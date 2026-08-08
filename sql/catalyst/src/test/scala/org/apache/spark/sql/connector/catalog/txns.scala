@@ -142,6 +142,7 @@ class TxnTable(
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
     catalog.writeTarget = this
+    delegate.lastUpdatedColumns = info.updatedColumns()
     super.newRowLevelOperationBuilder(info)
   }
 
@@ -158,6 +159,7 @@ class TxnTable(
     delegate.replacedPartitions = replacedPartitions
     delegate.lastWriteInfo = lastWriteInfo
     delegate.lastWriteLog = lastWriteLog
+    delegate.lastUpdatedColumns = lastUpdatedColumns
     delegate.commits ++= commits
     delegate.increaseVersion()
   }
