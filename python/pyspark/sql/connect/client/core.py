@@ -130,6 +130,7 @@ if TYPE_CHECKING:
 
 
 PYSPARK_ROOT = os.path.dirname(pyspark.__file__)
+_OPERATION_ID_METADATA_KEY = "spark-connect-operation-id"
 
 
 @dataclass(frozen=True)
@@ -887,6 +888,12 @@ class SparkConnectClient(object):
             if isinstance(connection, ChannelBuilder)
             else DefaultChannelBuilder(connection, channel_options)
         )
+        if any(key.lower() == _OPERATION_ID_METADATA_KEY for key, _ in self._builder.metadata()):
+            logger.warning(
+                "Connection option %s is ignored because Spark Connect sets it for each "
+                "ExecutePlan request.",
+                _OPERATION_ID_METADATA_KEY,
+            )
         self._user_id = None
         self._retry_policies: List[RetryPolicy] = []
 
@@ -1679,6 +1686,7 @@ class SparkConnectClient(object):
         for hook in self._session_hooks:
             req = hook.on_execute_plan(req)
             req.operation_id = operation_id
+        metadata = self._execute_plan_metadata(req.operation_id)
 
         def handle_response(b: pb2.ExecutePlanResponse) -> None:
             self._verify_response_integrity(b)
@@ -1690,7 +1698,7 @@ class SparkConnectClient(object):
                     req,
                     self._stub,
                     self._retrying,
-                    self._builder.metadata(),
+                    metadata,
                     reattachable_execute_plan_timeout=self._rpc_deadlines.reattachable_execute_plan,
                     reattach_execute_timeout=self._rpc_deadlines.reattach_execute,
                 )
@@ -1704,10 +1712,19 @@ class SparkConnectClient(object):
                 for attempt in self._retrying():
                     with attempt:
                         with disable_gc():
-                            for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                            for b in self._stub.ExecutePlan(req, metadata=metadata):
                                 handle_response(b)
         except Exception as error:
             self._handle_error(error, req.operation_id)
+
+    def _execute_plan_metadata(self, operation_id: str) -> List[Tuple[str, str]]:
+        metadata = [
+            (key, value)
+            for key, value in self._builder.metadata()
+            if key.lower() != _OPERATION_ID_METADATA_KEY
+        ]
+        metadata.append((_OPERATION_ID_METADATA_KEY, operation_id))
+        return metadata
 
     def _execute_and_fetch_as_iterator(
         self,
@@ -1732,6 +1749,7 @@ class SparkConnectClient(object):
         for hook in self._session_hooks:
             req = hook.on_execute_plan(req)
             req.operation_id = operation_id
+        metadata = self._execute_plan_metadata(req.operation_id)
 
         num_records = 0
         arrow_batch_chunks_to_assemble: List[bytes] = []
@@ -1907,7 +1925,7 @@ class SparkConnectClient(object):
                     req,
                     self._stub,
                     self._retrying,
-                    self._builder.metadata(),
+                    metadata,
                     reattachable_execute_plan_timeout=self._rpc_deadlines.reattachable_execute_plan,
                     reattach_execute_timeout=self._rpc_deadlines.reattach_execute,
                 )
@@ -1921,9 +1939,7 @@ class SparkConnectClient(object):
                 for attempt in self._retrying():
                     with attempt:
                         with disable_gc():
-                            it = iter(
-                                self._stub.ExecutePlan(req, metadata=self._builder.metadata())
-                            )
+                            it = iter(self._stub.ExecutePlan(req, metadata=metadata))
                         while True:
                             try:
                                 with disable_gc():

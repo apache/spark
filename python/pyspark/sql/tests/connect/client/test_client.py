@@ -149,6 +149,7 @@ if should_test_connect:
         def __init__(self, session_id: str, operation_statuses=None):
             self._session_id = session_id
             self.req = None
+            self.metadata = None
             self.client_user_context_extensions = []
             if operation_statuses is None:
                 operation_statuses = self.DEFAULT_OPERATION_STATUSES
@@ -156,6 +157,7 @@ if should_test_connect:
 
         def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata, timeout=None):
             self.req = req
+            self.metadata = metadata
             self.client_user_context_extensions = list(req.user_context.extensions)
             resp = proto.ExecutePlanResponse()
             resp.session_id = self._session_id
@@ -551,6 +553,20 @@ class SparkConnectClientTestCase(unittest.TestCase):
         try:
             req = client._execute_plan_request_with_metadata()
             uuid.UUID(req.operation_id)
+        finally:
+            client.close()
+
+    def test_execute_plan_sends_operation_id_metadata(self):
+        client = SparkConnectClient(
+            "sc://foo/;spark-connect-operation-id=ignored", use_reattachable_execute=False
+        )
+        mock = MockService(client._session_id)
+        client._stub = mock
+        try:
+            req = client._execute_plan_request_with_metadata()
+            client._execute(req)
+            self.assertIsNotNone(mock.metadata)
+            self.assertEqual(dict(mock.metadata)["spark-connect-operation-id"], req.operation_id)
         finally:
             client.close()
 
