@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, ResolveTimeZone, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, SortOrder, TransformExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder, TransformExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartitions, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -96,9 +96,7 @@ object DistributionAndOrderingUtils {
   }
 
   private def resolveTransformExpression(expr: Expression): Expression = expr.transform {
-    case TransformExpression(scalarFunc: ScalarFunction[_], arguments, Some(numBuckets)) =>
-      V2ExpressionUtils.resolveScalarFunction(scalarFunc, Seq(Literal(numBuckets)) ++ arguments)
-    case TransformExpression(scalarFunc: ScalarFunction[_], arguments, None) =>
+    case TransformExpression(scalarFunc: ScalarFunction[_], arguments) =>
       V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments)
   }
 

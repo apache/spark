@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
-import org.apache.spark.sql.connector.expressions.{BucketTransform, Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.connector.read.{SampleMethod => V2SampleMethod}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -116,17 +116,6 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
     case IdentityTransform(ref) =>
       Some(resolveRef[NamedExpression](ref, query))
-    case BucketTransform(numBuckets, refs, sorted)
-        if sorted.isEmpty && refs.length == 1 && refs.forall(_.isInstanceOf[NamedReference]) =>
-      val resolvedRefs = refs.map(r => resolveRef[NamedExpression](r, query))
-      // Create a dummy reference for `numBuckets` here and use that, together with `refs`, to
-      // look up the V2 function.
-      val numBucketsRef = AttributeReference("numBuckets", IntegerType, nullable = false)()
-      funCatalogOpt.flatMap { catalog =>
-        loadV2FunctionOpt(catalog, "bucket", Seq(numBucketsRef) ++ resolvedRefs).map { bound =>
-          TransformExpression(bound, resolvedRefs, Some(numBuckets))
-        }
-      }
     case NamedTransform(name, args) =>
       val catalystArgs = args.map(toCatalyst(_, query, funCatalogOpt))
       funCatalogOpt.flatMap { catalog =>

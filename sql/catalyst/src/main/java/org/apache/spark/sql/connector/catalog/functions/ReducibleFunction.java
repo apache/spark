@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connector.catalog.functions;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Literal;
 
 /**
  * Base class for user-defined functions that can be 'reduced' on another function.
@@ -61,6 +62,52 @@ import org.apache.spark.annotation.Evolving;
 public interface ReducibleFunction<I, O> {
 
   /**
+   * Generic reducer for parameterized functions (bucket, truncate, etc.).
+   *
+   * If this function is 'reducible' on another function, return the {@link Reducer}.
+   * <p>
+   * Each parameter is a non-complex {@link Literal} carrying both its value and data type:
+   * array/map/struct/UDT-typed values are filtered out by Spark and not passed here, but other
+   * scalar values (e.g. bucket numBuckets, truncate width, or a
+   * {@code CalendarInterval}) may be. {@link Literal#value()} is Spark's internal representation
+   * (e.g. {@code UTF8String} for strings, {@code Decimal} for decimals); use
+   * {@link Literal#dataType()} to interpret it rather than assuming a JVM type.
+   * <p>
+   * {@code thisParams} and {@code otherParams} hold each side's own literal parameters and may have
+   * different lengths -- for example a zero-parameter transform reducing onto a one-parameter one.
+   * Implementations must check each array's length before indexing into it.
+   * <p>
+   * Returning {@code null} means "not reducible for these parameters" and is authoritative:
+   * Spark consults no other overload. Dispatch order: Spark tries this generalized overload
+   * first; only if it is not implemented (throws {@link UnsupportedOperationException}) and each
+   * side has a single non-null integer parameter does Spark fall back to the deprecated
+   * {@code reducer(int, ReducibleFunction, int)} overload. If every eligible overload throws
+   * {@link UnsupportedOperationException}, Spark logs an "implements no reducer" warning; any
+   * other exception is logged and the pair is treated as not reducible (the join falls back to a
+   * shuffle).
+   * <p>
+   * Examples:
+   * <ul>
+   *     <li>bucket(4, x) and bucket(2, x): thisParams = [4], otherParams = [2]</li>
+   *     <li>truncate(x, 3) and truncate(x, 5): thisParams = [3], otherParams = [5]</li>
+   *     <li>hypothetical range_bucket(x, 0L, 100L, 4): thisParams = [0L, 100L, 4]</li>
+   * </ul>
+   *
+   * @param thisParams literal parameters for this function (may differ in length from otherParams)
+   * @param otherFunction the other parameterized function
+   * @param otherParams literal parameters for the other function (may differ in length from
+   *                    thisParams)
+   * @return a reduction function if reducible, null otherwise
+   * @since 4.3.0
+   */
+  default Reducer<I, O> reducer(
+          Literal<?>[] thisParams,
+          ReducibleFunction<?, ?> otherFunction,
+          Literal<?>[] otherParams) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * This method is for the bucket function.
    *
    * If this bucket function is 'reducible' on another bucket function,
@@ -78,7 +125,12 @@ public interface ReducibleFunction<I, O> {
    * @param otherBucketFunction the other parameterized function
    * @param otherNumBuckets parameter for the other function
    * @return a reduction function if it is reducible, null if not
+   * @deprecated as of 4.3.0. Please override
+   *     {@link #reducer(Literal[], ReducibleFunction, Literal[])} instead.
+   *     The new overload supports transforms with any number of parameters of any type
+   *     (e.g. truncate width, multi-arg range buckets), not just a single int.
    */
+  @Deprecated(since = "4.3.0")
   default Reducer<I, O> reducer(
       int thisNumBuckets,
       ReducibleFunction<?, ?> otherBucketFunction,
@@ -101,6 +153,6 @@ public interface ReducibleFunction<I, O> {
    * @return a reduction function if it is reducible, null if not.
    */
   default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
-    throw new UnsupportedOperationException();
+    return reducer(new Literal<?>[0], otherFunction, new Literal<?>[0]);
   }
 }
