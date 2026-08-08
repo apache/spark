@@ -4547,6 +4547,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("connector" -> connectorClass))
   }
 
+  def requiredDataAttributesMissingPartitionColumnsError(
+      connectorClass: String,
+      missingColumns: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS",
+      messageParameters = Map(
+        "connector" -> connectorClass,
+        "missingColumns" -> missingColumns.mkString("[", ", ", "]")))
+  }
+
   def requiredDataAttributesMissingUpdatedColumnsError(
       connectorClass: String,
       missingColumns: Seq[String]): Throwable = {
@@ -4565,6 +4575,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "connector" -> connectorClass,
         "overlappingColumns" -> overlappingColumns.mkString("[", ", ", "]")))
+  }
+
+  def splitUpdateRowIdNotDeclaredError(
+      connectorClass: String,
+      rowIds: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "SPLIT_UPDATE_ROW_ID_NOT_DECLARED",
+      messageParameters = Map(
+        "connector" -> connectorClass,
+        "rowIds" -> rowIds.mkString("[", ", ", "]")))
   }
 
   def splitUpdateRowIdReassignmentError(
