@@ -148,10 +148,10 @@ private[sql] class RocksDBStateStoreProvider
         case Some(nextState) => nextState
         case None =>
           val errorMsg = operation match {
-            case UPDATE => s"Cannot update after ${oldState.toString}"
-            case ABORT => s"Cannot abort after ${oldState.toString}"
-            case RELEASE => s"Cannot release after ${oldState.toString}"
-            case COMMIT => s"Cannot commit after ${oldState.toString}"
+            case UPDATE => s"Cannot update after ${oldState}"
+            case ABORT => s"Cannot abort after ${oldState}"
+            case RELEASE => s"Cannot release after ${oldState}"
+            case COMMIT => s"Cannot commit after ${oldState}"
             case METRICS => s"Cannot get metrics in ${oldState} state"
           }
           throw StateStoreErrors.stateStoreOperationOutOfOrder(errorMsg)
