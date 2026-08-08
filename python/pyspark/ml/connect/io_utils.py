@@ -45,16 +45,21 @@ def _copy_file_from_local_to_fs(local_path: str, dest_path: str) -> None:
 def _copy_dir_from_local_to_fs(local_path: str, dest_path: str) -> None:
     """
     Copy directory from local path to cloud storage path.
-    Limitation: Currently only one level directory is supported.
     """
     assert os.path.isdir(local_path)
 
-    file_list = os.listdir(local_path)
-    for file_name in file_list:
-        file_path = os.path.join(local_path, file_name)
-        dest_file_path = os.path.join(dest_path, file_name)
-        assert os.path.isfile(file_path)
-        _copy_file_from_local_to_fs(file_path, dest_file_path)
+    session = SparkSession.active()
+    if is_remote():
+        session.copyFromLocalToFs(local_path, dest_path)
+        return
+
+    for root, _, file_names in os.walk(local_path):
+        relative_root = os.path.relpath(root, local_path)
+        dest_root = dest_path if relative_root == "." else os.path.join(dest_path, relative_root)
+        for file_name in file_names:
+            file_path = os.path.join(root, file_name)
+            dest_file_path = os.path.join(dest_root, file_name)
+            _copy_file_from_local_to_fs(file_path, dest_file_path)
 
 
 def _get_class(clazz: str) -> Any:
