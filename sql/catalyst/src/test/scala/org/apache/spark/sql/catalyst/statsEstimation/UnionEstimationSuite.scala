@@ -339,6 +339,27 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
       "distinctCount should be capped at rowCount=6, not max(500,300)=500")
   }
 
+  test("SPARK-54582: propagate min/max stats for TimeType columns") {
+    val sz = Some(BigInt(1024))
+    val attrTime = AttributeReference("ctime", TimeType())()
+    val columnInfo = AttributeMap(Seq(
+      attrTime -> ColumnStat(min = Some(1L), max = Some(4L))))
+    val columnInfo1 = AttributeMap(Seq(
+      AttributeReference("ctime1", TimeType())() -> ColumnStat(min = Some(2L), max = Some(6L))))
+
+    val child1 = StatsTestPlan(
+      outputList = columnInfo.keys.toSeq, rowCount = 2,
+      attributeStats = columnInfo, size = sz)
+    val child2 = StatsTestPlan(
+      outputList = columnInfo1.keys.toSeq, rowCount = 2,
+      attributeStats = columnInfo1, size = sz)
+
+    val union = Union(Seq(child1, child2))
+    val keyStat = union.stats.attributeStats(union.output.head)
+    assert(keyStat.min === Some(1L))
+    assert(keyStat.max === Some(6L))
+  }
+
   test("SPARK-56047: hasCountStats is true when both distinctCount and nullCount propagated") {
     val sz = Some(BigInt(1024))
     val attrInt = AttributeReference("cint", IntegerType)()
