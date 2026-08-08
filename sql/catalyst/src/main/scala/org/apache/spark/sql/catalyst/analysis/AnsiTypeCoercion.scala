@@ -189,6 +189,12 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // If a function expects integral type, fractional input is not allowed.
       case (_: FractionalType, IntegralType) => None
 
+      // TIME values should not be silently coerced into date/timestamp inputs, or vice versa.
+      case (_: TimeType, AnyTimestampType | AnyTimestampNanoType) => None
+      case (_: TimeType, d: DatetimeType) if !d.isInstanceOf[TimeType] => None
+      case (d: DatetimeType, AnyTimeType) if !d.isInstanceOf[TimeType] => None
+      case (d: DatetimeType, _: TimeType) if !d.isInstanceOf[TimeType] => None
+
       // Ideally the implicit cast rule should be the same as `Cast.canANSIStoreAssign` so that it's
       // consistent with table insertion. To avoid breaking too many existing Spark SQL queries,
       // we make the system to allow implicitly converting String type as other primitive types.
