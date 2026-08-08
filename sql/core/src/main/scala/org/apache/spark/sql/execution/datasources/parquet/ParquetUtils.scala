@@ -243,6 +243,7 @@ object ParquetUtils extends Logging {
    * from Parquet file footer, and then construct an InternalRow from these aggregate results.
    *
    * NOTE: if statistics is missing from Parquet file footer, exception would be thrown.
+   * A column whose values are all null yields NULL for MIN/MAX, matching their SQL semantics.
    *
    * @return Aggregate results in the format of InternalRow
    */
@@ -278,6 +279,8 @@ object ParquetUtils extends Logging {
       NoopUpdater)
     val primitiveTypeNames = primitiveTypes.map(_.getPrimitiveTypeName)
     primitiveTypeNames.zipWithIndex.foreach {
+      case (_, i) if values(i) == null =>
+        // A null value means MIN/MAX over an all-null column, so the result field stays NULL.
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
         val v = values(i).asInstanceOf[Boolean]
         converter.getConverter(i).asPrimitiveConverter.addBoolean(v)
@@ -347,7 +350,8 @@ object ParquetUtils extends Logging {
             index = dataSchema.fieldNames.toList.indexOf(colName)
             schemaName = "max(" + colName + ")"
             val currentMax = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, true)
-            if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
+            if (currentMax != null &&
+              (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0)) {
               value = currentMax
             }
           case min: Min if V2ColumnUtils.extractV2Column(min.column).isDefined =>
@@ -355,7 +359,8 @@ object ParquetUtils extends Logging {
             index = dataSchema.fieldNames.toList.indexOf(colName)
             schemaName = "min(" + colName + ")"
             val currentMin = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, false)
-            if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
+            if (currentMin != null &&
+              (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0)) {
               value = currentMin
             }
           case count: Count if V2ColumnUtils.extractV2Column(count.column).isDefined =>
@@ -383,7 +388,9 @@ object ParquetUtils extends Logging {
         valuesBuilder += rowCount
         primitiveTypeBuilder += Types.required(PrimitiveTypeName.INT64).named(schemaName);
       } else {
-        valuesBuilder += value
+        // `value` stays `None` when no block contributed a min/max, i.e. all values of the
+        // column are null. The aggregated MIN/MAX is NULL then, represented as a null value.
+        valuesBuilder += (if (value == None) null else value)
         val field = fields.get(index)
         primitiveTypeBuilder += Types.required(field.asPrimitiveType.getPrimitiveTypeName)
           .as(field.getLogicalTypeAnnotation)
@@ -397,22 +404,28 @@ object ParquetUtils extends Logging {
   /**
    * Get the Max or Min value for ith column in the current block
    *
-   * @return the Max or Min value
+   * @return the Max or Min value, or null if all values of the column in this block are null
    */
   private def getCurrentBlockMaxOrMin(
       filePath: String,
       columnChunkMetaData: util.List[ColumnChunkMetaData],
       i: Int,
       isMax: Boolean): Any = {
-    val statistics = columnChunkMetaData.get(i).getStatistics
-    if (!statistics.hasNonNullValue) {
+    val columnChunk = columnChunkMetaData.get(i)
+    val statistics = columnChunk.getStatistics
+    if (statistics.hasNonNullValue) {
+      if (isMax) statistics.genericGetMax else statistics.genericGetMin
+    } else if (statistics.isNumNullsSet && statistics.getNumNulls == columnChunk.getValueCount) {
+      // All values of the column in this block are null. MIN/MAX ignore nulls, so the block
+      // contributes nothing to the aggregate. This mirrors the ORC behavior, see
+      // `OrcUtils.getMinMaxFromColumnStatistics`.
+      null
+    } else {
       throw new SparkUnsupportedOperationException(
         errorClass = "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED.NO_MIN_MAX",
         messageParameters = Map(
           "filePath" -> filePath,
           "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
-    } else {
-      if (isMax) statistics.genericGetMax else statistics.genericGetMin
     }
   }
 
