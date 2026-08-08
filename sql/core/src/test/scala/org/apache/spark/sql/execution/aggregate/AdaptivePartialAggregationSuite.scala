@@ -62,19 +62,35 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false")
 
   /**
-   * Runs `df` with adaptive partial aggregation disabled (the reference) and then across the full
-   * configuration matrix with it enabled, asserting every enabled run matches the reference.
+   * Runs `build` with adaptive partial aggregation disabled (the reference) and then across the
+   * full configuration matrix with it enabled, asserting every enabled run matches the reference.
+   *
+   * `build` takes the number of input partitions, which the matrix varies along with everything
+   * else, because the plan shape decides which parts of the feature run at all. When the two
+   * aggregates end up in one whole-stage -- no `Exchange` between them -- the partial aggregate's
+   * output feeds the Final's `doConsume` directly and never reaches
+   * `BufferedRowIterator.currentRows`, so `shouldStop()` stays false for the whole build and
+   * neither `needStopCheck` nor the resumed-build path is exercised. Splitting them puts the
+   * streamed rows through the output buffer and runs both.
+   *
+   * More than one input partition is necessary but not sufficient for that split: a `Range` keyed
+   * directly on `id` already reports an output partitioning that satisfies the Final aggregate's
+   * `ClusteredDistribution`, so `EnsureRequirements` inserts no `Exchange` however many partitions
+   * it has. Tests that want the split shape group on a derived key (a cast, say) so the input
+   * partitioning no longer satisfies the requirement.
    */
-  private def checkAdaptiveMatchesReference(build: () => DataFrame): Unit = {
-    val reference = withSQLConf(
-      (SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "false") +: fixedPlanConfs: _*) {
-      build().collect().toSeq
-    }
+  private def checkAdaptiveMatchesReference(build: Int => DataFrame): Unit = {
     for {
+      inputPartitions <- Seq(1, 2)
       wholeStage <- Seq(true, false)
       twoLevelMap <- Seq(true, false)
       forceSpill <- Seq(true, false)
     } {
+      // The reference is built with the same partitioning, so only the feature differs.
+      val reference = withSQLConf(
+        (SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "false") +: fixedPlanConfs: _*) {
+        build(inputPartitions).collect().toSeq
+      }
       val spillConf = if (forceSpill) {
         Seq("spark.sql.TungstenAggregate.testFallbackStartsAt" -> forceSpillFallback)
       } else {
@@ -88,9 +104,10 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           // Small `minRows` so the periodic check runs on modest inputs.
           SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "8") ++
           spillConf ++ fixedPlanConfs): _*) {
-        val msg = s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap forceSpill=$forceSpill"
+        val msg = s"inputPartitions=$inputPartitions wholeStage=$wholeStage " +
+          s"twoLevelMap=$twoLevelMap forceSpill=$forceSpill"
         withClue(msg) {
-          checkAnswer(build(), reference)
+          checkAnswer(build(inputPartitions), reference)
         }
       }
     }
@@ -226,9 +243,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   test("results unchanged for high-cardinality input that bypasses partial aggregation") {
     // Every grouping key is distinct, so partial aggregation reduces nothing and should be
     // bypassed by the periodic check.
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 200, 1, 1)
-        .select($"id" as "k", ($"id" * 2) as "v")
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 200, 1, parts)
+        .select($"id".cast("string") as "k", ($"id" * 2) as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s", count(lit(1)) as "c", max($"v") as "m")
     }
@@ -236,9 +253,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
 
   test("results unchanged for low-cardinality input that keeps partial aggregation") {
     // Few distinct keys, high reduction: partial aggregation is effective and should be kept.
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 600, 1, 1)
-        .select(($"id" % 5) as "k", $"id" as "v")
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 600, 1, parts)
+        .select(($"id" % 5).cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s", count(lit(1)) as "c", min($"v") as "mn", max($"v") as "mx")
     }
@@ -246,17 +263,17 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
 
   test("results unchanged for medium-cardinality input near the reduction threshold") {
     // Roughly half the rows are distinct keys; exercises the boundary of the ratio checks.
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 1000, 1, 1)
-        .select(($"id" % 500) as "k", $"id" as "v")
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 1000, 1, parts)
+        .select(($"id" % 500).cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s", count(lit(1)) as "c")
     }
   }
 
   test("results unchanged with multiple grouping keys and string keys") {
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 500, 1, 1)
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 500, 1, parts)
         .select(
           concat(lit("g"), ($"id" % 300).cast("string")) as "k1",
           ($"id" % 7) as "k2",
@@ -270,10 +287,10 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // Nulls are sparse enough (1 in 40) that the keys stay close to unique and the input really
     // does bypass; a denser null key would lift the compaction ratio above the threshold and the
     // test would never engage the feature.
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 400, 1, 1)
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 400, 1, parts)
         .select(
-          when($"id" % 40 === 0, lit(null)).otherwise($"id") as "k",
+          when($"id" % 40 === 0, lit(null)).otherwise($"id").cast("string") as "k",
           $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s", count(lit(1)) as "c")
@@ -282,9 +299,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
 
   test("results unchanged with average (multi-slot buffer) aggregate") {
     // avg has a two-slot partial buffer (sum, count); pass-through buffers must carry all slots.
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 300, 1, 1)
-        .select($"id" as "k", ($"id" + 1) as "v")
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 300, 1, parts)
+        .select($"id".cast("string") as "k", ($"id" + 1) as "v")
         .groupBy($"k")
         .agg(avg($"v") as "a", sum($"v") as "s")
     }
@@ -293,8 +310,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   test("results unchanged with a mix of many aggregate functions and buffer types") {
     // Exercises a wide pass-through buffer spanning several aggregate buffer layouts at once:
     // sum (decimal), avg (double), count, min/max, first/last, and stddev (imperative buffer).
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 400, 1, 1)
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 400, 1, parts)
         .select(
           $"id" as "k",
           ($"id" % 97).cast("decimal(10,2)") as "d",
@@ -322,9 +339,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // filter guard actually runs in the pass-through path.
     withTempView("t") {
       spark.range(0, 400, 1, 1)
-        .select($"id" as "k", ($"id" % 100) as "v")
+        .select($"id".cast("string") as "k", ($"id" % 100) as "v")
         .createOrReplaceTempView("t")
-      checkAdaptiveMatchesReference { () =>
+      checkAdaptiveMatchesReference { parts =>
         spark.sql(
           """SELECT k,
             |       sum(v) FILTER (WHERE v % 2 = 0) AS s_even,
@@ -338,8 +355,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("results unchanged with decimal and date grouping keys") {
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 300, 1, 1)
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 300, 1, parts)
         .select(
           ($"id" % 280).cast("decimal(12,3)") as "k1",
           date_add(lit(java.sql.Date.valueOf("2020-01-01")), ($"id" % 250).cast("int")) as "k2",
@@ -353,8 +370,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // No aggregate functions: the pass-through buffer is a zero-column UnsafeRow, so the output is
     // just the grouping key. High-cardinality keys should bypass, and the de-duplicated result must
     // still match the reference.
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 400, 1, 1)
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 400, 1, parts)
         .select(($"id" % 350) as "k1", ($"id" % 11) as "k2")
         .distinct()
     }
@@ -366,8 +383,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // plan. With duplicate keys, a bypassing `Final` would skip its de-duplication and return
     // duplicate rows. The two-level map off variants route the rows to the regular map so the
     // periodic check fires and the regression would show up.
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 1000, 1, 1)
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 1000, 1, parts)
         .select(($"id" % 10) as "c")
         .distinct()
     }
@@ -378,7 +395,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // so the early map output (which also frees the map) spans several drain cycles and re-enters
     // the map-output function; the results must still match the feature-off reference.
     val query = () => spark.range(0, 400000, 1, 1)
-      .select($"id" as "k", $"id" as "v")
+      .select($"id".cast("string") as "k", $"id" as "v")
       .groupBy($"k")
       .agg(sum($"v") as "s")
     withSQLConf(
@@ -395,9 +412,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("distinct aggregation stays correct") {
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 300, 1, 1)
-        .select($"id" as "k", ($"id" % 50) as "v")
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 300, 1, parts)
+        .select($"id".cast("string") as "k", ($"id" % 50) as "v")
         .groupBy($"k")
         .agg(countDistinct($"v") as "cd", sum($"v") as "s")
     }
@@ -409,7 +426,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // phase are de-duplicated and pass-through carries exactly one distinct value each.
     forEachCodegenAndMap() { clue =>
       val df = () => spark.range(0, 1000, 1, 1)
-        .select(($"id" % 100) as "k", $"id" as "v")
+        .select(($"id" % 100).cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(countDistinct($"v") as "cd")
       withClue(clue) {
@@ -425,7 +442,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // de-duplication partial (2 grouping keys) reduce nothing, so it must bypass.
     forEachCodegenAndMap() { clue =>
       val df = () => spark.range(0, 400, 1, 1)
-        .select(($"id" % 4) as "k", $"id" as "v")
+        .select(($"id" % 4).cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(countDistinct($"v") as "cd")
       withClue(clue) {
@@ -442,7 +459,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // (1 grouping key) sees a fresh key per row and must bypass.
     forEachCodegenAndMap() { clue =>
       val df = () => spark.range(0, 400, 1, 1)
-        .select($"id" as "k", ($"id" % 2) as "v")
+        .select($"id".cast("string") as "k", ($"id" % 2) as "v")
         .groupBy($"k")
         .agg(countDistinct($"v") as "cd")
       withClue(clue) {
@@ -459,7 +476,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // and the distinct partial counts them, so the result must still match the reference.
     forEachCodegenAndMap() { clue =>
       val df = () => spark.range(0, 400, 1, 1)
-        .select($"id" as "k", $"id" as "v")
+        .select($"id".cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(countDistinct($"v") as "cd")
       withClue(clue) {
@@ -481,9 +498,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("results unchanged with an empty input") {
-    checkAdaptiveMatchesReference { () =>
+    checkAdaptiveMatchesReference { parts =>
       spark.range(0, 0, 1, 1)
-        .select($"id" as "k", $"id" as "v")
+        .select($"id".cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s", count(lit(1)) as "c")
     }
@@ -503,8 +520,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   // high-cardinality input below an Expand`, cover an Expand that bypasses.
 
   test("results unchanged for ROLLUP (Expand below partial aggregate)") {
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 400, 1, 1)
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 400, 1, parts)
         .select(($"id" % 200) as "k1", ($"id" % 7) as "k2", $"id" as "v")
         .rollup($"k1", $"k2")
         .agg(sum($"v") as "s", count(lit(1)) as "c")
@@ -512,8 +529,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("results unchanged for CUBE (Expand below partial aggregate)") {
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 400, 1, 1)
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 400, 1, parts)
         .select(($"id" % 150) as "k1", ($"id" % 5) as "k2", $"id" as "v")
         .cube($"k1", $"k2")
         .agg(sum($"v") as "s", count(lit(1)) as "c")
@@ -528,7 +545,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       spark.range(0, 400, 1, 1)
         .select($"id" as "k1", ($"id" + 1000) as "k2", $"id" as "v")
         .createOrReplaceTempView("t")
-      checkAdaptiveMatchesReference { () =>
+      checkAdaptiveMatchesReference { parts =>
         spark.sql(
           """SELECT k1, k2, sum(v) AS s, count(1) AS c
             |FROM t
@@ -538,9 +555,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("results unchanged for multi-distinct (Expand below partial aggregate)") {
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 400, 1, 1)
-        .select(($"id" % 100) as "k", ($"id" % 30) as "a", ($"id" % 40) as "b")
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 400, 1, parts)
+        .select(($"id" % 100).cast("string") as "k", ($"id" % 30) as "a", ($"id" % 40) as "b")
         .groupBy($"k")
         .agg(countDistinct($"a") as "da", countDistinct($"b") as "db", sum($"a") as "s")
     }
@@ -551,56 +568,84 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // output buffer returns only as far as the aggregate's build loop. Reaching the end of the
     // child's produce therefore does not mean the input is exhausted, and treating it as such
     // drops the rest of the partition.
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 100, 1, 2).union(spark.range(100, 200, 1, 2)).groupBy("id").count()
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 100, 1, parts + 1)
+        .union(spark.range(100, 200, 1, parts + 1))
+        .groupBy("id").count()
+    }
+  }
+
+  test("results unchanged when an Exchange separates the two aggregates") {
+    // Grouping on a derived key stops the `Range`'s output partitioning from satisfying the Final
+    // aggregate's `ClusteredDistribution`, so the plan keeps an `Exchange` and the two aggregates
+    // land in separate whole-stages. That is the shape where streamed rows actually pass through
+    // `BufferedRowIterator.currentRows` -- fused, they go straight into the Final's hash map and
+    // neither `needStopCheck` nor the resumed build is reached.
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 200, 1, parts)
+        .select($"id".cast("string") as "k", ($"id" * 2) as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s", count(lit(1)) as "c", max($"v") as "m")
     }
   }
 
   test("both execution paths agree on an order-sensitive aggregate") {
-    // Bypassing emits a group's streamed rows ahead of the ones its map still holds, so
-    // `first`/`last` see a different merge order than an unbypassed run. Whether that order is
-    // guaranteed is a separate question -- what must hold is that the generated and interpreted
-    // paths agree, or `spark.sql.codegen.wholeStage` would be observable in the result.
+    // Bypassing merges a group's buffers in a different order than an unbypassed run: the rows
+    // streamed after the flip reach the `Final` aggregate before the ones the maps still hold.
+    // That order is not guaranteed -- what must hold is that the generated and interpreted paths
+    // produce the *same* result, or `spark.sql.codegen.wholeStage` becomes observable.
     //
-    // Key -1 takes the first and last input rows; the rest are distinct, so the bypass fires early
-    // and leaves row 0 in the map while row 8 streams past it.
-    val query = () => spark.range(0, 9, 1, 1)
-      .select(
-        when($"id" === 0 || $"id" === 8, lit(-1L)).otherwise($"id") as "k",
-        $"id" as "v")
-      .groupBy($"k")
-      .agg(first($"v") as "f", last($"v") as "l")
-
-    val results = for {
-      wholeStage <- Seq(true, false)
-      twoLevelMap <- Seq(true, false)
-      forceSpill <- Seq(true, false)
-    } yield {
-      val spillConf = if (forceSpill) {
-        Seq("spark.sql.TungstenAggregate.testFallbackStartsAt" -> forceSpillFallback)
-      } else {
-        Nil
+    // Both axes below matter. A single input partition, or a key the input is already partitioned
+    // by, fuses the two aggregates into one whole-stage, where streamed rows go straight into the
+    // Final's hash map and never reach the output buffer -- the paths cannot diverge there. And
+    // the divergence only shows when the colliding row is not the one the flip fired on, since
+    // that row is emitted from the build loop either way.
+    for {
+      splits <- Seq(1, 2)
+      derivedKey <- Seq(false, true)
+      dupAt <- Seq(8, 9)
+    } {
+      val query = () => {
+        val base = when($"id" === 0 || $"id" === dupAt, lit(-1L)).otherwise($"id")
+        spark.range(0, 40, 1, splits)
+          .select(if (derivedKey) base.cast("string") else base as "k", $"id" as "v")
+          .toDF("k", "v")
+          .groupBy($"k")
+          .agg(first($"v") as "f", last($"v") as "l")
       }
-      withSQLConf(
-        (Seq(
-          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
-          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "2") ++
-          spillConf ++ fixedPlanConfs): _*) {
-        query().collect().toSeq.sortBy(_.getLong(0))
+      val results = for {
+        wholeStage <- Seq(true, false)
+        twoLevelMap <- Seq(true, false)
+        forceSpill <- Seq(true, false)
+      } yield {
+        val spillConf = if (forceSpill) {
+          Seq("spark.sql.TungstenAggregate.testFallbackStartsAt" -> forceSpillFallback)
+        } else {
+          Nil
+        }
+        withSQLConf(
+          (Seq(
+            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+            SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
+            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "8") ++
+            spillConf ++ fixedPlanConfs): _*) {
+          query().collect().toSeq.map(_.toString()).sorted
+        }
+      }
+      withClue(s"splits=$splits derivedKey=$derivedKey dupAt=$dupAt: ") {
+        assert(results.distinct.length == 1,
+          s"the execution paths disagree: ${results.distinct.map(_.mkString("[", ",", "]"))}")
       }
     }
-    assert(results.distinct.length == 1,
-      s"the execution paths disagree: ${results.map(_.mkString("[", ",", "]")).distinct}")
   }
 
   test("results unchanged below a generator that cannot yield mid-fan-out") {
     // `GenerateExec` expands a collection without checking `shouldStop()`, so the aggregate cannot
     // rely on the child to bound the output buffer -- each streamed row has to be able to leave
     // the build loop on its own.
-    checkAdaptiveMatchesReference { () =>
-      spark.range(0, 1, 1, 1)
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 1, 1, parts)
         .select(explode(sequence(lit(1), lit(500))) as "k")
         .groupBy($"k").count()
     }
@@ -614,7 +659,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     forEachCodegenAndMap() { clue =>
       // Fully distinct keys: partial aggregation reduces nothing, so rows must bypass.
       val highCard = () => spark.range(0, 200, 1, 1)
-        .select($"id" as "k", $"id" as "v")
+        .select($"id".cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
@@ -623,7 +668,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       }
       // Few distinct keys, high reduction: partial aggregation is effective, nothing bypasses.
       val lowCard = () => spark.range(0, 600, 1, 1)
-        .select(($"id" % 5) as "k", $"id" as "v")
+        .select(($"id" % 5).cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
@@ -650,7 +695,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     forEachCodegenAndMap() { clue =>
       withTempView("t") {
         spark.range(0, 200, 1, 1)
-          .select($"id" as "k", ($"id" % 100) as "v")
+          .select($"id".cast("string") as "k", ($"id" % 100) as "v")
           .createOrReplaceTempView("t")
         val df = () => spark.sql(
           """SELECT k, sum(v) FILTER (WHERE v % 2 = 0) AS s
@@ -701,7 +746,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString) ++ fixedPlanConfs): _*) {
         val df = () => spark.range(0, 200, 1, 1)
-          .select($"id" as "k", $"id" as "v")
+          .select($"id".cast("string") as "k", $"id" as "v")
           .groupBy($"k")
           .agg(sum($"v") as "s")
         withClue(s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap") {
@@ -755,7 +800,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // the regular map never spills.
     forEachCodegenAndMap() { clue =>
       val df = () => spark.range(0, 200, 1, 1)
-        .select($"id" as "k", $"id" as "v")
+        .select($"id".cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
@@ -775,7 +820,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // input so the periodic check cannot fire first and the spill check is the one exercised.
     forEachCodegenAndMap(minRows = 100000, regularFallback = 16) { clue =>
       val df = () => spark.range(0, 200, 1, 1)
-        .select($"id" as "k", $"id" as "v")
+        .select($"id".cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
@@ -845,7 +890,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           "spark.sql.TungstenAggregate.testFallbackStartsAt" -> s"$fastCap, 16") ++
           fixedPlanConfs): _*) {
         val df = () => spark.range(0, 200, 1, 1)
-          .select($"id" as "k", $"id" as "v")
+          .select($"id".cast("string") as "k", $"id" as "v")
           .groupBy($"k")
           .agg(sum($"v") as "s")
         withClue(s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap") {
@@ -877,7 +922,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
             "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 50") ++
             fixedPlanConfs): _*) {
           val df = () => spark.range(0, 400, 1, 1)
-            .select(($"id" % 40) as "k", $"id" as "v")
+            .select(($"id" % 40).cast("string") as "k", $"id" as "v")
             .groupBy($"k")
             .agg(sum($"v") as "s")
           withClue(s"minCompaction=$minCompaction wholeStage=$wholeStage") {
@@ -900,7 +945,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // check point. The results must still match the feature-off reference.
     forEachCodegenAndMap(minCompaction = 1000000.0) { clue =>
       val df = () => spark.range(0, 600, 1, 1)
-        .select(($"id" % 5) as "k", $"id" as "v")
+        .select(($"id" % 5).cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
@@ -917,7 +962,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // periodic check is genuinely off rather than merely deferred.
     forEachCodegenAndMap(minRows = 0) { clue =>
       val df = () => spark.range(0, 200, 1, 1)
-        .select($"id" as "k", $"id" as "v")
+        .select($"id".cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
@@ -932,7 +977,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // bypasses instead of paying the spill I/O, which is the spill-only operating mode.
     forEachCodegenAndMap(minRows = 0, regularFallback = 16) { clue =>
       val df = () => spark.range(0, 200, 1, 1)
-        .select($"id" as "k", $"id" as "v")
+        .select($"id".cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
@@ -963,7 +1008,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // check point is never reached, so nothing bypasses even though the keys are fully distinct.
     forEachCodegenAndMap(minRows = 100000) { clue =>
       val df = () => spark.range(0, 200, 1, 1)
-        .select($"id" as "k", $"id" as "v")
+        .select($"id".cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
@@ -983,7 +1028,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       // partial aggregate emits far more than the handful of keys a real aggregation would. Read
       // all counters from a single execution so the metrics are not double-counted.
       val highCard = () => spark.range(0, numRows, 1, 1)
-        .select($"id" as "k", $"id" as "v")
+        .select($"id".cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
@@ -1001,7 +1046,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       // Low-cardinality reference: partial aggregation stays effective, so its output equals the
       // small number of distinct keys and nothing is bypassed.
       val lowCard = () => spark.range(0, 600, 1, 1)
-        .select(($"id" % 5) as "k", $"id" as "v")
+        .select(($"id" % 5).cast("string") as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {

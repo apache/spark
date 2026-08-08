@@ -417,7 +417,8 @@ class TungstenAggregationIterator(
   // Indicates that partial aggregation has been bypassed and the remaining input rows should be
   // passed through as single-row partial buffers. Set in `processInputs` by either check point.
   // It may coexist with earlier spills, so the output order is: sort-based (or map) output first,
-  // then the pass-through rows.
+  // then the pass-through rows -- a group's map buffer holds its earlier rows, so its streamed
+  // rows merge after it.
   private[this] var passThrough: Boolean = false
 
   // The row that could not be inserted at the spill check. It is stashed here (as
@@ -501,15 +502,7 @@ class TungstenAggregationIterator(
 
   override final def next(): UnsafeRow = {
     if (hasNext) {
-      // Pass-through rows come first, matching the generated path, where a bypassed row is emitted
-      // from inside the build loop and the frozen maps are only drained afterwards. The two paths
-      // have to agree: otherwise `spark.sql.codegen.wholeStage` would be observable in the result
-      // of an order-sensitive aggregate such as `first`/`last`.
-      val res = if (passThroughHasNext) {
-        // Adaptive partial aggregation bypassed partial aggregation: emit the remaining input
-        // rows as single-row partial buffers.
-        nextPassThroughOutput()
-      } else if (sortBased && sortedInputHasNewGroup) {
+      val res = if (sortBased && sortedInputHasNewGroup) {
         // Process the current group.
         processCurrentSortedGroup()
         // Generate output row for the current group.
@@ -518,9 +511,8 @@ class TungstenAggregationIterator(
         sortBasedAggregationBuffer.copyFrom(initialAggregationBuffer)
 
         outputRow
-      } else {
-        // We did not fall back to sort-based aggregation; `hasNext` guarantees the map iterator
-        // has a row here.
+      } else if (mapIteratorHasNext) {
+        // We did not fall back to sort-based aggregation.
         val result =
           generateOutput(
             aggregationBufferMapIterator.getKey,
@@ -533,13 +525,19 @@ class TungstenAggregationIterator(
         if (!mapIteratorHasNext) {
           // If there is no input from aggregationBufferMapIterator, we copy current result.
           val resultCopy = result.copy()
-          // Then, we free the map. Pass-through, which runs before this, does not use the map.
+          // Then, we free the map. Pass-through (if any) does not use the map.
           hashMap.free()
 
           resultCopy
         } else {
           result
         }
+      } else {
+        // Adaptive partial aggregation bypassed partial aggregation: emit the remaining input
+        // rows as single-row partial buffers. These come last: a group's map buffer holds its
+        // earlier rows, so its streamed rows have to merge after it, which is the order a
+        // non-bypassed run produces.
+        nextPassThroughOutput()
       }
 
       numOutputRows += 1
