@@ -923,6 +923,15 @@ class CollectionExpressionsSuite
     checkEvaluation(Slice(a1, Literal(1), Literal(2)), Seq("a", "b"))
     checkEvaluation(Slice(a2, Literal(1), Literal(2)), Seq("", null))
     checkEvaluation(Slice(a0, Literal(10), Literal(1)), Seq.empty[Int])
+    // SPARK-57665: a large length must not overflow startIndex + length; both the interpreted and
+    // codegen paths must return the tail of the array, not an empty array.
+    checkEvaluation(Slice(a0, Literal(2), Literal(Int.MaxValue)), Seq(2, 3, 4, 5, 6))
+    checkEvaluation(Slice(a0, Literal(1), Literal(Int.MaxValue)), Seq(1, 2, 3, 4, 5, 6))
+    // Negative start with a large length exercises the start < 0 branch together with clamping.
+    checkEvaluation(Slice(a0, Literal(-2), Literal(Int.MaxValue)), Seq(5, 6))
+    // Both extremes: an Int.MinValue start resolves far below 0, so the result is empty before the
+    // (harmlessly overflowing) length resolution is used.
+    checkEvaluation(Slice(a0, Literal(Int.MinValue), Literal(Int.MaxValue)), Seq.empty[Int])
     checkEvaluation(Slice(a1, Literal(10), Literal(1)), Seq.empty[String])
     checkEvaluation(Slice(a3, Literal(2), Literal(3)), Seq(2, null, 4))
   }
