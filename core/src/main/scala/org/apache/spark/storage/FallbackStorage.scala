@@ -90,6 +90,11 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
     }
   }
 
+  /**
+   * Read a ManagedBuffer.
+   */
+  def read(blockId: BlockId): ManagedBuffer = FallbackStorage.read(conf, blockId)
+
   def exists(shuffleId: Int, filename: String): Boolean = {
     val hash = JavaUtils.nonNegativeHash(filename)
     fallbackFileSystem.exists(new Path(fallbackPath, s"$appId/$shuffleId/$hash/$filename"))
