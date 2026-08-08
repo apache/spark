@@ -375,7 +375,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
       dtManager.stop()
     }
   }
-  
+
 
   test("SPARK-57896: UserCredentials serialization roundtrip preserves all schemes") {
     val conf = createOidcConf()
