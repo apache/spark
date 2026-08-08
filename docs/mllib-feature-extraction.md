@@ -28,7 +28,7 @@ license: |
 **Note** We recommend using the DataFrame-based API, which is detailed in the [ML user guide on 
 TF-IDF](ml-features.html#tf-idf).
 
-[Term frequency-inverse document frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a feature 
+[Term frequency-inverse document frequency (TF-IDF)](https://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a feature 
 vectorization method widely used in text mining to reflect the importance of a term to a document in the corpus.
 Denote a term by `$t$`, a document by `$d$`, and the corpus by `$D$`.
 Term frequency `$TF(t, d)$` is the number of times that term `$t$` appears in document `$d$`,
@@ -52,7 +52,7 @@ There are several variants on the definition of term frequency and document freq
 In `spark.mllib`, we separate TF and IDF to make them flexible.
 
 Our implementation of term frequency utilizes the
-[hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
+[hashing trick](https://en.wikipedia.org/wiki/Feature_hashing).
 A raw feature is mapped into an index (term) by applying a hash function.
 Then term frequencies are calculated based on the mapped indices.
 This approach avoids the need to compute a global term-to-index map,
@@ -245,7 +245,7 @@ Refer to the [`Normalizer` Scala docs](api/scala/org/apache/spark/mllib/feature/
 
 ## ChiSqSelector
 
-[Feature selection](http://en.wikipedia.org/wiki/Feature_selection) tries to identify relevant
+[Feature selection](https://en.wikipedia.org/wiki/Feature_selection) tries to identify relevant
 features for use in model construction. It reduces the size of the feature space, which can improve
 both speed and statistical learning behavior.
 

@@ -45,13 +45,13 @@ license: |
 
 ### Gradient descent
 The simplest method to solve optimization problems of the form `$\min_{\wv \in\R^d} \; f(\wv)$`
-is [gradient descent](http://en.wikipedia.org/wiki/Gradient_descent).
+is [gradient descent](https://en.wikipedia.org/wiki/Gradient_descent).
 Such first-order optimization methods (including gradient descent and stochastic variants
 thereof) are well-suited for large-scale and distributed computation.
 
 Gradient descent methods aim to find a local minimum of a function by iteratively taking steps in
 the direction of steepest descent, which is the negative of the derivative (called the
-[gradient](http://en.wikipedia.org/wiki/Gradient)) of the function at the current point, i.e., at
+[gradient](https://en.wikipedia.org/wiki/Gradient)) of the function at the current point, i.e., at
 the current parameter value.
 If the objective function `$f$` is not differentiable at all arguments, but still convex, then a
 *sub-gradient* 
@@ -144,7 +144,7 @@ standard SGD. In that case, the step direction depends from the uniformly random
 point.
 
 ### Limited-memory BFGS (L-BFGS)
-[L-BFGS](http://en.wikipedia.org/wiki/Limited-memory_BFGS) is an optimization 
+[L-BFGS](https://en.wikipedia.org/wiki/Limited-memory_BFGS) is an optimization 
 algorithm in the family of quasi-Newton methods to solve the optimization problems of the form 
 `$\min_{\wv \in\R^d} \; f(\wv)$`. The L-BFGS method approximates the objective function locally as a 
 quadratic without evaluating the second partial derivatives of the objective function to construct the 
