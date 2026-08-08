@@ -76,7 +76,13 @@ unary_np_spark_mappings = {
         )
         .otherwise(F.lit(1.0) / c),
     ).otherwise(
-        pandas_udf(np.reciprocal, DoubleType())(c)  # type: ignore[call-overload]
+        # Integer input: numpy does integer division (truncated toward zero),
+        # so casting the float quotient to long reproduces 1 -> 1, -1 -> -1,
+        # and every other magnitude -> 0. Dividing by 0 overflows to the int64
+        # minimum, matching numpy's behavior on integer arrays.
+        F.when(c == 0, F.lit(float(np.iinfo(np.int64).min))).otherwise(
+            (F.lit(1) / c).cast("long").cast("double")
+        )
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
