@@ -21,12 +21,13 @@ import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, ZoneId}
 
 import org.apache.spark.{SparkRuntimeException, SparkThrowable}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Encoders, Row}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, EnableStateStoreRowChecksum, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType, TimestampLTZNanosType}
 import org.apache.spark.tags.SlowSQLTest
 
 case class InputEventRow(
@@ -93,6 +94,24 @@ class StatefulProcessorEmittingRowsOlderThanWatermark
         // watermark will move past 0L
         Timestamp.from(Instant.ofEpochMilli(1)),
         inputRows.size))
+  }
+}
+
+/**
+ * Emits a Row with a nanosecond-precision timestamp (1ms epoch) that will be older than the
+ * watermark after the first batch, triggering the nanos extraction path in
+ * UpdateEventTimeColumnExec.
+ */
+class StatefulProcessorEmittingOldNanosRows
+  extends StatefulProcessor[String, InputEventRow, Row] {
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[InputEventRow],
+      timerValues: TimerValues): Iterator[Row] = {
+    // Emit Instant at 1ms epoch; after first batch watermark advances past this value
+    Iterator.single(Row(key, Instant.ofEpochMilli(1), inputRows.size))
   }
 }
 
@@ -409,6 +428,46 @@ class TransformWithStateChainingSuite extends StreamTest
       }
 
       checkError(ex, "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK")
+    }
+  }
+
+  test("SPARK-57843: UpdateEventTimeColumnExec nanos late-row error path") {
+    // Exercises the TimestampLTZNanosType branch in UpdateEventTimeColumnExec.doExecute()
+    // when a row older than the watermark is emitted. The processor outputs a Row with a
+    // nanosecond-precision outputEventTime via Encoders.row, so the exec extracts epoch
+    // micros via getTimestampLTZNanos(0).epochMicros.
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val outputSchema = new StructType()
+        .add("key", StringType)
+        .add("outputEventTime", TimestampLTZNanosType(9))
+        .add("count", IntegerType)
+      implicit val outputEnc: org.apache.spark.sql.Encoder[Row] = Encoders.row(outputSchema)
+
+      val inputData = MemoryStream[InputEventRow]
+      val result = inputData.toDS()
+        .withWatermark("eventTime", "1 minute")
+        .groupByKey(x => x.key)
+        .transformWithState[Row](
+          new StatefulProcessorEmittingOldNanosRows(),
+          "outputEventTime",
+          OutputMode.Append())
+
+      testStream(result, OutputMode.Append())(
+        AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
+        // First batch: emits row with outputEventTime = 1ms epoch (nanos).
+        // Watermark is 0 at this point, so the row passes.
+        CheckNewAnswer(Row("k1", Instant.ofEpochMilli(1), 1)),
+        // Second batch: watermark advances past 1ms, so the emitted row (1ms) is older
+        // than watermark and triggers the nanos extraction error path.
+        AddData(inputData, InputEventRow("k1", timestamp("2024-02-02 00:00:00"), "e1")),
+        ExpectFailure[SparkRuntimeException] { ex =>
+          checkError(ex.asInstanceOf[SparkThrowable],
+            "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED",
+            parameters = Map("currentWatermark" -> "1706774340000",
+              "emittedRowEventTime" -> "1000"))
+        }
+      )
     }
   }
 

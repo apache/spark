@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, TimestampLTZNanosType}
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -395,6 +395,40 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Deduplicate(Seq(att), batchRelation),
     outputMode = Append
   )
+
+  // Stream-stream join with nanosecond event-time column should be rejected (SPARK-57843)
+  testError(
+    "streaming plan - stream-stream join with nanosecond event-time: not supported",
+    Seq("Stream-stream joins", "nanosecond", "SPARK-57843")) {
+    val nanoAttr = AttributeReference("ts", TimestampLTZNanosType())()
+    val nanoWatermarkMetadata = new MetadataBuilder()
+      .withMetadata(nanoAttr.metadata)
+      .putLong(EventTimeWatermark.delayKey, 1000L)
+      .build()
+    val nanoAttrWithWatermark = nanoAttr.withMetadata(nanoWatermarkMetadata)
+    val leftRelation = new TestStreamingRelation(nanoAttrWithWatermark)
+    val rightRelation = new TestStreamingRelation(nanoAttrWithWatermark)
+    val plan = leftRelation.join(rightRelation, joinType = FullOuter,
+      condition = Some(nanoAttrWithWatermark > nanoAttrWithWatermark + 10))
+    UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), Append)
+  }
+
+  // Stream-stream INNER join with nanosecond event-time column should be rejected (SPARK-57843)
+  testError(
+    "streaming plan - stream-stream inner join with nanosecond event-time: not supported",
+    Seq("Stream-stream joins", "nanosecond", "SPARK-57843")) {
+    val nanoAttr = AttributeReference("ts", TimestampLTZNanosType())()
+    val nanoWatermarkMetadata = new MetadataBuilder()
+      .withMetadata(nanoAttr.metadata)
+      .putLong(EventTimeWatermark.delayKey, 1000L)
+      .build()
+    val nanoAttrWithWatermark = nanoAttr.withMetadata(nanoWatermarkMetadata)
+    val leftRelation = new TestStreamingRelation(nanoAttrWithWatermark)
+    val rightRelation = new TestStreamingRelation(nanoAttrWithWatermark)
+    val plan = leftRelation.join(rightRelation, joinType = Inner,
+      condition = Some(nanoAttrWithWatermark > nanoAttrWithWatermark + 10))
+    UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), Append)
+  }
 
   // Inner joins: Multiple stream-stream joins supported only in append mode
   testBinaryOperationInStreamingPlan(
