@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException, SPARK_DOC_ROOT}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -3301,5 +3301,105 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expr5 = TimeBucket(hour, tsLit, ntzOrigin)
     val r5 = expr5.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
     assert(r5.errorSubClass == "UNEXPECTED_INPUT_TYPE")
+  }
+
+  test("SPARK-57837: CurrentTimestampExpressionBuilder") {
+    // No argument keeps the historical micro TIMESTAMP expressions.
+    assert(CurrentTimestampExpressionBuilder.build("current_timestamp", Seq.empty) ===
+      CurrentTimestamp())
+    assert(CurrentTimestampExpressionBuilder.build("now", Seq.empty) === Now())
+
+    // Precision 6 stays on the micro type, per function name.
+    assert(CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Literal(6))) ===
+      CurrentTimestamp())
+    assert(CurrentTimestampExpressionBuilder.build("now", Seq(Literal(6))) === Now())
+
+    // Precisions 7-9 build the nanosecond TIMESTAMP_LTZ variant, including a foldable arg.
+    Seq(7, 8, 9).foreach { p =>
+      val built = CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Literal(p)))
+      assert(built === CurrentTimestampNanos(p))
+      assert(built.dataType === TimestampLTZNanosType(p))
+    }
+    assert(CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Add(Literal(4),
+      Literal(5)))) === CurrentTimestampNanos(9))
+
+    // Out-of-range precision (other than 6) is rejected with INVALID_TIMESTAMP_PRECISION.
+    Seq(0, 3, 5, 10).foreach { p =>
+      checkError(
+        exception = intercept[SparkException] {
+          CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Literal(p)))
+        },
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> p.toString, "type" -> "TIMESTAMP_LTZ"))
+    }
+
+    // Non-foldable precision.
+    checkError(
+      exception = intercept[AnalysisException] {
+        CurrentTimestampExpressionBuilder.build(
+          "current_timestamp", Seq(AttributeReference("a", IntegerType)()))
+      },
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> "`current_timestamp`",
+        "paramName" -> "`precision`",
+        "paramType" -> "\"INT\""))
+
+    // Non-integral precision.
+    checkError(
+      exception = intercept[AnalysisException] {
+        CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Literal("9")))
+      },
+      condition = "UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "paramIndex" -> "first",
+        "functionName" -> "`current_timestamp`",
+        "requiredType" -> "\"INT\"",
+        "inputSql" -> "\"9\"",
+        "inputType" -> "\"STRING\""))
+
+    // Too many arguments.
+    checkError(
+      exception = intercept[AnalysisException] {
+        CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Literal(9), Literal(9)))
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`current_timestamp`",
+        "expectedNum" -> "[0, 1]",
+        "actualNum" -> "2",
+        "docroot" -> SPARK_DOC_ROOT))
+  }
+
+  test("SPARK-57837: LocalTimestampExpressionBuilder") {
+    assert(LocalTimestampExpressionBuilder.build("localtimestamp", Seq.empty) === LocalTimestamp())
+    assert(LocalTimestampExpressionBuilder.build("localtimestamp", Seq(Literal(6))) ===
+      LocalTimestamp())
+
+    Seq(7, 8, 9).foreach { p =>
+      val built = LocalTimestampExpressionBuilder.build("localtimestamp", Seq(Literal(p)))
+      assert(built === LocalTimestampNanos(p))
+      assert(built.dataType === TimestampNTZNanosType(p))
+    }
+
+    Seq(0, 3, 5, 10).foreach { p =>
+      checkError(
+        exception = intercept[SparkException] {
+          LocalTimestampExpressionBuilder.build("localtimestamp", Seq(Literal(p)))
+        },
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> p.toString, "type" -> "TIMESTAMP_NTZ"))
+    }
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        LocalTimestampExpressionBuilder.build("localtimestamp", Seq(Literal(9), Literal(9)))
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`localtimestamp`",
+        "expectedNum" -> "[0, 1]",
+        "actualNum" -> "2",
+        "docroot" -> SPARK_DOC_ROOT))
   }
 }

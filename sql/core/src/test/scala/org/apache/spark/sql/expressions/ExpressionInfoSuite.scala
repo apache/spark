@@ -248,9 +248,11 @@ class ExpressionInfoSuite extends SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.CurrentDate",
       "org.apache.spark.sql.catalyst.expressions.CurDateExpressionBuilder",
       "org.apache.spark.sql.catalyst.expressions.CurrentTimestamp",
+      "org.apache.spark.sql.catalyst.expressions.CurrentTimestampExpressionBuilder",
       "org.apache.spark.sql.catalyst.expressions.CurrentTimeZone",
       "org.apache.spark.sql.catalyst.expressions.Now",
       "org.apache.spark.sql.catalyst.expressions.LocalTimestamp",
+      "org.apache.spark.sql.catalyst.expressions.LocalTimestampExpressionBuilder",
       "org.apache.spark.sql.catalyst.expressions.CurrentTime",
       // Random output without a seed
       "org.apache.spark.sql.catalyst.expressions.Rand",
