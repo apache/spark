@@ -16,6 +16,7 @@
 #
 
 import os
+from pathlib import Path
 import shutil
 import tempfile
 
@@ -105,6 +106,42 @@ class ReadwriterTestsMixin:
                 assertDataFrameEqual(df, actual)
         finally:
             shutil.rmtree(tmpPath)
+
+    def test_pathlike_paths(self):
+        df = self.df
+        with tempfile.TemporaryDirectory(prefix="pathlike") as d:
+            json_path = Path(d) / "json"
+            df.write.mode("overwrite").format("json").save(json_path)
+            assertDataFrameEqual(df, self.spark.read.format("json").load(json_path))
+            assertDataFrameEqual(df, self.spark.read.json(json_path))
+
+            json_path2 = Path(d) / "json2"
+            df.write.mode("overwrite").json(json_path2)
+            assertDataFrameEqual(df.union(df), self.spark.read.json([json_path, json_path2]))
+
+            parquet_path = Path(d) / "parquet"
+            df.write.mode("overwrite").parquet(parquet_path)
+            assertDataFrameEqual(df, self.spark.read.parquet(parquet_path))
+
+            text_df = df.select("value")
+            text_path = Path(d) / "text"
+            text_df.write.mode("overwrite").text(text_path)
+            assertDataFrameEqual(text_df, self.spark.read.text(text_path))
+
+            csv_path = Path(d) / "csv"
+            df.write.mode("overwrite").csv(csv_path)
+            assertDataFrameEqual(df, self.spark.read.csv(csv_path, schema=df.schema))
+
+            orc_path = Path(d) / "orc"
+            df.write.mode("overwrite").orc(orc_path)
+            assertDataFrameEqual(df, self.spark.read.orc(orc_path))
+
+            xml_path = Path(d) / "xml"
+            df.write.mode("overwrite").xml(xml_path, rowTag="row")
+            assertDataFrameEqual(
+                df,
+                self.spark.read.xml(xml_path, rowTag="row", schema=df.schema),
+            )
 
     def test_bucketed_write(self):
         data = [
