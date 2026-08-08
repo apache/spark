@@ -150,7 +150,7 @@ case class DescribeRelationJsonCommand(
     addKeyValueToMap("table_name", JString(ident.last), jsonMap)
     addKeyValueToMap("catalog_name", JString(ident.head), jsonMap)
     val namespace = ident.init.tail
-    addKeyValueToMap("namespace", JArray(namespace.map(JString).toList), jsonMap)
+    addKeyValueToMap("namespace", JArray(namespace.map(JString.apply).toList), jsonMap)
     if (namespace.nonEmpty) {
       addKeyValueToMap("schema_name", JString(namespace.last), jsonMap)
     }

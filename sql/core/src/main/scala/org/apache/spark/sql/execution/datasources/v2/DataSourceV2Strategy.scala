@@ -1005,7 +1005,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
       filters: Seq[Expression],
       scan: LeafExecNode,
       needsUnsafeConversion: Boolean): SparkPlan = {
-    val filterCondition = filters.reduceLeftOption(And)
+    val filterCondition = filters.reduceLeftOption(And.apply)
     val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
 
     if (withFilter.output != project || needsUnsafeConversion) {
