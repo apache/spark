@@ -54,9 +54,7 @@ class UDFInHigherOrderFunctionTestsMixin:
 
     def test_transform_null_array_and_null_elements(self):
         # A null array must stay null, and a null *element* must reach the UDF as None.
-        df = self.spark.createDataFrame(
-            [([1, None, 3],), (None,), ([],)], "values array<int>"
-        )
+        df = self.spark.createDataFrame([([1, None, 3],), (None,), ([],)], "values array<int>")
         # Null-aware so the UDF itself can observe the null element.
         f = udf(lambda x: -1 if x is None else x * 2, IntegerType())
 
@@ -139,9 +137,7 @@ class UDFInHigherOrderFunctionTestsMixin:
 
     def test_udf_with_outer_column_argument(self):
         # A non-element argument must be broadcast to every element of its row.
-        df = self.spark.createDataFrame(
-            [([1, 2], 100), ([3], 200)], "values array<int>, base int"
-        )
+        df = self.spark.createDataFrame([([1, 2], 100), ([3], 200)], "values array<int>, base int")
         add = udf(lambda x, b: x + b, IntegerType())
 
         assertDataFrameEqual(
@@ -261,7 +257,12 @@ class UDFInHigherOrderFunctionTestsMixin:
         )
 
     def test_transform_keys_and_values(self):
-        df = self.spark.createDataFrame([({"a": 1, "b": 2},),], "m map<string,int>")
+        df = self.spark.createDataFrame(
+            [
+                ({"a": 1, "b": 2},),
+            ],
+            "m map<string,int>",
+        )
         upper = udf(lambda s: s.upper(), StringType())
         plus_one = udf(lambda v: v + 1, IntegerType())
 
@@ -275,9 +276,7 @@ class UDFInHigherOrderFunctionTestsMixin:
         )
         # The lambda may read both the key and the value.
         assertDataFrameEqual(
-            df.select(
-                sf.transform_values("m", lambda k, v: plus_one(v) + sf.length(k)).alias("r")
-            ),
+            df.select(sf.transform_values("m", lambda k, v: plus_one(v) + sf.length(k)).alias("r")),
             [({"a": 3, "b": 4},)],
         )
 
@@ -294,7 +293,13 @@ class UDFInHigherOrderFunctionTestsMixin:
         # The visited key set is the union of both maps' keys; a key missing from one side gives
         # null on that side, matching map_zip_with's own semantics.
         df = self.spark.createDataFrame(
-            [({"a": 1, "b": 2}, {"b": 20, "c": 30},)], "l map<string,int>, r map<string,int>"
+            [
+                (
+                    {"a": 1, "b": 2},
+                    {"b": 20, "c": 30},
+                )
+            ],
+            "l map<string,int>, r map<string,int>",
         )
         combine = udf(
             lambda a, b: (0 if a is None else a) * 100 + (0 if b is None else b), IntegerType()
@@ -430,7 +435,16 @@ class UDFInHigherOrderFunctionTestsMixin:
         )
 
     def test_integration_with_joins_grouping_and_caching(self):
-        left = self.spark.createDataFrame([(1, [1, 2]), (2, [3],)], "k int, values array<int>")
+        left = self.spark.createDataFrame(
+            [
+                (1, [1, 2]),
+                (
+                    2,
+                    [3],
+                ),
+            ],
+            "k int, values array<int>",
+        )
         right = self.spark.createDataFrame([(1,), (2,)], "k int")
         plus_one = udf(lambda x: x + 1, IntegerType())
 
@@ -446,9 +460,11 @@ class UDFInHigherOrderFunctionTestsMixin:
             cached.unpersist()
 
         grouped = left.groupBy().agg(
-            sf.sum(sf.aggregate(
-                sf.transform("values", lambda x: plus_one(x)), sf.lit(0), lambda a, x: a + x
-            )).alias("s")
+            sf.sum(
+                sf.aggregate(
+                    sf.transform("values", lambda x: plus_one(x)), sf.lit(0), lambda a, x: a + x
+                )
+            ).alias("s")
         )
         # (1+1)+(2+1) + (3+1) = 9
         assertDataFrameEqual(grouped, [(9,)])
@@ -476,9 +492,7 @@ class UDFInHigherOrderFunctionTestsMixin:
     def test_disabled_by_conf(self):
         df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
         plus_one = udf(lambda x: x + 1, IntegerType())
-        with self.sql_conf(
-            {"spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled": False}
-        ):
+        with self.sql_conf({"spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled": False}):
             with self.assertRaises(AnalysisException) as ctx:
                 df.select(sf.transform("values", lambda x: plus_one(x))).collect()
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
