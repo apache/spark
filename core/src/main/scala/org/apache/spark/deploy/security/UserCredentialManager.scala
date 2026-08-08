@@ -22,6 +22,7 @@ import java.net.URI
 import java.nio.file.Paths
 import java.time.Instant
 import java.util.concurrent.{RejectedExecutionException, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -60,10 +61,16 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[spark] class UserCredentialManager(
     sparkConf: SparkConf,
     tokenIngestor: TokenIngestor,
-    onCredentialsUpdate: Array[Byte] => Unit) extends Logging {
+    onCredentialsUpdate: (Long, Array[Byte]) => Unit) extends Logging {
 
   private val safetyMargin = sparkConf.get(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN)
   private val minInterval = sparkConf.get(SECURITY_OIDC_RENEWAL_MIN_INTERVAL)
+
+  // Monotonically increasing version counter for credential updates.
+  // Incremented on each successful credential acquisition (initial + renewals).
+  // Used by executors to guard against stale TaskDescription credentials overwriting
+  // fresher credentials delivered via RPC broadcast.
+  private val credentialVersion = new AtomicLong(0)
 
   // Counter for exponential backoff calculation.
   // Only accessed from the single-thread renewal executor.
@@ -84,10 +91,10 @@ private[spark] class UserCredentialManager(
    * no credentials can be resolved, an exception is thrown. Subsequent renewal failures
    * are handled with exponential backoff.
    *
-   * @return The serialized initial [[UserCredentials]].
+   * @return The version and serialized initial [[UserCredentials]].
    * @throws IllegalStateException if the initial credential acquisition fails.
    */
-  def start(): Array[Byte] = {
+  def start(): (Long, Array[Byte]) = {
     require(renewalExecutor == null, "start() must not be called more than once")
 
     // Initial acquisition is fail-fast (no retry/backoff).
@@ -107,9 +114,10 @@ private[spark] class UserCredentialManager(
 
     val (credentials, earliestExpiry) = resolveCredentials(ctx)
     val serialized = UserCredentialManager.serializeUserCredentials(credentials)
+    val version = credentialVersion.incrementAndGet()
 
     // Propagate initial credentials
-    onCredentialsUpdate(serialized)
+    onCredentialsUpdate(version, serialized)
 
     // Create the renewal executor only after successful initial acquisition.
     // This avoids leaking a daemon thread if the fail-fast path throws, and
@@ -123,7 +131,7 @@ private[spark] class UserCredentialManager(
 
     logInfo(log"Credential acquisition successful. Next renewal in " +
       log"${MDC(LogKeys.TIME_UNITS, UIUtils.formatDuration(renewalDelay))}.")
-    serialized
+    (version, serialized)
   }
 
   def stop(): Unit = {
@@ -164,11 +172,12 @@ private[spark] class UserCredentialManager(
 
       val (credentials, earliestExpiry) = resolveCredentials(ctx)
       val serialized = UserCredentialManager.serializeUserCredentials(credentials)
+      val version = credentialVersion.incrementAndGet()
 
       // Propagate credentials to executors. Errors here are logged separately
       // so that credential-fetch success is not conflated with distribution failure.
       try {
-        onCredentialsUpdate(serialized)
+        onCredentialsUpdate(version, serialized)
       } catch {
         case e: Exception =>
           logWarning(log"Credentials were resolved successfully but failed to propagate " +
@@ -417,7 +426,7 @@ private[spark] object UserCredentialManager {
    */
   def create(
       sparkConf: SparkConf,
-      onCredentialsUpdate: Array[Byte] => Unit): Option[UserCredentialManager] = {
+      onCredentialsUpdate: (Long, Array[Byte]) => Unit): Option[UserCredentialManager] = {
     if (!sparkConf.get(SECURITY_OIDC_ENABLED)) {
       None
     } else {

@@ -188,13 +188,63 @@ class NumPyCompatTestsMixin:
                     1.0,
                     1.0,
                     1.0,
+                    0.0,
+                    -0.0,
+                    np.inf,
+                    -np.inf,
                 ],
-                "exp": [2, 3, -2, -3, -3, 0, -2, 2, 2, 2, -1074, -1075, 1024],
+                "exp": [
+                    2,
+                    3,
+                    -2,
+                    -3,
+                    -3,
+                    0,
+                    -2,
+                    2,
+                    2,
+                    2,
+                    -1074,
+                    -1075,
+                    1024,
+                    1024,
+                    1024,
+                    -1075,
+                    -1075,
+                ],
             }
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(np.ldexp(psdf.x, psdf.exp), np.ldexp(pdf.x, pdf.exp), almost=True)
+        result = np.ldexp(psdf.x, psdf.exp)
+        expected = np.ldexp(pdf.x, pdf.exp)
+        self.assert_eq(result, expected, almost=True)
+        self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+
+    def test_np_fmod(self):
+        for pdf in (
+            pd.DataFrame(
+                {
+                    "x1": [-64, -2, -1, 0, 1, 2, 64],
+                    "x2": [2, 3, -2, -3, -3, 0, 2],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": [-np.inf, -64.0, -2.0, -0.0, 0.0, 2.0, 64.0, np.inf, np.nan, 1.0],
+                    "x2": [2.0, 3.0, -2.0, -3.0, -3.0, 0.0, -np.inf, np.inf, 2.0, 0.0],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": pd.array([1, 2, None, None], dtype="Int64"),
+                    "x2": pd.array([2, None, 2, 0], dtype="Int64"),
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+
+            self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2), almost=True)
 
     def test_np_fmax_fmin(self):
         for pdf in (

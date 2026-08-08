@@ -983,6 +983,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val COMBINE_APPROXIMATE_PERCENTILES_ENABLED =
+    buildConf("spark.sql.optimizer.combineApproximatePercentiles.enabled")
+      .doc("When true, combines compatible scalar approximate percentile aggregates into a " +
+        "single array-valued aggregate so they share one percentile digest.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val EXPRESSION_PROJECTION_CANDIDATE_LIMIT =
     buildConf("spark.sql.optimizer.expressionProjectionCandidateLimit")
       .doc("The maximum number of the candidate of output expressions whose alias are replaced." +
@@ -1105,7 +1114,11 @@ object SQLConf {
       .doc("When true, the planner requires all the clustering keys as the hash partition keys " +
         "of the children, to eliminate the shuffles for the operator that needs its children to " +
         "be co-partitioned, such as JOIN node. This is to avoid data skews which can lead to " +
-        "significant performance regression if shuffles are eliminated.")
+        "significant performance regression if shuffles are eliminated. For storage-partitioned " +
+        "join, every clustering key must be covered by some partition key, rather than matching " +
+        "the partition keys positionally, so a column partitioned by more than one transform " +
+        "does not prevent shuffle elimination; hash partitioning deliberately keeps the " +
+        "positional match.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -3146,6 +3159,17 @@ object SQLConf {
     .version("3.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED =
+    buildConf("spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled")
+      .internal()
+      .doc("When true, map-typed arguments of distinct aggregates are normalized with MapSort. " +
+        "When false, MapSort is not added solely for distinct aggregate arguments; arguments " +
+        "that are also grouping expressions remain normalized.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val OPTIMIZE_EXPAND_RATIO =
     buildConf("spark.sql.optimizer.optimizeExpandRatio")
@@ -7741,23 +7765,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  // Deprecate "spark.connect.copyFromLocalToFs.allowDestLocal" in favor of this config. This is
-  // currently optional because we don't want to break existing users who are using the old config.
-  // If this config is set, then we override the deprecated config.
-  val ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
-    buildConf("spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
-      .internal()
-      .doc("""
-             |Allow `spark.copyFromLocalToFs` destination to be local file system
-             | path on spark driver node when
-             |`spark.sql.artifact.copyFromLocalToFs.allowDestLocal` is true.
-             |This will allow user to overwrite arbitrary file on spark
-             |driver node we should only enable it for testing purpose.
-             |""".stripMargin)
-      .version("4.0.0")
-      .booleanConf
-      .createOptional
-
   val LEGACY_RETAIN_FRACTION_DIGITS_FIRST =
     buildConf("spark.sql.legacy.decimal.retainFractionDigitsOnTruncate")
       .internal()
@@ -8312,7 +8319,7 @@ object SQLConf {
       DeprecatedConfig(ESCAPED_STRING_LITERALS.key, "4.0",
         "Use raw string literals with the `r` prefix instead. "),
       DeprecatedConfig("spark.connect.copyFromLocalToFs.allowDestLocal", "4.0",
-        s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead."),
+        "Use 'spark.sql.artifact.copyFromLocalToFs.allowDestLocal' instead."),
       DeprecatedConfig(ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key, "4.0", "Increase indexes by 1 " +
         "in `strfmt` of the `format_string` function. Refer to the first argument by \"1$\"."),
       DeprecatedConfig(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "4.1",

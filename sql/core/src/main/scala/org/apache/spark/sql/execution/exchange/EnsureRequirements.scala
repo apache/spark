@@ -782,20 +782,19 @@ case class EnsureRequirements(
       partitioning: Partitioning,
       distribution: ClusteredDistribution): Option[KeyedShuffleSpec] = {
     def tryCreate(partitioning: KeyedPartitioning): Option[KeyedShuffleSpec] = {
-      // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
-      // attribute per partition expression.
-      val attributes = partitioning.expressions.flatMap(_.references)
-      val clustering = distribution.clustering
-
-      val satisfies = if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
-        attributes.length == clustering.length && attributes.zip(clustering).forall {
-          case (l, r) => l.semanticEquals(r)
-        }
-      } else {
-        partitioning.satisfies(distribution)
+      // The config requires all the cluster keys to be covered by the partition keys, to avoid
+      // the skew of joining on keys that are coarser than the join keys. Key order and duplicated
+      // cluster keys don't matter.
+      def allClusterKeysCovered: Boolean = {
+        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
+        // attribute per partition expression.
+        val attributes = partitioning.expressions.flatMap(_.references)
+        distribution.clustering.forall(c => attributes.exists(_.semanticEquals(c)))
       }
 
-      if (satisfies) {
+      if (partitioning.satisfies(distribution) &&
+          (!SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION) ||
+            allClusterKeysCovered)) {
         Some(partitioning.createShuffleSpec(distribution).asInstanceOf[KeyedShuffleSpec])
       } else {
         None

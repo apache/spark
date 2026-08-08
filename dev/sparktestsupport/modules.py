@@ -537,6 +537,7 @@ pyspark_core = Module(
         "pyspark.tests.test_zero_copy_byte_stream",
         # unittests for upstream projects
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
@@ -1761,6 +1762,7 @@ dev_tools = Module(
         "dev/merge_spark_pr.py",
         "dev/requirements.txt",
         "dev/pr_merge_status.py",
+        "dev/spark_merge_footer.py",
         "dev/create_spark_jira.py",
         "dev/create-release/",
     ],

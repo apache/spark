@@ -637,6 +637,43 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     }
   }
 
+  // ----- shared parent-archive _metadata test --------------------------------
+
+  test("_metadata exposes the parent archive file's values, identical for every row") {
+    archiveExtensions.foreach { ext =>
+      withArchiveFile(ext) { archive =>
+        // Multiple entries, each multiple rows: the archive is one non-splittable PartitionedFile,
+        // so every row must carry the same parent-archive metadata (not any inner entry's).
+        val parts = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol"), (4, "Dan")))
+        writeArchive(
+          archive, parts.zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) })
+
+        val rows = read(archive.getCanonicalPath)
+          .select("_metadata.file_path", "_metadata.file_name", "_metadata.file_size",
+            "_metadata.file_block_start", "_metadata.file_block_length",
+            "_metadata.file_modification_time")
+          .collect()
+        assert(rows.length == parts.map(_.count()).sum,
+          s"expected one row per input record, got ${rows.length}")
+
+        val fileSize = archive.length()
+        rows.foreach { r =>
+          assert(r.getString(0).endsWith(archive.getName) && !r.getString(0).contains(entryName(0)),
+            s"file_path should be the archive file, got ${r.getString(0)}")
+          assert(r.getString(1) == archive.getName, s"file_name mismatch: ${r.getString(1)}")
+          assert(r.getLong(2) == fileSize, s"file_size mismatch: ${r.getLong(2)} != $fileSize")
+          assert(r.getLong(3) == 0L, s"file_block_start should be 0, got ${r.getLong(3)}")
+          assert(r.getLong(4) == fileSize,
+            s"file_block_length should be the archive size, got ${r.getLong(4)}")
+          assert(r.getAs[java.sql.Timestamp](5).getTime == archive.lastModified(),
+            "file_modification_time should be the archive's mtime")
+        }
+        assert(rows.map(_.toSeq).distinct.length == 1,
+          "every row must carry the same parent-archive metadata")
+      }
+    }
+  }
+
   // ----- shared complex-type test (run when `supportsComplexTypes`) ----------
 
   if (supportsComplexTypes) {
