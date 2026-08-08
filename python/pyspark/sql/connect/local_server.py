@@ -75,6 +75,20 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def _is_local_connect_server(pid: int) -> bool:
+    """Whether ``pid`` is still the managed Connect server recorded in discovery."""
+    try:
+        result = subprocess.run(
+            ["ps", "-ww", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and _SERVER_CLASS in result.stdout
+
+
 class Discovery:
     """Reads and writes the discovery file recording the persistent local server.
 
@@ -227,7 +241,7 @@ class LocalConnectServer:
 
     def stop(self) -> bool:
         stopped = False
-        if self.pid is not None:
+        if self.pid is not None and _is_local_connect_server(self.pid):
             try:
                 os.kill(self.pid, signal.SIGTERM)
                 stopped = True
@@ -313,6 +327,7 @@ class ServerLauncher:
                 "spark.api.mode",
                 "spark.master",
                 "spark.connect.authenticate.token",
+                "spark.connect.grpc.binding.address",
                 "spark.connect.grpc.binding.port",
             ) or k.startswith("spark.local.connect."):
                 conf.pop(k)
@@ -362,6 +377,8 @@ class ServerLauncher:
             script,
             "--master",
             self._master,
+            "--conf",
+            "spark.connect.grpc.binding.address=127.0.0.1",
             "--conf",
             "spark.connect.grpc.binding.port={}".format(port),
         ]

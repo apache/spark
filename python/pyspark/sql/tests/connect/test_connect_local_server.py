@@ -192,10 +192,54 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             discovery.save(
                 {k: getattr(server, k) for k in ("host", "port", "token", "pid", "spark_version")}
             )
-        with mock.patch.object(os, "kill") as kill:
+        # Avoid inspecting or signaling a real process while exercising the stop path.
+        ps_result = subprocess.CompletedProcess([], 0, stdout=local_server._SERVER_CLASS)
+        with (
+            mock.patch.object(subprocess, "run", return_value=ps_result) as run,
+            mock.patch.object(os, "kill") as kill,
+        ):
             self.assertTrue(local_server.stop_local_connect_server())
+        run.assert_called_once_with(
+            ["ps", "-ww", "-p", "12345", "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         kill.assert_called_once_with(12345, signal.SIGTERM)
         self.assertIsNone(self._discovered_server().pid)
+
+    def test_stop_does_not_signal_reused_pid(self) -> None:
+        from unittest import mock
+
+        with Discovery() as discovery:
+            server = self._server(pid=12345)
+            discovery.save(
+                {k: getattr(server, k) for k in ("host", "port", "token", "pid", "spark_version")}
+            )
+        # Model a recycled pid without depending on host process state.
+        ps_result = subprocess.CompletedProcess([], 0, stdout="unrelated process")
+        with (
+            mock.patch.object(subprocess, "run", return_value=ps_result),
+            mock.patch.object(os, "kill") as kill,
+        ):
+            self.assertFalse(local_server.stop_local_connect_server())
+        kill.assert_not_called()
+        self.assertIsNone(self._discovered_server().pid)
+
+    def test_server_launcher_binds_to_loopback(self) -> None:
+        from unittest import mock
+
+        with Discovery() as discovery:
+            launcher = local_server.ServerLauncher("local[2]", {}, discovery)
+            # Capture the launcher argv without starting an external daemon.
+            with (
+                mock.patch.object(os.path, "isfile", return_value=True),
+                mock.patch.object(
+                    subprocess, "run", return_value=subprocess.CompletedProcess([], 0)
+                ) as run,
+            ):
+                launcher._run_script(15002, "token", None)
+        self.assertIn("spark.connect.grpc.binding.address=127.0.0.1", run.call_args.args[0])
 
     def test_stop_cli_reports_when_no_server(self) -> None:
         result = subprocess.run(
