@@ -266,7 +266,7 @@ class RelationResolution(
             val relation: Option[Relation] = catalog match {
               case mc: RelationCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
                 try {
-                  Some(mc.loadRelation(ident))
+                  Some(mc.loadRelation(ident, finalOptions))
                 } catch {
                   case _: NoSuchTableException => None
                 }
