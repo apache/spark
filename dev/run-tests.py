@@ -423,6 +423,12 @@ def run_build_tests():
     run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
 
 
+def run_cli_tests(test_modules):
+    set_title_and_block("Running Spark CLI tests", "BLOCK_CLI_UNIT_TESTS")
+    goals = list(itertools.chain.from_iterable(m.cli_test_goals for m in test_modules))
+    run_cmd(["python3", "-m", "unittest"] + goals)
+
+
 def run_sparkr_tests():
     set_title_and_block("Running SparkR tests", "BLOCK_SPARKR_UNIT_TESTS")
 
@@ -669,6 +675,9 @@ def main():
             with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true",
         )
         run_python_packaging_tests()
+    modules_with_cli_tests = [m for m in test_modules if m.cli_test_goals]
+    if modules_with_cli_tests:
+        run_cli_tests(modules_with_cli_tests)
     if any(m.should_run_r_tests for m in test_modules) and not os.environ.get("SKIP_R"):
         run_sparkr_tests()
 

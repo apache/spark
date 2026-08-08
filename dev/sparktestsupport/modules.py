@@ -42,6 +42,7 @@ class Module(object):
         environ=None,
         sbt_test_goals=(),
         python_test_goals=(),
+        cli_test_goals=(),
         excluded_python_implementations=(),
         test_tags=(),
         should_run_r_tests=False,
@@ -62,6 +63,7 @@ class Module(object):
             module are changed.
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
+        :param cli_test_goals: A set of CLI test goals for testing this module.
         :param excluded_python_implementations: A set of Python implementations that are not
             supported by this module's Python components. The values in this set should match
             strings returned by Python's `platform.python_implementation()`.
@@ -77,6 +79,7 @@ class Module(object):
         self.build_profile_flags = build_profile_flags
         self.environ = environ or {}
         self.python_test_goals = python_test_goals
+        self.cli_test_goals = cli_test_goals
         self.excluded_python_implementations = excluded_python_implementations
         self.test_tags = test_tags
         self.should_run_r_tests = should_run_r_tests
@@ -101,7 +104,9 @@ class Module(object):
         if not re.match(r"test_.*\.py", last_part):
             return False
         module_path = ".".join(path.parts)[:-3]  # Remove the ".py" suffix
-        return not any(module_path.endswith(test) for test in self.python_test_goals)
+        # The CLI is implemented in Python but it's not tested as part of PySpark.
+        python_goals = self.python_test_goals + list(self.cli_test_goals)
+        return not any(module_path.endswith(test) for test in python_goals)
 
     def __repr__(self):
         return "Module<%s>" % self.name
@@ -1665,6 +1670,16 @@ docs = Module(
     ],
 )
 
+
+spark_cli = Module(
+    name="cli",
+    dependencies=[],
+    source_file_regexes=["cli/"],
+    cli_test_goals=[
+        "cli.tests.test_spark_cli",
+    ],
+)
+
 build = Module(
     name="build",
     dependencies=[],
@@ -1781,6 +1796,7 @@ root = Module(
         "test",
     ],
     python_test_goals=list(itertools.chain.from_iterable(m.python_test_goals for m in all_modules)),
+    cli_test_goals=list(itertools.chain.from_iterable(m.cli_test_goals for m in all_modules)),
     should_run_r_tests=True,
     should_run_build_tests=True,
 )
