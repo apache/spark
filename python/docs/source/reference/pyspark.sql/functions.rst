@@ -607,6 +607,7 @@ VARIANT Functions
     variant_array_append
     try_variant_array_append
     variant_delete
+    variant_strip_nulls
     variant_get
     variant_insert
     try_variant_insert

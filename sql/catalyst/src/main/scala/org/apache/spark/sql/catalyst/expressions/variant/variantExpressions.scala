@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.json.JsonInferSchema
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, QuotingUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
@@ -1497,6 +1497,92 @@ object VariantArrayAppendExpressionBuilder extends VariantArrayAppendExpressionB
 // scalastyle:on line.size.limit
 object TryVariantArrayAppendExpressionBuilder
     extends VariantArrayAppendExpressionBuilderBase(false)
+case class VariantStripNulls(child: Expression, includeArrays: Expression)
+    extends RuntimeReplaceable
+    with ExpectsInputTypes
+    with BinaryLike[Expression]
+    with QueryErrorsBase {
+
+  override def left: Expression = child
+  override def right: Expression = includeArrays
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType, BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val result = super.checkInputDataTypes()
+    if (result.isFailure) {
+      result
+    } else if (!includeArrays.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("include_arrays"),
+          "inputType" -> toSQLType(includeArrays.dataType),
+          "inputExpr" -> toSQLExpr(includeArrays)))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantExpressionEvalUtils.getClass,
+    VariantType,
+    "stripNulls",
+    Seq(child, includeArrays),
+    inputTypes,
+    returnNullable = false)
+
+  override def prettyName: String = "variant_strip_nulls"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): VariantStripNulls =
+    copy(child = newLeft, includeArrays = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v[, include_arrays]) - Recursively removes object fields and array elements " +
+    "whose value is a variant null, unless `include_arrays` is false, in which case null array " +
+    "elements are kept. Returns NULL if any argument is NULL.",
+  arguments = """
+    Arguments:
+      * v - A variant value to mutate.
+      * include_arrays - An optional boolean (default true). Must be a constant.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('{"a": 1, "b": null, "c": 3}'));
+       {"a":1,"c":3}
+      > SELECT _FUNC_(parse_json('[1, null, 3]'));
+       [1,3]
+      > SELECT _FUNC_(parse_json('{"a": {"b": null, "c": [1, null]}}'));
+       {"a":{"c":[1]}}
+      > SELECT _FUNC_(parse_json('{"a": [1, null], "b": null}'), false);
+       {"a":[1,null]}
+      > SELECT _FUNC_(parse_json('{"a": null}'));
+       {}
+      > SELECT _FUNC_(parse_json('null'));
+       null
+      > SELECT _FUNC_(NULL);
+       NULL
+  """,
+  since = "4.3.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+object VariantStripNullsExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] = {
+    val vArg = InputParameter("v")
+    val includeArraysArg =
+      InputParameter("include_arrays", Some(Literal.create(true, BooleanType)))
+    Some(FunctionSignature(Seq(vArg, includeArraysArg)))
+  }
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    assert(expressions.size == 2)
+    VariantStripNulls(expressions(0), expressions(1))
+  }
+}
 
 case class VariantExplode(child: Expression) extends UnaryExpression with Generator
   with ExpectsInputTypes {
