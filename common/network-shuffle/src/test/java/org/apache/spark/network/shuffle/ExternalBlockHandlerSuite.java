@@ -49,6 +49,7 @@ import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.CorruptionCause;
 import org.apache.spark.network.shuffle.protocol.DiagnoseCorruption;
+import org.apache.spark.network.shuffle.protocol.DiagnoseShuffleChunkCorruption;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
@@ -221,6 +222,33 @@ public class ExternalBlockHandlerSuite {
   @Test
   public void testShuffleCorruptionDiagnosisCRC32C() throws IOException {
     checkDiagnosisResult("CRC32C", Cause.CHECKSUM_VERIFY_PASS);
+  }
+
+  @Test
+  public void testShuffleChunkCorruptionDiagnosis() {
+    String appId = "app0";
+    int shuffleId = 0;
+    int shuffleMergeId = 1;
+    int reduceId = 2;
+    int chunkId = 3;
+    long checksumByReader = 12345L;
+    String algorithm = "ADLER32";
+    when(mergedShuffleManager.diagnoseShuffleChunkCorruption(appId, shuffleId, shuffleMergeId,
+      reduceId, chunkId, checksumByReader, algorithm)).thenReturn(Cause.DISK_ISSUE);
+
+    when(client.getClientId()).thenReturn(appId);
+    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+    DiagnoseShuffleChunkCorruption diagnoseMsg = new DiagnoseShuffleChunkCorruption(
+      appId, shuffleId, shuffleMergeId, reduceId, chunkId, checksumByReader, algorithm);
+    handler.receive(client, diagnoseMsg.toByteBuffer(), callback);
+
+    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
+    verify(callback, times(1)).onSuccess(response.capture());
+    verify(callback, never()).onFailure(any());
+
+    CorruptionCause cause =
+      (CorruptionCause) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
+    assertEquals(Cause.DISK_ISSUE, cause.cause);
   }
 
   @Test
