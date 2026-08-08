@@ -34,7 +34,7 @@ import org.apache.logging.log4j.CloseableThreadContext
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, QUERY_ID, RUN_ID, SPARK_DATA_STREAM}
+import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, CONFIG, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, QUERY_ID, RUN_ID, SPARK_DATA_STREAM}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.classic.{SparkSession, StreamingQuery}
@@ -43,10 +43,11 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLi
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
-import org.apache.spark.sql.execution.streaming.ContinuousTrigger
+import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RealTimeTrigger}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitLog, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperator, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchUserFuncException, ForeachUserFuncException}
+import org.apache.spark.sql.execution.streaming.state.{RocksDBConf, RocksDBStateStoreProvider}
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataV2FileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
@@ -325,6 +326,10 @@ abstract class StreamExecution(
           sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
         }
 
+        if (trigger.isInstanceOf[RealTimeTrigger]) {
+          setSparkSessionConfigsForRealTimeMode(sparkSessionForStream)
+        }
+
         sparkSessionForStream.conf.get(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL) match {
           case Some(_) => // no-op
           case None =>
@@ -455,6 +460,87 @@ abstract class StreamExecution(
         }
         terminationLatch.countDown()
       }
+    }
+  }
+
+  /**
+   * Applies the configuration a Real-Time Mode query needs but that is not the engine-wide default,
+   * because it is only the right choice for a low-latency, long-running batch. Runs once at query
+   * start, before the logical plan is forced, so a config read during planning sees the final
+   * value.
+   *
+   * There are two kinds of setting here, and the difference is deliberate:
+   *
+   *  - SOFT DEFAULTS, applied only when the user has not set the key, so an explicit choice always
+   *    wins. These are performance choices, not correctness requirements, so a user who sets one is
+   *    assumed to mean it. The state store settings and `changelogCheckpointing` are these.
+   *  - HARD OVERRIDES, applied unconditionally because honouring the user's value would break the
+   *    query outright. `sortBeforeRepartition` is one: leaving it `true` makes a Real-Time Mode
+   *    query with a round-robin repartition produce no rows at all. An override logs a warning so
+   *    the operator can see their config is not the one in force.
+   *
+   * Every change is logged, so a run's effective configuration is recoverable from the driver log.
+   *
+   * Deliberately not set, though Databricks Runtime does default them for Real-Time Mode:
+   *  - The incremental state-cleanup factor: that mechanism does not exist in OSS yet.
+   *  - The Python/Pandas UDF latency knobs: those configs do not exist in OSS.
+   */
+  private def setSparkSessionConfigsForRealTimeMode(sparkSessionForStream: SparkSession): Unit = {
+    val conf = sparkSessionForStream.conf
+
+    // SOFT DEFAULTS. Real-Time Mode benefits from state store checkpoint format v2: it gives each
+    // batch run its own state store checkpoint ids, which prevents a re-executed batch from reusing
+    // the state file names of a partially-written failed batch (see the v1 hazard described at the
+    // fail-fast in MicroBatchExecution.initializeExecution). v2 requires the RocksDB state store
+    // provider. These are defaulted with two INDEPENDENT guards, matching the Databricks runtime:
+    // each key is set only if the user has not set that key. If the user pins the provider to a
+    // non-RocksDB store but leaves the version unset, the version is still raised to 2 and the
+    // incompatible combination throws later (HDFSBackedStateStoreProvider rejects
+    // checkpointFormatVersion > 1) rather than silently running at v1 -- the runtime makes the same
+    // choice deliberately.
+    val checkpointVersionKey = SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key
+    if (!conf.contains(checkpointVersionKey)) {
+      logInfo(log"Real-Time Mode: defaulting ${MDC(CONFIG, checkpointVersionKey)}=2")
+      conf.set(checkpointVersionKey, CommitLog.VERSION_2.toString)
+    }
+    val providerKey = SQLConf.STATE_STORE_PROVIDER_CLASS.key
+    if (!conf.contains(providerKey)) {
+      logInfo(log"Real-Time Mode: defaulting " +
+        log"${MDC(CONFIG, providerKey)}=RocksDBStateStoreProvider")
+      conf.set(providerKey, classOf[RocksDBStateStoreProvider].getName)
+    }
+
+    // SOFT DEFAULT. Changelog checkpointing writes a changelog rather than a full snapshot on each
+    // commit, which shortens the state-commit step at a batch boundary. That step is on the
+    // critical path between batches in Real-Time Mode, so this is a latency optimization. It is
+    // only meaningful with RocksDB, hence the check against the provider actually in force.
+    val changelogKey = s"${RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX}.changelogCheckpointing.enabled"
+    val usingRocksDb =
+      conf.get(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+        SQLConf.STATE_STORE_PROVIDER_CLASS.defaultValueString) ==
+        classOf[RocksDBStateStoreProvider].getName
+    if (usingRocksDb && !conf.contains(changelogKey)) {
+      logInfo(log"Real-Time Mode: defaulting ${MDC(CONFIG, changelogKey)}=true")
+      conf.set(changelogKey, "true")
+    }
+
+    // SOFT DEFAULT. `repartition(n)` uses RoundRobinPartitioning, and by default (SPARK-23207)
+    // Spark inserts a local sort before a round-robin shuffle so the row-to-partition assignment is
+    // deterministic -- otherwise a retried task could emit rows in a different order and lose data.
+    // That sort is fully blocking: it drains its whole input before emitting a row. A Real-Time
+    // Mode task reads an unbounded stream, so the input never ends, the producer never emits, and
+    // the query makes no progress at all. Note this sort is not a SortExec node (it lives inside
+    // ShuffleExchangeExec's RDD), so the Real-Time Mode operator allowlist cannot catch it.
+    //
+    // Determinism is not needed here: Real-Time Mode does not retry tasks (TaskSetManager caps a
+    // pipelined task set at one attempt, and its group is aborted as a unit rather than
+    // recomputed), so the hazard the sort guards against does not arise.
+    //
+    // This is a soft default rather than an override: an explicit `true` is rejected up front by
+    // the pre-flight in StreamingQueryManager (throwIfConfsAreRealTimeModeIncompatible), so by the
+    // time we get here an explicit value can only be `false`. Matches the Databricks runtime.
+    if (!conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key)) {
+      conf.set(SQLConf.SORT_BEFORE_REPARTITION.key, "false")
     }
   }
 
