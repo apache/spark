@@ -127,11 +127,9 @@ case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
   }
 
   // TIME decoding converts micros->nanos (for TIME(MICROS)) and truncates to the requested
-  // precision per value in the updater; lazy dictionary decoding would attach the raw dictionary
-  // and skip that processing, so it must be disabled. This matches the fail-safe trait default,
-  // but is stated explicitly because TimeType opts into vectorized reads (isBatchReadSupported =
-  // true) and the per-value work is exactly why lazy decoding is unsafe here.
-  override def supportsLazyDictionaryDecoding(descriptor: ColumnDescriptor): Boolean = false
+  // precision per value. This transform is now handled inside ParquetDictionary.decodeToLong when
+  // the TIME-aware constructor is used, so lazy dictionary decoding is safe.
+  override def supportsLazyDictionaryDecoding(descriptor: ColumnDescriptor): Boolean = true
 }
 
 private[ops] object TimeTypeParquetOps {
