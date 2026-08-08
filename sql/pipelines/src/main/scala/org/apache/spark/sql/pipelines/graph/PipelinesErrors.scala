@@ -64,6 +64,23 @@ object PipelinesErrors extends Logging {
   }
 
   /**
+   * Returns true if `ex` (or any of its causes) indicates that a streaming flow's set of sources
+   * changed since the last run. This is unrecoverable without a full refresh, so a flow that fails
+   * with this error must not be retried.
+   */
+  private[graph] def streamingSourcesChanged(ex: Throwable): Boolean = {
+    checkCauses(
+      throwable = ex,
+      check = cause => {
+        cause.isInstanceOf[AssertionError] &&
+        cause.getMessage != null &&
+        cause.getMessage.contains("sources in the checkpoint offsets and now there are") &&
+        cause.getMessage.contains("sources requested by the query. Cannot continue.")
+      }
+    )
+  }
+
+  /**
    * Checks an error for streaming specific handling. This is a pretty messy signature as a result
    * of unifying some divergences between the triggered caller in TriggeredGraphExecution and the
    * continuous caller in StreamWatchdog.
@@ -87,28 +104,7 @@ object PipelinesErrors extends Logging {
       maxRetries: Int,
       onRetry: => Unit
   ): Unit = {
-    if (PipelinesErrors.checkCauses(
-        throwable = ex,
-        check = ex => {
-          ex.isInstanceOf[AssertionError] &&
-          ex.getMessage != null &&
-          ex.getMessage.contains("sources in the checkpoint offsets and now there are") &&
-          ex.getMessage.contains("sources requested by the query. Cannot continue.")
-        }
-      )) {
-      val message = s"""
-         |Flow '${flow.displayName}' had streaming sources added or removed. Please perform a
-         |full refresh in order to rebuild '${flow.displayName}' against the current set of
-         |sources.
-         |""".stripMargin
-
-      env.flowProgressEventLogger.recordFailed(
-        flow = flow,
-        exception = ex,
-        logAsWarn = false,
-        messageOpt = Option(message)
-      )
-    } else if (flow.once && ex == null) {
+    if (flow.once && ex == null) {
       // No need to do anything if this is a ONCE flow with no exception. That just means it's done.
     } else {
       val actionFromError = GraphExecution.determineFlowExecutionActionFromError(
@@ -120,7 +116,8 @@ object PipelinesErrors extends Logging {
       actionFromError match {
         // Simply retry
         case GraphExecution.RetryFlowExecution => onRetry
-        // Schema change exception
+        // Non-retryable stop reason (max retries exceeded, streaming sources changed, ...).
+        // When shouldRethrow is true, this rethrows so the run stops eagerly on these reasons.
         case GraphExecution.StopFlowExecution(reason) =>
           val msg = reason.failureMessage
           if (reason.warnInsteadOfError) {
