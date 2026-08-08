@@ -81,13 +81,35 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
     val runner = new UserDefinedPythonDataSourceFilterPushdownRunner(
       createPythonFunction(pythonResult.dataSource),
       outputSchema,
-      filters
+      filters,
+      limit = None
     )
     if (runner.isAnyFilterSupported) {
       Some(runner.runInPython())
     } else {
       None
     }
+  }
+
+  /**
+   * (Driver-side) Run Python process to push down a limit, get the updated data source
+   * instance and the pushdown result.
+   *
+   * `filters` must be the same filters that were previously passed to
+   * [[pushdownFiltersInPython]], so that the reader reaches the same state before
+   * `pushLimit` is called on it.
+   */
+  def pushdownLimitInPython(
+      pythonResult: PythonDataSourceCreationResult,
+      outputSchema: StructType,
+      filters: Array[Filter],
+      limit: Int): PythonFilterPushdownResult = {
+    new UserDefinedPythonDataSourceFilterPushdownRunner(
+      createPythonFunction(pythonResult.dataSource),
+      outputSchema,
+      filters,
+      limit = Some(limit)
+    ).runInPython()
   }
 
   /**
@@ -346,14 +368,16 @@ private class UserDefinedPythonDataSourceRunner(
 
 /**
  * @param isFilterPushed A sequence of bools indicating whether each filter is pushed down.
+ * @param isLimitPushed Whether the limit is pushed down. False when no limit was sent.
  */
 case class PythonFilterPushdownResult(
     readInfo: PythonDataSourceReadInfo,
-    isFilterPushed: collection.Seq[Boolean]
+    isFilterPushed: collection.Seq[Boolean],
+    isLimitPushed: Boolean = false
 )
 
 /**
- * Push down filters to a Python data source.
+ * Push down filters and optionally a limit to a Python data source.
  *
  * @param dataSource
  *   a Python data source instance
@@ -361,11 +385,14 @@ case class PythonFilterPushdownResult(
  *   output schema of the Python data source
  * @param filters
  *   all filters to be pushed down
+ * @param limit
+ *   the limit to be pushed down, if any
  */
 private class UserDefinedPythonDataSourceFilterPushdownRunner(
     dataSource: PythonFunction,
     schema: StructType,
-    filters: collection.Seq[Filter])
+    filters: collection.Seq[Filter],
+    limit: Option[Int])
     extends PythonPlannerRunner[PythonFilterPushdownResult](dataSource) {
 
   private case class SerializedFilter(
@@ -476,8 +503,12 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     // Send the filters
     PythonWorkerUtils.writeUTF(mapper.writeValueAsString(serializedFilters), dataOut)
 
+    // Send the limit, if any. -1 means no limit is pushed down.
+    dataOut.writeInt(limit.getOrElse(-1))
+
     // Send configurations
     dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
+    dataOut.writeBoolean(SQLConf.get.pythonLimitPushDown)
     dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
   }
 
@@ -493,9 +524,13 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
       isFilterPushed(serializedFilters(i).index) = true
     }
 
+    // Receive whether the limit was pushed down, sent as 1 or 0.
+    val isLimitPushed = dataIn.readInt() != 0
+
     PythonFilterPushdownResult(
       readInfo = readInfo,
-      isFilterPushed = isFilterPushed
+      isFilterPushed = isFilterPushed,
+      isLimitPushed = isLimitPushed
     )
   }
 }
@@ -575,6 +610,7 @@ private class UserDefinedPythonDataSourceReadRunner(
     // Send configurations
     dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
     dataOut.writeBoolean(SQLConf.get.pythonFilterPushDown)
+    dataOut.writeBoolean(SQLConf.get.pythonLimitPushDown)
 
     dataOut.writeBoolean(isStreaming)
     dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
