@@ -555,15 +555,16 @@ class TableValuedFunction:
         """
         return self._fn("sql_keywords")
 
-    def variant_explode(self, input: Column) -> DataFrame:
+    def variant_explode(self, input: Column, recursive: bool = False) -> DataFrame:
         """
         Separates a variant object/array into multiple rows containing its fields/elements.
 
         Its result schema is `struct<pos int, key string, value variant>`. `pos` is the position of
         the field/element in its parent object/array, and `value` is the field/element value.
         `key` is the field name when exploding a variant object, or is NULL when exploding a variant
-        array. It ignores any input that is not a variant array/object, including SQL NULL, variant
-        null, and any other variant values.
+        array. When ``recursive`` is true, it also emits all nested descendants and adds a leading
+        ``path`` column containing each field/element's JSONPath. It ignores any input that is not
+        a variant array/object, including SQL NULL, variant null, and any other variant values.
 
         .. versionadded:: 4.0.0
 
@@ -571,6 +572,8 @@ class TableValuedFunction:
         ----------
         input : :class:`~pyspark.sql.Column`
             input column of values to explode.
+        recursive : bool, optional
+            whether to recursively explode nested objects and arrays, by default False.
 
         Returns
         -------
@@ -617,18 +620,42 @@ class TableValuedFunction:
         |pos|key|value|
         +---+---+-----+
         +---+---+-----+
-        """
-        return self._fn("variant_explode", input)
 
-    def variant_explode_outer(self, input: Column) -> DataFrame:
+        Example 5: Recursively exploding a nested variant
+
+        >>> value = sf.parse_json(sf.lit('{"a": [1, 2]}'))
+        >>> spark.tvf.variant_explode(value, recursive=True).show()
+        +------+---+----+-----+
+        |  path|pos| key|value|
+        +------+---+----+-----+
+        |   $.a|  0|   a|[1,2]|
+        |$.a[0]|  0|NULL|    1|
+        |$.a[1]|  1|NULL|    2|
+        +------+---+----+-----+
+        """
+        if not recursive:
+            return self._fn("variant_explode", input)
+
+        from pyspark.sql.classic.column import _to_java_column
+
+        return DataFrame(
+            self._sparkSession._jsparkSession.tvf().variant_explode(
+                _to_java_column(input), recursive
+            ),
+            self._sparkSession,
+        )
+
+    def variant_explode_outer(self, input: Column, recursive: bool = False) -> DataFrame:
         """
         Separates a variant object/array into multiple rows containing its fields/elements.
 
         Its result schema is `struct<pos int, key string, value variant>`. `pos` is the position of
         the field/element in its parent object/array, and `value` is the field/element value.
         `key` is the field name when exploding a variant object, or is NULL when exploding a variant
-        array. Unlike variant_explode, if the given variant is not a variant array/object, including
-        SQL NULL, variant null, and any other variant values, then NULL is produced.
+        array. When ``recursive`` is true, it also emits all nested descendants and adds a leading
+        ``path`` column containing each field/element's JSONPath. Unlike variant_explode, if the
+        given variant is not a variant array/object, including SQL NULL, variant null, and any other
+        variant values, then NULL is produced.
 
         .. versionadded:: 4.0.0
 
@@ -636,6 +663,8 @@ class TableValuedFunction:
         ----------
         input : :class:`~pyspark.sql.Column`
             input column of values to explode.
+        recursive : bool, optional
+            whether to recursively explode nested objects and arrays, by default False.
 
         Returns
         -------
@@ -670,8 +699,27 @@ class TableValuedFunction:
         +----+----+-----+
         |NULL|NULL| NULL|
         +----+----+-----+
+        >>> value = sf.parse_json(sf.lit('{"a": [1, 2]}'))
+        >>> spark.tvf.variant_explode_outer(value, recursive=True).show()
+        +------+---+----+-----+
+        |  path|pos| key|value|
+        +------+---+----+-----+
+        |   $.a|  0|   a|[1,2]|
+        |$.a[0]|  0|NULL|    1|
+        |$.a[1]|  1|NULL|    2|
+        +------+---+----+-----+
         """
-        return self._fn("variant_explode_outer", input)
+        if not recursive:
+            return self._fn("variant_explode_outer", input)
+
+        from pyspark.sql.classic.column import _to_java_column
+
+        return DataFrame(
+            self._sparkSession._jsparkSession.tvf().variant_explode_outer(
+                _to_java_column(input), recursive
+            ),
+            self._sparkSession,
+        )
 
     def python_worker_logs(self) -> DataFrame:
         """

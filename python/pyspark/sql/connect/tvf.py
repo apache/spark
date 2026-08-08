@@ -99,13 +99,23 @@ class TableValuedFunction:
 
     sql_keywords.__doc__ = PySparkTableValuedFunction.sql_keywords.__doc__
 
-    def variant_explode(self, input: "Column") -> "DataFrame":
-        return self._fn("variant_explode", input)
+    def variant_explode(self, input: "Column", recursive: bool = False) -> "DataFrame":
+        if not recursive:
+            return self._fn("variant_explode", input)
+
+        from pyspark.sql.connect.functions import lit
+
+        return self._fn("variant_explode", input, lit(True))
 
     variant_explode.__doc__ = PySparkTableValuedFunction.variant_explode.__doc__
 
-    def variant_explode_outer(self, input: "Column") -> "DataFrame":
-        return self._fn("variant_explode_outer", input)
+    def variant_explode_outer(self, input: "Column", recursive: bool = False) -> "DataFrame":
+        if not recursive:
+            return self._fn("variant_explode_outer", input)
+
+        from pyspark.sql.connect.functions import lit
+
+        return self._fn("variant_explode_outer", input, lit(True))
 
     variant_explode_outer.__doc__ = PySparkTableValuedFunction.variant_explode_outer.__doc__
 
