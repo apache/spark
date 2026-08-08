@@ -110,7 +110,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  *       {@link View} for a view; callers discriminate via {@code instanceof}. Saves the
  *       {@code loadTable} -> {@code loadView} fallback on a cold cache. Used for lookups that
  *       carry no read options (DDL and miscellaneous commands), and as the base that the
- *       {@code loadTable} / {@code loadView} defaults derive from.</li>
+ *       {@code loadTable(Identifier)} / {@code loadView} defaults derive from.</li>
  *   <li>{@link #loadRelation(Identifier, CaseInsensitiveStringMap)} -- the resolver's
  *       per-identifier read path: same contract, plus the user's read options.</li>
  *   <li>{@link #listRelationSummaries(String[])} -- a unified listing of tables and views
