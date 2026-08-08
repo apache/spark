@@ -362,6 +362,7 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
   - `unix_timestamp`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
   - `to_unix_timestamp`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
   - `make_date`: This function should fail with an exception if the result date is invalid.
+  - `make_time`: This function should fail with an exception if the result time is invalid.
   - `make_timestamp`: This function should fail with an exception if the result timestamp is invalid.
   - `make_interval`:  This function should fail with an exception if the result interval is invalid.
   - `next_day`: This function throws `IllegalArgumentException` if input is not a valid day of week.
@@ -388,6 +389,7 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_make_timestamp`: identical to the function `make_timestamp`, except that it returns `NULL` result instead of throwing an exception on error.
   - `try_make_timestamp_ltz`: identical to the function `make_timestamp_ltz`, except that it returns `NULL` result instead of throwing an exception on error.
   - `try_make_timestamp_ntz`: identical to the function `make_timestamp_ntz`, except that it returns `NULL` result instead of throwing an exception on error.
+  - `try_make_time`: identical to the function `make_time`, except that it returns `NULL` result instead of throwing an exception on invalid inputs.
   - `try_make_interval`: identical to the function `make_interval`, except that it returns `NULL` result instead of throwing an exception on invalid interval.
   - `try_to_time`: identical to the function `to_time`, except that it returns `NULL` result instead of throwing an exception on string parsing error.
   - `try_to_date`: identical to the function `to_date`, except that it returns `NULL` result instead of throwing an exception on string parsing error.
