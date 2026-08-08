@@ -1800,12 +1800,12 @@ ORDER BY SUM(b)
 -- !query schema
 struct<a:int,b:int,sb:bigint>
 -- !query output
-1	NULL	40
-2	NULL	60
 1	10	10
 2	20	20
 1	30	30
+1	NULL	40
 2	40	40
+2	NULL	60
 
 
 -- !query
@@ -1816,17 +1816,17 @@ ORDER BY SUM(b)
 -- !query schema
 struct<a:int,b:int,sb:bigint>
 -- !query output
-1	NULL	40
-2	NULL	60
-NULL	NULL	100
 1	10	10
 NULL	10	10
 NULL	20	20
 2	20	20
 NULL	30	30
 1	30	30
+1	NULL	40
 2	40	40
 NULL	40	40
+2	NULL	60
+NULL	NULL	100
 
 
 -- !query
@@ -1837,13 +1837,13 @@ ORDER BY SUM(b)
 -- !query schema
 struct<a:int,b:int,sb:bigint>
 -- !query output
-1	NULL	40
-2	NULL	60
-NULL	NULL	100
 1	10	10
 2	20	20
 1	30	30
+1	NULL	40
 2	40	40
+2	NULL	60
+NULL	NULL	100
 
 
 -- !query
