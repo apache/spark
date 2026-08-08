@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Replaces a logical [[NearestByJoin]] operator with a `Generate(Inline(...))` over an
@@ -72,7 +73,12 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
   private lazy val random = new scala.util.Random()
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
-    case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction) =>
+    case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction)
+      // When the broadcast flag is ON the NearestByJoin node is left intact for the
+      // planner's NearestByJoinSelection strategy, which unconditionally plans
+      // BroadcastNearestByJoinExec. There is no size decision; the right side is
+      // broadcast unconditionally regardless of spark.sql.autoBroadcastJoinThreshold.
+      if !SQLConf.get.nearestByBroadcastEnabled =>
       // 1. Tag each left row with a unique id so that rows from the same left row can later be
       //    grouped together after the cross-join with `right`.
       val qidAlias = Alias(Uuid(Some(random.nextLong())), "__qid")()
@@ -85,11 +91,13 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
       //    are dropped. When `right` is non-empty every left row already has right-row
       //    pairings, so `LEFT OUTER` and `INNER` are equivalent in that case.
       //
-      //    This synthetic join is an unconditioned cross-product, so `NEAREST BY` queries
-      //    are subject to `CheckCartesianProducts` and will be rejected when the user has
-      //    set `spark.sql.crossJoin.enabled = false`. That is intentional: if the user has
-      //    opted out of cross-products, the NEAREST BY rewrite -- which is itself a bounded
-      //    cross-product today -- should not silently bypass that choice.
+      //    This synthetic join is an unconditioned cross-product, so on the REWRITE path
+      //    (flag OFF) `NEAREST BY` queries are subject to `CheckCartesianProducts` and will
+      //    be rejected when the user has set `spark.sql.crossJoin.enabled = false`. That is
+      //    intentional: if the user has opted out of cross-products, the rewrite -- which is
+      //    itself a bounded cross-product today -- should not silently bypass that choice.
+      //    (On the OPERATOR path -- flag ON -- no Join node is built, so
+      //    CheckCartesianProducts does not apply and crossJoin.enabled is irrelevant.)
       val join = Join(taggedLeft, right, joinType, None, JoinHint.NONE)
 
       // A LEFT OUTER join widens the right-side columns to nullable. The synthesized Aggregate

@@ -425,6 +425,28 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Plans NearestByJoin as a BroadcastNearestByJoinExec when the broadcast flag is ON.
+   * The optimizer's RewriteNearestByJoin leaves the NearestByJoin node intact when the flag
+   * is enabled, so this strategy unconditionally plans the broadcast operator -- there is
+   * no size decision; the right side is broadcast unconditionally. When the flag is OFF,
+   * RewriteNearestByJoin rewrites to the aggregate path and NearestByJoin never reaches
+   * the planner.
+   */
+  object NearestByJoinSelection extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case j: NearestByJoin =>
+        joins.BroadcastNearestByJoinExec(
+          planLater(j.left),
+          planLater(j.right),
+          j.joinType,
+          j.numResults,
+          j.rankingExpression,
+          j.direction) :: Nil
+      case _ => Nil
+    }
+  }
+
+  /**
    * Plans AS-OF joins using a dedicated sort-merge operator when enabled for the
    * DataFrame API, or implicitly for SQL ASOF JOIN (`requiresSortMergeAsOfJoin`).
    */
