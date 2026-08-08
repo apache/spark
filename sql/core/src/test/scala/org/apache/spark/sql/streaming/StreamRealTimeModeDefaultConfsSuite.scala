@@ -110,7 +110,7 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
   test("an explicit incompatible config is rejected up front for a Real-Time Mode query") {
     // The pre-flight in StreamingQueryManager rejects explicit RTM-incompatible session configs
     // before the query is built: checkpoint format below v2, a non-RocksDB provider, and
-    // sortBeforeRepartition=true. Each is reported in a single CONFIGURATION_NOT_SUPPORTED error.
+    // sortBeforeRepartition=true. Each is reported in one SQL_CONFIGURATION_NOT_SUPPORTED error.
     def assertRejected(confs: (String, String)*): Unit = {
       withSQLConf(confs: _*) {
         val inputData = LowLatencyMemoryStream[Int]
@@ -118,7 +118,7 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
           testStream(inputData.toDS(), OutputMode.Update, Map.empty, new ContinuousMemorySink())(
             StartStream())
         }
-        checkError(e, condition = "STREAMING_REAL_TIME_MODE.CONFIGURATION_NOT_SUPPORTED",
+        checkError(e, condition = "STREAMING_REAL_TIME_MODE.SQL_CONFIGURATION_NOT_SUPPORTED",
           parameters = e.getMessageParameters.asScala.toMap)
       }
     }
