@@ -27,7 +27,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkException
 import org.apache.spark.internal.config.{MEMORY_OFFHEAP_ENABLED, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.internal.config.Kryo._
-import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryConsumer, UnifiedMemoryManager}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
@@ -757,6 +757,13 @@ abstract class HashedRelationSuite extends SharedSparkSession {
       assert(it.hasNext != ignoresDuplicatedKey)
       map.free()
     }
+  }
+
+  test("Verify TaskMemoryManager creation") {
+    val taskMemoryManager = HashedRelation.createTaskMemoryManager()
+    val testMemoryConsumer = new TestMemoryConsumer(taskMemoryManager)
+    val memoryPage = taskMemoryManager.allocatePage(100, testMemoryConsumer)
+    assert(memoryPage.size() > 0)
   }
 }
 
