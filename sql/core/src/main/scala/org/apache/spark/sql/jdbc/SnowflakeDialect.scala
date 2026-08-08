@@ -31,6 +31,9 @@ private case class SnowflakeDialect() extends JdbcDialect with NoLegacyJDBCError
     e.getSQLState == "002003"
   }
 
+  // Snowflake rounds half away from zero when casting to an integral type.
+  override def truncateFractionalValue(expr: String): String = s"TRUNC($expr)"
+
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case BooleanType =>
       // By default, BOOLEAN is mapped to BIT(1).
