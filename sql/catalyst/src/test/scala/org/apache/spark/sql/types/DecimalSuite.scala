@@ -66,23 +66,21 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 1)),
-      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
       parameters = Map(
         "value" -> "0",
         "precision" -> "2",
-        "scale" -> "1",
-        "config" -> "\"spark.sql.ansi.enabled\""))
+        "scale" -> "1"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 0)),
-      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
       parameters = Map(
         "value" -> "0",
         "precision" -> "2",
-        "scale" -> "0",
-        "config" -> "\"spark.sql.ansi.enabled\""))
+        "scale" -> "0"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(BigDecimal("10.030"), 2, 1)),
-      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_ROUND_ATTEMPT",
       parameters = Map(
         "roundedValue" -> "10.0",
         "originalValue" -> "10.030",
@@ -90,7 +88,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "scale" -> "1"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(BigDecimal("-9.95"), 2, 1)),
-      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_ROUND_ATTEMPT",
       parameters = Map(
         "roundedValue" -> "-10.0",
         "originalValue" -> "-9.95",
@@ -98,12 +96,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "scale" -> "1"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(1e17.toLong, 17, 0)),
-      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
       parameters = Map(
         "value" -> "0",
         "precision" -> "17",
-        "scale" -> "0",
-        "config" -> "\"spark.sql.ansi.enabled\""))
+        "scale" -> "0"))
     checkError(
       exception = intercept[AnalysisException](Decimal(BigDecimal("10"), 2, -5)),
       condition = "NEGATIVE_SCALE_DISALLOWED",
