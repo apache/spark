@@ -1875,6 +1875,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       val memoryMetrics = d.info.memoryMetrics.get
       assert(memoryMetrics.usedOffHeapStorageMemory == 0)
       assert(memoryMetrics.usedOnHeapStorageMemory == 0)
+      assert(memoryMetrics.totalOffHeapStorageMemory == 0)
     }
   }
 
