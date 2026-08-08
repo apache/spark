@@ -31,9 +31,9 @@ that must react to data the moment it arrives, such as fraud detection, real-tim
 personalization.
 
 Real-time Mode in Apache Spark supports **stateless queries** -- projections, filters and other
-map-like operations, unions, and stream-static joins -- and, starting in Spark 4.3, a first set of
-**stateful queries**: streaming **deduplication** (`dropDuplicates` /
-`dropDuplicatesWithinWatermark`) and streaming **aggregations** (`groupBy(...).agg(...)`). These
+map-like operations, unions, and stream-static joins -- and, starting in Spark 4.3.0, a first set of
+**stateful queries**: streaming **deduplication** (`dropDuplicates`) and streaming **aggregations**
+(`groupBy(...).agg(...)`). These
 stateful operations require a shuffle, which Real-time Mode runs as a *pipelined shuffle* so that
 records still stream through without waiting for a batch boundary; see
 [How Stateful Queries Work](#how-stateful-queries-work). Other stateful operations -- stream-stream
@@ -163,7 +163,7 @@ substantially:
 - **Real-time Mode** is designed to support all query shapes, including stateful operations, while
   reusing Spark's mature components such as state management, the Catalyst optimizer, and the
   existing SQL operators. It provides exactly-once processing semantics. It supports stateless
-  queries and, starting in Spark 4.3, stateful deduplication and aggregation; support for the
+  queries and, starting in Spark 4.3.0, stateful deduplication and aggregation; support for the
   remaining stateful operations is ongoing.
 
 For new low-latency workloads, prefer Real-time Mode over Continuous Processing.
@@ -295,13 +295,16 @@ The following operations, sources, and sinks are supported:
 - *Stateful operations* (supported since Spark 4.3.0): these regroup records by key through a
   pipelined shuffle (see [How Stateful Queries Work](#how-stateful-queries-work)) and keep their
   state in the state store, checkpointed each batch.
-  + **Deduplication**: `dropDuplicates` and `dropDuplicatesWithinWatermark`.
+  + **Deduplication**: `dropDuplicates`. (`dropDuplicatesWithinWatermark` is not yet supported in
+    Real-time Mode.)
   + **Streaming aggregation**: `groupBy(...).agg(...)` (and the SQL `GROUP BY` equivalent), including
-    windowed aggregations with `window(...)`. Distinct aggregates (for example
-    `count(distinct ...)`) are not supported.
-  + `withWatermark` (event-time watermark declaration) is supported and now takes effect: it bounds
-    state for the stateful operators above (for example, evicting closed windows in append mode and
-    enabling `dropDuplicatesWithinWatermark`).
+    windowed aggregations with `window(...)`. Distinct aggregates such as `count(distinct ...)` are
+    not supported (see [Not supported](#not-supported)).
+  + `withWatermark` (event-time watermark declaration) is supported and now takes effect: it lets a
+    windowed aggregation drop late input and evict the state for windows that have closed, bounding
+    how much state a long-running query accumulates. (Real-time Mode always runs in `update` output
+    mode -- see [Requirements](#requirements) -- so a windowed aggregation emits each window's
+    running result as it changes, and the watermark governs when that window's state is evicted.)
 
 - *Sources*: the source must support Real-time Mode. In Apache Spark, the **Kafka** source supports
   Real-time Mode. An unsupported source fails with
@@ -324,18 +327,23 @@ starts; anything outside the allowlist fails with
 
 ### Not supported
 
-The following are not yet supported in Real-time Mode, and a query that uses one fails to start with
-`STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST`:
+The following are not yet supported in Real-time Mode. Unless noted otherwise, a query that uses one
+fails to start with `STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST`:
 
 - Stateful operations other than deduplication and aggregation: **stream-stream joins**,
-  `flatMapGroupsWithState`, `transformWithState`, and session-window aggregation.
-- **Distinct aggregates**, such as `count(distinct ...)`.
+  `flatMapGroupsWithState`, `transformWithState`, session-window aggregation, and
+  `dropDuplicatesWithinWatermark`.
 - A bare **`repartition`** -- a shuffle with no stateful operator. Real-time Mode runs a shuffle only
   as part of a supported stateful operator (see
   [How Stateful Queries Work](#how-stateful-queries-work)).
 - **Range partitioning**: `repartitionByRange`, or an `ORDER BY` / sort that plans to a range
   shuffle, because computing range bounds needs a separate sampling job that cannot complete while
   the source keeps producing.
+
+**Distinct aggregates** such as `count(distinct ...)` are not supported either, but this is a
+general Structured Streaming restriction rather than a Real-time Mode one: any streaming distinct
+aggregate is rejected during analysis (with a message suggesting `approx_count_distinct()`),
+regardless of the trigger.
 
 Support for more stateful operations is ongoing.
 
@@ -532,8 +540,8 @@ spark
 
 </div>
 
-To bound how long keys are retained, declare a watermark and use `dropDuplicatesWithinWatermark`, so
-that state for keys older than the watermark can be evicted.
+This keeps every distinct key it has seen in the state store. `dropDuplicatesWithinWatermark`, which
+bounds how long keys are retained, is not yet supported in Real-time Mode.
 
 ### Streaming aggregation
 
