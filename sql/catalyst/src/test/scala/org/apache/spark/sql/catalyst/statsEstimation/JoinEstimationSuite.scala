@@ -506,6 +506,18 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
           nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
         AttributeReference("ctimestamp", TimestampType)() -> ColumnStat(distinctCount = Some(1),
           min = Some(timestamp), max = Some(timestamp),
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8)),
+        AttributeReference("ctimestamp_ntz", TimestampNTZType)() -> ColumnStat(
+          distinctCount = Some(1), min = Some(timestamp), max = Some(timestamp),
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8)),
+        AttributeReference("ctime", TimeType())() -> ColumnStat(distinctCount = Some(1),
+          min = Some(1L), max = Some(1L),
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8)),
+        AttributeReference("cym_interval", YearMonthIntervalType())() -> ColumnStat(
+          distinctCount = Some(1), min = Some(1), max = Some(1),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        AttributeReference("cdt_interval", DayTimeIntervalType())() -> ColumnStat(
+          distinctCount = Some(1), min = Some(1L), max = Some(1L),
           nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))
       )
     }
