@@ -377,11 +377,11 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
 
 ## Requirements
 - A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
-- Volcano v1.14.2.
+- Volcano v1.15.0.
 
 ## Installation
 
-    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.15.0/installer/volcano-development.yaml
 
 ## Run tests
 
@@ -402,7 +402,7 @@ You can also specify `volcano` tag to only run Volcano test:
 
 ## Cleanup Volcano
 
-    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.15.0/installer/volcano-development.yaml
 
 # Running the YuniKorn Integration Tests
 
