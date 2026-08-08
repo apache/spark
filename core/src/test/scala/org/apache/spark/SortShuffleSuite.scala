@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.internal.config.{SHUFFLE_CHECKSUM_ALGORITHM, SHUFFLE_MANAGER}
+import org.apache.spark.internal.config.SHUFFLE_MANAGER
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -65,7 +65,7 @@ class SortShuffleSuite extends ShuffleSuite {
     // Ensure that the shuffle actually created files that will need to be cleaned up
     val filesCreatedByShuffle = getAllFiles -- filesBeforeShuffle
     filesCreatedByShuffle.map(_.getName) should be(
-      Set("shuffle_0_0_0.data", s"shuffle_0_0_0.checksum.${conf.get(SHUFFLE_CHECKSUM_ALGORITHM)}",
+      Set("shuffle_0_0_0.data", s"shuffle_0_0_0.checksum",
         "shuffle_0_0_0.index"))
     // Check that the cleanup actually removes the files
     sc.env.blockManager.master.removeShuffle(0, blocking = true)
