@@ -80,7 +80,11 @@ abstract class EventLogFileWriter(
   protected var writer: Option[PrintWriter] = None
 
   protected def requireLogBaseDirAsDirectory(): Unit = {
-    if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
+    val basePath = new Path(logBaseDir)
+    if (!fileSystem.exists(basePath)) {
+      FileSystem.mkdirs(fileSystem, basePath, EventLogFileWriter.LOG_FOLDER_PERMISSIONS)
+    }
+    if (!fileSystem.getFileStatus(basePath).isDirectory) {
       throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
     }
   }
