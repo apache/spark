@@ -18,10 +18,11 @@
 package org.apache.spark.deploy.yarn
 
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.client.api.AMRMClient
+import org.apache.hadoop.yarn.client.api.{AMRMClient, YarnClient}
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils
@@ -130,6 +131,37 @@ private[spark] class YarnRMClient extends Logging {
     sparkMaxAttempts match {
       case Some(x) => if (x <= yarnMaxAttempts) x else yarnMaxAttempts
       case None => yarnMaxAttempts
+    }
+  }
+
+  /**
+   * Returns a list of previous attempts and their AM container exit status. This should only
+   * be called once, so we create a new YarnClient and stop it when finished.
+   */
+  def getPreviousAttempts(
+      yarnConf: YarnConfiguration,
+      appAttemptId: ApplicationAttemptId): Seq[(ApplicationAttemptReport, Option[Int])] = {
+    val yarnClient = YarnClient.createYarnClient()
+    yarnClient.init(yarnConf)
+    yarnClient.start()
+    try {
+      val attempts = yarnClient
+        .getApplicationAttempts(appAttemptId.getApplicationId)
+        .asScala
+        .filter(_.getApplicationAttemptId != appAttemptId)
+        .toSeq
+      attempts.map { attempt =>
+        try {
+          val report = yarnClient.getContainerReport(attempt.getAMContainerId)
+          (attempt, Some(report.getContainerExitStatus))
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Failed to get previous attempt AM container exit status", e)
+            (attempt, None)
+        }
+      }
+    } finally {
+      yarnClient.stop()
     }
   }
 
