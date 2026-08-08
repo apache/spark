@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.{FetchFailed, TaskContext, TaskFailedReason}
+import org.apache.spark.{FetchFailed, MetadataFetchFailed, TaskContext, TaskFailedReason}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -69,4 +69,7 @@ private[spark] class MetadataFetchFailedException(
     shuffleId: Int,
     reduceId: Int,
     message: String)
-  extends FetchFailedException(null, shuffleId, -1L, -1, reduceId, message)
+  extends FetchFailedException(null, shuffleId, -1L, -1, reduceId, message) {
+  override def toTaskFailedReason: TaskFailedReason = MetadataFetchFailed(
+    shuffleId, reduceId, Utils.exceptionString(this))
+}
