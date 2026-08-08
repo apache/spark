@@ -161,6 +161,29 @@ class SparkConnectServiceSuite
       val response6 = handler.process(request6, sparkSessionHolder)
       assert(response6.hasInputFiles)
       assert(response6.getInputFiles.getFilesCount === 0)
+
+      val repartitionPlan = proto.Plan
+        .newBuilder()
+        .setRoot(
+          proto.Relation
+            .newBuilder()
+            .setRepartition(
+              proto.Repartition
+                .newBuilder()
+                .setInput(plan.getRoot)
+                .setNumPartitions(4)
+                .setShuffle(true)
+                .build())
+            .build())
+        .build()
+      val request7 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setGetNumPartitions(
+          proto.AnalyzePlanRequest.GetNumPartitions.newBuilder().setPlan(repartitionPlan).build())
+        .build()
+      val response7 = handler.process(request7, sparkSessionHolder)
+      assert(response7.hasGetNumPartitions)
+      assert(response7.getGetNumPartitions.getNumPartitions === 4)
     }
   }
 

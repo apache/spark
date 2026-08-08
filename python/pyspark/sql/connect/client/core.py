@@ -701,6 +701,7 @@ class AnalyzeResult:
         semantic_hash: Optional[int],
         storage_level: Optional[StorageLevel],
         ddl_string: Optional[str],
+        num_partitions: Optional[int],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -714,6 +715,7 @@ class AnalyzeResult:
         self.semantic_hash = semantic_hash
         self.storage_level = storage_level
         self.ddl_string = ddl_string
+        self.num_partitions = num_partitions
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -729,6 +731,7 @@ class AnalyzeResult:
         semantic_hash: Optional[int] = None
         storage_level: Optional[StorageLevel] = None
         ddl_string: Optional[str] = None
+        num_partitions: Optional[int] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -758,6 +761,8 @@ class AnalyzeResult:
             storage_level = proto_to_storage_level(pb.get_storage_level.storage_level)
         elif pb.HasField("json_to_ddl"):
             ddl_string = pb.json_to_ddl.ddl_string
+        elif pb.HasField("get_num_partitions"):
+            num_partitions = pb.get_num_partitions.num_partitions
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -774,6 +779,7 @@ class AnalyzeResult:
             semantic_hash,
             storage_level,
             ddl_string,
+            num_partitions,
         )
 
 
@@ -1641,6 +1647,8 @@ class SparkConnectClient(object):
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
         elif method == "json_to_ddl":
             req.json_to_ddl.json_string = cast(str, kwargs.get("json_string"))
+        elif method == "get_num_partitions":
+            req.get_num_partitions.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
         else:
             raise PySparkValueError(
                 errorClass="UNSUPPORTED_OPERATION",
