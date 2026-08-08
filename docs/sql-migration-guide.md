@@ -25,6 +25,7 @@ license: |
 ## Upgrading from Spark SQL 4.3 to 4.4
 
 - Since Spark 4.4, for storage-partitioned joins, `spark.sql.requireAllClusterKeysForCoPartition` requires every join key to be covered by some partition key instead of matching the partition keys positionally. As a result, a join-key column partitioned by more than one transform no longer prevents shuffle elimination, and `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` no longer additionally requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false` when the join keys are a subset of the partition keys. As before, when the partition keys cover only part of the join keys, eliminating the shuffle still requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false`.
+- Since Spark 4.4, when `array_repeat` or `array_insert` is asked to build an array larger than the maximum supported array length, generated code raises the same error as interpreted evaluation. `array_repeat` now fails with `COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER` instead of the internal error `_LEGACY_ERROR_TEMP_2176`, and `array_insert` fails with `COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION` instead of `COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER`, which named a `count` parameter that `array_insert` does not have. Both functions raise an error under exactly the same conditions as before; only the reported error condition changes.
 
 ## Upgrading from Spark SQL 4.2 to 4.3
 
