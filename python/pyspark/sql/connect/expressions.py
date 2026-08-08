@@ -763,6 +763,15 @@ class PythonUDF:
         expr.eval_type = self._eval_type
         expr.command = CloudPickleSerializer().dumps((self._func, output_type))
         expr.python_ver = self._python_ver
+        # (SPARK-51705) Drain the thread-local broadcast capture registry populated while pickling
+        # the command above (ConnectBroadcast.__reduce__ side-registers its id). This mirrors the
+        # classic dumps-then-drain-then-clear idiom in rdd._prepare_for_python_RDD, and covers both
+        # inline UDFs and spark.udf.register since both funnel through this to_plan.
+        from pyspark.sql.connect.broadcast import _broadcast_capture_registry
+
+        broadcast_ids = _broadcast_capture_registry.drain()
+        if broadcast_ids:
+            expr.broadcast_ids.extend(broadcast_ids)
         return expr
 
     def __repr__(self) -> str:
