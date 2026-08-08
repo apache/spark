@@ -64,6 +64,17 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
     SQLConf.withExistingConf(conf)(f)
   }
 
+  test("SPARK-58209: reflect expressions are copied before evaluation") {
+    val expression = createExpr(staticClassName, "method1")
+
+    assert(expression.stateful)
+    val freshCopy = expression.freshCopyIfContainsStatefulExpression()
+      .asInstanceOf[CallMethodViaReflection]
+    assert(freshCopy ne expression)
+    assert(freshCopy.children == expression.children)
+    assert(freshCopy.failOnError == expression.failOnError)
+  }
+
   test("findMethod via reflection for static methods") {
     assert(findMethod(staticClassName, "method1", Seq.empty).exists(_.getName == "method1"))
     assert(findMethod(staticClassName, "method2", Seq(IntegerType)).isDefined)
