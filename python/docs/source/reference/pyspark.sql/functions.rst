@@ -143,6 +143,7 @@ Mathematical Functions
     sqrt
     tan
     tanh
+    truncate
     try_add
     try_divide
     try_mod

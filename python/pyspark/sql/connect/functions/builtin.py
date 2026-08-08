@@ -847,6 +847,18 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 round.__doc__ = pysparkfuncs.round.__doc__
 
 
+def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("truncate", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("truncate", col, scale)
+
+
+truncate.__doc__ = pysparkfuncs.truncate.__doc__
+
+
 def sec(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sec", col)
 
