@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMa
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * In this test suite, we test predicates containing the following operators:
@@ -114,6 +115,16 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val colStatIntSkewHgm = ColumnStat(distinctCount = Some(5), min = Some(1), max = Some(10),
     nullCount = Some(0), avgLen = Some(4), maxLen = Some(4), histogram = Some(hgmIntSkew))
 
+  // column ctsnanos has 10 nanosecond-precision timestamp values.
+  // Values span from epochMicros=1000 nanosWithinMicro=0 to epochMicros=1009 nanosWithinMicro=0
+  // i.e. total epoch nanos 1000000..1009000 (range = 9000 nanos)
+  val tsNanosMin = TimestampNanosVal.fromParts(1000L, 0.toShort)
+  val tsNanosMax = TimestampNanosVal.fromParts(1009L, 0.toShort)
+  val attrTsNanos = AttributeReference("ctsnanos", TimestampNTZNanosType(9))()
+  val colStatTsNanos = ColumnStat(distinctCount = Some(10),
+    min = Some(tsNanosMin), max = Some(tsNanosMax),
+    nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+
   val attributeMap = AttributeMap(Seq(
     attrInt -> colStatInt,
     attrBool -> colStatBool,
@@ -125,7 +136,8 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     attrInt3 -> colStatInt3,
     attrInt4 -> colStatInt4,
     attrIntHgm -> colStatIntHgm,
-    attrIntSkewHgm -> colStatIntSkewHgm
+    attrIntSkewHgm -> colStatIntSkewHgm,
+    attrTsNanos -> colStatTsNanos
   ))
 
   test("true") {
@@ -1018,6 +1030,203 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         }
       }
     }
+  }
+
+  // Tests for nanosecond-precision timestamp types (SPARK-57839)
+  test("ctsnanos = TimestampNanosVal(1003, 0)") {
+    val tsVal = TimestampNanosVal.fromParts(1003L, 0.toShort)
+    validateEstimatedStats(
+      Filter(EqualTo(attrTsNanos, Literal(tsVal, TimestampNTZNanosType(9))),
+        childStatsTestPlan(Seq(attrTsNanos), 10L)),
+      Seq(attrTsNanos -> ColumnStat(distinctCount = Some(1),
+        min = Some(tsVal), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 1)
+  }
+
+  test("ctsnanos < TimestampNanosVal(1003, 0)") {
+    // Range [1000000, 1009000], value = 1003000, fraction = 3000/9000 = 1/3
+    // Rows = ceil(10 * 3/9) = 4 (3.33 rounds up), ndv = ceil(10 * 3/9) = 4
+    val tsVal = TimestampNanosVal.fromParts(1003L, 0.toShort)
+    validateEstimatedStats(
+      Filter(LessThan(attrTsNanos, Literal(tsVal, TimestampNTZNanosType(9))),
+        childStatsTestPlan(Seq(attrTsNanos), 10L)),
+      Seq(attrTsNanos -> ColumnStat(distinctCount = Some(4),
+        min = Some(tsNanosMin), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 4)
+  }
+
+  test("ctsnanos IN (TimestampNanosVal(1003, 0), TimestampNanosVal(1005, 0))") {
+    val ts3 = TimestampNanosVal.fromParts(1003L, 0.toShort)
+    val ts5 = TimestampNanosVal.fromParts(1005L, 0.toShort)
+    validateEstimatedStats(
+      Filter(In(attrTsNanos, Seq(
+        Literal(ts3, TimestampNTZNanosType(9)),
+        Literal(ts5, TimestampNTZNanosType(9)))),
+        childStatsTestPlan(Seq(attrTsNanos), 10L)),
+      Seq(attrTsNanos -> ColumnStat(distinctCount = Some(2),
+        min = Some(ts3), max = Some(ts5),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 2)
+  }
+
+  // column ctsLtzNanos: LTZ nanos type with sub-microsecond values (nanosWithinMicro != 0).
+  // Values span epochMicros=1000 nanos=500 to epochMicros=1009 nanos=500
+  // i.e. total epoch nanos 1000500..1009500 (range = 9000 nanos)
+  val tsLtzNanosMin = TimestampNanosVal.fromParts(1000L, 500.toShort)
+  val tsLtzNanosMax = TimestampNanosVal.fromParts(1009L, 500.toShort)
+  val attrTsLtzNanos = AttributeReference("ctsltznanos", TimestampLTZNanosType(9))()
+  val colStatTsLtzNanos = ColumnStat(distinctCount = Some(10),
+    min = Some(tsLtzNanosMin), max = Some(tsLtzNanosMax),
+    nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+
+  test("ctsltznanos < TimestampNanosVal(1003, 500) - LTZ type with sub-microsecond") {
+    // Range [1000500, 1009500], value = 1003500, fraction = 3000/9000 = 1/3
+    // Rows = ceil(10 * 3/9) = 4, ndv = ceil(10 * 3/9) = 4
+    val tsVal = TimestampNanosVal.fromParts(1003L, 500.toShort)
+    val ltzMap = AttributeMap(Seq(attrTsLtzNanos -> colStatTsLtzNanos))
+    validateEstimatedStats(
+      Filter(LessThan(attrTsLtzNanos, Literal(tsVal, TimestampLTZNanosType(9))),
+        childStatsTestPlan(Seq(attrTsLtzNanos), 10L, ltzMap)),
+      Seq(attrTsLtzNanos -> ColumnStat(distinctCount = Some(4),
+        min = Some(tsLtzNanosMin), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 4)
+  }
+
+  test("ctsnanos = TimestampNanosVal(1003, 456) - sub-microsecond nanosWithinMicro") {
+    // Test that sub-microsecond nanosWithinMicro term is exercised in toDouble estimation.
+    // The value 1003*1000+456 = 1003456 falls within range [1000000, 1009000].
+    val subMicroMin = TimestampNanosVal.fromParts(1000L, 0.toShort)
+    val subMicroMax = TimestampNanosVal.fromParts(1009L, 0.toShort)
+    val attrSubMicro = AttributeReference("ctssubmicro", TimestampNTZNanosType(9))()
+    val colStatSubMicro = ColumnStat(distinctCount = Some(10),
+      min = Some(subMicroMin), max = Some(subMicroMax),
+      nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+    val subMicroMap = AttributeMap(Seq(attrSubMicro -> colStatSubMicro))
+    val tsVal = TimestampNanosVal.fromParts(1003L, 456.toShort)
+    validateEstimatedStats(
+      Filter(EqualTo(attrSubMicro, Literal(tsVal, TimestampNTZNanosType(9))),
+        childStatsTestPlan(Seq(attrSubMicro), 10L, subMicroMap)),
+      Seq(attrSubMicro -> ColumnStat(distinctCount = Some(1),
+        min = Some(tsVal), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 1)
+  }
+
+  // High-magnitude nanos tests: exercise the lossy toDouble/fromDouble path where
+  // epochMicros*1000 exceeds Double's 2^53 exact-integer range (real-world 2024 timestamps).
+  // epochMicros ~1.7e15 => epoch nanos ~1.7e18 >> 2^53 (~9e15).
+  // The point is to verify estimation remains sensible despite floating-point rounding.
+
+  test("NTZ nanos filter estimation at high magnitude (2024 timestamps)") {
+    // 2024-01-01T00:00:00Z => epochMicros = 1704067200000000L
+    // 2024-01-01T00:00:09Z => epochMicros = 1704067209000000L
+    // Range in nanos = 9000000 nanos (9 ms)
+    val hiMin = TimestampNanosVal.fromParts(1704067200000000L, 0.toShort)
+    val hiMax = TimestampNanosVal.fromParts(1704067209000000L, 0.toShort)
+    val attrHiNtz = AttributeReference("ctsnanos_hi", TimestampNTZNanosType(9))()
+    val colStatHi = ColumnStat(distinctCount = Some(10),
+      min = Some(hiMin), max = Some(hiMax),
+      nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+    val hiMap = AttributeMap(Seq(attrHiNtz -> colStatHi))
+    // Filter value at ~1/3 of the range
+    val tsVal = TimestampNanosVal.fromParts(1704067203000000L, 0.toShort)
+    // Expected: fraction ~ 3/9 = 1/3, rows = ceil(10 * 1/3) = 4, ndv = 4
+    validateEstimatedStats(
+      Filter(LessThan(attrHiNtz, Literal(tsVal, TimestampNTZNanosType(9))),
+        childStatsTestPlan(Seq(attrHiNtz), 10L, hiMap)),
+      Seq(attrHiNtz -> ColumnStat(distinctCount = Some(4),
+        min = Some(hiMin), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 4)
+  }
+
+  test("LTZ nanos filter estimation at high magnitude (2024 timestamps)") {
+    // Same magnitude as above but using TimestampLTZNanosType.
+    val hiMin = TimestampNanosVal.fromParts(1704067200000000L, 0.toShort)
+    val hiMax = TimestampNanosVal.fromParts(1704067209000000L, 0.toShort)
+    val attrHiLtz = AttributeReference("ctsltznanos_hi", TimestampLTZNanosType(9))()
+    val colStatHi = ColumnStat(distinctCount = Some(10),
+      min = Some(hiMin), max = Some(hiMax),
+      nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+    val hiMap = AttributeMap(Seq(attrHiLtz -> colStatHi))
+    // Filter value at ~1/3 of the range
+    val tsVal = TimestampNanosVal.fromParts(1704067203000000L, 0.toShort)
+    // Expected: fraction ~ 3/9 = 1/3, rows = ceil(10 * 1/3) = 4, ndv = 4
+    validateEstimatedStats(
+      Filter(LessThan(attrHiLtz, Literal(tsVal, TimestampLTZNanosType(9))),
+        childStatsTestPlan(Seq(attrHiLtz), 10L, hiMap)),
+      Seq(attrHiLtz -> ColumnStat(distinctCount = Some(4),
+        min = Some(hiMin), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 4)
+  }
+
+  test("nanos filter estimation is safe when min/max collapse to same double" +
+    " (within one ULP)") {
+    // At epoch-nanos ~1.7e18 (2024 timestamps), the double ULP is ~256 ns.
+    // Two nanos bounds separated by less than one ULP collapse to the same double value
+    // when converted via toDouble, yet min != max.  This test locks the guard against future
+    // edits that might cause an AssertionError when the double range is zero.
+    val epochMicros = 1704067200000000L // 2024-01-01T00:00:00Z
+    // min and max differ by only 100 ns (< 256 ns ULP), so they collapse to the same double.
+    val ulpMin = TimestampNanosVal.fromParts(epochMicros, 0.toShort)
+    val ulpMax = TimestampNanosVal.fromParts(epochMicros, 100.toShort)
+    assert(ulpMin != ulpMax, "precondition: min and max must be distinct TimestampNanosVal values")
+
+    val ntzType = TimestampNTZNanosType(9)
+    val minDouble = toDouble(ulpMin, ntzType)
+    val maxDouble = toDouble(ulpMax, ntzType)
+    assert(minDouble == maxDouble,
+      s"precondition: toDouble(min)=$minDouble must equal toDouble(max)=$maxDouble " +
+        "(both within one ULP)")
+
+    val attrUlp = AttributeReference("ctsnanos_ulp", ntzType)()
+    val colStatUlp = ColumnStat(distinctCount = Some(10),
+      min = Some(ulpMin), max = Some(ulpMax),
+      nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+    val ulpMap = AttributeMap(Seq(attrUlp -> colStatUlp))
+
+    // Partial-overlap filter: value between min and max (logically), but since doubles collapse,
+    // the estimation must not throw and must return a sane result.
+    val filterVal = TimestampNanosVal.fromParts(epochMicros, 50.toShort)
+    val rowCount = 10L
+    val filter = Filter(LessThan(attrUlp, Literal(filterVal, ntzType)),
+      childStatsTestPlan(Seq(attrUlp), rowCount, ulpMap))
+    val estimated = filter.stats
+    assert(estimated.rowCount.isDefined, "estimation must produce a row count")
+    val estRows = estimated.rowCount.get
+    assert(estRows >= 0 && estRows <= rowCount,
+      s"estimated row count $estRows must be between 0 and $rowCount")
+  }
+
+  test("nanos filter estimation with pre-1970 negative epoch values (fromDouble floorDiv/Mod)") {
+    // Pre-1970 timestamps have negative epochMicros.  This exercises the floorDiv/floorMod path
+    // in EstimationUtils.fromDouble that reconstructs TimestampNanosVal from a negative double.
+    // 1969-12-31T23:59:50Z => epochMicros = -10000000L (10 seconds before epoch)
+    // 1969-12-31T23:59:59Z => epochMicros = -1000000L  (1 second before epoch)
+    val negMin = TimestampNanosVal.fromParts(-10000000L, 500.toShort)
+    val negMax = TimestampNanosVal.fromParts(-1000000L, 500.toShort)
+    val ntzType = TimestampNTZNanosType(9)
+    val attrNeg = AttributeReference("ctsnanos_neg", ntzType)()
+    val colStatNeg = ColumnStat(distinctCount = Some(10),
+      min = Some(negMin), max = Some(negMax),
+      nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+    val negMap = AttributeMap(Seq(attrNeg -> colStatNeg))
+
+    // Filter at ~1/3 of the range: -10000000500 to -1000000500 nanos, range = 9000000 nanos
+    // 1/3 point: -10000000500 + 3000000 = epochMicros=-7000000, nanos=500
+    val filterVal = TimestampNanosVal.fromParts(-7000000L, 500.toShort)
+    // Expected: fraction = 3/9 = 1/3, rows = ceil(10 * 1/3) = 4, ndv = 4
+    validateEstimatedStats(
+      Filter(LessThan(attrNeg, Literal(filterVal, ntzType)),
+        childStatsTestPlan(Seq(attrNeg), 10L, negMap)),
+      Seq(attrNeg -> ColumnStat(distinctCount = Some(4),
+        min = Some(negMin), max = Some(filterVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 4)
   }
 
 }

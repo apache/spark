@@ -291,7 +291,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
     }
 
     attr.dataType match {
-      case _: NumericType | DateType | TimestampType | BooleanType =>
+      case _: NumericType | DateType | TimestampType | BooleanType |
+           _: AnyTimestampNanoType =>
         evaluateBinaryForNumeric(op, attr, literal, update)
       case StringType | BinaryType =>
         // TODO: It is difficult to support other binary comparisons for String/Binary
@@ -413,7 +414,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
     // use [min, max] to filter the original hSet
     dataType match {
-      case _: NumericType | BooleanType | DateType | TimestampType =>
+      case _: NumericType | BooleanType | DateType | TimestampType |
+           _: AnyTimestampNanoType =>
         if (ndv.toDouble == 0) {
           return Some(0.0)
         }
