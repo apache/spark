@@ -32,9 +32,13 @@ You can also specify the test class to run:
 ./python/asv run --python=same --quick -b 'bench_arrow.LongArrowToPandasBenchmark'
 ```
 
+If you want to run against your local PySpark changes, make sure to package & install PySpark
+in your local environment first.
+
 ### Full run against a commit
 
-Run benchmarks in an isolated virtualenv (builds pyspark from source):
+Run benchmarks in an isolated virtualenv.
+Note: This builds Spark & PySpark from source and will take a while.
 
 ```bash
 ./python/asv run master^!          # Run on latest master commit

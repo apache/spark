@@ -12,10 +12,12 @@
     "results_dir": ".asv/results",
     "html_dir": ".asv/html",
     "build_command": [
-        "python -m pip wheel --no-deps -w {build_cache_dir} {conf_dir}/../packaging/classic"
+        "{build_dir}/build/sbt -batch -DskipTests clean package",
+        "python -m pip wheel --no-deps -w {build_cache_dir} {build_dir}/python/packaging/classic"
     ],
+    "install_timeout": null,
     "install_command": [
-        "python -m pip install --find-links {build_cache_dir} pyspark"
+        "in-dir={env_dir} python -m pip install --force-reinstall {wheel_file}"
     ],
     "uninstall_command": [
         "python -m pip uninstall -y pyspark"
