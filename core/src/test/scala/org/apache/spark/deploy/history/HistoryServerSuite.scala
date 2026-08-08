@@ -27,6 +27,7 @@ import scala.jdk.CollectionConverters._
 import jakarta.servlet._
 import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.logging.log4j.Level
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
@@ -653,6 +654,34 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     }
   }
 
+  test("history server access log") {
+    stop()
+    init()
+
+    val defaultMessages = withHistoryServerAccessLogAppender {
+      HistoryServerSuite.getContentAndCode(historyServerUrl("/api/v1/applications"))
+    }
+    assert(defaultMessages.isEmpty)
+
+    stop()
+    init(HISTORY_SERVER_UI_ACCESS_LOG_ENABLED.key -> "true")
+
+    val appId = "local-1430917381535"
+    val messages = withHistoryServerAccessLogAppender {
+      HistoryServerSuite.getContentAndCode(
+        historyServerUrl("/api/v1/applications?token=secret-value"))
+      HistoryServerSuite.getContentAndCode(historyServerUrl(s"/history/$appId/1/jobs/"))
+      HistoryServerSuite.getContentAndCode(historyServerUrl("/favicon.ico"))
+    }
+
+    assert(messages.exists { msg =>
+      msg.contains("uri=/api/v1/applications") &&
+        msg.contains(s"query=token=${Utils.REDACTION_REPLACEMENT_TEXT}")
+    })
+    assert(messages.exists(_.contains(s"uri=/history/$appId/1/jobs")))
+    assert(!messages.exists(_.contains("uri=/favicon.ico")))
+  }
+
   test("SPARK-33215: speed up event log download by skipping UI rebuild") {
     val appId = "local-1430917381535"
 
@@ -739,6 +768,23 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   def getUrl(path: String): String = {
     HistoryServerSuite.getUrl(generateURL(path))
+  }
+
+  private def withHistoryServerAccessLogAppender(f: => Unit): Seq[String] = {
+    val logAppender = new LogAppender
+    withLogAppender(
+        logAppender,
+        loggerNames = Seq(classOf[HistoryServerAccessLogFilter].getName),
+        level = Some(Level.INFO)) {
+      f
+    }
+    logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("Spark History Server access"))
+      .toSeq
+  }
+
+  private def historyServerUrl(path: String): URL = {
+    new URI(s"http://127.0.0.1:${server.boundPort}$path").toURL
   }
 
   def generateURL(path: String): URL = {

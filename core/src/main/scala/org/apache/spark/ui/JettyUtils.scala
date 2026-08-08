@@ -273,6 +273,17 @@ private[spark] object JettyUtils extends Logging {
       conf: SparkConf,
       serverName: String = "",
       poolSize: Int = 200): ServerInfo = {
+    startJettyServer(hostName, port, sslOptions, conf, serverName, poolSize, Nil)
+  }
+
+  def startJettyServer(
+      hostName: String,
+      port: Int,
+      sslOptions: SSLOptions,
+      conf: SparkConf,
+      serverName: String,
+      poolSize: Int,
+      internalFilters: Seq[() => Filter]): ServerInfo = {
 
     val stopTimeout = conf.get(UI_JETTY_STOP_TIMEOUT)
     logInfo(log"Start Jetty ${MDC(HOST, hostName)}:${MDC(PORT, port)}" +
@@ -400,7 +411,7 @@ private[spark] object JettyUtils extends Logging {
 
       server.addConnector(httpConnector)
       pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
-      ServerInfo(server, httpPort, securePort, conf, collection)
+      ServerInfo(server, httpPort, securePort, conf, collection, internalFilters)
     } catch {
       case e: Exception =>
         server.stop()
@@ -488,7 +499,8 @@ private[spark] case class ServerInfo(
     boundPort: Int,
     securePort: Option[Int],
     private val conf: SparkConf,
-    private val rootHandler: ContextHandlerCollection) extends Logging {
+    private val rootHandler: ContextHandlerCollection,
+    private val internalFilters: Seq[() => Filter] = Nil) extends Logging {
 
   def addHandler(
       handler: ServletContextHandler,
@@ -564,6 +576,13 @@ private[spark] case class ServerInfo(
       val newParams = conf.getAllWithPrefix(s"spark.$filter.param.").toMap
 
       JettyUtils.addFilter(handler, filter, oldParams ++ newParams)
+    }
+
+    // Internal filters run after user-installed filters so authentication wrappers are visible,
+    // and before the security filter so denied requests can still be observed.
+    internalFilters.foreach { filter =>
+      val holder = new FilterHolder(filter())
+      handler.addFilter(holder, "/*", EnumSet.of(DispatcherType.REQUEST))
     }
 
     // This filter must come after user-installed filters, since that's where authentication
