@@ -192,7 +192,7 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     }
 
     val vocSize = $(vocabSize)
-    val input = dataset.select($(inputCol)).rdd.map(_.getSeq[String](0))
+    val input = dataset.select($(inputCol))
     val countingRequired = $(minDF) < 1.0 || $(maxDF) < 1.0
     val maybeInputSize = if (countingRequired) {
       if (dataset.storageLevel == StorageLevel.NONE) {
@@ -213,41 +213,38 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       $(maxDF) * maybeInputSize.get
     }
     require(maxDf >= minDf, "maxDF must be >= minDF.")
-    val allWordCounts = input.flatMap { tokens =>
-      val wc = new OpenHashMap[String, Long]
-      tokens.foreach { w =>
-        wc.changeValue(w, 1L, _ + 1L)
-      }
-      wc.map { case (word, count) => (word, (count, 1)) }
-    }.reduceByKey { (wcdf1, wcdf2) =>
-      (wcdf1._1 + wcdf2._1, wcdf1._2 + wcdf2._2)
-    }
-
     val filteringRequired = isSet(minDF) || isSet(maxDF)
-    val maybeFilteredWordCounts = if (filteringRequired) {
-      allWordCounts.filter { case (_, (_, df)) => df >= minDf && df <= maxDf }
+    val termCounts = input
+      .select(explode(col($(inputCol))).as("word"))
+      .groupBy("word")
+      .count()
+
+    val wordCounts = if (filteringRequired) {
+      val documentCounts = input
+        .select(explode(array_distinct(col($(inputCol)))).as("word"))
+        .groupBy("word")
+        .count()
+        .withColumnRenamed("count", "documentCount")
+      termCounts.as("termCounts")
+        .join(
+          documentCounts.as("documentCounts"),
+          col("termCounts.word") <=> col("documentCounts.word"))
+        .filter(col("documentCount") >= minDf && col("documentCount") <= maxDf)
+        .select(col("termCounts.word").as("word"), col("termCounts.count"))
     } else {
-      allWordCounts
+      termCounts
     }
-
-    val wordCounts = maybeFilteredWordCounts
-      .map { case (word, (count, _)) => (word, count) }
-      .persist(StorageLevel.MEMORY_AND_DISK)
-
-    val fullVocabSize = wordCounts.count()
-
-    val ordering = Ordering.Tuple2(Ordering.Long, Ordering.String.reverse)
-      .on[(String, Long)] { case (word, count) => (count, word) }
 
     val vocab = wordCounts
-      .top(math.min(fullVocabSize, vocSize).toInt)(ordering)
-      .map(_._1)
+      .orderBy(col("count").desc, col("word").asc)
+      .limit(vocSize)
+      .select("word")
+      .collect()
+      .map(_.getString(0))
 
-    if (input.getStorageLevel != StorageLevel.NONE) {
+    if (input.storageLevel != StorageLevel.NONE) {
       input.unpersist()
     }
-    wordCounts.unpersist()
-
     if (vocab.isEmpty) {
       this.logWarning("The vocabulary size is empty. " +
         "If this was unexpected, you may wish to lower minDF (or) increase maxDF.")
