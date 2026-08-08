@@ -75,6 +75,22 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def runtime_dir() -> str:
+    """Return the private per-user directory holding local-server state."""
+    path = os.path.join(tempfile.gettempdir(), "spark-connect-{}".format(getpass.getuser()))
+    try:
+        # exist_ok also covers two first runs racing to create the directory; chmod
+        # re-asserts 0700 and fails if another user owns the path.
+        os.makedirs(path, mode=0o700, exist_ok=True)
+        os.chmod(path, 0o700)
+    except OSError as e:
+        raise PySparkRuntimeError(
+            errorClass="LOCAL_CONNECT_RUNTIME_DIR_UNAVAILABLE",
+            messageParameters={"path": path},
+        ) from e
+    return path
+
+
 class Discovery:
     """Reads and writes the discovery file recording the persistent local server.
 
@@ -82,26 +98,11 @@ class Discovery:
     ``SPARK_LOCAL_CONNECT_DISCOVERY`` points; the daemon's pid file and logs sit next to it.
     """
 
-    @staticmethod
-    def _runtime_dir() -> str:
-        path = os.path.join(tempfile.gettempdir(), "spark-connect-{}".format(getpass.getuser()))
-        try:
-            # exist_ok also covers two first runs racing to create the directory; chmod
-            # re-asserts 0700 and fails if another user owns the path.
-            os.makedirs(path, mode=0o700, exist_ok=True)
-            os.chmod(path, 0o700)
-        except OSError as e:
-            raise PySparkRuntimeError(
-                errorClass="LOCAL_CONNECT_RUNTIME_DIR_UNAVAILABLE",
-                messageParameters={"path": path},
-            ) from e
-        return path
-
     def __init__(self, path: Optional[str] = None):
         self.path = os.path.abspath(
             path
             or os.environ.get("SPARK_LOCAL_CONNECT_DISCOVERY")
-            or os.path.join(self._runtime_dir(), "connect-local.json")
+            or os.path.join(runtime_dir(), "connect-local.json")
         )
         self._lock_file: Optional[TextIO] = None
 
@@ -219,11 +220,32 @@ class LocalConnectServer:
 
     def reuse_or_start(self, master: str, opts: Dict[str, Any]) -> str:
         if not self.is_reusable():
-            ServerLauncher(master, opts, self._discovery).launch()
-            self._reload()
+            self.start(master, opts)
         assert self.token is not None
         os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = self.token
         return self.url
+
+    def start(
+        self,
+        master: str,
+        opts: Dict[str, Any],
+        *,
+        use_ephemeral_port: bool = False,
+        seed_conf: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Start this server and reload its discovery record.
+
+        Callers starting isolated daemons can request an ephemeral port and provide a
+        precomputed startup configuration while sharing the standard launch path.
+        """
+        ServerLauncher(
+            master,
+            opts,
+            self._discovery,
+            use_ephemeral_port=use_ephemeral_port,
+            seed_conf=seed_conf,
+        ).launch()
+        self._reload()
 
     def stop(self) -> bool:
         stopped = False
@@ -237,17 +259,47 @@ class LocalConnectServer:
         return stopped
 
 
+def startup_seed_conf(opts: Dict[str, Any]) -> Dict[str, Any]:
+    """Compute startup confs using the same merge as the in-process server path."""
+    conf: Dict[str, Any] = {}
+    for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
+        conf = json.loads(os.environ["PYSPARK_REMOTE_INIT_CONF_{}".format(i)])
+    conf.update(opts)
+    for k in list(conf):
+        if k in (
+            "spark.remote",
+            "spark.api.mode",
+            "spark.master",
+            "spark.connect.authenticate.token",
+            "spark.connect.grpc.binding.port",
+        ) or k.startswith("spark.local.connect."):
+            conf.pop(k)
+    return conf
+
+
 class ServerLauncher:
     """Starts a persistent local server via ``sbin/start-connect-server.sh`` and waits until
     it accepts connections. Callers must hold a ``Discovery`` context.
+
+    ``use_ephemeral_port`` and ``seed_conf`` allow other managed local servers to share this
+    launch path without duplicating its process and readiness handling.
     """
 
     _READY_TIMEOUT = 120
 
-    def __init__(self, master: str, opts: Dict[str, Any], discovery: Discovery):
+    def __init__(
+        self,
+        master: str,
+        opts: Dict[str, Any],
+        discovery: Discovery,
+        use_ephemeral_port: bool = False,
+        seed_conf: Optional[Dict[str, Any]] = None,
+    ):
         self._master = master
         self._opts = opts
         self._discovery = discovery
+        self._use_ephemeral_port = use_ephemeral_port
+        self._seed_override = seed_conf
         self._log_dir = os.path.join(discovery.directory, "logs")
 
     def launch(self) -> None:
@@ -269,12 +321,12 @@ class ServerLauncher:
         )
 
     def _pick_port(self) -> int:
-        """Under SPARK_TESTING always use an OS-assigned free port so suites can run in
-        parallel; otherwise honor the configured/default port, falling back to a free one if
-        another process holds it. (A live stale server of ours also holds the port, but that
-        start fails later at spark-daemon.sh's pid-file check regardless of port.) The sbin
-        script cannot report an ephemeral port back, so the free port is picked and released
-        here, with a small race until the server binds it.
+        """Use an OS-assigned free port when requested or under SPARK_TESTING so suites can
+        run in parallel. Otherwise honor the configured/default port, falling back to a free
+        one if another process holds it. (A live stale server of ours also holds the port, but
+        that start fails later at spark-daemon.sh's pid-file check regardless of port.) The
+        sbin script cannot report an ephemeral port back, so the free port is picked and
+        released here, with a small race until the server binds it.
         """
 
         def free_port() -> int:
@@ -282,7 +334,7 @@ class ServerLauncher:
                 sock.bind(("localhost", 0))
                 return sock.getsockname()[1]
 
-        if "SPARK_TESTING" in os.environ:
+        if self._use_ephemeral_port or "SPARK_TESTING" in os.environ:
             return free_port()
         from pyspark.sql.connect.client import DefaultChannelBuilder
 
@@ -303,20 +355,9 @@ class ServerLauncher:
         opt-in keys. Only the run that starts the server can seed static confs; later runs
         find the JVM already warm.
         """
-        conf: Dict[str, Any] = {}
-        for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
-            conf = json.loads(os.environ["PYSPARK_REMOTE_INIT_CONF_{}".format(i)])
-        conf.update(self._opts)
-        for k in list(conf):
-            if k in (
-                "spark.remote",
-                "spark.api.mode",
-                "spark.master",
-                "spark.connect.authenticate.token",
-                "spark.connect.grpc.binding.port",
-            ) or k.startswith("spark.local.connect."):
-                conf.pop(k)
-        return conf
+        if self._seed_override is not None:
+            return dict(self._seed_override)
+        return startup_seed_conf(self._opts)
 
     @contextlib.contextmanager
     def _seed_properties_file(self) -> Iterator[Optional[str]]:
