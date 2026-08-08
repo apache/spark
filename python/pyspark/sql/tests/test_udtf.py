@@ -1311,6 +1311,16 @@ class BaseUDTFTestsMixin:
             checkRowOrder=True,
         )
         assertDataFrameEqual(
+            func(df.asTable().partitionBy(("key", "number")).orderBy(df.value)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
             func(df.asTable().partitionBy("key").orderBy(df.value.desc())),
             [
                 Row(key=1, value="b"),
@@ -1322,6 +1332,16 @@ class BaseUDTFTestsMixin:
         )
         assertDataFrameEqual(
             func(df.asTable().partitionBy("key").orderBy(["number", "value"])),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(("number", "value"))),
             [
                 Row(key=1, value="a"),
                 Row(key=1, value="b"),
