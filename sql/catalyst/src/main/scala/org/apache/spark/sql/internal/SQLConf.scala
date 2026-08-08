@@ -52,7 +52,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.PathElement.PathRef
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{AtomicType, DecimalType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.{HadoopFSUtils, Utils, VersionUtils}
@@ -6763,6 +6763,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val JDBC_ORACLE_NUMBER_DEFAULT_SCALE =
+    buildConf("spark.sql.jdbc.oracle.numberDefaultScale")
+      .doc("Default scale for Oracle NUMBER columns that have no explicit precision/scale. " +
+        "Values with more fractional digits than this scale are silently rounded. " +
+        "Can be overridden per source via the oracle.numberDefaultScale JDBC read option.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(s => s >= 0 && s <= DecimalType.MAX_SCALE,
+        s"The scale must be between 0 and ${DecimalType.MAX_SCALE}, inclusive.")
+      .createWithDefault(10)
+
   val LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.db2.numericMapping.enabled")
       .internal()
@@ -8855,6 +8867,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
+
+  def jdbcOracleNumberDefaultScale: Int =
+    getConf(JDBC_ORACLE_NUMBER_DEFAULT_SCALE)
 
   def legacyDB2numericMappingEnabled: Boolean =
     getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)

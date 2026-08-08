@@ -135,6 +135,10 @@ abstract class JdbcDialect extends Serializable with Logging {
    *             <li>
    *               `scale`: The length of fractional part [[java.sql.ResultSetMetaData#getScale]]
    *             </li>
+   *             <li>
+   *               `numberDefaultScale`: Per-source override of the fallback scale for Oracle bare
+   *               NUMBER columns, from the `oracle.numberDefaultScale` JDBC option.
+   *             </li>
    *            </ul>
    * @return An option the actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
    *         or None if the default type mapping should be used.

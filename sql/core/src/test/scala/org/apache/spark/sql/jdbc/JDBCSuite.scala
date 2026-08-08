@@ -1506,6 +1506,38 @@ class JDBCSuite extends SharedSparkSession {
       Some(TimestampType))
   }
 
+  test("SPARK-56738: OracleDialect bare NUMBER scale is configurable") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    val mdNoScale = new MetadataBuilder().putString("name", "c").putLong("scale", 0)
+    val mdNegScale = new MetadataBuilder().putString("name", "c").putLong("scale", -127)
+
+    // default matches legacy hardcoded behavior
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, mdNegScale) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+
+    withSQLConf(SQLConf.JDBC_ORACLE_NUMBER_DEFAULT_SCALE.key -> "25") {
+      assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
+        Some(DecimalType(DecimalType.MAX_PRECISION, 25)))
+      assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, mdNegScale) ==
+        Some(DecimalType(DecimalType.MAX_PRECISION, 25)))
+      assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, mdNoScale) ==
+        Some(DecimalType(DecimalType.MAX_PRECISION, 25)))
+
+      // per-source option takes precedence over conf
+      val mdWithOption = new MetadataBuilder().putString("name", "c")
+        .putLong("scale", 0).putLong("numberDefaultScale", 30)
+      assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, mdWithOption) ==
+        Some(DecimalType(DecimalType.MAX_PRECISION, 30)))
+    }
+
+    val e = intercept[IllegalArgumentException] {
+      withSQLConf(SQLConf.JDBC_ORACLE_NUMBER_DEFAULT_SCALE.key -> "39") {}
+    }
+    assert(e.getMessage.contains("spark.sql.jdbc.oracle.numberDefaultScale"))
+  }
+
   test("SPARK-42469: OracleDialect Limit query test") {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
@@ -2838,6 +2870,22 @@ class JDBCSuite extends SharedSparkSession {
         },
         condition = "HINT_UNSUPPORTED_FOR_JDBC_DIALECT",
         parameters = Map("jdbcDialect" -> dialect.getClass.getSimpleName))
+    }
+  }
+
+  test("SPARK-56738: oracle.numberDefaultScale option") {
+    val opts = new JDBCOptions(Map("url" -> url, "dbtable" -> "t",
+      "oracle.numberDefaultScale" -> "25"))
+    assert(opts.oracleNumberDefaultScale == Some(25))
+
+    val defaultOpts = new JDBCOptions(Map("url" -> url, "dbtable" -> "t"))
+    assert(defaultOpts.oracleNumberDefaultScale == None)
+
+    Seq("-1", "39").foreach { v =>
+      val e = intercept[IllegalArgumentException] {
+        new JDBCOptions(Map("url" -> url, "dbtable" -> "t", "oracle.numberDefaultScale" -> v))
+      }.getMessage
+      assert(e.contains(s"Invalid value `$v` for option `oracle.numberDefaultScale`."))
     }
   }
 

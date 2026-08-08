@@ -160,12 +160,12 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
           // https://github.com/apache/spark/pull/8780#issuecomment-145598968
           // and
           // https://github.com/apache/spark/pull/8780#issuecomment-144541760
-          case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          case 0 => Some(fallbackNumberDecimalType(md))
           // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
           // this to NUMERIC with -127 scale
           // Not sure if there is a more robust way to identify the field as a float (or other
           // numeric types that do not specify a scale.
-          case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          case _ if scale == -127L => Some(fallbackNumberDecimalType(md))
           case _ => None
         }
       case TIMESTAMP_TZ | TIMESTAMP_LTZ =>
@@ -183,6 +183,21 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case INTERVAL_DS => Some(DayTimeIntervalType())
       case _ => None
     }
+  }
+
+  // Returns the DecimalType to use for bare Oracle NUMBER columns (no precision/scale).
+  // Reads the per-source oracle.numberDefaultScale option from metadata first, then falls back
+  // to spark.sql.jdbc.oracle.numberDefaultScale. Logs a warning because values with more
+  // fractional digits than the resolved scale will be silently rounded.
+  private def fallbackNumberDecimalType(md: MetadataBuilder): DecimalType = {
+    val meta = if (null != md) Some(md.build()) else None
+    val scale = meta.filter(_.contains("numberDefaultScale"))
+      .map(_.getLong("numberDefaultScale").toInt)
+      .getOrElse(conf.jdbcOracleNumberDefaultScale)
+    logWarning(s"Oracle NUMBER column has no precision/scale; using scale=$scale " +
+      s"(spark.sql.jdbc.oracle.numberDefaultScale / oracle.numberDefaultScale). " +
+      "Increase it if values are being silently rounded.")
+    DecimalType(DecimalType.MAX_PRECISION, scale)
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {

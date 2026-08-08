@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.TimestampNTZType
+import org.apache.spark.sql.types.{DecimalType, TimestampNTZType}
 import org.apache.spark.util.Utils
 
 /**
@@ -262,6 +262,14 @@ class JDBCOptions(
       s"$value "
     }).getOrElse("")
 
+  val oracleNumberDefaultScale = parameters.get(JDBC_ORACLE_NUMBER_DEFAULT_SCALE).map { v =>
+    val scale = v.toInt
+    require(scale >= 0 && scale <= DecimalType.MAX_SCALE,
+      s"Invalid value `$v` for option `$JDBC_ORACLE_NUMBER_DEFAULT_SCALE`." +
+        s" The scale must be between 0 and ${DecimalType.MAX_SCALE}, inclusive.")
+    scale
+  }
+
   override def hashCode: Int = this.parameters.hashCode()
 
   override def equals(other: Any): Boolean = other match {
@@ -367,4 +375,5 @@ object JDBCOptions {
   val JDBC_PREPARE_QUERY = newOption("prepareQuery")
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
   val JDBC_HINT_STRING = newOption("hint")
+  val JDBC_ORACLE_NUMBER_DEFAULT_SCALE = newOption("oracle.numberDefaultScale")
 }
