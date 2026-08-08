@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.SparkListenerJobStart
+import org.apache.spark.sql.connect.ml.{MLCacheModelInfo, MLCacheStatus}
 import org.apache.spark.sql.connect.service._
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.kvstore.InMemoryStore
@@ -47,7 +48,7 @@ class SparkConnectServerPageSuite
   /**
    * Run a dummy session and return the store
    */
-  private def getStatusStore: SparkConnectServerAppStatusStore = {
+  private def getStatusStore(closeSession: Boolean = true): SparkConnectServerAppStatusStore = {
     kvstore = new ElementTrackingStore(new InMemoryStore, new SparkConf())
     // val server = mock(classOf[SparkConnectServer], RETURNS_SMART_NULLS)
     val sparkConf = new SparkConf
@@ -74,14 +75,16 @@ class SparkConnectServerPageSuite
       SparkListenerConnectOperationFinished("jobTag", "operationId", System.currentTimeMillis()))
     listener.onOtherEvent(
       SparkListenerConnectOperationClosed("jobTag", "operationId", System.currentTimeMillis()))
-    listener.onOtherEvent(
-      SparkListenerConnectSessionClosed("sessionId", "userId", System.currentTimeMillis()))
+    if (closeSession) {
+      listener.onOtherEvent(
+        SparkListenerConnectSessionClosed("sessionId", "userId", System.currentTimeMillis()))
+    }
 
     statusStore
   }
 
   test("Spark Connect Server page should load successfully") {
-    val store = getStatusStore
+    val store = getStatusStore()
 
     val request = mock(classOf[HttpServletRequest])
     val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
@@ -89,6 +92,7 @@ class SparkConnectServerPageSuite
     when(tab.store).thenReturn(store)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
+    when(tab.getMLCacheStatuses).thenReturn(Seq.empty)
     val page = new SparkConnectServerPage(tab)
     val html = page.render(request).toString().toLowerCase(Locale.ROOT)
 
@@ -96,6 +100,7 @@ class SparkConnectServerPageSuite
     assert(html.contains("session statistics (1)"))
     assert(html.contains("request statistics (1)"))
     assert(html.contains("dummy query"))
+    assert(!html.contains("ml cache statistics"))
 
     // Pagination support
     assert(html.contains("<label class=\"text-nowrap\">1 pages. jump to</label>"))
@@ -107,7 +112,7 @@ class SparkConnectServerPageSuite
   }
 
   test("Spark Connect Server session page should load successfully") {
-    val store = getStatusStore
+    val store = getStatusStore()
 
     val request = mock(classOf[HttpServletRequest])
     when(request.getParameter("id")).thenReturn("sessionId")
@@ -132,6 +137,56 @@ class SparkConnectServerPageSuite
     assert(
       html.contains("collapse-table\" data-bs-toggle=\"collapse\"" +
         " data-bs-target=\"#aggregated-sqlsessionstat\""))
+  }
+
+  test("Spark Connect Server page should show live ML cache statistics and model details") {
+    val store = getStatusStore(closeSession = false)
+
+    val request = mock(classOf[HttpServletRequest])
+    val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
+    when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
+    when(tab.store).thenReturn(store)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+    when(tab.getMLCacheStatuses).thenReturn(
+      Seq(
+        SessionKey("userId", "sessionId") ->
+          MLCacheStatus(
+            memoryControlEnabled = true,
+            inMemorySizeBytes = 1024,
+            maxInMemorySizeBytes = 4096,
+            totalSizeBytes = 2048,
+            maxTotalSizeBytes = 8192,
+            models = Seq(
+              MLCacheModelInfo(
+                id = "model-id-1",
+                className = "org.apache.spark.ml.classification.LogisticRegressionModel",
+                modelString = "LogisticRegressionModel: uid=logreg-1",
+                estimatedSizeBytes = Some(1024),
+                inMemory = true),
+              MLCacheModelInfo(
+                id = "model-id-2",
+                className = "org.apache.spark.ml.classification.LogisticRegressionModel",
+                modelString = "LogisticRegressionModel: uid=logreg-2",
+                estimatedSizeBytes = Some(1024),
+                inMemory = false)))))
+
+    val page = new SparkConnectServerPage(tab)
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+
+    val sessionStatsIndex = html.indexOf("session statistics")
+    val mlCacheStatsIndex = html.indexOf("ml cache statistics (2)")
+    val requestStatsIndex = html.indexOf("request statistics")
+    assert(sessionStatsIndex < requestStatsIndex && requestStatsIndex < mlCacheStatsIndex)
+    assert(html.contains("2 (1 in memory, 1 offloaded)"))
+    assert(html.contains("estimated size (in-memory)"))
+    assert(html.contains("1024.0 b / 4.0 kib"))
+    assert(html.contains("estimated size (in-memory and offloaded data)"))
+    assert(html.contains("2.0 kib / 8.0 kib"))
+    assert(html.contains("model-id-1"))
+    assert(html.contains("logisticregressionmodel: uid=logreg-1"))
+    assert(html.contains("in memory"))
+    assert(html.contains("offloaded"))
   }
 
   test("SPARK-58097: session page only shows the requested user's operations") {

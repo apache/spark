@@ -387,6 +387,34 @@ class MLSuite extends MLHelper {
     }
   }
 
+  test("MLCache status") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE.key, 16384)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_STORAGE_SIZE.key, 65536)
+
+    // Reading UI status should not initialize an unused cache.
+    assert(sessionHolder.getMLCacheStatus.isEmpty)
+
+    val modelId = trainLogisticRegressionModel(sessionHolder)
+    val status = sessionHolder.getMLCacheStatus.get
+    assert(status.memoryControlEnabled)
+    assert(status.inMemorySizeBytes > 0)
+    assert(status.maxInMemorySizeBytes === 16384)
+    assert(status.totalSizeBytes === status.inMemorySizeBytes)
+    assert(status.maxTotalSizeBytes === 65536)
+    assert(status.models.size === 1)
+    val modelInfo = status.models.head
+    assert(modelInfo.id === modelId)
+    assert(modelInfo.className === classOf[LogisticRegressionModel].getName)
+    assert(modelInfo.modelString.startsWith("LogisticRegressionModel: uid="))
+    assert(modelInfo.estimatedSizeBytes.contains(status.totalSizeBytes))
+    assert(modelInfo.inMemory)
+  }
+
   test("MLCache offloading works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
@@ -420,10 +448,24 @@ class MLSuite extends MLHelper {
       assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() <= memorySizeBytes)
     }
 
+    val status = sessionHolder.getMLCacheStatus.get
+    assert(status.models.size === modelIdList.size)
+    assert(status.models.count(_.inMemory) === maxNumModels)
+    assert(status.models.map(_.id).toSet === modelIdList.toSet)
+
     // Assert all models can be loaded back from disk after they are offloaded.
     for (modelId <- modelIdList) {
       assert(sessionHolder.mlCache.get(modelId) != null)
     }
+
+    val statusBeforeRemove = sessionHolder.getMLCacheStatus.get
+    val offloadedModel = statusBeforeRemove.models.find(!_.inMemory).get
+    assert(sessionHolder.mlCache.remove(offloadedModel.id))
+    val statusAfterRemove = sessionHolder.getMLCacheStatus.get
+    assert(!statusAfterRemove.models.exists(_.id == offloadedModel.id))
+    assert(
+      statusAfterRemove.totalSizeBytes ===
+        statusBeforeRemove.totalSizeBytes - offloadedModel.estimatedSizeBytes.get)
   }
 
   test("Model size limit") {
@@ -461,6 +503,7 @@ class MLSuite extends MLHelper {
     assert(mlCache2.get(modelId) != null)
     mlCache2.close()
     assert(mlCache2.cachedModel.isEmpty)
+    assert(mlCache2.getStatus.models.isEmpty)
 
     // Test 3: Edge case - register then remove model, close should still run cleanup
     val edgeCaseSessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)

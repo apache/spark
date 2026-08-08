@@ -23,6 +23,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
@@ -74,14 +75,28 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_OFFLOADING_TIMEOUT)
   }
 
+  private case class ModelMetadata(
+      className: String,
+      modelString: String,
+      estimatedSizeBytes: Option[Long])
+
+  // Keep lightweight metadata after a model is evicted from memory so the UI can report
+  // offloaded models without loading them back into memory.
+  private val cachedModelMetadata = new ConcurrentHashMap[String, ModelMetadata]()
+  private val inMemoryModelIds = ConcurrentHashMap.newKeySet[String]()
+
   private[ml] case class CacheItem(obj: Object, sizeBytes: Long)
   private[ml] val cachedModel: ConcurrentMap[String, CacheItem] = {
     if (getMemoryControlEnabled) {
       CacheBuilder
         .newBuilder()
         .softValues()
-        .removalListener((removed: RemovalNotification[String, CacheItem]) =>
-          totalMLCacheInMemorySizeBytes.addAndGet(-removed.getValue.sizeBytes))
+        .removalListener((removed: RemovalNotification[String, CacheItem]) => {
+          Option(removed.getValue).foreach { value =>
+            totalMLCacheInMemorySizeBytes.addAndGet(-value.sizeBytes)
+          }
+          inMemoryModelIds.remove(removed.getKey)
+        })
         .maximumWeight(getMaxInMemoryCacheSizeKB)
         .weigher((key: String, value: CacheItem) => {
           Math.ceil(value.sizeBytes.toDouble / 1024).toInt
@@ -142,24 +157,32 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     if (obj.isInstanceOf[Summary]) {
       cachedModel.put(objectId, CacheItem(obj, 0))
     } else if (obj.isInstanceOf[Model[_]]) {
-      val sizeBytes = if (getMemoryControlEnabled) {
-        val _sizeBytes = estimateObjectSize(obj)
-        checkModelSize(_sizeBytes)
-        _sizeBytes
+      val model = obj.asInstanceOf[Model[_]]
+      val estimatedSizeBytes = if (getMemoryControlEnabled) {
+        val sizeBytes = estimateObjectSize(model)
+        checkModelSize(sizeBytes)
+        Some(sizeBytes)
       } else {
-        0L // Don't need to calculate size if disables memory-control.
+        // Avoid adding model-size estimation overhead when memory control is disabled.
+        None
       }
-      cachedModel.put(objectId, CacheItem(obj, sizeBytes))
       if (getMemoryControlEnabled) {
         val savePath = getModelOffloadingPath(objectId)
-        obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
-        if (obj.isInstanceOf[HasTrainingSummary[_]]
-          && obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
-          obj
+        model.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
+        if (model.isInstanceOf[HasTrainingSummary[_]]
+          && model.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+          model
             .asInstanceOf[HasTrainingSummary[_]]
             .saveSummary(savePath.resolve("summary").toString)
         }
-        Files.writeString(savePath.resolve(modelClassNameFile), obj.getClass.getName)
+        Files.writeString(savePath.resolve(modelClassNameFile), model.getClass.getName)
+      }
+      cachedModelMetadata.put(
+        objectId,
+        ModelMetadata(model.getClass.getName, model.toString, estimatedSizeBytes))
+      inMemoryModelIds.add(objectId)
+      cachedModel.put(objectId, CacheItem(model, estimatedSizeBytes.getOrElse(0L)))
+      estimatedSizeBytes.foreach { sizeBytes =>
         totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
         totalMLCacheSizeBytes.addAndGet(sizeBytes)
       }
@@ -219,6 +242,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
             loadPath.toString,
             loadFromLocal = true)
           val sizeBytes = estimateObjectSize(obj)
+          inMemoryModelIds.add(refId)
           cachedModel.put(refId, CacheItem(obj, sizeBytes))
           totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
         }
@@ -231,8 +255,12 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     verifyObjectId(refId)
     val removedModel = cachedModel.remove(refId)
     val removedFromMem = removedModel != null
-    val removedFromDisk = if (!evictOnly && removedModel != null && getMemoryControlEnabled) {
-      totalMLCacheSizeBytes.addAndGet(-removedModel.sizeBytes)
+    inMemoryModelIds.remove(refId)
+    val metadata = Option(cachedModelMetadata.get(refId))
+    val removedFromDisk = if (!evictOnly && metadata.nonEmpty && getMemoryControlEnabled) {
+      metadata.get.estimatedSizeBytes.foreach { sizeBytes =>
+        totalMLCacheSizeBytes.addAndGet(-sizeBytes)
+      }
       val removePath = getModelOffloadingPath(refId)
       val offloadingPath = new File(removePath.toString)
       if (offloadingPath.exists()) {
@@ -244,7 +272,9 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     } else {
       false
     }
-    removedFromMem || removedFromDisk
+    val removeMetadata = !evictOnly || !getMemoryControlEnabled
+    val removedMetadata = removeMetadata && cachedModelMetadata.remove(refId) != null
+    removedFromMem || removedFromDisk || removedMetadata
   }
 
   /**
@@ -264,6 +294,9 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   def clear(): Int = this.synchronized {
     val size = cachedModel.size()
     cachedModel.clear()
+    cachedModelMetadata.clear()
+    inMemoryModelIds.clear()
+    totalMLCacheInMemorySizeBytes.set(0)
     totalMLCacheSizeBytes.set(0)
     if (getMemoryControlEnabled) {
       SparkFileUtils.cleanDirectory(new File(offloadedModelsDir.toString))
@@ -280,4 +313,40 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     }
     info.result()
   }
+
+  /** Returns a cache snapshot without loading or touching any cached model. */
+  def getStatus: MLCacheStatus = this.synchronized {
+    val models = mutable.ArrayBuilder.make[MLCacheModelInfo]
+    cachedModelMetadata.asScala.foreach { case (id, metadata) =>
+      models += MLCacheModelInfo(
+        id = id,
+        className = metadata.className,
+        modelString = metadata.modelString,
+        estimatedSizeBytes = metadata.estimatedSizeBytes,
+        inMemory = inMemoryModelIds.contains(id))
+    }
+    MLCacheStatus(
+      memoryControlEnabled = getMemoryControlEnabled,
+      inMemorySizeBytes = totalMLCacheInMemorySizeBytes.get(),
+      maxInMemorySizeBytes = sessionHolder.session.conf.get(
+        Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE),
+      totalSizeBytes = totalMLCacheSizeBytes.get(),
+      maxTotalSizeBytes = getMLCacheMaxSize,
+      models = models.result().toIndexedSeq.sortBy(_.id))
+  }
 }
+
+private[connect] case class MLCacheModelInfo(
+    id: String,
+    className: String,
+    modelString: String,
+    estimatedSizeBytes: Option[Long],
+    inMemory: Boolean)
+
+private[connect] case class MLCacheStatus(
+    memoryControlEnabled: Boolean,
+    inMemorySizeBytes: Long,
+    maxInMemorySizeBytes: Long,
+    totalSizeBytes: Long,
+    maxTotalSizeBytes: Long,
+    models: Seq[MLCacheModelInfo])
