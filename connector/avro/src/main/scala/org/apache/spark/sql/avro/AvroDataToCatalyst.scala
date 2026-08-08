@@ -19,6 +19,7 @@ package org.apache.spark.sql.avro
 
 import scala.util.control.NonFatal
 
+import org.apache.avro.Schema
 import org.apache.avro.generic.GenericDatumReader
 import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
 
@@ -62,9 +63,26 @@ case class AvroDataToCatalyst(
 
   @transient private lazy val reader = new GenericDatumReader[Any](actualSchema, expectedSchema)
 
+  /**
+   * Resolve a union schema that contains a single non-null type by unwrapping it.
+   * This mirrors the logic in AvroSerializer.resolveNullableType so that from_avro
+   * can handle the same union schemas that to_avro accepts.
+   */
+  @transient private lazy val resolvedSchema: Schema = {
+    if (expectedSchema.getType == Schema.Type.UNION) {
+      val nonNullTypes = AvroUtils.nonNullUnionBranches(expectedSchema)
+      nonNullTypes match {
+        case Seq(singleType) => singleType
+        case _ => expectedSchema
+      }
+    } else {
+      expectedSchema
+    }
+  }
+
   @transient private lazy val deserializer =
     new AvroDeserializer(
-      expectedSchema,
+      resolvedSchema,
       dataType,
       avroOptions.datetimeRebaseModeInRead,
       avroOptions.useStableIdForUnionType,
