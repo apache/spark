@@ -1258,9 +1258,11 @@ class Analyzer(
     private def lookupTableOrView(
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
-      relationResolution.lookupTempView(identifier).map { tempView =>
-        ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
-      }.orElse {
+      def tempViewCandidate: Option[LogicalPlan] =
+        relationResolution.lookupTempView(identifier).map { tempView =>
+          ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
+        }
+      def persistentCandidate: Option[LogicalPlan] = {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
             if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
@@ -1319,6 +1321,18 @@ class Analyzer(
             }
           case _ => None
         }
+      }
+      // Map the shared session-qualified candidate order to DDL plans.
+      relationResolution.sessionQualifiedCandidateOrder(identifier) match {
+        case Some(order) =>
+          order.iterator
+            .map {
+              case RelationResolution.TempViewCandidate => tempViewCandidate
+              case RelationResolution.PersistentCandidate => persistentCandidate
+            }
+            .collectFirst { case Some(plan) => plan }
+        case None =>
+          tempViewCandidate.orElse(persistentCandidate)
       }
     }
 

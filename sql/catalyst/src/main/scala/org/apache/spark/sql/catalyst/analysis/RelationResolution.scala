@@ -111,6 +111,27 @@ class RelationResolution(
   }
 
   /**
+   * Candidate order for session-qualified names. Three-part names are temp-only; two-part names
+   * follow [[SQLConf.prioritizeSystemCatalog]]. Returns `None` for other names.
+   */
+  def sessionQualifiedCandidateOrder(
+      identifier: Seq[String]): Option[Seq[RelationResolution.SessionCandidateKind]] = {
+    import RelationResolution._
+    if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
+      Some(Seq(TempViewCandidate))
+    } else if (identifier.length == 2 &&
+        identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+      Some(if (conf.prioritizeSystemCatalog) {
+        Seq(TempViewCandidate, PersistentCandidate)
+      } else {
+        Seq(PersistentCandidate, TempViewCandidate)
+      })
+    } else {
+      None
+    }
+  }
+
+  /**
    * Scope in the relation resolution search path. Used to interpret
    * [[CatalogManager.sqlResolutionPathEntries]] when resolving unqualified table/view names.
    */
@@ -172,30 +193,17 @@ class RelationResolution(
     val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
     val identifier = u.multipartIdentifier
 
-    // system.session.v (3 parts): only local temp view by name; same as SessionCatalog matching.
-    if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
-      val normalized = normalizeSessionQualifiedViewIdentifier(identifier)
-      return resolveTempView(
-        normalized,
-        u.isStreaming,
-        finalTimeTravelSpec.isDefined
-      )
-    }
-
-    // Two-part session.v: local temp view `v`, or persistent relation `v` in schema `session`.
-    // Order follows [[SQLConf.prioritizeSystemCatalog]] (inverse of `PERSISTENT_CATALOG_FIRST`).
-    if (identifier.length == 2 &&
-        identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+    // Map the shared session-qualified candidate order to SELECT/DML plans.
+    sessionQualifiedCandidateOrder(identifier).foreach { order =>
       val viewNameOnly = Seq(identifier.last)
-      val tempSession = () =>
-        resolveTempView(viewNameOnly, u.isStreaming, finalTimeTravelSpec.isDefined)
-      val persistentSessionDb = () =>
-        tryResolvePersistent(u, identifier, finalTimeTravelSpec)
-      return if (conf.prioritizeSystemCatalog) {
-        tempSession().orElse(persistentSessionDb())
-      } else {
-        persistentSessionDb().orElse(tempSession())
-      }
+      return order.iterator
+        .map {
+          case RelationResolution.TempViewCandidate =>
+            resolveTempView(viewNameOnly, u.isStreaming, finalTimeTravelSpec.isDefined)
+          case RelationResolution.PersistentCandidate =>
+            tryResolvePersistent(u, identifier, finalTimeTravelSpec)
+        }
+        .collectFirst { case Some(plan) => plan }
     }
 
     // Multi-part (but not session-qualified): try temp view first (e.g. global_temp.tbl1), then
@@ -561,4 +569,11 @@ class RelationResolution(
         plan
     }
   }
+}
+
+object RelationResolution {
+  /** Candidate kind for session-qualified relation resolution. */
+  sealed trait SessionCandidateKind
+  case object TempViewCandidate extends SessionCandidateKind
+  case object PersistentCandidate extends SessionCandidateKind
 }
