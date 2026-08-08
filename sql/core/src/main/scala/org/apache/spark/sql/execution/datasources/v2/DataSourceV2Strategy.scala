@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableOperation, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -51,6 +51,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
@@ -511,14 +512,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             v1, v2Write.getClass.getName, classOf[V1Write].getName)
       }
 
-    case AppendData(r: DataSourceV2Relation, query, _, _, _, Some(write), _) =>
-      AppendDataExec(planLater(query), refreshCache(r), write, r.name) :: Nil
+    case a @ AppendData(r: DataSourceV2Relation, query, _, _, _, Some(write), _) =>
+      AppendDataExec(planLater(query), refreshCache(r), write, r.name, a.output) :: Nil
 
-    case InsertOnlyMerge(r: DataSourceV2Relation, query, Some(write), _) =>
-      InsertOnlyMergeExec(planLater(query), refreshCache(r), write, r.name) :: Nil
+    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, Some(write), _) =>
+      InsertOnlyMergeExec(planLater(query), refreshCache(r), write, r.name, m.output) :: Nil
 
     case OverwriteByExpression(r @ ExtractV2Table(v1: SupportsWrite), _, _,
-        _, _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+        _, _, _, Some(write), analyzedQuery, _)
+        if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
           assert(analyzedQuery.isDefined)
@@ -528,17 +530,20 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             v1, v2Write.getClass.getName, classOf[V1Write].getName)
       }
 
-    case OverwriteByExpression(
-        r: DataSourceV2Relation, _, query, _, _, _, Some(write), _) =>
-      OverwriteByExpressionExec(planLater(query), refreshCache(r), write, r.name) :: Nil
+    case o @ OverwriteByExpression(
+        r: DataSourceV2Relation, _, query, _, _, _, Some(write), _, _) =>
+      OverwriteByExpressionExec(planLater(query), refreshCache(r), write, r.name, o.output) :: Nil
 
-    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, _, Some(write)) =>
-      OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write, r.name) :: Nil
+    case o @ OverwritePartitionsDynamic(
+        r: DataSourceV2Relation, query, _, _, _, Some(write)) =>
+      OverwritePartitionsDynamicExec(
+        planLater(query), refreshCache(r), write, r.name, o.output) :: Nil
 
-    case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters, options) =>
-      DeleteFromTableExec(r.table.asDeletable, filters.toArray, refreshCache(r), options) :: Nil
+    case d @ DeleteFromTableWithFilters(r: DataSourceV2Relation, filters, options) =>
+      DeleteFromTableExec(
+        r.table.asDeletable, filters.toArray, refreshCache(r), options, d.output) :: Nil
 
-    case DeleteFromTable(relation, condition) =>
+    case d @ DeleteFromTable(relation, condition, _) =>
       relation match {
         case ExtractV2ScanInfo(r, _, output) =>
           val table = r.table
@@ -555,11 +560,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
           table match {
             case t: SupportsDeleteV2 if t.canDeleteWhere(filters) =>
-              DeleteFromTableExec(t, filters, refreshCache(r), r.options) :: Nil
+              DeleteFromTableExec(t, filters, refreshCache(r), r.options, d.output) :: Nil
             case t: SupportsDeleteV2 =>
               throw QueryCompilationErrors.cannotDeleteTableWhereFiltersError(t, filters)
             case t: TruncatableTable if condition == TrueLiteral =>
-              TruncateTableExec(t, refreshCache(r), r.options) :: Nil
+              TruncateTableExec(
+                t, refreshCache(r), r.options, TableOperation.DELETE, d.output) :: Nil
             case _ =>
               throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
           }
@@ -580,7 +586,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         projections,
         write,
         rd.operation.command,
-        r.name) :: Nil
+        r.name,
+        rd.output) :: Nil
 
     case wd @ WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
         _, Some(write)) =>
@@ -590,7 +597,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         projections,
         write,
         wd.operation.command,
-        r.name) :: Nil
+        r.name,
+        wd.output) :: Nil
 
     case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
         notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>
@@ -746,10 +754,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       ShowCreateTableExec(output, rt) :: Nil
 
-    case TruncateTable(r: ResolvedTable) =>
+    case t @ TruncateTable(r: ResolvedTable) =>
       TruncateTableExec(
         r.table.asTruncatable,
-        recacheTable(r, includeTimeTravel = false)) :: Nil
+        recacheTable(r, includeTimeTravel = false),
+        CaseInsensitiveStringMap.empty(),
+        TableOperation.TRUNCATE,
+        t.output) :: Nil
 
     case TruncatePartition(r: ResolvedTable, part) =>
       TruncatePartitionExec(

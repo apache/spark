@@ -1407,30 +1407,33 @@ class Analyzer(
               withSchemaEvolution = i.withSchemaEvolution)
           }
         } else {
-          val deleteExpr = i.replaceCriteriaOpt match {
+          val (deleteExpr, tableOperation) = i.replaceCriteriaOpt match {
             case Some(InsertReplaceWhere(condition)) =>
               if (staticPartitions.nonEmpty) {
                 throw SparkException.internalError(
                   s"REPLACE WHERE must not carry static partitions, but got: $staticPartitions")
               }
-              condition
+              (condition, TableOperation.INSERT_REPLACE_WHERE)
             case Some(other) => throw SparkException.internalError(
               s"Replace criteria ${other.getClass.getSimpleName} must not reach " +
                 "ResolveInsertInto; REPLACE ON/USING are rejected earlier.")
-            case None => staticDeleteExpression(r, staticPartitions)
+            case None =>
+              (staticDeleteExpression(r, staticPartitions), TableOperation.INSERT_OVERWRITE)
           }
           if (isByName) {
             OverwriteByExpression.byName(
               table = r,
               df = query,
               deleteExpr = deleteExpr,
-              withSchemaEvolution = i.withSchemaEvolution)
+              withSchemaEvolution = i.withSchemaEvolution,
+              tableOperation = tableOperation)
           } else {
             OverwriteByExpression.byPosition(
               table = r,
               query = query,
               deleteExpr = deleteExpr,
-              withSchemaEvolution = i.withSchemaEvolution)
+              withSchemaEvolution = i.withSchemaEvolution,
+              tableOperation = tableOperation)
           }
         }
     }

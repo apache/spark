@@ -91,7 +91,8 @@ class InMemoryRowLevelOperationTable private (
   var lastDeleteOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
 
   override def deleteWhere(
-      predicates: Array[Predicate], options: CaseInsensitiveStringMap): Unit = {
+      predicates: Array[Predicate],
+      options: CaseInsensitiveStringMap): Array[InternalRow] = {
     lastDeleteOptions = options
     deleteWhere(predicates)
   }
@@ -158,11 +159,14 @@ class InMemoryRowLevelOperationTable private (
       new WriteBuilder {
         override def build(): Write = if (noMetadata) {
           new Write {
+            override def output(): Array[InternalRow] = commandOutput(info.operation().get())
             override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
             override def description: String = "InMemoryWrite"
           }
         } else {
           new Write with RequiresDistributionAndOrdering {
+            override def output(): Array[InternalRow] = commandOutput(info.operation().get())
+
             override def requiredDistribution: Distribution = {
               Distributions.clustered(Array(PARTITION_COLUMN_REF))
             }
@@ -224,10 +228,12 @@ class InMemoryRowLevelOperationTable private (
       new DeltaWriteBuilder {
         override def build(): DeltaWrite = if (noMetadata) {
           new DeltaWrite {
+            override def output(): Array[InternalRow] = commandOutput(info.operation().get())
             override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
           }
         } else {
           new DeltaWrite with RequiresDistributionAndOrdering {
+            override def output(): Array[InternalRow] = commandOutput(info.operation().get())
 
             override def requiredDistribution(): Distribution = {
               Distributions.clustered(Array(PARTITION_COLUMN_REF))
@@ -360,17 +366,31 @@ class InMemoryTruncatableOnlyTable(
     }
   }
 
-  override def truncateTable(): Boolean = {
+  override def truncateTable(): util.Optional[Array[InternalRow]] = {
     lastTruncateOptions = CaseInsensitiveStringMap.empty()
-    dataMap.synchronized { dataMap.clear() }
+    val numAffectedRows = dataMap.synchronized {
+      val count = rows.size.toLong
+      dataMap.clear()
+      count
+    }
     increaseVersion()
-    true
+    util.Optional.of(affectedRowsOutput(numAffectedRows))
   }
 
-  override def truncateTable(options: CaseInsensitiveStringMap): Boolean = {
+  override def truncateTable(
+      options: CaseInsensitiveStringMap,
+      operation: TableOperation): util.Optional[Array[InternalRow]] = {
     lastTruncateOptions = options
-    dataMap.synchronized { dataMap.clear() }
+    val numAffectedRows = dataMap.synchronized {
+      val count = rows.size.toLong
+      dataMap.clear()
+      count
+    }
     increaseVersion()
-    true
+    if (operation == TableOperation.DELETE) {
+      util.Optional.of(deletedRowsOutput(numAffectedRows))
+    } else {
+      util.Optional.of(affectedRowsOutput(numAffectedRows))
+    }
   }
 }

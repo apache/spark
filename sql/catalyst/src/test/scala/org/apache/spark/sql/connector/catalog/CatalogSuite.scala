@@ -1290,7 +1290,7 @@ class CatalogSuite extends SparkFunSuite {
     table.withData(Array(
       BufferedRows("3", table.columns()).withRow(InternalRow(0, "abc", "3")),
       BufferedRows("4", table.columns()).withRow(InternalRow(1, "def", "4"))))
-    assert(table.truncateTable())
+    assert(table.truncateTable().isPresent)
     assert(table.rows.isEmpty)
   }
 
@@ -1315,7 +1315,7 @@ class CatalogSuite extends SparkFunSuite {
     ))
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
     assert(partTable.rows.nonEmpty)
-    assert(partTable.truncateTable())
+    assert(partTable.truncateTable().isPresent)
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
     assert(partTable.rows.isEmpty)
   }

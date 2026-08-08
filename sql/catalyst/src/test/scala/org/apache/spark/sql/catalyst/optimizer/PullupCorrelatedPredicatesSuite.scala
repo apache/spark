@@ -121,7 +121,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(optimized.resolved)
 
     optimized match {
-      case DeleteFromTable(_, s: InSubquery) =>
+      case DeleteFromTable(_, s: InSubquery, _) =>
         val outerRefs = SubExprUtils.getOuterReferences(s.query.plan)
         assert(outerRefs.isEmpty, "should be no outer refs")
       case other =>

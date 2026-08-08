@@ -1043,14 +1043,15 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val parsed4 = parseAndResolve(sql4)
 
       parsed1 match {
-        case DeleteFromTable(AsDataSourceV2Relation(_), Literal.TrueLiteral) =>
+        case DeleteFromTable(AsDataSourceV2Relation(_), Literal.TrueLiteral, _) =>
         case _ => fail("Expect DeleteFromTable, but got:\n" + parsed1.treeString)
       }
 
       parsed2 match {
         case DeleteFromTable(
           AsDataSourceV2Relation(_),
-          EqualTo(name: UnresolvedAttribute, StringLiteral("Robert"))) =>
+          EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")),
+          _) =>
           assert(name.name == "name")
         case _ => fail("Expect DeleteFromTable, but got:\n" + parsed2.treeString)
       }
@@ -1058,7 +1059,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       parsed3 match {
         case DeleteFromTable(
           SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
-          EqualTo(name: UnresolvedAttribute, StringLiteral("Robert"))) =>
+          EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")),
+          _) =>
           assert(name.name == "t.name")
         case _ => fail("Expect DeleteFromTable, but got:\n" + parsed3.treeString)
       }
@@ -1066,7 +1068,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       parsed4 match {
         case DeleteFromTable(
             SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
-            InSubquery(values, query)) =>
+            InSubquery(values, query),
+            _) =>
           assert(values.size == 1 && values.head.isInstanceOf[UnresolvedAttribute])
           assert(values.head.asInstanceOf[UnresolvedAttribute].name == "t.name")
           query match {
@@ -1361,7 +1364,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
     }
     overwriteParsed match {
-      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _) =>
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
     }

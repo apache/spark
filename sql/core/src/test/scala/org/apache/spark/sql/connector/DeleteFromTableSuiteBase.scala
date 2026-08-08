@@ -18,11 +18,12 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.internal.config
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTable, InMemoryTable, InMemoryTruncatableOnlyTable, InMemoryTruncatableOnlyTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable.commandOutput
 import org.apache.spark.sql.connector.write.DeleteSummary
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, TruncateTableExec, WriteDeltaExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -80,7 +81,11 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(5, "hr", "new-text"),
         Row(6, "hr", "new-text")))
 
-    sql(s"DELETE FROM $tableNameAsString WHERE pk IN (2, 5)")
+    checkAnswer(
+      sql(s"DELETE FROM $tableNameAsString WHERE pk IN (2, 5)"),
+      commandOutput(
+        "num_affected_rows" -> 2L,
+        "num_deleted_rows" -> 2L))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -735,7 +740,11 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 3, "id": 3, "dep": 100 }
         |""".stripMargin)
 
-    executeDeleteWithFilters(s"DELETE FROM $tableNameAsString WHERE dep = 100")
+    executeDeleteWithFilters(
+      s"DELETE FROM $tableNameAsString WHERE dep = 100",
+      expectedOutput = Some(commandOutput(
+        "num_affected_rows" -> 2L,
+        "num_deleted_rows" -> 2L)))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -1024,10 +1033,14 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
-  private def executeDeleteWithFilters(query: String): Unit = {
+  private def executeDeleteWithFilters(
+      query: String,
+      expectedOutput: Option[Seq[Row]] = None): Unit = {
+    var result: DataFrame = null
     val executedPlan = executeAndKeepPlan {
-      sql(query)
+      result = sql(query)
     }
+    expectedOutput.foreach(checkAnswer(result, _))
 
     executedPlan match {
       case _: DeleteFromTableExec =>
@@ -1151,12 +1164,16 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql("CREATE TABLE trunccat.ns.tbl (pk INT NOT NULL, dep STRING) USING foo")
         sql("INSERT INTO trunccat.ns.tbl VALUES (1, 'hr'), (2, 'software')")
 
-        val Seq(qe) = withQueryExecutionsCaptured(spark) {
-          sql("DELETE FROM trunccat.ns.tbl WITH (`write.split-size` = 10)")
+        val queryExecutions = withQueryExecutionsCaptured(spark) {
+          checkAnswer(
+            sql("DELETE FROM trunccat.ns.tbl WITH (`write.split-size` = 10)"),
+            commandOutput(
+              "num_affected_rows" -> 2L,
+              "num_deleted_rows" -> 2L))
         }
-        val exec = qe.executedPlan.collectFirst {
+        val exec = queryExecutions.iterator.flatMap(_.executedPlan.collect {
           case e: TruncateTableExec => e
-        }.getOrElse(fail("expected TruncateTableExec for the truncate path"))
+        }).nextOption().getOrElse(fail("expected TruncateTableExec for the truncate path"))
         assert(exec.options.get("write.split-size") === "10",
           "options must reach TruncateTableExec")
 
@@ -1166,7 +1183,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
             Array("ns"), "tbl"))
           .asInstanceOf[InMemoryTruncatableOnlyTable]
         assert(truncTable.lastTruncateOptions.get("write.split-size") === "10",
-          "options must be forwarded to TruncatableTable.truncateTable(options)")
+          "options must be forwarded to TruncatableTable.truncateTable(options, operation)")
 
         checkAnswer(spark.table("trunccat.ns.tbl"), Nil)
       }

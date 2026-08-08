@@ -290,6 +290,7 @@ case class AppendDataExec(
     refreshCache: () => Unit,
     write: Write,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
   override def withTransaction(txn: Option[Transaction]): AppendDataExec = copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): AppendDataExec =
@@ -309,6 +310,7 @@ case class InsertOnlyMergeExec(
     refreshCache: () => Unit,
     write: Write,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
   override def withTransaction(txn: Option[Transaction]): InsertOnlyMergeExec =
     copy(transaction = txn)
@@ -342,11 +344,15 @@ case class OverwriteByExpressionExec(
     refreshCache: () => Unit,
     write: Write,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
   override def withTransaction(txn: Option[Transaction]): OverwriteByExpressionExec =
     copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): OverwriteByExpressionExec =
     copy(query = newChild)
+
+  override protected def getWriteSummary(): Option[WriteSummary] =
+    Some(InsertSummaryImpl(numInsertedRows = numOutputRowsMetric.value))
 }
 
 /**
@@ -363,11 +369,15 @@ case class OverwritePartitionsDynamicExec(
     refreshCache: () => Unit,
     write: Write,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
   override def withTransaction(txn: Option[Transaction]): OverwritePartitionsDynamicExec =
     copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): OverwritePartitionsDynamicExec =
     copy(query = newChild)
+
+  override protected def getWriteSummary(): Option[WriteSummary] =
+    Some(InsertSummaryImpl(numInsertedRows = numOutputRowsMetric.value))
 }
 
 /**
@@ -380,6 +390,7 @@ case class ReplaceDataExec(
     write: Write,
     rowLevelCommand: RowLevelOperation.Command,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends RowLevelWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
@@ -427,6 +438,7 @@ case class WriteDeltaExec(
     write: DeltaWrite,
     rowLevelCommand: RowLevelOperation.Command,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends RowLevelWriteExec {
 
   override lazy val writingTask: WritingSparkTask[_] = {
@@ -491,15 +503,17 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec with TransactionalExec {
     createCustomMetrics(write.supportedCustomMetrics())
 
   override protected def run(): Seq[InternalRow] = {
-    val writtenRows = try {
+    try {
       writeWithV2(write.toBatch)
     } finally {
       postDriverMetrics(write.reportDriverMetrics())
     }
     transaction.foreach(TransactionUtils.commit)
     refreshCache()
-    writtenRows
+    outputRows
   }
+
+  protected def outputRows: Seq[InternalRow] = write.output().toImmutableArraySeq
 }
 
 /**
@@ -1010,4 +1024,3 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
-

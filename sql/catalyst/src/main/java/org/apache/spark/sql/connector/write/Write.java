@@ -21,8 +21,11 @@ import java.util.Map;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.connector.catalog.SupportsOperationOutput;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
+import org.apache.spark.sql.connector.catalog.TableOperation;
 import org.apache.spark.sql.connector.metric.CustomMetric;
 import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
@@ -46,6 +49,21 @@ public interface Write {
    */
   default String description() {
     return this.getClass().toString();
+  }
+
+  /**
+   * Returns the rows produced by this write after it commits successfully.
+   * <p>
+   * The returned rows must match the schema reported by
+   * {@link SupportsOperationOutput#outputSchema(TableOperation)}. By default, this method returns
+   * no rows.
+   * <p>
+   * This method is not used for writes executed using {@link TableCapability#V1_BATCH_WRITE}.
+   *
+   * @since 4.3.0
+   */
+  default InternalRow[] output() {
+    return new InternalRow[0];
   }
 
   /**
