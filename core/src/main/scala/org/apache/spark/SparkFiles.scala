@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.io.File
 
+import org.apache.spark.util.Utils
+
 /**
  * Resolves paths to files added through `SparkContext.addFile()`.
  */
@@ -31,7 +33,20 @@ object SparkFiles {
     val jobArtifactUUID = JobArtifactSet
       .getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
     val withUuid = if (jobArtifactUUID == "default") filename else s"$jobArtifactUUID/$filename"
-    new File(getRootDirectory(), withUuid).getAbsolutePath
+    val file = new File(getRootDirectory(), withUuid)
+    // In local mode, `SparkContext.addFile` places files directly under the root directory
+    // rather than under the job-specific artifact directory used by session isolation. Fall back
+    // to the root directory when the file is not found under the job-specific directory so that
+    // files added through `SparkContext.addFile` remain resolvable. This is scoped to local mode
+    // to preserve session isolation semantics on real executors. See SPARK-53478.
+    if (jobArtifactUUID != "default" && !file.exists() &&
+        Utils.isLocalMaster(SparkEnv.get.conf)) {
+      val fallbackFile = new File(getRootDirectory(), filename)
+      if (fallbackFile.exists()) {
+        return fallbackFile.getAbsolutePath
+      }
+    }
+    file.getAbsolutePath
   }
 
   /**
