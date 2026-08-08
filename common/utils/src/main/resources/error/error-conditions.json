@@ -5745,6 +5745,12 @@
     ],
     "sqlState" : "42000"
   },
+  "MAX_ARCHIVE_DEPTH_EXCEEDED" : {
+    "message" : [
+      "Cannot read archive entry <entry> in archive <path>: it is nested more than <maxDepth> archives deep."
+    ],
+    "sqlState" : "KD003"
+  },
   "MERGE_CARDINALITY_VIOLATION" : {
     "message" : [
       "The ON search condition of the MERGE statement matched a single row from the target table with multiple rows of the source table.",
