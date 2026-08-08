@@ -56,7 +56,7 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class ClusterByHelper(spec: ClusterBySpec) {
-    def asTransform: Transform = clusterBy(spec.columnNames.toArray)
+    def asTransform: Transform = new ClusterByTransform(spec.entries)
   }
 
   implicit class TransformHelper(transforms: Seq[Transform]) {
@@ -80,12 +80,12 @@ private[sql] object CatalogV2Implicits {
               sortCol.map(_.fieldNames.mkString("."))))
           }
 
-        case ClusterByTransform(columnNames) =>
+        case ClusterByTransform(entries) =>
           if (clusterBySpec.nonEmpty) {
             // AstBuilder guarantees that it only passes down one ClusterByTransform.
             throw SparkException.internalError("Cannot have multiple cluster by transforms.")
           }
-          clusterBySpec = Some(ClusterBySpec(columnNames))
+          clusterBySpec = Some(new ClusterBySpec(entries))
 
         case transform =>
           throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)

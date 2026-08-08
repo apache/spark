@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.connector.expressions.Transform
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE ... CLUSTER BY` command
@@ -42,6 +43,17 @@ trait AlterTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
     Seq("col3.`col4.1`", "col2.`col4 1`", "col2.col3")
 
   def validateClusterBy(tableName: String, clusteringColumns: Seq[String]): Unit
+
+  /**
+   * Validates clustering columns and their associated transforms.
+   * @param expectedTransforms per-column transforms, where None means a plain column reference
+   *                           and Some(transform) means an expression-based clustering column.
+   *                           Must have the same length as clusteringColumns.
+   */
+  def validateClusterBy(
+      tableName: String,
+      clusteringColumns: Seq[String],
+      expectedTransforms: Seq[Option[Transform]]): Unit
 
   test("test basic ALTER TABLE with clustering columns") {
     withNamespaceAndTable("ns", "table") { tbl =>
