@@ -55,7 +55,7 @@
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
-      <artifactId>scala-library</artifactId>
+      <artifactId>${scala.library.artifact}</artifactId>
     </dependency>
   </dependencies>
 
