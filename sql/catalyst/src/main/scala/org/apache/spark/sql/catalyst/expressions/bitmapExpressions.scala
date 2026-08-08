@@ -253,7 +253,9 @@ case class BitmapConstructAgg(child: Expression,
 @ExpressionDescription(
   usage = """
     _FUNC_(child) - Returns a bitmap that is the bitwise OR of all of the bitmaps from the child
-    expression. The input should be bitmaps created from bitmap_construct_agg().
+    expression. Input bitmaps shorter than 4096 bytes are merged into the corresponding byte
+    positions of the result; inputs produced by bitmap_construct_agg() are always exactly 4096
+    bytes. Inputs longer than 4096 bytes are not supported and will cause a runtime error.
   """,
   arguments = """
     Arguments:
@@ -332,6 +334,10 @@ case class BitmapOrAgg(child: Expression,
   override def update(buffer: InternalRow, input: InternalRow): Unit = {
     val input_bitmap = child.eval(input).asInstanceOf[Array[Byte]]
     if (input_bitmap != null) {
+      if (input_bitmap.length > BitmapExpressionUtils.NUM_BYTES) {
+        throw QueryExecutionErrors.bitmapInputTooLargeError(
+          input_bitmap.length, BitmapExpressionUtils.NUM_BYTES)
+      }
       val bitmap = buffer.getBinary(mutableAggBufferOffset)
       BitmapExpressionUtils.bitmapMerge(bitmap, input_bitmap)
     }
@@ -351,7 +357,11 @@ case class BitmapOrAgg(child: Expression,
 @ExpressionDescription(
   usage = """
     _FUNC_(child) - Returns a bitmap that is the bitwise AND of all of the bitmaps from the child
-    expression. The input should be bitmaps created from bitmap_construct_agg().
+    expression. The aggregation buffer is initialized to all 0xFF bytes (ones). Input bitmaps
+    shorter than 4096 bytes are ANDed into the corresponding byte positions of the result; tail
+    bytes not covered by a short input remain all-ones. Inputs produced by bitmap_construct_agg()
+    are always exactly 4096 bytes. Inputs longer than 4096 bytes are not supported and will cause
+    a runtime error.
   """,
   arguments = """
     Arguments:
@@ -430,6 +440,10 @@ case class BitmapAndAgg(
   override def update(buffer: InternalRow, input: InternalRow): Unit = {
     val input_bitmap = child.eval(input).asInstanceOf[Array[Byte]]
     if (input_bitmap != null) {
+      if (input_bitmap.length > BitmapExpressionUtils.NUM_BYTES) {
+        throw QueryExecutionErrors.bitmapInputTooLargeError(
+          input_bitmap.length, BitmapExpressionUtils.NUM_BYTES)
+      }
       val bitmap = buffer.getBinary(mutableAggBufferOffset)
       BitmapExpressionUtils.bitmapAndMerge(bitmap, input_bitmap)
     }
