@@ -114,6 +114,21 @@ private[sql] object Dataset {
       new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
+  // A variant of ofRows that allows disabling the QueryExecution refresh phase. Spark Connect
+  // re-resolves plans on each request, so the refresh phase would only re-issue redundant catalog
+  // loads for tables just resolved in the same QueryExecution. This has no default argument
+  // because only one ofRows overload may define defaults (the tracker-taking variant below).
+  def ofRows(
+      sparkSession: SparkSession,
+      logicalPlan: LogicalPlan,
+      refreshPhaseEnabled: Boolean): DataFrame =
+    sparkSession.withActive {
+      val qe = sparkSession.sessionState.executePlan(
+        logicalPlan, refreshPhaseEnabled = refreshPhaseEnabled)
+      if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
+    }
+
   def ofRows(
       sparkSession: SparkSession,
       logicalPlan: LogicalPlan,
@@ -130,10 +145,12 @@ private[sql] object Dataset {
       sparkSession: SparkSession,
       logicalPlan: LogicalPlan,
       tracker: QueryPlanningTracker,
-      shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup)
+      shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup,
+      refreshPhaseEnabled: Boolean = true)
     : DataFrame = sparkSession.withActive {
     val qe = new QueryExecution(
-      sparkSession, logicalPlan, tracker, shuffleCleanupModeOpt = Some(shuffleCleanupMode))
+      sparkSession, logicalPlan, tracker, shuffleCleanupModeOpt = Some(shuffleCleanupMode),
+      refreshPhaseEnabled = refreshPhaseEnabled)
     if (!qe.isLazyAnalysis) qe.assertAnalyzed()
     new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
   }

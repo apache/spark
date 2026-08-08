@@ -83,7 +83,11 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             sessionHolder.session,
             planner.transformRelation(request.getPlan.getRoot, cachePlan = true),
             tracker,
-            shuffleCleanupMode)
+            shuffleCleanupMode,
+            // Spark Connect re-resolves the plan on each request, so the analyzed plan already
+            // reflects the latest table state. The refresh phase would only re-issue redundant
+            // catalog loads for tables just resolved in this same QueryExecution.
+            refreshPhaseEnabled = false)
         responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
         processAsArrowBatches(dataframe, responseObserver, executeHolder)
         responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
@@ -95,7 +99,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               session,
               transformer(tracker),
               tracker,
-              shuffleCleanupModeOpt = Some(shuffleCleanupMode))
+              shuffleCleanupModeOpt = Some(shuffleCleanupMode),
+              refreshPhaseEnabled = false)
             qe.assertCommandExecuted()
             executeHolder.eventsManager.postFinished()
           case None =>
