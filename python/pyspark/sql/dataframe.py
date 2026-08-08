@@ -7173,6 +7173,7 @@ class DataFrameNaFunctions:
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        *,
         subset: Optional[List[str]] = ...,
     ) -> DataFrame: ...
 
@@ -7184,7 +7185,7 @@ class DataFrameNaFunctions:
         subset: Optional[List[str]] = ...,
     ) -> DataFrame: ...
 
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def replace(
         self,
         to_replace: Union[List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]],

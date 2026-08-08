@@ -18,7 +18,7 @@
 import re
 import sys
 from collections.abc import Iterator
-from typing import cast, overload, Any, Callable, List, Optional, TYPE_CHECKING, Union
+from typing import cast, overload, Any, Callable, Optional, Sequence, TYPE_CHECKING, Union
 
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.streaming.query import StreamingQuery
@@ -1193,9 +1193,9 @@ class DataStreamWriter:
     def partitionBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter": ...
+    def partitionBy(self, __cols: Sequence[str]) -> "DataStreamWriter": ...
 
-    def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
+    def partitionBy(self, *cols: Union[str, Sequence[str]]) -> "DataStreamWriter":
         """Partitions the output by the given columns on the file system.
 
         If specified, the output is laid out on the file system similar
@@ -1240,8 +1240,8 @@ class DataStreamWriter:
         """
         from pyspark.sql.classic.column import _to_seq
 
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
+            cols = tuple(cols[0])
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
 
@@ -1249,9 +1249,9 @@ class DataStreamWriter:
     def clusterBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter": ...
+    def clusterBy(self, __cols: Sequence[str]) -> "DataStreamWriter": ...
 
-    def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
+    def clusterBy(self, *cols: Union[str, Sequence[str]]) -> "DataStreamWriter":
         """Clusters the output by the given columns.
 
         If specified, the output is laid out such that records with similar values on the clustering
@@ -1297,8 +1297,8 @@ class DataStreamWriter:
         """
         from pyspark.sql.classic.column import _to_seq
 
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
+            cols = tuple(cols[0])
         self._jwrite = self._jwrite.clusterBy(_to_seq(self._spark._sc, cols))
         return self
 
@@ -1754,7 +1754,7 @@ class DataStreamWriter:
         path: Optional[str] = None,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> "StreamingQuery":
@@ -1842,7 +1842,7 @@ class DataStreamWriter:
         tableName: str,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> "StreamingQuery":
