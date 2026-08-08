@@ -59,6 +59,10 @@ object StatFunctions extends Logging {
    *
    * @note null and NaN values will be ignored in numerical columns before calculation. For
    *   a column only containing null or NaN values, an empty array is returned.
+   *
+   * @note TIME columns are also supported. Their quantiles are computed and returned as
+   *   seconds since midnight (with a fractional part preserving full nanosecond-of-day
+   *   precision), not as TIME values.
    */
   def multipleApproxQuantiles(
       df: DataFrame,
@@ -71,10 +75,16 @@ object StatFunctions extends Logging {
       "percentile should be in the range [0.0, 1.0]")
     val columns: Seq[Column] = cols.map { colName =>
       val field = df.resolve(colName)
-      require(field.dataType.isInstanceOf[NumericType],
+      require(field.dataType.isInstanceOf[NumericType] || field.dataType.isInstanceOf[TimeType],
         s"Quantile calculation for column $colName with data type ${field.dataType}" +
         " is not supported.")
-      col(colName).cast(DoubleType)
+      if (field.dataType.isInstanceOf[TimeType]) {
+        // TimeType -> LongType truncates to whole seconds (Cast.timeToLong). Route through
+        // DecimalType(14, 9) instead, which preserves the full nanosecond-of-day value.
+        col(colName).cast(DecimalType(14, 9)).cast(DoubleType)
+      } else {
+        col(colName).cast(DoubleType)
+      }
     }
 
     // approx_percentile needs integer accuracy
@@ -191,12 +201,17 @@ object StatFunctions extends Logging {
     var columnNames = Seq.empty[String]
 
     ds.schema.fields.foreach { field =>
-      if (field.dataType.isInstanceOf[NumericType] || field.dataType.isInstanceOf[StringType]) {
+      if (field.dataType.isInstanceOf[NumericType] || field.dataType.isInstanceOf[StringType] ||
+          field.dataType.isInstanceOf[TimeType]) {
         val column = col(field.name)
         var casted = column
         if (field.dataType.isInstanceOf[StringType]) {
           casted = column.try_cast(DoubleType)
         }
+        // avg/stddev require a numeric input; TIME has no meaningful numeric mean, so those
+        // statistics are left null for TIME columns. percentile_approx supports TimeType
+        // directly and returns a typed TIME result, so `casted` (== the raw column) is used as-is.
+        val isTimeColumn = field.dataType.isInstanceOf[TimeType]
 
         val percentilesCol = if (percentiles.nonEmpty) {
           percentile_approx(casted, lit(percentiles),
@@ -215,9 +230,11 @@ object StatFunctions extends Logging {
 
             case "approx_count_distinct" => aggColumns :+= approx_count_distinct(column)
 
-            case "mean" => aggColumns :+= avg(casted)
+            case "mean" =>
+              aggColumns :+= (if (isTimeColumn) lit(null).cast(StringType) else avg(casted))
 
-            case "stddev" => aggColumns :+= stddev(casted)
+            case "stddev" =>
+              aggColumns :+= (if (isTimeColumn) lit(null).cast(StringType) else stddev(casted))
 
             case "min" => aggColumns :+= min(column)
 
