@@ -529,6 +529,14 @@ abstract class DataFrameStatFunctions {
    *   expected number of items which will be put into the filter.
    * @param fpp
    *   expected false positive probability of the filter.
+   * @note
+   *   For string columns, this filter is built and queried using raw UTF-8 byte equality. When
+   *   the column has a non-binary collation (e.g. UTF8_LCASE or any ICU collation), two values
+   *   that compare equal under that collation (such as `'Alice'` and `'alice'` under UTF8_LCASE)
+   *   will occupy distinct slots and `mightContain` may return inconsistent results. If
+   *   collation-consistent membership is required, build the filter over a column declared with
+   *   the default UTF8_BINARY collation, or normalize the values yourself before building and
+   *   querying the filter (for example, `lower(col)` for ASCII data under UTF8_LCASE).
    * @since 2.0.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, fpp: Double): BloomFilter = {
@@ -544,6 +552,14 @@ abstract class DataFrameStatFunctions {
    *   expected number of items which will be put into the filter.
    * @param fpp
    *   expected false positive probability of the filter.
+   * @note
+   *   For string columns, this filter is built and queried using raw UTF-8 byte equality. When
+   *   the column has a non-binary collation (e.g. UTF8_LCASE or any ICU collation), two values
+   *   that compare equal under that collation (such as `'Alice'` and `'alice'` under UTF8_LCASE)
+   *   will occupy distinct slots and `mightContain` may return inconsistent results. If
+   *   collation-consistent membership is required, build the filter over a column declared with
+   *   the default UTF8_BINARY collation, or normalize the values yourself before building and
+   *   querying the filter (for example, `lower(col)` for ASCII data under UTF8_LCASE).
    * @since 2.0.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
@@ -560,6 +576,14 @@ abstract class DataFrameStatFunctions {
    *   expected number of items which will be put into the filter.
    * @param numBits
    *   expected number of bits of the filter.
+   * @note
+   *   For string columns, this filter is built and queried using raw UTF-8 byte equality. When
+   *   the column has a non-binary collation (e.g. UTF8_LCASE or any ICU collation), two values
+   *   that compare equal under that collation (such as `'Alice'` and `'alice'` under UTF8_LCASE)
+   *   will occupy distinct slots and `mightContain` may return inconsistent results. If
+   *   collation-consistent membership is required, build the filter over a column declared with
+   *   the default UTF8_BINARY collation, or normalize the values yourself before building and
+   *   querying the filter (for example, `lower(col)` for ASCII data under UTF8_LCASE).
    * @since 2.0.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, numBits: Long): BloomFilter = {
@@ -575,6 +599,14 @@ abstract class DataFrameStatFunctions {
    *   expected number of items which will be put into the filter.
    * @param numBits
    *   expected number of bits of the filter.
+   * @note
+   *   For string columns, this filter is built and queried using raw UTF-8 byte equality. When
+   *   the column has a non-binary collation (e.g. UTF8_LCASE or any ICU collation), two values
+   *   that compare equal under that collation (such as `'Alice'` and `'alice'` under UTF8_LCASE)
+   *   will occupy distinct slots and `mightContain` may return inconsistent results. If
+   *   collation-consistent membership is required, build the filter over a column declared with
+   *   the default UTF8_BINARY collation, or normalize the values yourself before building and
+   *   querying the filter (for example, `lower(col)` for ASCII data under UTF8_LCASE).
    * @since 2.0.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = withOrigin {
