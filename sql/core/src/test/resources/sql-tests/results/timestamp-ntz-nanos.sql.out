@@ -663,6 +663,70 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111'):interval day to second>
+-- !query output
+1 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456001'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456001'):interval day to second>
+-- !query output
+0 00:00:00.000000000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789'):interval day to second>
+-- !query output
+-1 00:00:00.123456000
+
+
+-- !query
+SELECT ('2020-01-02 03:04:05.1234567' :: timestamp_ntz(7)) - ('2020-01-01 03:04:05.000000009' :: timestamp_ntz(9))
+-- !query schema
+struct<(CAST(2020-01-02 03:04:05.1234567 AS TIMESTAMP_NTZ(7)) - CAST(2020-01-01 03:04:05.000000009 AS TIMESTAMP_NTZ(9))):interval day to second>
+-- !query output
+1 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05'):interval day to second>
+-- !query output
+0 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01'):interval day to second>
+-- !query output
+1 00:00:00.000000000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' - TIMESTAMP_NTZ '1960-01-01 00:00:00.000000999'
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' - TIMESTAMP_NTZ '1960-01-01 00:00:00.000000999'):interval day to second>
+-- !query output
+21915 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS timestamp_ntz(9))
+-- !query schema
+struct<(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS TIMESTAMP_NTZ(9))):interval day to second>
+-- !query output
+NULL
+
+
+-- !query
 SELECT max(c), min(c) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),

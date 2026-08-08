@@ -4527,7 +4527,13 @@ case class SubtractTimestamps(
   def this(endTimestamp: Expression, startTimestamp: Expression) =
     this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType, AnyTimestampType)
+  // Nanosecond-precision timestamps are accepted alongside the microsecond types. The difference is
+  // always reported on the microsecond grid (a DayTimeIntervalType has microsecond resolution), so
+  // each operand contributes only its epochMicros; the sub-microsecond remainder is truncated.
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      TypeCollection(AnyTimestampType, AnyTimestampNanoType),
+      TypeCollection(AnyTimestampType, AnyTimestampNanoType))
   override def dataType: DataType =
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
 
@@ -4535,6 +4541,13 @@ case class SubtractTimestamps(
     copy(timeZoneId = Option(timeZoneId))
 
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
+
+  // For the nanosecond carrier the child value is a boxed TimestampNanosVal, so read its
+  // epochMicros; for the microsecond timestamp types it is already a boxed Long.
+  private def toMicros(value: Any): Long = value match {
+    case v: TimestampNanosVal => v.epochMicros
+    case n => n.asInstanceOf[Long]
+  }
 
   @transient
   private lazy val evalFunc: (Long, Long) => Any = if (legacyInterval) {
@@ -4545,17 +4558,29 @@ case class SubtractTimestamps(
       subtractTimestamps(leftMicros, rightMicros, zoneIdInEval)
   }
 
-  override def nullSafeEval(leftMicros: Any, rightMicros: Any): Any = {
-    evalFunc(leftMicros.asInstanceOf[Long], rightMicros.asInstanceOf[Long])
+  override def nullSafeEval(leftTs: Any, rightTs: Any): Any = {
+    evalFunc(toMicros(leftTs), toMicros(rightTs))
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = if (legacyInterval) {
-    defineCodeGen(ctx, ev, (end, start) =>
-      s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
-  } else {
-    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (l, r) => s"""$dtu.subtractTimestamps($l, $r, $zid)""")
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // The nanosecond carrier exposes epochMicros as a public field; the microsecond types are
+    // already primitive longs. Reduce each operand to microseconds before subtracting.
+    def toMicrosCode(e: Expression): String => String = e.dataType match {
+      case _: AnyTimestampNanoType => c => s"$c.epochMicros"
+      case _ => c => c
+    }
+    val leftMicros = toMicrosCode(left)
+    val rightMicros = toMicrosCode(right)
+    if (legacyInterval) {
+      defineCodeGen(ctx, ev, (end, start) =>
+        s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, " +
+          s"${leftMicros(end)} - ${rightMicros(start)})")
+    } else {
+      val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      defineCodeGen(ctx, ev, (l, r) =>
+        s"""$dtu.subtractTimestamps(${leftMicros(l)}, ${rightMicros(r)}, $zid)""")
+    }
   }
 
   override def toString: String = s"($left - $right)"

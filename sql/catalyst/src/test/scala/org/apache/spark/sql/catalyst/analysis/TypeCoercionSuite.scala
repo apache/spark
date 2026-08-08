@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -436,6 +437,48 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     ruleTest(rule,
       SubtractTimestamps(timestampNTZLiteral, timestampLiteral),
       SubtractTimestamps(timestampNTZLiteral, Cast(timestampLiteral, TimestampNTZType)))
+
+    // SPARK-57832: subtraction accepts nanosecond-precision timestamps. A DATE operand takes the
+    // nanos type of the other side; a timestamp pair that differs only in precision or family is
+    // widened to a common type before being handed to SubtractTimestamps.
+    val ntzNanos9 = Literal.create(
+      DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("2021-01-01T00:00:00"), precision = 9),
+      TimestampNTZNanosType(9))
+    val ltzNanos9 = Literal.create(
+      DateTimeUtils.instantToTimestampNanos(
+        java.time.Instant.parse("2021-01-01T00:00:00Z"), precision = 9),
+      TimestampLTZNanosType(9))
+    val ntzNanos7 = Literal.create(
+      DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("2021-01-01T00:00:00"), precision = 7),
+      TimestampNTZNanosType(7))
+
+    // DATE - nanos and nanos - DATE cast the DATE side to the nanos type.
+    ruleTest(rule,
+      SubtractTimestamps(dateLiteral, ntzNanos9),
+      SubtractTimestamps(Cast(dateLiteral, TimestampNTZNanosType(9)), ntzNanos9))
+    ruleTest(rule,
+      SubtractTimestamps(ntzNanos9, dateLiteral),
+      SubtractTimestamps(ntzNanos9, Cast(dateLiteral, TimestampNTZNanosType(9))))
+    // Same-precision same-family pair is already the same type -> left untouched.
+    ruleTest(rule,
+      SubtractTimestamps(ntzNanos9, ntzNanos9),
+      SubtractTimestamps(ntzNanos9, ntzNanos9))
+    // Cross-family nanos pair (LTZ vs NTZ) unifies in the NTZ family at the max precision.
+    ruleTest(rule,
+      SubtractTimestamps(ltzNanos9, ntzNanos7),
+      SubtractTimestamps(
+        Cast(ltzNanos9, TimestampNTZNanosType(9)), Cast(ntzNanos7, TimestampNTZNanosType(9))))
+    // Micro NTZ vs nanos NTZ: same family, widen precision to the nanos type.
+    ruleTest(rule,
+      SubtractTimestamps(timestampNTZLiteral, ntzNanos9),
+      SubtractTimestamps(Cast(timestampNTZLiteral, TimestampNTZNanosType(9)), ntzNanos9))
+    // Micro LTZ (TIMESTAMP) vs nanos LTZ: same LTZ family, widen precision to the nanos LTZ type
+    // so the subtraction still runs in the session time zone.
+    ruleTest(rule,
+      SubtractTimestamps(timestampLiteral, ltzNanos9),
+      SubtractTimestamps(Cast(timestampLiteral, TimestampLTZNanosType(9)), ltzNanos9))
   }
 
   test("datetime comparison") {

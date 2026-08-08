@@ -302,6 +302,35 @@ abstract class TypeCoercionHelper {
         }
     }
 
+  /** Whether `dt` is on the LTZ/NTZ timestamp fractional-precision axis (a micro or nanos type). */
+  private def isTimestampFamily(dt: DataType): Boolean =
+    TimestampFamily.fractionalPrecision(dt).isDefined
+
+  /**
+   * Common operand type for [[SubtractTimestamps]] over two differing timestamp-family operands.
+   * The operands are widened to the larger of the two fractional-second precisions (the micro types
+   * count as 6, the nanos types carry their own precision `p` in [7, 9]) and unified in one
+   * time-zone family:
+   *   - a cross-family pair unifies in the no-time-zone (NTZ) family, mirroring the microsecond
+   *     precedent where TIMESTAMP - TIMESTAMP_NTZ coerces both operands to TIMESTAMP_NTZ;
+   *   - a same-family pair keeps that family, so a TIMESTAMP - TIMESTAMP_LTZ(p) style pair still
+   *     subtracts in the session time zone (DST-aware) exactly as a pure LTZ pair does.
+   * The subtraction reads only each operand's epochMicros and always yields a microsecond-grid
+   * DayTimeIntervalType, so widening the precision never changes the numeric result -- it only
+   * keeps the two operands the same concrete type. For a pure-micro cross-family pair this returns
+   * TimestampNTZType, identical to the pre-nanos behavior.
+   */
+  private def subtractTimestampsCommonType(dt1: DataType, dt2: DataType): DataType = {
+    val p = math.max(
+      TimestampFamily.fractionalPrecision(dt1).getOrElse(6),
+      TimestampFamily.fractionalPrecision(dt2).getOrElse(6))
+    if (TimestampFamily.isLtz(dt1) && TimestampFamily.isLtz(dt2)) {
+      if (p <= 6) TimestampType else TimestampLTZNanosType(p)
+    } else {
+      if (p <= 6) TimestampNTZType else TimestampNTZNanosType(p)
+    }
+  }
+
   /**
    * Type coercion helper that matches agaist [[In]] and [[InSubquery]] expressions in order to
    * type coerce LHS and RHS to expected types.
@@ -738,14 +767,18 @@ abstract class TypeCoercionHelper {
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case s @ SubtractTimestamps(DateTypeExpression(), AnyTimestampTypeExpression(), _, _) =>
+      case s @ SubtractTimestamps(DateTypeExpression(), r, _, _)
+          if isTimestampFamily(r.dataType) =>
         s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), DateTypeExpression(), _, _) =>
+      case s @ SubtractTimestamps(l, DateTypeExpression(), _, _)
+          if isTimestampFamily(l.dataType) =>
         s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), AnyTimestampTypeExpression(), _, _)
-          if s.left.dataType != s.right.dataType =>
-        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
-        val newRight = castIfNotSameType(s.right, TimestampNTZType)
+      case s @ SubtractTimestamps(l, r, _, _)
+          if isTimestampFamily(l.dataType) && isTimestampFamily(r.dataType) &&
+            l.dataType != r.dataType =>
+        val commonType = subtractTimestampsCommonType(l.dataType, r.dataType)
+        val newLeft = castIfNotSameType(s.left, commonType)
+        val newRight = castIfNotSameType(s.right, commonType)
         s.copy(left = newLeft, right = newRight)
 
       case t @ TimestampAddInterval(StringTypeExpression(), _, _) =>
@@ -766,14 +799,18 @@ abstract class TypeCoercionHelper {
       case d @ DateSub(AnyTimestampTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
 
-      case s @ SubtractTimestamps(DateTypeExpression(), AnyTimestampTypeExpression(), _, _) =>
+      case s @ SubtractTimestamps(DateTypeExpression(), r, _, _)
+          if isTimestampFamily(r.dataType) =>
         s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), DateTypeExpression(), _, _) =>
+      case s @ SubtractTimestamps(l, DateTypeExpression(), _, _)
+          if isTimestampFamily(l.dataType) =>
         s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), AnyTimestampTypeExpression(), _, _)
-          if s.left.dataType != s.right.dataType =>
-        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
-        val newRight = castIfNotSameType(s.right, TimestampNTZType)
+      case s @ SubtractTimestamps(l, r, _, _)
+          if isTimestampFamily(l.dataType) && isTimestampFamily(r.dataType) &&
+            l.dataType != r.dataType =>
+        val commonType = subtractTimestampsCommonType(l.dataType, r.dataType)
+        val newLeft = castIfNotSameType(s.left, commonType)
+        val newRight = castIfNotSameType(s.right, commonType)
         s.copy(left = newLeft, right = newRight)
 
       case other => other
