@@ -491,7 +491,10 @@ object UnsupportedOperationChecker extends Logging {
             joinType match {
               // The behavior for unmatched rows in outer joins with update mode
               // hasn't been defined yet.
-              case LeftOuter | RightOuter | FullOuter =>
+              // LeftAnti is included here because its unmatched rows are only emitted once the
+              // watermark guarantees no future match, so early-firing in Update mode would
+              // produce rows which a later batch could invalidate.
+              case LeftOuter | RightOuter | FullOuter | LeftAnti =>
                 if (outputMode != InternalOutputModes.Append) {
                   throwError(s"$joinType join between two streaming DataFrames/Datasets" +
                     s" is not supported in ${outputMode} output mode, only in Append output mode")
@@ -522,10 +525,16 @@ object UnsupportedOperationChecker extends Logging {
                 checkForStreamStreamJoinWatermark(j)
               }
 
+            // We support streaming left anti joins with stream on both sides under the
+            // appropriate conditions. A streaming right with a static left is not supported:
+            // unmatched left rows are determined at watermark-based eviction of the left state,
+            // which a static left side does not have.
             case LeftAnti =>
-              if (right.isStreaming) {
-                throwError(s"$LeftAnti joins with a streaming DataFrame/Dataset " +
-                    "on the right are not supported")
+              if (!left.isStreaming && right.isStreaming) {
+                throwError(s"$LeftAnti join with a streaming DataFrame/Dataset " +
+                  "on the right and a static DataFrame/Dataset on the left is not supported")
+              } else if (left.isStreaming && right.isStreaming) {
+                checkForStreamStreamJoinWatermark(j)
               }
 
             // We support streaming left outer and left semi joins with static on the right always,
@@ -687,7 +696,7 @@ object UnsupportedOperationChecker extends Logging {
     // Check if the nullable side has a watermark, and there's a range condition which
     // implies a state value watermark on the first side.
     val hasValidWatermarkRange = join.joinType match {
-      case LeftOuter | LeftSemi => StreamingJoinHelper.getStateValueWatermark(
+      case LeftOuter | LeftSemi | LeftAnti => StreamingJoinHelper.getStateValueWatermark(
         join.left.outputSet, join.right.outputSet, join.condition, Some(1000000)).isDefined
       case RightOuter => StreamingJoinHelper.getStateValueWatermark(
         join.right.outputSet, join.left.outputSet, join.condition, Some(1000000)).isDefined
