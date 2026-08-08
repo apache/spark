@@ -142,6 +142,12 @@ class ExpressionParserSuite extends AnalysisTest {
       Exists(table("b").where($"b.x" === $"a.x").select(1)))
   }
 
+  test("overlaps predicate") {
+    assertEqual(
+      "(a, b) OVERLAPS (c, d)",
+      Overlaps($"a", $"b", $"c", $"d"))
+  }
+
   test("comparison expressions") {
     assertEqual("a = b", $"a" === $"b")
     assertEqual("a == b", $"a" === $"b")
