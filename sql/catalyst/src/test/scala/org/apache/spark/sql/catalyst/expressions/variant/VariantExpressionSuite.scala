@@ -708,6 +708,31 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("$[\"\\\"\"]")
   }
 
+  test("validate char/varchar target types in variant_get") {
+    def check(dataType: DataType, expected: Boolean): Unit = {
+      assert(
+        variantGet("""{"a": 1}""", "$", dataType)
+          .checkInputDataTypes().isSuccess == expected)
+    }
+
+    def targetTypes(stringType: StringType): Seq[DataType] = Seq(
+      stringType,
+      ArrayType(stringType),
+      MapType(stringType, IntegerType),
+      MapType(StringType, stringType),
+      StructType(Seq(StructField("v", stringType))))
+
+    targetTypes(StringType).foreach { dataType =>
+      check(dataType, expected = true)
+    }
+
+    Seq(CharType(10), VarcharType(10)).foreach { stringType =>
+      targetTypes(stringType).foreach { dataType =>
+        check(dataType, expected = false)
+      }
+    }
+  }
+
   test("cast from variant") {
     // We do not test too many type combinations, as the cast implementation is mostly the same as
     // variant_get.
