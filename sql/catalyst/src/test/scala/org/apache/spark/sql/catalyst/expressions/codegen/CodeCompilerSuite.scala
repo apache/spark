@@ -468,7 +468,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
     // The dangerous asymmetry: a class can be missing a type named in one of its method
     // signatures, so the supertype climb succeeds while `getMethods` throws. Narrowing then
-    // looks safe - the emitted supertype name compiles - even though no member was ever
+    // looks safe, since the emitted supertype name compiles, even though no member was ever
     // checked, and an overload collision would bind to the supertype's method. The verdict
     // has to keep the binary name instead, which javac rejects and Spark falls back from.
     val dir = compileMemberLinkageFixture()
@@ -498,7 +498,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
       // Not routed: an unevaluable class is no evidence that narrowing is unsafe.
       assert(!JdkCodeCompiler.referencesUnnarrowableClass(body),
         "an unevaluable token must not route the unit to Janino")
-      // And not narrowed either - narrowing to lnk2.Foo would compile and hide the risk.
+      // And not narrowed either: narrowing to lnk2.Foo would compile and hide the risk.
       assert(JdkCodeCompiler.rewriteInnerClassRefs(body, brokenLoader) === body,
         "an unevaluable class must keep its binary name rather than be narrowed")
       withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
@@ -512,8 +512,8 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
   test("reflection that fails with a non-LinkageError does not narrow the reference") {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
     // The other half of the same failure: a classloader is user code, so it may reject a
-    // class with an ordinary RuntimeException instead of ClassNotFoundException - a
-    // relocating or artifact loader can - and the JVM propagates that out of `getMethods`
+    // class with an ordinary RuntimeException instead of ClassNotFoundException, as a
+    // relocating or artifact loader can, and the JVM propagates that out of `getMethods`
     // unwrapped rather than as a LinkageError. The verdict has to treat it the same way,
     // which is why its catch does not stop at LinkageError.
     val dir = compileMemberLinkageFixture()
@@ -570,13 +570,13 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
   /**
    * Compile `shd.Holder`, whose anonymous subclass redeclares its supertype's public field.
    * `getFields` reports both, so a field check that compares names rather than declaring
-   * classes accepts the pair - and narrowing then reads the supertype's value, since field
+   * classes accepts the pair, and narrowing then reads the supertype's value, since field
    * access is resolved statically. Java, not Scala: a Scala `val` compiles to a private
    * field plus an accessor, so it cannot shadow a public field.
    *
    * `makePublic` carries the same shadowing pair on a member class of a local class. javac
    * strips `ACC_PUBLIC` from an anonymous class, which Janino then refuses to reference from
-   * the generated unit's package, so an end-to-end test needs this shape instead - the same
+   * the generated unit's package, so an end-to-end test needs this shape instead, for the same
    * reason [[compileStaticHiderFixture]] uses one.
    */
   private def compileShadowedFieldFixture(): File = {
@@ -601,7 +601,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
   /**
    * Compile `sth.Holder`, whose member-of-local class hides its supertype's public static
    * method. `getMethods` reports both, with identical erased signatures, so a signature-based
-   * check accepts the pair - and a narrowed call binds the supertype's method, since a static
+   * check accepts the pair, and a narrowed call binds the supertype's method, since a static
    * call is bound statically. A member class of a local class is used rather than an anonymous
    * one because only the former keeps `ACC_PUBLIC`, which the Janino path needs.
    */
@@ -630,7 +630,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
   /**
    * Compile `lnk2.Holder`, whose anonymous `Foo` declares a method taking `lnk2.Missing`.
    * Deleting `Missing.class` afterwards leaves the anonymous class loadable with a readable
-   * supertype while `getMethods` throws - the asymmetric partial-jar shape.
+   * supertype while `getMethods` throws: the asymmetric partial-jar shape.
    */
   private def compileMemberLinkageFixture(): File = {
     val dir = Utils.createTempDir()
@@ -1102,7 +1102,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
   test("referencesUnnarrowableClass: a static method hiding the supertype's cannot be narrowed") {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
     // The method counterpart of the field case: `f()` erases identically on both classes, so
-    // a signature check accepts the pair, but a static call is bound statically - the narrowed
+    // a signature check accepts the pair, but a static call is bound statically, so the narrowed
     // reference would call the supertype's `f()` returning 1 instead of the class's 99, and
     // Java permits the instance-qualified form so even a plain cast rebinds.
     val dir = compileStaticHiderFixture()
@@ -1110,7 +1110,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     val inner = loader.loadClass("sth.Holder").getMethod("make").invoke(null).getClass
     assert(inner.getCanonicalName == null, s"expected an unnameable class, got: ${inner.getName}")
     // Fixture preconditions: `f` is static and declared here, while the target declares an
-    // identically-erased static of its own - the pair a declaring-class check must reject and
+    // identically-erased static of its own: the pair a declaring-class check must reject and
     // a signature check would accept. (`getMethods` reports only the hiding one; a static is
     // hidden, not inherited.)
     val fs = inner.getMethods.filter(_.getName == "f")
@@ -1186,7 +1186,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     // The complement of the test above: the same shape plus a non-synthetic public method
     // `ArrayList` does not have, so narrowing would put it out of reach. The rewrite refuses
     // rather than emitting a name that compiles but drops the member. The `$outer` field and
-    // accessor are NOT what makes this unnarrowable - being synthetic, they are unreachable
+    // accessor are NOT what makes this unnarrowable: being synthetic, they are unreachable
     // from generated source either way. No context-loader swap is needed here: this fixture
     // is on the suite's own classpath, unlike the temp-dir one above.
     val cls = CodeCompilerSuite.memberOfLocalClassWithExtra.getClass
@@ -1283,7 +1283,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
     // The verdict tests pin the decision; this pins the outcome. `Inner` redeclares `Base`'s
     // public `v`, and a field read is bound statically, so the two names answer differently
-    // at run time - 99 through the class, 1 through the supertype. Routing keeps the 99.
+    // at run time: 99 through the class, 1 through the supertype. Routing keeps the 99.
     val dir = compileShadowedFieldFixture()
     val loader = new DirClassLoader(dir, getClass.getClassLoader)
     val value = loader.loadClass("shd.Holder").getMethod("makePublic").invoke(null)
@@ -1297,7 +1297,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
          |}
        """.stripMargin)
     // The counterfactual: the same read spelled with the name narrowing would emit. Janino
-    // compiles it too, and it answers 1 - which is exactly why it may not be emitted.
+    // compiles it too, and it answers 1, which is exactly why it may not be emitted.
     val narrowed = newCodeAndComment(
       """
         |public java.lang.Object generate(Object[] references) {
@@ -1368,7 +1368,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
     // The third shape: `g()` is an INSTANCE method on the anonymous class whose only
     // counterpart on `StaticClashBase` is STATIC. Java permits the instance-qualified form
-    // for a static, so the narrowed call compiles and binds the target's `g()` - 1 instead
+    // for a static, so the narrowed call compiles and binds the target's `g()`, giving 1 instead
     // of 7. Both fixtures are on the suite's own classpath, so no loader swap is needed.
     val anon = CodeCompilerSuite.anonOverStaticClash
     val name = anon.getClass.getName
@@ -1538,7 +1538,7 @@ object CodeCompilerSuite {
   }
 
   // An INSTANCE method whose only counterpart on the supertype is STATIC. scalac allows it -
-  // it does not treat a Java static as an inherited member, so `g()` is not an override - and
+  // it does not treat a Java static as an inherited member, so `g()` is not an override, and
   // javac rejects the pair outright, which is why `StaticClashBase` is written in Java. A
   // narrowed call binds the supertype's static `g()`, returning 1 rather than 7.
   val anonOverStaticClash = new StaticClashBase {
@@ -1578,7 +1578,7 @@ object CodeCompilerSuite {
 
   // A lambda in the body makes scalac emit a `public static final $anonfun$...` helper on the
   // anonymous class. It is synthetic, so javac cannot name it ("cannot find symbol") and no
-  // generated reference can reach it - narrowing loses nothing, and the static check has to
+  // generated reference can reach it, so narrowing loses nothing and the static check has to
   // excuse it or every closure-carrying anonymous class would route to Janino.
   val anonWithLambdaBody = new java.util.Comparator[String] {
     override def compare(a: String, b: String): Int = {

@@ -2962,9 +2962,9 @@ object SQLConf {
       "Regardless of this setting, codegen in REPL / interactive sessions (spark-shell, " +
       "Spark Connect session artifacts), generated code referencing a class nested in " +
       "a Scala package object, and generated code referencing an anonymous or local class " +
-      "that Spark determines cannot be soundly rewritten to a nameable supertype - that " +
+      "that Spark determines cannot be soundly rewritten to a nameable supertype (that " +
       "supertype, or a class enclosing it, is not public, or it does not offer a member the " +
-      "class exposes - always compile with 'janino'; a one-time INFO log records each such " +
+      "class exposes) always compile with 'janino'. A one-time INFO log records each such " +
       "routing.")
     .version("4.3.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
