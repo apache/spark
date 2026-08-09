@@ -942,6 +942,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("entry" -> entry, "path" -> path))
   }
 
+  def maxArchiveDepthExceeded(entry: String, path: String, maxDepth: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "MAX_ARCHIVE_DEPTH_EXCEEDED",
+      messageParameters =
+        Map("entry" -> entry, "path" -> path, "maxDepth" -> maxDepth.toString))
+  }
+
   def cannotCreateColumnarReaderError(): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2065",

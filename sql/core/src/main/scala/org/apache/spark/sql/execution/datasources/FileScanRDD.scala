@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.security.AccessControlException
 
-import org.apache.spark.{Partition => RDDPartition, TaskContext}
+import org.apache.spark.{Partition => RDDPartition, SparkRuntimeException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.LogKeys.{CURRENT_FILE, PATH}
 import org.apache.spark.memory.MemoryMode
@@ -281,6 +281,10 @@ class FileScanRDD(
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
                   case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
+                  // A resource-safety limit is not a corrupt file: skipping the rest of the archive
+                  // would return partial data with no signal that the limit stopped the read.
+                  case e: SparkRuntimeException
+                      if e.getCondition == "MAX_ARCHIVE_DEPTH_EXCEEDED" => throw e
                   case e if ignoreCorruptFiles &&
                       DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
                     logWarning(log"Skipped the rest of the content in the corrupted file: " +
