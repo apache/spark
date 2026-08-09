@@ -849,6 +849,8 @@ object FunctionRegistry {
     expression[Uuid]("uuid"),
     expression[Murmur3Hash]("hash"),
     expression[XxHash64]("xxhash64"),
+    expression[Xxh364]("xxh3_64"),
+    expression[Xxh3128]("xxh3_128"),
     expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),

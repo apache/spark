@@ -6594,6 +6594,30 @@ object functions {
   def xxhash64(cols: Column*): Column = Column.fn("xxhash64", cols: _*)
 
   /**
+   * Returns a 64-bit hash value of the argument using the XXH3 algorithm.
+   *
+   * @param col
+   *   the column to hash, which must have string or binary type.
+   * @group hash_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
+   */
+  def xxh3_64(col: Column): Column = Column.fn("xxh3_64", col)
+
+  /**
+   * Returns a 128-bit XXH3 hash of the argument as a 32-character hex string.
+   *
+   * @param col
+   *   the column to hash, which must have string or binary type.
+   * @group hash_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a string.
+   */
+  def xxh3_128(col: Column): Column = Column.fn("xxh3_128", col)
+
+  /**
    * Returns null if the condition is true, and throws an exception otherwise.
    *
    * @param c
