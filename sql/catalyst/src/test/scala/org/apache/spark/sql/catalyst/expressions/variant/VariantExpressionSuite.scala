@@ -708,7 +708,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("$[\"\\\"\"]")
   }
 
-  test("validate char/varchar target types in variant_get") {
+  test("SPARK-58672: validate char/varchar target types in variant_get") {
     def check(dataType: DataType, expected: Boolean): Unit = {
       assert(
         variantGet("""{"a": 1}""", "$", dataType)
@@ -1009,6 +1009,30 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkFailure(true, toVariantObject = true)
     checkFailure(Literal.create(Literal.create(Period.ofMonths(0))), toVariantObject = true)
     checkFailure(Map(1 -> 1), toVariantObject = true)
+  }
+
+  test("SPARK-58672: validate char/varchar input types in to_variant_object") {
+    def check(dataType: DataType, expected: Boolean): Unit = {
+      assert(
+        ToVariantObject(Literal.create(null, dataType))
+          .checkInputDataTypes().isSuccess == expected)
+    }
+
+    def nestedTypes(stringType: StringType): Seq[DataType] = Seq(
+      ArrayType(stringType),
+      MapType(stringType, IntegerType),
+      MapType(StringType, stringType),
+      StructType(Seq(StructField("v", stringType))))
+
+    nestedTypes(StringType).foreach { dataType =>
+      check(dataType, expected = true)
+    }
+
+    Seq(CharType(10), VarcharType(10)).foreach { stringType =>
+      nestedTypes(stringType).foreach { dataType =>
+        check(dataType, expected = false)
+      }
+    }
   }
 
   test("schema_of_variant - unknown type") {
