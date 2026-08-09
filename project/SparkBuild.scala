@@ -2038,6 +2038,7 @@ object TestSettings {
     (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
+    (Test / javaOptions) += "-Dorg.apache.avro.SERIALIZABLE_PACKAGES=org.apache.spark",
     (Test / javaOptions) ++= {
       if ("true".equals(System.getProperty("java.net.preferIPv6Addresses"))) {
         Seq("-Djava.net.preferIPv6Addresses=true")
