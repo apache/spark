@@ -24,8 +24,8 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
  * javac rejects the pair outright. That combination has to be written in Java to exist at all.
  *
  * Narrowing a reference to such a subclass is unsound: a static call is bound statically, so
- * {@code ((StaticClashBase) ref).g()} reaches this method rather than the subclass's.
+ * {@code ((StaticClashBase) ref).value()} reaches this method, not the subclass's.
  */
 public class StaticClashBase {
-  public static int g() { return 1; }
+  public static int value() { return 1; }
 }

@@ -584,11 +584,11 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     val src =
       """package shd;
         |public class Holder {
-        |  public static class Base { public int v = 1; }
-        |  public static Object make() { return new Base() { public int v = 99; }; }
+        |  public static class Base { public int shadowed = 1; }
+        |  public static Object make() { return new Base() { public int shadowed = 99; }; }
         |  public static Object makePublic() {
         |    class Local {
-        |      public class Inner extends Base { public int v = 99; }
+        |      public class Inner extends Base { public int shadowed = 99; }
         |    }
         |    return new Local().new Inner();
         |  }
@@ -610,10 +610,10 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     val src =
       """package sth;
         |public class Holder {
-        |  public static class Base { public static int f() { return 1; } }
+        |  public static class Base { public static int hidden() { return 1; } }
         |  public static Object make() {
         |    class Local {
-        |      public class Inner extends Base { public static int f() { return 99; } }
+        |      public class Inner extends Base { public static int hidden() { return 99; } }
         |    }
         |    return new Local().new Inner();
         |  }
@@ -1082,9 +1082,10 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     val anon = loader.loadClass("shd.Holder").getMethod("make").invoke(null).getClass
     assert(anon.getCanonicalName == null, s"expected an unnameable class, got: ${anon.getName}")
     // Fixture preconditions: the shadowing pair is exactly what a name check would miss.
-    val vs = anon.getFields.filter(_.getName == "v")
-    assert(vs.length === 2, s"expected two public `v` fields, got: ${vs.mkString(", ")}")
-    assert(vs.exists(_.getDeclaringClass eq anon), "one `v` must be declared by the anon class")
+    val vs = anon.getFields.filter(_.getName == "shadowed")
+    assert(vs.length === 2, s"expected two public `shadowed` fields: ${vs.mkString(", ")}")
+    assert(vs.exists(_.getDeclaringClass eq anon),
+      "one `shadowed` must be declared by the anonymous class")
 
     val body = s"${anon.getName} v = (${anon.getName}) references[0];"
     val prev = Thread.currentThread().getContextClassLoader
@@ -1101,9 +1102,9 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
 
   test("referencesUnnarrowableClass: a static method hiding the supertype's cannot be narrowed") {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
-    // The method counterpart of the field case: `f()` erases identically on both classes, so
-    // a signature check accepts the pair, but a static call is bound statically, so the narrowed
-    // reference would call the supertype's `f()` returning 1 instead of the class's 99, and
+    // The method counterpart of the field case: `hidden()` erases identically on both
+    // classes, so a signature check accepts the pair, but a static call is bound statically:
+    // the narrowed reference would call the supertype's `hidden()` for 1 instead of 99, and
     // Java permits the instance-qualified form so even a plain cast rebinds.
     val dir = compileStaticHiderFixture()
     val loader = new DirClassLoader(dir, getClass.getClassLoader)
@@ -1113,13 +1114,13 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     // identically-erased static of its own: the pair a declaring-class check must reject and
     // a signature check would accept. (`getMethods` reports only the hiding one; a static is
     // hidden, not inherited.)
-    val fs = inner.getMethods.filter(_.getName == "f")
+    val fs = inner.getMethods.filter(_.getName == "hidden")
     assert(fs.length === 1, s"expected one visible `f`, got: ${fs.mkString(", ")}")
     assert((fs.head.getDeclaringClass eq inner) && Modifier.isStatic(fs.head.getModifiers),
       s"`f` must be a static declared by the member class, got: ${fs.head}")
     val base = loader.loadClass("sth.Holder$Base")
     assert(base.getMethods.exists(m =>
-      m.getName == "f" && m.getParameterCount == 0 && Modifier.isStatic(m.getModifiers)),
+      m.getName == "hidden" && m.getParameterCount == 0 && Modifier.isStatic(m.getModifiers)),
       "the target must declare the same static signature, or nothing would be hidden")
     assert(inner.getSuperclass eq base, s"expected Base as superclass, got ${inner.getSuperclass}")
     // And the complement, so both branches of the declaring-class check are pinned: a static
@@ -1127,7 +1128,8 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     val plain = loader.loadClass("sth.Holder").getMethod("makePlain").invoke(null).getClass
     assert(plain.getCanonicalName == null, s"expected an unnameable class, got: ${plain.getName}")
     assert(plain.getMethods.exists(m =>
-      m.getName == "f" && Modifier.isStatic(m.getModifiers) && (m.getDeclaringClass eq base)),
+      m.getName == "hidden" && Modifier.isStatic(m.getModifiers) &&
+        (m.getDeclaringClass eq base)),
       "the complement fixture must inherit the target's static rather than hide it")
 
     val body = s"${inner.getName} v = (${inner.getName}) references[0];"
@@ -1282,8 +1284,8 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
   test("end-to-end: a shadowing field reads the class's own value, not the target's") {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
     // The verdict tests pin the decision; this pins the outcome. `Inner` redeclares `Base`'s
-    // public `v`, and a field read is bound statically, so the two names answer differently
-    // at run time: 99 through the class, 1 through the supertype. Routing keeps the 99.
+    // public `shadowed`, and a field read is bound statically, so the two names answer
+    // differently at run time: 99 through the class, 1 through the supertype. Routing keeps 99.
     val dir = compileShadowedFieldFixture()
     val loader = new DirClassLoader(dir, getClass.getClassLoader)
     val value = loader.loadClass("shd.Holder").getMethod("makePublic").invoke(null)
@@ -1293,7 +1295,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
       s"""
          |public java.lang.Object generate(Object[] references) {
          |  $name v = ($name) references[0];
-         |  return Integer.valueOf(v.v);
+         |  return Integer.valueOf(v.shadowed);
          |}
        """.stripMargin)
     // The counterfactual: the same read spelled with the name narrowing would emit. Janino
@@ -1302,7 +1304,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
       """
         |public java.lang.Object generate(Object[] references) {
         |  shd.Holder.Base v = (shd.Holder.Base) references[0];
-        |  return Integer.valueOf(v.v);
+        |  return Integer.valueOf(v.shadowed);
         |}
       """.stripMargin)
     val prev = Thread.currentThread().getContextClassLoader
@@ -1325,9 +1327,9 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
 
   test("end-to-end: a hidden static call reaches the class's own method, not the target's") {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
-    // The method counterpart. `Inner.f()` hides `Base.f()` with an identical erasure, and a
-    // static call is bound statically even in the instance-qualified form, so the narrowed
-    // reference would answer 1 where the class answers 99.
+    // The method counterpart. `Inner.hidden()` hides `Base.hidden()` with an identical
+    // erasure, and a static call is bound statically even in the instance-qualified form, so
+    // the narrowed reference would answer 1 where the class answers 99.
     val dir = compileStaticHiderFixture()
     val loader = new DirClassLoader(dir, getClass.getClassLoader)
     val value = loader.loadClass("sth.Holder").getMethod("make").invoke(null)
@@ -1337,14 +1339,14 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
       s"""
          |public java.lang.Object generate(Object[] references) {
          |  $name v = ($name) references[0];
-         |  return Integer.valueOf(v.f());
+         |  return Integer.valueOf(v.hidden());
          |}
        """.stripMargin)
     val narrowed = newCodeAndComment(
       """
         |public java.lang.Object generate(Object[] references) {
         |  sth.Holder.Base v = (sth.Holder.Base) references[0];
-        |  return Integer.valueOf(v.f());
+        |  return Integer.valueOf(v.hidden());
         |}
       """.stripMargin)
     val prev = Thread.currentThread().getContextClassLoader
@@ -1366,10 +1368,10 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
 
   test("end-to-end: an instance method clashing with a static keeps the class's value") {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
-    // The third shape: `g()` is an INSTANCE method on the anonymous class whose only
+    // The third shape: `value()` is an INSTANCE method on the anonymous class whose only
     // counterpart on `StaticClashBase` is STATIC. Java permits the instance-qualified form
-    // for a static, so the narrowed call compiles and binds the target's `g()`, giving 1 instead
-    // of 7. Both fixtures are on the suite's own classpath, so no loader swap is needed.
+    // for a static, so the narrowed call compiles and binds the target's `value()`, giving 1
+    // instead of 7. Both fixtures are on the suite's own classpath, so no loader swap here.
     val anon = CodeCompilerSuite.anonOverStaticClash
     val name = anon.getClass.getName
     assert(anon.getClass.getCanonicalName == null, s"expected an unnameable class: $name")
@@ -1378,14 +1380,14 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
       s"""
          |public java.lang.Object generate(Object[] references) {
          |  $name v = ($name) references[0];
-         |  return Integer.valueOf(v.g());
+         |  return Integer.valueOf(v.value());
          |}
        """.stripMargin)
     val narrowed = newCodeAndComment(
       s"""
          |public java.lang.Object generate(Object[] references) {
          |  $target v = ($target) references[0];
-         |  return Integer.valueOf(v.g());
+         |  return Integer.valueOf(v.value());
          |}
        """.stripMargin)
     assert(JaninoCodeCompiler.compile(hazard)._1.generate(Array[Any](anon)) === 7)
@@ -1537,12 +1539,12 @@ object CodeCompilerSuite {
     override def hello(): String = "hi"
   }
 
-  // An INSTANCE method whose only counterpart on the supertype is STATIC. scalac allows it -
-  // it does not treat a Java static as an inherited member, so `g()` is not an override, and
-  // javac rejects the pair outright, which is why `StaticClashBase` is written in Java. A
-  // narrowed call binds the supertype's static `g()`, returning 1 rather than 7.
+  // An INSTANCE method whose only counterpart on the supertype is STATIC. scalac allows it,
+  // since it does not treat a Java static as an inherited member, so `value()` is not an
+  // override; javac rejects the pair outright, which is why `StaticClashBase` is written in
+  // Java. A narrowed call binds the supertype's static `value()`, returning 1 rather than 7.
   val anonOverStaticClash = new StaticClashBase {
-    def g(): Int = 7
+    def value(): Int = 7
   }
 
   // An OVERLOAD, not an override: `convert(String)` does not implement `convert(Any)`, so
