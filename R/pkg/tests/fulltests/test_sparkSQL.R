@@ -1817,6 +1817,19 @@ test_that("column functions", {
     expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
     expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
   }
+  # Test json_typeof()
+  df <- as.DataFrame(list(list("col" = "1")))
+  expect_equal(collect(select(df, json_typeof(lit("{\"a\": 1}"))))[[1]], "object")
+  expect_equal(collect(select(df, json_typeof(lit("[1, 2, 3]"))))[[1]], "array")
+  expect_equal(collect(select(df, json_typeof(lit("\"hello\""))))[[1]], "string")
+  expect_equal(collect(select(df, json_typeof(lit("123"))))[[1]], "number")
+  expect_equal(collect(select(df, json_typeof(lit("123.45"))))[[1]], "number")
+  expect_equal(collect(select(df, json_typeof(lit("true"))))[[1]], "boolean")
+  expect_equal(collect(select(df, json_typeof(lit("false"))))[[1]], "boolean")
+  expect_equal(collect(select(df, json_typeof(lit("null"))))[[1]], "null")
+  expect_equal(collect(select(df, json_typeof(lit("not json"))))[[1]], NA_character_)
+  expect_equal(collect(select(df, json_typeof(lit(""))))[[1]], NA_character_)
+
 
   # Test to_csv()
   df <- sql("SELECT named_struct('name', 'Bob') as people")

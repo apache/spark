@@ -3002,6 +3002,34 @@ setMethod("schema_of_json", signature(x = "characterOrColumn"),
           })
 
 #' @details
+#' \code{json_typeof}: Returns the type of the outermost JSON value as a string.
+#' Returns one of "object", "array", "string", "number", "boolean", or "null".
+#' Returns NULL if the input is not a valid JSON string or is an empty string.
+#'
+#' @rdname column_collection_functions
+#' @aliases json_typeof json_typeof,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' df <- sql("SELECT * FROM range(1)")
+#' df <- mutate(df,
+#'   obj = json_typeof(lit("{\"a\": 1}")),
+#'   arr = json_typeof(lit("[1, 2, 3]")),
+#'   str = json_typeof(lit("\"hello\"")),
+#'   num = json_typeof(lit("123")),
+#'   bool = json_typeof(lit("true")),
+#'   null_val = json_typeof(lit("null")),
+#'   invalid = json_typeof(lit("not json"))
+#' )
+#' head(df)}
+#' @note json_typeof since 4.4.0
+setMethod("json_typeof", signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "json_typeof", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
 #' with the specified \code{schema}.
 #' If the string is unparsable, the Column will contain the value NA.

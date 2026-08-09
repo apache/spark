@@ -1136,6 +1136,9 @@ setGeneric("instr", function(y, x) { standardGeneric("instr") })
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("isnan", function(x) { standardGeneric("isnan") })
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("json_typeof", function(x) { standardGeneric("json_typeof") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
