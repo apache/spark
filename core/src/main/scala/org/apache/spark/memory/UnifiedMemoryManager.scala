@@ -471,14 +471,14 @@ object UnifiedMemoryManager extends Logging {
     if (systemMemory < minSystemMemory) {
       if (isDriver) {
         throw new SparkIllegalArgumentException(
-          errorClass = "INVALID_DRIVER_MEMORY",
+          errorClass = "INVALID_DRIVER_MEMORY.SYSTEM_MEMORY",
           messageParameters = Map(
             "systemMemory" -> systemMemory.toString,
             "minSystemMemory" -> minSystemMemory.toString,
             "config" -> config.DRIVER_MEMORY.key))
       } else {
         throw new SparkIllegalArgumentException(
-          errorClass = "INVALID_EXECUTOR_SYSTEM_MEMORY",
+          errorClass = "INVALID_EXECUTOR_MEMORY.SYSTEM_MEMORY",
           messageParameters = Map(
             "systemMemory" -> systemMemory.toString,
             "minSystemMemory" -> minSystemMemory.toString,
@@ -490,7 +490,7 @@ object UnifiedMemoryManager extends Logging {
       val executorMemory = conf.getSizeAsBytes(config.EXECUTOR_MEMORY.key)
       if (executorMemory < minSystemMemory) {
         throw new SparkIllegalArgumentException(
-          errorClass = "INVALID_EXECUTOR_MEMORY",
+          errorClass = "INVALID_EXECUTOR_MEMORY.CONFIG_MEMORY",
           messageParameters = Map(
             "executorMemory" -> executorMemory.toString,
             "minSystemMemory" -> minSystemMemory.toString,

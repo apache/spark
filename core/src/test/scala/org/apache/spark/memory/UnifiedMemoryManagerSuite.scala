@@ -234,10 +234,16 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
     // Try using a system memory that's too small
     val conf2 = conf.clone().set(TEST_MEMORY, reservedMemory / 2)
-    val exception = intercept[IllegalArgumentException] {
+    val exception = intercept[SparkIllegalArgumentException] {
       UnifiedMemoryManager(conf2, numCores = 1)
     }
-    assert(exception.getMessage.contains("increase heap size"))
+    checkError(
+      exception,
+      condition = "INVALID_DRIVER_MEMORY.SYSTEM_MEMORY",
+      parameters = Map(
+        "systemMemory" -> (reservedMemory / 2).toString,
+        "minSystemMemory" -> (reservedMemory * 1.5).ceil.toLong.toString,
+        "config" -> DRIVER_MEMORY.key))
   }
 
   test("insufficient executor memory") {
@@ -253,10 +259,16 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
     // Try using an executor memory that's too small
     val conf2 = conf.clone().set(EXECUTOR_MEMORY.key, (reservedMemory / 2).toString)
-    val exception = intercept[IllegalArgumentException] {
+    val exception = intercept[SparkIllegalArgumentException] {
       UnifiedMemoryManager(conf2, numCores = 1)
     }
-    assert(exception.getMessage.contains("increase executor memory"))
+    checkError(
+      exception,
+      condition = "INVALID_EXECUTOR_MEMORY.CONFIG_MEMORY",
+      parameters = Map(
+        "executorMemory" -> (reservedMemory / 2).toString,
+        "minSystemMemory" -> (reservedMemory * 1.5).ceil.toLong.toString,
+        "config" -> EXECUTOR_MEMORY.key))
   }
 
   test("SPARK-58513: executor validates executor heap") {
@@ -274,10 +286,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     }
     checkError(
       exception,
-      condition = "INVALID_EXECUTOR_SYSTEM_MEMORY",
+      condition = "INVALID_EXECUTOR_MEMORY.SYSTEM_MEMORY",
       parameters = Map(
         "systemMemory" -> systemMemory.toString,
-        "minSystemMemory" -> ((reservedMemory * 1.5).ceil.toLong).toString,
+        "minSystemMemory" -> (reservedMemory * 1.5).ceil.toLong.toString,
         "config" -> EXECUTOR_MEMORY.key))
   }
 
