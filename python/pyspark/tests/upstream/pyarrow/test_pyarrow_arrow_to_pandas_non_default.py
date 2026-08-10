@@ -28,12 +28,10 @@ non-Arrow path.  These tests record how each Arrow type behaves under those
 arguments so CI fails loudly if the behavior drifts across pandas/PyArrow/NumPy
 upgrades.
 
-The shared ``_PyArrowToPandasTestBase`` holds the golden-file matrix driver and
-the per-cell conversion helper.  Each concrete test class supplies its own source
-arrays (the rows relevant to the argument under test) and one test method per
-argument combination (each producing its own golden file).  New ``to_pandas``
-arguments (e.g. ``zero_copy_only``, ``integer_object_nulls``) can be added as
-additional classes without touching the existing ones.
+The shared ``_PyArrowToPandasTestBase`` (in ``test_pyarrow_arrow_to_pandas_default.py``)
+holds the conversion helper and the source-array inventory.  Each class reuses the
+inventory whole or by group and adds a test method per argument combination (its own
+golden file), so a new argument is a new class rather than an edit to the existing ones.
 
 ## Golden File Cell Format
 
@@ -71,11 +69,12 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     numpy_requirement_message,
 )
-from pyspark.testing.goldenutils import GoldenFileTestMixin
 
-# Imported as a module, not `from ... import PyArrowArrayToPandasDefaultTests`, so
-# that unittest does not collect and re-run the default test class from this module.
-from pyspark.tests.upstream.pyarrow import test_pyarrow_arrow_to_pandas_default
+# Import the shared base (which defines no test_* methods), not a concrete test class,
+# so that unittest does not collect and re-run the default file's tests here.
+from pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default import (
+    _PyArrowToPandasTestBase,
+)
 
 if have_pandas:
     import pandas as pd
@@ -83,107 +82,6 @@ if have_pyarrow:
     import pyarrow as pa
 if have_numpy:
     import numpy as np
-
-
-class _PyArrowToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
-    """
-    Shared machinery for pa.Array.to_pandas() golden file tests.
-
-    Concrete subclasses provide their own ``_build_source_arrays`` (the rows) and
-    one or more ``test_*`` methods that call ``compare_or_generate_golden_matrix``.
-    This base defines no ``test_*`` methods, so it contributes no tests itself.
-    """
-
-    def _to_pandas_cell(self, arr, **to_pandas_kwargs) -> str:
-        """
-        Convert ``arr`` via ``to_pandas(**to_pandas_kwargs)`` and format the
-        result as a golden-file cell, returning ``ERR@<ExceptionClass>`` if the
-        conversion raises.
-        """
-        try:
-            return self.repr_value(arr.to_pandas(**to_pandas_kwargs), max_len=0)
-        except Exception as e:
-            return f"ERR@{type(e).__name__}"
-
-    @staticmethod
-    def _arrow_buffers(arrow_obj):
-        """
-        Every non-null buffer backing ``arrow_obj``.
-
-        A ChunkedArray has no buffers of its own -- its data lives in its chunks --
-        so it is expanded first.  ``None`` entries (e.g. an absent validity bitmap)
-        are skipped.
-        """
-        if isinstance(arrow_obj, pa.ChunkedArray):
-            chunks = [arrow_obj.chunk(i) for i in range(arrow_obj.num_chunks)]
-        else:
-            chunks = [arrow_obj]
-
-        buffers = []
-        for chunk in chunks:
-            for buffer in chunk.buffers():
-                if buffer is not None:
-                    buffers.append(buffer)
-        return buffers
-
-    @classmethod
-    def _verify_zero_copy(cls, arr, **to_pandas_kwargs) -> str:
-        """
-        Independently verify whether ``to_pandas`` reused ``arr``'s buffers,
-        instead of trusting PyArrow's own ``zero_copy_only`` verdict.
-
-        The check inspects whatever storage pandas returned rather than assuming a
-        numpy-backed Series, so it stays correct as pandas moves more dtypes to
-        Arrow-backed storage.
-
-        Returns ``"zero-copy"``, ``"partial-copy"``, ``"copied"``, or
-        ``"ERR@<ExceptionClass>"``.
-        """
-        try:
-            series = arr.to_pandas(**to_pandas_kwargs)
-        except Exception as e:
-            return f"ERR@{type(e).__name__}"
-
-        backing_array = series.array
-
-        # Arrow-backed result: compare buffer addresses, reading the stored data
-        # back through the public __arrow_array__ protocol.  to_numpy() would
-        # materialize a copy here and wrongly report no sharing.  Keying on the
-        # protocol rather than on ArrowDtype also covers dtypes that are
-        # Arrow-backed without being ArrowDtype, such as pandas 3's string.
-        #
-        # The result has several buffers (validity, offsets, values) and can borrow
-        # some while allocating others, so count how many it borrowed rather than
-        # stopping at the first match.  The result's buffers are the denominator
-        # because the question is what pandas had to allocate.
-        if hasattr(backing_array, "__arrow_array__"):
-            source_addresses = {buffer.address for buffer in cls._arrow_buffers(arr)}
-            stored_buffers = cls._arrow_buffers(pa.array(backing_array))
-            borrowed = 0
-            for buffer in stored_buffers:
-                if buffer.address in source_addresses:
-                    borrowed += 1
-            if borrowed == len(stored_buffers):
-                return "zero-copy"
-            return "partial-copy" if borrowed else "copied"
-
-        # numpy-backed result: np.shares_memory accounts for slice offsets, so it
-        # is robust where raw address equality is not.
-        pandas_values = series.to_numpy()
-        for buffer in cls._arrow_buffers(arr):
-            if np.shares_memory(np.frombuffer(buffer, dtype=np.uint8), pandas_values):
-                return "zero-copy"
-
-        # Zero bytes cannot overlap, so an empty result is zero-copy if the numpy
-        # array still borrows the Arrow array (numpy's .base is its memory owner).
-        if len(arr) == 0:
-            owner = pandas_values
-            while (base := getattr(owner, "base", None)) is not None:
-                if base is arr:
-                    return "zero-copy"
-                owner = base
-
-        return "copied"
 
 
 @unittest.skipIf(
@@ -206,41 +104,17 @@ class PyArrowArrayToPandasCoerceTemporalTests(_PyArrowToPandasTestBase):
     """
 
     def _build_source_arrays(self):
-        """Build an ordered dict of named source PyArrow arrays for testing."""
-        sources = {}
+        """
+        Reuse the base's temporal group (the types this argument targets), then add
+        coercion-specific overflow rows and a few non-temporal controls.
+        """
+        sources = self._temporal_sources()
 
-        # =====================================================================
-        # Timestamp types (the primary target of coerce_temporal_nanoseconds)
-        # =====================================================================
-        dt1 = datetime.datetime(2024, 1, 1, 12, 0, 0)
-        dt2 = datetime.datetime(2024, 6, 15, 18, 30, 0)
-        for unit in ["s", "ms", "us", "ns"]:
-            sources[f"timestamp[{unit}]:standard"] = pa.array([dt1, dt2], pa.timestamp(unit))
-            sources[f"timestamp[{unit}]:nullable"] = pa.array([dt1, None], pa.timestamp(unit))
-            sources[f"timestamp[{unit}]:empty"] = pa.array([], pa.timestamp(unit))
-        # Timestamp with timezone
-        sources["timestamp[us,tz=UTC]:standard"] = pa.array(
-            [dt1, dt2], pa.timestamp("us", tz="UTC")
-        )
-        sources["timestamp[us,tz=UTC]:nullable"] = pa.array(
-            [dt1, None], pa.timestamp("us", tz="UTC")
-        )
-        sources["timestamp[us,tz=UTC]:empty"] = pa.array([], pa.timestamp("us", tz="UTC"))
         # Overflow: coercion to nanoseconds has a valid range (~1677-2262); a
         # far-future second-resolution timestamp cannot fit and should error.
         sources["timestamp[s]:overflow"] = pa.array(
             [datetime.datetime(2500, 1, 1)], pa.timestamp("s")
         )
-
-        # =====================================================================
-        # Duration types (also coerced to nanoseconds)
-        # =====================================================================
-        td1 = datetime.timedelta(days=1)
-        td2 = datetime.timedelta(hours=2, minutes=30)
-        for unit in ["s", "ms", "us", "ns"]:
-            sources[f"duration[{unit}]:standard"] = pa.array([td1, td2], pa.duration(unit))
-            sources[f"duration[{unit}]:nullable"] = pa.array([td1, None], pa.duration(unit))
-            sources[f"duration[{unit}]:empty"] = pa.array([], pa.duration(unit))
         # Overflow: a duration beyond ~292 years exceeds the int64 nanosecond
         # range. Unlike timestamp overflow (which raises), coercing it silently
         # wraps around to a bogus value; this row pins that behavior.
@@ -248,43 +122,7 @@ class PyArrowArrayToPandasCoerceTemporalTests(_PyArrowToPandasTestBase):
             [datetime.timedelta(days=300 * 365)], pa.duration("s")
         )
 
-        # =====================================================================
-        # Date types. With the default date_as_object=True, pandas yields an
-        # object-dtype Series of datetime.date, so coerce_temporal_nanoseconds
-        # has nothing to coerce; the "date_as_object=False" column forces the
-        # numeric datetime64[ns] path where the argument actually takes effect.
-        # =====================================================================
-        d1 = datetime.date(2024, 1, 1)
-        d2 = datetime.date(2024, 6, 15)
-        sources["date32:standard"] = pa.array([d1, d2], pa.date32())
-        sources["date32:nullable"] = pa.array([d1, None], pa.date32())
-        sources["date32:empty"] = pa.array([], pa.date32())
-        sources["date64:standard"] = pa.array([d1, d2], pa.date64())
-        sources["date64:nullable"] = pa.array([d1, None], pa.date64())
-        sources["date64:empty"] = pa.array([], pa.date64())
-
-        # =====================================================================
-        # Time types (control: pandas yields object-dtype datetime.time, no
-        # native time-of-day dtype, so coerce_temporal_nanoseconds is a no-op)
-        # =====================================================================
-        t1 = datetime.time(12, 30, 0)
-        t2 = datetime.time(18, 45, 30)
-        sources["time32[s]:standard"] = pa.array([t1, t2], pa.time32("s"))
-        sources["time32[s]:nullable"] = pa.array([t1, None], pa.time32("s"))
-        sources["time32[s]:empty"] = pa.array([], pa.time32("s"))
-        sources["time32[ms]:standard"] = pa.array([t1, t2], pa.time32("ms"))
-        sources["time32[ms]:nullable"] = pa.array([t1, None], pa.time32("ms"))
-        sources["time32[ms]:empty"] = pa.array([], pa.time32("ms"))
-        sources["time64[us]:standard"] = pa.array([t1, t2], pa.time64("us"))
-        sources["time64[us]:nullable"] = pa.array([t1, None], pa.time64("us"))
-        sources["time64[us]:empty"] = pa.array([], pa.time64("us"))
-        sources["time64[ns]:standard"] = pa.array([t1, t2], pa.time64("ns"))
-        sources["time64[ns]:nullable"] = pa.array([t1, None], pa.time64("ns"))
-        sources["time64[ns]:empty"] = pa.array([], pa.time64("ns"))
-
-        # =====================================================================
-        # Non-temporal controls (unaffected by coerce_temporal_nanoseconds)
-        # =====================================================================
+        # Non-temporal controls (unaffected by coerce_temporal_nanoseconds).
         sources["int64:standard"] = pa.array([0, 1, -1], pa.int64())
         sources["int64:nullable"] = pa.array([0, 1, None], pa.int64())
         sources["float64:standard"] = pa.array([0.0, 1.5, -1.5], pa.float64())
@@ -395,19 +233,18 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
 
     def _build_source_arrays(self):
         """
-        Reuse every row of the sibling default test, then add the layout variants
-        that only matter for zero-copy.
+        Reuse the base's full inventory, then add the layout variants that only
+        matter for zero-copy.
 
-        Sharing the row set keeps both golden files pinning the same types, and
-        means a type added to the default test is covered here automatically.
+        Sharing the row set keeps this and the default golden pinning the same types,
+        and a type added to the base is covered here automatically.
         A slice still views a contiguous no-null region, so it stays zero-copy even
         though its data starts partway into the parent buffer.  A single chunk is
         zero-copy, but multiple chunks must be concatenated into one contiguous
         numpy buffer -- a copy.  Multi-chunk is the common shape in real PySpark,
         where each partition arrives as its own chunk.
         """
-        default_tests = test_pyarrow_arrow_to_pandas_default.PyArrowArrayToPandasDefaultTests
-        sources = default_tests._build_source_arrays(self)
+        sources = super()._build_source_arrays()
 
         sources["int64:sliced"] = pa.array(list(range(10)), pa.int64()).slice(2, 3)
         sources["int64:sliced-with-null"] = pa.array([1, 2, None, 4, 5], pa.int64()).slice(1, 3)
@@ -417,6 +254,86 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
         )
 
         return sources
+
+    @staticmethod
+    def _arrow_buffers(arrow_obj):
+        """
+        Every non-null buffer backing ``arrow_obj``.
+
+        A ChunkedArray has no buffers of its own -- its data lives in its chunks --
+        so it is expanded first.  ``None`` entries (e.g. an absent validity bitmap)
+        are skipped.
+        """
+        if isinstance(arrow_obj, pa.ChunkedArray):
+            chunks = [arrow_obj.chunk(i) for i in range(arrow_obj.num_chunks)]
+        else:
+            chunks = [arrow_obj]
+
+        buffers = []
+        for chunk in chunks:
+            for buffer in chunk.buffers():
+                if buffer is not None:
+                    buffers.append(buffer)
+        return buffers
+
+    @classmethod
+    def _verify_zero_copy(cls, arr, **to_pandas_kwargs) -> str:
+        """
+        Independently verify whether ``to_pandas`` reused ``arr``'s buffers,
+        instead of trusting PyArrow's own ``zero_copy_only`` verdict.
+
+        The check inspects whatever storage pandas returned rather than assuming a
+        numpy-backed Series, so it stays correct as pandas moves more dtypes to
+        Arrow-backed storage.
+
+        Returns ``"zero-copy"``, ``"partial-copy"``, ``"copied"``, or
+        ``"ERR@<ExceptionClass>"``.
+        """
+        try:
+            series = arr.to_pandas(**to_pandas_kwargs)
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
+
+        backing_array = series.array
+
+        # Arrow-backed result: compare buffer addresses, reading the stored data
+        # back through the public __arrow_array__ protocol.  to_numpy() would
+        # materialize a copy here and wrongly report no sharing.  Keying on the
+        # protocol rather than on ArrowDtype also covers dtypes that are
+        # Arrow-backed without being ArrowDtype, such as pandas 3's string.
+        #
+        # The result has several buffers (validity, offsets, values) and can borrow
+        # some while allocating others, so count how many it borrowed rather than
+        # stopping at the first match.  The result's buffers are the denominator
+        # because the question is what pandas had to allocate.
+        if hasattr(backing_array, "__arrow_array__"):
+            source_addresses = {buffer.address for buffer in cls._arrow_buffers(arr)}
+            stored_buffers = cls._arrow_buffers(pa.array(backing_array))
+            borrowed = 0
+            for buffer in stored_buffers:
+                if buffer.address in source_addresses:
+                    borrowed += 1
+            if borrowed == len(stored_buffers):
+                return "zero-copy"
+            return "partial-copy" if borrowed else "copied"
+
+        # numpy-backed result: np.shares_memory accounts for slice offsets, so it
+        # is robust where raw address equality is not.
+        pandas_values = series.to_numpy()
+        for buffer in cls._arrow_buffers(arr):
+            if np.shares_memory(np.frombuffer(buffer, dtype=np.uint8), pandas_values):
+                return "zero-copy"
+
+        # Zero bytes cannot overlap, so an empty result is zero-copy if the numpy
+        # array still borrows the Arrow array (numpy's .base is its memory owner).
+        if len(arr) == 0:
+            owner = pandas_values
+            while (base := getattr(owner, "base", None)) is not None:
+                if base is arr:
+                    return "zero-copy"
+                owner = base
+
+        return "copied"
 
     # Output column for the default zero_copy_only=False: PyArrow silently copies
     # when a view is not possible, so this always succeeds and records the dtype.
@@ -575,13 +492,11 @@ class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
 
     def _build_source_arrays(self):
         """
-        Reuse every row of the sibling default test, then add the integer variants
-        that only matter for this argument: the shared rows' nullable values are
-        small enough to survive ``float64``, and their nested rows are missing whole
-        sub-lists rather than a single integer inside one.
+        Reuse the base's full inventory, then add the integer variants it does not
+        reach: its nullable values are small enough to survive ``float64``, and its
+        nested rows are missing whole sub-lists rather than a single integer inside one.
         """
-        default_tests = test_pyarrow_arrow_to_pandas_default.PyArrowArrayToPandasDefaultTests
-        sources = default_tests._build_source_arrays(self)
+        sources = super()._build_source_arrays()
 
         # Each width's min and max alongside a null.  The shared rows use small values,
         # which float64 represents exactly; only at 64 bits does the range exceed its
