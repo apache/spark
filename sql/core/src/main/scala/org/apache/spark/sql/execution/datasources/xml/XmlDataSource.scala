@@ -23,7 +23,7 @@ import java.nio.charset.{Charset, StandardCharsets}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -34,7 +34,7 @@ import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, StaxXMLRecordReader, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -81,13 +81,16 @@ abstract class XmlDataSource extends Serializable with Logging with SupportsArch
    * `XmlFileFormat` read path supports archives; XML has no DSv2 reader.
    *
    * @param parser builds a fresh XML parser for each entry.
+   * @param archivePathFilter optional glob matched against the entry's full path
    */
   def readArchive(
       conf: Configuration,
       file: PartitionedFile,
       parser: () => StaxXmlParser,
-      schema: StructType): Iterator[InternalRow] =
-    SupportsArchiveFormat.readArchiveEntries(file.toPath, conf) { (_, in) =>
+      schema: StructType,
+      archivePathFilter: Option[GlobPattern]): Iterator[InternalRow] =
+    SupportsArchiveFormat.readArchiveEntries(
+        file.toPath, conf, archivePathFilter = archivePathFilter) { (_, in) =>
       readStream(in, parser(), schema)
     }
 
@@ -369,20 +372,32 @@ object MultiLineXmlDataSource extends XmlDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: XmlOptions): StructType = {
     val baseRdd = createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
+    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
+    // compiles it once when the archive branch is taken.
+    val archivePathFilterGlob = parsedOptions.archivePathFilter
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
 
-    val tokenRDD: RDD[String] = baseRdd.flatMap { stream =>
-      val path = new Path(stream.getPath())
-      skipInputOnError(ignoreMissingFiles, ignoreCorruptFiles) {
-        if (SupportsArchiveFormat.isArchivePath(path)) {
-          SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
-            StaxXmlParser.tokenizeStream(in, parsedOptions)
+    val tokenRDD: RDD[String] = baseRdd.mapPartitions { streams =>
+      // Compile at most once per partition: lazy so a partition of only loose files never
+      // compiles, while a partition with archives reuses one matcher across all of them.
+      lazy val archivePathFilter =
+        archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      streams.flatMap { stream =>
+        val path = new Path(stream.getPath())
+        skipInputOnError(ignoreMissingFiles, ignoreCorruptFiles) {
+          if (SupportsArchiveFormat.isArchivePath(path)) {
+            SupportsArchiveFormat.readArchiveEntries(
+              path, stream.getConfiguration, archivePathFilter = archivePathFilter) {
+              (_, in) =>
+              StaxXmlParser.tokenizeStream(in, parsedOptions)
+            }
+          } else {
+            StaxXmlParser.tokenizeStream(
+              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
+              parsedOptions)
           }
-        } else {
-          StaxXmlParser.tokenizeStream(
-            CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
-            parsedOptions)
         }
       }
     }
