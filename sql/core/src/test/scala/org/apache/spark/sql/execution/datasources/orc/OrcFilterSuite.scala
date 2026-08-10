@@ -400,8 +400,9 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
   }
 
   test("SPARK-57823: filter pushdown - nanosecond timestamp") {
-    // Wall clocks with sub-microsecond digits so the nanosecond fraction actually participates in
-    // the pushed-down search argument (a micro-only value would not exercise the nanos path).
+    // Wall clocks carry sub-microsecond digits. The literal is explicitly nanos-typed, so even a
+    // microsecond-aligned value would still exercise the nanos pushdown path; the extra digits
+    // exercise value preservation and comparison beyond microsecond precision.
     val wallClocks = Seq(
       LocalDateTime.of(1000, 1, 1, 1, 2, 3, 456789123),
       LocalDateTime.of(1582, 10, 1, 0, 11, 22, 456789123),
@@ -447,6 +448,11 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
                 checkFilterPredicate(ts(2) < $"ts", PredicateLeaf.Operator.LESS_THAN_EQUALS)
                 checkFilterPredicate(ts(0) >= $"ts", PredicateLeaf.Operator.LESS_THAN_EQUALS)
                 checkFilterPredicate(ts(3) <= $"ts", PredicateLeaf.Operator.LESS_THAN)
+
+                // In covers the per-value castLiteralValue path (values.map(...)) in
+                // buildLeafSearchArgument, exercising the nanos literal cast for every element.
+                checkFilterPredicate(
+                  In($"ts", Seq(ts(0), ts(2))), PredicateLeaf.Operator.IN)
               }
             }
         }

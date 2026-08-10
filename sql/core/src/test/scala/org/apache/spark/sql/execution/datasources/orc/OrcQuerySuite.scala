@@ -1076,12 +1076,51 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       }
     }
 
-    // The LTZ column stores/compares timestamps in the JVM default zone, so a literal built in the
-    // wrong frame would only diverge from the stripe stats outside UTC. Run under zones with both
-    // offset signs so timezone handling is exercised, not just UTC where such a bug is masked.
+    // The LTZ column stores the UTC instant; the JVM default zone enters only at comparison time,
+    // when ORC evaluates the pushed predicate against the non-UTC timestamp statistics. So a
+    // literal built in the wrong frame would only diverge from the stripe stats outside UTC. Run
+    // under zones with both offset signs so timezone handling is exercised, not just UTC where such
+    // a bug is masked.
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       Seq(DateTimeTestUtils.UTC, DateTimeTestUtils.LA, DateTimeTestUtils.JST).foreach { zoneId =>
         DateTimeTestUtils.withDefaultTimeZone(zoneId)(checkNanosPushdown())
+      }
+    }
+  }
+
+  test("SPARK-57823: LTZ nanos pushdown stays correct across a DST spring-forward gap") {
+    // Timestamp.valueOf maps a wall clock inside the JVM zone's spring-forward gap one hour ahead,
+    // so for instants whose UTC wall clock lands in that gap the literal frame is non-monotonic.
+    // Under America/Los_Angeles the gap is 2020-03-08 02:00..03:00, so lay data one minute apart
+    // straddling it (UTC wall clocks 01:30..03:29) with a boundary at 02:45. checkAnswer must hold:
+    // in the gap the pushed predicate may only turn conservative (skip fewer stripes), never prune
+    // a stripe that holds matching rows.
+    val numRows = 120
+    val base = LocalDateTime.of(2020, 3, 8, 1, 30, 0, 123456789)
+    val wallClocks = (0 until numRows).map(m => base.plusMinutes(m))
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+        foreachNanosPrecision { precision =>
+          val nanosType = TimestampLTZNanosType(precision)
+          val inputDf = nanosTimestampDf(nanosType, wallClocks)
+          val boundary = Literal.create(
+            LocalDateTime.of(2020, 3, 8, 2, 45, 0, 0).toInstant(ZoneOffset.UTC), nanosType)
+          def keepBeforeGapBoundary(df: DataFrame): Column = df("ts") < Column(boundary)
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            inputDf.repartition(numRows).write.orc(path)
+            Seq(true, false).foreach { vectorized =>
+              withSQLConf(
+                  SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+                  SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+                val read = spark.read.schema(new StructType().add("ts", nanosType)).orc(path)
+                checkAnswer(
+                  read.where(keepBeforeGapBoundary(read)),
+                  inputDf.where(keepBeforeGapBoundary(inputDf)))
+              }
+            }
+          }
+        }
       }
     }
   }
