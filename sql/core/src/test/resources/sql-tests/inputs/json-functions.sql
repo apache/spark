@@ -173,3 +173,39 @@ select to_json(from_json('{"time":"23:59:59.999999"}', 'time TIME(6)'));
 select schema_of_json('{"time": "14:30:45"}');
 select schema_of_json('{"time": "14:30:45.123456"}');
 select from_json('{"time": "14:30:45"}', 'time TIME') LIMIT 1;
+
+-- JSON_VALUE: extract a scalar value (ANSI SQL:2016)
+select json_value('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.name');
+select json_value('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.id' RETURNING INT);
+select json_value('{"id":7,"name":"Ada"}', '$.id' RETURNING INT) + 1;
+-- present but JSON null -> SQL NULL
+select json_value('{"score":null}', '$.score');
+-- non-scalar (object / array) -> NULL ON ERROR (default)
+select json_value('{"addr":{"city":"NYC"}}', '$.addr');
+select json_value('{"tags":["x","y"]}', '$.tags');
+-- missing path -> NULL ON EMPTY (default)
+select json_value('{"id":7}', '$.missing');
+-- NULL input propagates to NULL
+select json_value(cast(null as string), '$.a');
+-- ON EMPTY behaviors
+select json_value('{"id":7}', '$.missing' DEFAULT '?' ON EMPTY);
+select json_value('{"id":7}', '$.missing' RETURNING INT DEFAULT 42 ON EMPTY);
+select json_value('{"id":7}', '$.missing' ERROR ON EMPTY);
+-- ON ERROR behaviors
+select json_value('{"addr":{"city":"NYC"}}', '$.addr' DEFAULT 'n/a' ON ERROR);
+select json_value('not json', '$.a' DEFAULT 'bad' ON ERROR);
+select json_value('not json', '$.a' ERROR ON ERROR);
+-- failed cast -> ON ERROR
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT);
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT ERROR ON ERROR);
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT DEFAULT -1 ON ERROR);
+-- combined ON EMPTY + ON ERROR
+select json_value('{"a":"x"}', '$.b' DEFAULT 'e' ON EMPTY DEFAULT 'r' ON ERROR);
+-- RETURNING types
+select json_value('{"v":"3.14"}', '$.v' RETURNING DOUBLE);
+select json_value('{"v":"true"}', '$.v' RETURNING BOOLEAN);
+select json_value('{"v":"2020-01-02"}', '$.v' RETURNING DATE);
+-- invalid: wildcard path
+select json_value('{"a":[1,2]}', '$.a[*]');
+-- invalid: non-scalar RETURNING type
+select json_value('{"a":1}', '$.a' RETURNING STRUCT<x:INT>);

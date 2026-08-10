@@ -484,6 +484,36 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   }
 
   /**
+   * Resolves `containerPath` against a single JSON value, preserving the missing / JSON-null /
+   * found distinction that [[evaluate]] collapses. Returns:
+   *
+   *   - `None` if the input is not a single well-formed JSON value (malformed / trailing garbage /
+   *     empty);
+   *   - `Some(Missing)` if the path matches nothing;
+   *   - `Some(NullValue)` if the path matches an explicit JSON `null`;
+   *   - `Some(Found(raw))` if the path matches a value, where `raw` is its verbatim JSON text
+   *     (strings keep their enclosing quotes; an object/array is the whole fragment).
+   *
+   * A `null` input is the caller's responsibility. `explodeRoot` is ignored: this is a single-value
+   * lookup, so construct the evaluator with `explodeRoot = false`.
+   */
+  final def lookup(json: UTF8String): Option[JsonPathResult] = {
+    if (!isSingleWellFormedValue(json)) return None
+    Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+      try {
+        parser.nextToken()
+        positionAt(parser, containerPath) match {
+          case PositionResult.Missing => Some(JsonPathResult.Missing)
+          case PositionResult.NullValue => Some(JsonPathResult.NullValue)
+          case PositionResult.AtValue => Some(JsonPathResult.Found(serializeCurrentValue(parser)))
+        }
+      } catch {
+        case _: JsonProcessingException => None
+      }
+    }
+  }
+
+  /**
    * Navigates `path` and leaves the parser positioned at the first token of the matched value
    * (returning `AtValue`), or returns `Missing`/`NullValue`. Unlike the column projection traversal
    * ([[navigateColumns]]), this does not serialize the value or finish consuming the enclosing
@@ -747,6 +777,17 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
    * first byte is `"` can be a string literal. Non-string values (the common case) are returned
    * without constructing a parser at all.
    */
+  /**
+   * True if `raw` (a [[serializeCurrentValue]] fragment) is a JSON scalar rather than an object or
+   * array. The fragment has no leading whitespace, so only its first byte matters: `{` and `[`
+   * start an object/array, every other leading byte a scalar.
+   */
+  def isScalar(raw: UTF8String): Boolean = {
+    if (raw.numBytes() == 0) return true
+    val first = raw.getByte(0)
+    first != '{' && first != '['
+  }
+
   def unquotedString(raw: UTF8String): UTF8String = {
     if (raw.numBytes() == 0 || raw.getByte(0) != '"') return raw
     try {

@@ -1282,3 +1282,243 @@ select from_json('{"time": "14:30:45"}', 'time TIME') LIMIT 1
 struct<from_json({"time": "14:30:45"}):struct<time:time(6)>>
 -- !query output
 {"time":14:30:45}
+
+
+-- !query
+select json_value('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.name')
+-- !query schema
+struct<JSON_VALUE({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.name'):string>
+-- !query output
+Ada
+
+
+-- !query
+select json_value('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.id' RETURNING INT)
+-- !query schema
+struct<JSON_VALUE({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.id' RETURNING INT):int>
+-- !query output
+7
+
+
+-- !query
+select json_value('{"id":7,"name":"Ada"}', '$.id' RETURNING INT) + 1
+-- !query schema
+struct<(JSON_VALUE({"id":7,"name":"Ada"}, '$.id' RETURNING INT) + 1):int>
+-- !query output
+8
+
+
+-- !query
+select json_value('{"score":null}', '$.score')
+-- !query schema
+struct<JSON_VALUE({"score":null}, '$.score'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_value('{"addr":{"city":"NYC"}}', '$.addr')
+-- !query schema
+struct<JSON_VALUE({"addr":{"city":"NYC"}}, '$.addr'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_value('{"tags":["x","y"]}', '$.tags')
+-- !query schema
+struct<JSON_VALUE({"tags":["x","y"]}, '$.tags'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_value('{"id":7}', '$.missing')
+-- !query schema
+struct<JSON_VALUE({"id":7}, '$.missing'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_value(cast(null as string), '$.a')
+-- !query schema
+struct<JSON_VALUE(CAST(NULL AS STRING), '$.a'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_value('{"id":7}', '$.missing' DEFAULT '?' ON EMPTY)
+-- !query schema
+struct<JSON_VALUE({"id":7}, '$.missing' DEFAULT ? ON EMPTY):string>
+-- !query output
+?
+
+
+-- !query
+select json_value('{"id":7}', '$.missing' RETURNING INT DEFAULT 42 ON EMPTY)
+-- !query schema
+struct<JSON_VALUE({"id":7}, '$.missing' RETURNING INT DEFAULT 42 ON EMPTY):int>
+-- !query output
+42
+
+
+-- !query
+select json_value('{"id":7}', '$.missing' ERROR ON EMPTY)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_VALUE_ON_ERROR.EMPTY",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "path" : "'$.missing'"
+  }
+}
+
+
+-- !query
+select json_value('{"addr":{"city":"NYC"}}', '$.addr' DEFAULT 'n/a' ON ERROR)
+-- !query schema
+struct<JSON_VALUE({"addr":{"city":"NYC"}}, '$.addr' DEFAULT n/a ON ERROR):string>
+-- !query output
+n/a
+
+
+-- !query
+select json_value('not json', '$.a' DEFAULT 'bad' ON ERROR)
+-- !query schema
+struct<JSON_VALUE(not json, '$.a' DEFAULT bad ON ERROR):string>
+-- !query output
+bad
+
+
+-- !query
+select json_value('not json', '$.a' ERROR ON ERROR)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_VALUE_ON_ERROR.ERROR",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "path" : "'$.a'"
+  }
+}
+
+
+-- !query
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT)
+-- !query schema
+struct<JSON_VALUE({"name":"Ada"}, '$.name' RETURNING INT):int>
+-- !query output
+NULL
+
+
+-- !query
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT ERROR ON ERROR)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_VALUE_ON_ERROR.ERROR",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "path" : "'$.name'"
+  }
+}
+
+
+-- !query
+select json_value('{"name":"Ada"}', '$.name' RETURNING INT DEFAULT -1 ON ERROR)
+-- !query schema
+struct<JSON_VALUE({"name":"Ada"}, '$.name' RETURNING INT DEFAULT -1 ON ERROR):int>
+-- !query output
+-1
+
+
+-- !query
+select json_value('{"a":"x"}', '$.b' DEFAULT 'e' ON EMPTY DEFAULT 'r' ON ERROR)
+-- !query schema
+struct<JSON_VALUE({"a":"x"}, '$.b' DEFAULT e ON EMPTY DEFAULT r ON ERROR):string>
+-- !query output
+e
+
+
+-- !query
+select json_value('{"v":"3.14"}', '$.v' RETURNING DOUBLE)
+-- !query schema
+struct<JSON_VALUE({"v":"3.14"}, '$.v' RETURNING DOUBLE):double>
+-- !query output
+3.14
+
+
+-- !query
+select json_value('{"v":"true"}', '$.v' RETURNING BOOLEAN)
+-- !query schema
+struct<JSON_VALUE({"v":"true"}, '$.v' RETURNING BOOLEAN):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_value('{"v":"2020-01-02"}', '$.v' RETURNING DATE)
+-- !query schema
+struct<JSON_VALUE({"v":"2020-01-02"}, '$.v' RETURNING DATE):date>
+-- !query output
+2020-01-02
+
+
+-- !query
+select json_value('{"a":[1,2]}', '$.a[*]')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_PATH",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "path" : "'$.a[*]'",
+    "sqlExpr" : "\"JSON_VALUE({\"a\":[1,2]}, '$.a[*]')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "json_value('{\"a\":[1,2]}', '$.a[*]')"
+  } ]
+}
+
+
+-- !query
+select json_value('{"a":1}', '$.a' RETURNING STRUCT<x:INT>)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_SCALAR_RETURNING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_value`",
+    "returningType" : "\"STRUCT<x: INT>\"",
+    "sqlExpr" : "\"JSON_VALUE({\"a\":1}, '$.a' RETURNING STRUCT<x: INT>)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "json_value('{\"a\":1}', '$.a' RETURNING STRUCT<x:INT>)"
+  } ]
+}
