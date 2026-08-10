@@ -140,13 +140,20 @@ class OperatorResolutionContextStack {
   /**
    * Pops the top resolution context from the stack. Before popping, propagates the
    * `hasGroupingAnalytics` from the child context to the parent context if it was set.
-   * The flag is NOT propagated across subquery boundaries (isSubqueryRoot), because grouping
-   * analytics inside a subquery are unrelated to operators in the outer query.
+   * The flag is NOT propagated across subquery boundaries (isSubqueryRoot) or derived-table
+   * boundaries (SubqueryAlias), because grouping analytics inside a subquery or derived table
+   * are unrelated to operators in the outer query.
    */
   def pop(): Unit = {
     val childContext = current
     stack.pop()
-    if (childContext.hasGroupingAnalytics && !childContext.isSubqueryRoot) {
+    val isDerivedTableBoundary = childContext.unresolvedPlan match {
+      case Some(_: SubqueryAlias) => true
+      case _ => false
+    }
+    if (childContext.hasGroupingAnalytics &&
+        !childContext.isSubqueryRoot &&
+        !isDerivedTableBoundary) {
       current.hasGroupingAnalytics = childContext.hasGroupingAnalytics
     }
   }

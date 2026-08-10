@@ -117,6 +117,26 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
     )
   }
 
+  test("SPARK-57353: HAVING with grouping analytics in derived table does not reject outer") {
+    // Grouping analytics inside a derived table (SubqueryAlias) must not leak
+    // hasGroupingAnalytics to the outer query. The outer HAVING is unrelated.
+    checkResolution(
+      """SELECT a FROM (SELECT a FROM VALUES (1) t(a) GROUP BY CUBE(a)) s
+        |GROUP BY a HAVING a > 0""".stripMargin,
+      shouldPass = true
+    )
+  }
+
+  test("SPARK-57353: ORDER BY with grouping analytics in derived table does not reject outer") {
+    // Same boundary isolation for ORDER BY: grouping analytics confined to a derived table
+    // must not cause the outer ORDER BY to be rejected.
+    checkResolution(
+      """SELECT a FROM (SELECT a FROM VALUES (1) t(a) GROUP BY CUBE(a)) s
+        |ORDER BY a""".stripMargin,
+      shouldPass = true
+    )
+  }
+
   private def checkResolution(
       sqlText: String,
       shouldPass: Boolean = false,
