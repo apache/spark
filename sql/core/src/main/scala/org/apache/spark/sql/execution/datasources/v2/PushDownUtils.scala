@@ -168,7 +168,7 @@ object PushDownUtils extends Logging {
    * pushdown.
    *
    * Note: `filter` is mutating, and Spark may call this more than once for the same `scan`
-   * instance -- a plan can hold several scan nodes sharing one scan (e.g. the two branches of a
+   * instance: a plan can hold several scan nodes sharing one scan (e.g. the two branches of a
    * group-based UPDATE), each pushing its own copy of the runtime filters. Successive calls are
    * additive: a scan ANDs the newly pushed predicates with those it already holds.
    *
@@ -231,16 +231,27 @@ object PushDownUtils extends Logging {
         translatedFiltersPushed || partPredicatesPushed
 
       case catalystScan: SupportsRuntimeCatalystFiltering if runtimeFilters.nonEmpty =>
-        // Screen with the same guard, applied to the same form, that DataSourceV2Strategy uses
-        // before dropping a fully pushed filter from postScanFilters: a filter dropped there and
-        // rejected here would be evaluated nowhere. Nothing non-deterministic gets this far --
-        // DataSourceV2Strategy screens scalar subquery filters (SPARK-58207) and
-        // CleanupDynamicPruningFilters rewrites non-deterministic DPP filters to TrueLiteral --
-        // so what the guard rejects here is a residual subquery or a Python UDF.
-        // A DPP filter also degrades to TrueLiteral when its subquery is pruned away; it carries
-        // no information for the source. The V2 path above drops these implicitly because
-        // translateRuntimeFilterV2 returns None; here we push Catalyst expressions directly,
-        // so filter them out explicitly.
+        // A runtime filter is normally evaluated twice: the source prunes with it, and the
+        // FilterExec above the scan applies it again. The two have to agree, so this screen
+        // pushes only predicates the source can be trusted to evaluate in Spark's place.
+        //
+        // But pushing a non-deterministic one would let the source prune on its own coin flip and
+        // Spark flip again for the rows that survive, so we handle that specially.
+        //
+        // Not pushing a filter is safe only while its FilterExec still evaluates it. A fully
+        // pushed filter has none, so the source is its only evaluator. That is why
+        // DataSourceV2Strategy deletes a FilterExec at planning time only for a filter we push
+        // below, and we use the same method (isPushablePartitionFilter) to determine if we
+        // should push it.
+        //
+        // Note: Both sites accept everything today, since the strategy already keeps
+        // non-deterministic filters out of runtimeFilters (SPARK-58207); this keeps the two
+        // decisions consistent if we change what counts as non-deterministic in the helper
+        // method.
+        //
+        // A DPP filter degrades to TrueLiteral once its subquery is pruned away, so it matches
+        // every row. The V2 path above drops these implicitly, since translateRuntimeFilterV2
+        // returns None; here we push Catalyst expressions directly, so we remove them explicitly.
         val catalystFilters = runtimeFilters
           .filter(isPushablePartitionFilter(_, includeSubquery = true))
           .flatMap(unwrapRuntimeFilterExpression)

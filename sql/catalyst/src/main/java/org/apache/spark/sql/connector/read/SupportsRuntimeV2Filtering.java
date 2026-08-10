@@ -29,7 +29,8 @@ import org.apache.spark.sql.sources.Filter;
  * This interface is very similar to {@link SupportsRuntimeFiltering} except it uses
  * data source V2 {@link Predicate} instead of data source V1 {@link Filter}.
  * {@link SupportsRuntimeV2Filtering} is preferred over {@link SupportsRuntimeFiltering}.
- * Only one runtime filtering interface should be implemented by a data source.
+ * A scan must not implement SupportsRuntimeCatalystFiltering together with this interface;
+ * Spark rejects such a scan.
  * <p>
  * <b>Iterative filtering:</b> When {@link #supportsIterativePushdown()} returns true,
  * {@link #filter(Predicate[])} may be called <i>multiple times</i> on the same
@@ -75,6 +76,11 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * {@link PartitionPredicate}) when {@link #supportsIterativePushdown()} returns true.
    * The implementation must accumulate state across all calls so that
    * {@link #pushedPredicates()} can return predicates from all of them.
+   * <p>
+   * Independently of {@link #supportsIterativePushdown()}, this method may also be called once
+   * per scan node when a plan holds several scan nodes sharing one {@link Scan} instance (e.g.
+   * the two branches of a group-based UPDATE). Implementations must accumulate state across
+   * those calls as well.
    * <p>
    * Note that Spark will call {@link Scan#toBatch()} again after filtering the scan at runtime.
    *

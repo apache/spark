@@ -25,7 +25,9 @@ import org.apache.spark.sql.connector.read.Scan
  * A mix-in interface for [[Scan]]. Data sources can implement this interface if they can
  * filter initially planned [[org.apache.spark.sql.connector.read.InputPartition]]s using
  * Catalyst [[Expression]]s Spark infers at runtime.
- * Only one runtime filtering interface should be implemented by a data source.
+ * A scan must not implement this interface together with
+ * [[org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering]] or its subinterface
+ * [[org.apache.spark.sql.connector.read.SupportsRuntimeFiltering]]; Spark rejects such a scan.
  *
  * Spark considers a runtime predicate fully pushed when all attributes referenced by the
  * predicate are returned by [[fullyPushedFilterAttributes]]. Fully pushed predicates are not
@@ -53,6 +55,13 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * [[filterAttributes]]. Each attribute's value must therefore be fixed within every
    * [[org.apache.spark.sql.connector.read.InputPartition]] the scan returns, since pruning
    * partitions cannot fully evaluate a predicate on a column that varies within a partition.
+   *
+   * Spark relies on the scan alone here, so the scan must return only partitions it has proven
+   * satisfy such a predicate. Spark passes these expressions through as they are, leaving both
+   * translation and capability checking to the scan, so evaluating one can fail, for example on
+   * an ANSI cast or overflow error, or on a nested access that the scan matches differently
+   * against its partition layout. Declare an attribute only when the scan can evaluate every
+   * predicate over it.
    *
    * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
    * references and attributes pruned out of the read schema fail to resolve when Spark builds
