@@ -1759,6 +1759,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     PIPELINE_EVENT_RESULT_FIELD_NUMBER: builtins.int
     PIPELINE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     PIPELINE_QUERY_FUNCTION_EXECUTION_SIGNAL_FIELD_NUMBER: builtins.int
+    CREATE_BROADCAST_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1841,6 +1842,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         register its result with the server.
         """
     @property
+    def create_broadcast_result(self) -> global___CreateBroadcastResult:
+        """(SPARK-51705) Server-assigned handle for a CreateBroadcastCommand."""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1889,6 +1893,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         | None = ...,
         pipeline_query_function_execution_signal: pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal
         | None = ...,
+        create_broadcast_result: global___CreateBroadcastResult | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1902,6 +1907,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"arrow_batch",
             "checkpoint_command_result",
             b"checkpoint_command_result",
+            "create_broadcast_result",
+            b"create_broadcast_result",
             "create_resource_profile_command_result",
             b"create_resource_profile_command_result",
             "execution_progress",
@@ -1945,6 +1952,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"arrow_batch",
             "checkpoint_command_result",
             b"checkpoint_command_result",
+            "create_broadcast_result",
+            b"create_broadcast_result",
             "create_resource_profile_command_result",
             b"create_resource_profile_command_result",
             "execution_progress",
@@ -2010,6 +2019,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "pipeline_event_result",
             "pipeline_command_result",
             "pipeline_query_function_execution_signal",
+            "create_broadcast_result",
             "extension",
         ]
         | None
@@ -4202,6 +4212,28 @@ class CheckpointCommandResult(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CheckpointCommandResult = CheckpointCommandResult
+
+class CreateBroadcastResult(google.protobuf.message.Message):
+    """(SPARK-51705) Server-assigned broadcast handle (mirrors CheckpointCommandResult)."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    BROADCAST_ID_FIELD_NUMBER: builtins.int
+    broadcast_id: builtins.int
+    """(Required) The driver-side broadcast id. The client embeds this id in the pickled
+    Broadcast closure (Broadcast._from_id), which the executor/worker resolves against its
+    _broadcastRegistry keyed by the same id.
+    """
+    def __init__(
+        self,
+        *,
+        broadcast_id: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["broadcast_id", b"broadcast_id"]
+    ) -> None: ...
+
+global___CreateBroadcastResult = CreateBroadcastResult
 
 class CloneSessionRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
