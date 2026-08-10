@@ -233,12 +233,6 @@ abstract class DirectWorkerDispatcher(
    */
   protected def afterWorkerRegistered(worker: DirectWorkerProcess): Unit = ()
 
-  /**
-   * Test-only hook invoked after [[close]] wins its idempotence CAS and before
-   * it waits for in-flight session creation. The default is a no-op.
-   */
-  protected def afterCloseStarted(): Unit = ()
-
   override def createSession(
       securityScope: Option[WorkerSecurityScope]): WorkerSession = {
     require(securityScope.isEmpty,
@@ -307,9 +301,12 @@ abstract class DirectWorkerDispatcher(
     if (inFlightSessionCreations == 0) sessionCreationLock.notifyAll()
   }
 
-  /** Waits uninterruptibly so cleanup can never race an in-flight creation. */
-  private def awaitSessionCreations(): Unit = {
-    var interrupted = false
+  /**
+   * Waits uninterruptibly so cleanup can never race an in-flight creation.
+   * Returns whether interruption must be restored after cleanup completes.
+   */
+  private def awaitSessionCreations(): Boolean = {
+    var interrupted = Thread.interrupted()
     sessionCreationLock.synchronized {
       while (inFlightSessionCreations != 0) {
         try {
@@ -319,7 +316,7 @@ abstract class DirectWorkerDispatcher(
         }
       }
     }
-    if (interrupted) Thread.currentThread().interrupt()
+    interrupted
   }
 
   /**
@@ -332,26 +329,29 @@ abstract class DirectWorkerDispatcher(
     if (!closed.compareAndSet(false, true)) {
       return
     }
-    afterCloseStarted()
-    awaitSessionCreations()
-    // TODO [SPARK-55278]: Cleanup sessions as well?
-    // TODO [SPARK-55278]: close workers in parallel -- today shutdown is serialised at
-    //   N * gracefulTimeoutMs worst case.
-    workers.values().iterator().asScala.foreach { w =>
-      try {
-        w.close()
-      } catch {
-        case NonFatal(e) =>
-          logger.warn(s"Error closing worker ${w.id}", e)
+    val interrupted = awaitSessionCreations()
+    try {
+      // TODO [SPARK-55278]: Cleanup sessions as well?
+      // TODO [SPARK-55278]: close workers in parallel -- today shutdown is serialised at
+      //   N * gracefulTimeoutMs worst case.
+      workers.values().iterator().asScala.foreach { w =>
+        try {
+          w.close()
+        } catch {
+          case NonFatal(e) =>
+            logger.warn(s"Error closing worker ${w.id}", e)
+        }
       }
+      workers.clear()
+      try closeTransport() catch {
+        case NonFatal(e) =>
+          logger.warn("Error cleaning up transport state", e)
+      }
+      deregisterEnvironmentCleanupHook()
+      runEnvironmentCleanup()
+    } finally {
+      if (interrupted) Thread.currentThread().interrupt()
     }
-    workers.clear()
-    try closeTransport() catch {
-      case NonFatal(e) =>
-        logger.warn("Error cleaning up transport state", e)
-    }
-    deregisterEnvironmentCleanupHook()
-    runEnvironmentCleanup()
   }
 
   // -- Environment lifecycle -------------------------------------------------

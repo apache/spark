@@ -32,7 +32,8 @@ import io.netty.channel.{Channel, EventLoopGroup, MultiThreadIoEventLoopGroup, S
  *
  * Only `epoll` and `kqueue` are wired up here. Netty also ships an `io_uring`
  * transport (`io.netty.channel.uring`) that supports UDS on recent Linux
- * kernels; it could be added as a preferred Linux option in [[detect]] once its
+ * kernels; it could be added as a preferred Linux option in
+ * [[UnixDomainSocketTransport.detect]] once its
  * native artifact is on the classpath, but is intentionally left out for now to
  * keep the dependency set minimal.
  *

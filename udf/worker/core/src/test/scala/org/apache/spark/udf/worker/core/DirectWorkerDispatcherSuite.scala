@@ -33,7 +33,7 @@ import org.apache.spark.udf.worker.{
 import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerHandle, WorkerSecurityScope,
   WorkerSession}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerException, DirectWorkerProcess,
-  DirectWorkerTimeoutException}
+  DirectWorkerTimeoutException, UnixDomainSocketEndpointDirectory}
 
 /**
  * Tests for [[DirectWorkerDispatcher]] process lifecycle: spawning workers
@@ -133,6 +133,16 @@ class DirectWorkerDispatcherSuite
     case sfc: SocketFileConnection => sfc.socketPath
     case other => fail(
       s"Expected SocketFileConnection, got ${other.getClass.getSimpleName}")
+  }
+
+  private def awaitThreadWaiting(thread: Thread, description: String): Unit = {
+    val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
+    while (thread.isAlive && thread.getState != Thread.State.WAITING &&
+        System.nanoTime() < deadline) {
+      Thread.sleep(10)
+    }
+    assert(thread.getState == Thread.State.WAITING,
+      s"$description did not enter the creation barrier; state=${thread.getState}")
   }
 
   test("creates a worker and session") {
@@ -329,7 +339,6 @@ class DirectWorkerDispatcherSuite
     // workers or dispatcher-level transport state.
     val readyLatch = new java.util.concurrent.CountDownLatch(1)
     val releaseLatch = new java.util.concurrent.CountDownLatch(1)
-    val closeStartedLatch = new java.util.concurrent.CountDownLatch(1)
     val capturedWorkers =
       new java.util.concurrent.ConcurrentLinkedQueue[DirectWorkerProcess]()
     val transportClosed = new java.util.concurrent.atomic.AtomicBoolean(false)
@@ -348,8 +357,6 @@ class DirectWorkerDispatcherSuite
         transportClosed.set(true)
         super.closeTransport()
       }
-
-      override protected def afterCloseStarted(): Unit = closeStartedLatch.countDown()
     }
     try {
       val outcome =
@@ -371,8 +378,7 @@ class DirectWorkerDispatcherSuite
 
       val closeThread = new Thread(() => racing.close(), "close-racer")
       closeThread.start()
-      assert(closeStartedLatch.await(10, java.util.concurrent.TimeUnit.SECONDS),
-        "close thread never flipped the dispatcher to closed")
+      awaitThreadWaiting(closeThread, "close thread")
       assert(closeThread.isAlive, "close should wait for the in-flight createSession")
       assert(!transportClosed.get(),
         "transport cleanup must not run while createSession is in flight")
@@ -414,6 +420,87 @@ class DirectWorkerDispatcherSuite
       releaseLatch.countDown()
       racing.close()
     }
+  }
+
+  test("interrupted close completes cleanup before restoring the interrupt") {
+    val cleanupMarker = Files.createTempFile("interrupted-close-cleanup", ".txt").toFile
+    cleanupMarker.delete()
+    val env = WorkerEnvironment.newBuilder()
+      .setEnvironmentCleanup(ProcessCallable.newBuilder()
+        .addCommand("bash").addCommand("-c")
+        .addCommand(s"sleep 0.2; touch ${cleanupMarker.getAbsolutePath}").build())
+      .build()
+    val workerRegistered = new java.util.concurrent.CountDownLatch(1)
+    val releaseCreation = new java.util.concurrent.CountDownLatch(1)
+    val racing = new TestDirectWorkerDispatcher(specWithEnv(env = env)) {
+      override protected def afterWorkerRegistered(worker: DirectWorkerProcess): Unit = {
+        workerRegistered.countDown()
+        if (!releaseCreation.await(30, java.util.concurrent.TimeUnit.SECONDS)) {
+          fail("releaseCreation never fired -- test orchestration broken")
+        }
+      }
+    }
+
+    val createOutcome =
+      new java.util.concurrent.atomic.AtomicReference[Either[Throwable, WorkerSession]]()
+    val closeError = new java.util.concurrent.atomic.AtomicReference[Throwable]()
+    val closeWasInterrupted = new java.util.concurrent.atomic.AtomicBoolean(false)
+    val createThread = new Thread(() => {
+      try {
+        createOutcome.set(Right(racing.createSession(None)))
+      } catch {
+        case t: Throwable => createOutcome.set(Left(t))
+      }
+    }, "interrupted-close-create")
+    val closeThread = new Thread(() => {
+      try {
+        racing.close()
+      } catch {
+        case t: Throwable => closeError.set(t)
+      } finally {
+        closeWasInterrupted.set(Thread.currentThread().isInterrupted)
+      }
+    }, "interrupted-close")
+
+    try {
+      createThread.start()
+      assert(workerRegistered.await(10, java.util.concurrent.TimeUnit.SECONDS),
+        "createSession thread never registered its worker")
+
+      closeThread.start()
+      awaitThreadWaiting(closeThread, "interrupted close thread")
+      closeThread.interrupt()
+      assert(closeThread.isAlive, "close should keep waiting after interruption")
+      assert(!cleanupMarker.exists(),
+        "environment cleanup must not run while createSession is in flight")
+
+      releaseCreation.countDown()
+      createThread.join(10000)
+      closeThread.join(10000)
+      assert(!createThread.isAlive, "createSession thread did not finish")
+      assert(!closeThread.isAlive, "close thread did not finish")
+      assert(closeError.get() == null,
+        s"close should not fail after interruption: ${closeError.get()}")
+      assert(cleanupMarker.exists(), "environment cleanup should complete before close returns")
+      assert(closeWasInterrupted.get(), "close should restore the interrupt flag after cleanup")
+      createOutcome.get() match {
+        case Left(e: IllegalStateException) =>
+          assert(e.getMessage.contains("closed"),
+            s"expected dispatcher-closed error, got: ${e.getMessage}")
+        case Left(other) => fail(s"unexpected exception from createSession: $other")
+        case Right(_) => fail("createSession should fail when close wins")
+      }
+    } finally {
+      releaseCreation.countDown()
+      racing.close()
+      cleanupMarker.delete()
+    }
+  }
+
+  test("uses the kqueue UDS path limit on BSD") {
+    assert(UnixDomainSocketEndpointDirectory.maxPathBytesForOs("Linux") == 107)
+    assert(UnixDomainSocketEndpointDirectory.maxPathBytesForOs("Mac OS X") == 103)
+    assert(UnixDomainSocketEndpointDirectory.maxPathBytesForOs("FreeBSD") == 103)
   }
 
   test("worker-provided graceful timeout is capped at the engine-side maximum") {

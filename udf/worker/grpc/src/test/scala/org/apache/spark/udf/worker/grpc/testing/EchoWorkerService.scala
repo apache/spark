@@ -42,7 +42,7 @@ import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataRes
  *    carrying a `UserError`. The engine MUST follow with `Cancel`.
  *  - An `Init` whose assembled payload is `"INIT_ERROR"` triggers an
  *    `InitResponse` with a `WorkerError`. The engine MUST follow with `Cancel`.
- *  - Protocol version other than [[SupportedVersion]] triggers an init-time
+ *  - A protocol version other than [[SupportedVersion]] triggers an init-time
  *    `ProtocolError`.
  *  - Chunked payloads accumulate inline + chunks before init finalises.
  */

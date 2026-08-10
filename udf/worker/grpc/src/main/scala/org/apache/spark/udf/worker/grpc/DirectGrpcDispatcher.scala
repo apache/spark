@@ -16,11 +16,8 @@
  */
 package org.apache.spark.udf.worker.grpc
 
-import java.io.{File, IOException}
-import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, FileVisitResult, Path, Paths, SimpleFileVisitor}
-import java.nio.file.attribute.{BasicFileAttributes, PosixFilePermissions}
-import java.util.Locale
+import java.io.File
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.util.control.NonFatal
@@ -33,7 +30,7 @@ import org.apache.spark.udf.worker.{UDFProtoCommunicationPattern, UDFWorkerSpeci
 import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerHandle, WorkerLogger,
   WorkerSession}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerDispatcher, DirectWorkerException,
-  DirectWorkerTimeoutException}
+  DirectWorkerTimeoutException, UnixDomainSocketEndpointDirectory}
 import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.READY_POLL_INTERVAL_MS
 
 /**
@@ -45,74 +42,24 @@ import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.READY_POLL
  *
  * @param workerSpec worker specification used to launch each worker.
  * @param logger logger for lifecycle diagnostics.
- * @param grpcMaxInboundMessageSize maximum serialized response size accepted
- *                                  from a worker. Defaults to 128 MiB.
  */
 @Experimental
 class DirectGrpcDispatcher(
     workerSpec: UDFWorkerSpecification,
-    logger: WorkerLogger = WorkerLogger.NoOp,
-    grpcMaxInboundMessageSize: Int = GrpcWorkerChannel.DEFAULT_MAX_INBOUND_MESSAGE_SIZE)
+    logger: WorkerLogger = WorkerLogger.NoOp)
   extends DirectWorkerDispatcher(workerSpec, logger) {
 
-  // Upper bound on the rename-on-collision retry loop in newEndpointAddress.
-  // 16 is well above any realistic concurrent-worker count and keeps the
-  // failure mode bounded if something pathological occupies the directory.
-  private val MAX_SOCKET_LEAF_RETRIES = 16
-
-  // sockaddr_un.sun_path includes its terminating NUL. Linux reserves 108
-  // bytes and macOS 104, leaving at most 107 or 103 pathname bytes.
-  private val MAX_UDS_PATH_BYTES = {
-    val osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT)
-    if (osName.contains("mac") || osName.contains("darwin")) 103 else 107
-  }
-
-  // The private 0700 socket directory, created in [[initialize]] (after the
-  // base class has validated the spec) and removed in [[closeTransport]].
-  // `lazy val` + force-in-initialize keeps creation deterministic without
-  // depending on subclass field-initialiser ordering. deleteOnExit is
-  // avoided because the JDK retains the path for the JVM lifetime, which
-  // leaks in long-lived drivers.
-  private lazy val socketDir: Path = createPrivateTempDirectory()
+  // Laziness avoids reading subclass state during the base constructor's
+  // validation phase. initialize() forces deterministic allocation afterward.
+  private lazy val endpointDirectory = new UnixDomainSocketEndpointDirectory(logger)
 
   override protected def initialize(): Unit = {
     super.initialize()
-    // Force the lazy val now so the directory is created (and any failure
-    // surfaces) at construction time, after spec validation has passed.
-    socketDir
+    endpointDirectory
   }
 
-  /**
-   * Returns the UDS path the worker should bind. Uses a short 16-hex-char leaf
-   * (the worker's full UUID still travels via `--id`) to stay within the 108-byte
-   * UDS `sun_path` limit: on macOS `$TMPDIR` (~47 chars) plus the private dir
-   * (~29) plus a full-UUID leaf (49) overflows it and `bind(2)` fails with
-   * `ENAMETOOLONG`. 64 bits makes collisions negligible; the retry loop is a
-   * defensive guard so a near-impossible collision surfaces as a clear error
-   * here rather than an opaque "worker exited" from [[waitForReady]].
-   */
-  override protected def newEndpointAddress(workerId: String): String = {
-    val short = workerId.replace("-", "").take(16)
-    var candidate = socketDir.resolve(s"w-$short.sock")
-    var suffix = 0
-    while (Files.exists(candidate) && suffix < MAX_SOCKET_LEAF_RETRIES) {
-      suffix += 1
-      candidate = socketDir.resolve(s"w-$short-$suffix.sock")
-    }
-    if (Files.exists(candidate)) {
-      throw new IllegalStateException(
-        s"could not allocate a free UDS path under $socketDir after " +
-          s"$MAX_SOCKET_LEAF_RETRIES retries (truncated id=$short)")
-    }
-    val address = candidate.toString
-    val pathBytes = address.getBytes(StandardCharsets.UTF_8).length
-    if (pathBytes > MAX_UDS_PATH_BYTES) {
-      throw new IllegalStateException(
-        s"UDS path requires $pathBytes UTF-8 bytes but this platform allows " +
-          s"at most $MAX_UDS_PATH_BYTES: $address")
-    }
-    address
-  }
+  override protected def newEndpointAddress(workerId: String): String =
+    endpointDirectory.newEndpointAddress(workerId)
 
   override protected def connectWorker(
       address: String,
@@ -145,7 +92,6 @@ class DirectGrpcDispatcher(
             s"GrpcWorkerChannel but got ${other.getClass.getName}")
     }
     val deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(initTimeoutMs)
-    var socketTriggeredReconnect = false
     var state = grpc.channel.getState(true)
     while (state != ConnectivityState.READY) {
       if (!process.isAlive) throwWorkerExitedBeforeReady(process, address, outputFile)
@@ -157,13 +103,12 @@ class DirectGrpcDispatcher(
           s"Worker did not become reachable at $address within ${initTimeoutMs}ms\n$tail")
       }
 
-      // A failed pre-bind connection attempt enters gRPC backoff. Once the
-      // worker creates its fresh socket, reset that backoff exactly once so
-      // the channel can prove readiness without waiting for a long retry.
-      if (state == ConnectivityState.TRANSIENT_FAILURE &&
-          !socketTriggeredReconnect && Files.exists(Paths.get(address))) {
+      // A failed connection attempt enters gRPC backoff. While the worker's
+      // fresh socket exists, reset each observed backoff so a server that is
+      // still starting does not consume the initialization budget.
+      if (DirectGrpcDispatcher.shouldResetConnectBackoff(
+          state, Files.exists(Paths.get(address)))) {
         grpc.channel.resetConnectBackoff()
-        socketTriggeredReconnect = true
       }
       val stateChanged = new CountDownLatch(1)
       grpc.channel.notifyWhenStateChanged(state, () => stateChanged.countDown())
@@ -173,39 +118,10 @@ class DirectGrpcDispatcher(
     }
   }
 
-  override protected def cleanupEndpointAddress(address: String): Unit = {
-    Files.deleteIfExists(new File(address).toPath)
-  }
+  override protected def cleanupEndpointAddress(address: String): Unit =
+    endpointDirectory.cleanupEndpointAddress(address)
 
-  override protected def closeTransport(): Unit = {
-    if (!Files.exists(socketDir)) return
-    var firstFailure: IOException = null
-    def recordFailure(e: IOException): Unit = {
-      if (firstFailure == null) firstFailure = e else firstFailure.addSuppressed(e)
-    }
-    def delete(path: Path): Unit = {
-      try Files.deleteIfExists(path) catch { case e: IOException => recordFailure(e) }
-    }
-    // Recursive post-order delete: today socketDir contains only socket files
-    // at the top level, but a future change that namespaces workers into
-    // subdirectories should not silently leak them.
-    Files.walkFileTree(socketDir, new SimpleFileVisitor[Path] {
-      override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
-        delete(file)
-        FileVisitResult.CONTINUE
-      }
-      override def visitFileFailed(file: Path, exc: IOException): FileVisitResult = {
-        recordFailure(exc)
-        FileVisitResult.CONTINUE
-      }
-      override def postVisitDirectory(dir: Path, exc: IOException): FileVisitResult = {
-        if (exc != null) recordFailure(exc)
-        delete(dir)
-        FileVisitResult.CONTINUE
-      }
-    })
-    if (firstFailure != null) throw firstFailure
-  }
+  override protected def closeTransport(): Unit = endpointDirectory.close()
 
   // `spec` is the same object as the `workerSpec` field but passed
   // explicitly: at the point this runs (parent constructor body), `this`
@@ -238,8 +154,7 @@ class DirectGrpcDispatcher(
   }
 
   protected def newConnection(address: String): WorkerConnection =
-    new GrpcWorkerChannel(
-      address, logger, maxInboundMessageSize = grpcMaxInboundMessageSize)
+    new GrpcWorkerChannel(address, logger)
 
   override protected def newSession(
       workerHandle: WorkerHandle,
@@ -269,80 +184,11 @@ class DirectGrpcDispatcher(
     }
   }
 
-  /**
-   * Creates a private (owner-only, 0700) temp directory for worker sockets.
-   *
-   * On POSIX filesystems the permissions are applied atomically at creation via
-   * a file attribute, so there is '''no''' TOCTOU window. The non-POSIX branch
-   * cannot do that: `Files.createTempDirectory` first creates the directory with
-   * the platform default mask, then `File.setXxx` tightens it, leaving a brief
-   * window where the directory may be group/other-accessible. That race is an
-   * accepted limitation of the best-effort fallback -- Spark UDF workers run on
-   * POSIX in practice, the directory lives under the JVM temp dir, and a WARN is
-   * logged if the platform refuses the setters outright. Further hardening of
-   * the non-POSIX path (e.g. creating under an already-restricted parent) is out
-   * of scope here.
-   *
-   * The directory is anchored under a short base path (see [[shortTempBase]])
-   * rather than the configured `java.io.tmpdir`. Builds point the latter at a
-   * deep location (e.g. `<module>/target/tmp`), which combined with the
-   * generated socket leaf would push the worker's Unix-domain socket path past
-   * the platform `sun_path` limit (108 bytes on Linux, 104 on macOS) and fail
-   * with "AF_UNIX path too long".
-   */
-  private def createPrivateTempDirectory(): Path = {
-    val attr = PosixFilePermissions.asFileAttribute(
-      PosixFilePermissions.fromString("rwx------"))
-    val base = shortTempBase()
-    try {
-      Files.createTempDirectory(base, "spark-udf-worker", attr)
-    } catch {
-      case _: UnsupportedOperationException =>
-        val dir = Files.createTempDirectory(base, "spark-udf-worker")
-        val f = dir.toFile
-        // Bit-wise AND (NOT &&): all six setters must run even if an earlier
-        // one returns false, so the final permission state matches owner-only.
-        // && would short-circuit and silently leave permissions partially open.
-        val applied =
-          f.setReadable(false, false) & f.setWritable(false, false) &
-            f.setExecutable(false, false) & f.setReadable(true, true) &
-            f.setWritable(true, true) & f.setExecutable(true, true)
-        if (!applied) {
-          logger.warn(
-            s"Could not fully restrict permissions on $dir; socket " +
-              s"directory may be accessible to other local users on this " +
-              s"filesystem")
-        }
-        dir
-    }
-  }
+}
 
-  /**
-   * Picks the shortest usable base directory for the socket temp dir so the
-   * resulting Unix-domain socket path stays within the platform `sun_path`
-   * limit (108 bytes on Linux, 104 on macOS).
-   *
-   * This mirrors how PySpark already chooses its UDS directory in
-   * `python/run-tests.py` (`spark.python.unix.domain.socket.dir`): prefer the
-   * OS temp-dir env vars (`TMPDIR`/`TEMP`/`TMP`) and fall back to `/tmp`. Builds
-   * point `java.io.tmpdir` at a deep `<module>/target/tmp`, which combined with
-   * the generated socket leaf would overflow `sun_path`; the OS temp dir is
-   * short (e.g. a per-user `/tmp/...` on Linux runners, `/var/folders/...` via
-   * `$TMPDIR` on macOS). `java.io.tmpdir` remains the last-resort fallback.
-   */
-  private def shortTempBase(): Path = {
-    val candidates =
-      Seq("TMPDIR", "TEMP", "TMP").flatMap(sys.env.get).filter(_.nonEmpty) :+ "/tmp"
-    val usable = candidates
-      .map(Paths.get(_))
-      .filter(p => Files.isDirectory(p) && Files.isWritable(p))
-    // Netty passes the unresolved pathname spelling to the native bind call.
-    // Rank that exact spelling in UTF-8 bytes, then validate the complete
-    // generated path in newEndpointAddress.
-    def encodedLength(p: Path): Int = p.toString.getBytes(StandardCharsets.UTF_8).length
-    usable
-      .sortBy(encodedLength)
-      .headOption
-      .getOrElse(Paths.get(System.getProperty("java.io.tmpdir")))
-  }
+private[grpc] object DirectGrpcDispatcher {
+  private[grpc] def shouldResetConnectBackoff(
+      state: ConnectivityState,
+      endpointExists: Boolean): Boolean =
+    endpointExists && state == ConnectivityState.TRANSIENT_FAILURE
 }
