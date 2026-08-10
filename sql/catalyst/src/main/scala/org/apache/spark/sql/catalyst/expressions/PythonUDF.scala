@@ -123,8 +123,11 @@ object PythonUDF {
   /**
    * Whether `e` references a [[NamedLambdaVariable]] that it does not itself bind, i.e. one bound
    * by an enclosing lambda. Such an expression cannot be evaluated outside that lambda.
+   *
+   * Shared with `ExtractPythonUDFFromLambda` so the rule can re-check the nested-lambda guard on
+   * its own, rather than relying only on `CheckAnalysis` having already rejected such plans.
    */
-  private def hasFreeLambdaVariable(e: Expression): Boolean = {
+  def hasFreeLambdaVariable(e: Expression): Boolean = {
     def check(expr: Expression, bound: Set[ExprId]): Boolean = expr match {
       case LambdaFunction(function, arguments, _) =>
         check(function, bound ++ arguments.map(_.exprId))

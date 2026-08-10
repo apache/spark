@@ -5363,8 +5363,12 @@ object SQLConf {
         "function such as `transform` or `filter`. The UDF is not evaluated inside the lambda; " +
         "it is applied to the whole array outside the lambda and the lambda reads the " +
         "precomputed result. This uses an Arrow-based execution path, so PyArrow is required " +
-        "even for a UDF created with useArrow=False. When false, such queries fail with " +
-        "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF as before.")
+        "even for a UDF created with useArrow=False. Because the UDF is precomputed over the " +
+        "whole array, it runs once per element regardless of any short-circuiting (`exists`, " +
+        "`when`) in the lambda. In particular, an `array_sort` comparator that calls the UDF on " +
+        "both elements, `(a, b) -> udf(a, b)`, precomputes it over every pair, costing O(n^2) " +
+        "calls and memory for an array of length n; avoid it for large arrays. When false, such " +
+        "queries fail with UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF as before.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

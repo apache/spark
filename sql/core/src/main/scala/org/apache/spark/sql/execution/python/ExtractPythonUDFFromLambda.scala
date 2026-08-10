@@ -157,8 +157,11 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     // the sort's *argument*, not inside the comparator: `ArraySort` re-evaluates the whole
     // comparator body on every comparison, and `ExtractPythonUDFs` hoists only the `PythonUDF`
     // node - the surrounding `arrays_zip`/`transform`/`flatten`/`array_repeat` that build the cells
-    // would otherwise be rebuilt O(n^2) per comparison (O(n^3 log n) overall). `array_repeat`
-    // stores n references to the one `flatCells` array (computed once), so the carry is O(n^2).
+    // would otherwise be rebuilt O(n^2) per comparison (O(n^3 log n) overall). In interpreted
+    // evaluation `array_repeat` stores n references to the one computed `flatCells` array, so the
+    // carry is O(n^2); a later copy of the carrier into the Unsafe format would materialize each
+    // reference into O(n^3) bytes. Either way the whole pairwise path is already O(n^2) in Python
+    // calls, so it is only intended for small arrays (see the config doc).
     val posElem = NamedLambdaVariable("x", elementType, containsNull)
     val posIdx = NamedLambdaVariable("i", IntegerType, nullable = false)
     val cellsField = "cells"
@@ -279,7 +282,13 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   private def liftableHof(hof: HigherOrderFunction): Boolean =
     hof.functions.length == 1 && (hof.functions.head match {
       case LambdaFunction(body, args, _) =>
-        hasDirectRewritableUDF(body) && args.forall(_.isInstanceOf[NamedLambdaVariable])
+        hasDirectRewritableUDF(body) && args.forall(_.isInstanceOf[NamedLambdaVariable]) &&
+          // Defense in depth: `CheckAnalysis` already rejects a `hof` nested in an enclosing
+          // lambda (its argument is a free lambda variable, not a real column), but re-check here
+          // so the rule stays correct even for a plan that did not go through analysis - otherwise
+          // it could mis-rewrite `transform(arr, i -> transform(i, x -> f(x)))` and resurrect
+          // SPARK-48706 (a raw `PythonUDF` left inside a generated lambda).
+          !PythonUDF.hasFreeLambdaVariable(hof)
       case _ => false
     })
 

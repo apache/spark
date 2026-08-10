@@ -452,6 +452,88 @@ class UDFInHigherOrderFunctionTestsMixin:
             [([3, 3],)],
         )
 
+    def test_rewritable_higher_order_function_inside_outer_lambda(self):
+        # A rewritable inner HOF over a *real* column, sitting inside an outer HOF's lambda:
+        # `transform(arr2, i -> array_max(transform(arr, x -> f(x))) + i)`. Analysis accepts it
+        # (the inner `transform` iterates the real column `arr`, not the outer lambda variable),
+        # the inner UDF is lifted out of the inner lambda, and the resulting element-wise UDF stays
+        # inside the outer lambda for `ExtractPythonUDFs` to extract per row. The result must match
+        # the native computation for a deterministic UDF.
+        df = self.spark.createDataFrame([([1, 2, 3], [10, 20])], "arr array<int>, arr2 array<int>")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+
+        assertDataFrameEqual(
+            df.select(
+                sf.transform(
+                    "arr2",
+                    lambda i: sf.array_max(sf.transform("arr", lambda x: plus_one(x))) + i,
+                ).alias("r")
+            ),
+            # array_max([2, 3, 4]) = 4; 4 + 10 = 14, 4 + 20 = 24
+            [([14, 24],)],
+        )
+
+    def test_sql_string_syntax(self):
+        # The rewrite is on the analyzed plan, so it must fire for the SQL string syntax too, not
+        # only the DataFrame API.
+        self.spark.udf.register("py_plus_one", udf(lambda x: x + 1, IntegerType()))
+        with self.temp_view("t"):
+            self.spark.createDataFrame([([1, 2, 3],)], "values array<int>").createOrReplaceTempView(
+                "t"
+            )
+            assertDataFrameEqual(
+                self.spark.sql("SELECT transform(values, x -> py_plus_one(x)) AS r FROM t"),
+                [([2, 3, 4],)],
+            )
+
+    def test_kwargs_call_still_fails(self):
+        # A UDF called with a keyword argument carries a NamedArgumentExpression, which the lift
+        # cannot preserve, so it must keep failing analysis rather than being rewritten.
+        df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
+        add = udf(lambda x, y: x + y, IntegerType())
+
+        with self.assertRaises(AnalysisException) as ctx:
+            df.select(sf.transform("values", lambda x: add(x, y=sf.lit(1)))).collect()
+        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+
+    def test_decimal_timestamp_and_struct_element_types(self):
+        # Arrow conversion edge cases beyond int/double/string: decimal, timestamp, and a struct
+        # return type. Each must round-trip through the element-wise wrapper correctly.
+        import datetime
+        from decimal import Decimal
+        from pyspark.sql.types import (
+            DecimalType,
+            StructField,
+            StructType,
+            TimestampType,
+        )
+
+        dec_df = self.spark.createDataFrame(
+            [([Decimal("1.50"), Decimal("2.25")],)], "values array<decimal(5,2)>"
+        )
+        add_half = udf(lambda v: v + Decimal("0.50"), DecimalType(5, 2))
+        assertDataFrameEqual(
+            dec_df.select(sf.transform("values", lambda x: add_half(x)).alias("r")),
+            [([Decimal("2.00"), Decimal("2.75")],)],
+        )
+
+        ts_df = self.spark.createDataFrame(
+            [([datetime.datetime(2020, 1, 1, 0, 0, 0)],)], "values array<timestamp>"
+        )
+        add_day = udf(lambda t: t + datetime.timedelta(days=1), TimestampType())
+        assertDataFrameEqual(
+            ts_df.select(sf.transform("values", lambda x: add_day(x)).alias("r")),
+            [([datetime.datetime(2020, 1, 2, 0, 0, 0)],)],
+        )
+
+        struct_type = StructType([StructField("a", IntegerType()), StructField("b", IntegerType())])
+        int_df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
+        to_struct = udf(lambda v: (v, v * 10), struct_type)
+        assertDataFrameEqual(
+            int_df.select(sf.transform("values", lambda x: to_struct(x)).alias("r")),
+            [([(1, 10), (2, 20)],)],
+        )
+
     def test_integration_with_joins_grouping_and_caching(self):
         left = self.spark.createDataFrame(
             [

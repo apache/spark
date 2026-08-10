@@ -183,6 +183,20 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(udfsInsideLambda(df).isEmpty)
   }
 
+  test("a rewritable higher-order function inside another lambda leaves no UDF in any lambda") {
+    // `transform(arr2, i -> array_max(transform(arr, x -> f(x))) + i)`: the inner `transform`
+    // iterates the real column `arr` (not the outer lambda variable `i`), so it is rewritable and
+    // its UDF is lifted out of the inner lambda. The lifted element-wise UDF reads only `arr`, so
+    // `ExtractPythonUDFs` then hoists it out of the outer lambda too (evaluated once per row). The
+    // end state must leave no `PythonUDF` inside any lambda.
+    val df = Seq((Seq(1, 2, 3), Seq(10, 20))).toDF("arr", "arr2")
+      .select(transform(col("arr2"), i =>
+        org.apache.spark.sql.functions.array_max(
+          transform(col("arr"), x => pythonUDF(x).cast("int"))) + i).as("r"))
+    assert(udfsInsideLambda(df).isEmpty)
+    assert(liftedUDFs(df).size == 1)
+  }
+
   test("a lambda with no Python UDF is left unchanged") {
     val df = arrayDF.select(transform(col("values"), x => x + lit(1)).as("r"))
     val analyzed = df.queryExecution.analyzed
