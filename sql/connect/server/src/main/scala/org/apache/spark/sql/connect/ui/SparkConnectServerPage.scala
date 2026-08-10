@@ -538,10 +538,14 @@ private[ui] class SessionStatsPagedTable(
             val objectLabel = if (inMemoryModels == 1) "object" else "objects"
             <span>
               {s"$inMemoryModels $objectLabel in memory"}<br/>
-              {s"${Utils.bytesToString(status.inMemorySizeBytes)} / " +
-              s"${Utils.bytesToString(status.maxInMemorySizeBytes)} memory"}<br/>
-              {s"${Utils.bytesToString(status.totalSizeBytes)} / " +
-              s"${Utils.bytesToString(status.maxTotalSizeBytes)} total"}
+              {
+              s"${Utils.bytesToString(status.inMemorySizeBytes)} / " +
+                s"${Utils.bytesToString(status.maxInMemorySizeBytes)} memory"
+            }<br/>
+              {
+              s"${Utils.bytesToString(status.totalSizeBytes)} / " +
+                s"${Utils.bytesToString(status.maxTotalSizeBytes)} total"
+            }
             </span>
           } else {
             val cachedModels = status.models.size

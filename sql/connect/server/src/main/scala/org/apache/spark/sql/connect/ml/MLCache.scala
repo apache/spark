@@ -332,7 +332,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE),
       totalSizeBytes = totalMLCacheSizeBytes.get(),
       maxTotalSizeBytes = getMLCacheMaxSize,
-      models = models.result().toIndexedSeq.sortBy(_.id))
+      models = models.result().toIndexedSeq)
   }
 }
 
