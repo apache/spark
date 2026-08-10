@@ -19,6 +19,7 @@ package org.apache.spark.udf.worker.grpc.testing
 import java.io.IOException
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
 
@@ -54,81 +55,91 @@ object EchoGrpcWorkerMain {
     val workerId = parsed.getOrElse("id", "<unknown>")
 
     val transport = UnixDomainSocketTransport.detect()
-    val bossElg: EventLoopGroup = transport.newEventLoopGroup()
-    val workerElg: EventLoopGroup = transport.newEventLoopGroup()
-
-    // Ensure the parent directory exists; the engine should already have
-    // created it, but be defensive in case the test points at an unusual
-    // path.
     val sockFile = Paths.get(socketPath)
-    val parent = sockFile.getParent
-    if (parent != null && !Files.exists(parent)) {
-      Files.createDirectories(parent)
-    }
-    // The OS rejects bind() if the path already exists. Best-effort remove
-    // (e.g., a stale file from a previous run).
-    try { Files.deleteIfExists(sockFile) } catch { case _: IOException => () }
+    val cleanupStarted = new AtomicBoolean(false)
+    var bossElg: EventLoopGroup = null
+    var workerElg: EventLoopGroup = null
+    var server: Server = null
+    var shutdownHook: Thread = null
 
-    val server: Server = NettyServerBuilder
-      .forAddress(new DomainSocketAddress(socketPath))
-      .channelType(transport.serverChannelType)
-      .bossEventLoopGroup(bossElg)
-      .workerEventLoopGroup(workerElg)
-      .maxInboundMessageSize(GrpcWorkerChannel.DEFAULT_MAX_INBOUND_MESSAGE_SIZE)
-      .addService(new EchoWorkerService)
-      .build()
-
-    val shutdownLatch = new java.util.concurrent.CountDownLatch(1)
-
-    // SIGTERM is the engine's graceful-stop signal per the worker spec.
-    // SIGINT is added so manual testing (Ctrl-C) also shuts down cleanly.
-    val shutdownHook = new Thread(() => {
-      stderrln(s"shutdown signal received (worker=$workerId)")
+    def cleanup(): Unit = {
+      if (!cleanupStarted.compareAndSet(false, true)) return
       try {
-        server.shutdown()
-        if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
-          server.shutdownNow()
+        if (server != null) {
+          server.shutdown()
+          if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
+            server.shutdownNow()
+          }
         }
       } catch {
         case _: InterruptedException => Thread.currentThread().interrupt()
+        case NonFatal(e) => stderrln(s"failed to shut down gRPC server: ${e.getMessage}")
       } finally {
-        UnixDomainSocketTransport.shutdown(bossElg, 5000L)
-        UnixDomainSocketTransport.shutdown(workerElg, 5000L)
+        try UnixDomainSocketTransport.shutdown(bossElg, 5000L) catch {
+          case NonFatal(e) => stderrln(s"failed to shut down boss event loop: ${e.getMessage}")
+        }
+        try UnixDomainSocketTransport.shutdown(workerElg, 5000L) catch {
+          case NonFatal(e) => stderrln(s"failed to shut down worker event loop: ${e.getMessage}")
+        }
         // The dispatcher will also delete the socket file, but we delete it
         // here so a worker that ran without an engine cleans up after itself.
         try { Files.deleteIfExists(sockFile) } catch { case _: IOException => () }
-        shutdownLatch.countDown()
       }
-    }, s"echo-worker-shutdown-$workerId")
-    // This is a standalone test-worker main (no Spark on its classpath), so it
-    // cannot use Spark's ShutdownHookManager and registers the JVM hook directly.
-    // scalastyle:off runtimeaddshutdownhook
-    Runtime.getRuntime.addShutdownHook(shutdownHook)
-    // scalastyle:on runtimeaddshutdownhook
-
-    try {
-      server.start()
-      stderrln(s"listening on $socketPath (transport=${transport.name})")
-    } catch {
-      case NonFatal(e) =>
-        stderrln(s"failed to start gRPC server: ${e.getMessage}")
-        // Clean up event loops we created; the JVM is about to exit anyway,
-        // but skipping the cleanup leaks fds on test reruns.
-        UnixDomainSocketTransport.shutdown(bossElg, 5000L)
-        UnixDomainSocketTransport.shutdown(workerElg, 5000L)
-        // Remove the hook explicitly: addShutdownHook keeps the JVM alive
-        // until the hook returns, and we already did its job.
-        try { Runtime.getRuntime.removeShutdownHook(shutdownHook) } catch {
-          case _: IllegalStateException => () // JVM shutting down already
-        }
-        sys.exit(2)
     }
 
-    // Park until the shutdown hook fires.
-    server.awaitTermination()
-    // The hook's own latch is the post-shutdown gate -- wait briefly for it
-    // so the worker process exits only after fd cleanup is done.
-    shutdownLatch.await(10, TimeUnit.SECONDS)
+    try {
+      bossElg = transport.newEventLoopGroup()
+      workerElg = transport.newEventLoopGroup()
+
+      // Ensure the parent directory exists; the engine should already have
+      // created it, but be defensive in case the test points at an unusual
+      // path.
+      val parent = sockFile.getParent
+      if (parent != null && !Files.exists(parent)) {
+        Files.createDirectories(parent)
+      }
+      // The OS rejects bind() if the path already exists. Remove any stale file
+      // from a previous run on a best-effort basis.
+      try { Files.deleteIfExists(sockFile) } catch { case _: IOException => () }
+
+      server = NettyServerBuilder
+        .forAddress(new DomainSocketAddress(socketPath))
+        .channelType(transport.serverChannelType)
+        .bossEventLoopGroup(bossElg)
+        .workerEventLoopGroup(workerElg)
+        .maxInboundMessageSize(GrpcWorkerChannel.MAX_INBOUND_MESSAGE_SIZE)
+        .addService(new EchoWorkerService)
+        .build()
+
+      // SIGTERM is the engine's graceful-stop signal per the worker spec.
+      // SIGINT is added so manual testing (Ctrl-C) also shuts down cleanly.
+      shutdownHook = new Thread(() => {
+        stderrln(s"shutdown signal received (worker=$workerId)")
+        cleanup()
+      }, s"echo-worker-shutdown-$workerId")
+      // This standalone test-worker main has no Spark on its classpath, so it
+      // cannot use Spark's ShutdownHookManager and registers directly.
+      // scalastyle:off runtimeaddshutdownhook
+      Runtime.getRuntime.addShutdownHook(shutdownHook)
+      // scalastyle:on runtimeaddshutdownhook
+
+      server.start()
+      stderrln(s"listening on $socketPath (transport=${transport.name})")
+      // Park until the shutdown hook fires.
+      server.awaitTermination()
+    } catch {
+      case NonFatal(e) =>
+        stderrln(s"gRPC worker failed: ${e.getMessage}")
+        throw e
+    } finally {
+      cleanup()
+      if (shutdownHook != null) {
+        try { Runtime.getRuntime.removeShutdownHook(shutdownHook) } catch {
+          case _: IllegalStateException => () // JVM shutting down already
+          case NonFatal(e) => stderrln(s"failed to remove shutdown hook: ${e.getMessage}")
+        }
+      }
+    }
   }
   // scalastyle:on println
 

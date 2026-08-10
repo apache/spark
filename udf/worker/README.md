@@ -47,11 +47,16 @@ udf/worker/
 │     │
 │     └── direct/                 -- "direct" creation: local OS processes
 │           DirectWorkerDispatcher.scala  -- spawns processes, env lifecycle
-│           DirectWorkerProcess.scala     -- OS process + connection + UDS socket
+│           DirectWorkerProcess.scala     -- process, connection, cleanup artifacts
 │           DirectWorkerSession.scala     -- session backed by a direct process
+│           UnixDomainSocketEndpointDirectory.scala -- private UDS path lifecycle
 │
 └── grpc/                         -- gRPC transport (gRPC runtime confined here)
-      (generated)                 -- UdfWorkerGrpc service stubs from proto/udf_service.proto
+      DirectGrpcDispatcher.scala  -- launches direct workers over gRPC on UDS
+      GrpcWorkerChannel.scala     -- owns a Netty gRPC channel and event loop
+      GrpcWorkerSession.scala     -- one UDF execution over an Execute stream
+      UnixDomainSocketTransport.scala -- selects native epoll/kqueue transport
+      (generated)                 -- UdfWorkerGrpc stubs from proto/udf_service.proto
 ```
 
 The `core/` package defines abstract interfaces that are independent of how
@@ -60,9 +65,10 @@ worker creation where Spark spawns local OS processes. Future packages
 (e.g., `core/indirect/`) can implement alternative creation modes such as
 obtaining workers from a provisioning service or daemon.
 
-The `grpc/` module owns the gRPC service-stub generation (from
-`proto/`'s `udf_service.proto`) and the gRPC runtime dependencies. Keeping
-gRPC here means `proto/`, `core/`, and their consumers (`core`, `catalyst`,
+The `grpc/` module owns the concrete direct dispatcher, channel and session
+implementations, native Unix-domain-socket transport selection, gRPC service-stub
+generation (from `proto/`'s `udf_service.proto`), and the gRPC runtime dependencies.
+Keeping gRPC here means `proto/`, `core/`, and their consumers (`core`, `catalyst`,
 `sql/core`) carry no gRPC dependency on their classpath.
 
 ## Wire protocol
@@ -105,6 +111,7 @@ import org.apache.spark.udf.worker.{
   UDFWorkerSpecification, UnixDomainSocket, WorkerCapabilities,
   WorkerConnectionSpec, WorkerEnvironment}
 import org.apache.spark.udf.worker.core._
+import org.apache.spark.udf.worker.grpc.DirectGrpcDispatcher
 import com.google.protobuf.ByteString
 
 // 1. Define a worker spec (direct creation mode).
@@ -130,9 +137,8 @@ val spec = UDFWorkerSpecification.newBuilder()
     .build())
   .build()
 
-// 2. Create a dispatcher. Use a protocol-specific subclass of
-//    DirectWorkerDispatcher (e.g., gRPC over UDS).
-val dispatcher: WorkerDispatcher = ...
+// 2. Create a dispatcher that launches workers and connects over gRPC on UDS.
+val dispatcher: WorkerDispatcher = new DirectGrpcDispatcher(spec)
 
 // 3. Create a session for one UDF execution.
 val session = dispatcher.createSession(securityScope = None)
@@ -184,14 +190,13 @@ build/sbt "udf-worker-core/test" "udf-worker-grpc/test"
 
 ## Current status
 
-This is the **first MVP** providing the core abstraction layer and the
-direct worker dispatcher.
+This is the **first MVP** providing the core abstraction layer, direct worker
+creation, and a gRPC-over-UDS dispatcher and session implementation.
 The following are left as TODOs:
 
 - **Connection pooling** -- reuse workers across sessions
 - **Security scope isolation** -- partition pools by `WorkerSecurityScope`
 - **Indirect worker creation** -- obtain workers from a service or daemon
-- **Protocol-specific implementations** -- e.g., gRPC over UDS
 
 ## Design references
 

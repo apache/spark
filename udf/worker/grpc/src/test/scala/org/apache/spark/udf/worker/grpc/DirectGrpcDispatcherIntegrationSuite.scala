@@ -28,7 +28,7 @@ import org.apache.spark.udf.worker.{Cancel, DataRequest, DirectWorker, Finish, I
   ProcessCallable, UdfPayload, UDFProtoCommunicationPattern, UDFWorkerDataFormat,
   UDFWorkerProperties, UDFWorkerSpecification, UnixDomainSocket, WorkerCapabilities,
   WorkerConnectionSpec}
-import org.apache.spark.udf.worker.core.WorkerSession
+import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerSession}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerProcess, DirectWorkerTimeoutException}
 import org.apache.spark.udf.worker.grpc.testing.EchoGrpcWorkerMain
 
@@ -164,12 +164,36 @@ class DirectGrpcDispatcherIntegrationSuite
       .addCommand(socketOnlyWorker)
       .addCommand("--")
       .build()
-    dispatcher = new DirectGrpcDispatcher(workerSpec(runner, initTimeoutMs = 1000))
+    var failedProcess: Process = null
+    var failedConnection: GrpcWorkerChannel = null
+    dispatcher = new DirectGrpcDispatcher(workerSpec(runner, initTimeoutMs = 1000)) {
+      override protected def connectWorker(
+          address: String,
+          process: Process,
+          outputFile: File): WorkerConnection = {
+        failedProcess = process
+        super.connectWorker(address, process, outputFile)
+      }
+
+      override protected def newConnection(address: String): WorkerConnection = {
+        val connection = super.newConnection(address)
+        failedConnection = connection.asInstanceOf[GrpcWorkerChannel]
+        connection
+      }
+    }
 
     val error = intercept[DirectWorkerTimeoutException] {
       dispatcher.createSession(None)
     }
     assert(error.getMessage.contains("did not become reachable"))
     assert(error.getMessage.contains("socket-created"))
+    assert(failedProcess != null, "the failed worker process should have been captured")
+    assert(!failedProcess.isAlive, "the failed worker process should be reaped")
+    assert(failedConnection != null, "the failed worker connection should have been captured")
+    assert(failedConnection.channel.isShutdown, "the failed gRPC channel should be shut down")
+    assert(failedConnection.isEventLoopTerminated,
+      "the failed gRPC channel's event loop should be terminated")
+    assert(!new File(failedConnection.socketPath).exists(),
+      "the failed worker socket should be removed")
   }
 }

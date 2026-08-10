@@ -45,9 +45,9 @@ import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerLogger}
  * ownership.
  *
  * Lifecycle:
- *  - [[isActive]] is true while the channel reports any non-`SHUTDOWN` state.
- *    Transient failures keep the connection usable -- gRPC will reconnect on
- *    the next RPC.
+ *  - [[isActive]] is true until this wrapper is closed and while the channel
+ *    reports a non-`SHUTDOWN` state. Transient failures keep the connection
+ *    usable -- gRPC will reconnect on the next RPC.
  *  - [[close]] shuts the channel down and drains the event loop. Idempotent.
  *
  * Construction does NOT block on the worker actually being reachable; the
@@ -57,25 +57,12 @@ import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerLogger}
  *
  * @param socketPath path of the UDS the worker server binds.
  * @param logger logger for shutdown diagnostics; defaults to NoOp.
- * @param shutdownPhaseTimeoutMs upper bound on each individual phase of
- *                               close() -- graceful channel drain, forced
- *                               channel drain, and event-loop drain are
- *                               three separate phases that each get this
- *                               budget. Total worst-case close time is up
- *                               to three times this value. Defaults to 5s
- *                               per phase.
- * @param maxInboundMessageSize maximum serialized response size accepted by
- *                              the gRPC channel. Defaults to 128 MiB.
  */
 @Experimental
 class GrpcWorkerChannel(
     val socketPath: String,
-    logger: WorkerLogger = WorkerLogger.NoOp,
-    shutdownPhaseTimeoutMs: Long = GrpcWorkerChannel.DEFAULT_SHUTDOWN_PHASE_TIMEOUT_MS,
-    maxInboundMessageSize: Int = GrpcWorkerChannel.DEFAULT_MAX_INBOUND_MESSAGE_SIZE)
+    logger: WorkerLogger = WorkerLogger.NoOp)
   extends WorkerConnection {
-
-  require(maxInboundMessageSize > 0, "maxInboundMessageSize must be positive")
 
   private val transport: UnixDomainSocketTransport = UnixDomainSocketTransport.detect()
   private val eventLoopGroup: EventLoopGroup = transport.newEventLoopGroup()
@@ -89,12 +76,13 @@ class GrpcWorkerChannel(
       .forAddress(new DomainSocketAddress(socketPath))
       .channelType(transport.channelType)
       .eventLoopGroup(eventLoopGroup)
-      .maxInboundMessageSize(maxInboundMessageSize)
+      .maxInboundMessageSize(GrpcWorkerChannel.MAX_INBOUND_MESSAGE_SIZE)
       .usePlaintext()
       .build()
   } catch {
     case NonFatal(e) =>
-      UnixDomainSocketTransport.shutdown(eventLoopGroup, shutdownPhaseTimeoutMs)
+      UnixDomainSocketTransport.shutdown(
+        eventLoopGroup, GrpcWorkerChannel.SHUTDOWN_PHASE_TIMEOUT_MS)
       throw e
   }
 
@@ -104,6 +92,8 @@ class GrpcWorkerChannel(
     if (closed.get()) return false
     channel.getState(false) != ConnectivityState.SHUTDOWN
   }
+
+  private[grpc] def isEventLoopTerminated: Boolean = eventLoopGroup.isTerminated
 
   /**
    * Idempotently tears down the channel and event loop. Steps are guarded so
@@ -115,9 +105,11 @@ class GrpcWorkerChannel(
 
     try {
       channel.shutdown()
-      if (!channel.awaitTermination(shutdownPhaseTimeoutMs, TimeUnit.MILLISECONDS)) {
+      if (!channel.awaitTermination(
+          GrpcWorkerChannel.SHUTDOWN_PHASE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
         channel.shutdownNow()
-        channel.awaitTermination(shutdownPhaseTimeoutMs, TimeUnit.MILLISECONDS)
+        channel.awaitTermination(
+          GrpcWorkerChannel.SHUTDOWN_PHASE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }
     } catch {
       case _: InterruptedException =>
@@ -127,7 +119,8 @@ class GrpcWorkerChannel(
     }
 
     try {
-      UnixDomainSocketTransport.shutdown(eventLoopGroup, shutdownPhaseTimeoutMs)
+      UnixDomainSocketTransport.shutdown(
+        eventLoopGroup, GrpcWorkerChannel.SHUTDOWN_PHASE_TIMEOUT_MS)
     } catch {
       case NonFatal(e) =>
         logger.warn(s"Error shutting down event loop for $socketPath", e)
@@ -137,12 +130,7 @@ class GrpcWorkerChannel(
 
 object GrpcWorkerChannel {
   /** Matches Spark Connect's default and accommodates normal Arrow batches. */
-  val DEFAULT_MAX_INBOUND_MESSAGE_SIZE: Int = 128 * 1024 * 1024
+  private[grpc] val MAX_INBOUND_MESSAGE_SIZE: Int = 128 * 1024 * 1024
 
-  /**
-   * Default per-phase upper bound on close() drain time. Each of the three
-   * drain phases (graceful channel, forced channel, event loop) is capped
-   * by this value, so total worst-case close time is up to 3x.
-   */
-  val DEFAULT_SHUTDOWN_PHASE_TIMEOUT_MS: Long = 5000L
+  private val SHUTDOWN_PHASE_TIMEOUT_MS: Long = 5000L
 }
