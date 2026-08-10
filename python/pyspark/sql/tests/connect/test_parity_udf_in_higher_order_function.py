@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import unittest
+
 from pyspark.sql.tests.test_udf_in_higher_order_function import (
     UDFInHigherOrderFunctionTestsMixin,
 )
@@ -24,7 +26,9 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class UDFInHigherOrderFunctionParityTests(
     UDFInHigherOrderFunctionTestsMixin, ReusedConnectTestCase
 ):
-    pass
+    @unittest.skip("Asserts on the JVM optimized plan via _jdf, unavailable in Spark Connect.")
+    def test_lambda_without_udf_is_unchanged(self):
+        super().test_lambda_without_udf_is_unchanged()
 
 
 if __name__ == "__main__":
