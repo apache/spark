@@ -30,7 +30,7 @@ The discovery file, the daemon's pid file, and the logs live in a per-user ``070
 under the system temp dir; ``SPARK_LOCAL_CONNECT_DISCOVERY`` overrides the discovery file
 location. The auth token is stored with ``0600`` and the server always binds IPv4 loopback,
 overriding any configured binding address, so other users on the machine can neither read the
-token nor reach the server. Processes of the same user share the server by design.
+token nor authenticate to the server. Processes of the same user share the server by design.
 
 The server runs until stopped with ``python -m pyspark.sql.connect.local_server --stop``.
 (A plain ``sbin/stop-connect-server.sh`` cannot find it: the daemon runs with a custom pid
