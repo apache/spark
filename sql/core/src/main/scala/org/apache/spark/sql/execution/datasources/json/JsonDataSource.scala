@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -35,7 +35,7 @@ import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -84,13 +84,16 @@ abstract class JsonDataSource extends Serializable with Logging with SupportsArc
    * and is intentionally left untouched.
    *
    * @param parser builds a fresh JSON parser for each entry.
+   * @param archivePathFilter optional glob matched against the entry's full path
    */
   def readArchive(
       conf: Configuration,
       file: PartitionedFile,
       parser: () => JacksonParser,
-      schema: StructType): Iterator[InternalRow] =
-    SupportsArchiveFormat.readArchiveEntries(file.toPath, conf) { (_, in) =>
+      schema: StructType,
+      archivePathFilter: Option[GlobPattern]): Iterator[InternalRow] =
+    SupportsArchiveFormat.readArchiveEntries(
+        file.toPath, conf, archivePathFilter = archivePathFilter) { (_, in) =>
       readStream(in, parser(), schema)
     }
 
@@ -284,22 +287,34 @@ object MultiLineJsonDataSource extends JsonDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType = {
     val baseRdd = JsonDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
+    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
+    // compiles it once when the archive branch is taken.
+    val archivePathFilterGlob = parsedOptions.archivePathFilter
     val encoding = parsedOptions.encoding
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
 
     // An archive entry's stream is only valid until the shared cursor advances, so each document
     // must be consumed before the next is pulled; `JsonInferSchema.infer` does.
-    val docs: RDD[InputStream] = baseRdd.flatMap { stream =>
-      val path = new Path(stream.getPath())
-      skipInputOnError(stream.getPath(), ignoreMissingFiles, ignoreCorruptFiles) {
-        if (SupportsArchiveFormat.isArchivePath(path)) {
-          SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
-            Iterator.single(in)
+    val docs: RDD[InputStream] = baseRdd.mapPartitions { streams =>
+      // Compile at most once per partition: lazy so a partition of only loose files never
+      // compiles, while a partition with archives reuses one matcher across all of them.
+      lazy val archivePathFilter =
+        archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      streams.flatMap { stream =>
+        val path = new Path(stream.getPath())
+        skipInputOnError(stream.getPath(), ignoreMissingFiles, ignoreCorruptFiles) {
+          if (SupportsArchiveFormat.isArchivePath(path)) {
+            SupportsArchiveFormat.readArchiveEntries(
+              path, stream.getConfiguration, archivePathFilter = archivePathFilter) {
+              (_, in) =>
+              Iterator.single(in)
+            }
+          } else {
+            Iterator.single(
+              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
           }
-        } else {
-          Iterator.single(
-            CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
         }
       }
     }

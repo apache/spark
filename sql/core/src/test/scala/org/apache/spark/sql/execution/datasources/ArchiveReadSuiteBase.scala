@@ -357,9 +357,74 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     }
   }
 
+  // ----- shared archivePathFilter tests --------------------------------------
+
+  test("archivePathFilter selects inner entries by full path") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(
+        s"top.$fileExtension" -> encodeFile(sampleDf((1, "top"))),
+        s"sub/keep.$fileExtension" -> encodeFile(sampleDf((2, "keep"))),
+        s"other/skip.$fileExtension" -> encodeFile(sampleDf((3, "skip")))))
+      // `sub/*` matches the full inner path, so only the entry under `sub/` is ingested.
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("archivePathFilter" -> "sub/*")).select("id", "name"),
+        Seq(Row(2, "keep")))
+    }
+  }
+
+  test("archivePathFilter with an extension glob selects across subdirectories") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(
+        s"top.$fileExtension" -> encodeFile(sampleDf((1, "top"))),
+        s"sub/nested.$fileExtension" -> encodeFile(sampleDf((2, "nested"))),
+        "sub/skip.other" -> encodeFile(sampleDf((3, "skip")))))
+      // `*` crosses `/`, so the glob keeps both entries of this extension at any depth, while the
+      // entry with a different extension is filtered out.
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("archivePathFilter" -> s"*.$fileExtension"))
+          .select("id", "name"),
+        Seq(Row(1, "top"), Row(2, "nested")))
+    }
+  }
+
+  test("archivePathFilter matching no entry yields no rows") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(s"data.$fileExtension" -> encodeFile(sampleDf((1, "Alice")))))
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("archivePathFilter" -> "nomatch/*")), Seq.empty[Row])
+    }
+  }
+
+  test("archivePathFilter applies in addition to ignoredPathSegmentRegex") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(
+        s"keep/data.$fileExtension" -> encodeFile(sampleDf((1, "keep"))),
+        // Matches the glob, but the hidden-file filter still drops the `_`-prefixed entry.
+        s"keep/_hidden.$fileExtension" -> encodeFile(sampleDf((2, "hidden")))))
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("archivePathFilter" -> "keep/*")).select("id", "name"),
+        Seq(Row(1, "keep")))
+    }
+  }
+
   // ----- shared schema-inference tests (run when `supportsSchemaInference`) --
 
   if (supportsSchemaInference) {
+    test("archivePathFilter applies to schema inference, not just the scan") {
+      // The excluded entry carries a column the kept entry lacks. Inference must skip it, otherwise
+      // the inferred schema is a superset of what the scan returns and `extra` reads back all-null.
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq(
+          s"keep/data.$fileExtension" -> encodeFile(sampleDf((1, "keep"))),
+          s"skip/data.$fileExtension" ->
+            encodeFile(Seq((2, "skip", "x")).toDF("id", "name", "extra"))))
+        val schema = inferredSchema(
+          Seq(archive.getCanonicalPath), Map("archivePathFilter" -> "keep/*"))
+        assert(!schema.fieldNames.contains("extra"),
+          s"inference read a filtered-out entry; got $schema")
+      }
+    }
+
     test("archive infers the same schema as a directory of the same files") {
       val entries = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
         .zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) }
