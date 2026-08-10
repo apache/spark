@@ -201,13 +201,15 @@ private[spark] object SparkCoreErrors {
 
   def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3021", messageParameters = Map.empty, cause = e
+      errorClass = "SCHEDULER_BACKEND_SHUTDOWN_FAILED.EXECUTORS",
+      messageParameters = Map.empty, cause = e
     )
   }
 
   def stopStandaloneSchedulerDriverEndpointError(e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3022", messageParameters = Map.empty, cause = e
+      errorClass = "SCHEDULER_BACKEND_SHUTDOWN_FAILED.DRIVER_ENDPOINT",
+      messageParameters = Map.empty, cause = e
     )
   }
 
@@ -242,9 +244,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def cannotRunSubmitMapStageOnZeroPartitionRDDError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3023", messageParameters = Map.empty, cause = null
-    )
+    SparkException.internalError("Can't run submitMapStage on RDD with 0 partitions.")
   }
 
   def accessNonExistentAccumulatorError(id: Long): Throwable = {
@@ -260,8 +260,10 @@ private[spark] object SparkCoreErrors {
     new TimeoutException(s"The event queue is not empty after $timeoutMillis ms.")
   }
 
-  def durationCalledOnUnfinishedTaskError(): Throwable = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3026")
+  def durationCalledOnUnfinishedTaskError(className: String, methodName: String): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_CALL.TASK_NOT_FINISHED",
+      messageParameters = Map("className" -> className, "methodName" -> methodName))
   }
 
   def sparkError(errorMsg: String): Throwable = {
@@ -274,7 +276,7 @@ private[spark] object SparkCoreErrors {
 
   def clusterSchedulerError(message: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3029",
+      errorClass = "CLUSTER_MANAGER_APPLICATION_FAILURE",
       messageParameters = Map("message" -> message),
       cause = null
     )
