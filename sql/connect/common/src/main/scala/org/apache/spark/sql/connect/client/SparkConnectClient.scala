@@ -408,6 +408,13 @@ private[sql] class SparkConnectClient(
               .build())
         case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION =>
           builder.setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder().build())
+        case proto.AnalyzePlanRequest.AnalyzeCase.GET_NUM_PARTITIONS =>
+          assert(maybeCompressedPlan.isDefined)
+          builder.setGetNumPartitions(
+            proto.AnalyzePlanRequest.GetNumPartitions
+              .newBuilder()
+              .setPlan(maybeCompressedPlan.get)
+              .build())
         case other => throw new IllegalArgumentException(s"Unknown Analyze request $other")
       }
       analyze(builder)
