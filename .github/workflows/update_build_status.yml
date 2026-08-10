@@ -121,27 +121,29 @@ jobs:
                 if (pr.mergeable_state == null || maybeReady.includes(pr.mergeable_state)) {
                   const checkRuns = await listCheckRuns(pr.head.sha)
 
-                  // Track whether a syncable Build check exists. notify_test_workflow.yml creates
-                  // one once per push; if that job never completed (e.g. cancelled while starved
-                  // of an ASF runner) the check is missing and we backfill it after the loop. An
-                  // action_required check does NOT count as syncable: notify writes it when it
-                  // missed the fork run, and the sync loop skips it, so a stale one would strand
-                  // the PR forever. Leaving syncableBuildCheck false for it lets the backfill
-                  // below re-poll the fork and create a queued replacement once a run appears.
-                  // Sync every matching Build check (no early break): a SHA can carry more than
-                  // one (reopened PRs, or a backfill that raced notify_test_workflow.yml). Branch
-                  // protection evaluates the newest check-run of a given name, so syncing only
-                  // the first would leave a newer duplicate stuck in 'queued' and block the PR.
+                  // Does this SHA already carry an action_required Build check? notify (or an
+                  // earlier pass of this updater) writes one when no fork run was found. It is
+                  // not syncable, so it never suppresses the backfill below - which means a PR
+                  // that permanently lacks a fork run (Actions disabled, old master) would
+                  // otherwise re-poll on every 15-minute pass forever. When one is already
+                  // present, the backfill's re-poll is unnecessary (see below).
+                  const hasActionRequiredBuildCheck = checkRuns.some(isActionRequiredBuildCheck)
+
+                  // Track whether a syncable Build check exists (see isSyncableBuildCheck).
+                  // notify_test_workflow.yml creates one per push; if that job never completed
+                  // (e.g. cancelled while starved of an ASF runner) the check is missing and the
+                  // backfill after this loop recreates it. Sync every match (no early break): a
+                  // SHA can carry more than one Build check (reopened PRs, or a backfill that
+                  // raced notify). Branch protection evaluates the newest check-run of a given
+                  // name, so syncing only the first would leave a newer duplicate stuck in
+                  // 'queued' and block the PR.
                   let syncableBuildCheck = false
                   for await (const cr of checkRuns) {
                     if (cr.name == 'Build' && cr.conclusion != "action_required") {
-                      // output text carries the {owner, repo, run_id} request parameters. A Build
-                      // check created by something other than notify_test_workflow.yml (an older
-                      // version, a manual run, or another app) may have empty, malformed, or
-                      // fieldless output text; skip it instead of aborting the whole scheduled
-                      // run, which would block updates for every PR queued behind it. Such a
-                      // check is not syncable, so leave syncableBuildCheck false and let the
-                      // backfill below replace it rather than leave the PR stuck.
+                      // Skip a check with unusable output (see parseRunParams) instead of
+                      // aborting the whole scheduled run, which would block every PR queued
+                      // behind it. Leaving syncableBuildCheck false lets the backfill below
+                      // replace it rather than stranding the PR.
                       const params = parseRunParams(cr)
                       if (!params) {
                         console.error('Skipping Build check ' + cr.id + ' with unusable output')
@@ -206,9 +208,16 @@ jobs:
                     // after a push, and we must not create the sticky action_required check below
                     // over registration lag. A transient lookup error (5xx, network, rate limit)
                     // aborts to a later scheduled pass; any other error is treated as "no runs".
+                    //
+                    // When an action_required check already exists that lag risk is already
+                    // realized, so a single sleepless lookup suffices - this stops a PR that
+                    // permanently lacks a fork run (Actions disabled, old master) from re-polling
+                    // (3 lookups plus two 3s sleeps) on every 15-minute pass forever, while still
+                    // promoting it to a queued check on whichever pass first sees a run appear.
+                    const attempts = hasActionRequiredBuildCheck ? 1 : 3
                     let matched_run
                     let transient = false
-                    for (let attempt = 0; attempt < 3; attempt++) {
+                    for (let attempt = 0; attempt < attempts; attempt++) {
                       let forkRuns
                       try {
                         const runs = await github.request(
@@ -237,12 +246,24 @@ jobs:
                       if (matched_run) {
                         break
                       }
-                      if (attempt < 2) {
+                      if (attempt < attempts - 1) {
                         await new Promise(resolve => setTimeout(resolve, 3000))
                       }
                     }
                     if (transient) {
                       console.log('  Fork run lookup failed transiently; will retry next pass')
+                      continue
+                    }
+
+                    // An action_required Build check already exists and we still found no run:
+                    // the guidance check the no-run branch below would create is already present,
+                    // so there is nothing to backfill. Skip the recheck listing and the create
+                    // outright. (This is only reachable via the single, sleepless lookup above,
+                    // so there was no ~6s window for notify to have created a syncable check in
+                    // the meantime; even if it had, skipping is safe - with no run there is
+                    // nothing to promote to 'queued' this pass anyway.)
+                    if (hasActionRequiredBuildCheck && !matched_run) {
+                      console.log('  action_required Build check present; nothing to backfill')
                       continue
                     }
 
