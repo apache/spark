@@ -318,13 +318,6 @@ case class VariantFromEntries(child: Expression)
 
   override protected def nullSafeEval(input: Any): Any = {
     val entries = input.asInstanceOf[ArrayData]
-    if (nullEntries) {
-      var i = 0
-      while (i < entries.numElements()) {
-        if (entries.isNullAt(i)) return null
-        i += 1
-      }
-    }
     VariantExpressionEvalUtils.variantFromEntries(entries, valueType)
   }
 
@@ -332,9 +325,10 @@ case class VariantFromEntries(child: Expression)
     nullSafeCodeGen(ctx, ev, c => {
       val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
       val valueTypeArg = ctx.addReferenceObj("valueType", valueType)
-      ctx.nullArrayElementsSaveExec(nullEntries, ev.isNull, c) {
-        s"${ev.value} = $cls.variantFromEntries($c, $valueTypeArg);"
-      }
+      s"""
+         |${ev.value} = $cls.variantFromEntries($c, $valueTypeArg);
+         |${ev.isNull} = ${ev.value} == null;
+       """.stripMargin
     })
   }
 }
