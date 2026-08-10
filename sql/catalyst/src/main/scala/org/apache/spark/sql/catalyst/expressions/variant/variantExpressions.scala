@@ -325,9 +325,14 @@ case class VariantFromEntries(child: Expression)
     nullSafeCodeGen(ctx, ev, c => {
       val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
       val valueTypeArg = ctx.addReferenceObj("valueType", valueType)
+      // nullSafeCodeGen only declares `ev.isNull` as a local when this expression is
+      // nullable; when it isn't, entries can never contain a null and the helper can never
+      // return null, so the reassignment must be skipped rather than referencing an
+      // undeclared variable.
+      val markNull = if (nullable) s"${ev.isNull} = ${ev.value} == null;" else ""
       s"""
          |${ev.value} = $cls.variantFromEntries($c, $valueTypeArg);
-         |${ev.isNull} = ${ev.value} == null;
+         |$markNull
        """.stripMargin
     })
   }

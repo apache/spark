@@ -1019,6 +1019,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StructsToJson(Map.empty,
       entriesOf(Array(Row("a", 1), null), IntegerType, containsNull = true)), null)
 
+    // A null entry dominates a value-conversion failure in an earlier entry (matches
+    // map_from_entries: the null check runs for every entry before any value is converted).
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", Row(1, 2)), null),
+        StructType(Seq(StructField("x", IntegerType), StructField("x", IntegerType))),
+        containsNull = true)), null)
+
     // A null array input produces null.
     checkEvaluation(StructsToJson(Map.empty, VariantFromArrays(
       Literal.create(null, ArrayType(StringType)),

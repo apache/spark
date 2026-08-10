@@ -314,20 +314,27 @@ object VariantExpressionEvalUtils {
 
   /**
    * Build a variant object directly from an array of key/value struct entries, without an
-   * intermediate map. Keys must be non-null strings. A null key raises `NULL_MAP_KEY`, a
-   * duplicate key raises `VARIANT_DUPLICATE_KEY`, null values are kept as variant null, and a
-   * null entry makes the whole result null.
+   * intermediate map. Keys must be non-null strings. A null entry makes the whole result null,
+   * and this is checked for every entry before any value is converted, so a null entry always
+   * dominates a conversion failure in an earlier entry (matching `map_from_entries`). A null key
+   * raises `NULL_MAP_KEY`, a duplicate key raises `VARIANT_DUPLICATE_KEY`, and null values are
+   * kept as variant null.
    */
   def variantFromEntries(entries: ArrayData, valueType: DataType): VariantVal = {
-    val builder = new VariantBuilder(false)
-    val start = builder.getWritePos
     val numElements = entries.numElements()
-    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numElements)
     var i = 0
     while (i < numElements) {
       if (entries.isNullAt(i)) {
         return null
       }
+      i += 1
+    }
+
+    val builder = new VariantBuilder(false)
+    val start = builder.getWritePos
+    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numElements)
+    i = 0
+    while (i < numElements) {
       val entry = entries.getStruct(i, 2)
       if (entry.isNullAt(0)) {
         throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
