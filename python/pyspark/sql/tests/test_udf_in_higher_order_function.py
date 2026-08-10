@@ -732,6 +732,57 @@ class UDFInHigherOrderFunctionTestsMixin:
             [([2, 3, 4],), ([],), (None,), ([11, 21],), ([6],)],
         )
 
+    def test_scalar_pandas_iter_udf_multiple_arguments_differ_in_type(self):
+        # A two-argument iterator UDF whose arguments have different element types: the array
+        # element (int) and an outer column (string) that the rewrite repeats into an aligned
+        # array. Each argument must be flattened with its own element type, not the first's.
+        from typing import Iterator, Tuple
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3], "a"), ([], "b"), (None, "c"), ([10], "d")],
+            "values array<int>, tag string",
+        )
+
+        @pandas_udf(StringType())
+        def tag_each(it: Iterator[Tuple[pd.Series, pd.Series]]) -> Iterator[pd.Series]:
+            for x, t in it:
+                yield t + x.astype("string")
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: tag_each(x, sf.col("tag"))).alias("r")),
+            [(["a1", "a2", "a3"],), ([],), (None,), (["d10"],)],
+        )
+
+    def test_scalar_pandas_iter_udf_timestamp_return_type(self):
+        # A timestamp-returning pandas iterator UDF with a non-UTC session timezone: the result
+        # chunks are typed with the session timezone, so the streamed buffer must take its type
+        # from the first chunk rather than assuming UTC, or pa.concat_arrays would fail. Assert
+        # against the equivalent non-iterator pandas UDF - both go through the same session-timezone
+        # typing, so this isolates the concat fix without depending on absolute timezone offsets.
+        from typing import Iterator
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.types import TimestampType
+
+        with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
+            df = self.spark.createDataFrame([([1, 2],), (None,), ([3],)], "values array<int>")
+
+            @pandas_udf(TimestampType())
+            def to_ts(s: pd.Series) -> pd.Series:
+                return pd.to_datetime(s, unit="D", origin="2020-01-01")
+
+            @pandas_udf(TimestampType())
+            def to_ts_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+                for s in it:
+                    yield pd.to_datetime(s, unit="D", origin="2020-01-01")
+
+            assertDataFrameEqual(
+                df.select(sf.transform("values", lambda x: to_ts_iter(x)).alias("r")),
+                df.select(sf.transform("values", lambda x: to_ts(x)).alias("r")),
+            )
+
     def test_non_arrow_udf_is_also_supported(self):
         # A UDF created with useArrow=False is still rewritable; the generated array wrapper
         # is Arrow-based regardless of how the user's UDF was declared.

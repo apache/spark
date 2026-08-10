@@ -1858,14 +1858,15 @@ def _elementwise_renest(flat_values, shape_lengths, is_large):
     return list_cls.from_arrays(offsets_arr, flat_values, mask=null_mask), running
 
 
-def _elementwise_flatten_arg(column, element_type, is_pandas, runner_conf):
-    """Flatten one ``array<T>`` argument column to the vectorized function's per-argument input.
+def _elementwise_flatten_column(flat, element_type, is_pandas, runner_conf):
+    """Adapt one already-flattened ``array<T>`` element column to the vectorized fn's input.
 
-    Returns the flattened element column as a pandas Series / DataFrame (pandas flavor) or a
-    ``pa.Array`` (Arrow flavor). Shared by the vectorized element-wise worker paths that back Python
-    UDFs inside higher-order function lambdas. See ``ExtractPythonUDFFromLambda``.
+    ``flat`` is the flattened element ``pa.Array`` (the caller flattens once per batch and shares it
+    across fused UDFs). Returns it unchanged for the Arrow flavor, or converted to a pandas Series /
+    DataFrame with the element type ``T`` for the pandas flavor. Shared by the vectorized
+    element-wise worker paths that back Python UDFs inside higher-order function lambdas. See
+    ``ExtractPythonUDFFromLambda``.
     """
-    flat = column.flatten()
     if not is_pandas:
         return flat
     from pyspark.sql.conversion import ArrowArrayToPandasConversion
@@ -1885,8 +1886,11 @@ def _elementwise_result_to_arrow(result, return_type, arrow_element_type, is_pan
     """Convert one vectorized UDF result over the flat elements to a single flat Arrow Array.
 
     ``result`` is a pandas Series / DataFrame (pandas flavor) or a ``pa.Array`` (Arrow flavor); the
-    returned array holds one element per input element, typed as the declared element type. Shared
-    by the vectorized element-wise worker paths. See ``ExtractPythonUDFFromLambda``.
+    returned array holds one element per input element. The Arrow flavor is coerced to
+    ``arrow_element_type`` (UTC-typed); the pandas flavor is typed by ``PandasToArrowConversion``
+    using the session timezone, so its timestamp type may differ from ``arrow_element_type`` -
+    callers that concatenate results must take the type from the returned array, not assume UTC.
+    Shared by the vectorized element-wise worker paths. See ``ExtractPythonUDFFromLambda``.
     """
     import pyarrow as pa
 
@@ -1907,6 +1911,8 @@ def _elementwise_result_to_arrow(result, return_type, arrow_element_type, is_pan
             pa.schema([pa.field("_0", arrow_element_type)]),
             safecheck=runner_conf.safecheck,
         )
+    # PandasToArrowConversion / enforce_schema both return a pa.RecordBatch, so column(0) is a
+    # single pa.Array (never a ChunkedArray).
     return batch.column(0)
 
 
@@ -3251,46 +3257,64 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             )
         col_names = [f"_{i}" for i in range(len(udfs))]
 
+        if is_pandas:
+            import pandas as pd
+
         # Each argument is ``array<T>``; the vectorized function must see the element type ``T``.
         element_types = [f.dataType.elementType for f in eval_conf.input_type]
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             for input_batch in data:
+                # Flatten each list column to its element array once per batch and share it across
+                # fused UDFs (the 102 path does the same), rather than re-flattening per UDF.
+                flat_columns = [
+                    _elementwise_flatten_column(
+                        col.flatten(), element_types[i], is_pandas, runner_conf
+                    )
+                    for i, col in enumerate(input_batch.itercolumns())
+                ]
+
                 output_arrays = []
                 for wrapped_func, offsets, return_type, arrow_element_type in udf_infos:
-                    flat_args = [
-                        _elementwise_flatten_arg(
-                            input_batch.column(o), element_types[o], is_pandas, runner_conf
-                        )
-                        for o in offsets
-                    ]
                     # Re-nest by this UDF's first argument's shape. Different UDFs in one operator
                     # may iterate differently shaped arrays, so each re-nests by its own argument.
                     shape = input_batch.column(offsets[0])
                     shape_lengths = pc.list_value_length(shape).to_pylist()
+                    total_elements = sum(n for n in shape_lengths if n is not None)
 
-                    result = wrapped_func(*flat_args)
-                    if is_pandas and not hasattr(result, "__len__"):
-                        pd_type = (
-                            "pandas.DataFrame"
-                            if isinstance(return_type, StructType)
-                            else "pandas.Series"
-                        )
-                        raise PySparkTypeError(
-                            errorClass="UDF_RETURN_TYPE",
-                            messageParameters={
-                                "expected": pd_type,
-                                "actual": type(result).__name__,
-                            },
-                        )
+                    result = wrapped_func(*[flat_columns[o] for o in offsets])
+                    if is_pandas:
+                        if not hasattr(result, "__len__"):
+                            pd_type = (
+                                "pandas.DataFrame"
+                                if isinstance(return_type, StructType)
+                                else "pandas.Series"
+                            )
+                            raise PySparkTypeError(
+                                errorClass="UDF_RETURN_TYPE",
+                                messageParameters={
+                                    "expected": pd_type,
+                                    "actual": type(result).__name__,
+                                },
+                            )
+                        # struct return type must be a DataFrame (matches the base pandas path).
+                        if isinstance(return_type, StructType) and not isinstance(
+                            result, pd.DataFrame
+                        ):
+                            raise PySparkValueError(
+                                "Invalid return type. Please make sure that the UDF returns a "
+                                "pandas.DataFrame when the specified return type is StructType."
+                            )
+                    # Verify the flat length before re-nesting so a wrong-length result raises the
+                    # friendly RESULT_ROWS_MISMATCH rather than an opaque pyarrow offset error.
+                    verify_result_row_count(len(result), total_elements)
 
                     flat_arr = _elementwise_result_to_arrow(
                         result, return_type, arrow_element_type, is_pandas, runner_conf
                     )
-                    nested, total_elements = _elementwise_renest(
+                    nested, _ = _elementwise_renest(
                         flat_arr, shape_lengths, pa.types.is_large_list(shape.type)
                     )
-                    verify_result_row_count(len(flat_arr), total_elements)
                     output_arrays.append(nested)
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
@@ -3326,7 +3350,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # output to input positionally by row (one ``array<R>`` per input ``array<T>`` row, in
         # order), buffering a FIFO of the per-row element counts to re-group the streamed flat
         # results back into arrays. Output batch boundaries need not match input ones.
-        element_type = eval_conf.input_type[args_offsets[0]].dataType.elementType
+        # Each argument is ``array<T>``; the pandas function must see each argument's own element
+        # type ``T`` (arguments may differ, e.g. an outer column repeated into an aligned array).
+        element_types = [f.dataType.elementType for f in eval_conf.input_type]
         arrow_element_type = to_arrow_type(
             return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
@@ -3345,10 +3371,11 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     is_large = pa.types.is_large_list(shape.type)
                 pending_shapes.append(pc.list_value_length(shape).to_pylist())
                 # Flatten each argument to its element column; the user function sees the flat
-                # elements as a pandas Series / DataFrame (pandas) or a pa.Array (Arrow).
+                # elements as a pandas Series / DataFrame (pandas) or a pa.Array (Arrow). Each
+                # argument is converted with its own element type.
                 flat_cols = [
-                    _elementwise_flatten_arg(
-                        batch.column(o), element_type, is_pandas, runner_conf
+                    _elementwise_flatten_column(
+                        batch.column(o).flatten(), element_types[o], is_pandas, runner_conf
                     )
                     for o in args_offsets
                 ]
@@ -3367,8 +3394,11 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
             # Buffer the streamed flat element results as one contiguous Arrow array and emit an
             # ``array<R>`` row as soon as the shape at the head of the FIFO is fully covered. A
-            # null array (length None) emits a null row and consumes no elements.
-            buffered = pa.array([], type=arrow_element_type)
+            # null array (length None) emits a null row and consumes no elements. The buffer is
+            # created lazily from the first chunk's type rather than the UTC-typed
+            # ``arrow_element_type``: the pandas flavor types timestamps with the session timezone,
+            # so a pre-typed empty buffer could differ and break ``pa.concat_arrays``.
+            buffered = None
             num_output_elements = 0
 
             def emit_ready():
@@ -3376,7 +3406,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 while pending_shapes:
                     lengths = pending_shapes[0]
                     needed = sum(n for n in lengths if n is not None)
-                    if len(buffered) < needed:
+                    if buffered is None or len(buffered) < needed:
                         break
                     pending_shapes.popleft()
                     flat = buffered.slice(0, needed)
@@ -3397,11 +3427,14 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     chunk = _elementwise_result_to_arrow(
                         result, return_type, arrow_element_type, is_pandas, runner_conf
                     )
-                    # `chunk` may be a ChunkedArray (from PandasToArrowConversion); normalize to a
-                    # single Array so slicing in `emit_ready` stays O(1) per emitted row.
-                    chunk = chunk.combine_chunks() if hasattr(chunk, "combine_chunks") else chunk
-                    buffered = pa.concat_arrays([buffered, chunk])
                     num_output_elements += len(chunk)
+                    # Fail fast if the UDF over-produces, before the buffer grows unbounded (the
+                    # base iterator paths do the same via verify_output_row_limit).
+                    if num_output_elements > num_input_elements:
+                        raise PySparkRuntimeError(
+                            errorClass="OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={}
+                        )
+                    buffered = chunk if buffered is None else pa.concat_arrays([buffered, chunk])
                     yield from emit_ready()
 
                 # The iterator is exhausted: every input row's flat elements must have arrived.
