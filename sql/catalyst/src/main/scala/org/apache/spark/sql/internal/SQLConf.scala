@@ -4163,11 +4163,12 @@ object SQLConf {
         "rows enough to be worthwhile. Once bypassed, the remaining input rows are passed " +
         "through as single-row partial aggregation buffers for the final aggregation to merge, " +
         "which avoids the cost of maintaining and spilling a large aggregation map with little " +
-        "reduction benefit. This applies only to hash aggregation with grouping keys.")
+        "reduction benefit. Disabled by default. This applies only to hash aggregation with " +
+        "grouping keys.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS =
     buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.minRows")

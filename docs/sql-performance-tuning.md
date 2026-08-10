@@ -202,7 +202,7 @@ skipped entirely -- so a query that only becomes ineffective later in its input 
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.enabled</code></td>
-    <td>true</td>
+    <td>false</td>
     <td>
       When true, hash aggregation adaptively bypasses the pre-shuffle partial aggregation at runtime
       when it observes that the partial aggregation is not reducing the number of rows enough to be
