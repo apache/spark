@@ -2162,8 +2162,11 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val startIndex = ArrayExpressionUtils.sliceStartIndex(startInt, arr.numElements(), prettyName)
     // Resolve (and validate) the result length via the shared helper, mirroring the codegen path.
     // Besides rejecting a negative length, this clamps the length to the elements remaining after
-    // `startIndex`, so `startIndex + resLength` cannot overflow `Int` for a large length -- the
-    // unclamped `startIndex + lengthInt` could wrap negative and make `slice` drop all elements.
+    // `startIndex`. For an in-range `startIndex` that keeps `startIndex + resLength` from
+    // overflowing `Int` -- the unclamped `startIndex + lengthInt` could wrap negative and make
+    // `slice` drop all elements. An out-of-range `startIndex` (a large negative `start`) can
+    // still wrap the helper's own `numElements - startIndex`, but the guard below returns before
+    // `resLength` is used.
     val resLength =
       ArrayExpressionUtils.sliceLength(lengthInt, arr.numElements(), startIndex, prettyName)
     // startIndex can be negative if start is negative and its absolute value is greater than the
