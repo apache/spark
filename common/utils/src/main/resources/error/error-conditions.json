@@ -1048,6 +1048,12 @@
     ],
     "sqlState" : "42000"
   },
+  "CLUSTER_MANAGER_APPLICATION_FAILURE" : {
+    "message" : [
+      "Exiting due to an error reported by the cluster manager: <message>"
+    ],
+    "sqlState" : "56000"
+  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available."
@@ -6841,6 +6847,24 @@
     ],
     "sqlState" : "21000"
   },
+  "SCHEDULER_BACKEND_SHUTDOWN_FAILED" : {
+    "message" : [
+      "Failed to shut down the scheduler backend while the application was terminating:"
+    ],
+    "subClass" : {
+      "DRIVER_ENDPOINT" : {
+        "message" : [
+          "the driver endpoint did not stop cleanly."
+        ]
+      },
+      "EXECUTORS" : {
+        "message" : [
+          "the driver could not confirm that the executors were asked to shut down, so the later shutdown steps were skipped."
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "SCHEMA_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create schema <schemaName> because it already exists.",
@@ -8343,6 +8367,11 @@
       "FIELD_INDEX" : {
         "message" : [
           "The row shall have a schema to get an index of the field <fieldName>."
+        ]
+      },
+      "TASK_NOT_FINISHED" : {
+        "message" : [
+          "The task has not finished yet, so its duration is not available."
         ]
       },
       "WITHOUT_SUGGESTION" : {
@@ -11450,34 +11479,9 @@
       "Checkpoint dir must be specified."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3021" : {
-    "message" : [
-      "Error asking standalone scheduler to shut down executors"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3022" : {
-    "message" : [
-      "Error stopping standalone scheduler's driver endpoint"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3023" : {
-    "message" : [
-      "Can't run submitMapStage on RDD with 0 partitions"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3026" : {
-    "message" : [
-      "duration() called on unfinished task"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3028" : {
     "message" : [
       "<errorMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3029" : {
-    "message" : [
-      "Exiting due to error from cluster scheduler: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3033" : {
