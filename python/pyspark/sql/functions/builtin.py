@@ -550,7 +550,6 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     Returns the sum of `left` and `right` and the result is null on overflow.
     The acceptable input types are the same as for the `+` operator.
 
-
     .. versionadded:: 3.5.0
 
     Parameters
