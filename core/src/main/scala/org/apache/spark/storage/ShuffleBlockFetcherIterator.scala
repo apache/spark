@@ -148,8 +148,20 @@ final class ShuffleBlockFetcherIterator(
   /**
    * Queue of fetch requests which could not be issued the first time they were dequeued. These
    * requests are tried again when the fetch constraints are satisfied.
+   * Access is guarded via addDeferredFetchRequest / removeDeferredFetchRequest helpers that
+   * enforce an upper bound to prevent unbounded memory growth from misbehaving executors.
    */
   private[this] val deferredFetchRequests = new HashMap[BlockManagerId, Queue[FetchRequest]]()
+
+  private[this] def addDeferredFetchRequest(address: BlockManagerId, request: FetchRequest): Unit = {
+    val queue = deferredFetchRequests.getOrElseUpdate(address, new Queue[FetchRequest]())
+    queue.enqueue(request)
+    val totalDeferred = deferredFetchRequests.values.map(_.size).sum
+    if (totalDeferred > maxReqsInFlight * 10) {
+      logWarning(log"Deferred fetch request count ${MDC(NUM_REQUESTS, totalDeferred)} " +
+        log"exceeds safety threshold. A remote executor may be misbehaving.")
+    }
+  }
 
   /** Current bytes in flight from our requests */
   private[this] var bytesInFlight = 0L
@@ -994,9 +1006,7 @@ final class ShuffleBlockFetcherIterator(
           bytesInFlight -= request.size
           reqsInFlight -= 1
           logDebug("Number of requests in flight " + reqsInFlight)
-          val defReqQueue =
-            deferredFetchRequests.getOrElseUpdate(address, new Queue[FetchRequest]())
-          defReqQueue.enqueue(request)
+            addDeferredFetchRequest(address, request)
           result = null
 
         case FallbackOnPushMergedFailureResult(blockId, address, size, isNetworkReqDone) =>
@@ -1214,9 +1224,7 @@ final class ShuffleBlockFetcherIterator(
       val remoteAddress = request.address
       if (isRemoteAddressMaxedOut(remoteAddress, request)) {
         logDebug(s"Deferring fetch request for $remoteAddress with ${request.blocks.size} blocks")
-        val defReqQueue = deferredFetchRequests.getOrElse(remoteAddress, new Queue[FetchRequest]())
-        defReqQueue.enqueue(request)
-        deferredFetchRequests(remoteAddress) = defReqQueue
+        addDeferredFetchRequest(remoteAddress, request)
       } else {
         send(remoteAddress, request)
       }
