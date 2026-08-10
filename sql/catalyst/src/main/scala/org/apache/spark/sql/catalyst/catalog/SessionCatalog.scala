@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
@@ -1191,6 +1192,8 @@ class SessionCatalog(
     col: Expression,
     toField: StructField,
     schemaMode: ViewSchemaMode): NamedExpression = {
+    val viewSchemaDataType =
+      DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(toField.dataType)
     val cast = schemaMode match {
       /*
       ** For schema binding, we cast the column to the expected type using safe cast only.
@@ -1199,13 +1202,13 @@ class SessionCatalog(
       *  in ansi mode.
       ** For schema (type) evolution, we take the column as is.
       */
-      case SchemaBinding => UpCast(col, toField.dataType)
+      case SchemaBinding => UpCast(col, viewSchemaDataType)
       case SchemaUnsupported => if (conf.viewSchemaCompensation) {
-        Cast(col, toField.dataType, ansiEnabled = true)
+        Cast(col, viewSchemaDataType, ansiEnabled = true)
       } else {
-        UpCast(col, toField.dataType)
+        UpCast(col, viewSchemaDataType)
       }
-      case SchemaCompensation => Cast(col, toField.dataType, ansiEnabled = true)
+      case SchemaCompensation => Cast(col, viewSchemaDataType, ansiEnabled = true)
       case SchemaTypeEvolution => col
       case other => throw SparkException.internalError("Unexpected ViewSchemaMode")
     }

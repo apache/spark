@@ -380,10 +380,12 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           dataType = replaceDefaultStringCharAndVarcharTypes(columnDef.dataType, collation),
           generationExpression = newGenExpr)
 
-    case cast: Cast if hasDefaultStringCharOrVarcharType(cast.dataType) &&
-      cast.containsTag(Cast.USER_SPECIFIED_CAST) =>
-      collation => cast.copy(dataType =
-        replaceDefaultStringCharAndVarcharTypes(cast.dataType, collation))
+    case cast: Cast if hasDefaultStringCharOrVarcharType(cast.dataType) =>
+      collation =>
+        val newCast = cast.copy(dataType =
+          replaceDefaultStringCharAndVarcharTypes(cast.dataType, collation))
+        newCast.copyTagsFrom(cast)
+        newCast
 
     case Literal(value, dt) if hasDefaultStringCharOrVarcharType(dt) =>
       collation => Literal(value, replaceDefaultStringCharAndVarcharTypes(dt, collation))
