@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.expressions.JsonValue
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType}
@@ -96,6 +97,18 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
     assert(e.getCondition == "JSON_VALUE_ON_ERROR.ERROR")
   }
 
+  test("a valid JSON prefix followed by trailing content is an ON ERROR case") {
+    // The whole input must be a single well-formed JSON value: a value that parses but is trailed
+    // by garbage (or a second root value) is malformed, even when the path matches within the
+    // prefix. NULL ON ERROR by default; ERROR ON ERROR raises.
+    checkAnswer(sql("""SELECT json_value('{"a":1} trailing', '$.a')"""), Row(null))
+    checkAnswer(sql("""SELECT json_value('{"a":1}{"a":2}', '$.a')"""), Row(null))
+    val e = intercept[SparkRuntimeException] {
+      sql("""SELECT json_value('{"a":1} trailing', '$.a' ERROR ON ERROR)""").collect()
+    }
+    assert(e.getCondition == "JSON_VALUE_ON_ERROR.ERROR")
+  }
+
   test("ERROR ON ERROR raises for a non-scalar match") {
     val e = intercept[SparkRuntimeException] {
       sql(s"SELECT json_value('$doc', '$$.addr' ERROR ON ERROR)").collect()
@@ -117,7 +130,7 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
   }
 
   test("independent ON EMPTY and ON ERROR behaviors") {
-    // Missing path -> ON EMPTY branch; a malformed / non-scalar -> ON ERROR branch.
+    // Missing path -> ON EMPTY branch; malformed input / non-scalar value -> ON ERROR branch.
     checkAnswer(
       sql(s"SELECT json_value('$doc', '$$.missing' DEFAULT 'e' ON EMPTY DEFAULT 'r' ON ERROR)"),
       Row("e"))
@@ -180,9 +193,33 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
     assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_JSON_SCALAR_RETURNING_TYPE")
   }
 
+  test("invalid: a DEFAULT that cannot cast to the RETURNING type is rejected at analysis") {
+    // The DEFAULT-to-RETURNING cast is validated up front, so an uncastable default (here an
+    // ARRAY DEFAULT with RETURNING INT) fails at analysis rather than late in the fallback branch.
+    Seq("ON EMPTY", "ON ERROR").foreach { clause =>
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT json_value('{}', '$$.x' RETURNING INT DEFAULT array(1) $clause)").collect()
+      }
+      assert(e.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+        s"unexpected condition for $clause: ${e.getCondition}")
+    }
+  }
+
   test("bracket path syntax and array index") {
     checkAnswer(sql(s"SELECT json_value('$doc', '$$.tags[0]')"), Row("x"))
     checkAnswer(sql(s"SELECT json_value('$doc', '$$[\\'name\\']')"), Row("Ada"))
+  }
+
+  test("sql renders a bracket-quoted path as a valid, re-parseable string literal") {
+    // A path containing single quotes (e.g. `$['name']`) must be escaped when rendered back to
+    // SQL, or the round-tripped statement is malformed. Extract the JsonValue expression, render
+    // its `.sql`, and confirm the rendered form both parses and evaluates to the same result.
+    val df = sql(s"SELECT json_value('$doc', '$$[\\'name\\']')")
+    val jsonValue = df.queryExecution.analyzed.expressions
+      .flatMap(_.collect { case jv: JsonValue => jv }).head
+    val rendered = jsonValue.sql
+    assert(rendered.contains("\\'name\\'"), s"path was not escaped in: $rendered")
+    checkAnswer(sql(s"SELECT $rendered"), Row("Ada"))
   }
 
   test("nested path into an object") {

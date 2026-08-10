@@ -209,3 +209,5 @@ select json_value('{"v":"2020-01-02"}', '$.v' RETURNING DATE);
 select json_value('{"a":[1,2]}', '$.a[*]');
 -- invalid: non-scalar RETURNING type
 select json_value('{"a":1}', '$.a' RETURNING STRUCT<x:INT>);
+-- invalid: a DEFAULT that cannot cast to the RETURNING type
+select json_value('{}', '$.x' RETURNING INT DEFAULT array(1) ON EMPTY);

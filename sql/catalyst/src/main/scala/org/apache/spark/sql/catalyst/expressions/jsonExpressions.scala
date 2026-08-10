@@ -696,6 +696,11 @@ case class JsonValue(
 
   override def nullable: Boolean = true
 
+  // Reuses the mutable `castInput` row across rows (see `castScalar`), so it holds evaluation
+  // state. Interpreted execution must fresh-copy the expression before use, or a shared instance
+  // could cast another concurrent evaluation's value; matches the neighboring JSON expressions.
+  override def stateful: Boolean = true
+
   // Children: the JSON input first, then whichever DEFAULT expressions are present. The two
   // defaults are resolved/coerced through the normal child machinery; their cast to `returning`
   // happens at eval time via `emptyDefaultCast` / `errorDefaultCast`.
@@ -732,7 +737,15 @@ case class JsonValue(
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName), "returningType" -> toSQLType(returning)))
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      // Each DEFAULT expression is cast to the RETURNING type at eval time (see
+      // `emptyDefaultCast` / `errorDefaultCast`). Those casts are not analyzed children, so an
+      // uncastable default (e.g. `DEFAULT array(1)` with `RETURNING INT`) would otherwise slip
+      // past analysis and fail late only when its branch is taken. Surface the cast's own type
+      // check here so it is rejected up front with the standard CAST_* message.
+      (emptyDefaultCast ++ errorDefaultCast)
+        .map(_.checkInputDataTypes())
+        .find(_.isFailure)
+        .getOrElse(TypeCheckResult.TypeCheckSuccess)
     }
   }
 
@@ -815,7 +828,10 @@ case class JsonValue(
       else s" ${behaviorSQL(onEmpty, emptyDefault)} ON EMPTY"
     val errorSQL = if (onError == JsonValueBehavior.Null) ""
       else s" ${behaviorSQL(onError, errorDefault)} ON ERROR"
-    s"JSON_VALUE(${child.sql}, '$path'$returningSQL$emptySQL$errorSQL)"
+    // Render the path as a properly escaped string literal so bracket-quoted paths such as
+    // `$['a']` (and any path containing a quote or backslash) round-trip as valid SQL.
+    val pathSQL = Literal(UTF8String.fromString(path), StringType).sql
+    s"JSON_VALUE(${child.sql}, $pathSQL$returningSQL$emptySQL$errorSQL)"
   }
 
   override protected def withNewChildrenInternal(

@@ -1522,3 +1522,27 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "json_value('{\"a\":1}', '$.a' RETURNING STRUCT<x:INT>)"
   } ]
 }
+
+
+-- !query
+select json_value('{}', '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"JSON_VALUE({}, '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)\"",
+    "srcType" : "\"ARRAY<INT>\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 70,
+    "fragment" : "json_value('{}', '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)"
+  } ]
+}

@@ -496,21 +496,48 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
    *
    * A `null` input is the caller's responsibility. `explodeRoot` is ignored: this is a single-value
    * lookup, so construct the evaluator with `explodeRoot = false`.
+   *
+   * A single parser both navigates the path and validates well-formedness: after the matched value
+   * is captured (or the path is found missing), [[drainToRootEnd]] consumes the rest of the root
+   * value and rejects any trailing content, so a valid prefix followed by garbage (or a second
+   * root value) is rejected exactly as a fully malformed document is. This avoids the extra
+   * O(document size) validation pass a separate `isSingleWellFormedValue` scan would add per row.
    */
   final def lookup(json: UTF8String): Option[JsonPathResult] = {
-    if (!isSingleWellFormedValue(json)) return None
     Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       try {
-        parser.nextToken()
-        positionAt(parser, containerPath) match {
-          case PositionResult.Missing => Some(JsonPathResult.Missing)
-          case PositionResult.NullValue => Some(JsonPathResult.NullValue)
-          case PositionResult.AtValue => Some(JsonPathResult.Found(serializeCurrentValue(parser)))
+        if (parser.nextToken() == null) {
+          None // empty or whitespace-only
+        } else {
+          val result = positionAt(parser, containerPath) match {
+            case PositionResult.Missing => JsonPathResult.Missing
+            case PositionResult.NullValue => JsonPathResult.NullValue
+            case PositionResult.AtValue => JsonPathResult.Found(serializeCurrentValue(parser))
+          }
+          // Reject a valid prefix trailed by extra content, keeping malformed-input semantics
+          // identical to the array row source (which validates the whole document up front).
+          if (drainToRootEnd(parser)) Some(result) else None
         }
       } catch {
         case _: JsonProcessingException => None
       }
     }
+  }
+
+  /**
+   * Finishes consuming the root JSON value the `parser` is partway through and verifies nothing
+   * follows it, returning false if the input is truncated or has trailing content. Callers navigate
+   * to (and serialize) a matched value with the same parser, which can leave it positioned inside
+   * the enclosing containers; this walks back out to the root and confirms the document held
+   * exactly one well-formed value.
+   */
+  private def drainToRootEnd(parser: JsonParser): Boolean = {
+    // Walk out of any still-open containers, consuming the remainder of the root value.
+    while (!parser.getParsingContext.inRoot) {
+      if (parser.nextToken() == null) return false // truncated mid-value
+    }
+    // At the root now: exactly one value was present iff nothing remains.
+    parser.nextToken() == null
   }
 
   /**
@@ -769,15 +796,6 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   }
 
   /**
-   * If `raw` is a JSON string literal (e.g. `"hi"`), returns its unquoted, unescaped value;
-   * otherwise (numbers, booleans, objects, arrays) returns the raw JSON text unchanged. Used to
-   * give a value column the string's content rather than its quoted JSON form.
-   *
-   * `raw` is a Jackson-serialized fragment with no leading whitespace, so only a fragment whose
-   * first byte is `"` can be a string literal. Non-string values (the common case) are returned
-   * without constructing a parser at all.
-   */
-  /**
    * True if `raw` (a [[serializeCurrentValue]] fragment) is a JSON scalar rather than an object or
    * array. The fragment has no leading whitespace, so only its first byte matters: `{` and `[`
    * start an object/array, every other leading byte a scalar.
@@ -788,6 +806,15 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
     first != '{' && first != '['
   }
 
+  /**
+   * If `raw` is a JSON string literal (e.g. `"hi"`), returns its unquoted, unescaped value;
+   * otherwise (numbers, booleans, objects, arrays) returns the raw JSON text unchanged. Used to
+   * give a value column the string's content rather than its quoted JSON form.
+   *
+   * `raw` is a Jackson-serialized fragment with no leading whitespace, so only a fragment whose
+   * first byte is `"` can be a string literal. Non-string values (the common case) are returned
+   * without constructing a parser at all.
+   */
   def unquotedString(raw: UTF8String): UTF8String = {
     if (raw.numBytes() == 0 || raw.getByte(0) != '"') return raw
     try {
