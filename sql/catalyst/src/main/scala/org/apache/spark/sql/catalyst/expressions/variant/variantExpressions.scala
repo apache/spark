@@ -1649,7 +1649,8 @@ object VariantArrayAppendExpressionBuilder extends VariantArrayAppendExpressionB
 )
 // scalastyle:on line.size.limit
 object TryVariantArrayAppendExpressionBuilder
-    extends VariantArrayAppendExpressionBuilderBase(false)
+extends VariantArrayAppendExpressionBuilderBase(false)
+
 case class VariantStripNulls(child: Expression, includeArrays: Expression)
     extends RuntimeReplaceable
     with ExpectsInputTypes
@@ -1699,7 +1700,7 @@ case class VariantStripNulls(child: Expression, includeArrays: Expression)
     "elements are kept. Returns NULL if any argument is NULL.",
   arguments = """
     Arguments:
-      * v - A variant value to mutate.
+      * v - The variant value to strip.
       * include_arrays - An optional boolean (default true). Must be a constant.
   """,
   examples = """
