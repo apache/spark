@@ -880,30 +880,26 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("SPARK-57460: JDBC TIMESTAMP reads nanosecond NTZ precision when requested") {
-    // Pin the JVM default zone so the driver's local <-> java.sql.Timestamp conversion (and thus
-    // the NTZ wall-clock read) is deterministic, mirroring the microsecond TimestampNTZGetter.
-    DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.UTC) {
-      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-        val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
-        try {
-          conn.createStatement().execute("CREATE TABLE TEST.TS_NANOS_NTZ (t TIMESTAMP(8))")
-          conn.createStatement().execute(
-            "INSERT INTO TEST.TS_NANOS_NTZ VALUES (TIMESTAMP '2020-02-02 04:13:14.123456789')")
-          val df = spark.read
-            .option("preferTimestampNanos", "true")
-            .option("preferTimestampNTZ", "true")
-            .jdbc(urlWithUserAndPass, "TEST.TS_NANOS_NTZ", new Properties())
-          // Reported scale 8 -> precision 8. H2 rounds the stored value to 8 fractional digits
-          // (.123456789 -> .12345679); Spark's read path only floors to precision, so the value is
-          // preserved at 8 digits.
-          assert(df.schema("T").dataType === TimestampNTZNanosType(8))
-          val result = df.collect()
-          assert(result(0).getAs[java.time.LocalDateTime](0) ===
-            java.time.LocalDateTime.of(2020, 2, 2, 4, 13, 14, 123456790))
-        } finally {
-          conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TS_NANOS_NTZ")
-          conn.close()
-        }
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+      try {
+        conn.createStatement().execute("CREATE TABLE TEST.TS_NANOS_NTZ (t TIMESTAMP(8))")
+        conn.createStatement().execute(
+          "INSERT INTO TEST.TS_NANOS_NTZ VALUES (TIMESTAMP '2020-02-02 04:13:14.123456789')")
+        val df = spark.read
+          .option("preferTimestampNanos", "true")
+          .option("preferTimestampNTZ", "true")
+          .jdbc(urlWithUserAndPass, "TEST.TS_NANOS_NTZ", new Properties())
+        // Reported scale 8 -> precision 8. H2 rounds the stored value to 8 fractional digits
+        // (.123456789 -> .12345679); Spark's read path only floors to precision, so the value is
+        // preserved at 8 digits.
+        assert(df.schema("T").dataType === TimestampNTZNanosType(8))
+        val result = df.collect()
+        assert(result(0).getAs[java.time.LocalDateTime](0) ===
+          java.time.LocalDateTime.of(2020, 2, 2, 4, 13, 14, 123456790))
+      } finally {
+        conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TS_NANOS_NTZ")
+        conn.close()
       }
     }
   }
