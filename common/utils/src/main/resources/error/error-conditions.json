@@ -365,6 +365,13 @@
     ],
     "sqlState" : "42613"
   },
+  "AVRO_CANNOT_READ_NULL_FIELD" : {
+    "message" : [
+      "Cannot read null value for <name> into a non-nullable SQL type.",
+      "To allow null values, declare the corresponding type as nullable in the read schema."
+    ],
+    "sqlState" : "22004"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
@@ -819,6 +826,12 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_READ_ZIP_ENTRY" : {
+    "message" : [
+      "Cannot read zip entry <entry> in archive <path>: encrypted or an unsupported compression method."
+    ],
+    "sqlState" : "KD003"
+  },
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
       "Cannot recognize hive type string: <fieldType>, column: <fieldName>. The specified data type for the field cannot be recognized by Spark SQL. Please check the data type of the specified field and ensure that it is a valid Spark SQL data type. Refer to the Spark SQL documentation for a list of valid data types and their format. If the data type is correct, please ensure that you are using a supported version of Spark SQL."
@@ -1035,6 +1048,12 @@
     ],
     "sqlState" : "42000"
   },
+  "CLUSTER_MANAGER_APPLICATION_FAILURE" : {
+    "message" : [
+      "Exiting due to an error reported by the cluster manager: <message>"
+    ],
+    "sqlState" : "56000"
+  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available."
@@ -1233,6 +1252,14 @@
       "Please use a different name for the partition column."
     ],
     "sqlState" : "KD009"
+  },
+  "CONFLICTING_PIPELINE_FLOW_CASE_SENSITIVITY" : {
+    "message" : [
+      "The flows writing to table <tableName> do not agree on '<configKey>': <flowConfigurations>.",
+      "The effective value determines whether column names that differ only in case identify the same column, so the table's schema would depend on the order the flows are evaluated in.",
+      "Set '<configKey>' to the same value for every flow writing to this table."
+    ],
+    "sqlState" : "42KD9"
   },
   "CONNECT" : {
     "message" : [
@@ -1936,6 +1963,11 @@
           "Input schema <schema> must be a struct, an array, a map or a variant."
         ]
       },
+      "INVALID_JSON_TABLE_PATH" : {
+        "message" : [
+          "The <location> of JSON_TABLE has an invalid or unsupported JSON path <path>. Only simple, wildcard-free paths are supported (a trailing '[*]' is allowed on the row path)."
+        ]
+      },
       "INVALID_MAP_KEY_TYPE" : {
         "message" : [
           "The key of map cannot be/contain <keyType>."
@@ -2260,6 +2292,12 @@
   "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION" : {
     "message" : [
       "Decimal precision <precision> exceeds max precision <maxPrecision>."
+    ],
+    "sqlState" : "22003"
+  },
+  "DECIMAL_SCALE_EXCEEDS_PRECISION" : {
+    "message" : [
+      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
     ],
     "sqlState" : "22003"
   },
@@ -3909,9 +3947,16 @@
   },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
-      "System memory <systemMemory> must be at least <minSystemMemory>.",
-      "Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+      "Insufficient driver memory:"
     ],
+    "subClass" : {
+      "SYSTEM_MEMORY" : {
+        "message" : [
+          "System memory <systemMemory> must be at least <minSystemMemory>.",
+          "Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+        ]
+      }
+    },
     "sqlState" : "F0000"
   },
   "INVALID_EMPTY_LOCATION" : {
@@ -3957,9 +4002,22 @@
   },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
-      "Executor memory <executorMemory> must be at least <minSystemMemory>.",
-      "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+      "Insufficient executor memory:"
     ],
+    "subClass" : {
+      "CONFIG_MEMORY" : {
+        "message" : [
+          "Executor memory <executorMemory> must be at least <minSystemMemory>.",
+          "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+        ]
+      },
+      "SYSTEM_MEMORY" : {
+        "message" : [
+          "System memory <systemMemory> must be at least <minSystemMemory>.",
+          "Please increase heap size using the --executor-memory option or \"<config>\" in Spark configuration."
+        ]
+      }
+    },
     "sqlState" : "F0000"
   },
   "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA" : {
@@ -5025,6 +5083,11 @@
       "CREATE_TEMP_TABLE_USING_PROVIDER" : {
         "message" : [
           "CREATE TEMPORARY TABLE ... USING ... is a deprecated syntax. To overcome the issue, please use CREATE TEMPORARY VIEW instead."
+        ]
+      },
+      "DUPLICATE_JSON_TABLE_COLUMN" : {
+        "message" : [
+          "JSON_TABLE has duplicate column name <columnName>. Column names in the COLUMNS clause must be unique."
         ]
       },
       "EMPTY_IN_PREDICATE" : {
@@ -6804,6 +6867,24 @@
     ],
     "sqlState" : "21000"
   },
+  "SCHEDULER_BACKEND_SHUTDOWN_FAILED" : {
+    "message" : [
+      "Failed to shut down the scheduler backend while the application was terminating:"
+    ],
+    "subClass" : {
+      "DRIVER_ENDPOINT" : {
+        "message" : [
+          "the driver endpoint did not stop cleanly."
+        ]
+      },
+      "EXECUTORS" : {
+        "message" : [
+          "the driver could not confirm that the executors were asked to shut down, so the later shutdown steps were skipped."
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "SCHEMA_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create schema <schemaName> because it already exists.",
@@ -8306,6 +8387,11 @@
       "FIELD_INDEX" : {
         "message" : [
           "The row shall have a schema to get an index of the field <fieldName>."
+        ]
+      },
+      "TASK_NOT_FINISHED" : {
+        "message" : [
+          "The task has not finished yet, so its duration is not available."
         ]
       },
       "WITHOUT_SUGGESTION" : {
@@ -10264,11 +10350,6 @@
       "The SQL config '<configName>' was removed in the version <version>. <comment>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_1228" : {
-    "message" : [
-      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1232" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
@@ -11418,34 +11499,9 @@
       "Checkpoint dir must be specified."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3021" : {
-    "message" : [
-      "Error asking standalone scheduler to shut down executors"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3022" : {
-    "message" : [
-      "Error stopping standalone scheduler's driver endpoint"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3023" : {
-    "message" : [
-      "Can't run submitMapStage on RDD with 0 partitions"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3026" : {
-    "message" : [
-      "duration() called on unfinished task"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3028" : {
     "message" : [
       "<errorMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3029" : {
-    "message" : [
-      "Exiting due to error from cluster scheduler: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3033" : {

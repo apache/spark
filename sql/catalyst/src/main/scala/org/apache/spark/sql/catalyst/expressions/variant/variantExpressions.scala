@@ -81,6 +81,10 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Check if a variant value is a variant null. Returns true if and only if the input is a variant null and false otherwise (including in the case of SQL NULL).",
+  arguments = """
+    Arguments:
+      * expr - A variant value to check.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(parse_json('null'));
@@ -122,6 +126,11 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Convert a nested input (array/map/struct) into a variant where maps and structs are converted to variant objects which are unordered unlike SQL structs. Input maps can only have string keys.",
+  arguments = """
+    Arguments:
+      * expr - A nested value of array, map, or struct type. Maps must have string keys. Nested
+          values of any type are allowed.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
@@ -638,6 +647,13 @@ abstract class VariantGetExpressionBuilderBase(failOnError: Boolean) extends Exp
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(v, path[, type]) - Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to `type`. When `type` is omitted, it is default to `variant`. Returns null if the path does not exist. Throws an exception if the cast fails.",
+  arguments = """
+    Arguments:
+      * v - A variant value to extract from.
+      * path - A string literal in JSONPath format that identifies the sub-variant to extract.
+      * type - An optional string literal naming the SQL type to cast the extracted sub-variant to.
+          When omitted, it defaults to `variant`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(parse_json('{"a": 1}'), '$.a', 'int');
@@ -660,6 +676,13 @@ object VariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(true)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(v, path[, type]) - Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to `type`. When `type` is omitted, it is default to `variant`. Returns null if the path does not exist or the cast fails.",
+  arguments = """
+    Arguments:
+      * v - A variant value to extract from.
+      * path - A string literal in JSONPath format that identifies the sub-variant to extract.
+      * type - An optional string literal naming the SQL type to cast the extracted sub-variant to.
+          When omitted, it defaults to `variant`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(parse_json('{"a": 1}'), '$.a', 'int');
@@ -1061,6 +1084,13 @@ case class VariantSet(
     val result = super.checkInputDataTypes()
     if (result.isFailure) {
       result
+    } else if (!createIfMissing.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("create_if_missing"),
+          "inputType" -> toSQLType(createIfMissing.dataType),
+          "inputExpr" -> toSQLExpr(createIfMissing)))
     } else if (value.dataType == NullType) {
       TypeCheckResult.TypeCheckSuccess
     } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = false)) {
@@ -1196,7 +1226,7 @@ abstract class VariantSetExpressionBuilderBase(failOnError: Boolean) extends Exp
           path should start with `$` and is followed by one or more segments like `[123]`,
           `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
       * val - Any expression castable to variant.
-      * create_if_missing - An optional boolean (default true).
+      * create_if_missing - An optional boolean (default true). Must be a constant.
   """,
   examples = """
     Examples:
@@ -1237,7 +1267,7 @@ object VariantSetExpressionBuilder extends VariantSetExpressionBuilderBase(true)
           path should start with `$` and is followed by one or more segments like `[123]`,
           `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
       * val - Any expression castable to variant.
-      * create_if_missing - An optional boolean (default true).
+      * create_if_missing - An optional boolean (default true). Must be a constant.
   """,
   examples = """
     Examples:
@@ -1584,6 +1614,10 @@ object VariantExplode {
 
 @ExpressionDescription(
   usage = "_FUNC_(v) - Returns schema in the SQL format of a variant.",
+  arguments = """
+    Arguments:
+      * v - A variant value whose schema is returned.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(parse_json('null'));
@@ -1699,6 +1733,10 @@ object SchemaOfVariant {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(v) - Returns the merged schema in the SQL format of a variant column.",
+  arguments = """
+    Arguments:
+      * v - A variant column whose per-row schemas are merged into a single schema.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(parse_json(j)) FROM VALUES ('1'), ('2'), ('3') AS tab(j);
@@ -1763,6 +1801,10 @@ case class SchemaOfVariantAgg(
 @ExpressionDescription(
   usage = "_FUNC_(v) - Returns true if the variant is valid, false if it is malformed, " +
     "NULL if `v` is NULL.",
+  arguments = """
+    Arguments:
+      * v - A variant value to validate.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(parse_json('null'));

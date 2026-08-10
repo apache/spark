@@ -60,8 +60,8 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
    * Validate and transform the input schema.
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
+    SchemaUtils.appendColumn(schema, $(outputCol), SQLDataTypes.VectorType)
   }
 }
 

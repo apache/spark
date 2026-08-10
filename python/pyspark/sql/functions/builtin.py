@@ -8312,6 +8312,67 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
 
 @_try_remote_functions
+def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    """
+    Truncate the given value toward zero to `scale` decimal places when `scale` >= 0,
+    or to the left of the decimal point when `scale` < 0. `scale` defaults to 0.
+
+    Unlike :func:`round`, the result is always rounded toward zero, and unlike :func:`floor`
+    negative values are not rounded toward negative infinity.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column or column name to truncate.
+        A column that evaluates to a numeric.
+    scale : :class:`~pyspark.sql.Column` or int, optional
+        An optional parameter to control the number of decimal places to keep.
+        A column that evaluates to an integer. Must be a constant. Defaults to 0.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column for the truncated value, of the same type as the input, except that a decimal
+        input may return a decimal of different precision and scale.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.round`
+    :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.floor`
+    :meth:`pyspark.sql.functions.ceil`
+
+    Examples
+    --------
+    Example 1: Truncate toward zero to a given number of decimal places
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(15.79), sf.lit(1)).alias("r")).collect()
+    [Row(r=15.7)]
+
+    Example 2: Truncation rounds toward zero for negative values
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(-2.99), sf.lit(0)).alias("r")).collect()
+    [Row(r=-2.0)]
+
+    Example 3: The scale argument defaults to 0 when omitted
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(1234.5678)).alias("r")).collect()
+    [Row(r=1234.0)]
+    """
+    if scale is None:
+        return _invoke_function_over_columns("truncate", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("truncate", col, scale)
+
+
+@_try_remote_functions
 def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
@@ -14766,6 +14827,71 @@ def md5(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def xxh3_64(col: "ColumnOrName") -> Column:
+    """Returns a 64-bit hash value of the argument using the XXH3 algorithm.
+
+    Unlike :func:`xxhash64`, which hashes one or more columns structurally, this hashes the raw
+    bytes of a single value with seed 0, so its result is byte compatible with the reference XXH3.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to hash, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_128`
+    :meth:`pyspark.sql.functions.xxhash64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.xxh3_64('a').alias('h')).collect()
+    [Row(h=80997306238743657)]
+    """
+    return _invoke_function_over_columns("xxh3_64", col)
+
+
+@_try_remote_functions
+def xxh3_128(col: "ColumnOrName") -> Column:
+    """Returns a 128-bit XXH3 hash of the argument as a 32-character hex string.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to hash, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_64`
+    :meth:`pyspark.sql.functions.md5`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.xxh3_128('a').alias('h')).collect()
+    [Row(h='7d57dd84c60c86ca1f4e82ab91a12b5e')]
+    """
+    return _invoke_function_over_columns("xxh3_128", col)
+
+
+@_try_remote_functions
 def sha1(col: "ColumnOrName") -> Column:
     """Returns the hex string result of SHA-1.
 
@@ -14940,6 +15066,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.hash`
+    :meth:`pyspark.sql.functions.xxh3_64`
 
     Examples
     --------
@@ -15243,6 +15370,7 @@ def base64(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.unbase64`
+    :meth:`pyspark.sql.functions.to_base32`
 
     Examples
     --------
@@ -15258,6 +15386,41 @@ def base64(col: "ColumnOrName") -> Column:
     +----------+----------------+
     """
     return _invoke_function_over_columns("base64", col)
+
+
+@_try_remote_functions
+def to_base32(col: "ColumnOrName") -> Column:
+    """
+    Computes the BASE32 (RFC 4648) encoding of a binary column and returns it as a
+    string column.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to work on.
+        A column that evaluates to a binary.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        BASE32 encoding of the binary value.
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_base32`
+    :meth:`pyspark.sql.functions.base64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(b"foobar",)], ["value"])
+    >>> df.select(sf.to_base32("value").alias("r")).collect()
+    [Row(r='MZXW6YTBOI======')]
+    """
+    return _invoke_function_over_columns("to_base32", col)
 
 
 @_try_remote_functions
@@ -15285,6 +15448,7 @@ def unbase64(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.base64`
+    :meth:`pyspark.sql.functions.from_base32`
 
     Examples
     --------
@@ -15300,6 +15464,41 @@ def unbase64(col: "ColumnOrName") -> Column:
     +----------------+-------------------------------+
     """
     return _invoke_function_over_columns("unbase64", col)
+
+
+@_try_remote_functions
+def from_base32(col: "ColumnOrName") -> Column:
+    """
+    Decodes a BASE32 (RFC 4648) encoded string column and returns it as a binary
+    column.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to work on.
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        decoded binary value.
+        Returns a column that evaluates to a binary.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_base32`
+    :meth:`pyspark.sql.functions.unbase64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("MZXW6YTBOI======",)], ["value"])
+    >>> df.select(sf.from_base32("value").alias("r")).collect()
+    [Row(r=b'foobar')]
+    """
+    return _invoke_function_over_columns("from_base32", col)
 
 
 @_try_remote_functions
@@ -23517,6 +23716,42 @@ def json_object_keys(col: "ColumnOrName") -> Column:
     [Row(r=None), Row(r=[]), Row(r=['key1', 'key2'])]
     """
     return _invoke_function_over_columns("json_object_keys", col)
+
+
+@_try_remote_functions
+def json_typeof(col: "ColumnOrName") -> Column:
+    """
+    Returns the type of the outermost JSON value as a string: one of 'object', 'array',
+    'string', 'number', 'boolean', or 'null'. Returns null if the input is not a valid JSON
+    string or is an empty string.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the type of the outermost JSON value.
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.json_object_keys`
+    :meth:`pyspark.sql.functions.get_json_object`
+    :meth:`pyspark.sql.functions.json_array_length`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('{"a": 1}',), ('[1, 2, 3]',), ('123',), ('',)], ['data'])
+    >>> df.select(json_typeof(df.data).alias('r')).collect()
+    [Row(r='object'), Row(r='array'), Row(r='number'), Row(r=None)]
+    """
+    return _invoke_function_over_columns("json_typeof", col)
 
 
 # TODO: Fix and add an example for StructType with Spark Connect

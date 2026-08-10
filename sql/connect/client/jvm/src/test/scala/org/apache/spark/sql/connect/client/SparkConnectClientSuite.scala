@@ -78,6 +78,46 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     assert(client.userId == System.getProperty("user.name"))
   }
 
+  test("client generates an operation ID for ExecutePlan requests") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .disableReattachableExecute()
+      .build()
+
+    val responses = client.execute(buildPlan("select 1")).toSeq
+    val operationId = responses.head.getOperationId
+
+    UUID.fromString(operationId)
+    assert(responses.forall(_.getOperationId == operationId))
+  }
+
+  test("ExecutePlan exceptions expose the client-generated operation ID") {
+    val failingService = new DummySparkConnectService {
+      override def executePlan(
+          request: ExecutePlanRequest,
+          responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+        responseObserver.onError(Status.INTERNAL.withDescription("expected").asRuntimeException())
+      }
+    }
+    server = NettyServerBuilder.forPort(0).addService(failingService).build().start()
+    service = failingService
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .disableReattachableExecute()
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
+      .build()
+
+    val error = intercept[SparkException] {
+      client.execute(buildPlan("select 1")).foreach(_ => ())
+    }
+    val operationId = SparkConnectClient.getOperationId(error)
+    assert(operationId.isDefined)
+    UUID.fromString(operationId.get)
+  }
+
   test("Placeholder test: Create SparkConnectClient") {
     client = SparkConnectClient.builder().userId("abc123").build()
     assert(client.userId == "abc123")

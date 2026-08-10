@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.window.{WindowExec, WindowGroupLimitExec}
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1360,7 +1360,7 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
     def isShuffleExecByRequirement(
         plan: ShuffleExchangeExec,
         desiredClusterColumns: Seq[String]): Boolean = plan match {
-      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS, _) =>
+      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS, _, _) =>
         partitionExpressionsColumns(op.expressions) === desiredClusterColumns
       case _ => false
     }
@@ -1677,68 +1677,6 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
               )
             )
           }
-        }
-      }
-    }
-  }
-
-  test("SPARK-58404: bypass partial WindowGroupLimit") {
-    val df = Seq(
-      ("a", 0, "c"),
-      ("a", 1, "x"),
-      ("a", 2, "y"),
-      ("b", 1, "h"),
-      ("b", 1, "n"),
-      ("c", 1, "z"),
-      ("c", 2, "a")).toDF("key", "value", "order")
-
-    def countWindowGroupLimits(df: DataFrame): Int = {
-      collect(df.queryExecution.executedPlan) {
-        case w: WindowGroupLimitExec => w
-      }.size
-    }
-
-    val rankLikeFunctions = Seq(row_number(), rank(), dense_rank())
-
-    // Partitioned window: a shuffle is required, so without the bypass both the partial and the
-    // final WindowGroupLimit are present; with the bypass only the final one remains.
-    val window = Window.partitionBy($"key").orderBy($"order")
-    val expected = Seq(
-      Row("a", 0, "c", 1),
-      Row("b", 1, "h", 1),
-      Row("c", 2, "a", 1))
-
-    Seq(true, false).foreach { bypass =>
-      withSQLConf(
-        SQLConf.BYPASS_PARTIAL_WINDOW_GROUP_LIMIT.key -> bypass.toString,
-        SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "100") {
-        rankLikeFunctions.foreach { rankLikeFunction =>
-          val result = df.withColumn("rn", rankLikeFunction.over(window)).where($"rn" === 1)
-          checkAnswer(result, expected)
-          assert(countWindowGroupLimits(result) === (if (bypass) 1 else 2))
-        }
-      }
-    }
-
-    // Unpartitioned window: the final WindowGroupLimit requires AllTuples, so the shuffle funnels
-    // the whole input into a single reducer. The partial pass bounds each input partition to
-    // `limit` rank groups before that shuffle, so the bypass is gated off for an empty partition
-    // spec and both the partial and the final WindowGroupLimit remain even when the flag is on.
-    // Note row_number() is excluded: with an empty partition spec and a limit below
-    // topKSortFallbackThreshold, InferWindowGroupLimit rewrites it to a Limit + Sort (top-n)
-    // rather than a WindowGroupLimit, so no WindowGroupLimit node is produced.
-    val unpartitionedWindow = Window.orderBy($"order")
-    val unpartitionedExpected = Seq(Row("c", 2, "a", 1))
-
-    Seq(true, false).foreach { bypass =>
-      withSQLConf(
-        SQLConf.BYPASS_PARTIAL_WINDOW_GROUP_LIMIT.key -> bypass.toString,
-        SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "100") {
-        Seq(rank(), dense_rank()).foreach { rankLikeFunction =>
-          val result =
-            df.withColumn("rn", rankLikeFunction.over(unpartitionedWindow)).where($"rn" === 1)
-          checkAnswer(result, unpartitionedExpected)
-          assert(countWindowGroupLimits(result) === 2)
         }
       }
     }

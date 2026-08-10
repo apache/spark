@@ -847,6 +847,18 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 round.__doc__ = pysparkfuncs.round.__doc__
 
 
+def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("truncate", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("truncate", col, scale)
+
+
+truncate.__doc__ = pysparkfuncs.truncate.__doc__
+
+
 def sec(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sec", col)
 
@@ -2067,6 +2079,13 @@ def json_object_keys(col: "ColumnOrName") -> Column:
 json_object_keys.__doc__ = pysparkfuncs.json_object_keys.__doc__
 
 
+def json_typeof(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("json_typeof", col)
+
+
+json_typeof.__doc__ = pysparkfuncs.json_typeof.__doc__
+
+
 def inline(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("inline", col)
 
@@ -2601,11 +2620,25 @@ def base64(col: "ColumnOrName") -> Column:
 base64.__doc__ = pysparkfuncs.base64.__doc__
 
 
+def to_base32(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_base32", col)
+
+
+to_base32.__doc__ = pysparkfuncs.to_base32.__doc__
+
+
 def unbase64(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unbase64", col)
 
 
 unbase64.__doc__ = pysparkfuncs.unbase64.__doc__
+
+
+def from_base32(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("from_base32", col)
+
+
+from_base32.__doc__ = pysparkfuncs.from_base32.__doc__
 
 
 def ltrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
@@ -4694,6 +4727,20 @@ def md5(col: "ColumnOrName") -> Column:
 
 
 md5.__doc__ = pysparkfuncs.md5.__doc__
+
+
+def xxh3_64(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xxh3_64", col)
+
+
+xxh3_64.__doc__ = pysparkfuncs.xxh3_64.__doc__
+
+
+def xxh3_128(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xxh3_128", col)
+
+
+xxh3_128.__doc__ = pysparkfuncs.xxh3_128.__doc__
 
 
 def sha1(col: "ColumnOrName") -> Column:

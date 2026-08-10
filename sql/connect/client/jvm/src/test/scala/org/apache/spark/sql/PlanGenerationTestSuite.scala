@@ -1623,6 +1623,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.round(fn.col("b"), 2)
   }
 
+  functionTest("truncate") {
+    fn.truncate(fn.col("b"), 2)
+  }
+
   functionTest("sec") {
     fn.sec(fn.col("b"))
   }
@@ -1709,6 +1713,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("crc32") {
     fn.crc32(fn.col("g").cast("binary"))
+  }
+
+  functionTest("xxh3_64") {
+    fn.xxh3_64(fn.col("g").cast("binary"))
+  }
+
+  functionTest("xxh3_128") {
+    fn.xxh3_128(fn.col("g").cast("binary"))
   }
 
   functionTest("hash") {
@@ -1853,6 +1865,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("unbase64") {
     fn.unbase64(fn.col("g"))
+  }
+
+  functionTest("to_base32") {
+    fn.to_base32(fn.col("g").cast("binary"))
+  }
+
+  functionTest("from_base32") {
+    fn.from_base32(fn.col("g"))
   }
 
   functionTest("rpad") {
@@ -3127,6 +3147,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("json_object_keys") {
     fn.json_object_keys(fn.col("g"))
+  }
+
+  functionTest("json_typeof") {
+    fn.json_typeof(fn.col("g"))
   }
 
   functionTest("mask with specific upperChar lowerChar digitChar otherChar") {

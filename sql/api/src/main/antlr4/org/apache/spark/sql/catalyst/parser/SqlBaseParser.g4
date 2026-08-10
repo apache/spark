@@ -1209,6 +1209,7 @@ relationPrimary
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
     | unnest                                                #unnestTable
+    | jsonTable                                             #jsonTableRelation
     | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
     ;
 
@@ -1218,6 +1219,27 @@ relationPrimary
 unnest
     : UNNEST LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
       (WITH ORDINALITY)? tableAlias
+    ;
+
+// The ANSI SQL:2016 JSON_TABLE table-valued function. Because the COLUMNS clause is not a normal
+// function-argument list, it has a dedicated production rather than going through
+// tableFunctionCall. Only the flat (non-NESTED) subset is currently supported.
+jsonTable
+    : JSON_TABLE LEFT_PAREN jsonExpr=expression COMMA rowPath=stringLit
+        COLUMNS LEFT_PAREN jsonTableColumn (COMMA jsonTableColumn)* RIGHT_PAREN
+        jsonTableOnErrorClause?
+      RIGHT_PAREN tableAlias
+    ;
+
+jsonTableColumn
+    : colName=errorCapturingIdentifier FOR ORDINALITY                           #jsonTableOrdinalityColumn
+    | colName=errorCapturingIdentifier dataType
+        EXISTS (PATH path=stringLit)?                                           #jsonTableExistsColumn
+    | colName=errorCapturingIdentifier dataType (PATH path=stringLit)?          #jsonTableValueColumn
+    ;
+
+jsonTableOnErrorClause
+    : (NULL | ERROR) ON ERROR
     ;
 
 optionsClause
@@ -2150,6 +2172,7 @@ ansiNonReserved
     | DROP
     | ELSEIF
     | ENFORCED
+    | ERROR
     | ESCAPED
     | EVOLUTION
     | EXACT
@@ -2208,6 +2231,7 @@ ansiNonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_TABLE
     | KEY
     | KEYS
     | LANGUAGE
@@ -2570,6 +2594,7 @@ nonReserved
     | ELSEIF
     | END
     | ENFORCED
+    | ERROR
     | ESCAPE
     | ESCAPED
     | EVOLUTION
@@ -2642,6 +2667,7 @@ nonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_TABLE
     | KEY
     | KEYS
     | LANGUAGE

@@ -24,7 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, PersistedView}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, PersistedView, Resolver}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
@@ -39,9 +39,12 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructTyp
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, Transform}
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
-import org.apache.spark.sql.pipelines.util.PipelinesCatalogUtils
+import org.apache.spark.sql.pipelines.util.{
+  PipelinesCatalogUtils,
+  SchemaInferenceUtils,
+  SchemaMergingUtils
+}
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
-import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -97,6 +100,9 @@ object DatasetManager extends Logging {
     val tablesToMaterialize = {
       tablesToMatz(resolvedDataflowGraph).map(t => t.table.identifier -> t).toMap
     }
+    val sessionCaseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
+    val inferredSchemas = resolvedDataflowGraph.inferSchemas(sessionCaseSensitive)
+    val auxiliaryTableSpecs = resolvedDataflowGraph.auxiliaryTableSpecs(inferredSchemas)
 
     // materialized [[DataflowGraph]] where each table has been materialized and each table
     // has metadata (e.g., normalized table storage path) populated
@@ -112,8 +118,7 @@ object DatasetManager extends Logging {
                 // materializeAuxiliaryTable (which uses it to decide evolve-vs-create). Nothing
                 // between them mutates the auxiliary table, so a single load is safe and avoids a
                 // redundant catalog round trip.
-                val auxiliaryTableSpecOpt =
-                  resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier)
+                val auxiliaryTableSpecOpt = auxiliaryTableSpecs.get(table.identifier)
                 val existingAuxiliaryTable = auxiliaryTableSpecOpt.flatMap { spec =>
                   val (auxCatalog, auxId) =
                     PipelinesCatalogUtils.resolveTableCatalog(context.spark, spec.identifier)
@@ -122,6 +127,7 @@ object DatasetManager extends Logging {
                 val (tableWithMaterializationMetadata, catalogTableEntity) = materializeTable(
                   resolvedDataflowGraph = resolvedDataflowGraph,
                   table = table,
+                  inferredSchemas = inferredSchemas,
                   isFullRefresh = isFullRefresh,
                   auxiliaryTableSpecOpt = auxiliaryTableSpecOpt,
                   existingAuxiliaryTable = existingAuxiliaryTable,
@@ -149,6 +155,10 @@ object DatasetManager extends Logging {
                       auxiliaryTableSpec = auxiliaryTableSpec,
                       isFullRefresh = isFullRefresh,
                       existingAuxiliaryTable = existingAuxiliaryTable,
+                      // The auxiliary schema is derived from its target's, so it evolves under the
+                      // target's effective case sensitivity.
+                      caseSensitive = effectiveCaseSensitivityFor(
+                        resolvedDataflowGraph, table.identifier, context),
                       context = context
                     )
                 }
@@ -282,8 +292,9 @@ object DatasetManager extends Logging {
   /**
    * Materializes a table in the catalog. This method will create or update the table in the
    * catalog based on the given table and context.
-   * @param resolvedDataflowGraph The resolved [[DataflowGraph]] used to infer the table schema.
+   * @param resolvedDataflowGraph The resolved [[DataflowGraph]] used for table metadata.
    * @param table The table to be materialized.
+   * @param inferredSchemas The schemas inferred from the resolved graph, keyed by table.
    * @param isFullRefresh Whether this table should be full refreshed or not.
    * @param auxiliaryTableSpecOpt The spec for the auxiliary table (if this table has one)
    * @param existingAuxiliaryTable The already-loaded auxiliary table for this target (if it has one
@@ -296,6 +307,7 @@ object DatasetManager extends Logging {
   private def materializeTable(
       resolvedDataflowGraph: DataflowGraph,
       table: Table,
+      inferredSchemas: Map[TableIdentifier, StructType],
       isFullRefresh: Boolean,
       auxiliaryTableSpecOpt: Option[AuxiliaryTableSpec],
       existingAuxiliaryTable: Option[V2Table],
@@ -306,7 +318,7 @@ object DatasetManager extends Logging {
       PipelinesCatalogUtils.resolveTableCatalog(context.spark, table.identifier)
 
     val outputSchema = table.specifiedSchema.getOrElse(
-      resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
+      inferredSchemas(table.identifier).asNullable
     )
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
@@ -354,6 +366,9 @@ object DatasetManager extends Logging {
     val autoCdcAuxTableSpecOpt = auxiliaryTableSpecOpt.collect {
         case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
       }
+    val effectiveCaseSensitive = effectiveCaseSensitivityFor(
+      resolvedDataflowGraph, table.identifier, context)
+    val effectiveResolver = SchemaInferenceUtils.resolverFor(effectiveCaseSensitive)
 
     // For an incrementally-updated AutoCDC target, validate that the AutoCDC configuration recorded
     // on the auxiliary table has not drifted, BEFORE anything is created or evolved this run. These
@@ -365,7 +380,7 @@ object DatasetManager extends Logging {
     // Running here turns that into one clear drift error (remedy: full refresh).
     if (isTableIncrementallyUpdated) {
       autoCdcAuxTableSpecOpt.foreach {
-        validateNoAutoCdcAuxConfigDrift(_, existingAuxiliaryTable, context)
+        validateNoAutoCdcAuxConfigDrift(_, existingAuxiliaryTable, effectiveResolver)
       }
     }
 
@@ -387,7 +402,7 @@ object DatasetManager extends Logging {
               targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
               expectedScdType = autoCdcSpec.expectedScdType,
               expectedSequencingType = autoCdcSpec.expectedSequencingType,
-              resolver = context.spark.sessionState.conf.resolver
+              resolver = effectiveResolver
             )
           }
         }
@@ -397,7 +412,8 @@ object DatasetManager extends Logging {
           existingTable = existingTable,
           desiredSchema = outputSchema,
           properties = mergedProperties,
-          mergeWithExistingSchema = isTableIncrementallyUpdated
+          mergeWithExistingSchema = isTableIncrementallyUpdated,
+          caseSensitive = effectiveCaseSensitive
         )
       case None =>
         createTable(
@@ -455,12 +471,15 @@ object DatasetManager extends Logging {
    * @param existingAuxiliaryTable the already-loaded auxiliary table (if it exists), loaded once by
    *                               the caller and shared with the config-drift validation in
    *                               [[materializeTable]] rather than re-loaded here.
+   * @param caseSensitive the effective case sensitivity of the flows writing to the auxiliary
+   *                      table's TARGET, whose schema the auxiliary schema is derived from.
    * @param context the context for the pipeline update.
    */
   private def materializeAuxiliaryTable(
       auxiliaryTableSpec: AuxiliaryTableSpec,
       isFullRefresh: Boolean,
       existingAuxiliaryTable: Option[V2Table],
+      caseSensitive: Boolean,
       context: PipelineUpdateContext): Unit = {
     // Get the DSv2 catalog handler and identifier for the aux table.
     val (catalog, auxiliaryTableIdentifier) =
@@ -511,7 +530,8 @@ object DatasetManager extends Logging {
             existingTable = existingAuxTable,
             desiredSchema = auxiliaryTableSpec.schema,
             properties = auxiliaryTableSpec.properties,
-            mergeWithExistingSchema = true
+            mergeWithExistingSchema = true,
+            caseSensitive = caseSensitive
           )
         case None =>
           createTable(
@@ -541,13 +561,12 @@ object DatasetManager extends Logging {
    * @param existingAuxiliaryTableOpt the already-loaded auxiliary table (if it exists), shared with
    *                                  the caller and [[materializeAuxiliaryTable]] to avoid a
    *                                  redundant load.
-   * @param context the context for the pipeline update.
+   * @param resolver the effective resolver of the flows writing to the AutoCDC target.
    */
   private def validateNoAutoCdcAuxConfigDrift(
       autoCdcSpec: AutoCdcAuxiliaryTableSpec,
       existingAuxiliaryTableOpt: Option[V2Table],
-      context: PipelineUpdateContext): Unit = {
-    val resolver = context.spark.sessionState.conf.resolver
+      resolver: Resolver): Unit = {
     existingAuxiliaryTableOpt.foreach { existingAuxiliaryTable =>
       AutoCdcAuxiliaryTable.validateNoKeyColumnDrift(
         existingAuxiliaryTable = existingAuxiliaryTable,
@@ -567,6 +586,23 @@ object DatasetManager extends Logging {
         resolver = resolver
       )
     }
+  }
+
+  /**
+   * The effective `spark.sql.caseSensitive` for schema evolution of `tableIdentifier`, read from
+   * the flows writing to it rather than from the session, so evolution stays consistent with the
+   * flows whose schemas it is evolving (a pipeline-level `SET` never reaches the session). Fails if
+   * those flows disagree; see [[SchemaInferenceUtils.effectiveCaseSensitivity]].
+   */
+  private def effectiveCaseSensitivityFor(
+      resolvedDataflowGraph: DataflowGraph,
+      tableIdentifier: TableIdentifier,
+      context: PipelineUpdateContext): Boolean = {
+    SchemaInferenceUtils.effectiveCaseSensitivity(
+      tableIdentifier = tableIdentifier,
+      flows = resolvedDataflowGraph.flowsTo.getOrElse(tableIdentifier, Seq.empty),
+      sessionCaseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
+    )
   }
 
   /**
@@ -626,6 +662,15 @@ object DatasetManager extends Logging {
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
+   * @param caseSensitive           whether the additive schema merge treats field names differing
+   *                                only in case as distinct columns. Callers should pass the
+   *                                effective `spark.sql.caseSensitive` used to resolve the schema
+   *                                being evolved. When `false`, an incoming column differing from
+   *                                an existing one only in case is folded onto it rather than
+   *                                added as a duplicate. Only affects the merge (i.e.
+   *                                `mergeWithExistingSchema = true`); the subsequent diff always
+   *                                keys columns on their exact names, so a case-only rename on a
+   *                                non-merging path stays an explicit drop-then-add.
    */
   private def evolveTable(
       catalog: TableCatalog,
@@ -633,13 +678,18 @@ object DatasetManager extends Logging {
       existingTable: V2Table,
       desiredSchema: StructType,
       properties: Map[String, String],
-      mergeWithExistingSchema: Boolean): Unit = {
+      mergeWithExistingSchema: Boolean,
+      caseSensitive: Boolean): Unit = {
     val currentSchema = v2ColumnsToStructType(existingTable.columns())
     val targetSchema = if (mergeWithExistingSchema) {
-      SchemaMergingUtils.mergeSchemas(currentSchema, desiredSchema)
+      SchemaMergingUtils.mergeSchemas(currentSchema, desiredSchema, caseSensitive)
     } else {
       desiredSchema
     }
+    // `diffSchemas` keys column identity on exact field names. On the incremental path the merge
+    // above has already folded a case-only-differing incoming field onto the persisted one. On the
+    // non-merging paths (materialized views, full refresh), `targetSchema` is the declared schema
+    // as-is, where exact-name matching keeps a case-only rename visible as a schema change.
     val columnChanges = diffSchemas(currentSchema, targetSchema)
 
     val existingProperties = existingTable.properties()

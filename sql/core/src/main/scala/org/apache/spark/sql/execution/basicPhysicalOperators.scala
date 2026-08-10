@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
+import org.apache.spark.sql.catalyst.plans.logical.Sample
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -497,7 +498,7 @@ case class SampleExec(
     seed: Option[Long],
     child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
-  val resolvedSeed: Long = seed.getOrElse((math.random() * 1000).toLong)
+  val resolvedSeed: Long = Sample.resolveSeed(seed)
 
   override def output: Seq[Attribute] = child.output
 

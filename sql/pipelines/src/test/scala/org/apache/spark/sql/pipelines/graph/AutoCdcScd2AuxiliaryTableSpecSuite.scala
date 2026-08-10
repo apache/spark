@@ -76,7 +76,9 @@ class AutoCdcScd2AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
         deleteCondition = None,
         storedAsScdType = ScdType.Type2)))
     val graph = ctx.resolveToDataflowGraph()
-    graph.auxiliaryTableSpecs(targetIdentifier).asInstanceOf[AutoCdcAuxiliaryTableSpec]
+    val inferredSchemas = graph.inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)
+    graph.auxiliaryTableSpecs(inferredSchemas)(targetIdentifier)
+      .asInstanceOf[AutoCdcAuxiliaryTableSpec]
   }
 
   /** The SCD2 target (inferred) schema for the default single-flow graph. */
@@ -97,7 +99,8 @@ class AutoCdcScd2AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
         columnSelection = None,
         deleteCondition = None,
         storedAsScdType = ScdType.Type2)))
-    ctx.resolveToDataflowGraph().inferredSchema(targetIdentifier)
+    ctx.resolveToDataflowGraph()
+      .inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)(targetIdentifier)
   }
 
   test("SCD2 aux schema is the full target schema plus the deleted-by-batch-id marker") {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.{Connection, SQLFeatureNotSupportedException}
 
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.MySQLDatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -312,6 +312,15 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     assert(rows10.length === 2)
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
+  }
+
+  test("do not push down casts to double") {
+    val df = sql(
+      s"SELECT name FROM $catalogName.employee " +
+        "WHERE CAST(salary AS DOUBLE) > 10000.5")
+
+    checkFilterPushed(df, pushed = false)
+    checkAnswer(df, Seq(Row("alex"), Row("jen")))
   }
 }
 

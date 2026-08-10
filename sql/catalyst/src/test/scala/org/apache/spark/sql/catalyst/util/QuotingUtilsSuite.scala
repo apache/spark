@@ -40,4 +40,17 @@ class QuotingUtilsSuite extends SparkFunSuite {
     assert(quoteIfNeeded("0d") == "`0d`")
     assert(quoteIfNeeded("") === "``")
   }
+
+  test("quoteIdentifier escapes back-ticks and always wraps") {
+    assert(QuotingUtils.quoteIdentifier("a") === "`a`")
+    assert(QuotingUtils.quoteIdentifier("") === "``")
+    assert(QuotingUtils.quoteIdentifier("a`b") === "`a``b`")
+    assert(QuotingUtils.quoteIdentifier("`") === "````")
+  }
+
+  test("escapeSingleQuotedString escapes single quotes only") {
+    assert(QuotingUtils.escapeSingleQuotedString("abc") === "abc")
+    assert(QuotingUtils.escapeSingleQuotedString("a'b") === "a\\'b")
+    assert(QuotingUtils.escapeSingleQuotedString("''") === "\\'\\'")
+  }
 }

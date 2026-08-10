@@ -983,6 +983,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val COMBINE_APPROXIMATE_PERCENTILES_ENABLED =
+    buildConf("spark.sql.optimizer.combineApproximatePercentiles.enabled")
+      .doc("When true, combines compatible scalar approximate percentile aggregates into a " +
+        "single array-valued aggregate so they share one percentile digest.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val EXPRESSION_PROJECTION_CANDIDATE_LIMIT =
     buildConf("spark.sql.optimizer.expressionProjectionCandidateLimit")
       .doc("The maximum number of the candidate of output expressions whose alias are replaced." +
@@ -1105,7 +1114,11 @@ object SQLConf {
       .doc("When true, the planner requires all the clustering keys as the hash partition keys " +
         "of the children, to eliminate the shuffles for the operator that needs its children to " +
         "be co-partitioned, such as JOIN node. This is to avoid data skews which can lead to " +
-        "significant performance regression if shuffles are eliminated.")
+        "significant performance regression if shuffles are eliminated. For storage-partitioned " +
+        "join, every clustering key must be covered by some partition key, rather than matching " +
+        "the partition keys positionally, so a column partitioned by more than one transform " +
+        "does not prevent shuffle elimination; hash partitioning deliberately keeps the " +
+        "positional match.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -3147,6 +3160,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED =
+    buildConf("spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled")
+      .internal()
+      .doc("When true, map-typed arguments of distinct aggregates are normalized with MapSort. " +
+        "When false, MapSort is not added solely for distinct aggregate arguments; arguments " +
+        "that are also grouping expressions remain normalized.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZE_EXPAND_RATIO =
     buildConf("spark.sql.optimizer.optimizeExpandRatio")
       .internal()
@@ -3758,6 +3782,36 @@ object SQLConf {
       .intConf
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
+
+  val STREAMING_USE_STREAMLINE_AGGREGATOR =
+    buildConf("spark.sql.streaming.useStreamlineAggregator")
+      .internal()
+      .doc("Test/development only, not intended for production use. When true, plan a streaming " +
+        "aggregation with the streamline aggregation operator, which merges each input row " +
+        "against state and emits immediately, instead of the microbatch operators that only emit " +
+        "once the batch ends. Real-Time Mode queries use the streamline operator regardless of " +
+        "this config; this flag exists only so the operator can be exercised under an ordinary " +
+        "microbatch trigger in tests, and changes an aggregation's output timing when set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR =
+    buildConf("spark.sql.streaming.statefulOperator.incrementalCleanupFactor")
+      .internal()
+      .doc("For a stateful operator that evicts by watermark, the number of eviction-eligible " +
+        "records to remove per input record processed, spreading eviction cost across the batch " +
+        "instead of paying it all at batch end. When 0, incremental cleanup is disabled and all " +
+        "eviction happens at batch end. When k, up to k eligible records are removed per input; " +
+        "any still-eligible records left over are removed at batch end. Only applies to modes " +
+        "that evict (e.g. Append/Update); has no effect in Complete mode, which never evicts. " +
+        "Currently read only by the streamline aggregation operator.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .longConf
+      .checkValue(_ >= 0, "The incremental cleanup factor must not be negative.")
+      .createWithDefault(0L)
 
   val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
     buildConf("spark.sql.streaming.stopActiveRunOnRestart")
@@ -4688,20 +4742,6 @@ object SQLConf {
       .checkValue(_ >= -1,
         "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
-
-  val BYPASS_PARTIAL_WINDOW_GROUP_LIMIT =
-    buildConf("spark.sql.execution.bypassPartialWindowGroupLimit")
-      .doc("When true, skips the pre-shuffle partial WindowGroupLimit and runs only a single " +
-        "WindowGroupLimit after the shuffle. Bypassing the partial window group limit can " +
-        "improve performance when the pre-shuffle reduction ratio is low. This only applies to " +
-        "windows with a non-empty partition spec; an unpartitioned window always keeps the " +
-        "partial pass, since for a multi-partition input the shuffle funnels the whole input " +
-        "into a single reducer. When false (default), a partial WindowGroupLimit runs before " +
-        "the shuffle and a final one runs after it.")
-      .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .booleanConf
-      .createWithDefault(false)
 
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
@@ -7467,6 +7507,36 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val MERGE_SUBPLANS_DSV2_ALLOW_KEY_GROUPED_PARTITIONING_DEGRADATION = buildConf(
+    "spark.sql.optimizer.mergeSubplans.dsv2ScanMerge.keyGroupedPartitioningDegradation.enabled")
+    .doc("When false, a DataSource V2 scan merge is declined if the rebuilt merged scan would " +
+      "report weaker key-grouped partitioning than an input reported (no longer clustering by " +
+      "the same expressions), which can force a shuffle the original plan avoided. The merge is " +
+      "also declined, before any rebuild, when the two input scans report different clustering " +
+      "expressions, since no single merged scan could preserve both. When true, the merge " +
+      "proceeds anyway in both cases, trading the partitioning for a single scan. Reported " +
+      "partitioning is re-derived on the merged scan, so a merge that does not weaken it is " +
+      "always allowed. Only affects sources that declare the SCAN_MERGING table capability.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
+  val MERGE_SUBPLANS_DSV2_ALLOW_ORDERING_DEGRADATION = buildConf(
+    "spark.sql.optimizer.mergeSubplans.dsv2ScanMerge.orderingDegradation.enabled")
+    .doc("When false, a DataSource V2 scan merge is declined if the rebuilt merged scan would " +
+      "report a weaker output ordering than an input reported (an input ordering is no longer a " +
+      "prefix of the merged scan's), which can force a sort the original plan avoided. The merge " +
+      "is also declined, before any rebuild, when neither input's reported ordering satisfies " +
+      "the other, since no single merged scan could preserve both. When true, the merge proceeds " +
+      "anyway in both cases, trading the ordering for a single scan. Reported ordering is " +
+      "re-derived on the merged scan, so a merge that does not weaken it is always allowed. Only " +
+      "affects sources that declare the SCAN_MERGING table capability.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
   val MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED =
     buildConf("spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled")
       .doc("When set to true, filter attributes can propagate through Join nodes during subplan " +
@@ -7741,23 +7811,6 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
-
-  // Deprecate "spark.connect.copyFromLocalToFs.allowDestLocal" in favor of this config. This is
-  // currently optional because we don't want to break existing users who are using the old config.
-  // If this config is set, then we override the deprecated config.
-  val ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
-    buildConf("spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
-      .internal()
-      .doc("""
-             |Allow `spark.copyFromLocalToFs` destination to be local file system
-             | path on spark driver node when
-             |`spark.sql.artifact.copyFromLocalToFs.allowDestLocal` is true.
-             |This will allow user to overwrite arbitrary file on spark
-             |driver node we should only enable it for testing purpose.
-             |""".stripMargin)
-      .version("4.0.0")
-      .booleanConf
-      .createOptional
 
   val LEGACY_RETAIN_FRACTION_DIGITS_FIRST =
     buildConf("spark.sql.legacy.decimal.retainFractionDigitsOnTruncate")
@@ -8313,7 +8366,7 @@ object SQLConf {
       DeprecatedConfig(ESCAPED_STRING_LITERALS.key, "4.0",
         "Use raw string literals with the `r` prefix instead. "),
       DeprecatedConfig("spark.connect.copyFromLocalToFs.allowDestLocal", "4.0",
-        s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead."),
+        "Use 'spark.sql.artifact.copyFromLocalToFs.allowDestLocal' instead."),
       DeprecatedConfig(ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key, "4.0", "Increase indexes by 1 " +
         "in `strfmt` of the `format_string` function. Refer to the first argument by \"1$\"."),
       DeprecatedConfig(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "4.1",
@@ -9135,8 +9188,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def windowExecBufferSpillSizeThreshold: Long = getConf(WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD)
 
   def windowGroupLimitThreshold: Int = getConf(WINDOW_GROUP_LIMIT_THRESHOLD)
-
-  def bypassPartialWindowGroupLimit: Boolean = getConf(BYPASS_PARTIAL_WINDOW_GROUP_LIMIT)
 
   def windowSegmentTreeEnabled: Boolean = getConf(WINDOW_SEGMENT_TREE_ENABLED)
 
