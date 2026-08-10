@@ -310,8 +310,8 @@ private[spark] object SparkCoreErrors {
 
   def unableToRegisterWithExternalShuffleServerError(e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3033",
-      messageParameters = Map("message" -> e.getMessage),
+      errorClass = "UNABLE_TO_REGISTER_WITH_EXTERNAL_SHUFFLE_SERVICE",
+      messageParameters = Map("message" -> Option(e.getMessage).getOrElse(e.toString)),
       cause = e
     )
   }
@@ -320,35 +320,30 @@ private[spark] object SparkCoreErrors {
     SparkException.internalError("Error occurred while waiting for async. reregistration.", e)
   }
 
-  def unexpectedShuffleBlockWithUnsupportedResolverError(
+  def shuffleBlockMigrationNotSupportedError(
+      blockId: BlockId,
       shuffleBlockResolver: ShuffleBlockResolver,
-      blockId: BlockId): Throwable = {
+      e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3035",
+      errorClass = "SHUFFLE_BLOCK_MIGRATION_NOT_SUPPORTED",
       messageParameters = Map(
         "blockId" -> s"$blockId",
-        "shuffleBlockResolver" -> s"$shuffleBlockResolver"
+        "resolverClass" -> shuffleBlockResolver.getClass.getName
       ),
-      cause = null
+      cause = e
     )
   }
 
   def failToStoreBlockOnBlockManagerError(
       blockManagerId: BlockManagerId,
       blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3036",
-      messageParameters = Map(
-        "blockId" -> s"$blockId",
-        "blockManagerId" -> s"$blockManagerId"
-      ),
-      cause = null
-    )
+    SparkException.internalError(
+      s"Failed to store block $blockId on $blockManagerId.", category = "STORAGE")
   }
 
-  def readLockedBlockNotFoundError(blockId: BlockId): Throwable = {
+  def localBlockDataNotFoundError(blockId: BlockId): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3037",
+      errorClass = "LOCAL_BLOCK_DATA_NOT_FOUND",
       messageParameters = Map(
         "blockId" -> s"$blockId"
       ),

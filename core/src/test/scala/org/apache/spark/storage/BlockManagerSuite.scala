@@ -1781,9 +1781,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // Because the BlockManager's metadata claims that the block exists (i.e. that it's present
     // in at least one store), the read attempts to read it and fails when the on-disk file is
     // missing.
-    intercept[SparkException] {
-      readMethod(store)
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        readMethod(store)
+      },
+      condition = "LOCAL_BLOCK_DATA_NOT_FOUND",
+      sqlState = Some("58030"),
+      parameters = Map("blockId" -> "test_blockId"))
     // Subsequent read attempts will succeed; the block isn't present but we return an expected
     // "block not found" response rather than a fatal error:
     assert(readMethod(store).isEmpty)
@@ -2065,7 +2069,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val exception = intercept[SparkException] {
       bm.putBlockDataAsStream(shuffleBlockId, StorageLevel.DISK_ONLY, ClassTag(message.getClass))
     }
-    assert(exception.getMessage.contains("unsupported shuffle resolver"))
+    checkError(
+      exception = exception,
+      condition = "SHUFFLE_BLOCK_MIGRATION_NOT_SUPPORTED",
+      sqlState = Some("0A000"),
+      parameters = Map(
+        "blockId" -> shuffleBlockId.toString,
+        "resolverClass" -> badShuffleResolver.getClass.getName))
+    // The `ClassCastException` is kept as the cause, so an unrelated CCE raised inside a
+    // third-party resolver stays diagnosable.
+    assert(exception.getCause.isInstanceOf[ClassCastException])
   }
 
   test("SPARK-54796: putBlockDataAsStream throws ShuffleManagerNotInitializedException " +
