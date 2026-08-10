@@ -23,7 +23,9 @@ import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregat
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This rule combines adjacent aggregation with `Partial` and `Final` to `Complete` mode.
+ * This rule combines adjacent aggregation with `Partial` and `Final` to `Complete` mode, or
+ * `PartialMerge` and `Final` to `Final` mode. The latter can be produced by physical plan
+ * extensions that add an extra aggregation stage.
  * Example for hash aggregate:
  *    HashAggregate (Final)         HashAggregate (Complete)
  *          |                             |
@@ -83,12 +85,12 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
       case other => throw new IllegalArgumentException(s"Unexpected aggregate mode: $other")
     }
     finalAgg.copy(
-      requiredChildDistributionExpressions = partialAgg.requiredChildDistributionExpressions,
+      requiredChildDistributionExpressions = finalAgg.requiredChildDistributionExpressions,
       isStreaming = partialAgg.isStreaming,
       numShufflePartitions = partialAgg.numShufflePartitions,
       groupingExpressions = partialAgg.groupingExpressions,
       aggregateExpressions = aggregateExpressions,
-      initialInputBufferOffset = if (mode == Complete) 0 else finalAgg.initialInputBufferOffset,
+      initialInputBufferOffset = if (mode == Complete) 0 else partialAgg.initialInputBufferOffset,
       child = partialAgg.child)
   }
 
@@ -96,8 +98,6 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
       partialAgg: HashAggregateExec,
       finalAgg: HashAggregateExec): Option[AggregateMode] = {
     if (!isCompatibleAggregates(partialAgg, finalAgg)) {
-      None
-    } else if (partialAgg.outputSet != finalAgg.usedInputs) {
       None
     } else if (partialAgg.aggregateExpressions.forall(_.mode == Partial)) {
       Some(Complete)
