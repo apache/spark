@@ -23,6 +23,7 @@ import java.util.ArrayDeque
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.commons.text.StringEscapeUtils
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, TypeCheckResult}
