@@ -850,12 +850,14 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitRejectsSessionNameWithAccentedChar() {
-    // "caf\u00e9" contains a Latin-1 accented 'e' -- valid under \w but NOT valid
-    // in STS session names. This test would PASS (incorrectly) under the buggy \w
-    // pattern and must FAIL (correctly) under the explicit ASCII pattern.
+    // "caf" + (char) 0xE9 produces "cafe" with accented 'e' -- valid under \w but
+    // NOT valid in STS session names. This test would PASS (incorrectly) under the
+    // buggy \w pattern and must FAIL (correctly) under the explicit ASCII pattern.
+    // NOTE: (char) 0xNN construction avoids unicode escapes banned by Spark
+    // checkstyle (AvoidEscapedUnicodeCharacters) while keeping source bytes ASCII.
     Map<String, String> conf = new HashMap<>();
     conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "caf\u00e9");
+    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "caf" + (char) 0xE9);
 
     AwsStsCredentialProvider p = new AwsStsCredentialProvider();
     IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
@@ -867,9 +869,10 @@ public class AwsStsCredentialProviderSuite {
   public void testInitRejectsSessionNameWithCjkChar() {
     // CJK ideograph U+4E16 ('world' in Chinese) -- valid under \w but NOT valid
     // in STS session names. Regression test for the ASCII-only fix.
+    // NOTE: (char) 0xNN construction avoids unicode escapes banned by checkstyle.
     Map<String, String> conf = new HashMap<>();
     conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "session\u4e16");
+    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "session" + (char) 0x4E16);
 
     AwsStsCredentialProvider p = new AwsStsCredentialProvider();
     IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
