@@ -244,10 +244,11 @@ object PushDownUtils extends Logging {
         // below, and we use the same method (isPushablePartitionFilter) to determine if we
         // should push it.
         //
-        // Note: Both sites accept everything today, since the strategy already keeps
-        // non-deterministic filters out of runtimeFilters (SPARK-58207); this keeps the two
-        // decisions consistent if we change what counts as non-deterministic in the helper
-        // method.
+        // Note: today every filter reaching either site passes this check
+        // (deleted by DataSourceV2Strategy, and pushed by this method), since runtimeFilters
+        // holds only deterministic filters (SPARK-58207) and ExtractPythonUDFs has already
+        // lifted any Python UDF out of the post-scan filters. But sharing the check keeps the two
+        // decisions consistent if non-deterministic filters reach the site.
         //
         // A DPP filter degrades to TrueLiteral once its subquery is pruned away, so it matches
         // every row. The V2 path above drops these implicitly, since translateRuntimeFilterV2
