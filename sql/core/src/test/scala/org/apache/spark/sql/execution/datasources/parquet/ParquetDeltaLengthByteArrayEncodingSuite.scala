@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.nio.ByteBuffer
 import java.util.Random
 
 import org.apache.commons.lang3.RandomStringUtils
 import org.apache.parquet.bytes.{ByteBufferInputStream, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.Utils
 import org.apache.parquet.column.values.deltalengthbytearray.DeltaLengthByteArrayValuesWriter
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.STUtils
@@ -90,6 +92,20 @@ class ParquetDeltaLengthByteArrayEncodingSuite
       reader.skipBinary(skipCount)
       i += skipCount + 1
     }
+  }
+
+  test("skipBinary fails cleanly when the data region is truncated") {
+    // The length header is intact but the data region is short, so the lengths decoded from
+    // the page declare more bytes than the stream actually holds. skipBinary must surface a
+    // ParquetDecodingException instead of spinning forever on an exhausted stream.
+    writeData(writer, values)
+    val fullBytes = writer.getBytes.toByteArray
+    val truncated = java.util.Arrays.copyOf(fullBytes, fullBytes.length - 3)
+    reader.initFromPage(values.length, ByteBufferInputStream.wrap(ByteBuffer.wrap(truncated)))
+    val e = intercept[ParquetDecodingException] {
+      reader.skipBinary(values.length)
+    }
+    assert(e.getMessage.contains("Failed to skip"))
   }
 
   // Read the lengths from the beginning of the buffer and compare with the lengths of the values
