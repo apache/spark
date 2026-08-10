@@ -58,7 +58,7 @@ import org.apache.spark.util.ArrayImplicits._
  *  - Part 4: Methods and fields used when we switch to sort-based aggregation.
  *  - Part 5: Methods and fields used by sort-based aggregation.
  *  - Part 6: Methods and fields used by adaptive partial aggregation pass-through.
- *  - Part 7: Loads input and process input rows.
+ *  - Part 7: Loads input and processes input rows.
  *  - Part 8: Public methods of this iterator.
  *  - Part 9: A utility function used to generate a result when there is no
  *            input and there is no grouping expression.
@@ -464,7 +464,7 @@ class TungstenAggregationIterator(
   }
 
   ///////////////////////////////////////////////////////////////////////////
-  // Part 7: Loads input rows and setup aggregationBufferMapIterator if we
+  // Part 7: Loads input rows and sets up aggregationBufferMapIterator if we
   //         have not switched to sort-based aggregation.
   ///////////////////////////////////////////////////////////////////////////
 
