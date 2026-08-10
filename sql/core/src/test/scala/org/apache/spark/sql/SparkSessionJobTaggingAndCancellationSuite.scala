@@ -160,8 +160,8 @@ class SparkSessionJobTaggingAndCancellationSuite
         }
 
         override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-          sem.release()
           jobEnded.incrementAndGet()
+          sem.release()
         }
       })
 
