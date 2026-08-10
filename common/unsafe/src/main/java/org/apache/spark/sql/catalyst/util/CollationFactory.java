@@ -1151,6 +1151,7 @@ public final class CollationFactory {
           "null",
           "null",
           null,
+          ULocale.ROOT,
           (s1, s2) -> {
             throw indeterminateError();
           },
