@@ -1982,7 +1982,7 @@ case class BRound(
   arguments = """
     Arguments:
       * expr - The expression to truncate. An expression that evaluates to a numeric.
-      * scale - The number of decimal places to keep. An expression that evaluates to an integer, must be a constant, and defaults to 0. A negative value truncates digits to the left of the decimal point.
+      * scale - The number of decimal places to keep. It must be a constant integer expression and defaults to 0. A negative value truncates digits to the left of the decimal point.
   """,
   examples = """
     Examples:

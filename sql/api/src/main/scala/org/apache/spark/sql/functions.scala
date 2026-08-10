@@ -6075,7 +6075,8 @@ object functions {
    * @param e
    *   the value to truncate. A column that evaluates to a numeric.
    * @return
-   *   Returns a column of the same type as the input.
+   *   Returns a column of the same type as the input, except that a decimal input may return a
+   *   decimal of different precision and scale.
    * @group math_funcs
    * @since 4.4.0
    */
@@ -6091,7 +6092,8 @@ object functions {
    *   the number of decimal places to keep. A column that evaluates to an integral. Must be a
    *   constant.
    * @return
-   *   Returns a column of the same type as the input.
+   *   Returns a column of the same type as the input, except that a decimal input may return a
+   *   decimal of different precision and scale.
    * @group math_funcs
    * @since 4.4.0
    */
@@ -6107,7 +6109,8 @@ object functions {
    *   the number of decimal places to keep. A column that evaluates to an integral. Must be a
    *   constant.
    * @return
-   *   Returns a column of the same type as the input.
+   *   Returns a column of the same type as the input, except that a decimal input may return a
+   *   decimal of different precision and scale.
    * @group math_funcs
    * @since 4.4.0
    */
