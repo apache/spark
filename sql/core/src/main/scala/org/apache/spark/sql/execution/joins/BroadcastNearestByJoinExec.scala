@@ -76,7 +76,7 @@ case class BroadcastNearestByJoinExec(
        |${ExplainUtils.generateFieldString("Ranking", rankingExpression.sql)}
        |${ExplainUtils.generateFieldString("NumResults", numResults.toString)}
        |${ExplainUtils.generateFieldString("Direction", direction.toString)}
-       |${ExplainUtils.generateFieldString("JoinType", joinType.toString)}
+       |${ExplainUtils.generateFieldString("Join type", joinType.toString)}
        |""".stripMargin
   }
 
@@ -97,7 +97,10 @@ case class BroadcastNearestByJoinExec(
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
-  override def outputOrdering: Seq[SortOrder] = Nil
+  // Matches BroadcastNestedLoopJoinExec: for BuildRight with InnerLike or LeftOuter,
+  // the streamed (left) side's ordering is preserved because we iterate left rows in
+  // order and emit each row's matches contiguously.
+  override def outputOrdering: Seq[SortOrder] = left.outputOrdering
 
   protected override def doExecute(): RDD[InternalRow] = {
     val broadcastedRight = right.executeBroadcast[Array[InternalRow]]()

@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Replaces a logical [[NearestByJoin]] operator with a `Generate(Inline(...))` over an
@@ -78,7 +77,7 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
       // planner's NearestByJoinSelection strategy, which unconditionally plans
       // BroadcastNearestByJoinExec. There is no size decision; the right side is
       // broadcast unconditionally regardless of spark.sql.autoBroadcastJoinThreshold.
-      if !SQLConf.get.nearestByBroadcastEnabled =>
+      if !conf.nearestByBroadcastEnabled =>
       // 1. Tag each left row with a unique id so that rows from the same left row can later be
       //    grouped together after the cross-join with `right`.
       val qidAlias = Alias(Uuid(Some(random.nextLong())), "__qid")()

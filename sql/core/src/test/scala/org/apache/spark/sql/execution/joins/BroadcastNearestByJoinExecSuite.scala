@@ -20,11 +20,14 @@ package org.apache.spark.sql.execution.joins
 import java.sql.Date
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper,
+  BroadcastQueryStageExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession {
+class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -460,7 +463,13 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("SPARK-57091: AQE re-optimization works with BroadcastNearestByJoinExec") {
+  test("SPARK-57091: AQE ValidateSparkPlan accepts BroadcastNearestByJoinExec") {
+    // Directly verify that ValidateSparkPlan does not reject a
+    // BroadcastNearestByJoinExec whose right child is a BroadcastQueryStageExec.
+    // Without the explicit `case b: BroadcastNearestByJoinExec` in ValidateSparkPlan,
+    // the default case recurses into the BroadcastQueryStageExec child and throws
+    // InvalidAQEPlanException.
+    import org.apache.spark.sql.execution.adaptive.ValidateSparkPlan
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true") {
@@ -468,13 +477,28 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
       val right = Seq((10, 9.0), (11, 15.0), (12, 21.0), (13, 29.0)).toDF("rid", "y")
       val df = left.nearestByJoin(right, abs(col("x") - col("y")),
         numResults = 2, mode = "exact", direction = "distance")
-      val plan = df.queryExecution.executedPlan.toString()
-      assert(plan.contains("BroadcastNearestByJoin"),
-        s"Expected BroadcastNearestByJoinExec in plan: $plan")
-      checkAnswer(df.filter(col("id") === 1).orderBy(abs(col("x") - col("y"))), Seq(
-        Row(1, 10.0, 10, 9.0),
-        Row(1, 10.0, 11, 15.0)
-      ))
+      val executedPlan = df.queryExecution.executedPlan
+      // After execution, the plan tree has BroadcastNearestByJoinExec with
+      // BroadcastQueryStageExec as its right child
+      val adaptivePlan = executedPlan match {
+        case aqe: AdaptiveSparkPlanExec =>
+          df.collect() // force execution
+          aqe.executedPlan
+        case other => other
+      }
+      // Find the BroadcastNearestByJoinExec with its BroadcastQueryStageExec right child
+      val nearestByOps = collect(adaptivePlan) {
+        case b: BroadcastNearestByJoinExec => b
+      }
+      assert(nearestByOps.nonEmpty,
+        "Expected BroadcastNearestByJoinExec in plan but got:\n" + adaptivePlan.treeString)
+      val nb = nearestByOps.head
+      assert(nb.right.isInstanceOf[BroadcastQueryStageExec],
+        s"Expected BroadcastQueryStageExec as right child but got: ${nb.right.getClass.getName}")
+      // Directly invoke ValidateSparkPlan on the subtree rooted at
+      // BroadcastNearestByJoinExec. This must not throw InvalidAQEPlanException.
+      // If the case in ValidateSparkPlan for our operator is missing, this throws.
+      ValidateSparkPlan.apply(nb)
     }
   }
 
@@ -670,8 +694,8 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
         s"EXPLAIN FORMATTED should contain 'Direction: NearestByDistance'\n$explain")
       assert(explain.contains("Ranking:"),
         s"EXPLAIN FORMATTED should contain 'Ranking:'\n$explain")
-      assert(explain.contains("JoinType: Inner"),
-        s"EXPLAIN FORMATTED should contain 'JoinType: Inner'\n$explain")
+      assert(explain.contains("Join type: Inner"),
+        s"EXPLAIN FORMATTED should contain 'Join type: Inner'\n$explain")
     }
   }
 
@@ -726,7 +750,9 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
     assert(leftOuterAllNull(true).toSeq == leftOuterAllNull(false).toSeq,
       "LEFT OUTER ALL-NULL: operator and rewrite should produce identical results")
 
-    // Case 4: Per-left-row result ordering (best-first)
+    // Case 4: Per-left-row result ordering (best-first).
+    // With a single left row and no ties, the raw collect() order is deterministic
+    // and best-first for both paths -- no orderBy needed.
     def orderedResults(flagOn: Boolean): Array[Row] = {
       withSQLConf(
         SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> flagOn.toString,
@@ -734,10 +760,10 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
         val singleLeft = Seq((1, 10.0)).toDF("id", "x")
         singleLeft.nearestByJoin(right, abs(col("x") - col("y")),
           numResults = 3, mode = "exact", direction = "distance")
-          .orderBy(abs(col("x") - col("y")), col("rid")).collect()
+          .collect()
       }
     }
     assert(orderedResults(true).toSeq == orderedResults(false).toSeq,
-      "ORDERED RESULTS: operator and rewrite should produce identical results")
+      "ORDERED RESULTS: operator and rewrite should produce identical best-first order")
   }
 }

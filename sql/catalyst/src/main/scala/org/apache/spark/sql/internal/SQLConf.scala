@@ -2668,7 +2668,7 @@ object SQLConf {
         "of its size and of spark.sql.autoBroadcastJoinThreshold, so a right side too large " +
         "to broadcast fails the query instead of falling back to the rewrite. Because no " +
         "Join node is built, spark.sql.crossJoin.enabled does not apply on this path.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
