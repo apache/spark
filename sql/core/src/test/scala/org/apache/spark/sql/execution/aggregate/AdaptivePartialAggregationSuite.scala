@@ -637,16 +637,22 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("both execution paths agree on an order-sensitive aggregate") {
-    // Bypassing merges a group's buffers in a different order than an unbypassed run: the rows
-    // streamed after the flip reach the `Final` aggregate before the ones the maps still hold.
-    // That order is not guaranteed -- what must hold is that the generated and interpreted paths
-    // produce the *same* result, or `spark.sql.codegen.wholeStage` becomes observable.
+    // Bypassing merges a group's buffers in a different order than a run that never bypasses:
+    // the first bypassed row is emitted ahead of the frozen map, and the rows streamed after it
+    // trail the map output. That order is not a promise -- what must hold is that the generated
+    // and interpreted paths produce the *same* result, or `spark.sql.codegen.wholeStage` becomes
+    // observable. The test deliberately does not compare against a non-bypassed run.
     //
-    // Both axes below matter. Splitting the plan by an exchange (or not) changes how the frozen
-    // map output merges with the streamed rows -- the generated path must be told whether its
-    // output is buffered or feeds the `Final`'s `doConsume` directly -- so the two shapes are
-    // exercised separately. And the divergence only shows when the colliding row is not the one
-    // the flip fired on, since that row is emitted from the build loop either way.
+    // The flip fires at the first periodic check: with `minRows=8` it lands on the 8th aggregated
+    // row, when the map already holds 8 distinct keys (id 0 maps to -1, ids 1-7 to keys 1-7), so
+    // the compaction ratio 1.0 is below `minCompaction` (1.05) and every remaining row streams;
+    // id 8 is the first bypassed row. At `dupAt=8` the colliding row is that first bypassed row,
+    // so its buffer reaches the `Final` before the frozen map's and `first`/`last` invert. At
+    // `dupAt=9` the colliding row streams after the map and the group stays in input order.
+    //
+    // Both plan shapes are exercised separately. Splitting the aggregates with an `Exchange` (or
+    // not) changes how the frozen map output merges with the streamed rows -- the generated path
+    // must be told whether its output is buffered or feeds the `Final`'s `doConsume` directly.
     for {
       splits <- Seq(1, 2)
       derivedKey <- Seq(false, true)
