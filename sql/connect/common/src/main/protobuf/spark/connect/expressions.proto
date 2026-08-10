@@ -475,6 +475,11 @@ message PythonUDF {
   string python_ver = 4;
   // (Optional) Additional includes for the Python UDF.
   repeated string additional_includes = 5;
+  // (Optional) (SPARK-51705) Server-assigned ids of broadcast variables referenced by this UDF.
+  // Resolved by SparkConnectPlanner against the per-session SessionHolder broadcasts registry
+  // into SimplePythonFunction.broadcastVars. The ids are the driver-side Broadcast ids returned
+  // by CreateBroadcastResult (which the executor/worker also key on), not opaque handles.
+  repeated int64 broadcast_ids = 6;
 }
 
 message ScalarScalaUDF {

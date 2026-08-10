@@ -30,6 +30,16 @@
       "Length mismatch: Expected axis has <expected_length> elements, new values have <actual_length> elements."
     ]
   },
+  "BROADCAST_NOT_FOUND": {
+    "message": [
+      "Cannot find a broadcast variable with id: <id>. It may never have been created on this session, may belong to another session, or may have been unpersisted or destroyed."
+    ]
+  },
+  "BROADCAST_VALUE_TOO_LARGE": {
+    "message": [
+      "The broadcast value of <size> bytes exceeds the maximum allowed size of <max_size> bytes."
+    ]
+  },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
