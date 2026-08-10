@@ -248,9 +248,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // When nanosecond timestamps are requested (and the preview feature is enabled), a driver
       // TIMESTAMP that reports a sub-microsecond fractional-second scale (7-9) is mapped to the
       // nanosecond-capable type. Otherwise the historical microsecond mapping is preserved.
-      if (preferTimestampNanos && conf.timestampNanosTypesEnabled &&
+      if (preferTimestampNanos &&
         scale >= TimestampNTZNanosType.MIN_PRECISION &&
-        scale <= TimestampNTZNanosType.MAX_PRECISION) {
+        scale <= TimestampNTZNanosType.MAX_PRECISION &&
+        conf.timestampNanosTypesEnabled) {
         getTimestampNanosType(isTimestampNTZ, scale)
       } else getTimestampType(isTimestampNTZ)
     case java.sql.Types.TINYINT => IntegerType
