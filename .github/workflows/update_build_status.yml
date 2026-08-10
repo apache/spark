@@ -138,6 +138,10 @@ jobs:
                   // name, so syncing only the first would leave a newer duplicate stuck in
                   // 'queued' and block the PR.
                   let syncableBuildCheck = false
+                  // Build checks whose referenced fork run is permanently gone (404). They parse
+                  // as syncable (their output still carries valid run params) but can never be
+                  // synced, so the recheck below must not let them suppress the backfill.
+                  const staleCheckIds = new Set()
                   for await (const cr of checkRuns) {
                     if (cr.name == 'Build' && cr.conclusion != "action_required") {
                       // Skip a check with unusable output (see parseRunParams) instead of
@@ -149,7 +153,6 @@ jobs:
                         console.error('Skipping Build check ' + cr.id + ' with unusable output')
                         continue
                       }
-                      syncableBuildCheck = true
 
                       // Get the workflow run in the forked repository
                       let run
@@ -157,10 +160,22 @@ jobs:
                         run = await github.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}', params)
                       } catch (error) {
                         console.error(error)
-                        // Run not found. This can happen when the PR author removes GitHub Actions runs or
-                        // disables GitHub Actions.
+                        // The referenced fork run could not be fetched. A transient failure (5xx,
+                        // rate limit) should be retried on a later pass, so count the check as
+                        // syncable to suppress the backfill this pass. A permanent not-found (404:
+                        // the PR author deleted the fork run or disabled GitHub Actions) means this
+                        // check can never be synced, so leave syncableBuildCheck false and let the
+                        // backfill below recreate a useful status - otherwise the flag would stay
+                        // set and leave Build 'queued' indefinitely on every pass.
+                        if (isTransientError(error)) {
+                          syncableBuildCheck = true
+                        } else {
+                          staleCheckIds.add(cr.id)
+                        }
                         continue
                       }
+                      // Only now that the run is fetched is this a check we can actually sync.
+                      syncableBuildCheck = true
 
                       // Keep syncing the status of the checks
                       if (run.data.status == 'completed') {
@@ -281,7 +296,9 @@ jobs:
                     // syncable OR an action_required check (the guidance check we would create).
                     // In both cases a malformed/fieldless check does NOT count - the sync loop
                     // cannot sync it, so refusing here would strand the PR on an unsyncable check;
-                    // we fall through and create a usable one instead.
+                    // we fall through and create a usable one instead. A check whose fork run the
+                    // sync loop just found permanently gone (staleCheckIds) is likewise not useful,
+                    // even though its output still parses as syncable, so it too is excluded.
                     //
                     // The recheck listing and the create below are wrapped so a failure on one
                     // PR degrades to "skip this PR, retry next pass" rather than aborting the
@@ -290,7 +307,7 @@ jobs:
                     try {
                       const recheck = await listCheckRuns(pr.head.sha)
                       const existingBuild = recheck.some(cr =>
-                        isSyncableBuildCheck(cr)
+                        (isSyncableBuildCheck(cr) && !staleCheckIds.has(cr.id))
                           || (!matched_run && isActionRequiredBuildCheck(cr)))
                       if (existingBuild) {
                         console.log('  Build check appeared during polling; skipping backfill')
