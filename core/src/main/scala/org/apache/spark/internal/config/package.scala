@@ -512,7 +512,7 @@ package object config {
         "bounds the size of the error message that is sent to the driver and shown in the UI. " +
         "It does not affect the full breakdown written to the executor logs. Set to 0 to omit " +
         "the breakdown from the error message entirely.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ >= 0, "The consumer breakdown limit must not be negative")

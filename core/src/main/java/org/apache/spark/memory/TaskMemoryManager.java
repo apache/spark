@@ -577,10 +577,18 @@ public class TaskMemoryManager {
    * that the consumers competing for memory at the moment of failure travel with the task failure
    * reason all the way to the driver and the Spark UI. Returns an empty string when there is
    * nothing to report -- no consumer is holding memory <i>and</i> there is no unattributed
-   * memory -- so the caller can append it unconditionally. A task holding only unattributed memory
-   * still gets a breakdown, consisting of the unattributed line alone.
+   * memory, or the breakdown is disabled by a limit of 0 -- so the caller can append it
+   * unconditionally. Otherwise, a task holding only unattributed memory still gets a breakdown,
+   * consisting of the unattributed line alone.
    */
   public String getMemoryConsumptionBreakdown() {
+    // Skip the snapshot entirely when the breakdown is disabled: renderConsumerBreakdown would
+    // discard it anyway. The combined logging path (logMemoryUsageAndGetBreakdown) still needs the
+    // snapshot to write the executor-log dump, so it keeps snapshotting and relies on the
+    // renderer's own limit-0 check.
+    if (memoryManager.oomErrorConsumerBreakdownLimit() == 0) {
+      return "";
+    }
     return renderConsumerBreakdown(snapshotMemoryUsage());
   }
 
