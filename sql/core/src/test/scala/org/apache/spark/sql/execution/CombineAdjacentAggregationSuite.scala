@@ -266,9 +266,11 @@ class CombineAdjacentAggregationSuite extends QueryTest
         assert(collect(df.queryExecution.executedPlan) {
           case agg: HashAggregateExec => agg
         }.size == 1)
-        assert(collect(df.queryExecution.executedPlan) {
+        val partitionSpecs = collect(df.queryExecution.executedPlan) {
           case read: AQEShuffleReadExec => read
-        }.flatMap(_.partitionSpecs).forall(!_.isInstanceOf[PartialReducerPartitionSpec]))
+        }.flatMap(_.partitionSpecs)
+        assert(partitionSpecs.nonEmpty)
+        assert(partitionSpecs.forall(!_.isInstanceOf[PartialReducerPartitionSpec]))
       }
     }
   }

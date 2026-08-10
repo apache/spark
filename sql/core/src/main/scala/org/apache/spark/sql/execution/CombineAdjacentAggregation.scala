@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateMode, Complete, Final, Partial, PartialMerge}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Final, Partial, PartialMerge}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This rule combines adjacent aggregation with `Partial` and `Final` to `Complete` mode, or
- * `PartialMerge` and `Final` to `Final` mode. The latter can be produced by physical plan
- * extensions that add an extra aggregation stage.
+ * This rule combines adjacent aggregation with `Partial` and `Final` to `Complete` mode. For
+ * [[HashAggregateExec]], it also combines `PartialMerge` and `Final` to `Final` mode. The latter
+ * can be produced by physical plan extensions that add an extra aggregation stage.
  * Example for hash aggregate:
  *    HashAggregate (Final)         HashAggregate (Complete)
  *          |                             |
@@ -45,6 +45,10 @@ import org.apache.spark.sql.internal.SQLConf
  * It supports [[HashAggregateExec]], [[SortAggregateExec]] and [[ObjectHashAggregateExec]].
  */
 object CombineAdjacentAggregation extends Rule[SparkPlan] {
+  private case class CombinedAggregate(
+      aggregateExpressions: Seq[AggregateExpression],
+      initialInputBufferOffset: Int)
+
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED)) {
       return plan
@@ -52,7 +56,7 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
 
     plan.transformDown {
       case finalAgg @ HashAggregateExec(_, _, _, _, _, _, _, _, partialAgg: HashAggregateExec) =>
-        combinedMode(partialAgg, finalAgg)
+        combinedAggregate(partialAgg, finalAgg)
           .map(combineHashAggregates(partialAgg, finalAgg, _))
           .getOrElse(finalAgg)
 
@@ -78,33 +82,33 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
   private def combineHashAggregates(
       partialAgg: HashAggregateExec,
       finalAgg: HashAggregateExec,
-      mode: AggregateMode): HashAggregateExec = {
-    val aggregateExpressions = mode match {
-      case Complete => partialAgg.aggregateExpressions.map(_.copy(mode = Complete))
-      case Final => finalAgg.aggregateExpressions
-      case other => throw new IllegalArgumentException(s"Unexpected aggregate mode: $other")
-    }
+      combined: CombinedAggregate): HashAggregateExec = {
+    // Keep the final aggregate's distribution requirement because the rule runs after
+    // EnsureRequirements. The other child-facing metadata comes from the removed aggregate.
     finalAgg.copy(
-      requiredChildDistributionExpressions = finalAgg.requiredChildDistributionExpressions,
       isStreaming = partialAgg.isStreaming,
       numShufflePartitions = partialAgg.numShufflePartitions,
       groupingExpressions = partialAgg.groupingExpressions,
-      aggregateExpressions = aggregateExpressions,
-      initialInputBufferOffset = if (mode == Complete) 0 else partialAgg.initialInputBufferOffset,
+      aggregateExpressions = combined.aggregateExpressions,
+      initialInputBufferOffset = combined.initialInputBufferOffset,
       child = partialAgg.child)
   }
 
-  private def combinedMode(
+  private def combinedAggregate(
       partialAgg: HashAggregateExec,
-      finalAgg: HashAggregateExec): Option[AggregateMode] = {
+      finalAgg: HashAggregateExec): Option[CombinedAggregate] = {
     if (!isCompatibleAggregates(partialAgg, finalAgg)) {
       None
     } else if (partialAgg.aggregateExpressions.forall(_.mode == Partial)) {
-      Some(Complete)
+      Some(CombinedAggregate(
+        partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
+        initialInputBufferOffset = 0))
     } else if (partialAgg.aggregateExpressions.forall(_.mode == PartialMerge) &&
         partialAgg.aggregateExpressions.forall(_.filter.isEmpty) &&
         finalAgg.aggregateExpressions.forall(_.filter.isEmpty)) {
-      Some(Final)
+      Some(CombinedAggregate(
+        finalAgg.aggregateExpressions,
+        partialAgg.initialInputBufferOffset))
     } else {
       None
     }
