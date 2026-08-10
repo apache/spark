@@ -1553,6 +1553,112 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 [num.select(wd("a")).first()[0], num.select(wd("a", "a")).first()[0]], [5, 55]
             )
 
+    def test_udf_transpile_multiple_lambdas_sharing_a_line(self):
+        # SPARK-58650: ``inspect.getsource`` is line based, so every lambda
+        # written on one line hands back the same source, and the transpiler
+        # read whichever one came first. For the shapes below that meant no
+        # transpilation at all (an ``Assign`` of a tuple or a dict matched
+        # nothing), so these are coverage cases -- the silent wrong-answer
+        # shape needs a semicolon and is pinned separately in
+        # ``test_udf_transpile_semicolon_separated_lambdas``. Each lambda is
+        # now identified by compiling the candidates on its line and comparing
+        # bytecode with the callable being transpiled.
+        L, S = LongType(), StringType()
+        num, txt = "a long", "a string"
+        # Differ only in the operator, so the constants alone cannot tell them
+        # apart -- the comparison has to reach the emitted bytecode.
+        plus_one, minus_one = lambda x: x + 1, lambda x: x - 1
+        # Differ in arity only.
+        double, double_first = lambda x: x * 2, lambda x, y: x * 2
+        # Differ in a string literal only.
+        suffix_a, suffix_b = lambda s: s + "a", lambda s: s + "b"
+        # Byte-identical twins: both candidates match, but they are the same
+        # expression, so either one is the right answer.
+        twin_a, twin_b = lambda x: x * 7, lambda x: x * 7
+        # Lambdas reachable only inside a collection literal -- the old
+        # first-statement walk bailed out on these entirely.
+        table = {"inc": lambda x: x + 100, "dec": lambda x: x - 100}
+
+        # A callable class INSTANCE has no ``__code__`` of its own; its source
+        # is read from ``__call__``. Resolution therefore has to key on
+        # ``__call__``'s code object, or the sibling ``helper`` on this line
+        # wins and the UDF silently computes ``x * 100``.
+        class Doubler:
+            helper, __call__ = lambda self, x: x * 100, lambda self, x: x * 2
+
+        for func, rt, schema, rows, expected in [
+            (plus_one, L, num, [(5,)], [6]),
+            (minus_one, L, num, [(5,)], [4]),
+            (double, L, num, [(5,)], [10]),
+            (double_first, L, "a long, b long", [(5, 9)], [10]),
+            (suffix_a, S, txt, [("z",)], ["za"]),
+            (suffix_b, S, txt, [("z",)], ["zb"]),
+            (twin_a, L, num, [(5,)], [35]),
+            (twin_b, L, num, [(5,)], [35]),
+            (table["inc"], L, num, [(5,)], [105]),
+            (table["dec"], L, num, [(5,)], [-95]),
+            (Doubler(), L, num, [(5,)], [10]),
+        ]:
+            with self.subTest(func=func):
+                self.assertEqual(self._vals(func, rt, schema, rows), expected)
+
+    def test_udf_transpile_unresolvable_lambda_on_shared_line_falls_back(self):
+        # A lambda that cannot be pinned to one candidate on its line must fall
+        # back rather than guess. A closure is the common case: compiling the
+        # candidate on its own turns the captured name into a global load, so
+        # the bytecode never matches (closures do not transpile anyway -- see
+        # SPARK-55207). Its line mate is still resolved.
+        offset = 4
+        closure, sibling = lambda x: x + offset, lambda x: x + 9
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(closure, LongType())
+            self.assertEqual([], u.transpiled)
+            self.assertTrue(UserDefinedFunction(sibling, LongType()).transpiled)
+            # Fell back -> interpreted Python still computes the closure.
+            df = self.spark.createDataFrame([(5,)], "a long")
+            self.assertEqual(df.select(u("a")).first()[0], 9)
+        self.assertEqual(self._vals(sibling, LongType(), "a long", [(5,)]), [14])
+
+    def test_udf_transpile_semicolon_separated_lambdas(self):
+        # The shape that produced the silent wrong answer before SPARK-58650:
+        # two lambdas joined by a semicolon parse into two statements, and the
+        # first was always the one lowered. It cannot be written inline here
+        # because ``ruff format`` rewrites semicolons onto separate lines, so
+        # generate a module on disk -- ``inspect.getsource`` reads it back
+        # through ``linecache`` exactly as it would any other import.
+        import importlib.util
+        import os
+        import tempfile
+
+        source = (
+            "plus_ten = lambda x: x + 10; plus_twenty = lambda x: x + 20\n"
+            "cat_a = lambda s: s + 'a'; cat_b = lambda s: s + 'b'\n"
+            "\n"
+            "\n"
+            "class Incr:\n"
+            "    helper = lambda self, x: x * 100; __call__ = lambda self, x: x + 1\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "spark_58650_lambdas.py")
+            with open(path, "w") as f:
+                f.write(source)
+            spec = importlib.util.spec_from_file_location("spark_58650_lambdas", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            # A callable instance reaches the same trap through ``__call__``'s
+            # source line rather than its own.
+            cases = [
+                ("plus_ten", LongType(), "a long", [(5,)], [15]),
+                ("plus_twenty", LongType(), "a long", [(5,)], [25]),
+                ("cat_a", StringType(), "a string", [("z",)], ["za"]),
+                ("cat_b", StringType(), "a string", [("z",)], ["zb"]),
+            ]
+            for name, rt, schema, rows, expected in cases:
+                with self.subTest(name=name):
+                    self.assertEqual(self._vals(getattr(module, name), rt, schema, rows), expected)
+            with self.subTest(name="Incr"):
+                self.assertEqual(self._vals(module.Incr(), LongType(), "a long", [(5,)]), [6])
+
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
         # a future fix is noticed): unguarded arithmetic on NULL yields NULL
