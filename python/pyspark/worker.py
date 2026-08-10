@@ -1835,8 +1835,7 @@ def _elementwise_renest(flat_values, shape_lengths, is_large):
     ``flat_values`` holds the results for every non-null element in order; ``shape_lengths`` is
     the per-array element count of the iterated argument (``None`` for a null array, which stays
     null and consumes no elements). ``is_large`` preserves the input's list width (``ListArray``
-    with int32 offsets vs. ``LargeListArray`` with int64). Returns the nested array and the total
-    number of elements consumed, so callers can verify the flat result length.
+    with int32 offsets vs. ``LargeListArray`` with int64).
 
     Shared by the vectorized element-wise worker paths (scalar pandas / Arrow and their iterator
     variants) that back Python UDFs inside higher-order function lambdas. See
@@ -1855,7 +1854,7 @@ def _elementwise_renest(flat_values, shape_lengths, is_large):
     list_cls = pa.LargeListArray if is_large else pa.ListArray
     offsets_arr = pa.array(offsets, type=pa.int64() if is_large else pa.int32())
     null_mask = pa.array(mask, type=pa.bool_())
-    return list_cls.from_arrays(offsets_arr, flat_values, mask=null_mask), running
+    return list_cls.from_arrays(offsets_arr, flat_values, mask=null_mask)
 
 
 def _elementwise_flatten_column(flat, element_type, is_pandas, runner_conf):
@@ -3312,7 +3311,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     flat_arr = _elementwise_result_to_arrow(
                         result, return_type, arrow_element_type, is_pandas, runner_conf
                     )
-                    nested, _ = _elementwise_renest(
+                    nested = _elementwise_renest(
                         flat_arr, shape_lengths, pa.types.is_large_list(shape.type)
                     )
                     output_arrays.append(nested)
@@ -3392,30 +3391,47 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 expected_iter_type = Iterator[pd.Series]
             verified_iter = verify_return_type(udf_func(flat_args_iter), expected_iter_type)
 
-            # Buffer the streamed flat element results as one contiguous Arrow array and emit an
-            # ``array<R>`` row as soon as the shape at the head of the FIFO is fully covered. A
-            # null array (length None) emits a null row and consumes no elements. The buffer is
-            # created lazily from the first chunk's type rather than the UTC-typed
-            # ``arrow_element_type``: the pandas flavor types timestamps with the session timezone,
-            # so a pre-typed empty buffer could differ and break ``pa.concat_arrays``.
-            buffered = None
+            # Buffer the streamed flat element results and emit an ``array<R>`` row as soon as the
+            # shape at the head of the FIFO is fully covered. A row whose length is 0 (an empty
+            # array) or None (a null array) needs no elements, so it is emitted immediately even
+            # before any chunk arrives - this matters when a whole partition is empty/null arrays
+            # and the UDF yields nothing, otherwise those rows would be dropped by the positional
+            # JVM join. Chunks are held in a list and concatenated only when a shape spans more than
+            # one, so a UDF that yields once per input batch (the common case) never re-copies the
+            # buffer. ``empty_type`` supplies the element type for a zero-length emit: the first
+            # chunk's type once seen (the pandas flavor types timestamps with the session timezone),
+            # else the UTC-typed ``arrow_element_type``. A partition that only ever emits
+            # zero-length rows never mixes the two, so the stream schema stays consistent.
+            pending_chunks = []
+            pending_len = 0
+            empty_type = arrow_element_type
             num_output_elements = 0
 
             def emit_ready():
-                nonlocal buffered
+                nonlocal pending_chunks, pending_len
                 while pending_shapes:
                     lengths = pending_shapes[0]
                     needed = sum(n for n in lengths if n is not None)
-                    if buffered is None or len(buffered) < needed:
+                    if needed > pending_len:
                         break
                     pending_shapes.popleft()
-                    flat = buffered.slice(0, needed)
-                    buffered = buffered.slice(needed)
-                    nested, _ = _elementwise_renest(flat, lengths, bool(is_large))
+                    if needed == 0:
+                        flat = pa.nulls(0, type=empty_type)
+                    else:
+                        combined = (
+                            pending_chunks[0]
+                            if len(pending_chunks) == 1
+                            else pa.concat_arrays(pending_chunks)
+                        )
+                        flat = combined.slice(0, needed)
+                        remainder = combined.slice(needed)
+                        pending_chunks = [remainder] if len(remainder) else []
+                        pending_len -= needed
+                    nested = _elementwise_renest(flat, lengths, bool(is_large))
                     yield pa.RecordBatch.from_arrays([nested], ["_0"])
 
             def process_results():
-                nonlocal buffered, num_output_elements
+                nonlocal pending_chunks, pending_len, empty_type, num_output_elements
                 for result in verified_iter:
                     if is_pandas:
                         verify_pandas_result(
@@ -3434,13 +3450,16 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         raise PySparkRuntimeError(
                             errorClass="OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={}
                         )
-                    buffered = chunk if buffered is None else pa.concat_arrays([buffered, chunk])
+                    if len(chunk):
+                        pending_chunks.append(chunk)
+                        pending_len += len(chunk)
+                        empty_type = chunk.type
                     yield from emit_ready()
 
                 # The iterator is exhausted: every input row's flat elements must have arrived.
                 verify_result_row_count(num_output_elements, num_input_elements)
+                # Flush any residual all-empty / all-null rows (they consume no elements).
                 if pending_shapes:
-                    # Any residual shapes are all-null arrays (no elements to wait for).
                     yield from emit_ready()
                 verify_iterator_exhausted(flat_args_iter)
 

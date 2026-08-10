@@ -275,7 +275,8 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
       scalarArrowIterUDF -> PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF)
     cases.foreach { case (udf, expectedEvalType) =>
       val df = arrayDF.select(transform(col("values"), x => udf(x)).as("r"))
-      assert(udfsInsideLambda(df).isEmpty, s"UDF still inside a lambda for eval type ${udf.func}")
+      val evalTypeName = PythonEvalType.toString(expectedEvalType)
+      assert(udfsInsideLambda(df).isEmpty, s"UDF still inside a lambda for $evalTypeName")
       val lifted = liftedUDFs(df)
       assert(lifted.size == 1)
       assert(lifted.head.evalType == expectedEvalType)
