@@ -1623,6 +1623,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.round(fn.col("b"), 2)
   }
 
+  functionTest("truncate") {
+    fn.truncate(fn.col("b"), 2)
+  }
+
   functionTest("sec") {
     fn.sec(fn.col("b"))
   }
