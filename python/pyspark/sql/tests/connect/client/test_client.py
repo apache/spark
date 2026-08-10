@@ -566,7 +566,8 @@ class SparkConnectClientTestCase(unittest.TestCase):
             req = client._execute_plan_request_with_metadata()
             client._execute(req)
             self.assertIsNotNone(mock.metadata)
-            self.assertEqual(dict(mock.metadata)["spark-connect-operation-id"], req.operation_id)
+            values = [v for k, v in mock.metadata if k == "spark-connect-operation-id"]
+            self.assertEqual(values, [req.operation_id])
         finally:
             client.close()
 
