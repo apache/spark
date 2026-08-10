@@ -904,6 +904,26 @@ def _code_identity(code: CodeType) -> tuple:
     fingerprints. Constants are keyed by ``(type name, repr)`` rather than by
     value so ``1``, ``1.0`` and ``True`` stay distinct (they compare equal),
     and nested code objects (a lambda inside a lambda) recurse.
+
+    Deliberately EXCLUDES everything that depends on where the code was
+    compiled rather than on what it computes, because the candidates are
+    compiled standalone (see ``_compile_lambda``) and the target was not:
+
+    * ``co_filename`` / ``co_name`` / ``co_qualname`` / ``co_firstlineno`` and
+      the line table -- position, not behavior;
+    * ``co_flags`` -- it carries ``CO_NESTED`` for a lambda written inside
+      another function, which a standalone compile never sets, so comparing it
+      would reject every correct match inside a function body. It adds no
+      discriminating power anyway: the flags that do describe behavior
+      (``CO_VARARGS``, ``CO_VARKEYWORDS``, ``CO_GENERATOR``) cannot differ
+      without ``co_varnames`` or ``co_code`` differing too;
+    * ``co_nlocals`` / ``co_stacksize`` / ``co_exceptiontable`` -- derived
+      from the fields already compared.
+
+    The fields that remain are exactly the ones that determine what the code
+    DOES, which is what makes a match safe: a candidate with an equal
+    fingerprint computes the same thing as the target even in the rare case
+    it is not literally the same source expression.
     """
     return (
         code.co_argcount,
