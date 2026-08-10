@@ -226,6 +226,22 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         kill.assert_not_called()
         self.assertIsNone(self._discovered_server().pid)
 
+    def test_stop_preserves_discovery_when_process_cannot_be_inspected(self) -> None:
+        from unittest import mock
+
+        with Discovery() as discovery:
+            server = self._server(pid=12345)
+            discovery.save(
+                {k: getattr(server, k) for k in ("host", "port", "token", "pid", "spark_version")}
+            )
+        with (
+            mock.patch.object(subprocess, "run", side_effect=subprocess.TimeoutExpired("ps", 5)),
+            mock.patch.object(os, "kill") as kill,
+        ):
+            self.assertIsNone(local_server.stop_local_connect_server())
+        kill.assert_not_called()
+        self.assertEqual(self._discovered_server().pid, 12345)
+
     def test_server_launcher_binds_to_loopback(self) -> None:
         from unittest import mock
 
@@ -233,12 +249,16 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             launcher = local_server.ServerLauncher("local[2]", {}, discovery)
             # Capture the launcher argv without starting an external daemon.
             with (
-                mock.patch.object(os.path, "isfile", return_value=True),
+                mock.patch.dict(os.environ, {"SPARK_HOME": self._tmpdir}),
+                mock.patch.object(os.path, "isfile", return_value=True) as isfile,
                 mock.patch.object(
                     subprocess, "run", return_value=subprocess.CompletedProcess([], 0)
                 ) as run,
             ):
                 launcher._run_script(15002, "token", None)
+        isfile.assert_called_once_with(
+            os.path.join(self._tmpdir, "sbin", "start-connect-server.sh")
+        )
         self.assertIn("spark.connect.grpc.binding.address=127.0.0.1", run.call_args.args[0])
 
     def test_stop_cli_reports_when_no_server(self) -> None:
