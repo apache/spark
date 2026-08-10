@@ -888,14 +888,14 @@ class SparkConnectClient(object):
             if isinstance(connection, ChannelBuilder)
             else DefaultChannelBuilder(connection, channel_options)
         )
-        metadata = self._builder.metadata()
+        metadata = list(self._builder.metadata())
         if any(key.lower() == _OPERATION_ID_METADATA_KEY for key, _ in metadata):
             logger.warning(
                 "Connection option %s is ignored because Spark Connect sets it for each "
                 "ExecutePlan request.",
                 _OPERATION_ID_METADATA_KEY,
             )
-        self._metadata = [
+        artifact_manager_metadata = [
             (key, value) for key, value in metadata if key.lower() != _OPERATION_ID_METADATA_KEY
         ]
         self._user_id = None
@@ -938,7 +938,7 @@ class SparkConnectClient(object):
             self._user_id,
             self._session_id,
             self._channel,
-            self._metadata,
+            artifact_manager_metadata,
             add_artifacts_timeout=self._rpc_deadlines.add_artifacts,
             artifact_status_timeout=self._rpc_deadlines.artifact_status,
         )
@@ -1665,7 +1665,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.AnalyzePlan(
                         req,
-                        metadata=self._metadata,
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.analyze_plan,
                     )
                     self._verify_response_integrity(resp)
@@ -1721,8 +1721,15 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error, req.operation_id)
 
+    def _builder_metadata(self) -> List[Tuple[str, str]]:
+        return [
+            (key, value)
+            for key, value in self._builder.metadata()
+            if key.lower() != _OPERATION_ID_METADATA_KEY
+        ]
+
     def _execute_plan_metadata(self, operation_id: str) -> List[Tuple[str, str]]:
-        metadata = list(self._metadata)
+        metadata = self._builder_metadata()
         metadata.append((_OPERATION_ID_METADATA_KEY, operation_id))
         return metadata
 
@@ -2080,7 +2087,7 @@ class SparkConnectClient(object):
                     with disable_gc():
                         resp = self._stub.Config(
                             req,
-                            metadata=self._metadata,
+                            metadata=self._builder_metadata(),
                             timeout=self._rpc_deadlines.config,
                         )
                     self._verify_response_integrity(resp)
@@ -2126,7 +2133,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.Interrupt(
                         req,
-                        metadata=self._metadata,
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.interrupt,
                     )
                     self._verify_response_integrity(resp)
@@ -2142,7 +2149,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.Interrupt(
                         req,
-                        metadata=self._metadata,
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.interrupt,
                     )
                     self._verify_response_integrity(resp)
@@ -2158,7 +2165,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.Interrupt(
                         req,
-                        metadata=self._metadata,
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.interrupt,
                     )
                     self._verify_response_integrity(resp)
@@ -2178,7 +2185,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.ReleaseSession(
                         req,
-                        metadata=self._metadata,
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.release_session,
                     )
                     self._verify_response_integrity(resp)
@@ -2234,7 +2241,7 @@ class SparkConnectClient(object):
                 with attempt:
                     resp = self._stub.GetStatus(
                         req,
-                        metadata=self._metadata,
+                        metadata=self._builder_metadata(),
                         timeout=self._rpc_deadlines.get_status,
                     )
                     self._verify_response_integrity(resp)
@@ -2368,7 +2375,7 @@ class SparkConnectClient(object):
         try:
             return self._stub.FetchErrorDetails(
                 req,
-                metadata=self._metadata,
+                metadata=self._builder_metadata(),
                 timeout=self._rpc_deadlines.fetch_error_details,
             )
         except grpc.RpcError:
@@ -2787,7 +2794,7 @@ class SparkConnectClient(object):
             with attempt:
                 response: pb2.CloneSessionResponse = self._stub.CloneSession(
                     request,
-                    metadata=self._metadata,
+                    metadata=self._builder_metadata(),
                     timeout=self._rpc_deadlines.clone_session,
                 )
 

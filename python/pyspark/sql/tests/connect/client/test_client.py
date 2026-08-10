@@ -299,6 +299,32 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         self.assertEqual(client._user_id, "abc")
 
+    def test_channel_builder_metadata_is_filtered_per_call(self):
+        class CustomChannelBuilder(DefaultChannelBuilder):
+            def __init__(self):
+                super().__init__("sc://foo/")
+                self.metadata_calls = 0
+
+            def metadata(self):
+                self.metadata_calls += 1
+                return iter(
+                    [
+                        ("authorization", f"token-{self.metadata_calls}"),
+                        ("spark-connect-operation-id", "ignored"),
+                    ]
+                )
+
+        builder = CustomChannelBuilder()
+        client = SparkConnectClient(builder, use_reattachable_execute=False)
+        try:
+            self.assertEqual(
+                client._artifact_manager._metadata, [("authorization", "token-1")]
+            )
+            self.assertEqual(client._builder_metadata(), [("authorization", "token-2")])
+            self.assertEqual(client._builder_metadata(), [("authorization", "token-3")])
+        finally:
+            client.close()
+
     def test_user_context_extension(self):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         mock = MockService(client._session_id)
