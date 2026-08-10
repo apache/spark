@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, Literal, NamedArgumentExpression,
+  PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.ArrowEvalPython
 import org.apache.spark.sql.functions.{array_sort, col, forall, lit, map_filter, map_zip_with,
   transform, transform_keys, transform_values, when, zip_with}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StringType}
 
 /**
@@ -43,6 +44,7 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
   // Used where a UDF call must receive two arguments, e.g. a pairwise comparator.
   private val pythonUDF2 = new MyDummyPythonUDF
   private val nondeterministicUDF = new MyDummyNondeterministicPythonUDF
+  private val udtUDF = new MyDummyUDTPythonUDF
 
   private def arrayDF = Seq(Seq(1, 2, 3)).toDF("values")
 
@@ -123,6 +125,23 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
       transform(col("values"), x => pythonUDF(x) || pythonUDF(x)).as("r"))
     assert(udfsInsideLambda(duplicated).isEmpty)
     assert(liftedUDFs(duplicated).size == 1)
+  }
+
+  test("a UDF nested inside a composite argument is lifted, not left inside a lambda") {
+    // SPARK-27052: `f(g(x) + 1)` / `f(-g(x))`. The inner call `g(x)` is already lifted; its
+    // occurrence buried inside the composite argument must be substituted too, or a raw `g` over a
+    // lambda variable would be left inside the generated transform for `ExtractPythonUDFs` to
+    // re-extract (the SPARK-48706 failure mode). Both nesting shapes must leave no UDF in a lambda.
+    val plusOne = arrayDF.select(
+      transform(col("values"), x => pythonUDF(pythonUDF(x).cast("int") + lit(1))).as("r"))
+    assert(udfsInsideLambda(plusOne).isEmpty)
+    // Two distinct calls (inner `g(x)`, outer `f(g(x) + 1)`), so two lifted array UDFs.
+    assert(liftedUDFs(plusOne).size == 2)
+
+    val negated = arrayDF.select(
+      transform(col("values"), x => pythonUDF(-pythonUDF(x).cast("int"))).as("r"))
+    assert(udfsInsideLambda(negated).isEmpty)
+    assert(liftedUDFs(negated).size == 2)
   }
 
   test("identical nondeterministic calls are lifted distinctly, not deduplicated") {
@@ -218,11 +237,50 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(lifted.head.children.size == 2)
   }
 
+  test("a key-form array_sort comparator lifts one UDF per element, not per comparator side") {
+    // `(a, b) -> udf(a) < udf(b)`: `udf(a)` and `udf(b)` canonicalize differently (distinct
+    // variable exprIds) but both lift to the same function over the whole array, so they must be
+    // deduplicated into one lifted UDF - otherwise the Python function runs 2n times instead of n.
+    val df = arrayDF.select(
+      array_sort(col("values"),
+        (a, b) => when(pythonUDF(a) === pythonUDF(b), lit(0)).otherwise(lit(1))).as("r"))
+    assert(udfsInsideLambda(df).isEmpty)
+    assert(liftedUDFs(df).size == 1)
+  }
+
   test("a pandas UDF inside a lambda still fails analysis") {
     val e = intercept[AnalysisException] {
       arrayDF.select(transform(col("values"), x => scalarPandasUDF(x))).collect()
     }
     assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
+  }
+
+  test("a UDF with a UDT type inside a lambda still fails analysis") {
+    // Lifting forces the Arrow element-wise eval type, which has no UDT fallback, so a UDF whose
+    // argument or return type involves a UDT is not rewritable and keeps the previous analysis
+    // error rather than failing at runtime.
+    val e = intercept[AnalysisException] {
+      arrayDF.select(transform(col("values"), x => udtUDF(x))).collect()
+    }
+    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
+  }
+
+  test("the rewritable predicate excludes named-argument and UDT UDFs") {
+    // These shapes cannot be preserved by the lift (a `NamedArgumentExpression` child would be
+    // buried inside the generated transform, losing kwargs; a UDT would hit the Arrow path with no
+    // fallback), so the shared predicate must reject them, keeping the previous analysis error.
+    val plain = PythonUDF("f", null, IntegerType, Seq(Literal(1)),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    assert(PythonUDF.isElementwiseRewritableUDF(plain))
+
+    val named = plain.copy(children = Seq(NamedArgumentExpression("k", Literal(1))))
+    assert(!PythonUDF.isElementwiseRewritableUDF(named))
+
+    val udtReturn = plain.copy(dataType = new ExamplePointUDT)
+    assert(!PythonUDF.isElementwiseRewritableUDF(udtReturn))
+
+    val udtArg = plain.copy(children = Seq(Literal.create(null, new ExamplePointUDT)))
+    assert(!PythonUDF.isElementwiseRewritableUDF(udtArg))
   }
 
   test("the rewrite can be disabled by conf, restoring the previous error") {
@@ -247,8 +305,10 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
   }
 
   test("a UDF over only constants is still lifted per element") {
-    // SPARK-27052: `transform(arr, x -> udf(lit(10)))` does not read the element, so it is
-    // already valid outside the lambda and is left to ExtractPythonUDFs.
+    // SPARK-27052: `transform(arr, x -> udf(lit(10)))` does not read the element, but it is still
+    // lifted per element (`overArray` repeats the constant into an aligned array) so it keeps the
+    // lambda's call domain - once per element, zero times for a null/empty array - rather than
+    // being left to ExtractPythonUDFs, which would call it once per row.
     val df = arrayDF.select(transform(col("values"), _ => pythonUDF(lit(10))).as("r"))
     assert(udfsInsideLambda(df).isEmpty)
   }

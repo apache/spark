@@ -135,6 +135,24 @@ class UDFInHigherOrderFunctionTestsMixin:
             df.select(sf.transform("values", lambda x: (x + 1) * 10).alias("r")),
         )
 
+    def test_nested_udf_inside_composite_argument(self):
+        # SPARK-27052: `f(g(x) + 1)` / `f(-g(x))`. The inner call is buried inside a composite
+        # argument, not a direct child. The inner result must be substituted before lifting `f`,
+        # or a raw `g` over the lambda variable would be left inside a lambda and mis-extracted
+        # (SPARK-48706). The result must match evaluating the composition element-wise.
+        df = self.spark.createDataFrame([([1, 2, 3],)], "values array<int>")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+        times_ten = udf(lambda x: x * 10, IntegerType())
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: times_ten(plus_one(x) + 1)).alias("r")),
+            df.select(sf.transform("values", lambda x: ((x + 1) + 1) * 10).alias("r")),
+        )
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: times_ten(-plus_one(x))).alias("r")),
+            df.select(sf.transform("values", lambda x: (-(x + 1)) * 10).alias("r")),
+        )
+
     def test_udf_with_outer_column_argument(self):
         # A non-element argument must be broadcast to every element of its row.
         df = self.spark.createDataFrame([([1, 2], 100), ([3], 200)], "values array<int>, base int")

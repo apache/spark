@@ -55,15 +55,25 @@ object PythonUDF {
    * `ExtractPythonUDFFromLambda`, which applies it to the whole array outside the lambda.
    *
    * Only the row-at-a-time eval types qualify, since the rule lifts a UDF that takes one value per
-   * call.
+   * call. Two otherwise-eligible shapes are excluded because the rewrite cannot preserve them:
+   *   - a call with named arguments: its `NamedArgumentExpression` children would be buried inside
+   *     the generated `ArrayTransform`, losing the kwargs mapping the runner derives from the
+   *     direct children;
+   *   - a UDF whose argument or return type involves a UDT: the lift forces the Arrow element-wise
+   *     eval type, which has no UDT fallback (unlike `correctEvalType`'s Arrow -> pickle path), so
+   *     it would fail at runtime instead of at analysis.
+   * Both keep the previous behavior (an analysis error) rather than being rewritten.
    *
    * This is shared with `CheckAnalysis` so that the shapes analysis accepts are exactly those the
    * optimizer rule can rewrite.
    */
   def isElementwiseRewritableUDF(e: Expression): Boolean = e match {
     case udf: PythonUDF =>
-      udf.evalType == PythonEvalType.SQL_BATCHED_UDF ||
-        udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF
+      (udf.evalType == PythonEvalType.SQL_BATCHED_UDF ||
+        udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) &&
+        !udf.children.exists(_.isInstanceOf[NamedArgumentExpression]) &&
+        !containsUDT(udf.dataType) &&
+        !udf.children.exists(c => containsUDT(c.dataType))
     case _ => false
   }
 
@@ -93,12 +103,19 @@ object PythonUDF {
    * least one array- or map-valued argument. `aggregate` / `reduce` fail this - they have two
    * lambdas (`merge`, `finish`) - so a UDF in a fold is rejected. Checking the shape rather than
    * listing classes means a new function of a familiar shape needs no change here.
+   *
+   * The function must also carry one of the result-type marker traits the rewrite dispatches on
+   * ([[ResultTypeFromArgument]] or [[ResultTypeFromFunction]]). Every built-in single-lambda HOF is
+   * marked today, but requiring it here keeps "analysis accepts exactly what the rule rewrites"
+   * structural: a future HOF missing both traits is rejected at analysis rather than slipping
+   * through and leaving the UDF inside the lambda at runtime.
    */
   private def isRewritableShape(hof: HigherOrderFunction): Boolean =
     hof.functions.length == 1 &&
       hof.functions.head.isInstanceOf[LambdaFunction] &&
       hof.functions.head.asInstanceOf[LambdaFunction].arguments
         .forall(_.isInstanceOf[NamedLambdaVariable]) &&
+      (hof.isInstanceOf[ResultTypeFromArgument] || hof.isInstanceOf[ResultTypeFromFunction]) &&
       hof.arguments.exists { a =>
         a.dataType.isInstanceOf[ArrayType] || a.dataType.isInstanceOf[MapType]
       }
