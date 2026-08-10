@@ -118,6 +118,26 @@ def _fmod_func(c1: Column, c2: Column) -> Column:
     )
 
 
+def _logaddexp_func(c1: Column, c2: Column, base2: bool = False) -> Column:
+    c1_double = c1.cast("double")
+    c2_double = c2.cast("double")
+    difference = F.abs(c1_double - c2_double)
+    maximum = F.greatest(c1_double, c2_double)
+    if base2:
+        log_term = F.log1p(F.pow(F.lit(2.0), -difference)) / F.log(F.lit(2.0))
+    else:
+        log_term = F.log1p(F.exp(-difference))
+
+    return (
+        F.when(c1_double.isNull() | F.isnan(c1_double), c1_double)
+        .when(c2_double.isNull() | F.isnan(c2_double), c2_double)
+        .when((c1_double == float("inf")) | (c2_double == float("inf")), F.lit(float("inf")))
+        .when(c1_double == float("-inf"), c2_double)
+        .when(c2_double == float("-inf"), c1_double)
+        .otherwise(maximum + log_term)
+    )
+
+
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
@@ -156,12 +176,8 @@ binary_np_spark_mappings = {
     "left_shift": lambda c1, c2: F.when((c2 < 0) | (c2 >= 64), F.lit(0)).otherwise(
         F.call_function("shiftleft", c1, c2)
     ),
-    "logaddexp": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.logaddexp(s1, s2), DoubleType()
-    ),
-    "logaddexp2": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.logaddexp2(s1, s2), DoubleType()
-    ),
+    "logaddexp": _logaddexp_func,
+    "logaddexp2": lambda c1, c2: _logaddexp_func(c1, c2, base2=True),
     "logical_and": lambda c1, c2: c1.cast(BooleanType()) & c2.cast(BooleanType()),
     "logical_or": lambda c1, c2: c1.cast(BooleanType()) | c2.cast(BooleanType()),
     "logical_xor": lambda c1, c2: (
