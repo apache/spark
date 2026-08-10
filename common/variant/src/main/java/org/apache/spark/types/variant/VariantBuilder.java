@@ -173,8 +173,9 @@ public class VariantBuilder {
 
   // Return a new variant with null-valued object fields removed, recursing into nested objects
   // and arrays. When `includeArrays` is true, null array elements are removed too; when false,
-  // arrays keep their nulls but objects inside them are still cleaned. Empty containers and a
-  // top-level variant null are left unchanged. The result is always rebuilt with fresh metadata.
+  // arrays keep their nulls but objects inside them are still cleaned. A container emptied by
+  // stripping is preserved as {} / [] rather than collapsed to a variant null, and a top-level
+  // variant null is returned unchanged. The result is always rebuilt with fresh metadata.
   public static Variant stripNulls(Variant v, boolean includeArrays) {
     VariantBuilder builder = new VariantBuilder(false);
     builder.appendWithNullStrippingImpl(v.value, v.metadata, v.pos, includeArrays);
