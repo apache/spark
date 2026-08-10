@@ -31,9 +31,11 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Heap entry storing an index into the broadcast array alongside its ranking value.
- * Using a case class with primitive `Int` field avoids boxing that `(Int, Any)` tuples incur.
+ * Mutable so that evicted entries can be reused: once the heap reaches capacity k,
+ * new candidates reuse the polled (worst) entry instead of allocating, bounding total
+ * heap-entry allocations to k per left row regardless of right-side size.
  */
-private[joins] case class HeapEntry(index: Int, rankingValue: Any)
+private[joins] class HeapEntry(var index: Int, var rankingValue: Any)
 
 /**
  * Physical operator for NearestByJoin that avoids materializing the full cross product.
@@ -178,8 +180,18 @@ case class BroadcastNearestByJoinExec(
                 } else {
                   rawValue
                 }
-                heap.offer(HeapEntry(i, rankingValue))
-                if (heap.size() > k) heap.poll()
+                if (heap.size() < k) {
+                  // Heap has room -- allocate a new entry.
+                  heap.offer(new HeapEntry(i, rankingValue))
+                } else {
+                  // Heap is at capacity -- reuse the evicted (worst) entry to avoid
+                  // allocating a new HeapEntry per candidate. Total allocations are
+                  // bounded by k per left row.
+                  val evicted = heap.poll()
+                  evicted.index = i
+                  evicted.rankingValue = rankingValue
+                  heap.offer(evicted)
+                }
               }
             }
             i += 1

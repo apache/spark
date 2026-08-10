@@ -700,6 +700,60 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession
   }
 
   // ==========================================================================
+  // Cross-child Python UDF fallback to rewrite path
+  // ==========================================================================
+
+  test("SPARK-57091: cross-child Python UDF in ranking routes through rewrite path") {
+    // When the ranking expression contains a scalar Python UDF whose references span both
+    // left and right children, the operator path would crash in ExtractPythonUDFs with
+    // "Invalid PythonUDF ... requires attributes from more than one child." The fix in
+    // RewriteNearestByJoin detects this and falls back to the rewrite even when the
+    // broadcast flag is ON.
+    //
+    // This test constructs a NearestByJoin with a mock PythonUDF referencing both sides
+    // and verifies the optimized plan uses the rewrite (Join + Aggregate) rather than
+    // BroadcastNearestByJoinExec. A null PythonFunction prevents actual execution but
+    // is sufficient to exercise the optimizer guard.
+    import org.apache.spark.api.python.PythonEvalType
+    import org.apache.spark.sql.catalyst.expressions.PythonUDF
+    import org.apache.spark.sql.catalyst.plans.logical.NearestByJoin
+    import org.apache.spark.sql.catalyst.plans.{Inner, NearestByDistance}
+
+    withSQLConf(
+      SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val left = Seq((1, 10.0), (2, 20.0)).toDF("id", "x")
+      val right = Seq((10, 9.0), (11, 15.0), (12, 21.0)).toDF("rid", "y")
+      val leftPlan = left.queryExecution.analyzed
+      val rightPlan = right.queryExecution.analyzed
+
+      // Construct a PythonUDF that references attributes from both children.
+      val leftAttr = leftPlan.output.find(_.name == "x").get
+      val rightAttr = rightPlan.output.find(_.name == "y").get
+      val crossChildUDF = PythonUDF(
+        "cross_child_distance", null,
+        org.apache.spark.sql.types.DoubleType,
+        Seq(leftAttr, rightAttr),
+        PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+
+      val nearestBy = NearestByJoin(
+        leftPlan, rightPlan, Inner, approx = false, numResults = 2,
+        rankingExpression = crossChildUDF,
+        direction = NearestByDistance)
+
+      // Run the optimizer on this plan. The RewriteNearestByJoin rule should detect
+      // the cross-child Python UDF and apply the rewrite despite the flag being ON.
+      // The NearestByJoin is already resolved (children are analyzed plans from DataFrames).
+      val optimized = spark.sessionState.optimizer.execute(nearestBy)
+
+      // The optimized plan must NOT contain a NearestByJoin node (it should be rewritten).
+      assert(!optimized.exists(_.isInstanceOf[NearestByJoin]),
+        "NearestByJoin should have been rewritten due to cross-child Python UDF, " +
+          "but it was left intact. Plan:\n" + optimized.treeString)
+    }
+  }
+
+  // ==========================================================================
   // Parity test: rewrite vs operator produce identical results
   // ==========================================================================
 

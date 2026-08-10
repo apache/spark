@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.isScalarPythonUDF
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -71,13 +72,42 @@ import org.apache.spark.sql.catalyst.rules._
 object RewriteNearestByJoin extends Rule[LogicalPlan] {
   private lazy val random = new scala.util.Random()
 
+  /**
+   * Returns true when the ranking expression of a [[NearestByJoin]] contains a scalar
+   * Python UDF whose attribute references span both the left and right children.
+   *
+   * `ExtractPythonUDFs` cannot evaluate a Python UDF that requires attributes from more
+   * than one child of its parent operator. On the rewrite path (flag OFF) this is not a
+   * problem because the rewrite produces a `Join` node that merges both sides into a single
+   * child before any UDF extraction runs. On the operator path (flag ON) the `NearestByJoin`
+   * node is left as a binary operator; if a scalar Python UDF in the ranking expression
+   * references both children, `ExtractPythonUDFs` will throw. Detecting this case here
+   * lets us fall back to the rewrite for correctness.
+   */
+  private def containsCrossChildPythonUDF(j: NearestByJoin): Boolean = {
+    val leftSet = j.left.outputSet
+    val rightSet = j.right.outputSet
+    j.rankingExpression.exists { e =>
+      isScalarPythonUDF(e) && {
+        val refs = e.references
+        refs.intersect(leftSet).nonEmpty && refs.intersect(rightSet).nonEmpty
+      }
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
     case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction)
       // When the broadcast flag is ON the NearestByJoin node is left intact for the
       // planner's NearestByJoinSelection strategy, which unconditionally plans
       // BroadcastNearestByJoinExec. There is no size decision; the right side is
       // broadcast unconditionally regardless of spark.sql.autoBroadcastJoinThreshold.
-      if !conf.nearestByBroadcastEnabled =>
+      //
+      // Exception: when the ranking expression contains a scalar Python UDF that
+      // references both children, the operator path would crash in ExtractPythonUDFs
+      // ("Invalid PythonUDF ... requires attributes from more than one child"). In
+      // that case we fall back to the rewrite which merges both sides into a Join
+      // before UDF extraction runs.
+      if !conf.nearestByBroadcastEnabled || containsCrossChildPythonUDF(j) =>
       // 1. Tag each left row with a unique id so that rows from the same left row can later be
       //    grouped together after the cross-join with `right`.
       val qidAlias = Alias(Uuid(Some(random.nextLong())), "__qid")()
