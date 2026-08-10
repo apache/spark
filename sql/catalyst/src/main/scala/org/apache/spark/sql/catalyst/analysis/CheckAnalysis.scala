@@ -501,10 +501,20 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 hof.invalidFormat(checkRes)
             }
 
+          // A Python UDF cannot be evaluated inside a lambda, because it needs a separate
+          // physical operator that cannot see the lambda's variables. For some shapes
+          // `ExtractPythonUDFFromLambda` rewrites the plan in the optimizer so the UDF is
+          // applied to the whole array outside the lambda instead; those are allowed through
+          // here. Everything else must still fail, or nothing downstream can evaluate it.
           case hof: HigherOrderFunction
               if hof.resolved && hof.functions
-                .exists(_.exists(_.isInstanceOf[PythonUDF])) =>
-            val u = hof.functions.flatMap(_.find(_.isInstanceOf[PythonUDF])).head
+                .exists(_.exists(_.isInstanceOf[PythonUDF])) &&
+                !(conf.pythonUDFInHigherOrderFunctionEnabled &&
+                  PythonUDF.canRewritePythonUDFInLambda(hof)) =>
+            // Name the offending UDF: the first one of an unsupported eval type if any (e.g. a
+            // pandas UDF), otherwise the first Python UDF in the lambdas.
+            val udfs = hof.functions.flatMap(_.collect { case u: PythonUDF => u })
+            val u = udfs.find(!PythonUDF.isElementwiseRewritableUDF(_)).getOrElse(udfs.head)
             hof.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
               messageParameters = Map("funcName" -> toSQLExpr(u)))

@@ -90,6 +90,8 @@ class SparkOptimizer(
       ExtractPythonUDFFromAggregate,
       // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
       ExtractGroupingPythonUDFFromAggregate,
+      // `ExtractPythonUDFs` first lifts Python UDFs out of higher-order function lambdas
+      // (via `ExtractPythonUDFFromLambda`) and then extracts them as ordinary top-level UDFs.
       ExtractPythonUDFs,
       ExtractPythonUDTFs,
       // The eval-python node may be between Project/Filter and the scan node, which breaks
@@ -116,6 +118,8 @@ class SparkOptimizer(
       ExtractPythonUDFFromJoinCondition.ruleName,
       ExtractPythonUDFFromAggregate.ruleName,
       ExtractGroupingPythonUDFFromAggregate.ruleName,
+      // Non-excludable: a plan with a Python UDF in a higher-order function lambda only works
+      // because `ExtractPythonUDFs` lifts it out (via `ExtractPythonUDFFromLambda`).
       ExtractPythonUDFs.ruleName,
       GroupBasedRowLevelOperationScanPlanning.ruleName,
       V2ScanRelationPushDown.ruleName,
