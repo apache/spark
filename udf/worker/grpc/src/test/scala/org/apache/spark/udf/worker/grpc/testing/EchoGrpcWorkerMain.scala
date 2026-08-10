@@ -20,6 +20,8 @@ import java.io.IOException
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.TimeUnit
 
+import scala.util.control.NonFatal
+
 import io.grpc.Server
 import io.grpc.netty.NettyServerBuilder
 import io.netty.channel.EventLoopGroup
@@ -108,7 +110,7 @@ object EchoGrpcWorkerMain {
       server.start()
       stderrln(s"listening on $socketPath (transport=${transport.name})")
     } catch {
-      case e: Throwable =>
+      case NonFatal(e) =>
         stderrln(s"failed to start gRPC server: ${e.getMessage}")
         // Clean up event loops we created; the JVM is about to exit anyway,
         // but skipping the cleanup leaks fds on test reruns.

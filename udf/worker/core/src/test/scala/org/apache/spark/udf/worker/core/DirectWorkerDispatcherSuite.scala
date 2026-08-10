@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.udf.worker.grpc
+package org.apache.spark.udf.worker.core
 
 import java.io.File
 import java.nio.file.{Files, Path}
@@ -34,7 +34,6 @@ import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerHandle, WorkerS
   WorkerSession}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerException, DirectWorkerProcess,
   DirectWorkerTimeoutException}
-import org.apache.spark.udf.worker.grpc.testing.{SocketFileConnection, TestDirectGrpcDispatcher}
 
 /**
  * Tests for [[DirectWorkerDispatcher]] process lifecycle: spawning workers
@@ -73,7 +72,7 @@ class DirectWorkerDispatcherSuite
   private def directWorker(runner: ProcessCallable): DirectWorker =
     DirectWorker.newBuilder().setRunner(runner).setProperties(udsProperties).build()
 
-  // DirectGrpcDispatcher requires the spec to advertise BIDIRECTIONAL_STREAMING.
+  // TestDirectWorkerDispatcher requires the spec to advertise BIDIRECTIONAL_STREAMING.
   private def bidiCapabilities: WorkerCapabilities = WorkerCapabilities.newBuilder()
     .addSupportedCommunicationPatterns(UDFProtoCommunicationPattern.BIDIRECTIONAL_STREAMING)
     .build()
@@ -93,7 +92,7 @@ class DirectWorkerDispatcherSuite
       .setDirect(directWorker(runner))
       .build()
 
-  private var dispatcher: TestDirectGrpcDispatcher = _
+  private var dispatcher: TestDirectWorkerDispatcher = _
 
   // Finalization message for session.close(); these lifecycle-only tests never
   // drive the protocol, so an empty Cancel suffices.
@@ -114,7 +113,7 @@ class DirectWorkerDispatcherSuite
   private def createStubSession(): WorkerSession =
     dispatcher.createSession(None)
 
-  // Centralised cast: every test in this suite uses TestDirectGrpcDispatcher,
+  // Centralised cast: every test in this suite uses TestDirectWorkerDispatcher,
   // which always returns a DirectWorkerProcess. Wrapping in a helper with a
   // clear failure message (a) deduplicates the boilerplate cast at every
   // assertion site, and (b) means a future dispatcher that returns a
@@ -137,7 +136,7 @@ class DirectWorkerDispatcherSuite
   }
 
   test("creates a worker and session") {
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(defaultRunner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
 
     val session = createStubSession()
     val worker = workerProcess(session)
@@ -151,7 +150,7 @@ class DirectWorkerDispatcherSuite
   }
 
   test("concurrent createSession calls produce distinct workers") {
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(defaultRunner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
 
     val threads = 8
     val sessions = new java.util.concurrent.ConcurrentLinkedQueue[WorkerSession]()
@@ -195,7 +194,7 @@ class DirectWorkerDispatcherSuite
   }
 
   test("close shuts down all workers via SIGTERM") {
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(defaultRunner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
 
     val session1 = createStubSession()
     val session2 = createStubSession()
@@ -244,7 +243,7 @@ class DirectWorkerDispatcherSuite
       .setDirect(DirectWorker.newBuilder()
         .setRunner(runner).setProperties(shortGracefulProps).build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(spec)
+    dispatcher = new TestDirectWorkerDispatcher(spec)
 
     val session = createStubSession()
     val worker = workerProcess(session)
@@ -262,7 +261,7 @@ class DirectWorkerDispatcherSuite
   }
 
   test("closing a session terminates its worker") {
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(defaultRunner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
 
     val session = createStubSession()
     val worker = workerProcess(session)
@@ -282,7 +281,7 @@ class DirectWorkerDispatcherSuite
   }
 
   test("concurrent session.close and dispatcher.close do not double-close the worker") {
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(defaultRunner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
 
     val sessions = (1 to 4).map(_ => createStubSession())
     val workers = sessions.map(workerProcess)
@@ -330,10 +329,11 @@ class DirectWorkerDispatcherSuite
     // workers or dispatcher-level transport state.
     val readyLatch = new java.util.concurrent.CountDownLatch(1)
     val releaseLatch = new java.util.concurrent.CountDownLatch(1)
+    val closeStartedLatch = new java.util.concurrent.CountDownLatch(1)
     val capturedWorkers =
       new java.util.concurrent.ConcurrentLinkedQueue[DirectWorkerProcess]()
     val transportClosed = new java.util.concurrent.atomic.AtomicBoolean(false)
-    val racing = new TestDirectGrpcDispatcher(specWithRunner(defaultRunner)) {
+    val racing = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner)) {
       override protected def afterWorkerRegistered(worker: DirectWorkerProcess): Unit = {
         capturedWorkers.add(worker)
         readyLatch.countDown()
@@ -348,6 +348,8 @@ class DirectWorkerDispatcherSuite
         transportClosed.set(true)
         super.closeTransport()
       }
+
+      override protected def afterCloseStarted(): Unit = closeStartedLatch.countDown()
     }
     try {
       val outcome =
@@ -369,8 +371,8 @@ class DirectWorkerDispatcherSuite
 
       val closeThread = new Thread(() => racing.close(), "close-racer")
       closeThread.start()
-      // Give close() time to flip `closed` and reach the creation barrier.
-      Thread.sleep(200)
+      assert(closeStartedLatch.await(10, java.util.concurrent.TimeUnit.SECONDS),
+        "close thread never flipped the dispatcher to closed")
       assert(closeThread.isAlive, "close should wait for the in-flight createSession")
       assert(!transportClosed.get(),
         "transport cleanup must not run while createSession is in flight")
@@ -427,7 +429,7 @@ class DirectWorkerDispatcherSuite
       .setDirect(DirectWorker.newBuilder()
         .setRunner(defaultRunner).setProperties(oversizedProps).build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(spec)
+    dispatcher = new TestDirectWorkerDispatcher(spec)
 
     val session = createStubSession()
     val worker = workerProcess(session)
@@ -447,14 +449,14 @@ class DirectWorkerDispatcherSuite
       .setDirect(DirectWorker.newBuilder()
         .setRunner(defaultRunner).setProperties(oversizedProps).build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(spec)
+    dispatcher = new TestDirectWorkerDispatcher(spec)
 
     assert(dispatcher.initTimeoutMs == 30000L,
       s"init timeout should be capped at 30000ms, got ${dispatcher.initTimeoutMs}")
   }
 
   test("createSession after close is rejected") {
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(defaultRunner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
     dispatcher.close()
 
     val ex = intercept[IllegalStateException] {
@@ -466,7 +468,7 @@ class DirectWorkerDispatcherSuite
   }
 
   test("socket directory is owner-only (0700) on POSIX") {
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(defaultRunner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
     // Drive one createSession so a worker (and therefore the socket dir) is
     // observable via the UDS connection's path.
     val session = createStubSession()
@@ -486,7 +488,7 @@ class DirectWorkerDispatcherSuite
   }
 
   test("socket directory is removed after dispatcher.close") {
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(defaultRunner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
     val session = createStubSession()
     val socketDir = new File(udsPath(workerProcess(session))).toPath.getParent.toFile
     assert(socketDir.exists(),
@@ -507,8 +509,10 @@ class DirectWorkerDispatcherSuite
     // must be terminated rather than leaked until dispatcher.close().
     var capturedWorker: DirectWorkerProcess = null
     val failingDispatcher =
-      new TestDirectGrpcDispatcher(specWithRunner(defaultRunner)) {
-        override protected def newSession(workerHandle: WorkerHandle): WorkerSession =
+      new TestDirectWorkerDispatcher(specWithRunner(defaultRunner)) {
+        override protected def newSession(
+            workerHandle: WorkerHandle,
+            connection: WorkerConnection): WorkerSession =
           throw new RuntimeException("session creation failed")
         override protected def afterWorkerRegistered(w: DirectWorkerProcess): Unit = {
           capturedWorker = w
@@ -535,7 +539,7 @@ class DirectWorkerDispatcherSuite
       .setDirect(DirectWorker.newBuilder().setRunner(defaultRunner).build())
       .build()
     val ex = intercept[IllegalArgumentException] {
-      new TestDirectGrpcDispatcher(badSpec)
+      new TestDirectWorkerDispatcher(badSpec)
     }
     assert(ex.getMessage.contains("connection must be set"),
       s"expected missing-connection error, got: ${ex.getMessage}")
@@ -551,7 +555,7 @@ class DirectWorkerDispatcherSuite
         .setRunner(defaultRunner).setProperties(tcpProperties).build())
       .build()
     val ex = intercept[IllegalArgumentException] {
-      new TestDirectGrpcDispatcher(badSpec)
+      new TestDirectWorkerDispatcher(badSpec)
     }
     assert(ex.getMessage.contains("UNIX domain socket"),
       s"expected UDS-only error, got: ${ex.getMessage}")
@@ -560,7 +564,7 @@ class DirectWorkerDispatcherSuite
   test("socket file is cleaned up when newConnection throws") {
     val capturedSocketPaths = new java.util.concurrent.ConcurrentLinkedQueue[String]()
     val failingDispatcher =
-      new TestDirectGrpcDispatcher(specWithRunner(defaultRunner)) {
+      new TestDirectWorkerDispatcher(specWithRunner(defaultRunner)) {
         override protected def newConnection(address: String): WorkerConnection = {
           capturedSocketPaths.add(address)
           throw new RuntimeException("connection creation failed")
@@ -583,7 +587,7 @@ class DirectWorkerDispatcherSuite
 
   test("empty ProcessCallable command is rejected with a clear error") {
     val emptyRunner = ProcessCallable.newBuilder().build()
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(emptyRunner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(emptyRunner))
     val ex = intercept[IllegalArgumentException] {
       dispatcher.createSession(None)
     }
@@ -596,7 +600,7 @@ class DirectWorkerDispatcherSuite
       .addCommand("bash").addCommand("-c")
       .addCommand("echo 'fatal: bad config' >&2; exit 42").addCommand("--")
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(runner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(runner))
 
     val ex = intercept[RuntimeException] {
       dispatcher.createSession(None)
@@ -625,7 +629,7 @@ class DirectWorkerDispatcherSuite
       .setDirect(DirectWorker.newBuilder()
         .setRunner(hangingRunner).setProperties(shortInitProps).build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(spec)
+    dispatcher = new TestDirectWorkerDispatcher(spec)
 
     val ex = intercept[DirectWorkerTimeoutException] {
       dispatcher.createSession(None)
@@ -649,7 +653,7 @@ class DirectWorkerDispatcherSuite
         .addCommand("bash").addCommand("-c")
         .addCommand(s"touch ${markerFile.getAbsolutePath}").build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(specWithEnv(env = env))
+    dispatcher = new TestDirectWorkerDispatcher(specWithEnv(env = env))
 
     val session = dispatcher.createSession(None)
     session.close(emptyCancel)
@@ -669,7 +673,7 @@ class DirectWorkerDispatcherSuite
         .addCommand("bash").addCommand("-c")
         .addCommand(s"touch ${markerFile.getAbsolutePath}").build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(specWithEnv(env = env))
+    dispatcher = new TestDirectWorkerDispatcher(specWithEnv(env = env))
 
     val session = dispatcher.createSession(None)
     session.close(emptyCancel)
@@ -688,7 +692,7 @@ class DirectWorkerDispatcherSuite
         .addCommand("bash").addCommand("-c")
         .addCommand(s"touch ${markerFile.getAbsolutePath}").build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(specWithEnv(env = env))
+    dispatcher = new TestDirectWorkerDispatcher(specWithEnv(env = env))
 
     val session = dispatcher.createSession(None)
     session.close(emptyCancel)
@@ -704,7 +708,7 @@ class DirectWorkerDispatcherSuite
         .addCommand("bash").addCommand("-c")
         .addCommand("echo 'missing dependency: libfoo' >&2; exit 7").build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(specWithEnv(env = env))
+    dispatcher = new TestDirectWorkerDispatcher(specWithEnv(env = env))
 
     val ex = intercept[RuntimeException] {
       dispatcher.createSession(None)
@@ -724,7 +728,7 @@ class DirectWorkerDispatcherSuite
       .addCommand("sleep 30").build()
     val env = WorkerEnvironment.newBuilder().setInstallation(slowInstall).build()
     val shortTimeoutDispatcher =
-      new TestDirectGrpcDispatcher(specWithEnv(env = env)) {
+      new TestDirectWorkerDispatcher(specWithEnv(env = env)) {
         override protected def callableTimeoutMs: Long = 500L
       }
     try {
@@ -749,7 +753,7 @@ class DirectWorkerDispatcherSuite
         .addCommand("bash").addCommand("-c")
         .addCommand(s"echo invoked >> ${counterFile.getAbsolutePath}").build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(specWithEnv(env = env))
+    dispatcher = new TestDirectWorkerDispatcher(specWithEnv(env = env))
 
     val s1 = dispatcher.createSession(None); s1.close(emptyCancel)
     val s2 = dispatcher.createSession(None); s2.close(emptyCancel)
@@ -775,7 +779,7 @@ class DirectWorkerDispatcherSuite
         .addCommand(
           s"sleep 0.2; echo invoked >> ${counterFile.getAbsolutePath}").build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(specWithEnv(env = env))
+    dispatcher = new TestDirectWorkerDispatcher(specWithEnv(env = env))
 
     val threads = 4
     val startGate = new java.util.concurrent.CountDownLatch(1)
@@ -824,7 +828,7 @@ class DirectWorkerDispatcherSuite
         .addCommand(
           s"echo invoked >> ${counterFile.getAbsolutePath}; exit 1").build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(specWithEnv(env = env))
+    dispatcher = new TestDirectWorkerDispatcher(specWithEnv(env = env))
 
     val first = intercept[RuntimeException] { dispatcher.createSession(None) }
     assert(first.getMessage.contains("installation failed"),
@@ -855,7 +859,7 @@ class DirectWorkerDispatcherSuite
           s"echo invoked >> ${counterFile.getAbsolutePath}; sleep 30").build())
       .build()
     val timeoutDispatcher =
-      new TestDirectGrpcDispatcher(specWithEnv(env = env)) {
+      new TestDirectWorkerDispatcher(specWithEnv(env = env)) {
         override protected def callableTimeoutMs: Long = 500L
       }
     try {
@@ -882,7 +886,7 @@ class DirectWorkerDispatcherSuite
   }
 
   test("non-None securityScope is rejected until pooling lands") {
-    dispatcher = new TestDirectGrpcDispatcher(specWithRunner(defaultRunner))
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
     val scope = new WorkerSecurityScope {
       override def equals(obj: Any): Boolean = obj.isInstanceOf[this.type]
       override def hashCode(): Int = 0
@@ -900,7 +904,7 @@ class DirectWorkerDispatcherSuite
         .addCommand("bash").addCommand("-c").addCommand("exit 0").build())
       .build()
     val ex = intercept[IllegalArgumentException] {
-      new TestDirectGrpcDispatcher(specWithEnv(env = env))
+      new TestDirectWorkerDispatcher(specWithEnv(env = env))
     }
     assert(ex.getMessage.contains("installation"),
       s"expected installation-required error, got: ${ex.getMessage}")
@@ -915,7 +919,7 @@ class DirectWorkerDispatcherSuite
         .addCommand("bash").addCommand("-c")
         .addCommand(s"touch ${cleanupMarker.getAbsolutePath}").build())
       .build()
-    dispatcher = new TestDirectGrpcDispatcher(specWithEnv(env = env))
+    dispatcher = new TestDirectWorkerDispatcher(specWithEnv(env = env))
 
     val session = dispatcher.createSession(None)
     session.close(emptyCancel)

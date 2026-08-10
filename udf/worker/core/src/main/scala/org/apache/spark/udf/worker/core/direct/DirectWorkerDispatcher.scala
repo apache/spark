@@ -207,10 +207,11 @@ abstract class DirectWorkerDispatcher(
    * Constructs the per-invocation [[WorkerSession]] for a worker.
    * Subclasses build the concrete session implementation (e.g.
    * `GrpcWorkerSession` for gRPC over UDS) using `workerHandle` for
-   * dispatcher-side cleanup and `workerHandle.connection` for the wire
-   * transport.
+   * dispatcher-side cleanup and `connection` for the wire transport.
    */
-  protected def newSession(workerHandle: WorkerHandle): WorkerSession
+  protected def newSession(
+      workerHandle: WorkerHandle,
+      connection: WorkerConnection): WorkerSession
 
   /**
    * Test-only hook: invoked once per [[createSession]] after the worker
@@ -231,6 +232,12 @@ abstract class DirectWorkerDispatcher(
    * is banned by scalastyle per SPARK-11615, so the intent is noted here.)
    */
   protected def afterWorkerRegistered(worker: DirectWorkerProcess): Unit = ()
+
+  /**
+   * Test-only hook invoked after [[close]] wins its idempotence CAS and before
+   * it waits for in-flight session creation. The default is a no-op.
+   */
+  protected def afterCloseStarted(): Unit = ()
 
   override def createSession(
       securityScope: Option[WorkerSecurityScope]): WorkerSession = {
@@ -256,7 +263,7 @@ abstract class DirectWorkerDispatcher(
         // The test hook may block, so close could have started since the
         // first post-publication check.
         if (closed.get()) throwClosed()
-        newSession(worker)
+        newSession(worker, worker.connection)
       } catch {
         case e: InterruptedException =>
           Thread.currentThread().interrupt()
@@ -325,6 +332,7 @@ abstract class DirectWorkerDispatcher(
     if (!closed.compareAndSet(false, true)) {
       return
     }
+    afterCloseStarted()
     awaitSessionCreations()
     // TODO [SPARK-55278]: Cleanup sessions as well?
     // TODO [SPARK-55278]: close workers in parallel -- today shutdown is serialised at

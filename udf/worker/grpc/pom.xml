@@ -100,16 +100,6 @@
       <artifactId>grpc-netty</artifactId>
       <version>${io.grpc.version}</version>
     </dependency>
-    <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-codec-http2</artifactId>
-      <version>${netty.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-handler-proxy</artifactId>
-      <version>${netty.version}</version>
-    </dependency>
     <!-- Required for DomainSocketAddress across Linux (epoll) and macOS (kqueue). -->
     <dependency>
       <groupId>io.netty</groupId>
