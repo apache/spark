@@ -241,7 +241,7 @@ class CombineAdjacentAggregationSuite extends QueryTest
       finalOverFilteredPartialMerge.copyTagsFrom(finalAgg)
       assert(collect(CombineAdjacentAggregation(finalOverFilteredPartialMerge)) {
         case agg: HashAggregateExec => agg
-      }.size == 2)
+      }.size == 3)
     }
   }
 
