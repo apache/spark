@@ -15,16 +15,135 @@
 # limitations under the License.
 #
 
-"""Filesystem-backed state storage for local Spark Connect server pools.
+"""Filesystem-backed state model for local Spark Connect server pools.
 
-This internal foundation owns the pool directory layout, locking, and JSON state-file access.
+This internal foundation owns member identity, directory locking, state-file access, and
+claiming. Process lifecycle and server acquisition are layered on top in follow-up changes.
 """
 
 import contextlib
+import hashlib
 import json
+import math
 import os
 import shutil
+import socket
+import sys
 from typing import Any, Dict, List, Optional, Tuple
+
+from pyspark.errors import PySparkValueError
+
+
+def pool_fingerprint(master: str, seed_conf: Dict[str, Any]) -> str:
+    """The identity of a pool member: everything that shapes the server a run would have
+    booted for itself. A run only claims members whose fingerprint equals its own, so a
+    pre-booted JVM is never handed to a run it would not have produced.
+
+    Besides the master and the seeded confs, this covers the working directory (unset
+    warehouse and Derby metastore locations resolve relative to it), the client Python
+    executable, and the Python executable the Connect server selects for Python UDFs.
+    """
+    server_python = os.environ.get(
+        "PYSPARK_PYTHON", os.environ.get("PYSPARK_DRIVER_PYTHON", "python3")
+    )
+    identity = [
+        master,
+        sorted((str(k), str(v)) for k, v in seed_conf.items()),
+        os.getcwd(),
+        sys.executable,
+        server_python,
+    ]
+    return hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()[:16]
+
+
+def _pid_alive(pid: int) -> bool:
+    """Whether ``pid`` is running. A process we cannot signal counts as alive. Linux zombies
+    count as terminated: they remain signalable until their parent reaps them, but cannot own
+    or serve a pool member. POSIX only, like everything in this module.
+    """
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OverflowError:
+        return False
+    except OSError:
+        pass
+    if sys.platform.startswith("linux"):
+        try:
+            with open(f"/proc/{pid}/stat", encoding="utf-8") as stat_file:
+                fields = stat_file.read().rpartition(")")[2].split()
+        except FileNotFoundError:
+            return False
+        except OSError:
+            pass
+        else:
+            if fields and fields[0] == "Z":
+                return False
+    return True
+
+
+class PoolMember:
+    """One published pool server, wrapping its ``server-<uid>.json`` record."""
+
+    def __init__(self, data: Dict[str, Any]):
+        normalized = dict(data)
+        for key in ("host", "token", "spark_version", "fingerprint"):
+            if not isinstance(normalized[key], str):
+                raise PySparkValueError(f"{key} must be a string")
+        normalized["port"] = int(normalized["port"])
+        normalized["pid"] = int(normalized["pid"])
+        normalized["created"] = float(normalized["created"])
+        if not 0 <= normalized["port"] <= 65535:
+            raise PySparkValueError("port is out of range")
+        if not math.isfinite(normalized["created"]):
+            raise PySparkValueError("created must be finite")
+        self.data = normalized
+        # Set when this process claims the member; the path of its claimed-<pid>-<uid>.json.
+        self.claim_path: Optional[str] = None
+
+    @classmethod
+    def from_data(cls, data: Dict[str, Any]) -> Optional["PoolMember"]:
+        """Parse a published member record, returning ``None`` when it is malformed."""
+        try:
+            return cls(data)
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return None
+
+    @property
+    def pid(self) -> int:
+        return int(self.data["pid"])
+
+    @property
+    def token(self) -> str:
+        return self.data["token"]
+
+    @property
+    def created(self) -> float:
+        return float(self.data["created"])
+
+    @property
+    def fingerprint(self) -> str:
+        return self.data["fingerprint"]
+
+    @property
+    def url(self) -> str:
+        return f"sc://{self.data['host']}:{self.data['port']}"
+
+    def is_usable(self) -> bool:
+        """Whether this member has a matching Spark version, live process, and open port."""
+        from pyspark.version import __version__
+
+        if self.data["spark_version"] != __version__ or not _pid_alive(self.pid):
+            return False
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(0.5)
+                return sock.connect_ex((self.data["host"], self.data["port"])) == 0
+        except (OSError, UnicodeError):
+            return False
 
 
 class PoolDirectory:
@@ -229,3 +348,30 @@ class PoolDirectory:
     def remove_member_dir(self, uid: str) -> None:
         self._assert_locked()
         shutil.rmtree(self.member_dir(uid), ignore_errors=True)
+
+
+class ServerPool:
+    """Claims members from one pool directory; lifecycle operations are added later."""
+
+    def __init__(self, directory: Optional[PoolDirectory] = None):
+        self._directory = directory or PoolDirectory()
+
+    def claim(self, fingerprint: str) -> Optional[PoolMember]:
+        """Claim the oldest usable member with this fingerprint, or ``None``. The rename to
+        ``claimed-<pid>-<uid>.json`` marks the member as owned by this process; the reaping
+        rules use that pid to retire members whose client died without releasing them."""
+        candidates = []
+        for uid, path in self._directory.paths_of_kind("server"):
+            data = self._directory.read_json(path)
+            member = PoolMember.from_data(data) if data is not None else None
+            if member is not None and member.fingerprint == fingerprint:
+                candidates.append((member, uid, path))
+        candidates.sort(key=lambda c: c[0].created)
+        for member, uid, path in candidates:
+            if not member.is_usable():
+                continue  # left for the reaping rules to retire
+            claim_path = self._directory.claimed_path(os.getpid(), uid)
+            self._directory.rename(path, claim_path)
+            member.claim_path = claim_path
+            return member
+        return None
