@@ -26,7 +26,8 @@ import scala.xml.Node
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.ml.MLCacheModelInfo
+import org.apache.spark.sql.connect.ml.{MLCacheModelInfo, MLCacheStatus}
+import org.apache.spark.sql.connect.service.SessionKey
 import org.apache.spark.sql.connect.ui.ToolTips._
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
@@ -54,6 +55,11 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val content = store.synchronized { // make sure all parts in this page are consistent
+      val mlCacheStatuses = if (parent.hasLiveMLCacheStatus) {
+        Some(parent.getMLCacheStatuses)
+      } else {
+        None
+      }
       generateBasicStats() ++
         <br/> ++
         <h4>
@@ -63,9 +69,9 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
           {store.getTotalRunning}
           Request(s)
         </h4> ++
-        generateSessionStatsTable(request) ++
+        generateSessionStatsTable(request, mlCacheStatuses.map(_.toMap)) ++
         generateSQLStatsTable(request) ++
-        generateMLCacheStatsTable(request)
+        generateMLCacheStatsTable(request, mlCacheStatuses.toSeq.flatten)
     }
     UIUtils.headerSparkPage(request, "Spark Connect", content, parent)
   }
@@ -134,7 +140,9 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
   }
 
   /** Generate stats of batch sessions of the Spark Connect server */
-  private def generateSessionStatsTable(request: HttpServletRequest): Seq[Node] = {
+  private def generateSessionStatsTable(
+      request: HttpServletRequest,
+      mlCacheStatuses: Option[Map[SessionKey, MLCacheStatus]]): Seq[Node] = {
     val numSessions = store.getSessionList.size
     val table = if (numSessions > 0) {
 
@@ -151,7 +159,8 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
             store.getSessionList,
             "connect",
             UIUtils.prependBaseUri(request, parent.basePath),
-            sessionTableTag).table(sessionTablePage))
+            sessionTableTag,
+            mlCacheStatuses).table(sessionTablePage))
       } catch {
         case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
           Some(<div class="alert alert-danger">
@@ -183,9 +192,11 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
   }
 
   /** Generate live ML cache statistics for active Spark Connect sessions. */
-  private def generateMLCacheStatsTable(request: HttpServletRequest): Seq[Node] = {
-    val cacheStatuses = parent.getMLCacheStatuses.filter(_._2.models.nonEmpty)
-    val models = cacheStatuses.flatMap { case (key, status) =>
+  private def generateMLCacheStatsTable(
+      request: HttpServletRequest,
+      mlCacheStatuses: Seq[(SessionKey, MLCacheStatus)]): Seq[Node] = {
+    val populatedCacheStatuses = mlCacheStatuses.filter(_._2.models.nonEmpty)
+    val models = populatedCacheStatuses.flatMap { case (key, status) =>
       status.models.map(MLCacheModelTableRow(key.userId, key.sessionId, _))
     }
     if (models.isEmpty) {
@@ -214,7 +225,8 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
       }
 
     val inMemoryModels = models.count(_.model.inMemory)
-    val memoryControlledStatuses = cacheStatuses.map(_._2).filter(_.memoryControlEnabled)
+    val memoryControlledStatuses =
+      populatedCacheStatuses.map(_._2).filter(_.memoryControlEnabled)
     val inMemorySize = memoryControlledStatuses.map(s => BigInt(s.inMemorySizeBytes)).sum
     val maxInMemorySize = memoryControlledStatuses.map(s => BigInt(s.maxInMemorySizeBytes)).sum
     val totalSize = memoryControlledStatuses.map(s => BigInt(s.totalSizeBytes)).sum
@@ -244,7 +256,7 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
     </span> ++
       <div class="collapsible-table collapse show" id="aggregated-mlcachestat">
         <ul class="list-unstyled">
-          <li><strong>Sessions with cached models: </strong>{cacheStatuses.size}</li>
+          <li><strong>Sessions with cached models: </strong>{populatedCacheStatuses.size}</li>
           <li>
             <strong>Cached models: </strong>
             {models.size} ({inMemoryModels} in memory, {models.size - inMemoryModels} offloaded)
@@ -437,7 +449,8 @@ private[ui] class SessionStatsPagedTable(
     data: Seq[SessionInfo],
     subPath: String,
     basePath: String,
-    sessionStatsTableTag: String)
+    sessionStatsTableTag: String,
+    mlCacheStatuses: Option[Map[SessionKey, MLCacheStatus]])
     extends PagedTable[SessionInfo] {
 
   private val (sortColumn, desc, pageSize) =
@@ -480,7 +493,8 @@ private[ui] class SessionStatsPagedTable(
         ("Start Time", true, None),
         ("Finish Time", true, None),
         ("Duration", true, Some(SPARK_CONNECT_SESSION_DURATION)),
-        ("Total Execute", true, Some(SPARK_CONNECT_SESSION_TOTAL_EXECUTE)))
+        ("Total Execute", true, Some(SPARK_CONNECT_SESSION_TOTAL_EXECUTE)),
+        ("ML Cache", false, Some(SPARK_CONNECT_SESSION_ML_CACHE)))
 
     isSortColumnValid(sessionTableHeadersAndTooltips, sortColumn)
 
@@ -507,7 +521,39 @@ private[ui] class SessionStatsPagedTable(
       <td> {if (session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
       <td> {formatDurationVerbose(session.totalTime)} </td>
       <td> {session.totalExecution.toString} </td>
+      <td> {renderMLCacheStatus(session)} </td>
     </tr>
+  }
+
+  private def renderMLCacheStatus(session: SessionInfo): Seq[Node] = {
+    if (session.finishTimestamp > 0 || mlCacheStatuses.isEmpty) {
+      <span>N/A</span>
+    } else {
+      mlCacheStatuses
+        .flatMap(_.get(SessionKey(session.userId, session.sessionId)))
+        .filter(_.models.nonEmpty)
+        .map { status =>
+          if (status.memoryControlEnabled) {
+            val inMemoryModels = status.models.count(_.inMemory)
+            val objectLabel = if (inMemoryModels == 1) "object" else "objects"
+            <span>
+              {s"$inMemoryModels $objectLabel in memory"}<br/>
+              {s"${Utils.bytesToString(status.inMemorySizeBytes)} / " +
+              s"${Utils.bytesToString(status.maxInMemorySizeBytes)} memory"}<br/>
+              {s"${Utils.bytesToString(status.totalSizeBytes)} / " +
+              s"${Utils.bytesToString(status.maxTotalSizeBytes)} total"}
+            </span>
+          } else {
+            val cachedModels = status.models.size
+            val objectLabel = if (cachedModels == 1) "object" else "objects"
+            <span>
+              Memory control disabled<br/>
+              {s"$cachedModels cached $objectLabel"}
+            </span>
+          }
+        }
+        .getOrElse(<span>Not used</span>)
+    }
   }
 }
 

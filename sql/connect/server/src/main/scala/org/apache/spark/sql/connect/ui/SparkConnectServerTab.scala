@@ -54,6 +54,8 @@ private[connect] class SparkConnectServerTab(
     sessionManager.toSeq.flatMap(_.getMLCacheStatuses)
   }
 
+  def hasLiveMLCacheStatus: Boolean = sessionManager.nonEmpty
+
   override def displayOrder: Int = 3
 }
 

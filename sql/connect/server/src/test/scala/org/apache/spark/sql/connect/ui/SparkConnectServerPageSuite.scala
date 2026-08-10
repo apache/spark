@@ -92,7 +92,6 @@ class SparkConnectServerPageSuite
     when(tab.store).thenReturn(store)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
-    when(tab.getMLCacheStatuses).thenReturn(Seq.empty)
     val page = new SparkConnectServerPage(tab)
     val html = page.render(request).toString().toLowerCase(Locale.ROOT)
 
@@ -100,6 +99,8 @@ class SparkConnectServerPageSuite
     assert(html.contains("session statistics (1)"))
     assert(html.contains("request statistics (1)"))
     assert(html.contains("dummy query"))
+    assert(html.contains("ml cache"))
+    assert(html.contains("<span>n/a</span>"))
     assert(!html.contains("ml cache statistics"))
 
     // Pagination support
@@ -148,6 +149,7 @@ class SparkConnectServerPageSuite
     when(tab.store).thenReturn(store)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
+    when(tab.hasLiveMLCacheStatus).thenReturn(true)
     when(tab.getMLCacheStatuses).thenReturn(
       Seq(
         SessionKey("userId", "sessionId") ->
@@ -178,6 +180,9 @@ class SparkConnectServerPageSuite
     val mlCacheStatsIndex = html.indexOf("ml cache statistics (2)")
     val requestStatsIndex = html.indexOf("request statistics")
     assert(sessionStatsIndex < requestStatsIndex && requestStatsIndex < mlCacheStatsIndex)
+    assert(html.contains("1 object in memory"))
+    assert(html.contains("1024.0 b / 4.0 kib memory"))
+    assert(html.contains("2.0 kib / 8.0 kib total"))
     assert(html.contains("2 (1 in memory, 1 offloaded)"))
     assert(html.contains("estimated size (in-memory)"))
     assert(html.contains("1024.0 b / 4.0 kib"))
@@ -187,6 +192,64 @@ class SparkConnectServerPageSuite
     assert(html.contains("logisticregressionmodel: uid=logreg-1"))
     assert(html.contains("in memory"))
     assert(html.contains("offloaded"))
+  }
+
+  test("Spark Connect Server page should show unused and unavailable ML cache states") {
+    val store = getStatusStore(closeSession = false)
+
+    val request = mock(classOf[HttpServletRequest])
+    val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
+    when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
+    when(tab.store).thenReturn(store)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+
+    when(tab.hasLiveMLCacheStatus).thenReturn(false)
+    val unavailableHtml =
+      new SparkConnectServerPage(tab).render(request).toString().toLowerCase(Locale.ROOT)
+    assert(unavailableHtml.contains("<span>n/a</span>"))
+
+    when(tab.hasLiveMLCacheStatus).thenReturn(true)
+    when(tab.getMLCacheStatuses).thenReturn(Seq.empty)
+    val uninitializedHtml =
+      new SparkConnectServerPage(tab).render(request).toString().toLowerCase(Locale.ROOT)
+    assert(uninitializedHtml.contains("<span>not used</span>"))
+
+    when(tab.getMLCacheStatuses).thenReturn(
+      Seq(
+        SessionKey("userId", "sessionId") ->
+          MLCacheStatus(
+            memoryControlEnabled = true,
+            inMemorySizeBytes = 0,
+            maxInMemorySizeBytes = 4096,
+            totalSizeBytes = 0,
+            maxTotalSizeBytes = 8192,
+            models = Seq.empty)))
+    val clearedHtml =
+      new SparkConnectServerPage(tab).render(request).toString().toLowerCase(Locale.ROOT)
+    assert(clearedHtml.contains("<span>not used</span>"))
+    assert(!clearedHtml.contains("ml cache statistics"))
+
+    when(tab.getMLCacheStatuses).thenReturn(
+      Seq(
+        SessionKey("userId", "sessionId") ->
+          MLCacheStatus(
+            memoryControlEnabled = false,
+            inMemorySizeBytes = 0,
+            maxInMemorySizeBytes = 0,
+            totalSizeBytes = 0,
+            maxTotalSizeBytes = 0,
+            models = Seq(
+              MLCacheModelInfo(
+                id = "model-id",
+                className = "model-class",
+                modelString = "model-details",
+                estimatedSizeBytes = None,
+                inMemory = true)))))
+    val disabledHtml =
+      new SparkConnectServerPage(tab).render(request).toString().toLowerCase(Locale.ROOT)
+    assert(disabledHtml.contains("memory control disabled"))
+    assert(disabledHtml.contains("1 cached object"))
   }
 
   test("SPARK-58097: session page only shows the requested user's operations") {
