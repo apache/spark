@@ -1575,9 +1575,22 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # Byte-identical twins: both candidates match, but they are the same
         # expression, so either one is the right answer.
         twin_a, twin_b = lambda x: x * 7, lambda x: x * 7
+        # Differ in the PARAMETER NAME only. Both bodies compute the same
+        # value, so this pins the mechanism rather than an answer: the names
+        # reach the fingerprint through ``co_varnames``, and without them both
+        # candidates would match while disagreeing on ``ast.dump``, which is
+        # the "ambiguous" verdict -- so both would fall back instead.
+        by_x, by_y = lambda x: x + 3, lambda y: y + 3
+        # More than two on one line: resolution is a filter over every
+        # candidate, not a pairwise comparison.
+        t1, t2, t3, t4 = lambda x: x + 41, lambda x: x + 42, lambda x: x + 43, lambda x: x + 44
         # Lambdas reachable only inside a collection literal -- the old
         # first-statement walk bailed out on these entirely.
         table = {"inc": lambda x: x + 100, "dec": lambda x: x - 100}
+        # Wrapped in a call: ``Assign(value=Call(...))`` is not unwrapped by
+        # the structural path, so before this change BOTH of these fell back.
+        same = lambda f: f  # noqa: E731
+        wrapped_a, wrapped_b = same(lambda x: x + 51), same(lambda x: x + 52)
 
         # A callable class INSTANCE has no ``__code__`` of its own; its source
         # is read from ``__call__``. Resolution therefore has to key on
@@ -1585,6 +1598,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # wins and the UDF silently computes ``x * 100``.
         class Doubler:
             helper, __call__ = lambda self, x: x * 100, lambda self, x: x * 2
+
+        # Same, with ``__call__`` written FIRST: resolution must not depend on
+        # the target's position among the candidates.
+        class Tripler:
+            __call__, helper = lambda self, x: x * 3, lambda self, x: x * 100
 
         for func, rt, schema, rows, expected in [
             (plus_one, L, num, [(5,)], [6]),
@@ -1595,9 +1613,18 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             (suffix_b, S, txt, [("z",)], ["zb"]),
             (twin_a, L, num, [(5,)], [35]),
             (twin_b, L, num, [(5,)], [35]),
+            (by_x, L, num, [(5,)], [8]),
+            (by_y, L, num, [(5,)], [8]),
+            (t1, L, num, [(5,)], [46]),
+            (t2, L, num, [(5,)], [47]),
+            (t3, L, num, [(5,)], [48]),
+            (t4, L, num, [(5,)], [49]),
             (table["inc"], L, num, [(5,)], [105]),
             (table["dec"], L, num, [(5,)], [-95]),
+            (wrapped_a, L, num, [(5,)], [56]),
+            (wrapped_b, L, num, [(5,)], [57]),
             (Doubler(), L, num, [(5,)], [10]),
+            (Tripler(), L, num, [(5,)], [15]),
         ]:
             with self.subTest(func=func):
                 self.assertEqual(self._vals(func, rt, schema, rows), expected)
@@ -1618,6 +1645,22 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             df = self.spark.createDataFrame([(5,)], "a long")
             self.assertEqual(df.select(u("a")).first()[0], 9)
         self.assertEqual(self._vals(sibling, LongType(), "a long", [(5,)]), [14])
+
+    def test_udf_transpile_constant_folded_twins_on_shared_line_fall_back(self):
+        # The other way resolution comes up ambiguous: the compiler folds
+        # ``1 + 2`` at compile time, so these two emit IDENTICAL bytecode while
+        # their ASTs differ. Neither can be told from the other, so both fall
+        # back. Identical bytecode also means identical behavior, so falling
+        # back costs speed and never correctness -- asserted here so a future
+        # change that guesses one of them shows up as a failure.
+        folded, direct = lambda x: x + (1 + 2), lambda x: x + 3
+        with self.sql_conf(_TRANSPILE_ON):
+            df = self.spark.createDataFrame([(5,)], "a long")
+            for func in (folded, direct):
+                with self.subTest(func=func):
+                    u = UserDefinedFunction(func, LongType())
+                    self.assertEqual([], u.transpiled)
+                    self.assertEqual(df.select(u("a")).first()[0], 8)
 
     def test_udf_transpile_semicolon_separated_lambdas(self):
         # The shape that produced the silent wrong answer before SPARK-58650:
