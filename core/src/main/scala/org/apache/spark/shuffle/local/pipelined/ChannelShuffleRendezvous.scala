@@ -63,7 +63,15 @@ private[spark] object ChannelShuffleRendezvous {
       (shuffleId, reducePartitionId),
       _ => new LinkedBlockingQueue[AnyRef](DefaultCapacity))
 
-  /** Drop all queues for a shuffle once it is unregistered, releasing their memory. */
+  /**
+   * Drop all queues for a shuffle once it is unregistered, releasing their memory.
+   *
+   * A non-empty queue here is NORMAL, not a hazard: a reader may legitimately stop early
+   * (e.g. LIMIT reads only the first rows and never drains the rest), so leftover elements
+   * at unregister time are expected. Queue occupancy is therefore NOT a usable signal for
+   * "unregistered mid-job", and this method makes no such check. The mid-job-unregister
+   * hazard is handled by audit rather than a runtime sentinel -- see the class scaladoc.
+   */
   def removeShuffle(shuffleId: Int): Unit = {
     val it = queues.keySet().iterator()
     while (it.hasNext) {
