@@ -408,6 +408,8 @@ case class StreamingSymmetricHashJoinExec(
     //      new left input with stored right input, and also stores all the left input.
     //    - Left Semi Join: generates all new left input rows from matching new left input with
     //      stored right input, and also stores all the non-matched left input.
+    //    - Left Anti Join: like left semi, but generates nothing; it stores only the non-matched
+    //      new left input (a matched left row can never be anti output, so it is not buffered).
     //
     //  - `rightSideJoiner.storeAndJoinWithOtherSide(leftSideJoiner)`
     //    - Inner, Left Outer, Right Outer, Full Outer Join: generates all rows from matching
@@ -418,16 +420,18 @@ case class StreamingSymmetricHashJoinExec(
     //    - Left Semi Join: generates all stored left input rows, from matching new right input
     //      with stored left input, and also stores all the right input. Note only first-time
     //      matched left input rows will be generated, this is to guarantee left semi semantics.
+    //    - Left Anti Join: generates nothing, but removes the matched left rows from state (they
+    //      can no longer become anti output), and also stores all the right input.
     //
-    //  For Left Semi Join, we process the right side first so that new right input is stored
-    //  before left input probes against it. This way, new left rows that match new right rows
-    //  in the same microbatch are emitted immediately without being buffered in state.
+    //  For Left Semi and Left Anti Join, we process the right side first so that new right input is
+    //  stored before left input probes against it. This way, new left rows that match new right
+    //  rows in the same microbatch are handled immediately without being buffered in state (emitted
+    //  for left semi, dropped for left anti).
     //
-    //  Left Anti Join generates nothing while joining, on either side: whether a left row has no
-    //  match is only decided once the watermark guarantees no future right row can match it, so
-    //  unmatched left rows are emitted when the left side state is evicted (see `outputIter`). Both
-    //  sides still store their input, and matching a new right input marks the corresponding stored
-    //  left rows as matched so that they are suppressed at eviction time.
+    //  Left Anti differs from left semi only in what it emits: nothing during the join. A surviving
+    //  (never-matched) left row is not provably unmatched until the watermark rules out any future
+    //  right match, so -- like left outer -- those rows are emitted when the left state is evicted
+    //  (see `outputIter`).
     val leftOutputIter =
       joinerManager.leftSideJoiner.storeAndJoinWithOtherSide(joinerManager.rightSideJoiner) {
         (input: InternalRow, matched: InternalRow) => joinedRow.withLeft(input).withRight(matched)
@@ -447,10 +451,10 @@ case class StreamingSymmetricHashJoinExec(
     // this will be prepended to a second iterator producing other rows; for inner and left semi
     // joins, this is the full output.
     //
-    // For left semi join, right side is processed first so new right rows are available in
-    // state when left rows probe, avoiding unnecessary left-side state buffering.
+    // For left semi and left anti join, right side is processed first so new right rows are
+    // available in state when left rows probe, avoiding unnecessary left-side state buffering.
     val hashJoinOutputIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
-      if (joinType == LeftSemi) rightOutputIter ++ leftOutputIter
+      if (joinType == LeftSemi || joinType == LeftAnti) rightOutputIter ++ leftOutputIter
       else leftOutputIter ++ rightOutputIter,
       onHashJoinOutputCompletion())
 
@@ -549,22 +553,18 @@ case class StreamingSymmetricHashJoinExec(
 
         hashJoinOutputIter ++ leftSideOutputIter ++ rightSideOutputIter
       case LeftAnti =>
-        // Left anti join is structurally an eviction-time join, like left outer: whether a left
-        // row has "no match" is only known once the watermark guarantees no future right row can
-        // match it. So we reuse the left outer eviction path, with two differences:
-        // * nothing is emitted when a left row matches, and
-        // * an unmatched left row is emitted as the bare left row rather than joined with nulls.
+        // Left anti join is a hybrid of left semi and left outer. The matched-row handling is the
+        // left semi optimization: a left row that finds any match can never be anti output, so it
+        // is dropped from state on match rather than kept (see `storeAndJoinWithOtherSide`),
+        // exactly mirroring left semi. As a result every left row that survives in state is, by
+        // construction, still unmatched.
         //
-        // State format version 1 is already rejected for non-inner joins (see the constructor),
-        // so only the 'matched' flag path needs to be handled.
+        // Whether such a surviving row is truly unmatched is only decided once the watermark
+        // guarantees no future right row can match it, so -- like the left side of a left outer
+        // join -- the survivors are emitted at eviction time, as bare left rows. Unlike left
+        // outer, no matched-flag filter is needed here, since matched rows are already gone.
         val initIterFn = { () =>
-          val removedRowIter = joinerManager.leftSideJoiner.removeAndReturnOldState()
-          removedRowIter.filterNot { kv =>
-            stateFormatVersion match {
-              case 2 | 3 | 4 => kv.matched
-              case _ => throwBadStateFormatVersionException()
-            }
-          }.map(_.value)
+          joinerManager.leftSideJoiner.removeAndReturnOldState().map(_.value)
         }
 
         // NOTE: we need to make sure `antiOutputIter` is evaluated "after" exhausting all of
@@ -573,10 +573,10 @@ case class StreamingSymmetricHashJoinExec(
         // Please refer SPARK-38684 for more details.
         val antiOutputIter = new LazilyInitializingRowIterator(initIterFn)
 
-        // `hashJoinOutputIter` still has to be consumed: draining it is what appends input rows to
-        // the state stores and persists the 'matched' flag for left rows which found a match. For
-        // left anti it only carries the rows which failed the pre-join filter (see
-        // `generateFilteredJoinedRow`), which are genuine anti output, so it is concatenated as-is.
+        // `hashJoinOutputIter` still has to be consumed: draining it is what appends unmatched left
+        // input to state and removes newly-matched left rows. For left anti it only carries the
+        // rows which failed the pre-join filter (see `generateFilteredJoinedRow`), which are
+        // genuine anti output, so it is concatenated as-is.
         hashJoinOutputIter ++ antiOutputIter
       case _ => throwBadJoinTypeException()
     }
@@ -605,8 +605,8 @@ case class StreamingSymmetricHashJoinExec(
       }
 
       // Count rows removed from the other side's state during the join phase
-      // (e.g., left semi join optimization removes matched left-side rows while processing
-      // right-side input, instead of a separate eviction pass).
+      // (e.g., the left semi / left anti join optimization removes matched left-side rows while
+      // processing right-side input, instead of a separate eviction pass).
       numRemovedStateRows += joinerManager.numRemovedFromOtherSideDuringJoin
 
       allRemovalsTimeMs += timeTakenMs {
@@ -831,8 +831,8 @@ case class StreamingSymmetricHashJoinExec(
       // For older versions, we do not apply the optimization as it is a behavioral change,
       // although the optimization is valid for all versions.
       //
-      // Left anti join needs the flag on the left side rows only, so that unmatched left rows can
-      // be identified at eviction time. That flag is written while processing the right side.
+      // Left anti mirrors left semi here: matched left rows are removed from state on match, so no
+      // matched flag is consulted at eviction time (every survivor is unmatched by construction).
       val needToUpdateMatchedOnOtherSide = joinType match {
         case Inner => false
         case LeftOuter => joinSide == RightSide
@@ -861,8 +861,11 @@ case class StreamingSymmetricHashJoinExec(
           case _ => (_: InternalRow, joinedRowIter: Iterator[JoinedRow]) => joinedRowIter
         }
 
+      // Both left semi and left anti remove a matched left row from state while processing the
+      // right side: once matched, a left row can no longer become semi output (already emitted) or
+      // anti output (permanently disqualified), so there is no reason to keep it.
       val removeMatchedFromOtherSideState =
-        joinType == LeftSemi && joinSide == RightSide
+        (joinType == LeftSemi || joinType == LeftAnti) && joinSide == RightSide
 
       nonLateRows.flatMap { row =>
         val thisRow = row.asInstanceOf[UnsafeRow]
@@ -872,9 +875,9 @@ case class StreamingSymmetricHashJoinExec(
         // the case of inner join).
         if (preJoinFilter(thisRow)) {
           val key = keyGenerator(thisRow)
-          // If the join type is Left Semi and this is the right side, we can remove the matched
-          // row from the other (left) side's state, since the row won't be produced anymore for
-          // the following input rows.
+          // If the join type is Left Semi or Left Anti and this is the right side, we can remove
+          // the matched row from the other (left) side's state, since the row won't be produced
+          // anymore for the following input rows.
           val joinedRowIter: Iterator[JoinedRow] = if (removeMatchedFromOtherSideState) {
             otherSideJoiner.joinStateManager.getJoinedRowsAndRemoveMatched(
               key,
@@ -892,16 +895,17 @@ case class StreamingSymmetricHashJoinExec(
               skipUpdatingMatchedFlag)
           }
           if (joinType == LeftAnti) {
-            // Left anti join emits nothing when rows match, on either side; unmatched left rows
-            // are emitted later during watermark-based eviction of the left side state. The match
+            // Left anti join emits nothing while joining, on either side; unmatched left rows are
+            // emitted later during watermark-based eviction of the left side state. The match
             // status is passed explicitly, since it can no longer be inferred from the (empty)
-            // output iterator.
+            // output iterator: on the left side it drives skip-on-match (a matched left row is not
+            // stored), mirroring left semi.
             //
-            // The iterator must be drained fully rather than short-circuited on the first match:
-            // `getJoinedRows` sets the 'matched' flag on the other side's rows lazily, as they are
-            // produced, so stopping early would leave some matched left rows flagged as unmatched
-            // and they would then be wrongly emitted as anti output at eviction time. Draining is
-            // also what the state manager API requires of callers.
+            // The iterator must be drained fully rather than short-circuited on the first match.
+            // On the right side it is the `getJoinedRowsAndRemoveMatched` iterator, so draining is
+            // what removes the matched left rows from state; on the left side draining is required
+            // by the state manager API. Either way, draining is also needed to detect a match at
+            // all, since the anti output produces no rows to observe.
             var matched = false
             while (joinedRowIter.hasNext) {
               joinedRowIter.next()
@@ -948,11 +952,11 @@ case class StreamingSymmetricHashJoinExec(
         //   state store if it's right outer join or full outer join, as unmatched output is
         //   handled during state eviction.
         //
-        // Note left anti deliberately does not get the left semi skip-on-match treatment: a matched
-        // left row has to stay in state (carrying matched = true) so that it is suppressed, rather
-        // than emitted, when the left side state is evicted.
-        val isLeftSemiWithMatch = joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
-        val shouldAddToState = if (isLeftSemiWithMatch) {
+        // Left anti gets the same left-side skip-on-match treatment as left semi: a matched left
+        // row can never be anti output, so there is no reason to keep it in state.
+        val isLeftSemiOrAntiWithMatch =
+          (joinType == LeftSemi || joinType == LeftAnti) && joinSide == LeftSide && iteratorNotEmpty
+        val shouldAddToState = if (isLeftSemiOrAntiWithMatch) {
           false
         } else if (joinSide == LeftSide) {
           true

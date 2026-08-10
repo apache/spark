@@ -2645,21 +2645,21 @@ abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
         // out a future match for them. Left 3, 4, 5 matched and are suppressed forever.
         CheckNewAnswer(),
         // states
-        // left: 1, 2, 3, 4, 5 (all buffered; 3, 4, 5 carry matched = true)
+        // left: 1, 2 (3, 4, 5 matched right rows, so they are not buffered -- see left semi)
         // right: 3, 4, 5, 6, 7
         assertNumStateRows(
-          total = Seq(10), updated = Seq(10),
+          total = Seq(7), updated = Seq(7),
           droppedByWatermark = Seq(0), removed = Some(Seq(0))),
         MultiAddData(leftInput, 21)(rightInput, 22),
-        // Watermark = 11, so window=[0,10] is evicted from the left side: the unmatched left rows
-        // 1 and 2 are emitted now, while the matched 3, 4, 5 are dropped without output.
+        // Watermark = 11, so window=[0,10] is evicted from the left side: the surviving unmatched
+        // left rows 1 and 2 are emitted now (3, 4, 5 were never buffered, having matched).
         CheckNewAnswer(Row(1, 10, 2), Row(2, 10, 4)),
         // states
         // left: 21
         // right: 22
         //
         // states evicted
-        // left: 1, 2, 3, 4, 5 (below watermark)
+        // left: 1, 2 (below watermark)
         // right: 3, 4, 5, 6, 7 (below watermark)
         //
         // Only the 5 right side rows are reported as removed: the left side rows are evicted
@@ -2672,13 +2672,13 @@ abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
         // Restart the join query from the same checkpoint
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         AddData(leftInput, 22),
-        // Left 22 matches right 22, so it is buffered with matched = true and never emitted.
+        // Left 22 matches right 22, so it is not buffered and never emitted (as in left semi).
         CheckNewAnswer(),
         // states
-        // left: 21, 22
+        // left: 21
         // right: 22
         assertNumStateRows(
-          total = Seq(3), updated = Seq(1),
+          total = Seq(2), updated = Seq(0),
           droppedByWatermark = Seq(0), removed = Some(Seq(0))),
         StopStream,
         // Restart the query from the same checkpoint
@@ -2687,10 +2687,10 @@ abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
         // Row not added as 1 < state key watermark = 12.
         CheckNewAnswer(),
         // states
-        // left: 21, 22
+        // left: 21
         // right: 22
         assertNumStateRows(
-          total = Seq(3), updated = Seq(0),
+          total = Seq(2), updated = Seq(0),
           droppedByWatermark = Seq(1), removed = Some(Seq(0)))
       )
     }
@@ -2724,10 +2724,10 @@ abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
       // never match and are emitted immediately without being added to the state.
       CheckNewAnswer(Row(1, 10, 2), Row(2, 10, 4)),
       // states
-      // left: 3 (matched right 3 in the same batch, buffered with matched = true)
+      // left: empty (3 matched right 3 in the same batch, so it is not buffered)
       // right: 3, 4, 5
       assertNumStateRows(
-        total = Seq(4), updated = Seq(4),
+        total = Seq(3), updated = Seq(3),
         droppedByWatermark = Seq(0), removed = Some(Seq(0))),
       // Left 3 matched, so advancing the watermark must not produce an anti row for it.
       MultiAddData(leftInput, 20)(rightInput, 21),
@@ -2737,11 +2737,10 @@ abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
       // right: 21
       //
       // states evicted
-      // left: 3 (below watermark, matched so no output)
+      // left: nothing (3 was never buffered, having matched)
       // right: 3, 4, 5 (below watermark)
       //
-      // Only the 3 right side rows are counted as removed - see the note in
-      // "windowed left anti join" about left side eviction not feeding numRemovedStateRows.
+      // Only the 3 right side rows are counted as removed.
       assertNumStateRows(
         total = Seq(2), updated = Seq(2),
         droppedByWatermark = Seq(0), removed = Some(Seq(3)))
@@ -2757,10 +2756,10 @@ abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
       // are not added to the state and cannot suppress any left row.
       CheckNewAnswer(),
       // states
-      // left: 3, 4, 5 (3 matched right 3, so carries matched = true)
+      // left: 4, 5 (3 matched right 3, so it is not buffered)
       // right: 3
       assertNumStateRows(
-        total = Seq(4), updated = Seq(4),
+        total = Seq(3), updated = Seq(3),
         droppedByWatermark = Seq(0), removed = Some(Seq(0))),
       // Advance the watermark: left 4 and 5 were never matched, so they are emitted now.
       MultiAddData(leftInput, 20)(rightInput, 21),
@@ -2770,11 +2769,12 @@ abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
       // right: 21
       //
       // states evicted
-      // left: 3, 4, 5 (below watermark)
+      // left: 4, 5 (below watermark)
       // right: 3 (below watermark)
       //
-      // Only the single right side row is counted as removed - see the note in
-      // "windowed left anti join" about left side eviction not feeding numRemovedStateRows.
+      // Only the single right side row is counted as removed - the left side rows are evicted
+      // through removeAndReturnOldState while generating the anti output, which does not feed
+      // numRemovedStateRows.
       assertNumStateRows(
         total = Seq(2), updated = Seq(2),
         droppedByWatermark = Seq(0), removed = Some(Seq(1)))
@@ -2796,19 +2796,19 @@ abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
         droppedByWatermark = Seq(0), removed = Some(Seq(0))),
       AddData(rightInput, (1, 10), (2, 5)),
       // Right (1, 10) satisfies the range condition against left (1, 5), so that left row is
-      // marked as matched in state and must never be emitted. Unlike left semi, it is kept in
-      // state so that it can be suppressed at eviction time.
+      // removed from state and must never be emitted, exactly as in left semi.
       CheckNewAnswer(),
       // states
-      // left: (1, 5) (now matched), (3, 5)
+      // left: (3, 5) ((1, 5) removed on match)
       // right: (1, 10), (2, 5)
       assertNumStateRows(
-        total = Seq(4), updated = Seq(2),
-        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+        total = Seq(3), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(1))),
       // Advance the watermark to 20 by adding rows with event time 30 on both sides. A left row is
       // only safe to evict once no future right row can match it, which the range condition puts
       // at leftTime + 5 < watermark, so the left rows with leftTime < 15 are evicted here:
-      // (3, 5) was never matched so it is emitted, while (1, 5) was matched so it is suppressed.
+      // (3, 5) was never matched so it is emitted. (1, 5) is not among them -- it was already
+      // removed from state when it matched in the previous batch.
       AddData(leftInput, (1, 30)),
       CheckNewAnswer(),
       AddData(rightInput, (0, 30)),
