@@ -196,7 +196,11 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * <p>
    * The default implementation derives from {@link #loadRelation}: a {@link View} is rejected as
    * not-a-table; a {@link Table} is returned. Override only if a tables-only path is materially
-   * cheaper than the unified one.
+   * cheaper than the unified one -- note that reads do not reach this method: they go to
+   * {@link #loadRelation(Identifier, CaseInsensitiveStringMap)}, directly from the resolver or
+   * via {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)}. What remains
+   * here is write-privilege loads, DDL and miscellaneous lookups and reloads, including
+   * {@code V2TableReference} resolution.
    */
   @Override
   default Table loadTable(Identifier ident) throws NoSuchTableException {
