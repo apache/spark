@@ -643,20 +643,94 @@ class UDFInHigherOrderFunctionTestsMixin:
                 df.select(agg).collect()
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
-    def test_pandas_udf_in_lambda_still_fails(self):
-        # A vectorized (pandas) UDF in a lambda is not supported.
+    def test_scalar_pandas_udf_in_lambda(self):
+        # A vectorized scalar pandas UDF is lifted and applied over the flattened elements, so it
+        # still receives a pandas Series (its native contract) once per batch, not per element.
         import pandas as pd
         from pyspark.sql.functions import pandas_udf
 
-        df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,), ([10, None],)], "values array<int>"
+        )
 
         @pandas_udf(IntegerType())
         def plus_one_pandas(s: pd.Series) -> pd.Series:
             return s + 1
 
-        with self.assertRaises(AnalysisException) as ctx:
-            df.select(sf.transform("values", lambda x: plus_one_pandas(x))).collect()
-        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: plus_one_pandas(x)).alias("r")),
+            [([2, 3, 4],), ([],), (None,), ([11, None],)],
+        )
+        # Composition around the UDF result, filter and array_sort key all work too.
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: plus_one_pandas(x) * 2).alias("r")),
+            [([4, 6, 8],), ([],), (None,), ([22, None],)],
+        )
+
+    def test_scalar_arrow_udf_in_lambda(self):
+        # A vectorized scalar Arrow UDF is lifted the same way; it takes and returns a pyarrow
+        # Array over the flattened elements.
+        import pyarrow as pa
+        from pyspark.sql.functions import arrow_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,), ([10, None],)], "values array<int>"
+        )
+
+        @arrow_udf(IntegerType())
+        def plus_one_arrow(a: pa.Array) -> pa.Array:
+            return pa.compute.add(a, 1)
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: plus_one_arrow(x)).alias("r")),
+            [([2, 3, 4],), ([],), (None,), ([11, None],)],
+        )
+        assertDataFrameEqual(
+            df.select(sf.filter("values", lambda x: plus_one_arrow(x) > 2).alias("r")),
+            [([2, 3],), ([],), (None,), ([10],)],
+        )
+
+    def test_scalar_pandas_iter_udf_in_lambda(self):
+        # A scalar iterator pandas UDF keeps its iterator contract: it consumes and produces an
+        # iterator of Series. The worker feeds it the flattened elements and re-groups the streamed
+        # results back into arrays positionally, so output batch boundaries need not match input.
+        from typing import Iterator
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,), ([10, 20],), ([5],)], "values array<int>"
+        )
+
+        @pandas_udf(IntegerType())
+        def plus_one_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                yield s + 1
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: plus_one_iter(x)).alias("r")),
+            [([2, 3, 4],), ([],), (None,), ([11, 21],), ([6],)],
+        )
+
+    def test_scalar_arrow_iter_udf_in_lambda(self):
+        # A scalar iterator Arrow UDF, lifted the same way as the pandas iterator variant.
+        from typing import Iterator
+        import pyarrow as pa
+        from pyspark.sql.functions import arrow_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,), ([10, 20],), ([5],)], "values array<int>"
+        )
+
+        @arrow_udf(IntegerType())
+        def plus_one_arrow_iter(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for a in it:
+                yield pa.compute.add(a, 1)
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: plus_one_arrow_iter(x)).alias("r")),
+            [([2, 3, 4],), ([],), (None,), ([11, 21],), ([6],)],
+        )
 
     def test_non_arrow_udf_is_also_supported(self):
         # A UDF created with useArrow=False is still rewritable; the generated array wrapper

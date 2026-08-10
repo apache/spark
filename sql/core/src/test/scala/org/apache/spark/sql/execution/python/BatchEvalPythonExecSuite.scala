@@ -368,6 +368,27 @@ class MyDummyScalarPandasUDF extends UserDefinedPythonFunction(
   pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
   udfDeterministic = true)
 
+class MyDummyScalarArrowUDF extends UserDefinedPythonFunction(
+  name = "dummyScalarArrowUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_SCALAR_ARROW_UDF,
+  udfDeterministic = true)
+
+class MyDummyScalarPandasIterUDF extends UserDefinedPythonFunction(
+  name = "dummyScalarPandasIterUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+  udfDeterministic = true)
+
+class MyDummyScalarArrowIterUDF extends UserDefinedPythonFunction(
+  name = "dummyScalarArrowIterUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+  udfDeterministic = true)
+
 class MyDummyUDTPythonUDF extends UserDefinedPythonFunction(
   name = "dummyUDTUDF",
   func = new DummyUDF,

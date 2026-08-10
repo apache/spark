@@ -41,6 +41,9 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
 
   private val pythonUDF = new MyDummyPythonUDF
   private val scalarPandasUDF = new MyDummyScalarPandasUDF
+  private val scalarArrowUDF = new MyDummyScalarArrowUDF
+  private val scalarPandasIterUDF = new MyDummyScalarPandasIterUDF
+  private val scalarArrowIterUDF = new MyDummyScalarArrowIterUDF
   // Used where a UDF call must receive two arguments, e.g. a pairwise comparator.
   private val pythonUDF2 = new MyDummyPythonUDF
   private val nondeterministicUDF = new MyDummyNondeterministicPythonUDF
@@ -262,11 +265,23 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(liftedUDFs(df).size == 1)
   }
 
-  test("a pandas UDF inside a lambda still fails analysis") {
-    val e = intercept[AnalysisException] {
-      arrayDF.select(transform(col("values"), x => scalarPandasUDF(x))).collect()
+  test("a vectorized scalar UDF inside a lambda is lifted to its element-wise eval type") {
+    // Each vectorized scalar flavor lifts to its own element-wise eval type so the worker keeps
+    // that flavor's batching contract (pandas Series, Arrow Array, or an iterator of batches).
+    val cases = Seq(
+      scalarPandasUDF -> PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
+      scalarArrowUDF -> PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
+      scalarPandasIterUDF -> PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+      scalarArrowIterUDF -> PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF)
+    cases.foreach { case (udf, expectedEvalType) =>
+      val df = arrayDF.select(transform(col("values"), x => udf(x)).as("r"))
+      assert(udfsInsideLambda(df).isEmpty, s"UDF still inside a lambda for eval type ${udf.func}")
+      val lifted = liftedUDFs(df)
+      assert(lifted.size == 1)
+      assert(lifted.head.evalType == expectedEvalType)
+      assert(lifted.head.dataType == ArrayType(udf.dataType, containsNull = true))
+      assert(lifted.head.children.head.dataType.isInstanceOf[ArrayType])
     }
-    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
   }
 
   test("a UDF with a UDT type inside a lambda still fails analysis") {
@@ -287,6 +302,23 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     val plain = PythonUDF("f", null, IntegerType, Seq(Literal(1)),
       PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
     assert(PythonUDF.isElementwiseRewritableUDF(plain))
+
+    // Every row-at-a-time and vectorized scalar eval type is rewritable; each maps to its own
+    // element-wise lifted eval type.
+    Seq(
+      PythonEvalType.SQL_ARROW_BATCHED_UDF -> PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
+      PythonEvalType.SQL_SCALAR_PANDAS_UDF -> PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
+      PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF ->
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+      PythonEvalType.SQL_SCALAR_ARROW_UDF -> PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
+      PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF ->
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF).foreach {
+      case (base, lifted) =>
+        assert(PythonUDF.isElementwiseRewritableUDF(plain.copy(evalType = base)))
+        assert(PythonUDF.liftedElementwiseEvalType(base) == lifted)
+    }
+    assert(PythonUDF.liftedElementwiseEvalType(PythonEvalType.SQL_BATCHED_UDF) ==
+      PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF)
 
     val zeroArg = plain.copy(children = Seq.empty)
     assert(!PythonUDF.isElementwiseRewritableUDF(zeroArg))

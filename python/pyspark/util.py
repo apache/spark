@@ -91,6 +91,10 @@ if typing.TYPE_CHECKING:
     from pyspark.sql._typing import (
         SQLArrowBatchedUDFType,
         SQLArrowElementwiseUDFType,
+        SQLScalarPandasElementwiseUDFType,
+        SQLScalarPandasIterElementwiseUDFType,
+        SQLScalarArrowElementwiseUDFType,
+        SQLScalarArrowIterElementwiseUDFType,
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
@@ -664,6 +668,10 @@ class PythonEvalType:
     SQL_BATCHED_UDF: "SQLBatchedUDFType" = 100
     SQL_ARROW_BATCHED_UDF: "SQLArrowBatchedUDFType" = 101
     SQL_ARROW_ELEMENTWISE_UDF: "SQLArrowElementwiseUDFType" = 102
+    SQL_SCALAR_PANDAS_ELEMENTWISE_UDF: "SQLScalarPandasElementwiseUDFType" = 103
+    SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF: "SQLScalarPandasIterElementwiseUDFType" = 104
+    SQL_SCALAR_ARROW_ELEMENTWISE_UDF: "SQLScalarArrowElementwiseUDFType" = 105
+    SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF: "SQLScalarArrowIterElementwiseUDFType" = 106
 
     SQL_SCALAR_PANDAS_UDF: "PandasScalarUDFType" = 200
     SQL_GROUPED_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 201

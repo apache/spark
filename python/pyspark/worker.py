@@ -498,6 +498,11 @@ def _is_iter_based(eval_type: int) -> bool:
     return eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+        # Iterator UDFs lifted out of a higher-order function lambda keep the iterator contract:
+        # the user function still consumes and produces an iterator of batches; the worker only
+        # feeds it the flattened elements and re-nests the results. See ExtractPythonUDFFromLambda.
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
@@ -607,6 +612,7 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
 
     if eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
     ):
         func = profiling_func
@@ -624,6 +630,10 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
@@ -1819,10 +1829,43 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
         return mapper, None, ser, ser
 
 
+def _elementwise_renest(flat_values, shape_lengths, is_large):
+    """Re-nest a flat Array of per-element results into an ``array<R>`` column.
+
+    ``flat_values`` holds the results for every non-null element in order; ``shape_lengths`` is
+    the per-array element count of the iterated argument (``None`` for a null array, which stays
+    null and consumes no elements). ``is_large`` preserves the input's list width (``ListArray``
+    with int32 offsets vs. ``LargeListArray`` with int64). Returns the nested array and the total
+    number of elements consumed, so callers can verify the flat result length.
+
+    Shared by the vectorized element-wise worker paths (scalar pandas / Arrow and their iterator
+    variants) that back Python UDFs inside higher-order function lambdas. See
+    ``ExtractPythonUDFFromLambda``.
+    """
+    import pyarrow as pa
+
+    offsets = [0]
+    running = 0
+    mask = []
+    for n in shape_lengths:
+        mask.append(n is None)
+        if n is not None:
+            running += n
+        offsets.append(running)
+    list_cls = pa.LargeListArray if is_large else pa.ListArray
+    offsets_arr = pa.array(offsets, type=pa.int64() if is_large else pa.int32())
+    null_mask = pa.array(mask, type=pa.bool_())
+    return list_cls.from_arrays(offsets_arr, flat_values, mask=null_mask), running
+
+
 def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -3118,6 +3161,294 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     )
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF:
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+        require_minimum_pyarrow_version()
+
+        import pyarrow as pa
+        import pyarrow.compute as pc
+        from pyspark.sql.conversion import ArrowArrayToPandasConversion
+
+        # A scalar pandas UDF lifted out of a higher-order function's lambda by
+        # ExtractPythonUDFFromLambda. Each argument arrives as ``array<T>`` aligned with the
+        # iterated array. We flatten each list column to its element list, run the *vectorized*
+        # pandas function once over that flat element column (so it still receives a pandas Series
+        # / DataFrame, its native contract), then re-nest the flat result to ``array<R>`` using the
+        # input's offsets - one row in, one row out, one Python round trip per batch.
+
+        udf_infos = []
+        for udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type in udfs:
+            wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
+                udf_func, udf_args_offsets, udf_kwargs_offsets
+            )
+            # The UDF returns one value per element, so its declared return type is the element
+            # type of the ``array<R>`` this operator produces.
+            udf_infos.append((wrapped_func, args_kwargs_offsets, udf_return_type))
+        col_names = [f"_{i}" for i in range(len(udfs))]
+
+        # Each argument is ``array<T>``; the pandas function must see the element type ``T``.
+        input_fields = list(eval_conf.input_type)
+        element_types = [f.dataType.elementType for f in input_fields]
+
+        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            for input_batch in data:
+                output_arrays = []
+                for wrapped_func, offsets, udf_return_type in udf_infos:
+                    # Flatten each argument list column to its element list and convert to a pandas
+                    # Series (struct elements become a DataFrame, as in the normal pandas path).
+                    pandas_args = [
+                        ArrowArrayToPandasConversion.convert(
+                            input_batch.column(o).flatten(),
+                            element_types[o],
+                            timezone=runner_conf.timezone,
+                            struct_in_pandas="dict",
+                            ndarray_as_list=False,
+                            prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                            df_for_struct=True,
+                        )
+                        for o in offsets
+                    ]
+                    # Re-nest by this UDF's first argument's shape. Different UDFs in one operator
+                    # may iterate differently shaped arrays, so each re-nests by its own argument.
+                    shape = input_batch.column(offsets[0])
+                    shape_lengths = pc.list_value_length(shape).to_pylist()
+
+                    result = wrapped_func(*pandas_args)
+                    if not hasattr(result, "__len__"):
+                        pd_type = (
+                            "pandas.DataFrame"
+                            if isinstance(udf_return_type, StructType)
+                            else "pandas.Series"
+                        )
+                        raise PySparkTypeError(
+                            errorClass="UDF_RETURN_TYPE",
+                            messageParameters={
+                                "expected": pd_type,
+                                "actual": type(result).__name__,
+                            },
+                        )
+
+                    # Convert the flat pandas result to an Arrow element array, then re-nest.
+                    element_schema = StructType([StructField("_0", udf_return_type)])
+                    flat_batch = PandasToArrowConversion.convert(
+                        [result],
+                        element_schema,
+                        timezone=runner_conf.timezone,
+                        safecheck=runner_conf.safecheck,
+                        arrow_cast=True,
+                        prefers_large_types=runner_conf.use_large_var_types,
+                        assign_cols_by_name=runner_conf.assign_cols_by_name,
+                        int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                    )
+                    flat_arr = flat_batch.column(0)
+                    nested, total_elements = _elementwise_renest(
+                        flat_arr, shape_lengths, pa.types.is_large_list(shape.type)
+                    )
+                    verify_result_row_count(len(flat_arr), total_elements)
+                    output_arrays.append(nested)
+
+                yield pa.RecordBatch.from_arrays(output_arrays, col_names)
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF:
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+        require_minimum_pyarrow_version()
+
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        # A scalar Arrow UDF lifted out of a higher-order function's lambda. Like the pandas
+        # element-wise path above, but the vectorized function takes and returns ``pa.Array``: we
+        # flatten each ``array<T>`` argument to its element array, call the function on the flat
+        # element arrays, then re-nest the flat result to ``array<R>`` with the input's offsets.
+
+        udf_infos = []
+        for udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type in udfs:
+            arrow_element_type = to_arrow_type(
+                udf_return_type,
+                timezone="UTC",
+                prefers_large_types=runner_conf.use_large_var_types,
+            )
+            udf_infos.append((udf_func, udf_args_offsets, udf_kwargs_offsets, arrow_element_type))
+        col_names = [f"_{i}" for i in range(len(udfs))]
+
+        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            for input_batch in data:
+                output_arrays = []
+                for udf_func, args_offsets, kwargs_offsets, arrow_element_type in udf_infos:
+                    # Flatten each argument list column to its element array.
+                    flat_args = [input_batch.column(o).flatten() for o in args_offsets]
+                    flat_kwargs = {
+                        k: input_batch.column(v).flatten() for k, v in kwargs_offsets.items()
+                    }
+                    shape = input_batch.column(args_offsets[0])
+                    shape_lengths = pc.list_value_length(shape).to_pylist()
+
+                    flat_result = udf_func(*flat_args, **flat_kwargs)
+                    # The Arrow UDF returns a pa.Array of elements; enforce the declared type.
+                    flat_batch = ArrowBatchTransformer.enforce_schema(
+                        pa.RecordBatch.from_arrays([flat_result], ["_0"]),
+                        pa.schema([pa.field("_0", arrow_element_type)]),
+                        safecheck=runner_conf.safecheck,
+                    )
+                    flat_arr = flat_batch.column(0)
+                    nested, total_elements = _elementwise_renest(
+                        flat_arr, shape_lengths, pa.types.is_large_list(shape.type)
+                    )
+                    verify_result_row_count(len(flat_arr), total_elements)
+                    output_arrays.append(nested)
+
+                yield pa.RecordBatch.from_arrays(output_arrays, col_names)
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
+    if eval_type in (
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
+    ):
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+        require_minimum_pyarrow_version()
+
+        import collections
+
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        is_pandas = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF
+        if is_pandas:
+            import pandas as pd
+            from pyspark.sql.conversion import ArrowArrayToPandasConversion
+
+        assert num_udfs == 1, "One SCALAR_*_ITER_ELEMENTWISE UDF expected here."
+        udf_func, args_offsets, kwargs_offsets, return_type = udfs[0]
+        assert not kwargs_offsets, "Iterator UDFs do not take keyword arguments."
+
+        # A scalar iterator UDF (pandas or Arrow) lifted out of a higher-order function's lambda.
+        # The user function keeps its iterator contract: it consumes an iterator of batches and
+        # yields an iterator of batches, one output value per input value. We preserve that by
+        # feeding it the *flattened* elements of each input batch and, since the JVM joins UDF
+        # output to input positionally by row (one ``array<R>`` per input ``array<T>`` row, in
+        # order), buffering a FIFO of the per-row element counts to re-group the streamed flat
+        # results back into arrays. Output batch boundaries need not match input ones.
+        element_type = list(eval_conf.input_type)[args_offsets[0]].dataType.elementType
+        arrow_element_type = to_arrow_type(
+            return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+        )
+        is_large = None  # set from the first input batch; the list width is uniform per column.
+
+        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            # FIFO of per-row element counts (None for a null array) awaiting their flat results,
+            # and the flat elements produced so far but not yet enough to complete the head shapes.
+            pending_shapes: "collections.deque" = collections.deque()
+            num_input_elements = 0
+
+            def extract_flat(batch: pa.RecordBatch):
+                nonlocal is_large, num_input_elements
+                shape = batch.column(args_offsets[0])
+                if is_large is None:
+                    is_large = pa.types.is_large_list(shape.type)
+                pending_shapes.append(pc.list_value_length(shape).to_pylist())
+                # Flatten each argument to its element column; the user function sees the flat
+                # elements as a pandas Series / DataFrame (pandas) or a pa.Array (Arrow).
+                flat_cols = [batch.column(o).flatten() for o in args_offsets]
+                num_input_elements += len(flat_cols[0])
+                if is_pandas:
+                    flat_cols = [
+                        ArrowArrayToPandasConversion.convert(
+                            c,
+                            element_type,
+                            timezone=runner_conf.timezone,
+                            struct_in_pandas="dict",
+                            ndarray_as_list=False,
+                            prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                            df_for_struct=True,
+                        )
+                        for c in flat_cols
+                    ]
+                return flat_cols[0] if len(flat_cols) == 1 else tuple(flat_cols)
+
+            flat_args_iter = map(extract_flat, data)
+
+            if not is_pandas:
+                expected_iter_type = Iterator[pa.Array]  # type: ignore[type-abstract]
+            elif isinstance(return_type, StructType):
+                expected_iter_type = Iterator[pd.DataFrame]
+            else:
+                expected_iter_type = Iterator[pd.Series]
+            verified_iter = verify_return_type(udf_func(flat_args_iter), expected_iter_type)
+
+            # Buffer the streamed flat element results as one contiguous Arrow array and emit an
+            # ``array<R>`` row as soon as the shape at the head of the FIFO is fully covered. A
+            # null array (length None) emits a null row and consumes no elements.
+            buffered = pa.array([], type=arrow_element_type)
+            num_output_elements = 0
+
+            def emit_ready():
+                nonlocal buffered
+                while pending_shapes:
+                    lengths = pending_shapes[0]
+                    needed = sum(n for n in lengths if n is not None)
+                    if len(buffered) < needed:
+                        break
+                    pending_shapes.popleft()
+                    flat = buffered.slice(0, needed)
+                    buffered = buffered.slice(needed)
+                    nested, _ = _elementwise_renest(flat, lengths, bool(is_large))
+                    yield pa.RecordBatch.from_arrays([nested], ["_0"])
+
+            def process_results():
+                nonlocal buffered, num_output_elements
+                for result in verified_iter:
+                    if is_pandas:
+                        verify_pandas_result(
+                            result,
+                            return_type,
+                            assign_cols_by_name=True,
+                            truncate_return_schema=True,
+                        )
+                        chunk = PandasToArrowConversion.convert(
+                            [result],
+                            StructType([StructField("_0", return_type)]),
+                            timezone=runner_conf.timezone,
+                            safecheck=runner_conf.safecheck,
+                            arrow_cast=True,
+                            prefers_large_types=runner_conf.use_large_var_types,
+                            assign_cols_by_name=runner_conf.assign_cols_by_name,
+                            int_to_decimal_coercion_enabled=(
+                                runner_conf.int_to_decimal_coercion_enabled
+                            ),
+                        ).column(0)
+                    else:
+                        chunk = ArrowBatchTransformer.enforce_schema(
+                            pa.RecordBatch.from_arrays([result], ["_0"]),
+                            pa.schema([pa.field("_0", arrow_element_type)]),
+                            safecheck=runner_conf.safecheck,
+                        ).column(0)
+                    # `chunk` may be a ChunkedArray (from PandasToArrowConversion); normalize to a
+                    # single Array so slicing in `emit_ready` stays O(1) per emitted row.
+                    chunk = chunk.combine_chunks() if hasattr(chunk, "combine_chunks") else chunk
+                    buffered = pa.concat_arrays([buffered, chunk])
+                    num_output_elements += len(chunk)
+                    yield from emit_ready()
+
+                # The iterator is exhausted: every input row's flat elements must have arrived.
+                verify_result_row_count(num_output_elements, num_input_elements)
+                if pending_shapes:
+                    # Any residual shapes are all-null arrays (no elements to wait for).
+                    yield from emit_ready()
+                verify_iterator_exhausted(flat_args_iter)
+
+            yield from process_results()
 
         # profiling is not supported for UDF
         return func, None, ser, ser
