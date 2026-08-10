@@ -255,10 +255,12 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalRoot
 
   // A sentinel thrown from the block-store updater. Reaching it proves the scan actually
   // walked down to a recoverable shuffle file, so the test cannot pass vacuously.
+  private val sentinelMessage = "reached a shuffle file"
+
   private def sentinelBlockManager(): BlockManager = {
     val bm = mock(classOf[BlockManager])
     when(bm.TempFileBasedBlockStoreUpdater)
-      .thenAnswer(_ => throw new IllegalStateException("reached a shuffle file"))
+      .thenAnswer(_ => throw new IllegalStateException(sentinelMessage))
     bm
   }
 
@@ -275,10 +277,11 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalRoot
     // walking two levels up from it yields null. The deep dir must still be recovered.
     val sparkConf = conf.clone.set("spark.local.dir", s"/data,$deepDir")
 
-    intercept[IllegalStateException] {
+    val m = intercept[IllegalStateException] {
       KubernetesLocalDiskShuffleExecutorComponents
         .recoverDiskStore(sparkConf, sentinelBlockManager())
-    }
+    }.getMessage
+    assert(m.contains(sentinelMessage))
   }
 
   test("SPARK-58693: an unlistable directory in the scan does not abort recovery") {
@@ -292,10 +295,11 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalRoot
     assume(!unlistable.canRead, "requires an unreadable directory; skipped when run as root")
 
     try {
-      intercept[IllegalStateException] {
+      val m = intercept[IllegalStateException] {
         KubernetesLocalDiskShuffleExecutorComponents
           .recoverDiskStore(conf.clone.set("spark.local.dir", deepDir), sentinelBlockManager())
-      }
+      }.getMessage
+      assert(m.contains(sentinelMessage))
     } finally {
       unlistable.setReadable(true, false)
     }

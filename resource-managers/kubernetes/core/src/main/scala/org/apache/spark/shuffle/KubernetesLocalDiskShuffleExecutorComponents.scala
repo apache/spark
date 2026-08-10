@@ -75,9 +75,10 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
    * `File.listFiles` returns null when the directory cannot be read (an IO error, a permission
    * denial, or the directory being removed during the walk). Skip such a directory with a warning
    * instead of failing the whole recovery, so one unreadable entry cannot cost us every other
-   * recoverable file.
+   * recoverable file. This is the single-level counterpart of `SparkFileUtils.recursiveList`, and
+   * unlike `JavaUtils.listFilesSafely` it does not throw on an unlistable directory.
    */
-  private def listFilesSafely(dir: File): Array[File] = {
+  private def listEntriesOrEmpty(dir: File): Array[File] = {
     val entries = dir.listFiles()
     if (entries != null) {
       entries
@@ -98,8 +99,10 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
     if (root.isEmpty) {
       logWarning(log"Cannot locate the volume root of local directory " +
         log"${MDC(LogKeys.PATH, localDir)}; skipping it during shuffle data recovery. Recovery " +
-        log"requires a local directory nested at least two levels below the volume root, " +
-        log"such as /data/spark-x/executor-y.")
+        log"requires a local directory nested at least two levels below the volume root, such as " +
+        log"/data/spark-x/executor-y. Set the mount path of the spark-local-dir-* volume, or " +
+        log"${MDC(LogKeys.CONFIG, "spark.local.dir")} when no such volume is mounted, " +
+        log"accordingly.")
     }
     root
   }
@@ -115,14 +118,14 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
       .filter(s => s != null && s.nonEmpty)
       .flatMap(volumeRootOf)
       .flatMap { dir =>
-        val oldDirs = listFilesSafely(dir).filter { f =>
+        val oldDirs = listEntriesOrEmpty(dir).filter { f =>
           f.isDirectory && f.getName.startsWith("spark-")
         }
         oldDirs
-          .flatMap(listFilesSafely).filter(_.isDirectory) // executor-xxx
-          .flatMap(listFilesSafely).filter(_.isDirectory) // blockmgr-xxx
-          .flatMap(listFilesSafely).filter(_.isDirectory) // 00
-          .flatMap(listFilesSafely)
+          .flatMap(listEntriesOrEmpty).filter(_.isDirectory) // executor-xxx
+          .flatMap(listEntriesOrEmpty).filter(_.isDirectory) // blockmgr-xxx
+          .flatMap(listEntriesOrEmpty).filter(_.isDirectory) // 00
+          .flatMap(listEntriesOrEmpty)
           .toImmutableArraySeq
       }
       .partition(_.getName.contains(".checksum"))
