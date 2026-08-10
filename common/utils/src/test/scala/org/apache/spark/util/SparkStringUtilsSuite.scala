@@ -48,6 +48,19 @@ class SparkStringUtilsSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     assert(SparkStringUtils.rightPad(null, 5, "*") === null)
   }
 
+  test("rightPad with an empty pad string fails when padding is required") {
+    // The pad length is used as a divisor, so an empty pad string divides by zero.
+    // Documented here rather than guarded, since callers are expected to pass a
+    // non-empty pad string.
+    intercept[ArithmeticException] {
+      SparkStringUtils.rightPad("a", 5, "")
+    }
+    // No padding is needed in these cases, so the divisor is never reached.
+    assert(SparkStringUtils.rightPad("hello", 5, "") === "hello")
+    assert(SparkStringUtils.rightPad("hello", 3, "") === "hello")
+    assert(SparkStringUtils.rightPad(null, 5, "") === null)
+  }
+
   test("abbreviate truncates with the marker and leaves short inputs untouched") {
     assert(SparkStringUtils.abbreviate("hello world", 8) === "hello...")
     assert(SparkStringUtils.abbreviate("abc", 8) === "abc")
