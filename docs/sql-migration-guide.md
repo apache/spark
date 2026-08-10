@@ -25,7 +25,6 @@ license: |
 ## Upgrading from Spark SQL 4.3 to 4.4
 
 - Since Spark 4.4, for storage-partitioned joins, `spark.sql.requireAllClusterKeysForCoPartition` requires every join key to be covered by some partition key instead of matching the partition keys positionally. As a result, a join-key column partitioned by more than one transform no longer prevents shuffle elimination, and `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` no longer additionally requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false` when the join keys are a subset of the partition keys. As before, when the partition keys cover only part of the join keys, eliminating the shuffle still requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false`.
-- Since Spark 4.4, when `array_repeat` or `array_insert` is asked to build an array larger than the maximum supported array length, generated code raises the same error as interpreted evaluation. `array_repeat` now fails with `COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER` instead of the internal error `_LEGACY_ERROR_TEMP_2176`, and `array_insert` fails with `COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION` instead of `COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER`, which named a `count` parameter that `array_insert` does not have. Both functions raise an error under exactly the same conditions as before; only the reported error condition changes.
 
 ## Upgrading from Spark SQL 4.2 to 4.3
 
@@ -45,6 +44,7 @@ license: |
 - Since Spark 4.3, `hash()` and `xxhash64()` include the `days` field of `CalendarInterval` when computing the hash, so their output for interval values differs from earlier releases. Previously the codegen path dropped `days`, disagreeing with interpreted evaluation.
 - Since Spark 4.3, when a `SELECT` or `INSERT` statement references the same table more than once with different `WITH (...)` options (for example a self-join, or `INSERT INTO t WITH (...) SELECT * FROM t WITH (...)`), each reference now uses its own options instead of the second reference silently inheriting the first reference's options via the analyzer's relation cache.
 - Since Spark 4.3, `HAVING` is evaluated before window functions when the `SELECT` list also contains generator functions such as `explode`. Previously, window functions could include groups removed by `HAVING` and produce incorrect results.
+- Since Spark 4.3, when `array_repeat` or `array_insert` is asked to build an array larger than the maximum supported array length, generated code raises the same error as interpreted evaluation. `array_repeat` now fails with `COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER` instead of the internal error `_LEGACY_ERROR_TEMP_2176`, and `array_insert` fails with `COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION` instead of `COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER`, which named a `count` parameter that `array_insert` does not have. Both functions raise an error under exactly the same conditions as before; only the reported error condition changes.
 
 ## Upgrading from Spark SQL 4.1 to 4.2
 
