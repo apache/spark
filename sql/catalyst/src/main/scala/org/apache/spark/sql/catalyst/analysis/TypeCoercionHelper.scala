@@ -244,6 +244,11 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  // Fractional-seconds precision of the microsecond timestamp family. DATE has no time component
+  // and is treated as this precision when widening (so DATE <-> micro widens to a micro type and
+  // DATE <-> nanos to a nanos type). The nanos types carry their own precision in [7, 9].
+  private final val MicrosPrecision = 6
+
   protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): Option[DatetimeType] =
     (d1, d2) match {
       // Two TIME operands of differing fractional-seconds precision widen to the larger precision
@@ -275,7 +280,6 @@ abstract class TypeCoercionHelper {
         // Fractional-seconds precision of the timestamp family (micros: 6, nanos: 7-9). DATE has no
         // time component and is treated as the micro precision (getOrElse) so that DATE <-> micro
         // widens to the micro type and DATE <-> nanos to the nanos type.
-        val MicrosPrecision = 6
         def isLtz(d: DatetimeType): Boolean = TimestampFamily.isLtz(d)
         def isNtz(d: DatetimeType): Boolean = TimestampFamily.isNtz(d)
         def precisionOf(d: DatetimeType): Int =
@@ -315,19 +319,20 @@ abstract class TypeCoercionHelper {
    *     precedent where TIMESTAMP - TIMESTAMP_NTZ coerces both operands to TIMESTAMP_NTZ;
    *   - a same-family pair keeps that family, so a TIMESTAMP - TIMESTAMP_LTZ(p) style pair still
    *     subtracts in the session time zone (DST-aware) exactly as a pure LTZ pair does.
-   * The subtraction reads only each operand's epochMicros and always yields a microsecond-grid
-   * DayTimeIntervalType, so widening the precision never changes the numeric result -- it only
-   * keeps the two operands the same concrete type. For a pure-micro cross-family pair this returns
-   * TimestampNTZType, identical to the pre-nanos behavior.
+   * The subtraction reads only each operand's epochMicros and always reports the difference on the
+   * microsecond grid (a DayTimeIntervalType in the default mode, a CalendarIntervalType when
+   * spark.sql.legacy.interval.enabled is set), so widening the precision never changes the numeric
+   * result -- it only keeps the two operands the same concrete type. For a pure-micro cross-family
+   * pair this returns TimestampNTZType, identical to the pre-nanos behavior.
    */
   private def subtractTimestampsCommonType(dt1: DataType, dt2: DataType): DataType = {
     val p = math.max(
-      TimestampFamily.fractionalPrecision(dt1).getOrElse(6),
-      TimestampFamily.fractionalPrecision(dt2).getOrElse(6))
+      TimestampFamily.fractionalPrecision(dt1).getOrElse(MicrosPrecision),
+      TimestampFamily.fractionalPrecision(dt2).getOrElse(MicrosPrecision))
     if (TimestampFamily.isLtz(dt1) && TimestampFamily.isLtz(dt2)) {
-      if (p <= 6) TimestampType else TimestampLTZNanosType(p)
+      if (p <= MicrosPrecision) TimestampType else TimestampLTZNanosType(p)
     } else {
-      if (p <= 6) TimestampNTZType else TimestampNTZNanosType(p)
+      if (p <= MicrosPrecision) TimestampNTZType else TimestampNTZNanosType(p)
     }
   }
 

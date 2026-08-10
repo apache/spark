@@ -184,8 +184,9 @@ SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0
 
 -- SPARK-57832: TIMESTAMP_LTZ(p) - TIMESTAMP_LTZ(p) yields a microsecond-grid DayTimeIntervalType.
 -- Only each operand's epochMicros participates, so the sub-microsecond remainder is truncated: the
--- 789/111 sub-micro digits drop out and the difference is exactly 1 day + 0.123456 s. Instant
--- subtraction is zone-agnostic, so the session time zone does not change the interval magnitude.
+-- 789/111 sub-micro digits drop out and the difference is exactly 1 day + 0.123456 s. Like the
+-- micro TIMESTAMP_LTZ case, the subtraction runs on session-zone local date-times, so a DST
+-- transition between the two instants could shift the interval; there is none in the UTC span here.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC';
 -- Two values inside the same microsecond subtract to zero once the remainder is truncated.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05.123456001 UTC';
@@ -195,6 +196,10 @@ SELECT TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC' - TIMESTAMP_LTZ '2020-0
 SELECT ('2020-01-02 03:04:05.1234567 UTC' :: timestamp_ltz(7)) - ('2020-01-01 03:04:05.000000009 UTC' :: timestamp_ltz(9));
 -- Mixed with a micro TIMESTAMP_LTZ operand.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05 UTC';
+-- A DATE operand is cast to the nanos LTZ type (midnight in the session time zone); the
+-- fraction below the micro grid drops. The bare LTZ literal and the DATE both read in the session
+-- zone (America/Los_Angeles), so the difference is exactly 1 day.
+SELECT TIMESTAMP_LTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01';
 -- Pre-epoch operand exercises the negative-epoch path.
 SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' - TIMESTAMP_LTZ '1960-01-01 00:00:00.000000999 UTC';
 -- NULL operand propagates.

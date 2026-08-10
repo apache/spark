@@ -4509,6 +4509,10 @@ object Extract {
  *     the given timestamps.
  *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in microseconds
  *     between given timestamps.
+ *
+ * Both microsecond and nanosecond-precision timestamp types are accepted as operands. Because the
+ * difference is reported on the microsecond grid in either mode, a nanosecond operand contributes
+ * only its `epochMicros`; the sub-microsecond remainder is truncated.
  */
 case class SubtractTimestamps(
     left: Expression,
@@ -4524,8 +4528,9 @@ case class SubtractTimestamps(
     this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
 
   // Nanosecond-precision timestamps are accepted alongside the microsecond types. The difference is
-  // always reported on the microsecond grid (a DayTimeIntervalType has microsecond resolution), so
-  // each operand contributes only its epochMicros; the sub-microsecond remainder is truncated.
+  // always reported on the microsecond grid (both result types -- DayTimeIntervalType and, in
+  // legacy mode, CalendarIntervalType -- carry microsecond resolution), so each operand contributes
+  // only its epochMicros; the sub-microsecond remainder is truncated.
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       TypeCollection(AnyTimestampType, AnyTimestampNanoType),

@@ -454,13 +454,21 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         LocalDateTime.parse("2021-01-01T00:00:00"), precision = 7),
       TimestampNTZNanosType(7))
 
-    // DATE - nanos and nanos - DATE cast the DATE side to the nanos type.
+    // DATE - nanos and nanos - DATE cast the DATE side to the nanos type. Both the NTZ-nanos and
+    // the LTZ-nanos side are covered so the DATE-adopts-the-other-family arm is exercised in both
+    // time-zone families and both operand orders.
     ruleTest(rule,
       SubtractTimestamps(dateLiteral, ntzNanos9),
       SubtractTimestamps(Cast(dateLiteral, TimestampNTZNanosType(9)), ntzNanos9))
     ruleTest(rule,
       SubtractTimestamps(ntzNanos9, dateLiteral),
       SubtractTimestamps(ntzNanos9, Cast(dateLiteral, TimestampNTZNanosType(9))))
+    ruleTest(rule,
+      SubtractTimestamps(dateLiteral, ltzNanos9),
+      SubtractTimestamps(Cast(dateLiteral, TimestampLTZNanosType(9)), ltzNanos9))
+    ruleTest(rule,
+      SubtractTimestamps(ltzNanos9, dateLiteral),
+      SubtractTimestamps(ltzNanos9, Cast(dateLiteral, TimestampLTZNanosType(9))))
     // Same-precision same-family pair is already the same type -> left untouched.
     ruleTest(rule,
       SubtractTimestamps(ntzNanos9, ntzNanos9),
@@ -479,6 +487,17 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     ruleTest(rule,
       SubtractTimestamps(timestampLiteral, ltzNanos9),
       SubtractTimestamps(Cast(timestampLiteral, TimestampLTZNanosType(9)), ltzNanos9))
+    // Cross-family micro/nanos pairs: a micro operand on one side and a nanos operand of the other
+    // family on the other. Both unify in the NTZ family at the nanos precision (the cross-family
+    // rule prefers NTZ), so the micro operand widens across both axes at once.
+    ruleTest(rule,
+      SubtractTimestamps(timestampLiteral, ntzNanos9),
+      SubtractTimestamps(Cast(timestampLiteral, TimestampNTZNanosType(9)), ntzNanos9))
+    ruleTest(rule,
+      SubtractTimestamps(timestampNTZLiteral, ltzNanos9),
+      SubtractTimestamps(
+        Cast(timestampNTZLiteral, TimestampNTZNanosType(9)),
+        Cast(ltzNanos9, TimestampNTZNanosType(9))))
   }
 
   test("datetime comparison") {

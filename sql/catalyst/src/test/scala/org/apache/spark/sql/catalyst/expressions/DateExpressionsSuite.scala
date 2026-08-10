@@ -2410,8 +2410,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-57832: subtract nanosecond-precision timestamps") {
     // The difference between two nanosecond timestamps is reported on the microsecond grid: only
     // each operand's epochMicros participates, so the sub-microsecond remainder is truncated. The
-    // two operands below share the same wall clock down to the microsecond and differ only within
-    // it (789 vs 111), so a nanosecond-aware subtraction and a micros-grid one must agree on zero.
+    // first pair below differs by a whole day plus 0.123456 s at the microsecond level, and the
+    // 789/111 sub-microsecond digits drop out entirely. The zero-result case (two values inside the
+    // same microsecond) is exercised by the second pair further down.
     val ntzType = TimestampNTZNanosType(9)
     val ntzLeft = DateTimeUtils.localDateTimeToTimestampNanos(
       LocalDateTime.parse("2020-01-02T03:04:05.123456789"), precision = 9)
