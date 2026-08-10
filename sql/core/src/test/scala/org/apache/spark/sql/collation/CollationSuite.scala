@@ -96,6 +96,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("initcap uses locale-specific collation rules") {
+    checkAnswer(
+      sql("SELECT initcap('erik ijzermans' COLLATE NL)"),
+      Seq(Row("Erik IJzermans")))
+  }
+
   test("collation name is case insensitive") {
     Seq(
       "uTf8_BiNaRy",

@@ -17,18 +17,12 @@
 
 package org.apache.spark.sql.collation
 
-import org.apache.spark.sql.{Column, Dataset, Row}
+import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.functions.{from_json, from_xml}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 class CollationSQLFunctionsSuite extends SharedSparkSession {
-
-  test("initcap uses locale-specific collation rules") {
-    checkAnswer(
-      sql("SELECT initcap('erik ijzermans' COLLATE NL)"),
-      Seq(Row("Erik IJzermans")))
-  }
 
   test("SPARK-50214: from_json and from_xml work correctly with session collation") {
     import testImplicits._
