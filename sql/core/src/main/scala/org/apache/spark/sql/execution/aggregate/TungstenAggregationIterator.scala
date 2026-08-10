@@ -57,9 +57,10 @@ import org.apache.spark.util.ArrayImplicits._
  *  - Part 3: Methods and fields used by hash-based aggregation.
  *  - Part 4: Methods and fields used when we switch to sort-based aggregation.
  *  - Part 5: Methods and fields used by sort-based aggregation.
- *  - Part 6: Loads input and process input rows.
- *  - Part 7: Public methods of this iterator.
- *  - Part 8: A utility function used to generate a result when there is no
+ *  - Part 6: Methods and fields used by adaptive partial aggregation pass-through.
+ *  - Part 7: Loads input and process input rows.
+ *  - Part 8: Public methods of this iterator.
+ *  - Part 9: A utility function used to generate a result when there is no
  *            input and there is no grouping expression.
  *
  * @param partIndex
@@ -195,8 +196,9 @@ class TungstenAggregationIterator(
   //     that could not be inserted becomes the first pass-through row.
   // A spill starts a new in-memory map epoch: the row counters restart so that epoch is judged on
   // its own rows, which lets an input whose cardinality only turns unfavorable later still be
-  // passed through. Pass-through may therefore coexist with earlier spills; the output stage
-  // drains the sort-based (or map) output first and streams the remaining rows afterwards.
+  // passed through. Pass-through may therefore coexist with earlier spills. The output order
+  // matches the generated path: the first pass-through row is emitted before the sort-based (or
+  // map) output, and the remaining rows stream afterwards.
   private def processInputs(fallbackStartsAt: (Int, Int)): Unit = {
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
@@ -237,6 +239,7 @@ class TungstenAggregationIterator(
             // `newInput` could not be inserted; stash a copy as the first pass-through row so it
             // is not lost when we drain the rest of `inputIter`.
             pendingPassThroughRow = newInput.copy()
+            passThroughTriggerPending = true
           } else {
             val sorter = hashMap.destructAndCreateExternalSorter()
             if (externalSorter == null) {
@@ -265,6 +268,9 @@ class TungstenAggregationIterator(
           if (adaptivePartialAggEnabled && processedRows == nextCheckRow) {
             if (ineffective()) {
               passThrough = true
+              // The first row consumed after the flip becomes the first pass-through row, emitted
+              // before the frozen map (or sort) output to match the generated path.
+              passThroughTriggerPending = true
             } else {
               nextCheckRow += minRows
             }
@@ -411,19 +417,24 @@ class TungstenAggregationIterator(
   }
 
   ///////////////////////////////////////////////////////////////////////////
-  // Part 5b: Methods and fields used by adaptive partial aggregation pass-through.
+  // Part 6: Methods and fields used by adaptive partial aggregation pass-through.
   ///////////////////////////////////////////////////////////////////////////
 
   // Indicates that partial aggregation has been bypassed and the remaining input rows should be
   // passed through as single-row partial buffers. Set in `processInputs` by either check point.
-  // It may coexist with earlier spills, so the output order is: sort-based (or map) output first,
-  // then the pass-through rows -- a group's map buffer holds its earlier rows, so its streamed
-  // rows merge after it.
+  // It may coexist with earlier spills. The output order matches the generated path: the first
+  // pass-through row is emitted before the frozen map (or sort-based) output, and the remaining
+  // rows stream afterwards.
   private[this] var passThrough: Boolean = false
 
   // The row that could not be inserted at the spill check. It is stashed here (as
   // a copy) so it becomes the first pass-through row rather than being lost.
   private[this] var pendingPassThroughRow: InternalRow = null
+
+  // Whether the first pass-through row has not been emitted yet. It is emitted before the frozen
+  // map (or sort) output -- mirroring the generated path, where the first bypassed row is appended
+  // to the output buffer from inside the build loop and the maps only drain afterwards.
+  private[this] var passThroughTriggerPending: Boolean = false
 
   // A reused aggregation buffer for building single-row partial buffers during pass-through. It is
   // re-initialized from `initialAggregationBuffer` for every passed-through row.
@@ -453,7 +464,7 @@ class TungstenAggregationIterator(
   }
 
   ///////////////////////////////////////////////////////////////////////////
-  // Part 6: Loads input rows and setup aggregationBufferMapIterator if we
+  // Part 7: Loads input rows and setup aggregationBufferMapIterator if we
   //         have not switched to sort-based aggregation.
   ///////////////////////////////////////////////////////////////////////////
 
@@ -492,7 +503,7 @@ class TungstenAggregationIterator(
   })
 
   ///////////////////////////////////////////////////////////////////////////
-  // Part 7: Iterator's public methods.
+  // Part 8: Iterator's public methods.
   ///////////////////////////////////////////////////////////////////////////
 
   override final def hasNext: Boolean = {
@@ -502,7 +513,17 @@ class TungstenAggregationIterator(
 
   override final def next(): UnsafeRow = {
     if (hasNext) {
-      val res = if (sortBased && sortedInputHasNewGroup) {
+      val res = if (passThroughTriggerPending &&
+        (pendingPassThroughRow != null || inputIter.hasNext)) {
+        // Adaptive partial aggregation bypassed partial aggregation: emit the first pass-through
+        // row before the frozen map (or sort) output, matching the generated path where the first
+        // bypassed row is appended to the output buffer from inside the build loop and the maps
+        // only drain afterwards. The remaining rows stream after the map output below. When the
+        // flip happens on the last input row there is no such row, and only the map (or sort)
+        // output remains.
+        passThroughTriggerPending = false
+        nextPassThroughOutput()
+      } else if (sortBased && sortedInputHasNewGroup) {
         // Process the current group.
         processCurrentSortedGroup()
         // Generate output row for the current group.
@@ -534,9 +555,7 @@ class TungstenAggregationIterator(
         }
       } else {
         // Adaptive partial aggregation bypassed partial aggregation: emit the remaining input
-        // rows as single-row partial buffers. These come last: a group's map buffer holds its
-        // earlier rows, so its streamed rows have to merge after it, which is the order a
-        // non-bypassed run produces.
+        // rows as single-row partial buffers, after the frozen map output above.
         nextPassThroughOutput()
       }
 
@@ -549,7 +568,7 @@ class TungstenAggregationIterator(
   }
 
   ///////////////////////////////////////////////////////////////////////////
-  // Part 8: Utility functions
+  // Part 9: Utility functions
   ///////////////////////////////////////////////////////////////////////////
 
   /**

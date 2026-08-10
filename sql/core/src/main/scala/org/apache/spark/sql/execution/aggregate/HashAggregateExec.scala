@@ -220,8 +220,10 @@ case class HashAggregateExec(
   private var processedRowsTerm: String = _
   private var adaptiveChildrenConsumedTerm: String = _
   // Whether the map output has already been emitted (and the maps freed). Once pass-through is
-  // active the maps are frozen, so the next re-entry outputs them -- releasing their memory before
-  // the rest of the input is streamed; this flag lets the final output skip them.
+  // active the maps are frozen; draining them -- which also frees them -- releases their memory
+  // before the rest of the input is streamed. The drain runs right after the trigger row in a
+  // fused plan, or on the next re-entry when an exchange splits the build from the output (see
+  // `emitPassThroughRow`); either way this flag lets the later output skip the maps.
   private var adaptiveMapOutputDoneTerm: String = _
   // Whether the map iterators have been set up (`finishHashMap`). The map-output function may be
   // re-entered when its loops return via `shouldStop()` to drain the buffer, and `finishAggregate`
@@ -239,6 +241,9 @@ case class HashAggregateExec(
   // The name of the generated output function, promoted to a field so `doConsumeWithKeys` can emit
   // pass-through rows directly from within the build loop.
   private var outputFunc: String = _
+  // The name of the generated map-output function, promoted to a field so `doConsumeWithKeys` can
+  // drain the frozen maps right after the trigger row in a fused plan (see `emitPassThroughRow`).
+  private var adaptiveOutputMapFuncName: String = _
 
   /**
    * This is called by generated Java class, should be public.
@@ -658,14 +663,6 @@ case class HashAggregateExec(
     } else {
       finishHashMap
     }
-    val doAggFuncName = ctx.addNewFunction(doAgg,
-      s"""
-         |private void $doAgg(int partitionIndex) throws java.io.IOException {
-         |  ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
-         |  $postChildProduce
-         |}
-       """.stripMargin)
-
     val limitNotReachedCondition = limitNotReachedCond
 
     def outputFromFastHashMap: String = {
@@ -741,7 +738,7 @@ case class HashAggregateExec(
     // `shouldStop()`) leaves it unset and the caller resumes the map iterator on re-entry; once it
     // is set the maps have been fully output and freed and will not be touched again. The iterator
     // setup (`finishHashMap`, which destructs the map) is guarded to run only once.
-    val outputMapFuncName = if (adaptivePartialAggEnabled) {
+    adaptiveOutputMapFuncName = if (adaptivePartialAggEnabled) {
       val name = ctx.freshName("outputMap")
       ctx.addNewFunction(name,
         s"""
@@ -759,12 +756,22 @@ case class HashAggregateExec(
       ""
     }
 
+    val doAggFuncName = ctx.addNewFunction(doAgg,
+      s"""
+         |private void $doAgg(int partitionIndex) throws java.io.IOException {
+         |  ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
+         |  $postChildProduce
+         |}
+       """.stripMargin)
+
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
-    // With adaptive partial aggregation, `doAgg` may start appending pass-through rows to the
-    // output buffer mid-build. In that case `shouldStop()` becomes true and we must return so the
-    // buffered rows are drained; the build is resumed on re-entry (guarded by `childrenConsumed`)
-    // until the child input is exhausted, only then falling through to the map output below.
+    // Split by an exchange, `doAgg` may start appending pass-through rows to the output buffer
+    // mid-build. In that case `shouldStop()` becomes true and we must return so the buffered rows
+    // are drained; the build is resumed on re-entry (guarded by `childrenConsumed`) until the
+    // child input is exhausted, only then falling through to the map output below. Fused with the
+    // Final, nothing is buffered, so `shouldStop()` never fires and the maps are drained inside
+    // the build (see `emitPassThroughRow`).
     val adaptiveStopCheck = if (adaptivePartialAggEnabled) {
       "if (shouldStop()) return;"
     } else {
@@ -773,13 +780,15 @@ case class HashAggregateExec(
     // Once pass-through is active the maps are frozen, so output them (releasing their memory)
     // exactly once: early in `adaptiveResumeBuild` (resuming the build means it returned because
     // pass-through filled the buffer, so pass-through is already active) or at the end in
-    // `adaptiveFinalOutput` when they were never output early. The output loops return via
-    // `shouldStop()` when the buffer fills, so the done flag is set inside the output function and
-    // re-entry resumes the map iterator.
+    // `adaptiveFinalOutput` when they were never output early. A fused plan drains them inside
+    // the build instead, right after the trigger row (see `emitPassThroughRow`); the done flag
+    // set there makes both call sites below a no-op. The output loops return via `shouldStop()`
+    // when the buffer fills, so the done flag is set inside the output function and re-entry
+    // resumes the map iterator.
     val adaptiveOutputMap = if (adaptivePartialAggEnabled) {
       s"""
          |if (!$adaptiveMapOutputDoneTerm) {
-         |  $outputMapFuncName();
+         |  $adaptiveOutputMapFuncName();
          |  if (shouldStop()) return;
          |}
        """.stripMargin
@@ -845,6 +854,13 @@ case class HashAggregateExec(
   // requirement rather than copying for every adaptive aggregate.
   override def needCopyResult: Boolean = adaptivePartialAggEnabled &&
     child.asInstanceOf[CodegenSupport].needCopyResult
+
+  // Whether this partial aggregate is the root of its whole-stage. When an exchange splits the
+  // partial from the Final, the partial is the whole-stage root and its output function appends to
+  // `BufferedRowIterator.currentRows`; fused, the output feeds the Final's `doConsume` directly and
+  // is never buffered. The distinction decides where the frozen maps are drained (see
+  // `emitPassThroughRow`).
+  private def isWholeStageRoot: Boolean = parent.isInstanceOf[WholeStageCodegenExec]
 
   protected override def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // create grouping key
@@ -1234,12 +1250,34 @@ case class HashAggregateExec(
     // With adaptive partial aggregation, once pass-through is active `updateRowInHashMap` fills the
     // single-row buffer built above; we then emit `key ++ buffer` straight to the parent so the row
     // skips both the fast map and the regular map.
+    //
+    // The maps were frozen when pass-through fired, so they are drained to preserve the merge order
+    // -- trigger row, then the maps, then the rest of the input. Where the drain runs depends on
+    // the plan shape. Split by an exchange, the partial is the whole-stage root and its output
+    // function appends a reference to the reusable output row; draining in the same call would
+    // overwrite that row while still buffered and silently drop the trigger, so the drain is left
+    // to `doProduceWithKeys` on the next `processNext` (the buffered trigger is pulled first).
+    // Fused with the Final (no exchange), the output is consumed directly by the Final's
+    // `doConsume` and never buffered, so there is no aliasing hazard; the drain runs here, right
+    // after the trigger, because nothing else would yield the build loop -- with no append there is
+    // no `shouldStop()` -- and the maps would otherwise come out only after all the remaining
+    // streamed rows, flipping the merge order.
     val emitPassThroughRow = if (adaptivePartialAggEnabled) {
       val numBypassingRows = metricTerm(ctx, "numBypassingRows")
+      val drainFused = if (isWholeStageRoot) {
+        ""
+      } else {
+        s"""
+           |if (!$adaptiveMapOutputDoneTerm) {
+           |  $adaptiveOutputMapFuncName();
+           |}
+         """.stripMargin
+      }
       s"""
          |if ($adaptiveRowBypassedTerm) {
          |  $numBypassingRows.add(1);
          |  $outputFunc(${unsafeRowKeyCode.value}, $unsafeRowBuffer);
+         |  $drainFused
          |}
        """.stripMargin
     } else {

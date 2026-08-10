@@ -78,8 +78,15 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
    * `ClusteredDistribution`, so `EnsureRequirements` inserts no `Exchange` however many partitions
    * it has. Tests that want the split shape group on a derived key (a cast, say) so the input
    * partitioning no longer satisfies the requirement.
+   *
+   * `expectBypass` ties the correctness guarantee to the triggering guarantee: beyond matching the
+   * reference, every cell must either actually stream rows through (when true) or keep
+   * aggregating (when false). Without it a test could silently stop exercising pass-through if the
+   * input stopped being bypassable, and only this assertion makes that fail loudly.
    */
-  private def checkAdaptiveMatchesReference(build: Int => DataFrame): Unit = {
+  private def checkAdaptiveMatchesReference(
+      build: Int => DataFrame,
+      expectBypass: Boolean = true): Unit = {
     for {
       inputPartitions <- Seq(1, 2)
       wholeStage <- Seq(true, false)
@@ -107,7 +114,23 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         val msg = s"inputPartitions=$inputPartitions wholeStage=$wholeStage " +
           s"twoLevelMap=$twoLevelMap forceSpill=$forceSpill"
         withClue(msg) {
-          checkAnswer(build(inputPartitions), reference)
+          // Collect once so the metrics are populated, then check whether the bypass fired for
+          // this cell. The metric lives on the `Partial`-mode `HashAggregateExec`, so that is the
+          // operator the assertion reads.
+          val df = build(inputPartitions)
+          df.collect()
+          val skipped = collect(df.queryExecution.executedPlan) {
+            case agg: HashAggregateExec if agg.aggregateExpressions.forall(_.mode == Partial) =>
+              agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
+          }.sum
+          if (expectBypass) {
+            assert(skipped > 0,
+              s"expected rows to bypass partial aggregation, got $skipped bypassed rows")
+          } else {
+            assert(skipped == 0,
+              s"expected no rows to bypass partial aggregation, got $skipped bypassed rows")
+          }
+          checkAnswer(df, reference)
         }
       }
     }
@@ -252,17 +275,22 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("results unchanged for low-cardinality input that keeps partial aggregation") {
-    // Few distinct keys, high reduction: partial aggregation is effective and should be kept.
-    checkAdaptiveMatchesReference { parts =>
-      spark.range(0, 600, 1, parts)
-        .select(($"id" % 5).cast("string") as "k", $"id" as "v")
-        .groupBy($"k")
-        .agg(sum($"v") as "s", count(lit(1)) as "c", min($"v") as "mn", max($"v") as "mx")
-    }
+    // Few distinct keys, high reduction: partial aggregation is effective and should be kept, so
+    // the bypass metric must stay zero in every cell.
+    checkAdaptiveMatchesReference(
+      expectBypass = false,
+      build = { parts =>
+        spark.range(0, 600, 1, parts)
+          .select(($"id" % 5).cast("string") as "k", $"id" as "v")
+          .groupBy($"k")
+          .agg(sum($"v") as "s", count(lit(1)) as "c", min($"v") as "mn", max($"v") as "mx")
+      })
   }
 
   test("results unchanged for medium-cardinality input near the reduction threshold") {
-    // Roughly half the rows are distinct keys; exercises the boundary of the ratio checks.
+    // Roughly half the rows are distinct keys; exercises the boundary of the ratio checks. The
+    // overall compaction ratio (~2.0) is above the threshold, but the *first* periodic check still
+    // sees the leading distinct keys and fires, so the bypass must be observable too.
     checkAdaptiveMatchesReference { parts =>
       spark.range(0, 1000, 1, parts)
         .select(($"id" % 500).cast("string") as "k", $"id" as "v")
@@ -403,11 +431,19 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "200000",
         SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false") ++ fixedPlanConfs): _*) {
+      val df = query()
+      df.collect()
+      val skipped = collect(df.queryExecution.executedPlan) {
+        case agg: HashAggregateExec if agg.aggregateExpressions.forall(_.mode == Partial) =>
+          agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
+      }.sum
+      assert(skipped > 0,
+        s"expected the large frozen map to eventually bypass, got $skipped bypassed rows")
       val reference = withSQLConf(
         SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "false") {
         query().collect().toSeq
       }
-      checkAnswer(query(), reference)
+      checkAnswer(df, reference)
     }
   }
 
@@ -498,12 +534,15 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("results unchanged with an empty input") {
-    checkAdaptiveMatchesReference { parts =>
-      spark.range(0, 0, 1, 1)
-        .select($"id".cast("string") as "k", $"id" as "v")
-        .groupBy($"k")
-        .agg(sum($"v") as "s", count(lit(1)) as "c")
-    }
+    // No rows means the check points never fire; the metric must stay zero.
+    checkAdaptiveMatchesReference(
+      expectBypass = false,
+      build = { parts =>
+        spark.range(0, 0, 1, 1)
+          .select($"id".cast("string") as "k", $"id" as "v")
+          .groupBy($"k")
+          .agg(sum($"v") as "s", count(lit(1)) as "c")
+      })
   }
 
   // The following four tests cover plans where an `ExpandExec` sits below the partial aggregate
@@ -520,21 +559,29 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   // high-cardinality input below an Expand`, cover an Expand that bypasses.
 
   test("results unchanged for ROLLUP (Expand below partial aggregate)") {
-    checkAdaptiveMatchesReference { parts =>
-      spark.range(0, 400, 1, parts)
-        .select(($"id" % 200) as "k1", ($"id" % 7) as "k2", $"id" as "v")
-        .rollup($"k1", $"k2")
-        .agg(sum($"v") as "s", count(lit(1)) as "c")
-    }
+    // The grand-total group repeats on every expanded row, so the compaction ratio stays above the
+    // threshold and the partial aggregate declines to bypass in every cell.
+    checkAdaptiveMatchesReference(
+      expectBypass = false,
+      build = { parts =>
+        spark.range(0, 400, 1, parts)
+          .select(($"id" % 200) as "k1", ($"id" % 7) as "k2", $"id" as "v")
+          .rollup($"k1", $"k2")
+          .agg(sum($"v") as "s", count(lit(1)) as "c")
+      })
   }
 
   test("results unchanged for CUBE (Expand below partial aggregate)") {
-    checkAdaptiveMatchesReference { parts =>
-      spark.range(0, 400, 1, parts)
-        .select(($"id" % 150) as "k1", ($"id" % 5) as "k2", $"id" as "v")
-        .cube($"k1", $"k2")
-        .agg(sum($"v") as "s", count(lit(1)) as "c")
-    }
+    // Same as ROLLUP: the grand-total group keeps the ratio above the threshold, so nothing
+    // bypasses.
+    checkAdaptiveMatchesReference(
+      expectBypass = false,
+      build = { parts =>
+        spark.range(0, 400, 1, parts)
+          .select(($"id" % 150) as "k1", ($"id" % 5) as "k2", $"id" as "v")
+          .cube($"k1", $"k2")
+          .agg(sum($"v") as "s", count(lit(1)) as "c")
+      })
   }
 
   test("results unchanged for GROUPING SETS (Expand below partial aggregate)") {
@@ -595,11 +642,11 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // That order is not guaranteed -- what must hold is that the generated and interpreted paths
     // produce the *same* result, or `spark.sql.codegen.wholeStage` becomes observable.
     //
-    // Both axes below matter. A single input partition, or a key the input is already partitioned
-    // by, fuses the two aggregates into one whole-stage, where streamed rows go straight into the
-    // Final's hash map and never reach the output buffer -- the paths cannot diverge there. And
-    // the divergence only shows when the colliding row is not the one the flip fired on, since
-    // that row is emitted from the build loop either way.
+    // Both axes below matter. Splitting the plan by an exchange (or not) changes how the frozen
+    // map output merges with the streamed rows -- the generated path must be told whether its
+    // output is buffered or feeds the `Final`'s `doConsume` directly -- so the two shapes are
+    // exercised separately. And the divergence only shows when the colliding row is not the one
+    // the flip fired on, since that row is emitted from the build loop either way.
     for {
       splits <- Seq(1, 2)
       derivedKey <- Seq(false, true)
@@ -790,6 +837,29 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         assert(numBypassingRows(df) == 0,
           "an aggregation collapsing ~17 rows per key must not bypass; fast-map hits are " +
             "missing from the numerator if it does")
+      }
+    }
+  }
+
+  test("a distinct-heavy prefix commits the task even when later rows collapse") {
+    // The flip is one-way, so the decision is made from the rows seen so far, not the partition as
+    // a whole. Here the first `minRows` rows are all distinct, so the periodic check bypasses and
+    // the pass-through stays on permanently: the remaining rows -- which all collapse onto a single
+    // key and would have aggregated well -- stream through as single-row partial buffers. The
+    // overall compaction ratio (40 rows / 8 keys = 5.0) would keep aggregation, but the prefix has
+    // already committed the task. The mirror case (a compacting prefix with a distinct tail) is
+    // covered by the test above; this pins the other side of the same asymmetry.
+    forEachCodegenAndMap() { clue =>
+      val df = () => spark.range(0, 40, 1, 1)
+        .select(when($"id" < 8, $"id").otherwise(lit(0L)) as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        val c = runAndReadCounters(df)
+        assert(c.skipped == 32,
+          s"expected the 32 rows after the flip to bypass, got ${c.skipped}")
+        assert(c.partialOutputRows == 40,
+          s"expected every input row to stream through the partial, got ${c.partialOutputRows}")
       }
     }
   }
