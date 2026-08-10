@@ -46,11 +46,14 @@ private[connect] class CustomSparkConnectBlockingStub(
   private val grpcExceptionConverter = stubState.exceptionConverter
 
   private def executePlanStub(operationId: String) = {
-    Option(operationId).filter(_.nonEmpty).map { id =>
-      stub.withInterceptors(
-        new SparkConnectClient.MetadataHeaderClientInterceptor(
-          Map(SparkConnectClient.OPERATION_ID_HEADER -> id)))
-    }.getOrElse(stub)
+    Option(operationId)
+      .filter(_.nonEmpty)
+      .map { id =>
+        stub.withInterceptors(
+          new SparkConnectClient.MetadataHeaderClientInterceptor(
+            Map(SparkConnectClient.OPERATION_ID_HEADER -> id)))
+      }
+      .getOrElse(stub)
   }
 
   // Non-reattachable executePlan intentionally has no deadline: a timeout here would kill the
