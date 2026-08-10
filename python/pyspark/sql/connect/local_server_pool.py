@@ -54,6 +54,9 @@ class PoolDirectory:
     def __enter__(self) -> "PoolDirectory":
         import fcntl
 
+        # Not reentrant: a nested enter would os.open a second fd and flock(LOCK_EX) would block
+        # forever against the fd this process already holds. Fail loudly instead of deadlocking.
+        assert self._lock_fd is None, "PoolDirectory is not reentrant"
         os.makedirs(self.path, mode=0o700, exist_ok=True)
         # Re-assert privacy for an existing override directory: state files contain auth tokens,
         # and directory write access would allow replacing them or bypassing the shared lock.
@@ -96,28 +99,54 @@ class PoolDirectory:
     def member_dir(self, uid: str) -> str:
         return os.path.join(self.path, f"member-{uid}")
 
-    @staticmethod
-    def parse_entry(name: str) -> Tuple[Optional[str], Optional[str]]:
+    # uids are generated as ``uuid.uuid4().hex[:12]`` (see the acquisition layer), so a valid
+    # uid is a nonempty run of lowercase hex. Validating the shape keeps editor droppings such
+    # as ``member-abc.json.swp`` and empty stems like ``server-.json`` from becoming phantom uids.
+    _UID_CHARS = frozenset("0123456789abcdef")
+
+    @classmethod
+    def _is_uid(cls, uid: str) -> bool:
+        return bool(uid) and all(c in cls._UID_CHARS for c in uid)
+
+    @classmethod
+    def _split_claimed(cls, stem: str) -> Optional[Tuple[str, str]]:
+        """Split a well-formed ``claimed-<pid>-<uid>`` stem (without the ``.json`` suffix) into
+        ``(client_pid, uid)`` as strings, or ``None`` otherwise. The pid is returned unparsed:
+        ``parse_entry`` classifies over every directory entry and must never raise, and
+        ``str.isdigit()`` accepts characters ``int()`` rejects (e.g. superscripts), so the
+        ``isascii()`` guard keeps the eventual ``int()`` in ``claiming_pid`` total."""
+        if not stem.startswith("claimed-"):
+            return None
+        client_pid, sep, uid = stem[len("claimed-") :].partition("-")
+        if not sep or not (client_pid.isascii() and client_pid.isdigit()) or not cls._is_uid(uid):
+            return None
+        return client_pid, uid
+
+    @classmethod
+    def parse_entry(cls, name: str) -> Tuple[Optional[str], Optional[str]]:
         """The ``(kind, uid)`` of a pool directory entry, ``(None, None)`` for anything
-        else (the lock file, editor droppings, ...)."""
+        else (the lock file, editor droppings, entries with a malformed uid, ...)."""
         if name.startswith("member-"):
-            return "member", name[len("member-") :]
+            uid = name[len("member-") :]
+            return ("member", uid) if cls._is_uid(uid) else (None, None)
         if not name.endswith(".json"):
             return None, None
         stem = name[: -len(".json")]
         for kind in ("pending", "conf", "server", "retired"):
             if stem.startswith(kind + "-"):
-                return kind, stem[len(kind) + 1 :]
-        if stem.startswith("claimed-"):
-            client_pid, sep, uid = stem[len("claimed-") :].partition("-")
-            if sep and client_pid.isdigit():
-                return "claimed", uid
-        return None, None
+                uid = stem[len(kind) + 1 :]
+                return (kind, uid) if cls._is_uid(uid) else (None, None)
+        claimed = cls._split_claimed(stem)
+        return ("claimed", claimed[1]) if claimed is not None else (None, None)
 
-    @staticmethod
-    def claiming_pid(claimed_path: str) -> int:
+    @classmethod
+    def claiming_pid(cls, claimed_path: str) -> int:
         """The client pid recorded in a ``claimed-<pid>-<uid>.json`` file name."""
-        return int(os.path.basename(claimed_path)[len("claimed-") :].split("-", 1)[0])
+        name = os.path.basename(claimed_path)
+        stem = name[: -len(".json")] if name.endswith(".json") else name
+        claimed = cls._split_claimed(stem)
+        assert claimed is not None, f"not a claimed entry: {claimed_path!r}"
+        return int(claimed[0])
 
     # Locked accessors.
 
@@ -139,6 +168,10 @@ class PoolDirectory:
         for name in self._entries():
             kind, entry_uid = self.parse_entry(name)
             if kind is not None and entry_uid == uid:
+                # At most one entry per kind. Claiming renames a single file into place (see the
+                # claiming layer), so two claimed entries for one uid means the pid a reaper would
+                # read via claiming_pid is ambiguous; surface that rather than pick one silently.
+                assert kind not in found, f"duplicate {kind} entries for uid {uid}"
                 found[kind] = os.path.join(self.path, name)
         return found
 

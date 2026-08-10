@@ -22,7 +22,6 @@ import sys
 import tempfile
 import unittest
 
-from pyspark.util import is_remote_only
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
@@ -32,9 +31,12 @@ if should_test_connect:
 _SAVED_ENV_KEYS = ("SPARK_LOCAL_CONNECT_POOL_DIR",)
 
 
+# These tests start no server and exercise only stdlib filesystem code, so they do not need JVM
+# access (no is_remote_only gate). should_test_connect is still required because importing
+# PoolDirectory pulls in the pyspark.sql.connect package, which checks Connect dependencies.
 @unittest.skipIf(
-    not should_test_connect or is_remote_only(),
-    connect_requirement_message or "Requires Spark Connect test dependencies",
+    not should_test_connect,
+    connect_requirement_message or "Requires Spark Connect dependencies to import the pool module",
 )
 @unittest.skipUnless(os.name == "posix", "the pool relies on POSIX file locks")
 class LocalConnectServerPoolUnitTests(unittest.TestCase):
@@ -110,6 +112,115 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 timeout=10,
             )
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_parse_entry_grammar(self) -> None:
+        # uids match the acquisition layer's uuid4().hex[:12]: nonempty lowercase hex.
+        uid = "0123456789ab"
+        cases = [
+            # Well-formed state entries of every kind.
+            (f"pending-{uid}.json", ("pending", uid)),
+            (f"conf-{uid}.json", ("conf", uid)),
+            (f"server-{uid}.json", ("server", uid)),
+            (f"retired-{uid}.json", ("retired", uid)),
+            (f"claimed-4321-{uid}.json", ("claimed", uid)),
+            (f"member-{uid}", ("member", uid)),
+            # Short but valid hex uids.
+            ("member-abc", ("member", "abc")),
+            ("server-abc.json", ("server", "abc")),
+            # The lock file and unrelated entries.
+            (".lock", (None, None)),
+            ("random.txt", (None, None)),
+            # Editor droppings: the finding-2 cases that used to slip through as phantom uids.
+            (f"member-{uid}.json.swp", (None, None)),
+            (f"server-{uid}.json.swp", (None, None)),
+            # Empty uids are rejected for every kind.
+            ("server-.json", (None, None)),
+            ("member-", (None, None)),
+            ("claimed-1234-.json", (None, None)),
+            # Non-hex uids (uppercase, out-of-range letters) are rejected.
+            ("server-ABCDEF.json", (None, None)),
+            ("server-ghij.json", (None, None)),
+            # Malformed claimed stems (non-numeric or missing pid, or a malformed uid).
+            (f"claimed-notapid-{uid}.json", (None, None)),
+            (f"claimed-{uid}.json", (None, None)),
+            ("claimed-4321-ABCDEF.json", (None, None)),
+            # A pid that is str.isdigit() but not int()-parsable (superscript two, U+00B2) must
+            # classify as "not claimed", never raise, since parse_entry runs over every entry.
+            (f"claimed-{chr(0xB2)}-{uid}.json", (None, None)),
+        ]
+        for name, expected in cases:
+            with self.subTest(name=name):
+                self.assertEqual(PoolDirectory.parse_entry(name), expected)
+
+    def test_claiming_pid(self) -> None:
+        uid = "0123456789ab"
+        path = self._directory.claimed_path(4321, uid)
+        self.assertEqual(PoolDirectory.claiming_pid(path), 4321)
+        # Parses from the basename alone, independent of the directory prefix.
+        self.assertEqual(PoolDirectory.claiming_pid(f"claimed-7-{uid}.json"), 7)
+
+    def test_locked_accessors_enumerate_state(self) -> None:
+        uid_a, uid_b = "aaaaaaaaaaaa", "bbbbbbbbbbbb"
+        with self._directory as directory:
+            directory.write_json(directory.server_path(uid_a), {"a": 1})
+            directory.write_json(directory.pending_path(uid_a), {"a": 2})
+            directory.write_json(directory.server_path(uid_b), {"b": 1})
+            os.makedirs(directory.member_dir(uid_a), mode=0o700)
+
+            self.assertEqual(sorted(directory.uids()), [uid_a, uid_b])
+
+            states_a = directory.states(uid_a)
+            self.assertEqual(set(states_a), {"server", "pending", "member"})
+            self.assertEqual(states_a["server"], directory.server_path(uid_a))
+            self.assertEqual(states_a["member"], directory.member_dir(uid_a))
+
+            servers = dict(directory.paths_of_kind("server"))
+            self.assertEqual(set(servers), {uid_a, uid_b})
+            self.assertEqual(servers[uid_a], directory.server_path(uid_a))
+            self.assertEqual(directory.paths_of_kind("retired"), [])
+
+    def test_rename_remove_and_member_dir(self) -> None:
+        uid = "cccccccccccc"
+        with self._directory as directory:
+            src = directory.pending_path(uid)
+            dst = directory.server_path(uid)
+            directory.write_json(src, {"x": 1})
+            directory.rename(src, dst)
+            self.assertFalse(os.path.exists(src))
+            self.assertEqual(directory.read_json(dst), {"x": 1})
+
+            directory.remove(dst)
+            self.assertFalse(os.path.exists(dst))
+            # Removing a missing path is a no-op.
+            directory.remove(dst)
+
+            member = directory.member_dir(uid)
+            os.makedirs(member, mode=0o700)
+            with open(os.path.join(member, "inner"), "w") as f:
+                f.write("data")
+            directory.remove_member_dir(uid)
+            self.assertFalse(os.path.exists(member))
+            # Removing a missing member directory is a no-op.
+            directory.remove_member_dir(uid)
+
+    def test_states_rejects_duplicate_claimed(self) -> None:
+        uid = "dddddddddddd"
+        with self._directory as directory:
+            directory.write_json(directory.claimed_path(111, uid), {})
+            directory.write_json(directory.claimed_path(222, uid), {})
+            with self.assertRaisesRegex(AssertionError, "duplicate claimed"):
+                directory.states(uid)
+
+    def test_accessors_require_the_lock(self) -> None:
+        # The locked accessors must refuse to run outside the context manager.
+        with self.assertRaisesRegex(AssertionError, "context manager"):
+            self._directory.uids()
+
+    def test_not_reentrant(self) -> None:
+        with self._directory:
+            with self.assertRaisesRegex(AssertionError, "not reentrant"):
+                with self._directory:
+                    pass
 
 
 if __name__ == "__main__":
