@@ -167,10 +167,37 @@ object PipelinedShuffleBenchmark {
     // scalastyle:on println
   }
 
+  // regular vs channel only (no streaming), for the fixed-cost curve. Also reports rows/sec
+  // so the fixed overhead shows up as a collapsing speedup at small sizes.
+  private def compareChannel(name: String)(workload: SparkSession => Unit): Unit = {
+    val regular = transportBestMs("regular", 8, workload)
+    val channel = transportBestMs("channel", 8, workload)
+    // scalastyle:off println
+    println(f"[curve] $name%-28s regular=${regular}%5dms  channel=${channel}%5dms  " +
+      f"speedup=${regular.toDouble / channel}%.2fx")
+    // scalastyle:on println
+  }
+
+  // Sweep repartition(k)+count over shrinking row counts to find where the channel's fixed
+  // per-gang cost (extra concurrent stage scheduling + queue setup) overtakes its transport
+  // win -- the crossover the cost-aware placement question hinges on. Pure repartition (no
+  // aggregation compressing the row count) so the transport is on the hot path throughout.
+  private def fixedCostCurve(): Unit = {
+    Seq(20000000L, 1000000L, 100000L, 10000L, 1000L, 100L).foreach { n =>
+      compareChannel(s"repartition, ${n} rows")({ spark =>
+        import spark.implicits._
+        spark.range(0, n, 1, inputParts).withColumn("k", $"id" % 1000)
+          .repartition($"k").count()
+      })
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     // scalastyle:off println
     println(s"[bench] local[$cores], $numRows rows, best of $iters iters")
     // scalastyle:on println
+
+    if (args.contains("curve")) { fixedCostCurve(); return }
 
     compareTransports("repartition(k) + count")({ spark =>
       import spark.implicits._
