@@ -338,12 +338,14 @@ public class AwsStsCredentialProviderSuite {
 
     // Now resolve() with a separate provider that uses the test constructor
     // so we can capture the STS request via mock
-    AwsStsCredentialProvider resolveProvider = new AwsStsCredentialProvider(
-        mockSts, TEST_ROLE_ARN, provider.resolvedConfig().roleSessionName, null);
+    String sessionName = provider.resolvedConfig().roleSessionName;
+    provider.close();
+    provider = new AwsStsCredentialProvider(
+        mockSts, TEST_ROLE_ARN, sessionName, null);
 
     UserContext user = new UserContext(TEST_PRINCIPAL, TEST_ISSUER, TEST_TOKEN,
         Instant.now(), Instant.now().plusSeconds(300));
-    resolveProvider.resolve(user, TEST_TARGET);
+    provider.resolve(user, TEST_TARGET);
 
     ArgumentCaptor<AssumeRoleWithWebIdentityRequest> captor =
         ArgumentCaptor.forClass(AssumeRoleWithWebIdentityRequest.class);
@@ -842,6 +844,106 @@ public class AwsStsCredentialProviderSuite {
     IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
         () -> p.init(conf));
     assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+  }
+
+  // ========== Session name: non-ASCII rejection (regression) ==========
+
+  @Test
+  public void testInitRejectsSessionNameWithAccentedChar() {
+    // "caf\u00e9" contains a Latin-1 accented 'e' -- valid under \w but NOT valid
+    // in STS session names. This test would PASS (incorrectly) under the buggy \w
+    // pattern and must FAIL (correctly) under the explicit ASCII pattern.
+    Map<String, String> conf = new HashMap<>();
+    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "caf\u00e9");
+
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        () -> p.init(conf));
+    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+  }
+
+  @Test
+  public void testInitRejectsSessionNameWithCjkChar() {
+    // CJK ideograph U+4E16 ('world' in Chinese) -- valid under \w but NOT valid
+    // in STS session names. Regression test for the ASCII-only fix.
+    Map<String, String> conf = new HashMap<>();
+    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "session\u4e16");
+
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        () -> p.init(conf));
+    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+  }
+
+  // ========== close() idempotency ==========
+
+  @Test
+  public void testDoubleCloseIsIdempotent() {
+    StsClient mockSts = mock(StsClient.class);
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider(
+        mockSts, TEST_ROLE_ARN, "test-session", null);
+
+    // First close should succeed normally
+    p.close();
+    // Second close must be a no-op (no exception, no double-close on the client)
+    p.close();
+
+    // Verify the underlying client was closed exactly once
+    verify(mockSts).close();
+  }
+
+  @Test
+  public void testResolveAfterCloseThrowsWithClosedMessage() {
+    StsClient mockSts = mock(StsClient.class);
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider(
+        mockSts, TEST_ROLE_ARN, "test-session", null);
+    p.close();
+
+    UserContext user = new UserContext(TEST_PRINCIPAL, TEST_ISSUER, TEST_TOKEN,
+        Instant.now(), Instant.now().plusSeconds(300));
+
+    CredentialResolutionException ex = assertThrows(CredentialResolutionException.class,
+        () -> p.resolve(user, TEST_TARGET));
+    assertTrue(ex.getMessage().contains("closed"),
+        "Message should indicate the provider is closed");
+  }
+
+  // ========== causeChainStream cycle protection ==========
+
+  @Test
+  public void testCauseChainCycleDoesNotLoop() throws Exception {
+    // Construct a circular cause chain via reflection: nodeA -> nodeB -> nodeA.
+    // Java's Throwable.initCause() prevents self-causation and re-initialization,
+    // so we use Field.set to create the cycle.
+    RuntimeException nodeA = new RuntimeException("nodeA");
+    RuntimeException nodeB = new RuntimeException("nodeB", nodeA);
+    // nodeA.cause is currently the sentinel (this), which means "not yet set" in
+    // OpenJDK's implementation. Force it to nodeB to create the cycle.
+    java.lang.reflect.Field causeField = Throwable.class.getDeclaredField("cause");
+    causeField.setAccessible(true);
+    causeField.set(nodeA, nodeB);
+
+    // Now we have nodeA -> nodeB -> nodeA (a cycle).
+    // Simulate what resolve() does: call causeChainContainsToken and verify termination.
+    StsClient mockSts = mock(StsClient.class);
+    StsException stsException = (StsException) StsException.builder()
+        .message("some error")
+        .cause(nodeA)
+        .build();
+    when(mockSts.assumeRoleWithWebIdentity(any(AssumeRoleWithWebIdentityRequest.class)))
+        .thenThrow(stsException);
+
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider(
+        mockSts, TEST_ROLE_ARN, "test-session", null);
+
+    UserContext user = new UserContext(TEST_PRINCIPAL, TEST_ISSUER, TEST_TOKEN,
+        Instant.now(), Instant.now().plusSeconds(300));
+
+    // This must terminate (no infinite loop) and throw CredentialResolutionException
+    assertThrows(CredentialResolutionException.class,
+        () -> p.resolve(user, TEST_TARGET));
   }
 
   // ========== resolve() after close() (Item 5) ==========

@@ -20,6 +20,8 @@ package org.apache.spark.security.aws;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -69,7 +71,7 @@ import org.apache.spark.security.UserContext;
  * <b>Security note:</b> The OIDC raw token is never included in log messages or
  * exception messages. It is passed directly to the STS API call and discarded.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 public class AwsStsCredentialProvider implements CredentialProvider {
 
@@ -97,10 +99,13 @@ public class AwsStsCredentialProvider implements CredentialProvider {
 
   /**
    * Precompiled pattern for validating a configured STS session name.
-   * Must match {@code [\w+=,.@-]{2,64}} per AWS STS documentation.
+   * Must match {@code [a-zA-Z0-9_+=,.@-]{2,64}} per AWS STS documentation.
+   * Uses an explicit ASCII character class rather than {@code \w} to avoid
+   * accepting non-ASCII characters (e.g. accented letters, CJK) that AWS STS
+   * would reject.
    */
   private static final Pattern SESSION_NAME_VALID_PATTERN =
-      Pattern.compile("[\\w+=,.@\\-]{2,64}");
+      Pattern.compile("[a-zA-Z0-9_+=,.@\\-]{2,64}");
 
   /**
    * Immutable configuration holder that is safely published via the volatile
@@ -128,6 +133,9 @@ public class AwsStsCredentialProvider implements CredentialProvider {
 
   /** Safely published via volatile write in init(); read in resolve()/suggestedTtl(). */
   private volatile ResolvedConfig config;
+
+  /** Guards against double-close and allows resolve() to fail fast after close(). */
+  private volatile boolean closed = false;
 
   /**
    * Default no-arg constructor used by {@link java.util.ServiceLoader}.
@@ -179,7 +187,8 @@ public class AwsStsCredentialProvider implements CredentialProvider {
     }
     if (roleSessionName != null && !SESSION_NAME_VALID_PATTERN.matcher(roleSessionName).matches()) {
       throw new IllegalArgumentException(
-          "Configuration key '" + CONF_SESSION_NAME + "' must match [\\w+=,.@-]{2,64}, got: "
+          "Configuration key '" + CONF_SESSION_NAME
+              + "' must match [a-zA-Z0-9_+=,.@-]{2,64}, got: "
               + roleSessionName);
     }
     String regionStr = conf.get(CONF_REGION);
@@ -222,6 +231,10 @@ public class AwsStsCredentialProvider implements CredentialProvider {
 
   @Override
   public void close() {
+    if (closed) {
+      return;
+    }
+    closed = true;
     ResolvedConfig cfg = this.config;
     if (cfg != null && cfg.stsClient != null) {
       cfg.stsClient.close();
@@ -299,6 +312,9 @@ public class AwsStsCredentialProvider implements CredentialProvider {
   @Override
   public ServiceCredential resolve(UserContext user, URI target)
       throws CredentialResolutionException {
+    if (closed) {
+      throw new CredentialResolutionException("provider is closed");
+    }
     if (user == null) {
       throw new CredentialResolutionException(
           "UserContext must not be null when resolving AWS credentials");
@@ -414,11 +430,13 @@ public class AwsStsCredentialProvider implements CredentialProvider {
 
   /**
    * Returns a sequential stream over the cause chain starting from {@code root}.
+   * Uses identity-based cycle detection to guard against circular cause chains.
    */
   private static Stream<Throwable> causeChainStream(Throwable root) {
     Stream.Builder<Throwable> builder = Stream.builder();
+    Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
     Throwable current = root;
-    while (current != null) {
+    while (current != null && visited.add(current)) {
       builder.accept(current);
       current = current.getCause();
     }
@@ -427,8 +445,10 @@ public class AwsStsCredentialProvider implements CredentialProvider {
 
   /**
    * Sanitizes a principal string to be valid as an STS role session name.
-   * STS session names must match [\w+=,.@-]{2,64}. We use an explicit character
-   * class rather than {@code \w} to avoid locale-dependent behavior.
+   * STS session names must match [a-zA-Z0-9_+=,.@-]{2,64}. Both the validation
+   * pattern and the sanitization replacement use an explicit ASCII character class
+   * rather than {@code \w} to avoid locale-dependent behavior and to reject
+   * non-ASCII characters that AWS STS would not accept.
    */
   static String sanitizeSessionName(String principal) {
     String sanitized = SESSION_NAME_INVALID_CHARS.matcher(principal).replaceAll("-");
