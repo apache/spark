@@ -469,15 +469,12 @@ abstract class StreamExecution(
    * start, before the logical plan is forced, so a config read during planning sees the final
    * value.
    *
-   * There are two kinds of setting here, and the difference is deliberate:
-   *
-   *  - SOFT DEFAULTS, applied only when the user has not set the key, so an explicit choice always
-   *    wins. These are performance choices, not correctness requirements, so a user who sets one is
-   *    assumed to mean it. The state store settings and `changelogCheckpointing` are these.
-   *  - HARD OVERRIDES, applied unconditionally because honouring the user's value would break the
-   *    query outright. `sortBeforeRepartition` is one: leaving it `true` makes a Real-Time Mode
-   *    query with a round-robin repartition produce no rows at all. An override logs a warning so
-   *    the operator can see their config is not the one in force.
+   * Every setting here is a SOFT DEFAULT: applied only when the user has not set the key, so an
+   * explicit choice always wins. The state store settings, `changelogCheckpointing`, and
+   * `sortBeforeRepartition` are these. An explicit value that is incompatible with Real-Time Mode
+   * is not overridden here -- it is rejected up front by the preflight in StreamingQueryManager
+   * (throwIfConfsAreRealTimeModeIncompatible), so by the time this runs an explicit value is always
+   * a safe one to keep.
    *
    * Every change is logged, so a run's effective configuration is recoverable from the driver log.
    *
