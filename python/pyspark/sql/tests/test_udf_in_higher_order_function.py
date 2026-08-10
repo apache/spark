@@ -496,6 +496,27 @@ class UDFInHigherOrderFunctionTestsMixin:
             df.select(sf.transform("values", lambda x: add(x, y=sf.lit(1)))).collect()
         self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
+    def test_zero_argument_udf_still_fails(self):
+        # A zero-argument UDF has no argument to carry the iterated array's shape, so the rewrite
+        # cannot express it; it must keep failing analysis rather than crash the worker at runtime.
+        df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
+        const = udf(lambda: 7, IntegerType())
+
+        with self.assertRaises(AnalysisException) as ctx:
+            df.select(sf.transform("values", lambda x: const())).collect()
+        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+
+    def test_nondeterministic_iterated_argument_still_fails(self):
+        # The rewrite references the iterated argument several times; a nondeterministic one (e.g.
+        # shuffle) would be evaluated independently per reference and misalign the results, so it
+        # must fail analysis instead of being rewritten.
+        df = self.spark.createDataFrame([([1, 2, 3, 4],)], "values array<int>")
+        is_even = udf(lambda x: x % 2 == 0, "boolean")
+
+        with self.assertRaises(AnalysisException) as ctx:
+            df.select(sf.filter(sf.shuffle("values"), lambda x: is_even(x))).collect()
+        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+
     def test_decimal_timestamp_and_struct_element_types(self):
         # Arrow conversion edge cases beyond int/double/string: decimal, timestamp, and a struct
         # return type. Each must round-trip through the element-wise wrapper correctly.

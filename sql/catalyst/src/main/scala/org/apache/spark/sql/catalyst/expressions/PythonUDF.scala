@@ -55,14 +55,17 @@ object PythonUDF {
    * `ExtractPythonUDFFromLambda`, which applies it to the whole array outside the lambda.
    *
    * Only the row-at-a-time eval types qualify, since the rule lifts a UDF that takes one value per
-   * call. Two otherwise-eligible shapes are excluded because the rewrite cannot preserve them:
+   * call. Otherwise-eligible shapes are excluded because the rewrite cannot preserve them:
+   *   - a zero-argument call, `f()`: the lift turns each argument into an aligned array, so with no
+   *     argument there is no array to carry the iterated shape, and the element-wise UDF would
+   *     reach the worker with no input column and crash there instead of failing analysis;
    *   - a call with named arguments: its `NamedArgumentExpression` children would be buried inside
    *     the generated `ArrayTransform`, losing the kwargs mapping the runner derives from the
    *     direct children;
    *   - a UDF whose argument or return type involves a UDT: the lift forces the Arrow element-wise
    *     eval type, which has no UDT fallback (unlike `correctEvalType`'s Arrow -> pickle path), so
    *     it would fail at runtime instead of at analysis.
-   * Both keep the previous behavior (an analysis error) rather than being rewritten.
+   * All keep the previous behavior (an analysis error) rather than being rewritten.
    *
    * This is shared with `CheckAnalysis` so that the shapes analysis accepts are exactly those the
    * optimizer rule can rewrite.
@@ -71,6 +74,7 @@ object PythonUDF {
     case udf: PythonUDF =>
       (udf.evalType == PythonEvalType.SQL_BATCHED_UDF ||
         udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) &&
+        udf.children.nonEmpty &&
         !udf.children.exists(_.isInstanceOf[NamedArgumentExpression]) &&
         !containsUDT(udf.dataType) &&
         !udf.children.exists(c => containsUDT(c.dataType))
@@ -79,12 +83,18 @@ object PythonUDF {
 
   /**
    * Whether every Python UDF in `hof`'s lambdas can be lifted out by `ExtractPythonUDFFromLambda`.
-   * Used by `CheckAnalysis` to decide whether to reject the plan. Three shapes cannot be rewritten:
+   * Used by `CheckAnalysis` to decide whether to reject the plan. These shapes cannot be rewritten:
    *   - a UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`: the inner array
    *     `i` is not a real column. (A UDF in a nested *argument*, `transform(arr, x ->
    *     transform(udf(x), y -> y))`, is fine - `udf(x)` lifts onto `arr`.)
    *   - a UDF in `aggregate` / `reduce`: the fold is sequential, so it sees earlier steps' outputs;
-   *   - a vectorized (scalar pandas / arrow) UDF, which is not supported.
+   *   - a vectorized (scalar pandas / arrow) UDF, which is not supported;
+   *   - a *nondeterministic iterated argument*, `filter(shuffle(arr), x -> f(x))`: the rewrite
+   *     references that argument several times (the carrier's `c0`, each lifted UDF's argument, the
+   *     `map_keys`/`map_values` desugar, the pairwise `array_sort` path), and nondeterministic
+   *     expressions are not subexpression-eliminated, so the copies would evaluate independently
+   *     and disagree - keeping the results misaligned. (This is distinct from a nondeterministic
+   *     UDF *call*, which `ExtractPythonUDFFromLambda.liftKey` keeps distinct but well-defined.)
    */
   def canRewritePythonUDFInLambda(hof: HigherOrderFunction): Boolean = {
     // Only row-at-a-time eval types are supported; a vectorized UDF is not rewritable regardless
@@ -95,7 +105,10 @@ object PythonUDF {
     // Reading a free lambda variable means `hof` is itself nested in an enclosing lambda, so the
     // array it iterates is not a real column (the nested case above).
     val iteratesRealColumns = !hasFreeLambdaVariable(hof)
-    allUDFsRewritable && iteratesRealColumns && isRewritableShape(hof)
+    // The rewrite duplicates the iterated argument expression, so a nondeterministic one would be
+    // evaluated more than once with diverging results.
+    val deterministicArguments = hof.arguments.forall(_.deterministic)
+    allUDFsRewritable && iteratesRealColumns && deterministicArguments && isRewritableShape(hof)
   }
 
   /**

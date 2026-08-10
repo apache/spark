@@ -279,13 +279,17 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
   }
 
-  test("the rewritable predicate excludes named-argument and UDT UDFs") {
-    // These shapes cannot be preserved by the lift (a `NamedArgumentExpression` child would be
-    // buried inside the generated transform, losing kwargs; a UDT would hit the Arrow path with no
+  test("the rewritable predicate excludes zero-argument, named-argument and UDT UDFs") {
+    // These shapes cannot be preserved by the lift (a zero-arg call has no array to carry the
+    // iterated shape and would crash the worker; a `NamedArgumentExpression` child would be buried
+    // inside the generated transform, losing kwargs; a UDT would hit the Arrow path with no
     // fallback), so the shared predicate must reject them, keeping the previous analysis error.
     val plain = PythonUDF("f", null, IntegerType, Seq(Literal(1)),
       PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
     assert(PythonUDF.isElementwiseRewritableUDF(plain))
+
+    val zeroArg = plain.copy(children = Seq.empty)
+    assert(!PythonUDF.isElementwiseRewritableUDF(zeroArg))
 
     val named = plain.copy(children = Seq(NamedArgumentExpression("k", Literal(1))))
     assert(!PythonUDF.isElementwiseRewritableUDF(named))
@@ -295,6 +299,28 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
 
     val udtArg = plain.copy(children = Seq(Literal.create(null, new ExamplePointUDT)))
     assert(!PythonUDF.isElementwiseRewritableUDF(udtArg))
+  }
+
+  test("a zero-argument UDF inside a lambda still fails analysis") {
+    // `transform(arr, x -> f())` has no argument to carry the iterated shape, so it is not
+    // rewritable and must keep failing analysis rather than crash the Python worker at runtime.
+    val e = intercept[AnalysisException] {
+      arrayDF.select(transform(col("values"), _ => pythonUDF())).collect()
+    }
+    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
+  }
+
+  test("a nondeterministic iterated argument is rejected") {
+    // The rewrite references the iterated argument several times and nondeterministic expressions
+    // are not subexpression-eliminated, so a nondeterministic argument like `shuffle(arr)` would be
+    // evaluated independently per reference and misalign the results. It must fail analysis.
+    val e = intercept[AnalysisException] {
+      arrayDF.select(
+        org.apache.spark.sql.functions.filter(
+          org.apache.spark.sql.functions.shuffle(col("values")),
+          x => pythonUDF(x))).collect()
+    }
+    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
   }
 
   test("the rewrite can be disabled by conf, restoring the previous error") {

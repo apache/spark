@@ -3105,6 +3105,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     )
                     try:
                         flat_arr = pa.array(converted, type=arrow_element_type)
+                    # Broader than the SQL_ARROW_BATCHED_UDF path above (which catches only
+                    # ArrowInvalid): the element-wise wrapper commonly returns list/struct-typed
+                    # elements, whose type mismatches surface as ArrowTypeError, so both are caught
+                    # before falling back to an explicit cast.
                     except (pa.lib.ArrowInvalid, pa.lib.ArrowTypeError):
                         flat_arr = pa.array(converted).cast(
                             target_type=arrow_element_type, safe=runner_conf.safecheck

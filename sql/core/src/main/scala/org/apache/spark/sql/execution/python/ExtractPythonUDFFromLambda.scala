@@ -162,30 +162,37 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     // carry is O(n^2); a later copy of the carrier into the Unsafe format would materialize each
     // reference into O(n^3) bytes. Either way the whole pairwise path is already O(n^2) in Python
     // calls, so it is only intended for small arrays (see the config doc).
+    // Also carry the row width `n` so the comparator does not re-evaluate `Size(argument)` on every
+    // comparison (negligible for a column, but `argument` may be a computed expression). Like the
+    // cells, it is repeated into the carrier once and read as a struct field.
     val posElem = NamedLambdaVariable("x", elementType, containsNull)
     val posIdx = NamedLambdaVariable("i", IntegerType, nullable = false)
     val cellsField = "cells"
+    val sizeField = "n"
     val indexed = ArraysZip(
       Seq(
         argument,
         ArrayTransform(argument, LambdaFunction(posIdx, Seq(posElem, posIdx))),
-        ArrayRepeat(flatCells, n)),
+        ArrayRepeat(flatCells, n),
+        ArrayRepeat(n, n)),
       Seq(
         Literal(s"${carrierElementPrefix}0"),
         Literal(carrierIndexField),
-        Literal(cellsField)))
+        Literal(cellsField),
+        Literal(sizeField)))
     val indexedElement = indexed.dataType.asInstanceOf[ArrayType].elementType
 
-    // Index the flat n*n results directly: cell (i, j) is at `i * n + j`. The cells live in a
-    // struct field carried by every element, so the comparator only does a field read plus an
-    // `element_at`, both O(1). `element_at` is 1-based.
+    // Index the flat n*n results directly: cell (i, j) is at `i * n + j`. The cells and `n` live in
+    // struct fields carried by every element, so the comparator only does field reads plus an
+    // `element_at`, all O(1). `element_at` is 1-based.
     val cmpLeft = NamedLambdaVariable("a", indexedElement, nullable = false)
     val cmpRight = NamedLambdaVariable("b", indexedElement, nullable = false)
     def idxOf(v: NamedLambdaVariable): Expression = GetStructField(v, 1, Some(carrierIndexField))
     val cells = GetStructField(cmpLeft, 2, Some(cellsField))
+    val width = GetStructField(cmpLeft, 3, Some(sizeField))
     val comparison = ElementAt(
       cells,
-      Add(Add(Multiply(idxOf(cmpLeft), n), idxOf(cmpRight)), Literal(1)),
+      Add(Add(Multiply(idxOf(cmpLeft), width), idxOf(cmpRight)), Literal(1)),
       None,
       failOnError = false)
 
