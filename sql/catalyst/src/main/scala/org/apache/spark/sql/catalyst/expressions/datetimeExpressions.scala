@@ -314,6 +314,10 @@ private[expressions] object CurrentTimestampPrecision {
  * integer precision `p`, returning the microsecond `TIMESTAMP` for `p == 6` and a nanosecond
  * `TIMESTAMP_LTZ(p)` for `p` in `[7, 9]` (gated behind `spark.sql.timestampNanosTypes.enabled`).
  * The precision handling mirrors the `TIMESTAMP_LTZ(p)` type parser and `current_time(p)`.
+ *
+ * `now` is registered through the separate [[NowExpressionBuilder]] so it can document its own
+ * examples (`now` has no braceless form, unlike the `current_timestamp` keyword), but delegates
+ * its build logic here.
  */
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
@@ -364,6 +368,41 @@ object CurrentTimestampExpressionBuilder extends ExpressionBuilder {
         throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(0, 1), n)
     }
   }
+}
+
+/**
+ * Builds `now` / `now(precision)`. Shares [[CurrentTimestampExpressionBuilder]]'s build logic but
+ * carries its own `@ExpressionDescription`: `now` is a regular function with no braceless form,
+ * so its examples must not include the `SELECT now` case that the `current_timestamp` keyword
+ * documents.
+ */
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current timestamp at the start of query evaluation. All calls of now within the same query return the same value.
+
+    _FUNC_(precision) - Returns the current timestamp at the start of query evaluation, with the given fractional-seconds precision. A precision in [7, 9] returns a nanosecond-precision TIMESTAMP_LTZ(precision) and requires spark.sql.timestampNanosTypes.enabled to be true; precision 6 returns the standard microsecond TIMESTAMP.
+  """,
+  arguments = """
+    Arguments:
+      * precision - An optional integer literal. Either 6 (the microsecond TIMESTAMP default) or a
+                    value in [7, 9] selecting a nanosecond-precision TIMESTAMP_LTZ(precision).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_(9);
+       2020-04-25 15:49:11.914120463
+  """,
+  group = "datetime_funcs",
+  since = "1.6.0")
+// scalastyle:on line.size.limit line.contains.tab
+object NowExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression =
+    CurrentTimestampExpressionBuilder.build(funcName, expressions)
 }
 
 /**

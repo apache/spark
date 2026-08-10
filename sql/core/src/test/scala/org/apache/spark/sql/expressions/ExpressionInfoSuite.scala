@@ -220,6 +220,7 @@ class ExpressionInfoSuite extends SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.CurrentTimestampExpressionBuilder",
       "org.apache.spark.sql.catalyst.expressions.CurrentTimeZone",
       "org.apache.spark.sql.catalyst.expressions.Now",
+      "org.apache.spark.sql.catalyst.expressions.NowExpressionBuilder",
       "org.apache.spark.sql.catalyst.expressions.LocalTimestamp",
       "org.apache.spark.sql.catalyst.expressions.LocalTimestampExpressionBuilder",
       "org.apache.spark.sql.catalyst.expressions.CurrentTime",

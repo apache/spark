@@ -113,7 +113,6 @@
 | org.apache.spark.sql.catalyst.expressions.CurrentTime | localtime | SELECT localtime() | struct<current_time(6):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.CurrentTimeZone | current_timezone | SELECT current_timezone() | struct<current_timezone():string> |
 | org.apache.spark.sql.catalyst.expressions.CurrentTimestampExpressionBuilder | current_timestamp | SELECT current_timestamp() | struct<current_timestamp():timestamp> |
-| org.apache.spark.sql.catalyst.expressions.CurrentTimestampExpressionBuilder | now | SELECT now() | struct<now():timestamp> |
 | org.apache.spark.sql.catalyst.expressions.CurrentUser | current_user | SELECT current_user() | struct<current_user():string> |
 | org.apache.spark.sql.catalyst.expressions.CurrentUser | session_user | SELECT session_user() | struct<session_user():string> |
 | org.apache.spark.sql.catalyst.expressions.CurrentUser | user | SELECT user() | struct<user():string> |
@@ -262,6 +261,7 @@
 | org.apache.spark.sql.catalyst.expressions.NextDay | next_day | SELECT next_day('2015-01-14', 'TU') | struct<next_day(2015-01-14, TU):date> |
 | org.apache.spark.sql.catalyst.expressions.Not | ! | SELECT ! true | struct<(NOT true):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Not | not | SELECT not true | struct<(NOT true):boolean> |
+| org.apache.spark.sql.catalyst.expressions.NowExpressionBuilder | now | SELECT now() | struct<now():timestamp> |
 | org.apache.spark.sql.catalyst.expressions.NthValue | nth_value | SELECT a, b, nth_value(b, 2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,nth_value(b, 2) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int> |
 | org.apache.spark.sql.catalyst.expressions.NullIf | nullif | SELECT nullif(2, 2) | struct<nullif(2, 2):int> |
 | org.apache.spark.sql.catalyst.expressions.NullIfZero | nullifzero | SELECT nullifzero(0) | struct<nullifzero(0):int> |
