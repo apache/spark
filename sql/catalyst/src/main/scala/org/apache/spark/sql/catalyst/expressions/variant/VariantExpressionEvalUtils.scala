@@ -293,8 +293,10 @@ object VariantExpressionEvalUtils {
     }
     val builder = new VariantBuilder(false)
     val start = builder.getWritePos
-    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](keys.numElements())
-    for (i <- 0 until keys.numElements()) {
+    val numElements = keys.numElements()
+    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numElements)
+    var i = 0
+    while (i < numElements) {
       if (keys.isNullAt(i)) {
         throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
       }
@@ -303,6 +305,7 @@ object VariantExpressionEvalUtils {
       fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
       val value = if (values.isNullAt(i)) null else values.get(i, valueType)
       buildVariant(builder, value, valueType)
+      i += 1
     }
     builder.finishWritingObject(start, fields)
     val v = builder.result()
@@ -318,8 +321,10 @@ object VariantExpressionEvalUtils {
   def variantFromEntries(entries: ArrayData, valueType: DataType): VariantVal = {
     val builder = new VariantBuilder(false)
     val start = builder.getWritePos
-    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](entries.numElements())
-    for (i <- 0 until entries.numElements()) {
+    val numElements = entries.numElements()
+    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numElements)
+    var i = 0
+    while (i < numElements) {
       val entry = entries.getStruct(i, 2)
       if (entry.isNullAt(0)) {
         throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
@@ -329,6 +334,7 @@ object VariantExpressionEvalUtils {
       fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
       val value = if (entry.isNullAt(1)) null else entry.get(1, valueType)
       buildVariant(builder, value, valueType)
+      i += 1
     }
     builder.finishWritingObject(start, fields)
     val v = builder.result()
