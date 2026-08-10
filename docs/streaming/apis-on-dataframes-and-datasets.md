@@ -1230,7 +1230,7 @@ impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
     """),
-  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  "leftOuter"     # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
 )
 
 {% endhighlight %}
@@ -1248,7 +1248,7 @@ impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
     """),
-  joinType = "leftOuter"      // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  joinType = "leftOuter"  // "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
  )
 
 {% endhighlight %}
@@ -1264,7 +1264,7 @@ impressionsWithWatermark.join(
     "clickAdId = impressionAdId AND " +
     "clickTime >= impressionTime AND " +
     "clickTime <= impressionTime + interval 1 hour "),
-  "leftOuter"                 // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  "leftOuter"     // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
 );
 
 {% endhighlight %}
@@ -1283,7 +1283,7 @@ joined <- join(
       "clickAdId = impressionAdId AND",
       "clickTime >= impressionTime AND",
       "clickTime <= impressionTime + interval 1 hour"),
-  "left_outer"                 # can be "inner", "left_outer", "right_outer", "full_outer", "left_semi"
+  "left_outer"  # "inner", "left_outer", "right_outer", "full_outer", "left_semi", "left_anti"
 ))
 
 {% endhighlight %}
@@ -1332,8 +1332,10 @@ on the right side in future before it can emit the row.
 As for the other stateful join types, the event-time constraint can be expressed in either of two
 ways: a watermarked event-time column can appear in the equality join keys, or a watermark can be
 defined on the right side together with a time range condition (for example
-`leftTime BETWEEN rightTime - INTERVAL 1 HOUR AND rightTime`). Defining a watermark on the left
-side as well is optional, and is what allows the left side state to be cleaned up.
+`leftTime BETWEEN rightTime - INTERVAL 1 HOUR AND rightTime`). The right side watermark is what
+lets the engine decide that a left row can no longer be matched and emit it, so it drives the
+eviction and output of left side state. Defining a watermark on the left side as well is optional,
+and is what allows the right side state to be cleaned up.
 
 Note that anti join is only supported in Append output mode. Update mode would have to emit rows
 early, before the watermark can rule out a future match, and such a row could be invalidated by a
@@ -1549,7 +1551,7 @@ joined = impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
     """),
-  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  "leftOuter"     # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
 )
 
 joined.groupBy(
@@ -1571,7 +1573,7 @@ val joined = impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
   """),
-  joinType = "leftOuter"      // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  joinType = "leftOuter"  // "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
 )
 
 joined
@@ -1590,7 +1592,7 @@ Dataset<Row> joined = impressionsWithWatermark.join(
     "clickAdId = impressionAdId AND " +
     "clickTime >= impressionTime AND " +
     "clickTime <= impressionTime + interval 1 hour "),
-  "leftOuter"                 // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  "leftOuter"     // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
 );
 
 joined
