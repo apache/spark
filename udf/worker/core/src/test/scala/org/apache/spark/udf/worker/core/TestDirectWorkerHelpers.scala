@@ -14,54 +14,80 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.udf.worker.grpc
+package org.apache.spark.udf.worker.core
 
 import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, FileVisitResult, Path, Paths, SimpleFileVisitor}
 import java.nio.file.attribute.{BasicFileAttributes, PosixFilePermissions}
 import java.util.Locale
-import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import scala.util.control.NonFatal
-
-import io.grpc.ConnectivityState
-
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.udf.worker.{UDFProtoCommunicationPattern, UDFWorkerSpecification,
-  WorkerConnectionSpec}
-import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerHandle, WorkerLogger,
-  WorkerSession}
+import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, FinishResponse,
+  Init, InitResponse, UDFProtoCommunicationPattern, UDFWorkerSpecification, WorkerConnectionSpec}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerDispatcher, DirectWorkerException,
   DirectWorkerTimeoutException}
 import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.READY_POLL_INTERVAL_MS
 
 /**
- * :: Experimental ::
- * A concrete [[DirectWorkerDispatcher]] that spawns workers and talks to
- * them over the UDF gRPC protocol on a Unix domain socket. Allocates a
- * private 0700 socket directory at construction; each worker is given a
- * UDS path inside it.
+ * A [[WorkerConnection]] test implementation that treats the connection as
+ * active as long as the worker's UDS file exists on disk. The socket file is
+ * removed on close.
  *
- * @param workerSpec worker specification used to launch each worker.
- * @param logger logger for lifecycle diagnostics.
- * @param grpcMaxInboundMessageSize maximum serialized response size accepted
- *                                  from a worker. Defaults to 128 MiB.
+ * Suitable for dispatcher-lifecycle tests that don't need to drive a wire
+ * protocol -- e.g. verifying that a worker spec spawns a real worker process
+ * that creates the expected socket.
  */
-@Experimental
-class DirectGrpcDispatcher(
+class SocketFileConnection(val socketPath: String) extends WorkerConnection {
+  override def isActive: Boolean = new File(socketPath).exists()
+  override def close(): Unit = {
+    val f = new File(socketPath)
+    if (f.exists()) f.delete()
+  }
+}
+
+/**
+ * No-op [[WorkerSession]] for lifecycle-only tests. All protocol methods are
+ * inert (init/finish report empty responses); tests that exercise the actual
+ * wire protocol use a concrete transport-backed session.
+ */
+class NoOpWorkerSession(
+    workerHandle: WorkerHandle,
+    logger: WorkerLogger = WorkerLogger.NoOp)
+  extends WorkerSession(workerHandle, logger) {
+
+  override protected def doInit(message: Init): InitResponse = InitResponse.getDefaultInstance
+  override protected def doProcess(
+      input: Iterator[DataRequest],
+      finish: () => Finish): Iterator[DataResponse] =
+    Iterator.empty[DataResponse]
+  override protected def doClose(cancel: () => Cancel): Termination = {
+    // Settle the clean terminal so close() does not fall through to its
+    // contract-violation recovery path. A no-op session has no in-flight work,
+    // so the cancel thunk is never needed.
+    completeTerminal(Termination.Finished(FinishResponse.getDefaultInstance))
+    settledTermination
+  }
+}
+
+/**
+ * A concrete [[DirectWorkerDispatcher]] for tests that spawns workers over a
+ * Unix domain socket and yields [[SocketFileConnection]]s / [[NoOpWorkerSession]]s,
+ * so lifecycle tests exercise the dispatcher's spawn / wait-for-ready / cleanup
+ * machinery without driving a wire protocol. Allocates a private 0700 socket
+ * directory at construction; each worker is given a UDS path inside it.
+ *
+ * Reusable across modules: callers in `sql/core` (or anywhere with a test-jar
+ * dependency on `udf-worker-core`) can drop this in for tests that only need to
+ * verify a worker spec produces a spawnable worker.
+ */
+class TestDirectWorkerDispatcher(
     workerSpec: UDFWorkerSpecification,
-    logger: WorkerLogger = WorkerLogger.NoOp,
-    grpcMaxInboundMessageSize: Int = GrpcWorkerChannel.DEFAULT_MAX_INBOUND_MESSAGE_SIZE)
+    logger: WorkerLogger = WorkerLogger.NoOp)
   extends DirectWorkerDispatcher(workerSpec, logger) {
 
   // Upper bound on the rename-on-collision retry loop in newEndpointAddress.
-  // 16 is well above any realistic concurrent-worker count and keeps the
-  // failure mode bounded if something pathological occupies the directory.
   private val MAX_SOCKET_LEAF_RETRIES = 16
 
-  // sockaddr_un.sun_path includes its terminating NUL. Linux reserves 108
-  // bytes and macOS 104, leaving at most 107 or 103 pathname bytes.
   private val MAX_UDS_PATH_BYTES = {
     val osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT)
     if (osName.contains("mac") || osName.contains("darwin")) 103 else 107
@@ -69,10 +95,6 @@ class DirectGrpcDispatcher(
 
   // The private 0700 socket directory, created in [[initialize]] (after the
   // base class has validated the spec) and removed in [[closeTransport]].
-  // `lazy val` + force-in-initialize keeps creation deterministic without
-  // depending on subclass field-initialiser ordering. deleteOnExit is
-  // avoided because the JDK retains the path for the JVM lifetime, which
-  // leaks in long-lived drivers.
   private lazy val socketDir: Path = createPrivateTempDirectory()
 
   override protected def initialize(): Unit = {
@@ -84,12 +106,8 @@ class DirectGrpcDispatcher(
 
   /**
    * Returns the UDS path the worker should bind. Uses a short 16-hex-char leaf
-   * (the worker's full UUID still travels via `--id`) to stay within the 108-byte
-   * UDS `sun_path` limit: on macOS `$TMPDIR` (~47 chars) plus the private dir
-   * (~29) plus a full-UUID leaf (49) overflows it and `bind(2)` fails with
-   * `ENAMETOOLONG`. 64 bits makes collisions negligible; the retry loop is a
-   * defensive guard so a near-impossible collision surfaces as a clear error
-   * here rather than an opaque "worker exited" from [[waitForReady]].
+   * (the worker's full UUID still travels via `--id`) to stay within the
+   * 108-byte UDS `sun_path` limit.
    */
   override protected def newEndpointAddress(workerId: String): String = {
     val short = workerId.replace("-", "").take(16)
@@ -118,59 +136,30 @@ class DirectGrpcDispatcher(
       address: String,
       process: Process,
       outputFile: File): WorkerConnection = {
-    val connection = newConnection(address)
-    try {
-      waitForReady(address, connection, process, outputFile)
-      connection
-    } catch {
-      case e: InterruptedException =>
-        closeFailedConnection(connection)
-        throw e
-      case NonFatal(e) =>
-        closeFailedConnection(connection)
-        throw e
+    val file = new File(address)
+    // At least one poll so very small initTimeouts don't trip a premature
+    // timeout before the worker has any chance to create the socket.
+    val maxAttempts = math.max(1, (initTimeoutMs / READY_POLL_INTERVAL_MS).toInt)
+    var attempts = 0
+    while (!file.exists() && attempts < maxAttempts) {
+      if (!process.isAlive) throwWorkerExitedBeforeSocket(process, address, outputFile)
+      Thread.sleep(READY_POLL_INTERVAL_MS)
+      attempts += 1
     }
-  }
-
-  private def waitForReady(
-      address: String,
-      connection: WorkerConnection,
-      process: Process,
-      outputFile: File): Unit = {
-    val grpc = connection match {
-      case channel: GrpcWorkerChannel => channel
-      case other =>
-        throw new IllegalStateException(
-          s"DirectGrpcDispatcher.newConnection should have produced a " +
-            s"GrpcWorkerChannel but got ${other.getClass.getName}")
-    }
-    val deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(initTimeoutMs)
-    var socketTriggeredReconnect = false
-    var state = grpc.channel.getState(true)
-    while (state != ConnectivityState.READY) {
-      if (!process.isAlive) throwWorkerExitedBeforeReady(process, address, outputFile)
-
-      val remainingNanos = deadlineNanos - System.nanoTime()
-      if (remainingNanos <= 0L) {
+    if (!file.exists()) {
+      if (process.isAlive) {
+        DirectWorkerDispatcher.destroyForciblyAndReap(
+          process, logger, s"init timeout $address")
         val tail = readOutputTail(outputFile)
         throw new DirectWorkerTimeoutException(
-          s"Worker did not become reachable at $address within ${initTimeoutMs}ms\n$tail")
+          s"Worker did not create socket at $address within ${initTimeoutMs}ms\n$tail")
+      } else {
+        // Worker exited after the last poll without creating the socket;
+        // prefer the exit-code message over the ambiguous "did not create".
+        throwWorkerExitedBeforeSocket(process, address, outputFile)
       }
-
-      // A failed pre-bind connection attempt enters gRPC backoff. Once the
-      // worker creates its fresh socket, reset that backoff exactly once so
-      // the channel can prove readiness without waiting for a long retry.
-      if (state == ConnectivityState.TRANSIENT_FAILURE &&
-          !socketTriggeredReconnect && Files.exists(Paths.get(address))) {
-        grpc.channel.resetConnectBackoff()
-        socketTriggeredReconnect = true
-      }
-      val stateChanged = new CountDownLatch(1)
-      grpc.channel.notifyWhenStateChanged(state, () => stateChanged.countDown())
-      val pollNanos = TimeUnit.MILLISECONDS.toNanos(READY_POLL_INTERVAL_MS)
-      stateChanged.await(math.min(remainingNanos, pollNanos), TimeUnit.NANOSECONDS)
-      state = grpc.channel.getState(true)
     }
+    newConnection(address)
   }
 
   override protected def cleanupEndpointAddress(address: String): Unit = {
@@ -207,81 +196,51 @@ class DirectGrpcDispatcher(
     if (firstFailure != null) throw firstFailure
   }
 
-  // `spec` is the same object as the `workerSpec` field but passed
-  // explicitly: at the point this runs (parent constructor body), `this`
-  // is only partially constructed and reading subclass fields is unsafe.
-  // See the contract on the abstract method in [[DirectWorkerDispatcher]].
+  // `spec` is the same object as the `workerSpec` field but passed explicitly:
+  // at the point this runs (parent constructor body), `this` is only partially
+  // constructed and reading subclass fields is unsafe.
   override protected def validateTransportSupport(spec: UDFWorkerSpecification): Unit = {
     val props = spec.getDirect.getProperties
     require(props.hasConnection,
       "DirectWorker.properties.connection must be set")
     val conn = props.getConnection
     require(conn.getTransportCase == WorkerConnectionSpec.TransportCase.UNIX_DOMAIN_SOCKET,
-      "DirectGrpcDispatcher requires UNIX domain socket transport, " +
+      "TestDirectWorkerDispatcher requires UNIX domain socket transport, " +
         s"got ${conn.getTransportCase}")
-    // BIDIRECTIONAL_STREAMING is the only pattern the gRPC `Execute` RPC
-    // speaks, so the spec MUST advertise it. We require the capabilities block
-    // and the pattern explicitly rather than treating an unset/empty block as
-    // "no constraint": a spec that does not declare bidi gives no evidence the
-    // worker can speak this transport, and accepting it would only defer the
-    // failure to stream time.
     require(spec.hasCapabilities,
-      "DirectGrpcDispatcher requires WorkerCapabilities declaring " +
+      "TestDirectWorkerDispatcher requires WorkerCapabilities declaring " +
         "BIDIRECTIONAL_STREAMING in supported_communication_patterns")
     val patterns = spec.getCapabilities.getSupportedCommunicationPatternsList
     val supportsBidi = (0 until patterns.size()).exists { i =>
       patterns.get(i) == UDFProtoCommunicationPattern.BIDIRECTIONAL_STREAMING
     }
     require(supportsBidi,
-      "DirectGrpcDispatcher requires BIDIRECTIONAL_STREAMING " +
+      "TestDirectWorkerDispatcher requires BIDIRECTIONAL_STREAMING " +
         "in WorkerCapabilities.supported_communication_patterns")
   }
 
   protected def newConnection(address: String): WorkerConnection =
-    new GrpcWorkerChannel(
-      address, logger, maxInboundMessageSize = grpcMaxInboundMessageSize)
+    new SocketFileConnection(address)
 
   override protected def newSession(
       workerHandle: WorkerHandle,
       connection: WorkerConnection): WorkerSession =
-    connection match {
-      case g: GrpcWorkerChannel =>
-        new GrpcWorkerSession(workerHandle, g.channel, logger)
-      case other =>
-        throw new IllegalStateException(
-          s"DirectGrpcDispatcher.newConnection should have produced a " +
-            s"GrpcWorkerChannel but got ${other.getClass.getName}")
-    }
+    new NoOpWorkerSession(workerHandle, logger)
 
-  private def throwWorkerExitedBeforeReady(
+  private def throwWorkerExitedBeforeSocket(
       process: Process,
       address: String,
       outputFile: File): Nothing = {
     val tail = readOutputTail(outputFile)
     throw new DirectWorkerException(
       s"Worker exited with code ${process.exitValue()} " +
-        s"before becoming reachable at $address\n$tail")
-  }
-
-  private def closeFailedConnection(connection: WorkerConnection): Unit = {
-    try connection.close() catch {
-      case NonFatal(e) => logger.debug("Failed to close worker connection", e)
-    }
+        s"before creating socket at $address\n$tail")
   }
 
   /**
    * Creates a private (owner-only, 0700) temp directory for worker sockets.
-   *
-   * On POSIX filesystems the permissions are applied atomically at creation via
-   * a file attribute, so there is '''no''' TOCTOU window. The non-POSIX branch
-   * cannot do that: `Files.createTempDirectory` first creates the directory with
-   * the platform default mask, then `File.setXxx` tightens it, leaving a brief
-   * window where the directory may be group/other-accessible. That race is an
-   * accepted limitation of the best-effort fallback -- Spark UDF workers run on
-   * POSIX in practice, the directory lives under the JVM temp dir, and a WARN is
-   * logged if the platform refuses the setters outright. Further hardening of
-   * the non-POSIX path (e.g. creating under an already-restricted parent) is out
-   * of scope here.
+   * On POSIX filesystems the permissions are applied atomically at creation;
+   * the non-POSIX branch tightens best-effort after creation.
    *
    * The directory is anchored under a short base path (see [[shortTempBase]])
    * rather than the configured `java.io.tmpdir`. Builds point the latter at a
@@ -302,7 +261,6 @@ class DirectGrpcDispatcher(
         val f = dir.toFile
         // Bit-wise AND (NOT &&): all six setters must run even if an earlier
         // one returns false, so the final permission state matches owner-only.
-        // && would short-circuit and silently leave permissions partially open.
         val applied =
           f.setReadable(false, false) & f.setWritable(false, false) &
             f.setExecutable(false, false) & f.setReadable(true, true) &

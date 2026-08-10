@@ -35,7 +35,7 @@ import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataRes
   ErrorResponse, ExecutionError, Finish, FinishResponse, Init, InitResponse, UdfControlResponse,
   UdfPayload, UdfRequest, UdfResponse, UDFWorkerDataFormat, UdfWorkerGrpc, UserError,
   WorkerRequest, WorkerResponse}
-import org.apache.spark.udf.worker.core.{Termination, WorkerConnection, WorkerHandle, WorkerLogger}
+import org.apache.spark.udf.worker.core.{Termination, WorkerHandle, WorkerLogger}
 
 /**
  * Concurrency tests for [[GrpcWorkerSession]] that pin the wire-ordering and
@@ -115,18 +115,12 @@ class GrpcWorkerSessionConcurrencySuite
   // Helpers
   // ---------------------------------------------------------------------------
 
-  private val stubConnection = new WorkerConnection {
-    override def isActive: Boolean = true
-    override def close(): Unit = ()
-  }
-
   private class TestWorkerHandle extends WorkerHandle {
     val invalidated = new AtomicBoolean(false)
     val released = new AtomicBoolean(false)
     override def id: String = "test-worker"
     override def markInvalid(): Unit = invalidated.set(true)
     override def releaseSession(): Unit = released.set(true)
-    override def connection: WorkerConnection = stubConnection
   }
 
   /**
