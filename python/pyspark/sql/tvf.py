@@ -568,6 +568,9 @@ class TableValuedFunction:
 
         .. versionadded:: 4.0.0
 
+        .. versionchanged:: 4.3.0
+            Added the ``recursive`` parameter.
+
         Parameters
         ----------
         input : :class:`~pyspark.sql.Column`
@@ -633,9 +636,6 @@ class TableValuedFunction:
         |$.a[1]|  1|NULL|    2|
         +------+---+----+-----+
         """
-        if not recursive:
-            return self._fn("variant_explode", input)
-
         from pyspark.sql.classic.column import _to_java_column
 
         return DataFrame(
@@ -658,6 +658,9 @@ class TableValuedFunction:
         variant values, then NULL is produced.
 
         .. versionadded:: 4.0.0
+
+        .. versionchanged:: 4.3.0
+            Added the ``recursive`` parameter.
 
         Parameters
         ----------
@@ -699,6 +702,9 @@ class TableValuedFunction:
         +----+----+-----+
         |NULL|NULL| NULL|
         +----+----+-----+
+
+        Recursively exploding a nested variant
+
         >>> value = sf.parse_json(sf.lit('{"a": [1, 2]}'))
         >>> spark.tvf.variant_explode_outer(value, recursive=True).show()
         +------+---+----+-----+
@@ -709,9 +715,6 @@ class TableValuedFunction:
         |$.a[1]|  1|NULL|    2|
         +------+---+----+-----+
         """
-        if not recursive:
-            return self._fn("variant_explode_outer", input)
-
         from pyspark.sql.classic.column import _to_java_column
 
         return DataFrame(
