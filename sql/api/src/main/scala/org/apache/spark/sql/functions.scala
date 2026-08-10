@@ -6070,6 +6070,53 @@ object functions {
   def round(e: Column, scale: Column): Column = Column.fn("round", e, scale)
 
   /**
+   * Truncates the value of `e` toward zero to 0 decimal places.
+   *
+   * @param e
+   *   the value to truncate. A column that evaluates to a numeric.
+   * @return
+   *   Returns a column of the same type as the input, except that a decimal input may return a
+   *   decimal of different precision and scale.
+   * @group math_funcs
+   * @since 4.4.0
+   */
+  def truncate(e: Column): Column = truncate(e, 0)
+
+  /**
+   * Truncates the value of `e` toward zero to `scale` decimal places when `scale` is greater than
+   * or equal to 0, or to the left of the decimal point when `scale` is less than 0.
+   *
+   * @param e
+   *   the value to truncate. A column that evaluates to a numeric.
+   * @param scale
+   *   the number of decimal places to keep. A column that evaluates to an integral. Must be a
+   *   constant.
+   * @return
+   *   Returns a column of the same type as the input, except that a decimal input may return a
+   *   decimal of different precision and scale.
+   * @group math_funcs
+   * @since 4.4.0
+   */
+  def truncate(e: Column, scale: Int): Column = Column.fn("truncate", e, lit(scale))
+
+  /**
+   * Truncates the value of `e` toward zero to `scale` decimal places when `scale` is greater than
+   * or equal to 0, or to the left of the decimal point when `scale` is less than 0.
+   *
+   * @param e
+   *   the value to truncate. A column that evaluates to a numeric.
+   * @param scale
+   *   the number of decimal places to keep. A column that evaluates to an integral. Must be a
+   *   constant.
+   * @return
+   *   Returns a column of the same type as the input, except that a decimal input may return a
+   *   decimal of different precision and scale.
+   * @group math_funcs
+   * @since 4.4.0
+   */
+  def truncate(e: Column, scale: Column): Column = Column.fn("truncate", e, scale)
+
+  /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
    *
    * @param e
