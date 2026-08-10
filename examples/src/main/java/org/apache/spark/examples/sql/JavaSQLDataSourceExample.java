@@ -108,6 +108,7 @@ public class JavaSQLDataSourceExample {
     runParquetSchemaMergingExample(spark);
     runJsonDatasetExample(spark);
     runCsvDatasetExample(spark);
+    runFwfDatasetExample(spark);
     runTextDatasetExample(spark);
     runJdbcDatasetExample(spark);
     runXmlDatasetExample(spark);
@@ -420,6 +421,38 @@ public class JavaSQLDataSourceExample {
     // +-----------+
 
     // $example off:csv_dataset$
+  }
+
+  private static void runFwfDatasetExample(SparkSession spark) {
+    // $example on:fwf_dataset$
+    // A fixed-width dataset is pointed to by path: a file where each column
+    // occupies the same fixed range of characters on every line.
+    String path = "examples/src/main/resources/people-fwf.txt";
+
+    // By default, Spark infers both the column positions ("colspecs") and the
+    // schema from a sample of the data, the same way pandas' read_fwf does.
+    Dataset<Row> df = spark.read().option("header", "true").fwf(path);
+    df.show();
+    // +-------+---+
+    // |   name|age|
+    // +-------+---+
+    // |Michael| 29|
+    // |   Andy| 30|
+    // | Justin| 19|
+    // +-------+---+
+
+    // Column positions can also be given explicitly as contiguous widths...
+    Dataset<Row> df2 = spark.read().option("header", "true").option("widths", "10,4").fwf(path);
+
+    // ...or as a list of "from-to" character intervals.
+    Dataset<Row> df3 =
+      spark.read().option("header", "true").option("colspecs", "0-10,10-14").fwf(path);
+
+    // "output" is a folder which contains multiple fixed-width files and a _SUCCESS file.
+    // Writing requires explicit widths/colspecs -- there are no existing column
+    // boundaries to infer when writing.
+    df3.write().option("widths", "10,4").fwf("output");
+    // $example off:fwf_dataset$
   }
 
   private static void runTextDatasetExample(SparkSession spark) {

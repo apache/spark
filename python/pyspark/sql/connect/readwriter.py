@@ -404,6 +404,49 @@ class DataFrameReader(OptionUtils):
 
     csv.__doc__ = PySparkDataFrameReader.csv.__doc__
 
+    def fwf(
+        self,
+        path: Union[str, List[str]],
+        colspecs: Optional[str] = None,
+        widths: Optional[str] = None,
+        inferNrows: Optional[Union[int, str]] = None,
+        header: Optional[Union[bool, str]] = None,
+        comment: Optional[str] = None,
+        delimiter: Optional[str] = None,
+        skiprows: Optional[Union[int, str]] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        timeZone: Optional[str] = None,
+        locale: Optional[str] = None,
+        mode: Optional[str] = None,
+        columnNameOfCorruptRecord: Optional[str] = None,
+        encoding: Optional[str] = None,
+        schema: Optional[Union[StructType, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            colspecs=colspecs,
+            widths=widths,
+            inferNrows=inferNrows,
+            header=header,
+            comment=comment,
+            delimiter=delimiter,
+            skipRows=skiprows,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            timeZone=timeZone,
+            locale=locale,
+            mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord,
+            encoding=encoding,
+        )
+        if isinstance(path, str):
+            path = [path]
+        return self.load(path=path, format="fwf", schema=schema)
+
+    fwf.__doc__ = PySparkDataFrameReader.fwf.__doc__
+
     def xml(
         self,
         path: Union[PathOrPaths, "DataFrame"],
@@ -905,6 +948,32 @@ class DataFrameWriter(OptionUtils):
         self.format("csv").save(path)
 
     csv.__doc__ = PySparkDataFrameWriter.csv.__doc__
+
+    def fwf(
+        self,
+        path: str,
+        mode: Optional[str] = None,
+        colspecs: Optional[str] = None,
+        widths: Optional[str] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        timeZone: Optional[str] = None,
+        encoding: Optional[str] = None,
+    ) -> None:
+        self.mode(mode)
+        self._set_opts(
+            colspecs=colspecs,
+            widths=widths,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            timeZone=timeZone,
+            encoding=encoding,
+        )
+        self.format("fwf").save(path)
+
+    fwf.__doc__ = PySparkDataFrameWriter.fwf.__doc__
 
     def xml(
         self,

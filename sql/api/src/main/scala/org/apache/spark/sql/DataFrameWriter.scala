@@ -441,6 +441,26 @@ abstract class DataFrameWriter[T] {
   }
 
   /**
+   * Saves the content of the `DataFrame` in fixed-width format at the specified path. This is
+   * equivalent to:
+   * {{{
+   *   format("fwf").save(path)
+   * }}}
+   *
+   * Requires explicit `colspecs` or `widths` -- there are no existing column boundaries to infer
+   * when writing.
+   *
+   * You can find the fixed-width-specific options for writing these files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-fwf.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @since 4.4.0
+   */
+  def fwf(path: String): Unit = {
+    format("fwf").save(path)
+  }
+
+  /**
    * Saves the content of the `DataFrame` in XML format at the specified path. This is equivalent
    * to:
    * {{{

@@ -7428,6 +7428,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val FWF_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.fwf.filterPushdown.enabled")
+    .doc("When true, enable filter pushdown to the fixed-width file datasource.")
+    .version("4.4.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val JSON_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.json.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to JSON datasource.")
     .version("3.1.0")
@@ -10287,6 +10293,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
+
+  def fwfFilterPushDown: Boolean = getConf(FWF_FILTER_PUSHDOWN_ENABLED)
 
   def jsonFilterPushDown: Boolean = getConf(JSON_FILTER_PUSHDOWN_ENABLED)
 

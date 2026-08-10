@@ -4285,6 +4285,62 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_FIXED_WIDTH_COLSPECS" : {
+    "message" : [
+      "Invalid fixed-width column specification."
+    ],
+    "subClass" : {
+      "CANNOT_INFER_WITH_USER_SCHEMA" : {
+        "message" : [
+          "The 'colspecs' option set to 'infer' requires Spark to infer the schema from the data, and cannot be combined with a user-supplied schema. Pass explicit 'colspecs' or 'widths' instead."
+        ]
+      },
+      "CONFLICTING_OPTIONS" : {
+        "message" : [
+          "You must specify only one of 'widths' and 'colspecs'."
+        ]
+      },
+      "MALFORMED_COLSPECS" : {
+        "message" : [
+          "'colspecs' must be a comma-separated list of 'from-to' integer pairs. Found '<value>'."
+        ]
+      },
+      "MALFORMED_WIDTHS" : {
+        "message" : [
+          "'widths' must be a comma-separated list of integers. Found '<value>'."
+        ]
+      },
+      "REQUIRED_FOR_WRITE" : {
+        "message" : [
+          "Writing fixed-width files requires explicit 'colspecs' or 'widths'; there are no existing column boundaries to infer when writing."
+        ]
+      },
+      "WIDTH_COUNT_MISMATCH" : {
+        "message" : [
+          "Number of widths/colspecs (<numWidths>) must match the number of columns (<numColumns>) being written."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
+  "INVALID_FIXED_WIDTH_SKIP_ROWS" : {
+    "message" : [
+      "Invalid 'skipRows' option."
+    ],
+    "subClass" : {
+      "MALFORMED" : {
+        "message" : [
+          "Must be an integer (skip the first N rows) or a comma-separated list of row indices to skip. Found '<value>'."
+        ]
+      },
+      "NEGATIVE" : {
+        "message" : [
+          "Cannot be negative. Found '<value>'."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_FLOW_QUERY_TYPE" : {
     "message" : [
       "Flow <flowIdentifier> returns an invalid relation type."
@@ -6040,6 +6096,12 @@
       }
     },
     "sqlState" : "22023"
+  },
+  "MALFORMED_FWF_RECORD" : {
+    "message" : [
+      "Malformed fixed-width record: <badRecord>"
+    ],
+    "sqlState" : "KD000"
   },
   "MALFORMED_LOG_FILE" : {
     "message" : [

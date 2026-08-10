@@ -188,6 +188,33 @@ class DataSourcesTestsMixin:
         with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
             self.spark.read.csv(empty_schema_df).collect()
 
+    def test_fwf(self):
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        try:
+            self.spark.createDataFrame(
+                [(1, "Alice", 95.5), (2, "Bob", 88.0)],
+                schema="id INT, name STRING, score DOUBLE",
+            ).coalesce(1).write.fwf(tmpPath, widths="4,10,6")
+            result = self.spark.read.fwf(
+                tmpPath, widths="4,10,6", schema="id INT, name STRING, score DOUBLE"
+            )
+            expected = [Row(id=1, name="Alice", score=95.5), Row(id=2, name="Bob", score=88.0)]
+            self.assertEqual(sorted(result.collect(), key=lambda r: r.id), expected)
+        finally:
+            shutil.rmtree(tmpPath)
+
+    def test_fwf_with_header_and_inferred_colspecs(self):
+        tmpPath = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(tmpPath, "data.txt"), "w") as f:
+                f.write("id  name      score \n1   Alice     95.5  \n2   Bob       88.0  \n")
+            result = self.spark.read.option("header", True).fwf(tmpPath)
+            expected = [Row(id=1, name="Alice", score=95.5), Row(id=2, name="Bob", score=88.0)]
+            self.assertEqual(sorted(result.collect(), key=lambda r: r.id), expected)
+        finally:
+            shutil.rmtree(tmpPath)
+
     def test_xml(self):
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)

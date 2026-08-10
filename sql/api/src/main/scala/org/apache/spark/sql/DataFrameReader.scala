@@ -392,6 +392,24 @@ abstract class DataFrameReader {
   def csv(paths: String*): DataFrame = format("csv").load(paths: _*)
 
   /**
+   * Loads fixed-width files and returns the result as a `DataFrame`.
+   *
+   * This function will go through the input once to determine the input schema if no schema is
+   * specified, unless `colspecs`/`widths` are also left unspecified, in which case the column
+   * boundaries themselves are inferred from a sample of the data as well (`colspecs="infer"`,
+   * the default). To avoid going through the entire data, specify the schema explicitly using
+   * `schema`, and `colspecs` or `widths` explicitly.
+   *
+   * You can find the fixed-width-specific options for reading these files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-fwf.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @since 4.4.0
+   */
+  @scala.annotation.varargs
+  def fwf(paths: String*): DataFrame = format("fwf").load(paths: _*)
+
+  /**
    * Loads a XML file and returns the result as a `DataFrame`. See the documentation on the other
    * overloaded `xml()` method for more details.
    *
