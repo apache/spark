@@ -493,7 +493,9 @@ def reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> st
 
 def stop_local_connect_server() -> Optional[bool]:
     """Stop the recorded persistent local Connect server, if any; safe to call when none is
-    running. Also available as ``python -m pyspark.sql.connect.local_server --stop``.
+    running. Returns ``True`` when the server was signalled, ``False`` when no matching server
+    was found, and ``None`` when the process could not be inspected. Also available as
+    ``python -m pyspark.sql.connect.local_server --stop``.
     """
     with Discovery() as discovery:
         return LocalConnectServer(discovery).stop()
@@ -518,6 +520,7 @@ def main() -> None:
         print("Stopped the persistent local Spark Connect server.")
     elif stopped is None:
         print("Could not verify the persistent local Spark Connect server; try again later.")
+        sys.exit(1)
     else:
         print("No running persistent local Spark Connect server found.")
 

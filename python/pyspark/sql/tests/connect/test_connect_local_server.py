@@ -241,6 +241,8 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             self.assertIsNone(local_server.stop_local_connect_server())
         kill.assert_not_called()
         self.assertEqual(self._discovered_server().pid, 12345)
+        with Discovery() as discovery:
+            discovery.clear()
 
     def test_server_launcher_binds_to_loopback(self) -> None:
         from unittest import mock
@@ -271,6 +273,17 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("No running persistent local Spark Connect server", result.stdout)
+
+    def test_stop_cli_fails_when_process_cannot_be_inspected(self) -> None:
+        from unittest import mock
+
+        with (
+            mock.patch.object(sys, "argv", ["local_server", "--stop"]),
+            mock.patch.object(local_server, "stop_local_connect_server", return_value=None),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            local_server.main()
+        self.assertEqual(raised.exception.code, 1)
 
     def test_reuse_or_start_requires_posix(self) -> None:
         from unittest import mock
