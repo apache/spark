@@ -37,6 +37,8 @@ all-numeric and all-string variants.
 """
 
 import ast
+import copy
+from types import CodeType
 from typing import Any, Callable, List, Optional, Tuple, TYPE_CHECKING
 import inspect
 import itertools
@@ -893,13 +895,138 @@ def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
     return [arg.arg for arg in node.args.args]
 
 
-def _get_function_from_ast(body: ast.AST) -> ast.FunctionDef | None:
+def _code_identity(code: CodeType) -> tuple:
+    """A structural fingerprint of a code object, used to tell lambdas apart.
+
+    Covers everything the compiler derives from the lambda's own source --
+    signature shape, local/global/closure names, constants, and the emitted
+    bytecode -- so two lambdas differing anywhere in their body get different
+    fingerprints. Constants are keyed by ``(type name, repr)`` rather than by
+    value so ``1``, ``1.0`` and ``True`` stay distinct (they compare equal),
+    and nested code objects (a lambda inside a lambda) recurse.
+    """
+    return (
+        code.co_argcount,
+        code.co_posonlyargcount,
+        code.co_kwonlyargcount,
+        code.co_varnames,
+        code.co_names,
+        code.co_freevars,
+        code.co_cellvars,
+        tuple(
+            _code_identity(const)
+            if isinstance(const, CodeType)
+            else (type(const).__name__, repr(const))
+            for const in code.co_consts
+        ),
+        code.co_code,
+    )
+
+
+def _compile_lambda(node: ast.Lambda) -> Optional[CodeType]:
+    """Compile a single ``ast.Lambda`` in isolation and return ITS code object.
+
+    Compiling the lambda expression yields a module-level code object that
+    merely builds the function; the lambda's own code object is the single
+    nested code constant inside it. That inner one is what corresponds to a
+    ``function.__code__``, so it is what we hand back.
+
+    Returns ``None`` if the node cannot be compiled on its own -- the caller
+    treats that as "not a match" and falls back to interpreted Python.
+    """
+    try:
+        # Copy first: ``fix_missing_locations`` mutates in place, and the
+        # caller's tree is reused for the rest of the transpilation.
+        expression = ast.Expression(body=copy.deepcopy(node))
+        ast.fix_missing_locations(expression)
+        compiled = compile(expression, "<transpiler>", "eval")
+    except Exception:
+        return None
+    nested = [const for const in compiled.co_consts if isinstance(const, CodeType)]
+    return nested[0] if len(nested) == 1 else None
+
+
+def _resolve_lambda(target: CodeType, candidates: List[ast.Lambda]) -> Optional[ast.Lambda]:
+    """Pick the lambda node that ``target`` (a ``func.__code__``) was compiled from.
+
+    Returns ``None`` when the answer is not unambiguous, which the caller
+    turns into a fall back to interpreted Python. That covers:
+
+    * no candidate matches -- ``target`` is a closure (an isolated compile
+      turns the captured name into a global load, so ``co_freevars`` and the
+      bytecode both differ; closures are not transpilable anyway) or
+      ``target`` is a wrapper function that merely happens to share a line
+      with a lambda;
+    * several candidates match but are not the same expression. Compile-time
+      constant folding is the way this happens in practice: ``lambda x:
+      x + (1 + 2)`` and ``lambda x: x + 3`` fold to the same bytecode, so
+      neither can be told from the other and both fall back.
+
+    Byte-identical twins (``f = lambda x: x + 1; g = lambda x: x + 1``) do
+    match more than once. They transpile to the same expression, so any of
+    them is the right answer and we take the first.
+    """
+    fingerprint = _code_identity(target)
+    matches = [
+        node
+        for node in candidates
+        if (code := _compile_lambda(node)) is not None and _code_identity(code) == fingerprint
+    ]
+    if not matches:
+        return None
+    # ``ast.dump`` omits line/column attributes by default, so this compares
+    # the expressions themselves rather than where they sit on the line.
+    if len({ast.dump(node) for node in matches}) != 1:
+        return None
+    return matches[0]
+
+
+def _target_code(func: Optional[Callable]) -> Optional[CodeType]:
+    """The code object whose source ``_get_src_ast_from_func`` would have read.
+
+    Mirrors that function's two-step lookup: a plain function or method
+    exposes ``__code__`` directly, while a callable class INSTANCE does not --
+    its source is read from ``__call__``, so ``__call__``'s code object is the
+    one to match candidates against. Returns ``None`` when no code object is
+    reachable (builtins, C callables), which keeps the caller on its
+    structural path.
+    """
+    code = getattr(func, "__code__", None)
+    if code is None:
+        code = getattr(getattr(func, "__call__", None), "__code__", None)
+    return code if isinstance(code, CodeType) else None
+
+
+def _lambda_to_function_def(node: ast.Lambda) -> ast.FunctionDef:
+    """Wrap a lambda in a synthetic one-statement ``FunctionDef``.
+
+    Lets the rest of the transpiler treat lambdas and ``def`` uniformly.
+    """
+    # ``ast.FunctionDef``'s overloads in mypy's typeshed require keyword-only
+    # ``type_params`` on 3.12+, which doesn't exist at runtime on every Python
+    # we support (the field was added in 3.12 -- before that, passing it
+    # raises). Drop to ``Any`` so we avoid the overload resolution entirely;
+    # constructing the node via keyword args is well-defined at runtime even
+    # when the typed overloads disagree.
+    fn_ctor: Any = ast.FunctionDef
+    return fn_ctor(
+        name="<lambda>",
+        args=node.args,
+        body=[ast.Return(value=node.body)],
+        decorator_list=[],
+    )
+
+
+def _get_function_from_ast(
+    body: ast.AST, func: Optional[Callable] = None
+) -> ast.FunctionDef | None:
     """
     Extract a :class:`ast.FunctionDef` node from an AST produced by
     ``ast.parse(inspect.getsource(udf_func))``.
 
     Handles the following source patterns (in order):
 
+    * two or more lambdas sharing the source, disambiguated against ``func``
     * ``f = lambda x: x + 1`` -- lambda bound directly to a name
     * ``lambda x: x + 1`` -- bare expression (getsource on a raw lambda)
     * ``def f(x): ... return x + 1``
@@ -913,6 +1040,35 @@ def _get_function_from_ast(body: ast.AST) -> ast.FunctionDef | None:
     """
     if not hasattr(body, "body") or not body.body:
         return None
+
+    # ``inspect.getsource`` is line based, so a lambda arrives sharing its
+    # source with every other lambda on that line, and ``body.body[0]`` cannot
+    # tell them apart. The two shapes failed differently:
+    #
+    # * ``f = lambda x: x + 10; g = lambda x: x + 20`` parses into two
+    #   statements and the FIRST was always lowered, so ``g`` silently
+    #   computed ``f`` -- a wrong answer, not a fall back;
+    # * ``f, g = lambda x: x + 10, lambda x: x + 20`` parses as an ``Assign``
+    #   of a ``Tuple``, which matched nothing, so both fell back.
+    #
+    # So when the target is itself a lambda and the source holds more than
+    # one, identify which is which by compiling each candidate and comparing
+    # bytecode against the callable being transpiled. Note the ``> 1`` gate:
+    # every source with a single lambda stays on the structural path below, so
+    # nothing changes where there was never any ambiguity. That does leave one
+    # asymmetry -- a lone lambda inside a collection literal still falls back
+    # while two of them now resolve -- but routing the unambiguous case
+    # through bytecode matching too would trade the specific fall-back reasons
+    # below (closures, wrappers) for a generic one, which belongs in a change
+    # of its own.
+    target = _target_code(func)
+    if target is not None and target.co_name == "<lambda>":
+        candidates = [node for node in ast.walk(body) if isinstance(node, ast.Lambda)]
+        if len(candidates) > 1:
+            resolved = _resolve_lambda(target, candidates)
+            if resolved is None:
+                return None
+            return _lambda_to_function_def(resolved)
 
     stmt = body.body[0]
 
@@ -928,20 +1084,7 @@ def _get_function_from_ast(body: ast.AST) -> ast.FunctionDef | None:
     if isinstance(stmt, ast.Lambda):
         # Synthesize a one-statement FunctionDef wrapping the lambda body so
         # the rest of the transpiler can treat lambdas and ``def`` uniformly.
-        # ``ast.FunctionDef``'s overloads in mypy's typeshed require
-        # keyword-only ``type_params`` on 3.12+, which doesn't exist at
-        # runtime on every Python we support (the field was added in
-        # 3.12 -- before that, passing it raises). Drop to ``Any`` so we
-        # avoid the overload resolution entirely; constructing the node
-        # via keyword args is well-defined at runtime even when the typed
-        # overloads disagree.
-        fn_ctor: Any = ast.FunctionDef
-        return fn_ctor(
-            name="<lambda>",
-            args=stmt.args,
-            body=[ast.Return(value=stmt.body)],
-            decorator_list=[],
-        )
+        return _lambda_to_function_def(stmt)
 
     if isinstance(stmt, ast.FunctionDef):
         return stmt
@@ -1016,8 +1159,10 @@ def _transpile_func(
         src, ast = _get_src_ast_from_func(func)
         if ast is None:
             return ([], ["Error getting ast for function, cannot transpile"], [], [])
-        # Get the lambda body and parameters
-        function_ast = _get_function_from_ast(ast)
+        # Get the lambda body and parameters. ``func`` is passed so a lambda
+        # sharing its source line with other lambdas can be told apart from
+        # them; see ``_get_function_from_ast``.
+        function_ast = _get_function_from_ast(ast, func)
         if function_ast is None:
             return ([], ["Error extracting function body from ast, cannot transpile"], [], [])
         # Default, variadic (``*args`` / ``**kwargs``), keyword-only, and
