@@ -36,6 +36,12 @@ import org.apache.spark.sql.types.MetadataBuilder
  * (name, dataType) sets), so these mirror the SCD1 cases with SCD2 flows. The tests that
  * pre-create a tampered auxiliary table build an SCD2-shaped aux table (full target row schema
  * plus the deleted-by-batch-id marker) carrying the SCD2 scd-type property.
+ *
+ * Two deliberate departures from a strict one-to-one mirror keep both suites at fourteen tests:
+ * [[AutoCdcScd1KeyDriftSuite]]'s "AutoCDC key drift validation uses pipeline case sensitivity, not
+ * session default" has no analog here -- that the validator reads the pipeline's conf rather than
+ * the ambient session conf is SCD-type-agnostic and already pinned by the SCD1 suite -- and in its
+ * place this suite adds the SCD_TYPE_DRIFT case, which the SCD1 suite structurally cannot cover.
  */
 class AutoCdcScd2KeyDriftSuite
     extends ExecutionTest

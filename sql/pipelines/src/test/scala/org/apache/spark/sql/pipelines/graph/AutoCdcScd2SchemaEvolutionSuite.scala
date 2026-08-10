@@ -51,7 +51,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  *     whether an upsert opens a new record -- is also exercised end-to-end in
  *     [[AutoCdcScd2ColumnEvolutionSuite]], so it is not repeated here.
  *
- * Two SCD1 evolution cases have no SCD2 analog and so are absent here by design: "extra columns on
+ * One SCD1 evolution case has no SCD2 analog and so is absent here by design: "extra columns on
  * the target that the AutoCDC flow does not emit are preserved" relies on SCD1's in-place overwrite
  * (an SCD2 upsert instead reads unemitted target columns as NULL onto the newly-opened record), and
  * there is no SCD2-specific preservation invariant to assert.
@@ -319,10 +319,12 @@ class AutoCdcScd2SchemaEvolutionSuite
         keys = Seq("id"),
         sequencing = functions.col("version"),
         scdType = ScdType.Type2,
-        // `name` is the only non-key data column and it is absent in run #1, so an empty tracked
-        // set is what keeps the set stable across the two runs (see the note in the preceding
-        // test). Every upsert then opens a new record on sequencing alone.
-        trackHistorySelection = Option(ColumnSelection.IncludeColumns(Seq.empty)))
+        // Pin the tracked set to `version` -- an eligible non-key column (the sequencing column is
+        // neither a key nor a reserved framework column) present in both runs, so the set stays
+        // stable while `name` is added. Tracking `name` itself would widen the set when it appears
+        // in run #2 and trip TRACK_HISTORY_DRIFT (SPARK-58391); see the note in the preceding test.
+        trackHistorySelection =
+          Option(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("version")))))
     }
 
     // Run #1: target is (id, version, framework); aux mirrors it plus the marker.

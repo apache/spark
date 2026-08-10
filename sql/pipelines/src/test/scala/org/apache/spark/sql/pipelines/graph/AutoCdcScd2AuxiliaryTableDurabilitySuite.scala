@@ -299,7 +299,9 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
     stream.addData((1, "alice", 10L, true))
     runPipeline(buildCtx())
     checkAnswer(spark.table(s"$catalog.$namespace.target"), Seq.empty)
-    // The tombstone lives only in the aux (marker column set), with no matching visible target row.
+    // The tombstone lives only in the aux, as a live row (its deleted-by-batch-id marker is null;
+    // a non-null marker is what flags a row logically deleted), with no matching visible target
+    // row.
     assert(spark.table(auxTableNameFor("target")).count() == 1,
       "the delete-only run should record exactly one aux tombstone row")
 

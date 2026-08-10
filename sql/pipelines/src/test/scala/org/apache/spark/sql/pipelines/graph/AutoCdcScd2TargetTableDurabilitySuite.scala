@@ -66,6 +66,28 @@ class AutoCdcScd2TargetTableDurabilitySuite
     )
   }
 
+  /**
+   * Insert a pre-existing closed (historical) SCD2 record into a target table, as if a previous
+   * AutoCDC run had opened it at [[startAt]] and later closed it at [[endAt]]: `__START_AT` =
+   * `startAt`, `__END_AT` = `endAt` (no longer active), and `_cdc_metadata.__RECORD_START_AT` =
+   * `startAt`.
+   *
+   * @param table     Fully-qualified table name (catalog.schema.table).
+   * @param colValues Comma-separated SQL literals for the user-defined columns, in declared
+   *                  order, excluding the trailing framework columns.
+   * @param startAt   Interval start (and record-start-at) of the pre-existing record.
+   * @param endAt     Interval end (exclusive) at which the pre-existing record was closed.
+   */
+  private def insertPreloadedClosedRecord(
+      table: String, colValues: String, startAt: Long, endAt: Long): Unit = {
+    val recordStartAt = Scd2BatchProcessor.recordStartAtFieldName
+    spark.sql(
+      s"INSERT INTO $table SELECT $colValues, " +
+      s"CAST($startAt AS BIGINT), CAST($endAt AS BIGINT), " +
+      s"named_struct('$recordStartAt', CAST($startAt AS BIGINT))"
+    )
+  }
+
   test("pre-loaded current record: a higher-sequence upsert closes it and opens a new record") {
     val session = spark
     import session.implicits._
@@ -129,6 +151,48 @@ class AutoCdcScd2TargetTableDurabilitySuite
       Seq(
         Row(1, "early", 5L, 5L, 10L, scd2Meta(5L)),
         Row(1, "alice", 10L, 10L, null, scd2Meta(10L))
+      )
+    )
+  }
+
+  test("pre-loaded closed record: an event landing inside its interval bisects it") {
+    val session = spark
+    import session.implicits._
+
+    // The interop shape unique to SCD2: a hand-loaded *closed* record (a target row with no aux
+    // counterpart) reaches decomposeOutOfOrderRows with a target row that must be split. Pre-load
+    // [__START_AT=5, __END_AT=20); feed an event at seq=10, strictly inside that interval. The
+    // event bisects the pre-existing record into a head [5, 10) and a tail [10, 20): the head
+    // closes where the incoming event opens, the incoming event closes where the tail begins, and
+    // the redundant closed upsert the event itself would form drops out against the tail.
+    createScd2Target(s"$catalog.$namespace.target")
+    insertPreloadedClosedRecord(s"$catalog.$namespace.target", "1, 'alice', 5", startAt = 5L,
+      endAt = 20L)
+
+    val stream = MemoryStream[(Int, String, Long)]
+    stream.addData((1, "mid", 10L)) // 5 < 10 < 20 -> bisects the pre-existing [5, 20) record
+
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = "auto_cdc_flow",
+        target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "name", "version")),
+        keys = Seq("id"),
+        sequencing = functions.col("version"),
+        scdType = ScdType.Type2
+      ))
+    }
+    runPipeline(ctx)
+
+    // The pre-existing record is split at the incoming event's sequence: its value carries into
+    // [5, 10), the incoming "mid" opens [10, 20), and no row remains open (endAt=20 was the
+    // pre-existing closure).
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.target"),
+      Seq(
+        Row(1, "alice", 5L, 5L, 10L, scd2Meta(5L)),
+        Row(1, "mid", 10L, 10L, 20L, scd2Meta(10L))
       )
     )
   }
@@ -219,8 +283,9 @@ class AutoCdcScd2TargetTableDurabilitySuite
       )
     }
     // Schema evolution appends the framework columns after the user columns in the flow's output
-    // order (metadata, then the interval bounds), which differs from the declared order of a
-    // pre-created SCD2 target. Assert by name so the row matches regardless of physical order.
+    // order (__START_AT, __END_AT, then the metadata column -- the same order scd2MetadataDdl
+    // declares for a pre-created target). Assert by name so the row matches regardless of the
+    // physical column order.
     checkAnswer(
       spark.table(s"$catalog.$namespace.target").select(
         "id", "name", "version",

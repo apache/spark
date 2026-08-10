@@ -175,16 +175,37 @@ class AutoCdcScd2FullRefreshSuite
     createScd2Target(s"$catalog.$namespace.t_a")
     createScd2Target(s"$catalog.$namespace.t_b")
 
+    // t_b's run #1 is delete-only so that the state proving the aux was spared lives ONLY in the
+    // aux: the target stays empty and the aux holds a seq=10 tombstone. In run #2, t_b's seq=5
+    // upsert landing closed at 10 is possible only because the selective refresh left t_b's aux
+    // intact -- target state alone could not supply the seq=10 closure. (An open upsert in run #1
+    // would instead route to the target and leave the aux empty, so the assertion would hold even
+    // if the aux were wiped, attributing the outcome to the wrong state.)
+    //
     // streamA is replaced across runs because t_a is full-refreshed in run #2 (its streaming
     // checkpoint is reset by full-refresh, so a fresh source is fine and matches the user-visible
     // semantics). streamB is reused across runs because t_b is NOT full-refreshed -- its
     // streaming checkpoint must resume against the same MemoryStream instance, otherwise the
     // seq=5 assertion below could pass for the wrong reason (the source never produced seq=5
-    // in run #2 instead of the aux watermark suppressing it).
+    // in run #2 instead of the aux tombstone shaping it).
     val streamA1 = MemoryStream[(Int, String, Long)]
-    val streamB = MemoryStream[(Int, String, Long)]
+    val streamB = MemoryStream[(Int, String, Long, Boolean)]
     streamA1.addData((1, "a", 10L))
-    streamB.addData((1, "b", 10L))
+    streamB.addData((1, "b", 10L, true)) // delete at seq=10: target empty, aux tombstone at 10
+    // dfFlowFunc is a TestGraphRegistrationContext method, so it can only be called inside the
+    // context blocks below; flowB takes the already-built query and adds t_b's delete knobs.
+    def flowB(query: FlowFunction): AutoCdcFlow = autoCdcFlow(
+      name = "flow_b",
+      target = "t_b",
+      query = query,
+      keys = Seq("id"),
+      sequencing = functions.col("version"),
+      deleteCondition = Some(functions.col("is_delete") === true),
+      columnSelection = Some(ColumnSelection.ExcludeColumns(
+        Seq(UnqualifiedColumnName("is_delete"))
+      )),
+      scdType = ScdType.Type2
+    )
     val ctx1 = new TestGraphRegistrationContext(spark) {
       registerTable("t_a", catalog = Some(catalog), database = Some(namespace))
       registerTable("t_b", catalog = Some(catalog), database = Some(namespace))
@@ -196,24 +217,19 @@ class AutoCdcScd2FullRefreshSuite
         sequencing = functions.col("version"),
         scdType = ScdType.Type2
       ))
-      registerFlow(autoCdcFlow(
-        name = "flow_b",
-        target = "t_b",
-        query = dfFlowFunc(streamB.toDF().toDF("id", "name", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version"),
-        scdType = ScdType.Type2
-      ))
+      registerFlow(flowB(dfFlowFunc(streamB.toDF().toDF("id", "name", "version", "is_delete"))))
     }
     runPipeline(ctx1)
+    // Precondition: t_b's run #1 left the target empty with the seq=10 tombstone only in the aux.
+    checkAnswer(spark.table(s"$catalog.$namespace.t_b"), Seq.empty)
 
     // Run #2: full refresh ONLY on t_a; t_b's auxiliary state must persist.
     val streamA2 = MemoryStream[(Int, String, Long)]
     // t_a's aux is wiped, so seq=5 is the only record it has ever seen: a fresh open record.
     streamA2.addData((1, "a2", 5L))
-    // t_b keeps its aux (seq=10 current record). Unlike SCD1, SCD2 does not suppress a late
-    // lower-sequence event; it weaves it into history as a closed prior record ending at seq=10.
-    streamB.addData((1, "b2", 5L))
+    // t_b keeps its aux (seq=10 tombstone). The late seq=5 upsert is woven into history as a
+    // closed prior record ending at seq=10 -- a closure only the retained aux can supply.
+    streamB.addData((1, "b2", 5L, false))
     val ctx2 = new TestGraphRegistrationContext(spark) {
       registerTable("t_a", catalog = Some(catalog), database = Some(namespace))
       registerTable("t_b", catalog = Some(catalog), database = Some(namespace))
@@ -225,14 +241,7 @@ class AutoCdcScd2FullRefreshSuite
         sequencing = functions.col("version"),
         scdType = ScdType.Type2
       ))
-      registerFlow(autoCdcFlow(
-        name = "flow_b",
-        target = "t_b",
-        query = dfFlowFunc(streamB.toDF().toDF("id", "name", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version"),
-        scdType = ScdType.Type2
-      ))
+      registerFlow(flowB(dfFlowFunc(streamB.toDF().toDF("id", "name", "version", "is_delete"))))
     }
     val updateCtx = TestPipelineUpdateContext(
       spark,
@@ -250,14 +259,12 @@ class AutoCdcScd2FullRefreshSuite
       spark.table(s"$catalog.$namespace.t_a"),
       Seq(Row(1, "a2", 5L, 5L, null, scd2Meta(5L)))
     )
-    // t_b: aux retained, so the late seq=5 event is woven in as a closed prior record
-    // (endAt=10), and the pre-existing seq=10 record remains the open current record.
+    // t_b: aux retained, so the late seq=5 event is woven in as a closed prior record ending at
+    // the tombstoned seq=10. With no open successor (the seq=10 event was a delete), the closed
+    // [5, 10) record is the only visible row.
     checkAnswer(
       spark.table(s"$catalog.$namespace.t_b"),
-      Seq(
-        Row(1, "b2", 5L, 5L, 10L, scd2Meta(5L)),
-        Row(1, "b", 10L, 10L, null, scd2Meta(10L))
-      )
+      Seq(Row(1, "b2", 5L, 5L, 10L, scd2Meta(5L)))
     )
   }
 }
