@@ -623,6 +623,7 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     # Scalar, aggregation and window UDFs: (func, args_offsets, kwargs_offsets, return_type).
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
@@ -1821,6 +1822,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
 def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -2985,6 +2987,137 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     assign_cols_by_name=runner_conf.assign_cols_by_name,
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF:
+        # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
+        # clear message rather than a bare ImportError from `import pyarrow` below.
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+        require_minimum_pyarrow_version()
+
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        # Element-wise UDFs back higher-order lambdas like transform(arr, x -> udf(x)).
+        # ExtractPythonUDFFromLambda rewrites them so the UDF receives *all* array elements
+        # at once (as ``array<T>``) rather than per-element. Flatten once, evaluate once over
+        # the batch, then re-nest with input offsets. Example: array<int> -> udf -> array<int>.
+
+        # UDF preparation
+        udf_infos = []
+        for udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type in udfs:
+            wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
+                udf_func, udf_args_offsets, udf_kwargs_offsets
+            )
+            # UDF returns one value per element; return type was pickled, unchanged.
+            # This is per-element, so element type equals the declared return type.
+            element_return_type = udf_return_type
+            udf_infos.append(
+                (
+                    wrapped_func,
+                    args_kwargs_offsets,
+                    to_arrow_type(
+                        element_return_type,
+                        timezone="UTC",
+                        prefers_large_types=runner_conf.use_large_var_types,
+                    ),
+                    LocalDataToArrowConversion._create_converter(
+                        element_return_type,
+                        none_on_identity=True,
+                        int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                    ),
+                )
+            )
+        col_names = [f"_{i}" for i in range(len(udfs))]
+
+        # Input: every argument arrives as ``array<T>`` aligned with the iterated array.
+        # Flatten once per column; convert elements with the array's element type.
+        input_fields = list(eval_conf.input_type)
+        arrow_to_py_converters = [
+            ArrowTableToRowsConversion._create_converter(
+                f.dataType.elementType,
+                none_on_identity=True,
+                binary_as_bytes=runner_conf.binary_as_bytes,
+            )
+            for f in input_fields
+        ]
+
+        @fail_on_stopiteration
+        def _evaluate_elementwise_udf(udf_func, rows):
+            if runner_conf.arrow_concurrency_level <= 0:
+                return [udf_func(*row) for row in rows]
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
+                return list(pool.map(lambda row: udf_func(*row), rows))
+
+        def renest_spec(shape):
+            """Offsets, list class and null mask that re-nest a flat result list by ``shape``.
+
+            Null rows stay null and consume no offsets. ``ListArray`` uses int32 offsets and
+            ``LargeListArray`` int64, so the input's list width is preserved.
+            """
+            lengths = pc.list_value_length(shape).to_pylist()
+            offsets = []
+            running = 0
+            for n in lengths:
+                offsets.append(running)
+                if n is not None:
+                    running += n
+            offsets.append(running)
+            is_large = pa.types.is_large_list(shape.type)
+            list_cls = pa.LargeListArray if is_large else pa.ListArray
+            offsets_arr = pa.array(offsets, type=pa.int64() if is_large else pa.int32())
+            null_mask = pa.array([n is None for n in lengths], type=pa.bool_())
+            total_elements = running
+            return list_cls, offsets_arr, null_mask, total_elements
+
+        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            for input_batch in data:
+                # Flatten each list column once to its element list, converting to Python.
+                columns = []
+                for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters):
+                    values = ArrowTableToRowsConversion._to_pylist(col.flatten())
+                    if conv is not None:
+                        values = [conv(v) for v in values]
+                    columns.append(values)
+
+                # Each UDF is re-nested by *its own* first argument's shape. ExtractPythonUDFs can
+                # fuse UDFs over differently shaped arrays into one batch, so a single shared shape
+                # would misalign every UDF but the first. The rewrite always passes at least one
+                # array argument, so `offsets_meta` is non-empty.
+                output_arrays = []
+                for wrapped_func, offsets_meta, arrow_element_type, result_conv in udf_infos:
+                    list_cls, offsets_arr, null_mask, total_elements = renest_spec(
+                        input_batch.column(offsets_meta[0])
+                    )
+                    # Stream the argument tuples rather than materializing a batch-sized list.
+                    rows = zip(*[columns[o] for o in offsets_meta])
+                    results = _evaluate_elementwise_udf(wrapped_func, rows)
+                    verify_result_row_count(len(results), total_elements)
+
+                    # Convert results and re-nest to array<R> using that UDF's offsets.
+                    converted = (
+                        [result_conv(r) for r in results] if result_conv is not None else results
+                    )
+                    try:
+                        flat_arr = pa.array(converted, type=arrow_element_type)
+                    # Broader than the SQL_ARROW_BATCHED_UDF path above (which catches only
+                    # ArrowInvalid): the element-wise wrapper commonly returns list/struct-typed
+                    # elements, whose type mismatches surface as ArrowTypeError, so both are caught
+                    # before falling back to an explicit cast.
+                    except (pa.lib.ArrowInvalid, pa.lib.ArrowTypeError):
+                        flat_arr = pa.array(converted).cast(
+                            target_type=arrow_element_type, safe=runner_conf.safecheck
+                        )
+                    output_arrays.append(
+                        list_cls.from_arrays(offsets_arr, flat_arr, mask=null_mask)
+                    )
+
+                yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
         # profiling is not supported for UDF
         return func, None, ser, ser

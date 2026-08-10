@@ -162,6 +162,7 @@ case class ArrowEvalPythonExec(
   private def supportedPythonEvalTypes: Array[Int] =
     Array(
       PythonEvalType.SQL_ARROW_BATCHED_UDF,
+      PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
       PythonEvalType.SQL_SCALAR_ARROW_UDF,
       PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
       PythonEvalType.SQL_SCALAR_PANDAS_UDF,
