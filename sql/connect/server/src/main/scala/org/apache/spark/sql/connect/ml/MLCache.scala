@@ -316,15 +316,14 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
   /** Returns a cache snapshot without loading or touching any cached model. */
   def getStatus: MLCacheStatus = this.synchronized {
-    val models = mutable.ArrayBuilder.make[MLCacheModelInfo]
-    cachedModelMetadata.asScala.foreach { case (id, metadata) =>
-      models += MLCacheModelInfo(
+    val models = cachedModelMetadata.asScala.iterator.map { case (id, metadata) =>
+      MLCacheModelInfo(
         id = id,
         className = metadata.className,
         modelString = metadata.modelString,
         estimatedSizeBytes = metadata.estimatedSizeBytes,
         inMemory = inMemoryModelIds.contains(id))
-    }
+    }.toSeq
     MLCacheStatus(
       memoryControlEnabled = getMemoryControlEnabled,
       inMemorySizeBytes = totalMLCacheInMemorySizeBytes.get(),
@@ -332,7 +331,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE),
       totalSizeBytes = totalMLCacheSizeBytes.get(),
       maxTotalSizeBytes = getMLCacheMaxSize,
-      models = models.result().toIndexedSeq)
+      models = models)
   }
 }
 

@@ -286,15 +286,13 @@ class SparkConnectSessionManager extends Logging {
   }
 
   // Read live cache state directly without updating the sessions' last-access times.
-  private[connect] def getMLCacheStatuses: Seq[(SessionKey, MLCacheStatus)] = {
+  private[connect] def getMLCacheStatuses: Map[SessionKey, Option[MLCacheStatus]] = {
     sessionStore
       .entrySet()
       .asScala
-      .flatMap { entry =>
-        entry.getValue.getMLCacheStatus.map(entry.getKey -> _)
-      }
-      .toSeq
-      .sortBy { case (key, _) => (key.userId, key.sessionId) }
+      .iterator
+      .map(entry => entry.getKey -> entry.getValue.getMLCacheStatus)
+      .toMap
   }
 
   /**
