@@ -92,7 +92,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
           val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
             case (l, r) => EqualTo(l, r)
           } ++ condition
-          j.copy(condition = Some(newConditions.reduce(And)))
+          j.copy(condition = Some(newConditions.reduce(And.apply)))
 
         // TODO: ideally Aggregate should also be handled here, but its grouping expressions are
         // mixed in its aggregate expressions. It's unreliable to change the grouping expressions

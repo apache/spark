@@ -537,7 +537,7 @@ abstract class UnionBase extends LogicalPlan {
     val otherb = b.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
     // loose the constraints by: A1 && B1 || A2 && B2  ->  (A1 || A2) && (B1 || B2)
     val others = (othera.keySet intersect otherb.keySet).map { attr =>
-      Or(othera(attr).reduceLeft(And), otherb(attr).reduceLeft(And))
+      Or(othera(attr).reduceLeft(And.apply), otherb(attr).reduceLeft(And.apply))
     }
     common ++ others
   }

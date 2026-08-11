@@ -128,7 +128,7 @@ class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
       slices(idx % numPartitions).append(r)
     }
 
-    slices.map(TextSocketInputPartition)
+    slices.map(TextSocketInputPartition.apply)
   }
 
   override def createReaderFactory(): PartitionReaderFactory =

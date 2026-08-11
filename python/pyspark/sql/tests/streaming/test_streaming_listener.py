@@ -288,7 +288,9 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryStartedEvent"
             ),
-            16,
+            # 17 (not 16): jobTags serialization passes JString.apply, whose eta-expansion
+            # adds a synthetic public $anonfun method on this class in the Scala 2.13 build.
+            17,
             msg,
         )
         self.assertEqual(
