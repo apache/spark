@@ -1687,14 +1687,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertEqual(self._vals(lam, LongType(), "a long", [(5,)], require_lowered=True), [6])
 
     def test_udf_transpile_lambda_defaulted_by_a_lambda_falls_back(self):
-        # A default whose value is itself a lambda used to make the target's own
-        # candidate uncompilable (its module code held two nested code objects),
-        # so a line mate with the same body but NO default was resolved instead
-        # -- which silently bypassed the transpiler's refusal to handle
-        # defaulted parameters and mis-numbered the parameter list. Defaults are
-        # stripped before compiling now (they live on the function object, not
-        # the code object), so the target matches, its line mate matches too,
-        # and the pair is correctly reported ambiguous -> fall back.
+        # A default whose value is itself a lambda once made the target's own
+        # candidate unmatchable, so a line mate with the same body but NO default
+        # was resolved instead -- silently bypassing the refusal to handle
+        # defaulted parameters and mis-numbering the parameter list. Locating a
+        # lambda by position is immune: the target resolves to its OWN node,
+        # defaults intact, so the refusal fires as intended, and the line mate
+        # resolves to its own node and lowers normally.
         defaulted, plain = lambda x, k=(lambda: 3)(): x + k, lambda x, k: x + k
         with self.sql_conf(_TRANSPILE_ON):
             u = UserDefinedFunction(defaulted, LongType())
@@ -1702,19 +1701,29 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             df = self.spark.createDataFrame([(5,)], "a long")
             # Interpreted Python still applies the default.
             self.assertEqual(df.select(u("a")).first()[0], 8)
-            # The line mate is byte-identical to the target once defaults are
-            # stripped, so it is ambiguous too rather than silently resolved.
-            self.assertEqual([], UserDefinedFunction(plain, LongType()).transpiled)
+        # The line mate takes both its arguments from the call site, so nothing
+        # stops it lowering -- and it must lower to ITS body, not the target's.
+        self.assertEqual(
+            self._vals(plain, LongType(), "a long, b long", [(5, 9)], require_lowered=True), [14]
+        )
+
+    def test_udf_transpile_constant_folded_twins_on_shared_line(self):
+        # These two fold to identical bytecode, so comparing what they COMPILE TO
+        # could not tell them apart and both had to fall back. Position matching
+        # does not care what the compiler did with the constants: each resolves
+        # to its own node and lowers.
+        folded, direct = lambda x: x + (1 + 2), lambda x: x + 3
+        for func in (folded, direct):
+            with self.subTest(func=func):
+                self.assertEqual(
+                    self._vals(func, LongType(), "a long", [(5,)], require_lowered=True), [8]
+                )
 
     def test_udf_transpile_nested_lambda_resolves_to_the_outer_one(self):
-        # ``_code_identity`` recurses into nested code constants instead of
-        # keying them like any other constant. That branch is load-bearing and
-        # invisible from the outside: a lambda whose body holds another lambda
-        # does not lower today (``Call`` is unsupported), so an end-to-end test
-        # cannot see it. Without the recursion, a nested code object would be
-        # keyed by ``repr``, which embeds a memory address that never matches
-        # across two independent compiles -- so EVERY lambda containing a nested
-        # lambda would silently stop resolving. Assert resolution directly.
+        # A lambda whose body holds another lambda does not lower today
+        # (``Call`` is unsupported), so an end-to-end test cannot see which of
+        # the two was picked -- but picking the INNER one would lower a body
+        # taking a different parameter. Assert the resolution directly.
         import ast
 
         from pyspark.sql.transpile import _get_function_from_ast, _get_src_ast_from_func
@@ -1786,21 +1795,32 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(0, self._eval_python_count(projected))
             self.assertEqual(5000, projected.first()[0])
 
-    def test_udf_transpile_constant_folded_twins_on_shared_line_fall_back(self):
-        # The other way resolution comes up ambiguous: the compiler folds
-        # ``1 + 2`` at compile time, so these two emit IDENTICAL bytecode while
-        # their ASTs differ. Neither can be told from the other, so both fall
-        # back. Identical bytecode also means identical behavior, so falling
-        # back costs speed and never correctness -- asserted here so a future
-        # change that guesses one of them shows up as a failure.
-        folded, direct = lambda x: x + (1 + 2), lambda x: x + 3
-        with self.sql_conf(_TRANSPILE_ON):
-            df = self.spark.createDataFrame([(5,)], "a long")
-            for func in (folded, direct):
-                with self.subTest(func=func):
-                    u = UserDefinedFunction(func, LongType())
-                    self.assertEqual([], u.transpiled)
-                    self.assertEqual(df.select(u("a")).first()[0], 8)
+    def test_udf_transpile_lambda_on_a_continuation_line(self):
+        # ``inspect.getsource`` on a lambda that is not on the FIRST line of a
+        # multi-line literal returns a syntactic fragment -- here
+        # ``"c": lambda x: x + 23}`` -- which does not parse, so the whole
+        # transpilation used to bail before any lambda could be identified.
+        # Locating the lambda by position reads the whole file instead, which is
+        # always syntactically complete, so these lower like any other.
+        table = {
+            "a": lambda x: x + 21,
+            "b": lambda x: x + 22,
+            "c": lambda x: x + 23,
+        }
+        multi = {"d": lambda x: x + 31, "e": lambda x: x + 32,
+                 "f": lambda x: x + 33}  # fmt: skip
+        for key, expected in (("a", 26), ("b", 27), ("c", 28)):
+            with self.subTest(key=key):
+                self.assertEqual(
+                    self._vals(table[key], LongType(), "a long", [(5,)], require_lowered=True),
+                    [expected],
+                )
+        for key, expected in (("d", 36), ("e", 37), ("f", 38)):
+            with self.subTest(key=key):
+                self.assertEqual(
+                    self._vals(multi[key], LongType(), "a long", [(5,)], require_lowered=True),
+                    [expected],
+                )
 
     def test_udf_transpile_semicolon_separated_lambdas(self):
         # The shape that produced the silent wrong answer before SPARK-58650:
