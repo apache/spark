@@ -420,6 +420,6 @@ finally:
             if os.path.islink(path.target):
                 # Remove the link and not the real source trees under SPARK_HOME.
                 os.remove(path.target)
-            elif os.path.exists(path.target):
+            else:
                 rmtree(path.target)
         os.rmdir(TEMP_PATH)
