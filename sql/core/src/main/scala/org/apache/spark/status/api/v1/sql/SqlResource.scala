@@ -41,6 +41,7 @@ private[v1] class SqlResource extends BaseAppResource {
   def sqlList(
       @DefaultValue("true") @QueryParam("details") details: Boolean,
       @DefaultValue("true") @QueryParam("planDescription") planDescription: Boolean,
+      @DefaultValue("false") @QueryParam("sqlText") sqlText: Boolean,
       @DefaultValue("0") @QueryParam("offset") offset: Int,
       @DefaultValue("-1") @QueryParam("length") length: Int): Seq[ExecutionData] = {
     withUI { ui =>
@@ -52,7 +53,7 @@ private[v1] class SqlResource extends BaseAppResource {
       }
       execs.map { exec =>
         val graph = sqlStore.planGraph(exec.executionId)
-        prepareExecutionData(exec, graph, details, planDescription, ui.store)
+        prepareExecutionData(exec, graph, details, planDescription, ui.store, sqlText)
       }
     }
   }
@@ -62,15 +63,15 @@ private[v1] class SqlResource extends BaseAppResource {
   def sql(
       @PathParam("executionId") execId: Long,
       @DefaultValue("true") @QueryParam("details") details: Boolean,
-      @DefaultValue("true") @QueryParam("planDescription")
-      planDescription: Boolean): ExecutionData = {
+      @DefaultValue("true") @QueryParam("planDescription") planDescription: Boolean,
+      @DefaultValue("false") @QueryParam("sqlText") sqlText: Boolean): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
       sqlStore
         .execution(execId)
         .map { exec =>
           prepareExecutionData(exec, sqlStore.planGraph(execId), details, planDescription,
-            ui.store)
+            ui.store, sqlText)
         }
         .getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
     }
@@ -273,6 +274,26 @@ private[v1] class SqlResource extends BaseAppResource {
     details: Boolean,
     planDescription: Boolean,
     store: AppStatusStore): ExecutionData = {
+    prepareExecutionData(exec, graph, details, planDescription, store, sqlText = false)
+  }
+
+  private def prepareExecutionData(
+      exec: SQLExecutionUIData,
+      graph: SparkPlanGraph,
+      details: Boolean,
+      planDescription: Boolean,
+      sqlText: Boolean): ExecutionData = {
+    prepareExecutionData(
+      exec, graph, details, planDescription, null, sqlText)
+  }
+
+  private def prepareExecutionData(
+      exec: SQLExecutionUIData,
+      graph: SparkPlanGraph,
+      details: Boolean,
+      planDescription: Boolean,
+      store: AppStatusStore,
+      sqlText: Boolean): ExecutionData = {
 
     var running = Seq[Int]()
     var completed = Seq[Int]()
@@ -313,7 +334,8 @@ private[v1] class SqlResource extends BaseAppResource {
       exec.errorMessage.orNull,
       exec.rootExecutionId,
       exec.modifiedConfigs,
-      totalTaskTime(exec, store))
+      if (store != null) totalTaskTime(exec, store) else -1L,
+      if (sqlText) exec.sqlText.orNull else null)
   }
 
   private def printableMetrics(allNodes: collection.Seq[SparkPlanGraphNode],

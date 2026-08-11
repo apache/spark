@@ -103,7 +103,8 @@ object SqlResourceSuite {
       stages = Set[Int](),
       metricValues = getMetricValues(),
       errorMessage = None,
-      queryId = java.util.UUID.fromString("efe98ba7-1532-491e-9b4f-4be621cef37c")
+      queryId = java.util.UUID.fromString("efe98ba7-1532-491e-9b4f-4be621cef37c"),
+      sqlText = Some("SELECT * FROM source")
     )
   }
 
@@ -263,6 +264,18 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
         newAppStore(Seq.empty))
     verifyExpectedExecutionData(executionData, edges = Seq.empty,
       nodes = Seq.empty, planDescription = "")
+  }
+
+  test("SQL text is only returned when requested") {
+    val withoutSqlText =
+      sqlResource invokePrivate prepareExecutionData(
+        sqlExecutionUIData, SparkPlanGraph(Seq.empty, Seq.empty), false, false, false)
+    assert(withoutSqlText.sqlText == null)
+
+    val withSqlText =
+      sqlResource invokePrivate prepareExecutionData(
+        sqlExecutionUIData, SparkPlanGraph(Seq.empty, Seq.empty), false, false, true)
+    assert(withSqlText.sqlText == "SELECT * FROM source")
   }
 
   test("Prepare ExecutionData when details = true and planDescription = false") {

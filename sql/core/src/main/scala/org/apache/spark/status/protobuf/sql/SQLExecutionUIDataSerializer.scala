@@ -60,6 +60,7 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
     if (ui.queryId != null) {
       builder.setQueryId(ui.queryId.toString)
     }
+    ui.sqlText.foreach(builder.setSqlText)
     builder.build().toByteArray
   }
 
@@ -96,7 +97,8 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
       jobs = jobs,
       stages = ui.getStagesList.asScala.map(_.toInt).toSet,
       metricValues = metricValues,
-      queryId = if (ui.hasQueryId) UUID.fromString(ui.getQueryId) else null
+      queryId = if (ui.hasQueryId) UUID.fromString(ui.getQueryId) else null,
+      sqlText = getOptional(ui.hasSqlText, () => ui.getSqlText)
     )
   }
 }

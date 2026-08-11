@@ -426,6 +426,7 @@ message SQLExecutionUIData {
   bool metric_values_is_null = 13;
   map<int64, string> metric_values = 14;
   optional string query_id = 15;
+  optional string sql_text = 16;
 }
 
 message SparkPlanGraphNode {

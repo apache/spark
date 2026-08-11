@@ -201,7 +201,8 @@ object SQLExecution extends Logging {
               modifiedConfigs = redactedConfigs,
               jobTags = sc.getJobTags(),
               jobGroupId = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)),
-              queryId = Some(queryId)
+              queryId = Some(queryId),
+              sqlText = queryExecution.sqlText
             )
             try {
               body match {

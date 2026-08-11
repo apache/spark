@@ -559,7 +559,7 @@ class SparkSession private(
         }
         parsedPlan
       }
-      Dataset.ofRows(self, plan, tracker)
+      Dataset.ofRows(self, plan, tracker, sqlText = Some(sqlText))
     }
 
   /** @inheritdoc */
@@ -611,7 +611,7 @@ class SparkSession private(
         }
         queryPlan
       }
-      Dataset.ofRows(self, plan, tracker)
+      Dataset.ofRows(self, plan, tracker, sqlText = Some(sqlText))
     }
 
   /** @inheritdoc */
@@ -703,7 +703,7 @@ class SparkSession private(
         parsedPlan
       }
 
-      Dataset.ofRows(self, plan, tracker)
+      Dataset.ofRows(self, plan, tracker, sqlText = Some(sqlText))
     }
 
   /** @inheritdoc */

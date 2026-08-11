@@ -119,6 +119,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       val configs = Option(executionUIData.modifiedConfigs).getOrElse(Map.empty)
 
       summary ++
+        sqlText(executionUIData.sqlText) ++
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
         jobsTable(request, executionUIData) ++
@@ -133,6 +134,26 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     UIUtils.headerSparkPage(
       request, s"Details for Query $executionId", content, parent,
       useDataTables = true, useTimeline = true)
+  }
+
+  private def sqlText(sqlText: Option[String]): Seq[Node] = {
+    sqlText.map { text =>
+      <div>
+        <span style="cursor: pointer;" onclick="clickSqlTextDetails();">
+          <span id="sql-text-details-arrow" class="arrow-closed"></span>
+          <a>SQL Text</a>
+        </span>
+        <div id="sql-text-details" style="display: none;">
+          <pre>{text}</pre>
+        </div>
+      </div>
+    }.toSeq ++
+      <script>
+        function clickSqlTextDetails() {{
+          $('#sql-text-details').toggle();
+          $('#sql-text-details-arrow').toggleClass('arrow-closed arrow-open');
+        }}
+      </script>
   }
 
 
