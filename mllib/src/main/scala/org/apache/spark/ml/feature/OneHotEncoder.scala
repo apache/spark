@@ -34,16 +34,16 @@ import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{
   coalesce,
   col,
-  concat,
   floor,
   isnan,
   lit,
   max,
+  printf,
   raise_error,
   udf,
   when
 }
-import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SizeEstimator
 
@@ -542,12 +542,11 @@ private[feature] object OneHotEncoderCommon {
       dropLast: Boolean): Seq[AttributeGroup] = {
     val columns = inputColNames.map { inputColName =>
       val inputCol = col(inputColName).cast(DoubleType)
-      val value = coalesce(inputCol.cast(StringType), lit("null"))
-      val invalidIndexError = raise_error(concat(
-        lit(s"Values from column $inputColName must be indices, but got "), value, lit(".")))
-      val maxIndexError = raise_error(concat(
-        lit(s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got "), value,
-        lit(".")))
+      val invalidIndexError = raise_error(printf(
+        lit(s"Values from column $inputColName must be indices, but got %s."), inputCol))
+      val maxIndexError = raise_error(printf(
+        lit(s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got %s."),
+        inputCol))
       when(inputCol.isNull, invalidIndexError)
         .when(isnan(inputCol) || inputCol > Int.MaxValue, maxIndexError)
         .when(inputCol < 0.0 || inputCol =!= floor(inputCol), invalidIndexError)
