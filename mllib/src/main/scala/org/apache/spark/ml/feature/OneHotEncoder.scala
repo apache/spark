@@ -31,17 +31,7 @@ import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInput
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{
-  coalesce,
-  col,
-  isnan,
-  lit,
-  max,
-  printf,
-  raise_error,
-  udf,
-  when
-}
+import org.apache.spark.sql.functions.{printf => fprintf, _}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SizeEstimator
@@ -542,9 +532,9 @@ private[feature] object OneHotEncoderCommon {
     val columns = inputColNames.map { inputColName =>
       val doubleCol = col(inputColName).cast(DoubleType)
       val intCol = doubleCol.cast(IntegerType)
-      val invalidIndexError = raise_error(printf(
+      val invalidIndexError = raise_error(fprintf(
         lit(s"Values from column $inputColName must be indices, but got %s."), doubleCol))
-      val maxIndexError = raise_error(printf(
+      val maxIndexError = raise_error(fprintf(
         lit(s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got %s."),
         doubleCol))
       when(
