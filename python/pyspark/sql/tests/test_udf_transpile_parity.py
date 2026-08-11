@@ -153,10 +153,14 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         captured = 0
         # Free variable -> closure -> not transpilable, so it stays a Python UDF.
         # The raise itself is the proof it stayed one: a lowered native condition
-        # would be legal here and would not raise.
+        # would be legal here and would not raise. Cover every non-inner join the
+        # skipped test_udf_not_supported_in_join_condition enumerated, not just
+        # one, so a transpile-config planner regression on any of them is caught.
         closure_udf = udf(lambda a, b: a == b or captured > 0, BooleanType())
-        with self.assertRaisesRegex(AnalysisException, "Python UDF in the ON clause"):
-            left.join(right, closure_udf("a", "b"), "leftouter").collect()
+        for how in ("leftouter", "rightouter", "fullouter", "leftanti", "leftsemi"):
+            with self.subTest(how=how):
+                with self.assertRaisesRegex(AnalysisException, "Python UDF in the ON clause"):
+                    left.join(right, closure_udf("a", "b"), how).collect()
 
 
 @unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)
