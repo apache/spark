@@ -1641,8 +1641,16 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
   protected val extraOptionOnStateStore: Map[String, String] = Map.empty
 
-  override protected val incrementalCleanupFactor: Long =
-    session.sessionState.conf.getConf(SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR)
+  // Incremental cleanup is deliberately NOT enabled for dropDuplicatesWithinWatermark. Its dedup
+  // key is only the user's columns; the expiry (`expiresAtMicros`) lives in the value row and is
+  // decoupled from a record's event time. So two records that share a dedup key can have different
+  // event times, and one can be non-late while the other's stored entry has already expired.
+  // Evicting that entry mid-batch (as incremental cleanup would) makes a later non-late record with
+  // the same key miss the existing entry and be emitted as new -- an output that depends on the
+  // cleanup factor and store iteration order. Evicting only at batch end (the inherited factor-0
+  // path) keeps the entry visible to every record in the batch, so the output is deterministic.
+  // (StreamingDeduplicateExec is immune because its key includes the event time: any record sharing
+  // an evictable key is itself late and is dropped by the late-events filter first.)
 
   // Below three variables are defined as lazy, as evaluating these variables does not work with
   // canonicalized plan. Specifically, attributes in child won't have an event time column in
@@ -1681,25 +1689,15 @@ case class StreamingDeduplicateWithinWatermarkExec(
     val numRemovedStateRows = longMetric("numRemovedStateRows")
     val numRowsReadDuringEviction = longMetric("numRowsReadDuringEviction")
 
-    // See StreamingDeduplicateExec.iteratorForEviction for why incremental cleanup must evict
-    // against the late-events watermark rather than the eviction watermark: within a batch a record
-    // can arrive below the eviction watermark, so we may only clean up to the timestamp before
-    // which no further input can arrive.
-    val evictionWatermark = if (doIncrementalCleanup) {
-      eventTimeWatermarkForLateEvents
-    } else {
-      eventTimeWatermarkForEviction
-    }
-
-    // Convert watermark value to micros.
-    val watermarkForEviction = DateTimeUtils.millisToMicros(evictionWatermark.get)
+    // Incremental cleanup is not enabled for this operator (see incrementalCleanupFactor above), so
+    // eviction always runs once at batch end against the eviction watermark.
+    val watermarkForEviction = DateTimeUtils.millisToMicros(eventTimeWatermarkForEviction.get)
 
     // We cannot reuse [[EvictionIterator]] here because it reads the eviction timestamp from the
     // state store key, whereas this operator stores `expiresAtMicros` in the value row (the key is
     // only the dedup key columns). We still match EvictionIterator's semantics by returning only
     // the rows that are actually evicted, so each next() corresponds to a real removal and the
-    // caller's numRowsIncrementallyRemoved / numRemovedStateRows metrics count removals rather than
-    // state rows scanned.
+    // caller's numRemovedStateRows metric counts removals rather than state rows scanned.
     store.iterator().filter { rowPair =>
       numRowsReadDuringEviction += 1
       val expiresAt = rowPair.value.getLong(0)

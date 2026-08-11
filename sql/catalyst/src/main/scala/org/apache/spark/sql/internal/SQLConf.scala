@@ -3809,7 +3809,8 @@ object SQLConf {
         "eviction happens at batch end. When k, up to k eligible records are removed per input; " +
         "any still-eligible records left over are removed at batch end. Only applies to modes " +
         "that evict (e.g. Append/Update); has no effect in Complete mode, which never evicts. " +
-        "Read by the streamline aggregation and streaming deduplication operators.")
+        "Read by the streamline aggregation and streaming deduplication (dropDuplicates) " +
+        "operators; dropDuplicatesWithinWatermark always evicts at batch end.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
