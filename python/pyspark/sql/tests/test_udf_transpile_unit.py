@@ -1526,9 +1526,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # they now lower correctly and are asserted below.
         import functools
 
-        def wrapper(fn):
-            return fn
-
         def with_default(a, b=0):
             return a + 10 * b
 
@@ -1723,12 +1720,19 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         from pyspark.sql.transpile import _get_function_from_ast, _get_src_ast_from_func
 
         nest_a, nest_b = lambda x: (lambda y: y + 1)(x), lambda x: (lambda y: y + 2)(x)
-        for func, expected in ((nest_a, "y + 1"), (nest_b, "y + 2")):
+        for func, expected in (
+            (nest_a, "return (lambda y: y + 1)(x)"),
+            (nest_b, "return (lambda y: y + 2)(x)"),
+        ):
             with self.subTest(expected=expected):
                 _, tree = _get_src_ast_from_func(func)
                 resolved = _get_function_from_ast(tree, func)
                 self.assertIsNotNone(resolved, "nested-lambda candidate failed to resolve")
-                self.assertIn(expected, ast.unparse(resolved.body[0]))
+                # Full string, not a substring: `assertIn("y + 1", ...)` would
+                # also pass if the INNER lambda had been resolved, which is the
+                # confusion this test exists to rule out.
+                self.assertEqual(expected, ast.unparse(resolved.body[0]))
+                self.assertEqual(["x"], [a.arg for a in resolved.args.args])
 
     def test_udf_transpile_unresolvable_lambda_on_shared_line_falls_back(self):
         # A lambda that cannot be pinned to one candidate on its line must fall
@@ -1745,7 +1749,42 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # Fell back -> interpreted Python still computes the closure.
             df = self.spark.createDataFrame([(5,)], "a long")
             self.assertEqual(df.select(u("a")).first()[0], 9)
-        self.assertEqual(self._vals(sibling, LongType(), "a long", [(5,)]), [14])
+        self.assertEqual(
+            self._vals(sibling, LongType(), "a long", [(5,)], require_lowered=True), [14]
+        )
+
+    def test_udf_transpile_call_dunder_is_resolved_on_the_type(self):
+        # ``getattr(func, "__call__")`` disagrees with Python's call protocol in
+        # two ways, and both end with the transpiler lowering a body that never
+        # runs. Resolution keys on ``type(func).__call__`` instead.
+        with self.sql_conf(_TRANSPILE_ON):
+            df = self.spark.createDataFrame([(5,)], "a long")
+
+            # A CLASS object: attribute lookup finds the ``__call__`` its
+            # INSTANCES use, but calling the class runs ``__init__``. Lowering
+            # that lambda returned 6 while interpreted Python raised.
+            class AdderLambda:
+                def __init__(self, n=1):
+                    self.n = n
+
+                __call__ = lambda self, x: x + 1  # noqa: E731
+
+            self.assertEqual([], UserDefinedFunction(AdderLambda, LongType()).transpiled)
+
+            # An INSTANCE attribute shadows the type's for ``getattr`` but is
+            # ignored by the call protocol, so ``x * 1000`` is what runs.
+            class Base:
+                def __call__(self, x):
+                    return x * 1000
+
+            b = Base()
+            b.__call__ = lambda x: x + 99
+            self.assertEqual(5000, b(5))
+            u = UserDefinedFunction(b, LongType())
+            self.assertTrue(u.transpiled)
+            projected = df.select(u("a"))
+            self.assertEqual(0, self._eval_python_count(projected))
+            self.assertEqual(5000, projected.first()[0])
 
     def test_udf_transpile_constant_folded_twins_on_shared_line_fall_back(self):
         # The other way resolution comes up ambiguous: the compiler folds

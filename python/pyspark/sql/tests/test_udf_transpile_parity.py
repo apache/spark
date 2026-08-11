@@ -103,10 +103,39 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
 
     @unittest.skip(
         "Transpilation lowers the inline lambda to a native ON condition, so the "
-        "PYTHON_UDF_IN_ON_CLAUSE error this asserts no longer occurs (SPARK-58650)."
+        "PYTHON_UDF_IN_ON_CLAUSE error this asserts no longer occurs (SPARK-58650). "
+        "Rows are asserted instead by test_transpiled_udf_join_conditions_match_native."
     )
     def test_udf_not_supported_in_join_condition(self):
         pass
+
+    def test_transpiled_udf_join_conditions_match_native(self):
+        """Positive replacement for the two skips above.
+
+        Those tests asserted that a Python UDF in an ON clause was REFUSED, so
+        skipping them alone would leave the lowered path across non-inner joins
+        -- brand new, since it was previously unreachable -- entirely
+        unasserted. Compare rows against the equivalent native condition for
+        every join type the old error covered.
+        """
+        from pyspark.sql import Row
+        from pyspark.sql.functions import udf
+        from pyspark.sql.types import BooleanType
+
+        left = self.spark.createDataFrame([Row(a=1, a1=1), Row(a=2, a1=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1), Row(b=1, b1=3)])
+        eq = udf(lambda a, b: a == b, BooleanType())
+        for how in ("inner", "leftouter", "rightouter", "leftanti", "leftsemi", "fullouter"):
+            with self.subTest(how=how):
+                lowered = left.join(right, [eq("a", "b")], how)
+                native = left.join(right, left.a == right.b, how)
+                # No Python UDF survives -- which is both why these join types
+                # are legal here at all, and why the rows must match native.
+                plan = lowered._jdf.queryExecution().executedPlan().toString()
+                self.assertNotIn("EvalPython", plan)
+                self.assertEqual(
+                    sorted(map(str, lowered.collect())), sorted(map(str, native.collect()))
+                )
 
 
 @unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)
