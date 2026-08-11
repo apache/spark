@@ -72,6 +72,7 @@ case class DelegateExpression(
   override def dataType: DataType = definition.dataType
   override def nullable: Boolean = definition.nullable
   override def foldable: Boolean = definition.foldable
+  override def stateful: Boolean = definition.stateful
   // Delegate `nullIntolerant` too (it is not derived from children, unlike `throwable`), so that
   // null-intolerance optimizations -- `IsNotNull`-constraint inference in
   // `QueryPlanConstraints.scanNullIntolerantAttribute` and `NullPropagation`'s `IsNull`/`IsNotNull`

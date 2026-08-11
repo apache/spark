@@ -204,10 +204,10 @@ object MultiGetJsonObject {
         throw new IllegalArgumentException(s"Unsupported shared JSON path: $path")
       }
     }
-    val evaluator = MultiGetJsonObjectEvaluator(utf8Paths, simplePaths)
+    val evaluator = MultiGetJsonObjectEvaluatorHolder(utf8Paths, simplePaths)
     // `propagateNull = true` reproduces the old null-intolerant behavior: null json -> null result.
     val definition = Invoke(
-      Literal.create(evaluator, ObjectType(classOf[MultiGetJsonObjectEvaluator])),
+      evaluator,
       "evaluate",
       resultType,
       Seq(json),
@@ -235,6 +235,20 @@ object MultiGetJsonObject {
     case Some((_, paths)) => paths
     case None => throw new IllegalArgumentException(s"Not a multi_get_json_object: $e")
   }
+}
+
+/** Holds one mutable JSON evaluator per fresh expression copy. */
+private case class MultiGetJsonObjectEvaluatorHolder(
+    paths: Seq[UTF8String],
+    simplePaths: Seq[Seq[GetJsonObject.SimpleJsonPathSegment]])
+  extends LeafExpression with CodegenFallback {
+
+  @transient private lazy val evaluator = MultiGetJsonObjectEvaluator(paths, simplePaths)
+
+  override def dataType: DataType = ObjectType(classOf[MultiGetJsonObjectEvaluator])
+  override def nullable: Boolean = false
+  override def stateful: Boolean = true
+  override def eval(input: InternalRow): Any = evaluator
 }
 
 // scalastyle:off line.size.limit line.contains.tab

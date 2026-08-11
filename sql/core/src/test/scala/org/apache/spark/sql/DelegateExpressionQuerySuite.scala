@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.ResolverRunner
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, DelegateExpression, ImplicitCastInput, Literal, MultiGetJsonObject, TypeCheckInput}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.execution.{LowerDelegateExpression, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -32,7 +33,8 @@ import org.apache.spark.sql.types.StringType
  * is lowered to its real definition (by `LowerDelegateExpression`) before physical execution, so
  * the planner, pushdown, columnar rules and codegen see the actual executed expression.
  */
-class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
+class DelegateExpressionQuerySuite
+  extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("right() is a DelegateExpression in the optimized plan, lowered before execution") {
     val df = spark.range(0, 3).selectExpr("right(concat('row', cast(id as string)), 1) as r")
@@ -75,6 +77,16 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
           Seq(Row("w0"), Row("w1"), Row("w2")))
       }
     }
+  }
+
+  test("right() does not evaluate the length when the string is null") {
+    checkAnswer(
+      spark.sql(
+        """SELECT right(
+          |  IF(id = 0, CAST(NULL AS STRING), 'abc'),
+          |  raise_error(concat('boom-', CAST(id AS STRING))))
+          |FROM range(1)""".stripMargin),
+      Row(null))
   }
 
   test("right() extracts a window input only once") {
@@ -137,6 +149,17 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
       // Cast).
       assert(analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Cast]))),
         s"expected the implicit Cast to survive marker removal:\n$analyzed")
+    }
+  }
+
+  test("ResolverGuard accepts right() in an already-resolved subtree") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
+      val analyzed = spark.range(3)
+        .selectExpr("right(cast(id as string), 1) AS r")
+        .selectExpr("r")
+        .queryExecution.analyzed
+      assert(analyzed.getTagValue(ResolverRunner.SINGLE_PASS_ANALYSIS_MARKER).contains(true),
+        s"expected single-pass analysis to run:\n$analyzed")
     }
   }
 

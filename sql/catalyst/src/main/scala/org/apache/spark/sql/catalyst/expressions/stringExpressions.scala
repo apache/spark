@@ -2651,18 +2651,18 @@ object Right extends DelegateFunction {
       case _: StringType | _: CharType | _: VarcharType => str.dataType
       case _ => StringType
     }
-    // Keep each argument single-use while the analyzer extracts window expressions. The
-    // definition needs to reference both arguments more than once, but extracting those repeated
-    // trees independently can produce duplicate window aggregates. RewriteWithExpression expands
-    // these bindings later, after window extraction.
-    With(str, len) { case Seq(strRef, lenRef) =>
+    // Keep the string single-use while the analyzer extracts window expressions. Bind only the
+    // string outside the conditional: the length must remain in the non-null branch so right's
+    // null short-circuit is preserved. Keeping the input marker directly in that branch also lets
+    // CheckAnalysis attribute a failed length coercion to the right() argument.
+    With(str) { case Seq(strRef) =>
       If(
         IsNull(strRef),
         Literal(null, litType),
         If(
-          LessThanOrEqual(lenRef, Literal(0)),
+          LessThanOrEqual(len, Literal(0)),
           Literal(UTF8String.EMPTY_UTF8, litType),
-          new Substring(strRef, UnaryMinus(lenRef, failOnError = false))))
+          new Substring(strRef, UnaryMinus(len, failOnError = false))))
     }
   }
 }
