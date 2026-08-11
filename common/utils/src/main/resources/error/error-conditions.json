@@ -1048,6 +1048,12 @@
     ],
     "sqlState" : "42000"
   },
+  "CLUSTER_MANAGER_APPLICATION_FAILURE" : {
+    "message" : [
+      "Exiting due to an error reported by the cluster manager: <message>"
+    ],
+    "sqlState" : "56000"
+  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available."
@@ -1950,6 +1956,16 @@
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
+        ]
+      },
+      "INVALID_JSON_PATH" : {
+        "message" : [
+          "<functionName> has an invalid or unsupported JSON path <path>. Only simple, wildcard-free paths are supported."
+        ]
+      },
+      "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a scalar (string, numeric, boolean, or datetime) type."
         ]
       },
       "INVALID_JSON_SCHEMA" : {
@@ -3941,9 +3957,16 @@
   },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
-      "System memory <systemMemory> must be at least <minSystemMemory>.",
-      "Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+      "Insufficient driver memory:"
     ],
+    "subClass" : {
+      "SYSTEM_MEMORY" : {
+        "message" : [
+          "System memory <systemMemory> must be at least <minSystemMemory>.",
+          "Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+        ]
+      }
+    },
     "sqlState" : "F0000"
   },
   "INVALID_EMPTY_LOCATION" : {
@@ -3989,9 +4012,22 @@
   },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
-      "Executor memory <executorMemory> must be at least <minSystemMemory>.",
-      "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+      "Insufficient executor memory:"
     ],
+    "subClass" : {
+      "CONFIG_MEMORY" : {
+        "message" : [
+          "Executor memory <executorMemory> must be at least <minSystemMemory>.",
+          "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+        ]
+      },
+      "SYSTEM_MEMORY" : {
+        "message" : [
+          "System memory <systemMemory> must be at least <minSystemMemory>.",
+          "Please increase heap size using the --executor-memory option or \"<config>\" in Spark configuration."
+        ]
+      }
+    },
     "sqlState" : "F0000"
   },
   "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA" : {
@@ -4744,6 +4780,11 @@
       "LONG" : {
         "message" : [
           "expects a long literal, but got <invalidValue>."
+        ]
+      },
+      "NORMALIZE_FORM" : {
+        "message" : [
+          "expects one of the normalization forms 'NFC', 'NFD', 'NFKC', 'NFKD', but got <form>."
         ]
       },
       "NULL" : {
@@ -5547,6 +5588,24 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ],
     "sqlState" : "42K0E"
+  },
+  "JSON_VALUE_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not extract a scalar value at path <path>."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The path matched no value. This error was requested by the ERROR ON EMPTY clause."
+        ]
+      },
+      "ERROR" : {
+        "message" : [
+          "The input is not valid JSON, the matched value is not a scalar, or it could not be cast to the RETURNING type. This error was requested by the ERROR ON ERROR clause."
+        ]
+      }
+    },
+    "sqlState" : "2203G"
   },
   "KAFKA_DATA_SOURCE_NOT_ENABLED" : {
     "message" : [
@@ -6841,6 +6900,24 @@
     ],
     "sqlState" : "21000"
   },
+  "SCHEDULER_BACKEND_SHUTDOWN_FAILED" : {
+    "message" : [
+      "Failed to shut down the scheduler backend while the application was terminating:"
+    ],
+    "subClass" : {
+      "DRIVER_ENDPOINT" : {
+        "message" : [
+          "the driver endpoint did not stop cleanly."
+        ]
+      },
+      "EXECUTORS" : {
+        "message" : [
+          "the driver could not confirm that the executors were asked to shut down, so the later shutdown steps were skipped."
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "SCHEMA_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create schema <schemaName> because it already exists.",
@@ -8039,7 +8116,7 @@
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
-      "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."
+      "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>.<consumerBreakdown>"
     ],
     "sqlState" : "53200"
   },
@@ -8343,6 +8420,11 @@
       "FIELD_INDEX" : {
         "message" : [
           "The row shall have a schema to get an index of the field <fieldName>."
+        ]
+      },
+      "TASK_NOT_FINISHED" : {
+        "message" : [
+          "The task has not finished yet, so its duration is not available."
         ]
       },
       "WITHOUT_SUGGESTION" : {
@@ -8678,7 +8760,8 @@
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
         "message" : [
-          "Lambda function with Python UDF <funcName> in a higher order function."
+          "Cannot evaluate the Python UDF <funcName> inside the lambda of a higher-order function.",
+          "This placement is not supported. Rewrite the query so the UDF is applied outside the lambda."
         ]
       },
       "LAMBDA_FUNCTION_WITH_SQL_UDF" : {
@@ -11450,34 +11533,9 @@
       "Checkpoint dir must be specified."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3021" : {
-    "message" : [
-      "Error asking standalone scheduler to shut down executors"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3022" : {
-    "message" : [
-      "Error stopping standalone scheduler's driver endpoint"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3023" : {
-    "message" : [
-      "Can't run submitMapStage on RDD with 0 partitions"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3026" : {
-    "message" : [
-      "duration() called on unfinished task"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3028" : {
     "message" : [
       "<errorMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3029" : {
-    "message" : [
-      "Exiting due to error from cluster scheduler: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3033" : {

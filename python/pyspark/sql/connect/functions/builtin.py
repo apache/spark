@@ -847,6 +847,18 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 round.__doc__ = pysparkfuncs.round.__doc__
 
 
+def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("truncate", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("truncate", col, scale)
+
+
+truncate.__doc__ = pysparkfuncs.truncate.__doc__
+
+
 def sec(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sec", col)
 
@@ -2199,6 +2211,20 @@ def to_variant_object(col: "ColumnOrName") -> Column:
 to_variant_object.__doc__ = pysparkfuncs.to_variant_object.__doc__
 
 
+def variant_from_arrays(keys: "ColumnOrName", values: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("variant_from_arrays", keys, values)
+
+
+variant_from_arrays.__doc__ = pysparkfuncs.variant_from_arrays.__doc__
+
+
+def variant_from_entries(entries: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("variant_from_entries", entries)
+
+
+variant_from_entries.__doc__ = pysparkfuncs.variant_from_entries.__doc__
+
+
 def parse_json(col: "ColumnOrName") -> Column:
     return _invoke_function("parse_json", _to_col(col))
 
@@ -2299,6 +2325,13 @@ def try_variant_array_append(
 
 
 try_variant_array_append.__doc__ = pysparkfuncs.try_variant_array_append.__doc__
+
+
+def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
+    return _invoke_function("variant_strip_nulls", _to_col(v), lit(include_arrays))
+
+
+variant_strip_nulls.__doc__ = pysparkfuncs.variant_strip_nulls.__doc__
 
 
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
@@ -2706,6 +2739,16 @@ def try_validate_utf8(str: "ColumnOrName") -> Column:
 
 
 try_validate_utf8.__doc__ = pysparkfuncs.try_validate_utf8.__doc__
+
+
+def normalize(str: "ColumnOrName", form: Optional["ColumnOrName"] = None) -> Column:
+    if form is None:
+        return _invoke_function_over_columns("normalize", str)
+    else:
+        return _invoke_function_over_columns("normalize", str, form)
+
+
+normalize.__doc__ = pysparkfuncs.normalize.__doc__
 
 
 def format_number(col: "ColumnOrName", d: int) -> Column:

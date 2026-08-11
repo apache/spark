@@ -1075,7 +1075,8 @@ class StreamingKMeans:
         self._validate(dstream)
 
         def update(rdd: RDD["VectorLike"]) -> None:
-            self._model.update(rdd, self._decayFactor, self._timeUnit)  # type: ignore[union-attr]
+            assert self._model is not None
+            self._model.update(rdd, self._decayFactor, self._timeUnit)
 
         dstream.foreachRDD(update)
 

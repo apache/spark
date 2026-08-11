@@ -1223,12 +1223,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotAcquireMemoryForWindowAggregateError(
       requestedBytes: Long,
-      receivedBytes: Long): SparkOutOfMemoryError = {
+      receivedBytes: Long,
+      consumerBreakdown: String): SparkOutOfMemoryError = {
     new SparkOutOfMemoryError(
       "UNABLE_TO_ACQUIRE_MEMORY",
       java.util.Map.of(
         "requestedBytes", requestedBytes.toString,
-        "receivedBytes", receivedBytes.toString))
+        "receivedBytes", receivedBytes.toString,
+        "consumerBreakdown", consumerBreakdown))
   }
 
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {
@@ -1621,6 +1623,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "badRecord" -> badRecord,
         "failFastMode" -> FailFastMode.name),
       cause = e)
+  }
+
+  def jsonValueOnEmptyError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_VALUE_ON_ERROR.EMPTY",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
+  }
+
+  def jsonValueOnErrorError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_VALUE_ON_ERROR.ERROR",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
   }
 
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
@@ -2548,6 +2564,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "parameter" -> toSQLId("key"),
         "functionName" -> toSQLId("hmac"),
         "detailMessage" -> detailMessage))
+  }
+
+  def invalidNormalizeFormError(form: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+      messageParameters = Map(
+        "parameter" -> toSQLId("form"),
+        "functionName" -> toSQLId("normalize"),
+        "form" -> toSQLValue(form, StringType)))
   }
 
   def hiveTableWithAnsiIntervalsError(

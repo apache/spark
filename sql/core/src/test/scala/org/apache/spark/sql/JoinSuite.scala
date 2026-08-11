@@ -83,6 +83,14 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       canPlanAsBroadcastHashJoin(optimized.asInstanceOf[Join], conf) ===
         operators.head.isInstanceOf[BroadcastHashJoinExec],
       "canPlanAsBroadcastHashJoin not in sync with join selection codepath!")
+    operators.head match {
+      case bhj: BroadcastHashJoinExec =>
+        assert(
+          getBroadcastHashJoinBuildSide(optimized.asInstanceOf[Join], conf)
+            .contains(bhj.buildSide),
+          "getBroadcastHashJoinBuildSide not in sync with join selection codepath!")
+      case _ =>
+    }
     operators.head
   }
 

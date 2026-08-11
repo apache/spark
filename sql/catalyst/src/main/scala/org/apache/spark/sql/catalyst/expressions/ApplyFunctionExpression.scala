@@ -35,6 +35,7 @@ case class ApplyFunctionExpression(
   override lazy val deterministic: Boolean = function.isDeterministic &&
       children.forall(_.deterministic)
   override def foldable: Boolean = deterministic && children.forall(_.foldable)
+  override def stateful: Boolean = true
 
   private lazy val reusedRow = new SpecificInternalRow(function.inputTypes().toImmutableArraySeq)
 

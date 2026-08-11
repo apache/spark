@@ -57,12 +57,8 @@ case class PushDownJoinThroughUnion(override val conf: SQLConf)
     plan.transformUpWithPruning(
       _.containsAllPatterns(JOIN, UNION), ruleId) {
 
-    case join @ Join(u: Union, right, joinType, joinCond, hint)
+    case join @ Join(u: Union, right, joinType, _, _)
       if (joinType == Inner || joinType == LeftOuter) &&
-        // Requires equi-join keys, and rejects the join when a shuffle hash hint already decided
-        // the strategy. The check below adds the build side direction, which this one does not
-        // constrain.
-        canPlanAsBroadcastHashJoin(join, conf) &&
         broadcastsRightForEveryBranch(u, join) &&
         // Exclude right subtrees containing subqueries, as DeduplicateRelations
         // may not correctly handle correlated references when cloning.
@@ -79,53 +75,68 @@ case class PushDownJoinThroughUnion(override val conf: SQLConf)
           val deduped = dedupRight(right)
           (deduped, AttributeMap(right.output.zip(deduped.output)))
         }
-        val leftRewrites = AttributeMap(unionHeadOutput.zip(child.output))
-        val newCond = joinCond.map(_.transform {
-          case a: Attribute if leftRewrites.contains(a) => leftRewrites(a)
-          case a: Attribute if rightRewrites.contains(a) => rightRewrites(a)
-        })
-        Join(child, newRight, joinType, newCond, hint)
+        branchJoin(join, unionHeadOutput, child, newRight, rightRewrites)
       }
       u.withNewChildren(newChildren)
   }
   }
 
   /**
+   * The join for one `Union` branch: the branch on the left, `newRight` on the right, and the
+   * condition rewritten from the `Union` output to the outputs of both new children.
+   */
+  private def branchJoin(
+      join: Join,
+      unionHeadOutput: Seq[Attribute],
+      child: LogicalPlan,
+      newRight: LogicalPlan,
+      rightRewrites: AttributeMap[Attribute]): Join = {
+    val leftRewrites = AttributeMap(unionHeadOutput.zip(child.output))
+    val newCond = join.condition.map(_.transform {
+      case a: Attribute if leftRewrites.contains(a) => leftRewrites(a)
+      case a: Attribute if rightRewrites.contains(a) => rightRewrites(a)
+    })
+    Join(child, newRight, join.joinType, newCond, join.hint)
+  }
+
+  /**
    * Whether every join produced by the rewrite is expected to broadcast its right side.
    *
-   * `canPlanAsBroadcastHashJoin` is not enough. It holds when either side is broadcastable, and
-   * for an inner join the planner may build from either side, choosing the smaller one when both
-   * qualify. The rewrite replaces the `Union` on the left with one of its children, so the build
-   * side is decided per branch against a smaller left. Any branch that ends up building from the
-   * left leaves its copy of the right side as a plain probe input, which is not reused, so the
-   * right side is read once per such branch instead of once in total.
+   * Asking whether a broadcast hash join is possible is not enough: for an inner join the planner
+   * may build from either side, choosing the smaller one when both qualify. The rewrite replaces
+   * the `Union` on the left with one of its children, so the build side is decided per branch
+   * against a smaller left. Any branch that ends up building from the left leaves its copy of the
+   * right side as a plain probe input, which is not reused, so the right side is read once per such
+   * branch instead of once in total.
    *
-   * The check follows the planner's broadcast precedence, hints before sizes. It predicts rather
-   * than guarantees the final build side, because later rules and AQE re-estimate the sizes it
-   * reads. It is also all or nothing: one branch small enough to be the build side blocks the
-   * rewrite for the others, trading a missed optimization for never duplicating a probe side. Only
-   * an inner join can build from the left, so for a left outer join this reduces to asking whether
-   * the right side is broadcastable at all.
+   * `getBroadcastHashJoinBuildSide` returns `None` when the join has no equi-join keys, so this one
+   * check also carries the requirement the removed `canPlanAsBroadcastHashJoin` conjunct used to.
+   * It is not a statement about what the planner ends up choosing: with keys no hash join supports
+   * it still answers from the sizes, while `JoinSelection` falls through to a sort merge join. A
+   * `SHUFFLE_MERGE` or `SHUFFLE_REPLICATE_NL` hint is handled here rather than there: the planner
+   * tries those between a hinted broadcast and a size-based one, and falls back to the sizes only
+   * when the hinted strategy does not apply, so declining to rewrite errs on the safe side.
+   *
+   * The result predicts rather than guarantees the final build side, because later rules and AQE
+   * re-estimate the sizes it reads. It is also all or nothing: one branch small enough to be the
+   * build side blocks the rewrite for the others, trading a missed optimization for never
+   * duplicating a probe side. Only an inner join can build from the left, so for a left outer join
+   * this reduces to asking whether the right side is broadcastable at all.
    */
   private def broadcastsRightForEveryBranch(u: Union, join: Join): Boolean = {
-    // The planner tries these hints between a hinted broadcast and a size-based one, so the sizes
-    // below are usually not what decides the strategy. When the hinted strategy turns out not to
-    // apply the planner does fall back to a size-based broadcast, so this errs towards not
-    // rewriting. A shuffle hash hint needs no such check: given hash-joinable keys it makes
-    // `canPlanAsBroadcastHashJoin` reject the join, and a broadcast hint that outranks it is
-    // already answered by the hint-only query below.
     val hintPicksOtherStrategy =
       hintToSortMergeJoin(join.hint) || hintToShuffleReplicateNL(join.hint)
+    val unionHeadOutput = u.children.head.output
     u.children.forall { child =>
-      // Only the join type, the hints and each side's stats are read below, so the condition is
-      // left as is, still referencing the Union output rather than the branch output.
-      val branchJoin = join.copy(left = child)
-      getBroadcastBuildSide(branchJoin, hintOnly = true, conf)
-        .orElse {
-          if (hintPicksOtherStrategy) None
-          else getBroadcastBuildSide(branchJoin, hintOnly = false, conf)
-        }
-        .contains(BuildRight)
+      // The condition has to be rewritten to the branch output: `getBroadcastHashJoinBuildSide`
+      // extracts the equi-join keys, which do not resolve against a branch other than the first.
+      val probe =
+        branchJoin(join, unionHeadOutput, child, join.right, AttributeMap.empty[Attribute])
+      // A hinted broadcast outranks the hints above, so only a size-based answer is vetoed.
+      val hinted = getBroadcastBuildSide(probe, hintOnly = true, conf).isDefined
+      val planned =
+        if (hinted || !hintPicksOtherStrategy) getBroadcastHashJoinBuildSide(probe, conf) else None
+      planned.contains(BuildRight)
     }
   }
 

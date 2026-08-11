@@ -143,6 +143,7 @@ Mathematical Functions
     sqrt
     tan
     tanh
+    truncate
     try_add
     try_divide
     try_mod
@@ -192,6 +193,7 @@ String Functions
     ltrim
     make_valid_utf8
     mask
+    normalize
     octet_length
     overlay
     position
@@ -610,6 +612,9 @@ VARIANT Functions
     variant_array_append
     try_variant_array_append
     variant_delete
+    variant_from_arrays
+    variant_from_entries
+    variant_strip_nulls
     variant_get
     variant_insert
     try_variant_insert

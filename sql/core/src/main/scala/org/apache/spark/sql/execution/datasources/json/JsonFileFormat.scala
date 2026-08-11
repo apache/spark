@@ -109,7 +109,8 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
         filters)
       if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         JsonDataSource(parsedOptions).readArchive(
-          broadcastedHadoopConf.value.value, file, () => parser(), requiredSchema)
+          broadcastedHadoopConf.value.value, file, () => parser(), requiredSchema,
+          parsedOptions.archivePathFilterPattern)
       } else {
         JsonDataSource(parsedOptions).readFile(
           broadcastedHadoopConf.value.value,

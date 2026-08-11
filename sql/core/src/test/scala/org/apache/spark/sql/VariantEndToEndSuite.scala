@@ -246,6 +246,31 @@ class VariantEndToEndSuite extends SharedSparkSession {
     }
   }
 
+  test("variant_from_arrays and variant_from_entries - Codegen Support") {
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val entryType = StructType(Array(
+          StructField("k", StringType), StructField("v", IntegerType)))
+        val schema = StructType(Array(
+          StructField("keys", ArrayType(StringType)),
+          StructField("values", ArrayType(IntegerType)),
+          StructField("entries", ArrayType(entryType))))
+        // Source non-foldable rows so the operators' doGenCode is actually exercised under codegen.
+        val data = Seq(Row(Seq("a", "b"), Seq(1, 2), Seq(Row("a", 1), Row("b", 2))))
+        val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+        val arraysDF = df.select(variant_from_arrays(col("keys"), col("values")).cast("string"))
+        val entriesDF = df.select(variant_from_entries(col("entries")).cast("string"))
+        val wholeStage = codegenMode == "CODEGEN_ONLY"
+        assert(arraysDF.queryExecution.executedPlan.exists(
+          _.isInstanceOf[WholeStageCodegenExec]) == wholeStage)
+        assert(entriesDF.queryExecution.executedPlan.exists(
+          _.isInstanceOf[WholeStageCodegenExec]) == wholeStage)
+        checkAnswer(arraysDF, Row("""{"a":1,"b":2}"""))
+        checkAnswer(entriesDF, Row("""{"a":1,"b":2}"""))
+      }
+    }
+  }
+
   test("schema_of_variant") {
     def check(json: String, expected: String): Unit = {
       val df = Seq(json).toDF("j").selectExpr("schema_of_variant(parse_json(j))")

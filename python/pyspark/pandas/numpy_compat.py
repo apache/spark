@@ -76,7 +76,13 @@ unary_np_spark_mappings = {
         )
         .otherwise(F.lit(1.0) / c),
     ).otherwise(
-        pandas_udf(np.reciprocal, DoubleType())(c)  # type: ignore[call-overload]
+        # Integer input: numpy does integer division (truncated toward zero),
+        # so casting the float quotient to long reproduces 1 -> 1, -1 -> -1,
+        # and every other magnitude -> 0. Dividing by 0 overflows to the int64
+        # minimum, matching numpy's behavior on integer arrays.
+        F.when(c == 0, F.lit(float(np.iinfo(np.int64).min))).otherwise(
+            (F.lit(1) / c).cast("long").cast("double")
+        )
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
@@ -132,9 +138,10 @@ binary_np_spark_mappings = {
     ),
     "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
     .when(F.isnan(c2.cast("double")), c1)
+    .when(c1 == c2, c1)
     .otherwise(F.greatest(c1, c2))
     .cast("double"),
-    "fmin": lambda c1, c2: F.least(c1, c2).cast("double"),
+    "fmin": lambda c1, c2: F.when(c1 == c2, c1).otherwise(F.least(c1, c2)).cast("double"),
     "fmod": _fmod_func,
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "heaviside": lambda c1, c2: F.when(

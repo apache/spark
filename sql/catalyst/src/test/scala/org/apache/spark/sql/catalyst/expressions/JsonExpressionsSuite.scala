@@ -1068,7 +1068,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       input)
   }
 
-  test("JsonToStructs, GetJsonObject, JsonTuple, MultiGetJsonObject are stateful " +
+  test("JsonToStructs, GetJsonObject, JsonTuple, MultiGetJsonObject, JsonValue are stateful " +
       "and produce fresh copies") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val jsonToStructs = JsonToStructs(schema, Map.empty, Literal("{}"), UTC_OPT)
@@ -1086,6 +1086,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val multiGetJsonObject = MultiGetJsonObject(Literal("{}"), Seq("$.a", "$.b"))
     assert(multiGetJsonObject.stateful)
     assert(multiGetJsonObject.freshCopyIfContainsStatefulExpression() ne multiGetJsonObject)
+
+    // JsonValue reuses a mutable row to cast the extracted scalar, so it must be stateful.
+    val jsonValue = JsonValue(
+      Literal("{}"), "$.a", StringType,
+      JsonValueBehavior.Null, JsonValueBehavior.Null, None, None)
+    assert(jsonValue.stateful)
+    assert(jsonValue.freshCopyIfContainsStatefulExpression() ne jsonValue)
   }
 
 }
