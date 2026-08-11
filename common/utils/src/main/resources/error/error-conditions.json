@@ -8088,7 +8088,7 @@
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
-      "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."
+      "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>.<consumerBreakdown>"
     ],
     "sqlState" : "53200"
   },
