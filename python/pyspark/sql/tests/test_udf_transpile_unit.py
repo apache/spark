@@ -1720,7 +1720,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # taking a different parameter. Assert the resolution directly.
         import ast
 
-        from pyspark.sql.transpile import _get_function_from_ast, _get_src_ast_from_func
+        from pyspark.sql.transpile import _get_function_from_ast
 
         nest_a, nest_b = lambda x: (lambda y: y + 1)(x), lambda x: (lambda y: y + 2)(x)
         for func, expected in (
@@ -1728,8 +1728,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             (nest_b, "return (lambda y: y + 2)(x)"),
         ):
             with self.subTest(expected=expected):
-                _, tree = _get_src_ast_from_func(func)
-                resolved = _get_function_from_ast(tree, func)
+                resolved = _get_function_from_ast(func)
                 self.assertIsNotNone(resolved, "nested-lambda candidate failed to resolve")
                 # Full string, not a substring: `assertIn("y + 1", ...)` would
                 # also pass if the INNER lambda had been resolved, which is the
