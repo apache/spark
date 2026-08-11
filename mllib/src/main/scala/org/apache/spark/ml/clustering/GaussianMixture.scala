@@ -226,7 +226,8 @@ class GaussianMixtureModel private[ml] (
     var size = estimateMatadataSize
     // weights: Array[Double]
     // gaussians: Array[MultivariateGaussian], each containing a mean Vector and covariance Matrix
-    size += SizeEstimator.estimate((weights, gaussians))
+    val gaussianParams = gaussians.map(gaussian => (gaussian.mean, gaussian.cov))
+    size += SizeEstimator.estimate((weights, gaussianParams))
     size
   }
 

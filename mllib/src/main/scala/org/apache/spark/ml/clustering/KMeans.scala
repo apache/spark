@@ -216,9 +216,11 @@ class KMeansModel private[ml] (
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
     if (parentModel != null) {
-      // parentModel contains clusterCenters, distanceMeasure, trainingCost, and numIter.
-      // It also has transient derived fields for distance calculation and statistics.
-      size += SizeEstimator.estimate(parentModel)
+      size += SizeEstimator.estimate((
+        parentModel.clusterCenters,
+        parentModel.distanceMeasure,
+        parentModel.trainingCost,
+        parentModel.numIter))
     }
     size
   }
