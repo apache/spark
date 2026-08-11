@@ -284,6 +284,47 @@ class NumPyCompatTestsMixin:
                 np.heaviside(psdf.x1, psdf.x2), np.heaviside(pdf.x1, pdf.x2), almost=True
             )
 
+    def test_np_copysign(self):
+        # Integer inputs -> float result.
+        pdf = pd.DataFrame({"x1": [-64, -2, -1, 0, 1, 2, 64], "x2": [2, 3, -2, -3, 1, -1, 2]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.copysign(psdf.x1, psdf.x2), np.copysign(pdf.x1, pdf.x2), almost=True)
+
+        # inf and nan in both positions. Rows are chosen so the result sign differs
+        # from x1's own sign, so only correct sign transfer (not passing x1 through) passes.
+        pdf = pd.DataFrame(
+            {
+                "x1": [np.inf, -np.inf, np.inf, -np.inf, 2.0, -2.0, np.nan, 1.0],
+                "x2": [1.0, 1.0, -1.0, -1.0, np.inf, -np.inf, -1.0, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.copysign(psdf.x1, psdf.x2), np.copysign(pdf.x1, pdf.x2), almost=True)
+
+        # Signed zero: -0.0 has its sign bit set though -0.0 < 0 is False. Since
+        # +0.0 and -0.0 compare equal under almost=, pin the outputs with signbit.
+        pdf = pd.DataFrame(
+            {
+                "x1": [1.0, 1.0, 0.0, 0.0, -0.0, -0.0],
+                "x2": [-0.0, 0.0, -1.0, 1.0, -1.0, 1.0],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        result = np.copysign(psdf.x1, psdf.x2)
+        expected = np.copysign(pdf.x1, pdf.x2)
+        self.assert_eq(result, expected, almost=True)
+        self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+
+        # NA in either argument propagates to NA.
+        pdf = pd.DataFrame(
+            {
+                "x1": pd.array([1, 2, None, None], dtype="Int64"),
+                "x2": pd.array([2, None, 2, None], dtype="Int64"),
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(np.copysign(psdf.x1, psdf.x2), np.copysign(pdf.x1, pdf.x2), almost=True)
+
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 

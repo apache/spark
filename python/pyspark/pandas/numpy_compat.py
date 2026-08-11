@@ -118,14 +118,23 @@ def _fmod_func(c1: Column, c2: Column) -> Column:
     )
 
 
+def _copysign_func(c1: Column, c2: Column) -> Column:
+    # np.copysign: magnitude of c1 with the sign BIT of c2. The sign test is
+    # bit-aware: c2 == -0.0 counts as negative (sign bit set) though -0.0 < 0 is False.
+    c1_double = c1.cast("double")
+    return (
+        F.when(c1.isNull() | c2.isNull(), F.lit(None).cast("double"))
+        .when((c2 < 0) | (c2.cast("string") == "-0.0"), -F.abs(c1_double))
+        .otherwise(F.abs(c1_double))
+    )
+
+
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
     "bitwise_or": lambda c1, c2: c1.bitwiseOR(c2),
     "bitwise_xor": lambda c1, c2: c1.bitwiseXOR(c2),
-    "copysign": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.copysign(s1, s2), DoubleType()
-    ),
+    "copysign": _copysign_func,
     "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
     "floor_divide": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.floor_divide(s1, s2), DoubleType()
