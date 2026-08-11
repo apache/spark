@@ -187,7 +187,7 @@ Missing or inaccurate statistics will hinder Spark's ability to select an optima
 
 A grouping aggregation normally runs in two phases: a partial aggregation before the shuffle and a
 final aggregation after it. The partial aggregation is only worthwhile when it actually reduces the
-number of rows; when the grouping keys are close to unique it maintains -- and possibly spills -- an
+number of rows; when the grouping keys are close to unique it maintains, and possibly spills, an
 aggregation map roughly as large as its input while emitting almost as many rows as it consumed.
 
 When adaptive partial aggregation is enabled, hash aggregation measures the compaction ratio (the
@@ -195,8 +195,14 @@ number of processed rows divided by the number of keys held in its aggregation m
 and, if the partial aggregation is not collapsing enough rows to be worthwhile, stops populating
 the aggregation map and passes the remaining rows through as single-row partial aggregation buffers
 for the final aggregation to merge. Query results are unchanged. The ratio is evaluated
-periodically, and again right before the aggregation map would spill -- in which case the spill is
-skipped entirely -- so a query that only becomes ineffective later in its input is still caught.
+periodically, and again right before the aggregation map would spill, in which case the spill is
+skipped entirely. Periodic evaluations use the cumulative rows and keys of the current map epoch,
+so a favorable prefix can mask a later distinct-heavy tail. A spill restarts the accounting, so a
+query that becomes ineffective only later in its input is then caught. To catch such a turn
+without waiting for a spill, raise `minCompaction` so the cumulative ratio trips the threshold on
+a weaker late turn (a higher threshold also bypasses more readily on other inputs). To avoid
+committing to pass-through on an unfavorable prefix before an aggregatable tail shows up, raise
+`minRows` so the periodic evaluations start later.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
