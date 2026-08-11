@@ -47,7 +47,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder}
-import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -157,6 +157,14 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
   }
 
   protected def createStatusStore(): SQLAppStatusStore
+
+  test("SPARK-58703: spark plan graph exposes plan node ids after operator tagging") {
+    val dataFrame = createTestDataFrame
+    ExplainUtils.tagOperatorIds(dataFrame.queryExecution.executedPlan)
+
+    val graph = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(dataFrame.queryExecution.executedPlan))
+    assert(graph.allNodes.exists(_.planNodeId.isDefined))
+  }
 
   test("basic") {
     def checkAnswer(actual: Map[Long, String], expected: Map[Long, Long]): Unit = {

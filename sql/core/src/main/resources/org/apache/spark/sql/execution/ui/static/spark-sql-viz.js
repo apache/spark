@@ -67,6 +67,7 @@ function renderPlanViz() {
   setupLayoutForSparkPlanCluster(g, svg);
   setupSelectionForSparkPlanNode(g);
   setupTooltipForSparkPlanNode(g);
+  setupPlanDescriptionLinks();
   resizeSvg(svg);
   postprocessForAdditionalMetrics();
   setupDetailedLabelsToggle();
@@ -79,6 +80,45 @@ function renderPlanViz() {
  * -------------------- */
 
 function planVizContainer() { return d3.select("#plan-viz-graph"); }
+
+function setupPlanDescriptionLinks() {
+  document.querySelectorAll("#plan-viz-metadata .plan-node-links div").forEach(function(link) {
+    var graphNodeId = link.getAttribute("data-graph-node-id");
+    var planNodeIds = link.getAttribute("data-plan-node-ids");
+    var planNodeId = link.getAttribute("data-plan-node-id");
+    var graphNode = document.getElementById("node" + graphNodeId) ||
+      document.getElementById("cluster" + graphNodeId);
+    if (!graphNode) return;
+
+    graphNode.addEventListener("click", function() {
+      highlightPlanDescription(planNodeIds ? planNodeIds.split(",") : [planNodeId]);
+    });
+    graphNode.addEventListener("dblclick", function() {
+      focusPlanDescription(planNodeIds ? planNodeIds.split(",") : [planNodeId]);
+    });
+  });
+}
+
+function highlightPlanDescription(planNodeIds) {
+  document.querySelectorAll(".plan-description-line.selected").forEach(function(line) {
+    line.classList.remove("selected");
+  });
+  planNodeIds.filter(Boolean).forEach(function(planNodeId) {
+    var line = document.getElementById("plan-node-" + planNodeId);
+    if (line) line.classList.add("selected");
+  });
+}
+
+function focusPlanDescription(planNodeIds) {
+  highlightPlanDescription(planNodeIds);
+  var details = document.getElementById("physical-plan-details");
+  if (details && !details.classList.contains("show")) {
+    bootstrap.Collapse.getOrCreateInstance(details).show();
+  }
+  var firstNodeId = planNodeIds.filter(Boolean)[0];
+  var line = firstNodeId && document.getElementById("plan-node-" + firstNodeId);
+  if (line && line.scrollIntoView) line.scrollIntoView({behavior: "smooth", block: "center"});
+}
 
 /*
  * Set up the tooltip for a SparkPlan node using metadata. When the user moves the mouse on the

@@ -31,6 +31,18 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
   def localIdMap: ThreadLocal[java.util.Map[QueryPlan[_], Int]] = QueryPlan.localIdMap
 
   /**
+   * Assign operator IDs to the supplied plan using the same traversal as explain output.
+   *
+   * The generated IDs remain available through [[localIdMap]] for callers that build SQL UI
+   * metadata immediately after generating the explain string.
+   */
+  def tagOperatorIds(plan: QueryPlan[_]): Unit = {
+    val idMap = new IdentityHashMap[QueryPlan[_], Int]()
+    localIdMap.set(idMap)
+    assignOperatorIds(plan, idMap)
+  }
+
+  /**
    * Given a input physical plan, performs the following tasks.
    *   1. Computes the whole stage codegen id for current operator and records it in the
    *      operator by setting a tag.
@@ -343,5 +355,9 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    */
   def getOpId(plan: QueryPlan[_]): String = {
     Option(ExplainUtils.localIdMap.get().get(plan)).map(v => s"$v").getOrElse("unknown")
+  }
+
+  def getOpIdOption(plan: QueryPlan[_]): Option[Long] = {
+    Option(localIdMap.get()).flatMap(map => Option(map.get(plan))).map(_.toLong)
   }
 }

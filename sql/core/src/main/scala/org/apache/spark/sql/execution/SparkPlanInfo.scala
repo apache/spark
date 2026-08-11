@@ -39,7 +39,8 @@ class SparkPlanInfo(
     val simpleString: String,
     val children: Seq[SparkPlanInfo],
     val metadata: Map[String, String],
-    val metrics: Seq[SQLMetricInfo]) {
+    val metrics: Seq[SQLMetricInfo],
+    val operatorId: Option[Long] = None) {
 
   override def hashCode(): Int = {
     // hashCode of simpleString should be good enough to distinguish the plans from each other
@@ -104,7 +105,8 @@ private[execution] object SparkPlanInfo {
       plan.simpleString(SQLConf.get.maxToStringFields),
       childrenInfo,
       metadata,
-      metrics)
+      metrics,
+      ExplainUtils.getOpIdOption(plan))
   }
 
   final lazy val EMPTY: SparkPlanInfo = new SparkPlanInfo("", "", Nil, Map.empty, Nil)
