@@ -20,7 +20,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from pyspark import cloudpickle
-from pyspark.sql import Row
+from pyspark.sql.types import Row
 
 __all__ = ["StreamingQueryListener"]
 
