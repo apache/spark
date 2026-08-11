@@ -1039,6 +1039,11 @@ def _verifies(node: ast.Lambda, target: CodeType) -> bool:
 _LAMBDA_CANDIDATES_MAX_FILES = 64
 
 
+def _walk_lambdas(tree: ast.AST) -> List[ast.Lambda]:
+    """Every ``ast.Lambda`` anywhere in ``tree``."""
+    return [node for node in ast.walk(tree) if isinstance(node, ast.Lambda)]
+
+
 @functools.lru_cache(maxsize=_LAMBDA_CANDIDATES_MAX_FILES)
 def _parse_file_lambdas(path: str, _mtime_ns: int, _size: int) -> Tuple[ast.Lambda, ...]:
     """Parse ``path`` and return every ``ast.Lambda`` in it, LRU-cached per file.
@@ -1054,10 +1059,10 @@ def _parse_file_lambdas(path: str, _mtime_ns: int, _size: int) -> Tuple[ast.Lamb
             tree = ast.parse(source.read())
     except Exception:
         return ()
-    return tuple(node for node in ast.walk(tree) if isinstance(node, ast.Lambda))
+    return tuple(_walk_lambdas(tree))
 
 
-def _file_lambda_candidates(target: CodeType) -> Optional[List[ast.Lambda]]:
+def _file_lambda_candidates(target: CodeType) -> List[ast.Lambda]:
     """Every ``ast.Lambda`` in the file that defines ``target``, with real coordinates.
 
     Keyed on the CODE OBJECT, not the callable: a callable class instance is not
@@ -1078,8 +1083,7 @@ def _file_lambda_candidates(target: CodeType) -> Optional[List[ast.Lambda]]:
     cache. A source with no stat (a REPL or exec'd module kept alive only by
     ``linecache``) is read uncached via ``inspect.findsource``.
 
-    Returns ``None`` when there is no readable source at all, which the caller
-    turns into a fall back to interpreted Python.
+    Returns an empty list when there is no readable source at all.
     """
     try:
         stat = os.stat(target.co_filename)
@@ -1088,8 +1092,8 @@ def _file_lambda_candidates(target: CodeType) -> Optional[List[ast.Lambda]]:
             lines, _ = inspect.findsource(target)
             tree = ast.parse("".join(lines))
         except Exception:
-            return None
-        return [node for node in ast.walk(tree) if isinstance(node, ast.Lambda)]
+            return []
+        return _walk_lambdas(tree)
     return list(_parse_file_lambdas(target.co_filename, stat.st_mtime_ns, stat.st_size))
 
 
@@ -1193,9 +1197,7 @@ def _lambda_to_function_def(node: ast.Lambda) -> ast.FunctionDef:
     return fn
 
 
-def _get_function_from_ast(
-    body: Optional[ast.AST], func: Optional[Callable] = None
-) -> ast.FunctionDef | None:
+def _get_function_from_ast(func: Optional[Callable]) -> ast.FunctionDef | None:
     """
     Extract a :class:`ast.FunctionDef` node for the callable ``func``.
 
@@ -1209,34 +1211,29 @@ def _get_function_from_ast(
       parses;
     * anything else -- a ``def`` function, or a callable instance whose source
       is its ``def __call__`` -- is read structurally from the ``getsource``
-      fragment in ``body``, whose first statement is that ``FunctionDef``.
+      fragment, whose first statement is that ``FunctionDef``.
+
+    ``inspect.getsource`` is only consulted on the structural path: it is LINE
+    based, so the source it returns for a lambda is shared with every other
+    lambda on that line (and, in a decorator, with the whole decorated ``def``),
+    which is why lambdas are located by position instead and do not pay for it.
 
     Returns ``None`` when no single function can be identified, which the caller
     turns into a fall back to interpreted Python.
     """
-    # ``inspect.getsource`` is LINE based, so the source it returns for a lambda
-    # is shared with every other lambda on that line, and for a lambda in a
-    # decorator with the whole decorated ``def``. Picking ``body.body[0]`` used
-    # to lower the wrong thing silently -- two lambdas split by a semicolon (the
-    # second computed the first), or ``@deco(lambda x: x + 1)`` above
-    # ``def f(a): return a * 12345`` (the lambda computed the def's body). A
-    # lambda is located by its source position instead; see ``_resolve_lambda``.
     target = _target_code(func)
     if target is not None and target.co_name == "<lambda>":
-        candidates = _file_lambda_candidates(target) or []
-        resolved = _resolve_lambda(target, candidates)
+        resolved = _resolve_lambda(target, _file_lambda_candidates(target))
         return _lambda_to_function_def(resolved) if resolved is not None else None
 
-    # Everything below is the structural path, which serves only ``def``
-    # functions and callable classes (a callable instance's source is its
-    # ``def __call__``). It needs the ``getsource`` fragment, whose first
-    # statement is that ``FunctionDef``. Lambdas never reach here -- a lambda
-    # target has ``co_name == "<lambda>"`` and returned above -- so the
-    # lambda-unwrapping branches this used to carry (``Assign(value=Lambda)``,
-    # ``Expr(Lambda)``, bare ``Lambda``) are gone.
+    # Structural path: a ``def`` or a callable instance's ``def __call__``. A
+    # lambda never reaches here (it returned above), so the lambda-unwrapping
+    # branches this used to carry are gone.
+    if func is None:
+        return None
+    _, body = _get_src_ast_from_func(func)
     if body is None or not hasattr(body, "body") or not body.body:
         return None
-
     stmt = body.body[0]
     if isinstance(stmt, ast.FunctionDef):
         return stmt
@@ -1308,16 +1305,10 @@ def _transpile_func(
                 [],
                 [],
             )
-        # Only the parsed tree is needed (the ``def``/callable-class structural
-        # path); a lambda is located by position and ignores it.
-        _, ast_info = _get_src_ast_from_func(func)
-        # NOTE no early return when ``ast_info`` is None. A lambda is located by
-        # position in its whole FILE, so it does not need the ``getsource``
-        # fragment to be parseable -- and for a lambda on a continuation line of
-        # a collection literal it is not (the fragment is a syntactic fragment,
-        # e.g. ``"c": lambda x: x + 23}``). ``_get_function_from_ast`` tolerates
-        # ``None`` here and the check below still catches every real failure.
-        function_ast = _get_function_from_ast(ast_info, func)
+        # ``_get_function_from_ast`` reads source itself, and only on the
+        # structural (``def`` / callable-class) path -- a lambda is located by
+        # position and never pays for ``inspect.getsource``.
+        function_ast = _get_function_from_ast(func)
         if function_ast is None:
             return ([], ["Error extracting function body from ast, cannot transpile"], [], [])
         # Default, variadic (``*args`` / ``**kwargs``), keyword-only, and
