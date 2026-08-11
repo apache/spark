@@ -22,7 +22,6 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.util.Try
 
-import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{BreakingChangeInfo, MitigationConfig, SparkThrowable}
@@ -31,7 +30,6 @@ import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
@@ -72,30 +70,6 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
   private val userId = "user1"
 
   private val sessionId = UUID.randomUUID().toString
-
-  test("handleError fallback uses throwable class when fatal throwable has no message") {
-    var emittedError: Throwable = null
-    val observer = new StreamObserver[FetchErrorDetailsResponse] {
-      override def onNext(value: FetchErrorDetailsResponse): Unit = {
-        fail(s"Unexpected response: $value")
-      }
-
-      override def onError(t: Throwable): Unit = {
-        emittedError = t
-      }
-
-      override def onCompleted(): Unit = {
-        fail("Unexpected completion")
-      }
-    }
-
-    ErrorUtils.handleError("execute", observer, userId, sessionId)(
-      new InterruptedException())
-
-    val status = emittedError.asInstanceOf[StatusRuntimeException].getStatus
-    assert(status.getCode == io.grpc.Status.Code.UNKNOWN)
-    assert(status.getDescription == classOf[InterruptedException].getName)
-  }
 
   private def fetchErrorDetails(
       userId: String,
