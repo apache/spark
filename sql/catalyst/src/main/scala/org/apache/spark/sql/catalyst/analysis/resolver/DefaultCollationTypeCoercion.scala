@@ -52,7 +52,7 @@ object DefaultCollationTypeCoercion {
           literal.copy(dataType = replaceDefaultStringType(literal.dataType, collatedStringType))
         newLiteral.copyTagsFrom(literal)
         newLiteral
-      case cast: Cast if shouldApplyCollationToCast(cast) =>
+      case cast: Cast if hasDefaultStringType(cast.dataType) =>
         val newCast =
           cast.copy(dataType = replaceDefaultStringType(cast.dataType, collatedStringType))
         newCast.copyTagsFrom(cast)
@@ -91,13 +91,4 @@ object DefaultCollationTypeCoercion {
       case stringType: StringType => stringType.eq(StringType)
       case _ => false
     }
-
-  /**
-   * When a default collation is specified for a View,
-   * and the cast's dataType contains companion object [[StringType]],
-   * we should change all its occurrences to [[StringType]] with default collation.
-   */
-  private def shouldApplyCollationToCast(cast: Cast): Boolean = {
-    hasDefaultStringType(cast.dataType)
-  }
 }
