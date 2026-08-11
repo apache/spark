@@ -28,13 +28,16 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Tests for runtime adaptive partial aggregation
  * (see [[SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED]]). When a partial aggregate is not reducing
  * rows, the operator stops aggregating and streams the remaining rows through as single-row partial
- * buffers for the Final aggregate to merge. It must never change results.
+ * buffers for the Final aggregate to merge. Ordinary aggregate results stay equivalent; an
+ * order-sensitive aggregate such as `first`/`last` can merge its buffers in a different order, so
+ * only agreement between the generated and interpreted paths is guaranteed.
  *
  * The suite has two halves:
- *   1. Correctness: output is identical to the reference (feature-off) run across the full matrix
- *      of codegen on/off, two-level map on/off, and spill/no-spill, over a range of aggregate
- *      shapes, key types, and `Expand`-bearing plans (ROLLUP / CUBE / GROUPING SETS /
- *      multi-distinct).
+ *   1. Correctness: ordinary aggregate results are identical to the reference (feature-off) run
+ *      across the full matrix of codegen on/off, two-level map on/off, and spill/no-spill, over a
+ *      range of aggregate shapes, key types, and `Expand`-bearing plans (ROLLUP / CUBE / GROUPING
+ *      SETS / multi-distinct). Order-sensitive aggregates are tested separately for cross-path
+ *      agreement rather than against the reference.
  *   2. Triggering: the `numBypassingRows` metric proves the bypass actually fires when (and only
  *      when) it should -- high-cardinality input bypasses, low-cardinality input keeps aggregating,
  *      the feature switch and eligibility rules are honored, and both check points work.
