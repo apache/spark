@@ -38,7 +38,9 @@ all-numeric and all-string variants.
 
 import ast
 import dis
+import functools
 import os
+import tokenize
 from types import CodeType
 from typing import Any, Callable, List, Optional, Tuple, TYPE_CHECKING
 import inspect
@@ -86,8 +88,6 @@ class AbstractTranspiler(object):
 
     def _transpile_from_ast(
         self,
-        src: Optional[str],
-        ast_info: Optional[ast.AST],
         function_ast: ast.FunctionDef,
         params: List[str],
         returnType: "DataTypeOrString",
@@ -722,18 +722,11 @@ class CatalystTranspiler(AbstractTranspiler):
 
     def _transpile_from_ast(
         self,
-        src: Optional[str],
-        ast_info: Optional[ast.AST],
         function_ast: ast.FunctionDef,
         params: List[str],
         returnType: "DataTypeOrString",
         param_categories: Optional[dict] = None,
     ) -> Optional[Column]:
-        # Short circuit on nothing to transpile.
-        # ``function_ast`` is non-None by contract; ``ast_info`` may be absent for a
-        # lambda whose getsource fragment does not parse (see ``_transpile_func``).
-        if src == "":
-            return None
         # Per-variant input-type assumption ({public_param_index -> category}),
         # read by ``_category`` to choose str vs numeric operators.
         self._param_categories = param_categories or {}
@@ -900,42 +893,122 @@ def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
     return [arg.arg for arg in node.args.args]
 
 
-def _node_body_span(node: ast.Lambda) -> Tuple[int, Optional[int], int, Optional[int]]:
-    """The source span of a lambda's BODY expression, in the file's coordinates.
-
-    Keyed on the body rather than the whole ``lambda ...`` expression because
-    that is what the compiler attributes instructions to.
-    """
-    body = node.body
-    return (body.lineno, body.end_lineno, body.col_offset, body.end_col_offset)
+# (lineno, end_lineno, col_offset, end_col_offset). ``end_*`` are Optional in
+# typeshed even though CPython populates them for every real node/instruction on
+# the versions we support; ``_span_contains`` treats a missing bound as "cannot
+# decide -> not contained".
+_Span = Tuple[int, Optional[int], Optional[int], Optional[int]]
 
 
-def _instruction_spans(code: CodeType) -> set:
-    """Every source span the instructions of ``code`` are attributed to.
+def _full_span(node: ast.expr) -> _Span:
+    """The whole source span of an expression node, in the file's coordinates."""
+    return (node.lineno, node.end_lineno, node.col_offset, node.end_col_offset)
+
+
+def _instruction_spans(code: CodeType) -> List[_Span]:
+    """Source spans the instructions of ``code`` are attributed to.
 
     ``Instruction.positions`` (3.11+) rather than ``code.co_positions()``:
     the latter yields one entry per code UNIT, including inline cache slots, so
     zipping it against the instruction stream silently misaligns.
+
+    Degenerate column-0 spans (the synthetic ``RESUME`` marker, attributed to
+    ``(line, line, 0, 0)``) are dropped: they sit before the lambda's own
+    start column, so a containment test that included them would reject every
+    real match.
     """
-    spans = set()
+    spans: List[_Span] = []
     for instruction in dis.get_instructions(code):
         position = instruction.positions
         if position is None or position.lineno is None:
             continue
-        spans.add(
+        if position.col_offset is None or position.end_col_offset is None:
+            continue
+        if position.col_offset == 0 and position.end_col_offset == 0:
+            continue
+        spans.append(
             (position.lineno, position.end_lineno, position.col_offset, position.end_col_offset)
         )
     return spans
 
 
-# Parsed lambda nodes per source file, keyed by (path, mtime, size) so an edited
-# file is re-read rather than answered from a stale parse. Parsing is O(file), and
-# a lambda in a large module is otherwise re-parsed on every single ``udf()`` call
-# -- measured at 114 ms per construction for a 20k-line module, versus 3 ms once
-# cached. Only the ``ast.Lambda`` subtrees are retained, not the whole module
-# tree, and the whole cache is dropped once it exceeds a modest file count.
-_LAMBDA_CANDIDATES_BY_FILE: dict = {}
-_LAMBDA_CANDIDATES_MAX_FILES = 16
+def _span_contains(outer: _Span, inner: _Span) -> bool:
+    """Whether source span ``inner`` lies within ``outer`` (line/column order)."""
+    (ol, oel, oc, oec), (il, iel, ic, iec) = outer, inner
+    if oel is None or oc is None or oec is None or iel is None or ic is None or iec is None:
+        # A missing bound means we cannot decide; treat as "not contained".
+        return False
+    if il < ol or iel > oel:
+        return False
+    if il == ol and ic < oc:
+        return False
+    if iel == oel and iec > oec:
+        return False
+    return True
+
+
+def _recompiled_lambda_code(node: ast.Lambda, freevars: Tuple[str, ...]) -> Optional[CodeType]:
+    """Compile ``node`` in isolation and return its code object, or ``None``.
+
+    When the target captured free variables, the lambda is wrapped in an
+    enclosing ``def`` that declares those names, so the recompiled lambda emits
+    the same ``LOAD_DEREF`` form the target does and its bytecode can match.
+    Without that wrapper a captured name compiles to a global load and a
+    genuine match would be rejected as if the source were stale.
+    """
+    try:
+        expression = ast.unparse(node)
+        if freevars:
+            params = ", ".join(freevars)
+            module = compile(
+                f"def __w({params}):\n    return ({expression})\n", "<transpiler>", "exec"
+            )
+            enclosing = [c for c in module.co_consts if isinstance(c, CodeType)]
+            if len(enclosing) != 1:
+                return None
+            nested = [c for c in enclosing[0].co_consts if isinstance(c, CodeType)]
+        else:
+            compiled = compile(expression, "<transpiler>", "eval")
+            nested = [c for c in compiled.co_consts if isinstance(c, CodeType)]
+    except Exception:
+        return None
+    return nested[0] if len(nested) == 1 else None
+
+
+def _verifies(node: ast.Lambda, target: CodeType) -> bool:
+    """Whether ``node`` recompiles to the same bytecode as ``target``.
+
+    Position LOCATES a candidate; this CONFIRMS it. Without it, source that has
+    diverged from the compiled code -- an edited file re-read through
+    ``linecache``, or a relative ``co_filename`` resolved against a different
+    working directory -- would silently lower whatever now sits at that span.
+    Recompiling and comparing ``co_code`` means such a mismatch falls back
+    instead of lowering the wrong body.
+    """
+    recompiled = _recompiled_lambda_code(node, target.co_freevars)
+    return recompiled is not None and recompiled.co_code == target.co_code
+
+
+# Cap on distinct source files whose parsed lambdas are cached at once.
+_LAMBDA_CANDIDATES_MAX_FILES = 64
+
+
+@functools.lru_cache(maxsize=_LAMBDA_CANDIDATES_MAX_FILES)
+def _parse_file_lambdas(path: str, _mtime_ns: int, _size: int) -> Tuple[ast.Lambda, ...]:
+    """Parse ``path`` and return every ``ast.Lambda`` in it, LRU-cached per file.
+
+    ``_mtime_ns`` and ``_size`` are part of the cache key only: an edited file
+    has a different key and misses, so a stale parse is never served. The read
+    is fresh from disk (``tokenize.open`` respects the source's encoding cookie)
+    rather than through ``linecache``, for the same reason. Returns an empty
+    tuple on a read/parse error, which the caller treats as "no candidate".
+    """
+    try:
+        with tokenize.open(path) as source:
+            tree = ast.parse(source.read())
+    except Exception:
+        return ()
+    return tuple(node for node in ast.walk(tree) if isinstance(node, ast.Lambda))
 
 
 def _file_lambda_candidates(target: CodeType) -> Optional[List[ast.Lambda]]:
@@ -953,56 +1026,56 @@ def _file_lambda_candidates(target: CodeType) -> Optional[List[ast.Lambda]]:
     continuation line of a dict literal yields a fragment that does not parse at
     all.
 
-    Returns ``None`` when there is no readable source (a vanilla REPL, ``exec``
-    with no ``linecache`` entry, a C callable), which the caller turns into a
-    fall back to interpreted Python.
+    Parsing is O(file) and a lambda in a large module would otherwise be
+    re-parsed on every ``udf()`` call (measured 114 ms for a 20k-line module),
+    so a file-backed source goes through the ``(path, mtime, size)``-keyed LRU
+    cache. A source with no stat (a REPL or exec'd module kept alive only by
+    ``linecache``) is read uncached via ``inspect.findsource``.
+
+    Returns ``None`` when there is no readable source at all, which the caller
+    turns into a fall back to interpreted Python.
     """
-    key = None
     try:
         stat = os.stat(target.co_filename)
-        key = (target.co_filename, stat.st_mtime_ns, stat.st_size)
     except Exception:
-        # Not file-backed (a REPL or exec'd module kept alive by ``linecache``).
-        # Still resolvable, just not cacheable against a stat.
-        key = None
-    if key is not None:
-        cached = _LAMBDA_CANDIDATES_BY_FILE.get(key)
-        if cached is not None:
-            return cached
-    try:
-        lines, _ = inspect.findsource(target)
-        tree = ast.parse("".join(lines))
-    except Exception:
-        return None
-    candidates = [node for node in ast.walk(tree) if isinstance(node, ast.Lambda)]
-    if key is not None:
-        if len(_LAMBDA_CANDIDATES_BY_FILE) >= _LAMBDA_CANDIDATES_MAX_FILES:
-            _LAMBDA_CANDIDATES_BY_FILE.clear()
-        _LAMBDA_CANDIDATES_BY_FILE[key] = candidates
-    return candidates
+        try:
+            lines, _ = inspect.findsource(target)
+            tree = ast.parse("".join(lines))
+        except Exception:
+            return None
+        return [node for node in ast.walk(tree) if isinstance(node, ast.Lambda)]
+    return list(_parse_file_lambdas(target.co_filename, stat.st_mtime_ns, stat.st_size))
 
 
 def _resolve_lambda(target: CodeType, candidates: List[ast.Lambda]) -> Optional[ast.Lambda]:
     """Pick the lambda node that ``target`` (a ``func.__code__``) was compiled from.
 
-    A lambda is identified by WHERE IT IS, not by what it compiles to: a
-    candidate matches when its body span is one of the spans ``target``'s own
-    instructions are attributed to. Two distinct lambdas cannot occupy the same
-    span, so a match is exact and the "several candidates are indistinguishable"
-    problem does not arise -- constant-folded twins (``lambda x: x + (1 + 2)``
-    versus ``lambda x: x + 3``), byte-identical twins, ``lambda *a: 1`` versus
-    ``lambda **a: 1``, and closures (whose captured names an isolated compile
-    could never reproduce) all resolve to their own node.
+    Two steps, LOCATE then CONFIRM:
 
-    Returns ``None`` when the match is not unique, which the caller turns into a
-    fall back to interpreted Python. That covers a body shape whose span no
-    single instruction carries, and -- importantly -- source that has changed on
-    disk since import: a stale ``linecache`` entry yields spans that do not
-    line up, so nothing matches instead of the wrong lambda being lowered.
+    * locate by position -- the candidates whose source span contains every
+      span ``target``'s instructions are attributed to. This is robust where an
+      exact body-span match is not: on 3.11 a conditional-expression body (the
+      transpiler's own null-guard idiom) has no instruction carrying its full
+      span, so exact matching missed it, while containment still holds. It also
+      resolves constant-folded and byte-identical twins, which sit at distinct
+      positions;
+    * confirm by recompiling -- of the located candidates, the one whose
+      bytecode matches ``target`` (see ``_verifies``). This both disambiguates
+      the two nested candidates of ``lambda x: (lambda y: ...)`` and rejects
+      source that has diverged from the compiled code, so a stale file falls
+      back rather than lowering whatever now occupies the span.
+
+    Returns ``None`` unless exactly one candidate both contains the instructions
+    and verifies, which the caller turns into a fall back to interpreted Python.
     """
     spans = _instruction_spans(target)
-    matches = [node for node in candidates if _node_body_span(node) in spans]
-    return matches[0] if len(matches) == 1 else None
+    if not spans:
+        return None
+    located = [
+        node for node in candidates if all(_span_contains(_full_span(node), s) for s in spans)
+    ]
+    verified = [node for node in located if _verifies(node, target)]
+    return verified[0] if len(verified) == 1 else None
 
 
 def _call_dunder(func: Optional[Callable]) -> Any:
@@ -1027,19 +1100,22 @@ def _call_dunder(func: Optional[Callable]) -> Any:
 
 
 def _target_code(func: Optional[Callable]) -> Optional[CodeType]:
-    """The code object whose source ``_get_src_ast_from_func`` would have read.
+    """The code object that actually runs when ``func`` is called.
 
-    Mirrors that function's two-step lookup: a plain function or method
-    exposes ``__code__`` directly, while a callable class INSTANCE does not --
-    its source is read from ``__call__``, so ``__call__``'s code object is the
-    one to match candidates against. Returns ``None`` when no code object is
-    reachable (builtins, C callables, or a class object, whose ``type.__call__``
+    Keyed on WHAT DISPATCHES, not on which attribute happens to exist:
+
+    * a function or method runs its own ``__code__``;
+    * anything else callable runs ``type(func).__call__`` (an instance's own
+      ``__code__`` attribute, if any, is a red herring -- the call protocol
+      ignores it, so lowering it would transpile a body that never runs).
+
+    Returns ``None`` when no Python code object is reachable (builtins, C
+    callables, ``functools.partial``, a class object -- whose ``type.__call__``
     is a C slot), which keeps the caller on its structural path.
     """
-    code = getattr(func, "__code__", None)
-    # Validate BEFORE deciding to fall back, or a truthy non-code ``__code__``
-    # (duck typing, a Mock) suppresses the ``__call__`` lookup entirely.
-    if not isinstance(code, CodeType):
+    if inspect.isfunction(func) or inspect.ismethod(func):
+        code = getattr(func, "__code__", None)
+    else:
         code = getattr(_call_dunder(func), "__code__", None)
     return code if isinstance(code, CodeType) else None
 
@@ -1056,88 +1132,66 @@ def _lambda_to_function_def(node: ast.Lambda) -> ast.FunctionDef:
     # constructing the node via keyword args is well-defined at runtime even
     # when the typed overloads disagree.
     fn_ctor: Any = ast.FunctionDef
-    return fn_ctor(
+    fn = fn_ctor(
         name="<lambda>",
         args=node.args,
         body=[ast.Return(value=node.body)],
         decorator_list=[],
     )
+    # Copy positions onto the synthesized node and its new ``Return``. Without
+    # this, ``ast.unparse``/``compile`` of the result raises AttributeError on
+    # the missing ``lineno`` -- and this node is what every lambda now flows
+    # through, so a diagnostic that prints or recompiles it would crash.
+    ast.copy_location(fn, node)
+    ast.fix_missing_locations(fn)
+    return fn
 
 
 def _get_function_from_ast(
     body: Optional[ast.AST], func: Optional[Callable] = None
 ) -> ast.FunctionDef | None:
     """
-    Extract a :class:`ast.FunctionDef` node from an AST produced by
-    ``ast.parse(inspect.getsource(udf_func))``.
+    Extract a :class:`ast.FunctionDef` node for the callable ``func``.
 
-    Handles the following source patterns (in order):
+    Two disjoint paths, chosen by whether ``func`` runs a lambda:
 
-    * a lambda, identified against ``func`` among every lambda in the source
-    * ``f = lambda x: x + 1`` -- lambda bound directly to a name
-    * ``lambda x: x + 1`` -- bare expression (getsource on a raw lambda)
-    * ``def f(x): ... return x + 1``
-    * a class with a ``__call__`` method
+    * a LAMBDA (``co_name == "<lambda>"``) is located by source position among
+      every lambda in its file, then confirmed by recompiling -- see
+      ``_resolve_lambda``. This covers every syntactic home a lambda can have
+      (bound to a name, in a tuple/dict/list, inside a call, on a continuation
+      line), because position does not care how the surrounding statement
+      parses;
+    * anything else -- a ``def`` function, or a callable instance whose source
+      is its ``def __call__`` -- is read structurally from the ``getsource``
+      fragment in ``body``, whose first statement is that ``FunctionDef``.
 
-    Returns ``None`` when no single unambiguous function can be identified.
-    Local class variables are unsupported. A lambda wrapped in a call such as
-    ``f = some_wrapper(lambda x: x + 1)`` parses as ``Assign(value=Call(...))``,
-    which the structural path does not unwrap; it is instead located by its
-    source position (see below).
+    Returns ``None`` when no single function can be identified, which the caller
+    turns into a fall back to interpreted Python.
     """
-    # ``inspect.getsource`` is LINE based, so the source it hands back for a
-    # lambda is shared with every other lambda on that line -- and, for a lambda
-    # written in a decorator, with the whole decorated ``def``. Picking
-    # ``body.body[0]`` therefore lowered the wrong thing, silently, in several
-    # shapes: two lambdas joined by a semicolon (the second computed the first),
-    # and ``@deco(lambda x: x + 1)`` above ``def f(a): return a * 12345`` (the
-    # lambda computed the def's body).
-    #
-    # A lambda is instead located by WHERE IT IS. Since 3.11 -- and PySpark
-    # requires 3.11 -- every instruction carries the source span it came from,
-    # so the lambda whose body span matches the target's own instructions is the
-    # one being transpiled. Positions are unique by construction, which is what
-    # makes this exact: no two lambdas share a span, so there is no ambiguous
-    # case to adjudicate and no need to reason about what the compiler happened
-    # to emit. It resolves the shapes bytecode comparison could not distinguish
-    # (constant-folded twins, ``lambda *a: 1`` vs ``lambda **a: 1``) and the ones
-    # it could not reproduce at all (closures).
-    #
-    # Note this deliberately consults the FILE rather than ``body``: spans are in
-    # file coordinates and ``body`` was parsed from a dedented fragment, so its
-    # columns are re-based. ``body`` is used only by the structural path below,
-    # which still serves ``def`` functions and callable classes.
+    # ``inspect.getsource`` is LINE based, so the source it returns for a lambda
+    # is shared with every other lambda on that line, and for a lambda in a
+    # decorator with the whole decorated ``def``. Picking ``body.body[0]`` used
+    # to lower the wrong thing silently -- two lambdas split by a semicolon (the
+    # second computed the first), or ``@deco(lambda x: x + 1)`` above
+    # ``def f(a): return a * 12345`` (the lambda computed the def's body). A
+    # lambda is located by its source position instead; see ``_resolve_lambda``.
     target = _target_code(func)
     if target is not None and target.co_name == "<lambda>":
         candidates = _file_lambda_candidates(target) or []
         resolved = _resolve_lambda(target, candidates)
-        # No match means the source on disk does not correspond to this callable
-        # (a stale ``linecache`` entry, an unreadable source). Guessing from
-        # ``body`` is what produced the wrong answers above, so give up.
         return _lambda_to_function_def(resolved) if resolved is not None else None
 
-    # Everything below is the structural path, which still serves ``def``
-    # functions and callable classes. It needs the ``getsource`` fragment; a
-    # lambda has already returned above.
+    # Everything below is the structural path, which serves only ``def``
+    # functions and callable classes (a callable instance's source is its
+    # ``def __call__``). It needs the ``getsource`` fragment, whose first
+    # statement is that ``FunctionDef``. Lambdas never reach here -- a lambda
+    # target has ``co_name == "<lambda>"`` and returned above -- so the
+    # lambda-unwrapping branches this used to carry (``Assign(value=Lambda)``,
+    # ``Expr(Lambda)``, bare ``Lambda``) are gone.
     if body is None or not hasattr(body, "body") or not body.body:
         return None
 
     stmt = body.body[0]
-
-    # Grab the value side of a top level assign (e.g. x = lambda ...)
-    if isinstance(stmt, ast.Assign):
-        stmt = stmt.value
-
-    # Bare ``lambda x: ...`` (when ``inspect.getsource`` returns a raw
-    # lambda expression at module top level) parses as ``Expr(Lambda)``.
-    if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Lambda):
-        stmt = stmt.value
-
-    if isinstance(stmt, ast.Lambda):
-        # Synthesize a one-statement FunctionDef wrapping the lambda body so
-        # the rest of the transpiler can treat lambdas and ``def`` uniformly.
-        return _lambda_to_function_def(stmt)
-
     if isinstance(stmt, ast.FunctionDef):
         return stmt
     return None
@@ -1196,7 +1250,7 @@ def _transpile_func(
         # silently reproduce the wrong behavior, so refuse and fall back.
         if (
             getattr(func, "__wrapped__", None) is not None
-            or getattr(getattr(func, "__call__", None), "__wrapped__", None) is not None
+            or getattr(_call_dunder(func), "__wrapped__", None) is not None
         ):
             return (
                 [],
@@ -1208,7 +1262,9 @@ def _transpile_func(
                 [],
                 [],
             )
-        src, ast_info = _get_src_ast_from_func(func)
+        # Only the parsed tree is needed (the ``def``/callable-class structural
+        # path); a lambda is located by position and ignores it.
+        _, ast_info = _get_src_ast_from_func(func)
         # NOTE no early return when ``ast_info`` is None. A lambda is located by
         # position in its whole FILE, so it does not need the ``getsource``
         # fragment to be parseable -- and for a lambda on a continuation line of
@@ -1279,7 +1335,7 @@ def _transpile_func(
             for combo in combos:
                 try:
                     transpiled_column = transpiler._transpile_from_ast(
-                        src, ast_info, function_ast, params, returnType, combo
+                        function_ast, params, returnType, combo
                     )
                     if transpiled_column is not None:
                         transpiled.append(transpiled_column)
