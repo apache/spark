@@ -24,6 +24,7 @@ inherited into the Spark Connect parity test class. The companion
 property-based suite lives in ``test_udf_transpile_hypothesis.py``.
 """
 
+import re
 import unittest
 
 from pyspark.sql import Row
@@ -581,8 +582,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # runtime symptom is scheduling-dependent: with the old `&` lowering the
         # pushed-down `raise_error` fires only on some runs (whether the failing
         # task gets far enough before the join yields no rows). Asserting on the
-        # optimized plan instead is deterministic -- the raise guard must stay
-        # ABOVE the join rather than being pushed beneath it.
+        # optimized plan instead is deterministic -- the guard must not be pushed
+        # BENEATH the join, onto one side, where it would be evaluated on rows
+        # the other operand excluded. It does end up inside the join CONDITION,
+        # which is safe for the same reason the lowering exists: the predicate
+        # stays whole, so the `and` still short-circuits.
         def both_positive(a, c):
             return a > 0 and c > 0
 
@@ -612,14 +616,27 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
             filtered = joined.filter(and_udf("a", "c"))
             plan = filtered._jdf.queryExecution().optimizedPlan().toString()
-            # An optimized plan prints root-first, depth-first, so anything
-            # pushed below the join appears on a LATER line than the Join node.
             lines = plan.split("\n")
-            join_line = next(
-                (i for i, line in enumerate(lines) if "Join" in line),
-                None,
+            # Assert the guard is actually there first: without this every check
+            # below passes vacuously the moment the guard folds away or the UDF
+            # stops transpiling.
+            self.assertTrue(
+                any("raise_error" in line for line in lines),
+                f"expected the NULL raise guard somewhere in the plan:\n{plan}",
             )
-            self.assertIsNotNone(join_line, f"expected a Join in the plan:\n{plan}")
+            # An optimized plan prints root-first, depth-first, so a node pushed
+            # below the Join appears on a LATER line than the Join itself. Match
+            # the node name at the start of the line rather than the substring
+            # "Join", which also occurs inside a printed join condition.
+            join_lines = [i for i, line in enumerate(lines) if re.match(r"^[\s:+|-]*Join ", line)]
+            self.assertEqual(1, len(join_lines), f"expected exactly one Join node:\n{plan}")
+            join_line = join_lines[0]
+            # The hazard is the guard being pushed to ONE SIDE of the join, where
+            # it would see rows that never join. Landing in the join CONDITION is
+            # acceptable: the predicate stays whole, so `and` still
+            # short-circuits and the guard is only reached for candidate pairs.
+            # That is where it lands today -- hence `> join_line`, which excludes
+            # the Join's own line -- so also pin that it did not decompose.
             pushed = [
                 line for i, line in enumerate(lines) if i > join_line and "raise_error" in line
             ]
@@ -628,6 +645,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 pushed,
                 "the NULL raise guard was pushed below the Join, so it can be "
                 f"evaluated on rows the other operand excluded:\n{plan}",
+            )
+            self.assertIn(
+                "raise_error",
+                lines[join_line],
+                "expected the whole predicate to stay in the join condition; if "
+                "it moved above the Join that is also safe, but the lowering "
+                f"changed and this test should be re-read:\n{plan}",
             )
             # And it still returns Python's answer rather than raising.
             self.assertEqual([], filtered.select("k").collect())
@@ -680,14 +704,16 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         gt_gte = lambda a, b, c: a > b >= c  # noqa: E731
         lte_lte = lambda a, b, c: a <= b <= c  # noqa: E731
         four_ops = lambda a, b, c, d, e: a < b < c < d < e  # noqa: E731
-        for func, rows, expected in [
-            (lt_eq, [(1, 2, 2), (1, 2, 3), (2, 1, 1)], [True, False, False]),
-            (eq_lt, [(1, 1, 2), (1, 1, 0), (1, 2, 3)], [True, False, False]),
-            (gt_gte, [(3, 2, 2), (3, 2, 5), (1, 2, 2)], [True, False, False]),
-            (lte_lte, [(1, 1, 2), (1, 2, 2), (2, 1, 3)], [True, True, False]),
+        for label, func, rows, expected in [
+            ("a < b == c", lt_eq, [(1, 2, 2), (1, 2, 3), (2, 1, 1)], [True, False, False]),
+            ("a == b < c", eq_lt, [(1, 1, 2), (1, 1, 0), (1, 2, 3)], [True, False, False]),
+            ("a > b >= c", gt_gte, [(3, 2, 2), (3, 2, 5), (1, 2, 2)], [True, False, False]),
+            ("a <= b <= c", lte_lte, [(1, 1, 2), (1, 2, 2), (2, 1, 3)], [True, True, False]),
         ]:
-            with self.subTest(func=str(func)):
-                self.assertEqual(self._vals(func, B, "a long, b long, c long", rows), expected)
+            with self.subTest(func=label):
+                self.assertEqual(
+                    self._vals(func, B, "a long, b long, c long", rows), expected, label
+                )
         self.assertEqual(
             self._vals(
                 four_ops,
@@ -712,15 +738,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         not_in_none = lambda x: x not in (1, None)  # noqa: E731
         in_plain = lambda x: x in (1, 2)  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
-            for func, cases in [
-                (in_plain, [(None, False), (1, True), (2, True), (3, False)]),
-                (in_none, [(None, True), (1, True), (2, False)]),
-                (not_in_none, [(None, False), (1, False), (2, True)]),
+            for label, func, cases in [
+                ("x in (1, 2)", in_plain, [(None, False), (1, True), (2, True), (3, False)]),
+                ("x in (1, None)", in_none, [(None, True), (1, True), (2, False)]),
+                ("x not in (1, None)", not_in_none, [(None, False), (1, False), (2, True)]),
             ]:
                 pudf = UserDefinedFunction(func, BooleanType())
-                self.assertTrue(pudf.transpiled, f"{func} should transpile")
+                self.assertTrue(pudf.transpiled, f"{label} should transpile")
                 for value, expected in cases:
-                    with self.subTest(func=str(func), value=value):
+                    with self.subTest(func=label, value=value):
                         df = self.spark.createDataFrame([Row(a=value)], schema=schema)
                         [row] = df.select(pudf("a")).collect()
                         self.assertEqual(row[0], expected)
@@ -740,10 +766,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             conf = dict(_TRANSPILE_ON)
             conf["spark.sql.legacy.nullInEmptyListBehavior"] = legacy
             with self.sql_conf(conf):
-                for func, expected in [(empty_in, False), (empty_not_in, True)]:
-                    with self.subTest(legacy=legacy, func=str(func)):
+                for label, func, expected in [
+                    ("x in ()", empty_in, False),
+                    ("x not in ()", empty_not_in, True),
+                ]:
+                    with self.subTest(legacy=legacy, func=label):
                         pudf = UserDefinedFunction(func, BooleanType())
-                        self.assertTrue(pudf.transpiled, f"{func} should transpile")
+                        self.assertTrue(pudf.transpiled, f"{label} should transpile")
                         df = self.spark.createDataFrame([Row(a=None)], schema=schema)
                         [row] = df.select(pudf("a")).collect()
                         self.assertEqual(row[0], expected)
@@ -774,30 +803,30 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         in_long_rt = lambda x: x in (1, 2)  # noqa: E731
         six_longs = "a long, b long, c long, d long, e long, f long"
 
-        # (func, schema, rows, expected). `expected` is what interpreted Python
-        # produces, so the query must still run and return it.
+        # (label, func, schema, rows, expected). `expected` is what interpreted
+        # Python produces, so the query must still run and return it.
         cases = [
-            (str_in, "a string", [("b",), ("z",)], [True, False]),
-            (bytes_in, "a long", [(97,), (1,)], [True, False]),
-            (dict_in, "a long", [(1,), (2,)], [True, False]),
-            (runtime_in, "a long, b long", [(1, 1), (3, 5)], [True, False]),
-            (chained_in, "a long, b long", [(0, 1), (1, 0)], [True, False]),
-            (mixed_in, "a long", [(1,), (3,)], [True, False]),
-            (bool_in, "a long", [(1,), (5,)], [True, False]),
-            (five_ops, six_longs, [(1, 2, 3, 4, 5, 6)], [True]),
+            ("`in` on a str", str_in, "a string", [("b",), ("z",)], [True, False]),
+            ("`in` on bytes", bytes_in, "a long", [(97,), (1,)], [True, False]),
+            ("`in` on a dict", dict_in, "a long", [(1,), (2,)], [True, False]),
+            ("runtime `in`", runtime_in, "a long, b long", [(1, 1), (3, 5)], [True, False]),
+            ("chain + `in`", chained_in, "a long, b long", [(0, 1), (1, 0)], [True, False]),
+            ("mixed-category `in`", mixed_in, "a long", [(1,), (3,)], [True, False]),
+            ("`in` over bools", bool_in, "a long", [(1,), (5,)], [True, False]),
+            ("a 5-op chain (over the cap)", five_ops, six_longs, [(1, 2, 3, 4, 5, 6)], [True]),
         ]
         with self.sql_conf(_TRANSPILE_ON):
-            for func, schema, rows, expected in cases:
-                with self.subTest(func=str(func)):
+            for label, func, schema, rows, expected in cases:
+                with self.subTest(func=label):
                     with _warnings.catch_warnings(record=True):
                         _warnings.simplefilter("always")
                         pudf = UserDefinedFunction(func, BooleanType())
-                    self.assertEqual([], pudf.transpiled, f"{func} must NOT transpile")
+                    self.assertEqual([], pudf.transpiled, f"{label} must NOT transpile")
                     df = self.spark.createDataFrame(rows, schema)
                     self.assertEqual(
                         [r[0] for r in df.select(pudf(*df.columns)).collect()],
                         expected,
-                        f"{func}: interpreted result diverged",
+                        f"{label}: interpreted result diverged",
                     )
             # `0 < x < "z"` raises in interpreted Python too (cross-type
             # ordering), so assert only the fallback for it.
@@ -2503,8 +2532,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # EvalPython node disappears for them too.
             bounded = lambda x: 0 < x < 10  # noqa: E731
             member = lambda x: x in (1, 2, 3)  # noqa: E731
-            for func, expected in [(bounded, [1, 7]), (member, [1])]:
-                with self.subTest(func=str(func)):
+            for label, func, expected in [
+                ("0 < x < 10", bounded, [1, 7]),
+                ("x in (1,2,3)", member, [1]),
+            ]:
+                with self.subTest(func=label):
                     f = UserDefinedFunction(func, BooleanType())
                     self.assertTrue(f.transpiled)
                     fdf = self.spark.createDataFrame([(7,), (11,), (1,)], "a long").filter(f("a"))
@@ -2547,9 +2579,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         band = lambda x: 50 < x < 60  # noqa: E731
         band_or = lambda x: x < 50 or x > 60  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
-            for func in (band, band_or):
+            for label, func in (("50 < x < 60", band), ("x < 50 or x > 60", band_or)):
                 pudf = UserDefinedFunction(func, BooleanType())
-                self.assertTrue(pudf.transpiled, f"{func} should transpile on its own")
+                self.assertTrue(pudf.transpiled, f"{label} should transpile on its own")
                 base = self.spark.range(0, 8).select((col("id") * 10).alias("a"))
 
                 # Deterministic argument -> transpiled and elided.
@@ -2557,7 +2589,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual(
                     0,
                     self._eval_python_count(det),
-                    f"{func}: a deterministic argument should still be elided",
+                    f"{label}: a deterministic argument should still be elided",
                 )
 
                 # Non-deterministic argument -> must fall back.
@@ -2565,7 +2597,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual(
                     1,
                     self._eval_python_count(nondet),
-                    f"{func}: a non-deterministic argument must NOT be transpiled",
+                    f"{label}: a non-deterministic argument must NOT be transpiled",
                 )
                 # And it still produces results.
                 self.assertEqual(8, len(nondet.collect()))
