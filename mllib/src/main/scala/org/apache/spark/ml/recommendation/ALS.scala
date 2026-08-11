@@ -293,23 +293,27 @@ class ALSModel private[ml] (
   @Since("3.0.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
 
-  private val predict = udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
-    if (featuresA != null && featuresB != null) {
-      var dotProduct = 0.0f
-      var i = 0
-      while (i < rank) {
-        dotProduct += featuresA(i) * featuresB(i)
-        i += 1
+  private def getPredictUDF = {
+    val localRank = rank
+    udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
+      if (featuresA != null && featuresB != null) {
+        var dotProduct = 0.0f
+        var i = 0
+        while (i < localRank) {
+          dotProduct += featuresA(i) * featuresB(i)
+          i += 1
+        }
+        dotProduct
+      } else {
+        Float.NaN
       }
-      dotProduct
-    } else {
-      Float.NaN
     }
   }
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
+    val predict = getPredictUDF
     // create a new column named map(predictionCol) by running the predict UDF.
     val validatedUsers = checkIntegers(dataset, $(userCol))
     val validatedItems = checkIntegers(dataset, $(itemCol))
