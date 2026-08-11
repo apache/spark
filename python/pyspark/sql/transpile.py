@@ -39,7 +39,7 @@ all-numeric and all-string variants.
 import ast
 import copy
 from types import CodeType
-from typing import Any, Callable, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Callable, List, Optional, Tuple, Union, TYPE_CHECKING
 import inspect
 import itertools
 import textwrap
@@ -951,36 +951,72 @@ def _compile_lambda(node: ast.Lambda) -> Optional[CodeType]:
     nested code constant inside it. That inner one is what corresponds to a
     ``function.__code__``, so it is what we hand back.
 
+    Default values are STRIPPED before compiling. A default is evaluated where
+    the lambda is defined and stored on the function object (``__defaults__``),
+    not in its code object, so removing them cannot change the code object we
+    are trying to reproduce -- but leaving them in emits their expressions into
+    the enclosing module code. That matters when a default is itself a lambda
+    (``lambda x, k=(lambda: 3)(): x + k``): the module code then holds TWO
+    nested code constants, the guard below rejects the whole candidate, and a
+    line mate with the same body but no default would be resolved in its place
+    -- bypassing ``_transpile_func``'s refusal to transpile defaulted
+    parameters. Stripping keeps the candidate matchable, so the resolved node
+    still carries its ``defaults`` and that refusal fires as intended.
+
     Returns ``None`` if the node cannot be compiled on its own -- the caller
     treats that as "not a match" and falls back to interpreted Python.
     """
     try:
-        # Copy first: ``fix_missing_locations`` mutates in place, and the
-        # caller's tree is reused for the rest of the transpilation.
-        expression = ast.Expression(body=copy.deepcopy(node))
+        # Copy first: this mutates ``args`` and ``fix_missing_locations``
+        # mutates in place, and the caller's tree is reused for the rest of
+        # the transpilation.
+        bare = copy.deepcopy(node)
+        bare.args.defaults = []
+        bare.args.kw_defaults = [None for _ in bare.args.kw_defaults]
+        expression = ast.Expression(body=bare)
         ast.fix_missing_locations(expression)
         compiled = compile(expression, "<transpiler>", "eval")
     except Exception:
         return None
     nested = [const for const in compiled.co_consts if isinstance(const, CodeType)]
-    return nested[0] if len(nested) == 1 else None
+    # At most one nested code object can appear here: the only Expression-level
+    # code a lambda can force is a default value's, and those were stripped
+    # above (lambdas cannot carry annotations).
+    return nested[0] if nested else None
 
 
-def _resolve_lambda(target: CodeType, candidates: List[ast.Lambda]) -> Optional[ast.Lambda]:
+class _Ambiguous:
+    """Type of the ``_AMBIGUOUS`` verdict below, so it stays type-checkable."""
+
+
+# Returned by ``_resolve_lambda`` when several candidates match but are not the
+# same expression. Distinct from ``None`` ("nothing matched"): the caller may
+# fall through to the structural path on None, but must never guess when the
+# answer is ambiguous.
+_AMBIGUOUS = _Ambiguous()
+
+
+def _resolve_lambda(
+    target: CodeType, candidates: List[ast.Lambda]
+) -> Union[ast.Lambda, _Ambiguous, None]:
     """Pick the lambda node that ``target`` (a ``func.__code__``) was compiled from.
 
-    Returns ``None`` when the answer is not unambiguous, which the caller
-    turns into a fall back to interpreted Python. That covers:
+    Returns the matching node, ``None`` when NO candidate matches, or
+    ``_AMBIGUOUS`` when several match without being the same expression.
+    The caller treats those two failures differently, so they cannot be
+    collapsed into one:
 
-    * no candidate matches -- ``target`` is a closure (an isolated compile
-      turns the captured name into a global load, so ``co_freevars`` and the
-      bytecode both differ; closures are not transpilable anyway) or
-      ``target`` is a wrapper function that merely happens to share a line
-      with a lambda;
-    * several candidates match but are not the same expression. Compile-time
-      constant folding is the way this happens in practice: ``lambda x:
-      x + (1 + 2)`` and ``lambda x: x + 3`` fold to the same bytecode, so
-      neither can be told from the other and both fall back.
+    * ``None`` -- ``target`` is a closure (an isolated compile turns the
+      captured name into a global load, so ``co_freevars`` and the bytecode
+      both differ; closures are not transpilable anyway) or ``target`` is a
+      wrapper function that merely happens to share a line with a lambda.
+      Nothing was chosen, so the caller may still try the structural path,
+      which produces a more specific diagnostic for these.
+    * ``_AMBIGUOUS`` -- compile-time constant folding is how this happens in
+      practice: ``lambda x: x + (1 + 2)`` and ``lambda x: x + 3`` fold to the
+      same bytecode, so neither can be told from the other. Identical
+      bytecode means identical behavior, so falling back here costs speed and
+      never correctness.
 
     Byte-identical twins (``f = lambda x: x + 1; g = lambda x: x + 1``) do
     match more than once. They transpile to the same expression, so any of
@@ -997,7 +1033,7 @@ def _resolve_lambda(target: CodeType, candidates: List[ast.Lambda]) -> Optional[
     # ``ast.dump`` omits line/column attributes by default, so this compares
     # the expressions themselves rather than where they sit on the line.
     if len({ast.dump(node) for node in matches}) != 1:
-        return None
+        return _AMBIGUOUS
     return matches[0]
 
 
@@ -1046,49 +1082,62 @@ def _get_function_from_ast(
 
     Handles the following source patterns (in order):
 
-    * two or more lambdas sharing the source, disambiguated against ``func``
+    * a lambda, identified against ``func`` among every lambda in the source
     * ``f = lambda x: x + 1`` -- lambda bound directly to a name
     * ``lambda x: x + 1`` -- bare expression (getsource on a raw lambda)
     * ``def f(x): ... return x + 1``
     * a class with a ``__call__`` method
 
-    Returns ``None`` when no single unambiguous function can be identified --
-    notably, a lambda wrapped in a call such as
+    Returns ``None`` when no single unambiguous function can be identified.
+    Local class variables are unsupported. A lambda wrapped in a call such as
     ``f = some_wrapper(lambda x: x + 1)`` parses as ``Assign(value=Call(...))``,
-    which is not unwrapped here and so falls back to interpreted Python. Local
-    class variables are likewise unsupported.
+    which the structural path does not unwrap; it is instead reached by
+    matching ``func`` against the lambdas in the source.
     """
     if not hasattr(body, "body") or not body.body:
         return None
 
     # ``inspect.getsource`` is line based, so a lambda arrives sharing its
-    # source with every other lambda on that line, and ``body.body[0]`` cannot
-    # tell them apart. The two shapes failed differently:
+    # source with every other lambda on that line -- and, for a lambda written
+    # in a decorator, with the whole decorated ``def``. ``body.body[0]`` cannot
+    # tell any of them apart. Three shapes failed, two of them silently:
     #
     # * ``f = lambda x: x + 10; g = lambda x: x + 20`` parses into two
     #   statements and the FIRST was always lowered, so ``g`` silently
     #   computed ``f`` -- a wrong answer, not a fall back;
+    # * ``@deco(lambda x: x + 1)`` above ``def f(a): return a * 12345`` parses
+    #   as that ``FunctionDef``, so the lambda silently computed the DEF's
+    #   body -- likewise a wrong answer, and one a candidate count of 1 does
+    #   not protect against;
     # * ``f, g = lambda x: x + 10, lambda x: x + 20`` parses as an ``Assign``
     #   of a ``Tuple``, which matched nothing, so both fell back.
     #
-    # So when the target is itself a lambda and the source holds more than
-    # one, identify which is which by compiling each candidate and comparing
-    # bytecode against the callable being transpiled. Note the ``> 1`` gate:
-    # every source with a single lambda stays on the structural path below, so
-    # nothing changes where there was never any ambiguity. That does leave one
-    # asymmetry -- a lone lambda inside a collection literal still falls back
-    # while two of them now resolve -- but routing the unambiguous case
-    # through bytecode matching too would trade the specific fall-back reasons
-    # below (closures, wrappers) for a generic one, which belongs in a change
-    # of its own.
+    # So whenever the target is a lambda, identify WHICH lambda by compiling
+    # each candidate and comparing code objects against the callable being
+    # transpiled. This runs for a single candidate too: one lambda in the
+    # source is no guarantee it is the one being transpiled (the decorator
+    # shape above), and gating on ``> 1`` would leave that wrong answer in
+    # place while also making transpilation depend on how many unrelated
+    # lambdas happen to share the line.
+    #
+    # A failure to match is NOT the same as an ambiguous match, but neither one
+    # licenses a guess. When exactly one lambda appears in the source, whatever
+    # the structural path picks is provably the target's own node -- there is no
+    # other lambda to confuse it with -- so falling through is safe and gives a
+    # lone closure the far more precise "name is not in the parameter list"
+    # diagnostic. With two or more candidates, ``body.body[0]`` may hold a
+    # DIFFERENT lambda (``plain = lambda x: x + 9; clo = lambda x: x + n``,
+    # where the closure matches nothing), so falling through would resurrect the
+    # very wrong answer this exists to remove. Give up instead.
     target = _target_code(func)
-    if target is not None and target.co_name == "<lambda>":
+    lambda_target = target is not None and target.co_name == "<lambda>"
+    if target is not None and lambda_target:
         candidates = [node for node in ast.walk(body) if isinstance(node, ast.Lambda)]
-        if len(candidates) > 1:
-            resolved = _resolve_lambda(target, candidates)
-            if resolved is None:
-                return None
+        resolved = _resolve_lambda(target, candidates)
+        if isinstance(resolved, ast.Lambda):
             return _lambda_to_function_def(resolved)
+        if resolved is _AMBIGUOUS or len(candidates) > 1:
+            return None
 
     stmt = body.body[0]
 
@@ -1107,6 +1156,12 @@ def _get_function_from_ast(
         return _lambda_to_function_def(stmt)
 
     if isinstance(stmt, ast.FunctionDef):
+        # A lambda is never lowered from a ``def``. Reaching here with a lambda
+        # target means matching did not identify it and the first statement is
+        # somebody else's function -- the decorator shape in the comment above.
+        # Returning it would transpile the WRONG body, so refuse.
+        if lambda_target:
+            return None
         return stmt
     return None
 
