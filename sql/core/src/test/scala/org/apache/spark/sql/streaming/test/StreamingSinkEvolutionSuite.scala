@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, Commit
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.util.Utils
 
 /**
@@ -322,7 +322,7 @@ class StreamingSinkEvolutionSuite extends StreamTest with BeforeAndAfterEach {
         SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1",
         SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
           classOf[HDFSBackedStateStoreProvider].getName) {
-      def startQuery() = input.toDF()
+      def startQuery(): StreamingQuery = input.toDF()
         .groupBy("value")
         .count()
         .writeStream
