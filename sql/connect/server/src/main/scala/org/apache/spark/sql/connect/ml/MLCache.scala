@@ -157,35 +157,34 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     if (obj.isInstanceOf[Summary]) {
       cachedModel.put(objectId, CacheItem(obj, 0))
     } else if (obj.isInstanceOf[Model[_]]) {
-      val model = obj.asInstanceOf[Model[_]]
-      val estimatedSizeBytes = if (getMemoryControlEnabled) {
-        val sizeBytes = estimateObjectSize(model)
-        checkModelSize(sizeBytes)
-        Some(sizeBytes)
+      val sizeBytes = if (getMemoryControlEnabled) {
+        val _sizeBytes = estimateObjectSize(obj)
+        checkModelSize(_sizeBytes)
+        _sizeBytes
       } else {
-        // Avoid adding model-size estimation overhead when memory control is disabled.
-        None
+        0L // Don't need to calculate size if disables memory-control.
       }
+      inMemoryModelIds.add(objectId)
+      cachedModel.put(objectId, CacheItem(obj, sizeBytes))
       if (getMemoryControlEnabled) {
         val savePath = getModelOffloadingPath(objectId)
-        model.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
-        if (model.isInstanceOf[HasTrainingSummary[_]]
-          && model.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
-          model
+        obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
+        if (obj.isInstanceOf[HasTrainingSummary[_]]
+          && obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+          obj
             .asInstanceOf[HasTrainingSummary[_]]
             .saveSummary(savePath.resolve("summary").toString)
         }
-        Files.writeString(savePath.resolve(modelClassNameFile), model.getClass.getName)
-      }
-      cachedModelMetadata.put(
-        objectId,
-        ModelMetadata(model.getClass.getName, model.toString, estimatedSizeBytes))
-      inMemoryModelIds.add(objectId)
-      cachedModel.put(objectId, CacheItem(model, estimatedSizeBytes.getOrElse(0L)))
-      estimatedSizeBytes.foreach { sizeBytes =>
+        Files.writeString(savePath.resolve(modelClassNameFile), obj.getClass.getName)
         totalMLCacheInMemorySizeBytes.addAndGet(sizeBytes)
         totalMLCacheSizeBytes.addAndGet(sizeBytes)
       }
+      cachedModelMetadata.put(
+        objectId,
+        ModelMetadata(
+          obj.getClass.getName,
+          obj.toString,
+          if (getMemoryControlEnabled) Some(sizeBytes) else None))
     } else {
       throw new RuntimeException("'MLCache.register' only accepts model or summary objects.")
     }
