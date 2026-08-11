@@ -256,11 +256,8 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     val removedModel = cachedModel.remove(refId)
     val removedFromMem = removedModel != null
     inMemoryModelIds.remove(refId)
-    val metadata = Option(cachedModelMetadata.get(refId))
-    val removedFromDisk = if (!evictOnly && metadata.nonEmpty && getMemoryControlEnabled) {
-      metadata.get.estimatedSizeBytes.foreach { sizeBytes =>
-        totalMLCacheSizeBytes.addAndGet(-sizeBytes)
-      }
+    val removedFromDisk = if (!evictOnly && removedModel != null && getMemoryControlEnabled) {
+      totalMLCacheSizeBytes.addAndGet(-removedModel.sizeBytes)
       val removePath = getModelOffloadingPath(refId)
       val offloadingPath = new File(removePath.toString)
       if (offloadingPath.exists()) {
@@ -272,9 +269,10 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     } else {
       false
     }
-    val removeMetadata = !evictOnly || !getMemoryControlEnabled
-    val removedMetadata = removeMetadata && cachedModelMetadata.remove(refId) != null
-    removedFromMem || removedFromDisk || removedMetadata
+    if (removedFromMem && (!evictOnly || !getMemoryControlEnabled)) {
+      cachedModelMetadata.remove(refId)
+    }
+    removedFromMem || removedFromDisk
   }
 
   /**

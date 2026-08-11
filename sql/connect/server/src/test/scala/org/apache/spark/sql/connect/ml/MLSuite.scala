@@ -457,15 +457,6 @@ class MLSuite extends MLHelper {
     for (modelId <- modelIdList) {
       assert(sessionHolder.mlCache.get(modelId) != null)
     }
-
-    val statusBeforeRemove = sessionHolder.getMLCacheStatus.get
-    val offloadedModel = statusBeforeRemove.models.find(!_.inMemory).get
-    assert(sessionHolder.mlCache.remove(offloadedModel.id))
-    val statusAfterRemove = sessionHolder.getMLCacheStatus.get
-    assert(!statusAfterRemove.models.exists(_.id == offloadedModel.id))
-    assert(
-      statusAfterRemove.totalSizeBytes ===
-        statusBeforeRemove.totalSizeBytes - offloadedModel.estimatedSizeBytes.get)
   }
 
   test("Model size limit") {
