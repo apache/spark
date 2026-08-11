@@ -599,12 +599,8 @@ class TVFTestsMixin:
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_variant_explode_outer_with_recursive(self):
-        actual = self.spark.tvf.variant_explode_outer(
-            sf.parse_json(sf.lit("[]")), recursive=True
-        )
-        expected = self.spark.sql(
-            """SELECT * FROM variant_explode_outer(parse_json('[]'), true)"""
-        )
+        actual = self.spark.tvf.variant_explode_outer(sf.parse_json(sf.lit("[]")), recursive=True)
+        expected = self.spark.sql("""SELECT * FROM variant_explode_outer(parse_json('[]'), true)""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_variant_explode_outer_with_lateral_join(self):
