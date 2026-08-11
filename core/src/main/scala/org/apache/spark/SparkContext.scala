@@ -2912,17 +2912,38 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Register a new RDD, returning its 64-bit id.
    *
-   * Ids increase monotonically via AtomicLong so applications can create
-   * more than Int.MaxValue RDDs. The public [[org.apache.spark.rdd.RDD.id]]
-   * accessor remains Int for Java compatibility (`int id = rdd.id()`) and
-   * throws once the id exceeds Int.MaxValue; callers should use
-   * [[org.apache.spark.rdd.RDD.idLong]] in that case.
+   * Allocation uses AtomicLong so overflow past Int.MaxValue is detected
+   * instead of silently wrapping to negative Ints.
+   *
+   * Under spark.rdd.id.overflow.policy=fail (default), allocation past
+   * Int.MaxValue throws (fail-fast). Under 'continue', ids keep growing as
+   * Long values for [[org.apache.spark.rdd.RDD.idLong]]; the Int accessor
+   * [[org.apache.spark.rdd.RDD.id]] throws past Int.MaxValue.
    */
   private[spark] def newRddId(): Long = {
     val id = nextRddId.getAndIncrement()
-    if (id == Int.MaxValue.toLong + 1L) {
-      logWarning("RDD id counter has exceeded Int.MaxValue. Subsequent RDD " +
-        "ids use 64-bit values; use RDD.idLong instead of RDD.id.")
+    if (id > Int.MaxValue) {
+      conf.get(RDD_ID_OVERFLOW_POLICY) match {
+        case "continue" =>
+          if (id == Int.MaxValue.toLong + 1L) {
+            logWarning("RDD id counter has exceeded Int.MaxValue under " +
+              "spark.rdd.id.overflow.policy=continue. Subsequent RDD ids " +
+              "use 64-bit values; use RDD.idLong instead of RDD.id.")
+          }
+          id
+        case _ =>
+          // Stay pegged so subsequent allocations keep failing clearly.
+          nextRddId.set(id)
+          throw new SparkException(
+            "RDD id counter would exceed Int.MaxValue (" + Int.MaxValue +
+              "). This application has created too many RDDs; restart it. " +
+              "Set spark.rdd.id.overflow.policy=continue to keep allocating " +
+              "64-bit ids (use RDD.idLong).")
+      }
+    } else if (id == Int.MaxValue) {
+      logWarning("Allocated the last valid 32-bit RDD id (Int.MaxValue). " +
+        "Further RDD creation will fail under " +
+        "spark.rdd.id.overflow.policy=fail.")
     }
     id
   }

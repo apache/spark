@@ -147,7 +147,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * A unique ID for this RDD (within its SparkContext), as a 64-bit value.
-   * Prefer this in new code, especially once ids exceed Int.MaxValue.
+   * Prefer this in new code, especially with
+   * spark.rdd.id.overflow.policy=continue once ids exceed Int.MaxValue.
    */
   @Since("4.4.0")
   val idLong: Long = sc.newRddId()
@@ -157,7 +158,7 @@ abstract class RDD[T: ClassTag](
    *
    * Retained as Int for compatibility with existing callers such as
    * `int id = rdd.id()` in Java. Throws if [[idLong]] exceeds Int.MaxValue;
-   * use [[idLong]] in that case.
+   * use [[idLong]] in that case (requires overflow.policy=continue).
    */
   def id: Int = {
     if (idLong > Int.MaxValue) {

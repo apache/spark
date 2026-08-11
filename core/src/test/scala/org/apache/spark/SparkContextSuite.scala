@@ -1531,8 +1531,29 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(rdd.id >= 0)
   }
 
-  test("SPARK-41246: Long RDD ids past Int.MaxValue") {
-    val conf = new SparkConf().setAppName("test").setMaster("local[1]")
+  test("SPARK-41246: fail-fast policy rejects RDD id overflow") {
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local[1]")
+      .set(RDD_ID_OVERFLOW_POLICY, "fail")
+    sc = new SparkContext(conf)
+    sc.setNextRddIdForTesting(Int.MaxValue.toLong)
+    val last = sc.parallelize(Seq(1), 1)
+    assert(last.id === Int.MaxValue)
+    assert(last.idLong === Int.MaxValue.toLong)
+    val err = intercept[SparkException] {
+      sc.parallelize(Seq(2), 1)
+    }
+    assert(err.getMessage.contains("Int.MaxValue"))
+    assert(err.getMessage.contains("overflow") ||
+      err.getMessage.contains("exceed"))
+  }
+
+  test("SPARK-41246: continue policy allows Long RDD ids past Int.MaxValue") {
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local[1]")
+      .set(RDD_ID_OVERFLOW_POLICY, "continue")
     sc = new SparkContext(conf)
     sc.setNextRddIdForTesting(Int.MaxValue.toLong + 1L)
     val rdd = sc.parallelize(Seq(1), 1)
@@ -1546,7 +1567,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val block = RDDBlockId(rdd.idLong, 0)
     assert(block.name === s"rdd_${rdd.idLong}_0")
     assert(BlockId(block.name) === block)
-    // Cache and count should work with Long-backed block ids.
     rdd.cache()
     assert(rdd.count() === 1)
   }
