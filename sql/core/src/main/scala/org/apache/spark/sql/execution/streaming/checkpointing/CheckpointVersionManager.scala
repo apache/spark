@@ -128,10 +128,10 @@ object CheckpointVersionManager extends Logging {
   }
 
   /**
-   * Determines the commit log format version to WRITE for this query run. An existing checkpoint
-   * wins: a commit log that was created at a given version keeps being written at that version, so
-   * a session config change cannot start writing a format the checkpoint was not created with. Only
-   * a fresh checkpoint takes the version from the session config.
+   * Determines the commit log format version for ordinary writes in this query run. An existing
+   * checkpoint wins, so a session config change cannot start writing a format the checkpoint was
+   * not created with. Only a fresh checkpoint takes the version from the session config. Sink
+   * evolution may independently upgrade writes to [[CommitLog.VERSION_3]].
    */
   def resolveCommitLogVersion(
       sparkSessionForStream: SparkSession,

@@ -177,7 +177,7 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
       val mapped = inputData.toDS().map(_ + 1)
       testStream(mapped, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
         AddData(inputData, 1),
-        // Phase 1: a microbatch trigger, which writes a v1 commit log.
+        // Phase 1: a micro-batch trigger, which writes a v1 commit log.
         StartStream(
           trigger = Trigger.ProcessingTime("1 second"),
           checkpointLocation = checkpointDir.getAbsolutePath),
