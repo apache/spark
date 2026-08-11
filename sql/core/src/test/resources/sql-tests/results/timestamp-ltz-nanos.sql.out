@@ -1368,6 +1368,78 @@ NULL
 
 
 -- !query
+SELECT typeof(current_timestamp(9)), typeof(current_timestamp(8)), typeof(current_timestamp(7))
+-- !query schema
+struct<typeof(current_timestamp()):string,typeof(current_timestamp()):string,typeof(current_timestamp()):string>
+-- !query output
+timestamp_ltz(9)	timestamp_ltz(8)	timestamp_ltz(7)
+
+
+-- !query
+SELECT typeof(now(9)), typeof(now(6))
+-- !query schema
+struct<typeof(current_timestamp()):string,typeof(now()):string>
+-- !query output
+timestamp_ltz(9)	timestamp
+
+
+-- !query
+SELECT typeof(current_timestamp()), typeof(current_timestamp(6))
+-- !query schema
+struct<typeof(current_timestamp()):string,typeof(current_timestamp()):string>
+-- !query output
+timestamp	timestamp
+
+
+-- !query
+SELECT typeof(current_timestamp(7 + 2))
+-- !query schema
+struct<typeof(current_timestamp()):string>
+-- !query output
+timestamp_ltz(9)
+
+
+-- !query
+SELECT current_timestamp(9) = current_timestamp(9), now(9) = current_timestamp(9)
+-- !query schema
+struct<(current_timestamp() = current_timestamp()):boolean,(current_timestamp() = current_timestamp()):boolean>
+-- !query output
+true	true
+
+
+-- !query
+SELECT current_timestamp(3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "3",
+    "type" : "TIMESTAMP_LTZ"
+  }
+}
+
+
+-- !query
+SELECT current_timestamp(10)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_LTZ"
+  }
+}
+
+
+-- !query
 SELECT c FROM (SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' AS c
     UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC')
   INTERSECT SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' ORDER BY c
