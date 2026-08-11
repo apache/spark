@@ -476,7 +476,7 @@ abstract class StreamExecution(
    * (throwIfConfsAreRealTimeModeIncompatible), so by the time this runs an explicit value is always
    * a safe one to keep.
    *
-   * Every change is logged, so a run's effective configuration is recoverable from the driver log.
+   * Every default applied here is logged, so those changes are recoverable from the driver log.
    *
    * Deliberately not set, though Databricks Runtime does default them for Real-Time Mode:
    *  - The incremental state-cleanup factor: that mechanism does not exist in OSS yet.
