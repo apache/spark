@@ -182,6 +182,9 @@ class BisectingKMeansModel private[ml] (
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
     if (parentModel != null) {
+      // root: ClusteringTreeNode
+      // distanceMeasure: String
+      // trainingCost: Double
       size += SizeEstimator.estimate((
         parentModel.root,
         parentModel.distanceMeasure,

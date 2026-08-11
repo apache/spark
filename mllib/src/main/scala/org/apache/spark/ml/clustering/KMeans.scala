@@ -216,6 +216,10 @@ class KMeansModel private[ml] (
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
     if (parentModel != null) {
+      // clusterCenters: Array[Vector]
+      // distanceMeasure: String
+      // trainingCost: Double
+      // numIter: Int
       size += SizeEstimator.estimate((
         parentModel.clusterCenters,
         parentModel.distanceMeasure,

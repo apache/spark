@@ -225,7 +225,7 @@ class GaussianMixtureModel private[ml] (
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
     // weights: Array[Double]
-    // gaussians: Array[MultivariateGaussian], each containing a mean Vector and covariance Matrix
+    // gaussians: Array[MultivariateGaussian], each with mean: Vector and cov: Matrix
     val gaussianParams = gaussians.map(gaussian => (gaussian.mean, gaussian.cov))
     size += SizeEstimator.estimate((weights, gaussianParams))
     size
