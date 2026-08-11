@@ -557,7 +557,7 @@ class MicroBatchExecution(
 
     // Resolve the commit log format version the same way: an existing checkpoint keeps the version
     // it was created with, and only a fresh one takes the version from the session config. Persist
-    // it so a later read of the config agrees with what is actually being written.
+    // the implied state store checkpoint format so it agrees with what is actually being written.
     val commitLogFormatVersion = CheckpointVersionManager.resolveCommitLogVersion(
       sparkSessionForStream, latestCommittedBatch)
     CheckpointVersionManager.setFormatVersion(

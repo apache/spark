@@ -71,9 +71,10 @@ class CommitLog(
   /**
    * Factory for creating a [[CommitMetadataBase]] for the requested wire format version.
    *
-   * The version is a parameter rather than a field read from the session config, so that a caller
-   * always supplies the version it resolved for this query run. Reading the config here would
-   * capture whatever value happened to be set when this log was constructed -- which is during
+   * [[commitLogFormatVersion]] is a required parameter rather than a field read from the session
+   * config, so that a caller always supplies the version it resolved for this query run. Reading
+   * the config here would capture whatever value happened to be set when this log was constructed
+   * -- which is during
    * [[org.apache.spark.sql.execution.streaming.runtime.StreamExecution]]'s own initialization,
    * before per-query configuration is applied -- and would ignore the format an existing
    * checkpoint was created with.
@@ -85,7 +86,7 @@ class CommitLog(
       nextBatchWatermarkMs: Long = 0,
       stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None,
       sinkMetadataMap: Map[String, SinkMetadataInfo] = Map.empty,
-      commitLogFormatVersion: Int = VERSION_1): CommitMetadataBase = {
+      commitLogFormatVersion: Int): CommitMetadataBase = {
     commitLogFormatVersion match {
       case VERSION_3 =>
         CommitMetadataV3(nextBatchWatermarkMs, stateUniqueIds, sinkMetadataMap)

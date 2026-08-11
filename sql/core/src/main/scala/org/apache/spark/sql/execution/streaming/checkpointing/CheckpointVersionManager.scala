@@ -116,12 +116,10 @@ object CheckpointVersionManager extends Logging {
 
   /**
    * The commit log format version requested by the session config.
-   * `streamingCommitLogFormatVersion` already takes the max of
-   * [[SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION]] and
-   * [[SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION]], so a state store checkpoint format of v2
-   * (which makes each batch write `stateUniqueIds`, persistable only by a commit log at
-   * [[CommitLog.VERSION_2]] or above) raises the commit log version even when the commit log config
-   * is left at 1.
+   * `streamingCommitLogFormatVersion` tracks [[SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION]]: a
+   * state store checkpoint format of v2 makes each batch write `stateUniqueIds`, which only a
+   * commit log at [[CommitLog.VERSION_2]] or above can persist, so a v2 state store format raises
+   * the commit log version to v2.
    */
   private def getCommitLogVersion(sparkSessionForStream: SparkSession): Int = {
     val result = sparkSessionForStream.sessionState.conf.streamingCommitLogFormatVersion
@@ -200,7 +198,5 @@ object CheckpointVersionManager extends Logging {
     val stateStoreVersion = if (commitLogFormatVersion >= CommitLog.VERSION_2) 2 else 1
     sparkSessionForStream.conf
       .set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, stateStoreVersion.toString)
-    sparkSessionForStream.conf
-      .set(SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION.key, commitLogFormatVersion.toString)
   }
 }

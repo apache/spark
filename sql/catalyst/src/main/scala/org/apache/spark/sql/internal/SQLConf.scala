@@ -3624,19 +3624,6 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(1)
 
-  val STREAMING_COMMIT_LOG_FORMAT_VERSION =
-    buildConf("spark.sql.streaming.commitLog.formatVersion")
-      .internal()
-      .doc("The version of the commit log format. The default value is 1. Will use the max of " +
-        "this and STATE_STORE_CHECKPOINT_FORMAT_VERSION as the commit log version, since a " +
-        "state store checkpoint format above 1 writes state store checkpoint ids that only a " +
-        "commit log at version 2 or above can persist.")
-      .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .intConf
-      .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2 and 3")
-      .createWithDefault(1)
-
   val STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1 =
     buildConf("spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled")
       .internal()
@@ -8815,8 +8802,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def streamingOffsetLogFormatVersion: Int = getConf(STREAMING_OFFSET_LOG_FORMAT_VERSION)
 
+  // The commit log format version implied by the session config for a fresh checkpoint. A state
+  // store checkpoint format of v2 makes each batch write stateUniqueIds, which only a commit log at
+  // VERSION_2 or above can persist, so the commit log version tracks the state store format. It is
+  // capped at VERSION_2 here: VERSION_3 exists only to carry sink-evolution metadata and is written
+  // exclusively by the sink-evolution path in MicroBatchExecution, never derived from a config.
   def streamingCommitLogFormatVersion: Int =
-    getConf(STREAMING_COMMIT_LOG_FORMAT_VERSION).max(getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION))
+    if (getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION) >= 2) 2 else 1
 
   def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
 

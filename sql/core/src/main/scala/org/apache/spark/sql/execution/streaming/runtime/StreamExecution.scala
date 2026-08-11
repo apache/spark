@@ -490,11 +490,11 @@ abstract class StreamExecution(
     // the state file names of a partially-written failed batch (see the v1 hazard described at the
     // fail-fast in MicroBatchExecution.initializeExecution). v2 requires the RocksDB state store
     // provider. These are defaulted with two INDEPENDENT guards, matching the Databricks runtime:
-    // each key is set only if the user has not set that key. If the user pins the provider to a
-    // non-RocksDB store but leaves the version unset, the version is still raised to 2 and the
-    // incompatible combination throws later (HDFSBackedStateStoreProvider rejects
-    // checkpointFormatVersion > 1) rather than silently running at v1 -- the runtime makes the same
-    // choice deliberately.
+    // each key is set only if the user has not set that key. An explicit non-RocksDB provider has
+    // already been rejected by the pre-flight in StreamingQueryManager
+    // (throwIfConfsAreRealTimeModeIncompatible), so by the time this runs the provider is either
+    // unset (defaulted to RocksDB just below) or already RocksDB; the version default is applied
+    // independently of the provider default.
     val checkpointVersionKey = SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key
     if (!conf.contains(checkpointVersionKey)) {
       logInfo(log"Real-Time Mode: defaulting ${MDC(CONFIG, checkpointVersionKey)}=2")
