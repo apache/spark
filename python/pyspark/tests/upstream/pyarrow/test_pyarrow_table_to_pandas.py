@@ -247,6 +247,75 @@ class PyArrowTableToPandasDefaultTests(_PyArrowTableToPandasTestBase):
         )
 
 
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas,
+    pyarrow_requirement_message or pandas_requirement_message,
+)
+class PyArrowTableToPandasCoerceTemporalTests(_PyArrowTableToPandasTestBase):
+    """
+    Tests pa.Table.to_pandas(coerce_temporal_nanoseconds=True) via golden file comparison.
+
+    Reuses the shared temporal tables plus a coercion overflow row, recorded under two
+    columns: the default date_as_object=True (dates stay object, unaffected by coercion)
+    and date_as_object=False (the datetime64[ns] path where coercion applies, including
+    the far-future overflow).
+    """
+
+    # to_pandas(coerce_temporal_nanoseconds=True); date_as_object at its default (True).
+    COL_PANDAS = "pandas dataframe"
+
+    # to_pandas(coerce_temporal_nanoseconds=True, date_as_object=False) -- the only path
+    # on which coercion observably affects date columns.
+    COL_PANDAS_DATE_AS_OBJECT_FALSE = "pandas dataframe (date_as_object=False)"
+
+    def test_to_pandas_coerce_temporal_nanoseconds(self):
+        """Test pa.Table.to_pandas(coerce_temporal_nanoseconds=True) against golden file."""
+        sources = self._temporal_tables()
+        # Coercion to nanoseconds has a valid range (~1677-2262); a far-future
+        # second-resolution timestamp column cannot fit and raises.
+        sources["temporal:timestamp-overflow"] = pa.table(
+            {"ts": pa.array([datetime.datetime(2500, 1, 1)], pa.timestamp("s"))}
+        )
+        # A duration beyond ~292 years also exceeds the int64 nanosecond range, but
+        # unlike timestamp overflow, coercion wraps it silently to a bogus value.
+        sources["temporal:duration-overflow"] = pa.table(
+            {"dur": pa.array([datetime.timedelta(days=300 * 365)], pa.duration("s"))}
+        )
+        row_names = list(sources.keys())
+        col_names = [
+            "pyarrow table",
+            self.COL_PANDAS,
+            self.COL_PANDAS_DATE_AS_OBJECT_FALSE,
+        ]
+
+        # Version-specific expected values go here, keyed by (row, col), when a newer
+        # pandas/PyArrow legitimately changes a cell. Add a LooseVersion-guarded block
+        # for each known drift.
+        overrides: dict[tuple[str, str], str] = {}
+
+        def compute_cell(row_name, col_name):
+            table = sources[row_name]
+            if col_name == "pyarrow table":
+                return self.repr_value(table, max_len=0)
+            elif col_name == self.COL_PANDAS:
+                return self._to_pandas_cell(table, coerce_temporal_nanoseconds=True)
+            elif col_name == self.COL_PANDAS_DATE_AS_OBJECT_FALSE:
+                return self._to_pandas_cell(
+                    table, coerce_temporal_nanoseconds=True, date_as_object=False
+                )
+            else:
+                raise ValueError(f"unknown column: {col_name}")
+
+        self.compare_or_generate_golden_matrix(
+            row_names=row_names,
+            col_names=col_names,
+            compute_cell=compute_cell,
+            golden_file_prefix="golden_pyarrow_table_to_pandas_coerce_temporal",
+            index_name="test case",
+            overrides=overrides,
+        )
+
+
 if __name__ == "__main__":
     from pyspark.testing import main
 
