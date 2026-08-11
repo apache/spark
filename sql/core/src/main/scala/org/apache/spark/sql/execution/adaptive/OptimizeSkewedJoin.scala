@@ -82,9 +82,11 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     }
   }
 
+  // ExistenceJoin emits every left row with an extra boolean flag, and can only be built on the
+  // right, so its left side is always the probe side: splitting it is as safe as for LeftSemi.
   private def canSplitLeftSide(joinType: JoinType) = {
     joinType == Inner || joinType == Cross || joinType == LeftSemi ||
-      joinType == LeftAnti || joinType == LeftOuter
+      joinType == LeftAnti || joinType == LeftOuter || joinType.isInstanceOf[ExistenceJoin]
   }
 
   private def canSplitRightSide(joinType: JoinType) = {
