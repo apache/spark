@@ -1074,6 +1074,62 @@ Project [date_trunc(NANOSECOND, 2020-01-01 12:34:56.123456789, Some(America/Los_
 
 
 -- !query
+SELECT typeof(localtimestamp(9)), typeof(localtimestamp(8)), typeof(localtimestamp(7))
+-- !query analysis
+Project [typeof(localtimestamp(9, Some(America/Los_Angeles))) AS typeof(localtimestamp())#x, typeof(localtimestamp(8, Some(America/Los_Angeles))) AS typeof(localtimestamp())#x, typeof(localtimestamp(7, Some(America/Los_Angeles))) AS typeof(localtimestamp())#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(localtimestamp()), typeof(localtimestamp(6))
+-- !query analysis
+Project [typeof(localtimestamp(Some(America/Los_Angeles))) AS typeof(localtimestamp())#x, typeof(localtimestamp(Some(America/Los_Angeles))) AS typeof(localtimestamp())#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(localtimestamp(8 + 1))
+-- !query analysis
+Project [typeof(localtimestamp(9, Some(America/Los_Angeles))) AS typeof(localtimestamp())#x]
++- OneRowRelation
+
+
+-- !query
+SELECT localtimestamp(9) = localtimestamp(9)
+-- !query analysis
+Project [(localtimestamp(9, Some(America/Los_Angeles)) = localtimestamp(9, Some(America/Los_Angeles))) AS (localtimestamp() = localtimestamp())#x]
++- OneRowRelation
+
+
+-- !query
+SELECT localtimestamp(3)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "3",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}
+
+
+-- !query
+SELECT localtimestamp(10)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}
+
+
+-- !query
 SELECT c FROM (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' AS c
     UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999')
   INTERSECT SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' ORDER BY c

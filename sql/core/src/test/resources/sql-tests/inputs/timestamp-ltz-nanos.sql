@@ -409,6 +409,20 @@ SELECT date_trunc('DAY', '2020-01-01 04:00:00.000000123 UTC' :: timestamp_ltz(7)
 -- An unsupported (sub-microsecond) unit yields NULL; the result still carries the nanos type.
 SELECT date_trunc('NANOSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC');
 
+-- SPARK-57837: current_timestamp(p) / now(p) with a nanosecond precision return TIMESTAMP_LTZ(p).
+-- The values are non-deterministic, so only the (deterministic) result type and query-stable
+-- self-equality are checked. Precision 6 keeps the standard microsecond TIMESTAMP.
+SELECT typeof(current_timestamp(9)), typeof(current_timestamp(8)), typeof(current_timestamp(7));
+SELECT typeof(now(9)), typeof(now(6));
+SELECT typeof(current_timestamp()), typeof(current_timestamp(6));
+-- A foldable (constant) precision expression is accepted.
+SELECT typeof(current_timestamp(7 + 2));
+-- All references to current_timestamp(p) within a query see the same value.
+SELECT current_timestamp(9) = current_timestamp(9), now(9) = current_timestamp(9);
+-- Out-of-range precision is rejected.
+SELECT current_timestamp(3);
+SELECT current_timestamp(10);
+
 -- SPARK-57841: end-to-end coverage for operators that ride on the resolved widening (SPARK-57454)
 -- and complex-type access over nanosecond values, mirroring timestamp-ntz-nanos.sql for the LTZ
 -- family. Every case turns on the SUB-MICROSECOND remainder or on cross-precision widening. LTZ is
