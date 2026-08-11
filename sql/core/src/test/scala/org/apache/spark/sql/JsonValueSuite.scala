@@ -53,6 +53,16 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
     assert(sql(s"SELECT json_value('$doc', '$$.name')").schema.head.dataType === StringType)
   }
 
+  test("a raw JSON number keeps its exact source digits (no double rounding)") {
+    // The matched scalar is read straight from the parser, so a fraction with more digits than a
+    // double can represent reaches the DECIMAL cast (and the default STRING form) intact.
+    val big = """{"v":0.123456789012345678}"""
+    checkAnswer(
+      sql(s"SELECT json_value('$big', '$$.v' RETURNING DECIMAL(38,18))"),
+      Row(new java.math.BigDecimal("0.123456789012345678")))
+    checkAnswer(sql(s"SELECT json_value('$big', '$$.v')"), Row("0.123456789012345678"))
+  }
+
   test("a present JSON null yields SQL NULL") {
     checkAnswer(sql(s"SELECT json_value('$doc', '$$.score')"), Row(null))
   }

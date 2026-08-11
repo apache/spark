@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
   JsonPathParser, JsonPathResult, JsonTableEvaluator, JsonTablePathTrie, JsonToStructsEvaluator,
-  JsonTupleEvaluator, MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator,
-  StructsToJsonEvaluator}
+  JsonTupleEvaluator, JsonValueLookup, MultiGetJsonObjectEvaluator, PathInstruction,
+  SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
@@ -772,8 +772,8 @@ case class JsonValue(
   @transient private lazy val errorDefaultCast: Option[Expression] =
     errorDefault.map(e => Cast(e, returning, timeZoneId, defaultEvalMode))
 
-  private def castScalar(raw: UTF8String): Any = {
-    castInput.update(0, evaluator.unquotedString(raw))
+  private def castScalar(text: UTF8String): Any = {
+    castInput.update(0, text)
     valueCast.eval(castInput)
   }
 
@@ -801,17 +801,14 @@ case class JsonValue(
       // Malformed / non-single-value input.
       case None => onErrorResult(input, cause = null)
       // Path matched nothing.
-      case Some(JsonPathResult.Missing) => onEmptyResult(input)
+      case Some(JsonValueLookup.Missing) => onEmptyResult(input)
       // Matched an explicit JSON null: a present, scalar null value -> SQL NULL.
-      case Some(JsonPathResult.NullValue) => null
-      case Some(JsonPathResult.Found(raw)) =>
-        // A matched object/array is not a scalar -> ON ERROR.
-        if (!evaluator.isScalar(raw)) {
-          onErrorResult(input, cause = null)
-        } else {
-          // `valueCast` throws on a failed conversion, which routes to ON ERROR.
-          try castScalar(raw) catch { case e: Exception => onErrorResult(input, e) }
-        }
+      case Some(JsonValueLookup.NullValue) => null
+      // Matched an object or array: not a scalar -> ON ERROR.
+      case Some(JsonValueLookup.NonScalar) => onErrorResult(input, cause = null)
+      case Some(JsonValueLookup.Scalar(text)) =>
+        // `valueCast` throws on a failed conversion, which routes to ON ERROR.
+        try castScalar(text) catch { case e: Exception => onErrorResult(input, e) }
     }
   }
 
