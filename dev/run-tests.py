@@ -673,12 +673,10 @@ def main():
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests and not os.environ.get("SKIP_PYTHON"):
         relevant_changed_files = None
-        # We only filter tests based on changed files for post-commit of apache/spark
-        if (
-            not os.environ.get("APACHE_SPARK_REF", "")
-            and os.environ.get("GITHUB_PREV_SHA", "")
-            and changed_files
-        ):
+        # We only do smart test selection on push action of apache/spark
+        # If APACHE_SPARK_REF is set, we are in a forked repository.
+        # Otherwise if we have a list of changed files, we must be in post-merge CI.
+        if not os.environ.get("APACHE_SPARK_REF", "") and changed_files:
             # Filter out all dev_tools files because they are not relevant
             relevant_changed_files = [
                 f for f in changed_files if not modules.dev_tools.contains_file(f)
