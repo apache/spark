@@ -69,10 +69,10 @@ object PipelinesErrors extends Logging {
    * with this error must not be retried.
    *
    * Structured Streaming reports this as a bare `AssertionError`, so the only signal available
-   * here is the message text. It is produced by the source-count assertion in
-   * `org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq.toStreamProgress`; since
-   * this predicate now drives the retry decision, a change to that message silently turns these
-   * failures back into retried ones. Keep the two in sync.
+   * here is the message text, produced by the source-count assertion in
+   * `org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq.toStreamProgress`. Since
+   * this predicate drives the retry decision, a change to that message silently turns these
+   * failures back into retried ones; keep the two in sync.
    */
   private[graph] def streamingSourcesChanged(ex: Throwable): Boolean = {
     checkCauses(
