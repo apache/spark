@@ -561,7 +561,10 @@ class MicroBatchExecution(
     val commitLogFormatVersion = CheckpointVersionManager.resolveCommitLogVersion(
       sparkSessionForStream, latestCommittedBatch)
     CheckpointVersionManager.setFormatVersion(
-      sparkSessionForStream, CommitLogType, commitLogFormatVersion)
+      sparkSessionForStream,
+      CommitLogType,
+      commitLogFormatVersion,
+      latestCommittedBatch.map(_._2))
 
     // Real-Time Mode requires commit log v2. Real-Time Mode writes the offset log at batch end
     // (markMicroBatchStart is a no-op for it), so a mid-batch failure can leave durable state at a

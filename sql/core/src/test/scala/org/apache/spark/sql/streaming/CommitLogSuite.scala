@@ -290,12 +290,20 @@ class CommitLogSuite extends SharedSparkSession {
   }
 
   test("recording a commit log version sets the implied state store format") {
-    // A V3 commit log has no state store counterpart, so the state store config is clamped to 2
-    // rather than set to 3.
     val session = spark.cloneSession()
-    CheckpointVersionManager.setFormatVersion(session, CommitLogType, CommitLog.VERSION_3)
+    val v3WithStateIds = CommitMetadataV3(0, Some(Map.empty), Map.empty)
+    CheckpointVersionManager.setFormatVersion(
+      session, CommitLogType, CommitLog.VERSION_3, Some(v3WithStateIds))
     assert(session.conf.get(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key) === "2",
-      "the state store format must be clamped to 2 for a V3 commit log")
+      "state checkpoint ids in a V3 commit imply state store format v2")
+
+    val v3WithoutStateIdsSession = spark.cloneSession()
+    val v3WithoutStateIds = CommitMetadataV3(0, None, Map.empty)
+    CheckpointVersionManager.setFormatVersion(
+      v3WithoutStateIdsSession, CommitLogType, CommitLog.VERSION_3, Some(v3WithoutStateIds))
+    assert(v3WithoutStateIdsSession.conf.get(
+      SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key) === "1",
+      "a V3 commit without state checkpoint ids must preserve state store format v1")
 
     val v1Session = spark.cloneSession()
     CheckpointVersionManager.setFormatVersion(v1Session, CommitLogType, CommitLog.VERSION_1)

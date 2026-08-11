@@ -537,6 +537,8 @@ abstract class StreamExecution(
     // the pre-flight in StreamingQueryManager (throwIfConfsAreRealTimeModeIncompatible), so by the
     // time we get here an explicit value can only be `false`. Matches the Databricks runtime.
     if (!conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key)) {
+      logInfo(log"Real-Time Mode: defaulting " +
+        log"${MDC(CONFIG, SQLConf.SORT_BEFORE_REPARTITION.key)}=false")
       conf.set(SQLConf.SORT_BEFORE_REPARTITION.key, "false")
     }
   }
