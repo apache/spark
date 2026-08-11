@@ -71,7 +71,7 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$"),
-    // [SQL] Add recursive mode to variant explode table-valued functions
+    // [SPARK-58645][SQL] Add recursive mode to variant explode table-valued functions
     ProblemFilters.exclude[ReversedMissingMethodProblem](
       "org.apache.spark.sql.TableValuedFunction.variant_explode"),
     ProblemFilters.exclude[ReversedMissingMethodProblem](

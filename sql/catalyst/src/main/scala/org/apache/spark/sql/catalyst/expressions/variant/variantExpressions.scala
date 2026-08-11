@@ -1854,7 +1854,7 @@ object VariantExplodeGeneratorBuilder extends VariantExplodeGeneratorBuilderBase
 
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, recursive]) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. When `recursive` is true, it also emits all nested descendants and adds a leading `path string` column containing each field/element's JSONPath. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. It produces a single NULL row for inputs that do not produce any rows.",
+  usage = "_FUNC_(expr[, recursive]) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. When `recursive` is true, it also emits all nested descendants and adds a leading `path string` column containing each field/element's JSONPath. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. Unlike variant_explode, if the given variant is not a variant array/object, including SQL NULL, variant null, and any other variant values, then a single NULL row is produced.",
   examples = """
     Examples:
       > SELECT * from _FUNC_(parse_json('["hello", "world"]'));
