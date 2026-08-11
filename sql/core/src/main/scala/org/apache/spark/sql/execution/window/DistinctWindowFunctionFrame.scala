@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.window
 
 import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
@@ -33,13 +34,13 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  * Such a frame never removes rows: it either covers the entire partition or only grows as output
  * advances. For each qualifying input row this frame finds the first output row whose upper bound
  * contains it. A BytesToBytesMap removes duplicates while it remains below configurable key-count
- * and memory-size soft limits. When another new key arrives after either limit has been reached, or
- * an append fails, the frame permanently falls back to an external sorter for the rest of the
- * window partition. For a growing frame, that sorter finds the earliest event for every key, then
- * a second external sorter orders those events by (firstVisibleIndex, inputIndex). The frame feeds
- * each unique, normalized DISTINCT input to the aggregate processor when its event becomes visible.
- * A frame covering the entire partition consumes unique inputs directly because their order is
- * undefined.
+ * and memory-size soft limits. If the map cannot be allocated, or if another new key arrives after
+ * either limit has been reached or an append fails, the frame permanently falls back to an
+ * external sorter for the rest of the window partition. For a growing frame, that sorter finds the
+ * earliest event for every key, then a second external sorter orders those events by
+ * (firstVisibleIndex, inputIndex). The frame feeds each unique, normalized DISTINCT input to the
+ * aggregate processor when its event becomes visible. A frame covering the entire partition
+ * consumes unique inputs directly because their order is undefined.
  */
 private[window] abstract class DistinctWindowFunctionFrame(
     target: InternalRow,
@@ -137,15 +138,19 @@ private[window] abstract class DistinctWindowFunctionFrame(
    * in non-decreasing (firstVisibleIndex, inputIndex) order.
    *
    * BytesToBytesMap compares raw UnsafeRow bytes, so binary-unstable keys use the sorter directly.
-   * Once the map reaches either its key-count or memory-size soft limit and another new key
-   * arrives, or it cannot append a record, all map entries are transferred to one external sorter.
-   * The rest of this window partition goes directly to that sorter and never returns to hash-based
-   * deduplication.
+   * If map construction fails, inputs go directly to the sorter. Once the map reaches either its
+   * key-count or memory-size soft limit and another new key arrives, or it cannot append a record,
+   * all map entries are transferred to one external sorter. The rest of this window partition goes
+   * directly to that sorter and never returns to hash-based deduplication.
    */
   protected final class FirstVisibleRowsBuilder extends AutoCloseable {
     private val map = if (canUseHashDedup) {
       val taskMemoryManager = TaskContext.get().taskMemoryManager()
-      new BytesToBytesMap(taskMemoryManager, 64, taskMemoryManager.pageSizeBytes())
+      try {
+        new BytesToBytesMap(taskMemoryManager, 64, taskMemoryManager.pageSizeBytes())
+      } catch {
+        case _: SparkOutOfMemoryError => null
+      }
     } else {
       null
     }
@@ -474,7 +479,7 @@ private[window] final class UnboundedPrecedingDistinctWindowFunctionFrame(
     rowOffset match {
       case Some(offset) =>
         // A ROWS bound depends only on row indexes. Calculate the first visible output row
-        // directly instead of scanning the partition again as output rows.
+        // directly instead of scanning the partition again as output rows advance.
         val inputIterator = rows.generateIterator()
         var inputIndex = 0
         while (inputIterator.hasNext) {
