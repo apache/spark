@@ -1592,7 +1592,10 @@ case class StreamingDeduplicateExec(
       store,
       store.iterator(),
       keyExpressions,
-      allowMultipleEventTimeColumns = false,
+      // Match the event-time-column resolution the previous full-eviction path used (via
+      // watermarkExpression -> findEventTimeColumn), so behavior is unchanged: when multiple
+      // stateful operators are allowed, a single event time column is required.
+      allowMultipleEventTimeColumns = !allowMultipleStatefulOperators,
       evictionWatermark)
 
     CompletionIterator[UnsafeRowPair, Iterator[UnsafeRowPair]](evictionIterator, {
