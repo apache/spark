@@ -72,7 +72,8 @@ object PipelinesErrors extends Logging {
    * here is the message text, produced by the source-count assertion in
    * `org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq.toStreamProgress`. Since
    * this predicate drives the retry decision, a change to that message silently turns these
-   * failures back into retried ones; keep the two in sync.
+   * failures back into retried ones; keep the two in sync. Giving that assertion an error
+   * condition and matching on it here would remove the coupling.
    */
   private[graph] def streamingSourcesChanged(ex: Throwable): Boolean = {
     checkCauses(
