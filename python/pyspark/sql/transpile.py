@@ -877,9 +877,11 @@ def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.
         ast_info = ast.parse(src)
     except Exception:
         try:
-            # getattr keeps mypy happy: `__call__` on a bare Callable is
-            # not attribute-accessible in the type system.
-            src = inspect.getsource(getattr(func, "__call__"))
+            # ``_call_dunder`` rather than ``func.__call__``: the call protocol
+            # dispatches on the TYPE, so that is the body that actually runs.
+            # ``_target_code`` must agree with this choice or the fingerprint
+            # would be compared against a different callable's source.
+            src = inspect.getsource(_call_dunder(func))
             src = textwrap.dedent(src).strip()
             ast_info = ast.parse(src)
         except Exception:
@@ -895,15 +897,34 @@ def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
     return [arg.arg for arg in node.args.args]
 
 
+# The ``co_flags`` bits that describe what a code object DOES, as opposed to
+# where it was compiled. ``CO_NESTED`` is deliberately absent: it is set for a
+# lambda written inside another function and never by the standalone compile in
+# ``_compile_lambda``, so comparing it would reject every correct match inside a
+# function body. The bits below cannot be reconstructed from the other compared
+# fields -- ``lambda *a: 1`` and ``lambda **a: 1`` agree on argument counts,
+# ``co_varnames`` AND ``co_code``, and differ only here.
+_BEHAVIORAL_CO_FLAGS = (
+    inspect.CO_VARARGS
+    | inspect.CO_VARKEYWORDS
+    | inspect.CO_GENERATOR
+    | inspect.CO_COROUTINE
+    | inspect.CO_ASYNC_GENERATOR
+)
+
+
 def _code_identity(code: CodeType) -> tuple:
     """A structural fingerprint of a code object, used to tell lambdas apart.
 
     Covers everything the compiler derives from the lambda's own source --
-    signature shape, local/global/closure names, constants, and the emitted
-    bytecode -- so two lambdas differing anywhere in their body get different
-    fingerprints. Constants are keyed by ``(type name, repr)`` rather than by
-    value so ``1``, ``1.0`` and ``True`` stay distinct (they compare equal),
-    and nested code objects (a lambda inside a lambda) recurse.
+    signature shape, local/global/closure names, constants, the behavioral
+    ``co_flags`` bits, and the emitted bytecode -- so two lambdas differing
+    anywhere in their body get different fingerprints. Constants are keyed by
+    ``(type name, repr)`` rather than by value so ``1``, ``1.0`` and ``True``
+    stay distinct (they compare equal), and nested code objects (a lambda
+    inside a lambda) recurse rather than being keyed by ``repr``, whose output
+    for a code object embeds a memory address that never matches across two
+    independent compiles.
 
     Deliberately EXCLUDES everything that depends on where the code was
     compiled rather than on what it computes, because the candidates are
@@ -911,24 +932,21 @@ def _code_identity(code: CodeType) -> tuple:
 
     * ``co_filename`` / ``co_name`` / ``co_qualname`` / ``co_firstlineno`` and
       the line table -- position, not behavior;
-    * ``co_flags`` -- it carries ``CO_NESTED`` for a lambda written inside
-      another function, which a standalone compile never sets, so comparing it
-      would reject every correct match inside a function body. It adds no
-      discriminating power anyway: the flags that do describe behavior
-      (``CO_VARARGS``, ``CO_VARKEYWORDS``, ``CO_GENERATOR``) cannot differ
-      without ``co_varnames`` or ``co_code`` differing too;
+    * ``CO_NESTED`` and the remaining ``co_flags`` bits -- see
+      ``_BEHAVIORAL_CO_FLAGS`` above;
     * ``co_nlocals`` / ``co_stacksize`` / ``co_exceptiontable`` -- derived
       from the fields already compared.
 
-    The fields that remain are exactly the ones that determine what the code
-    DOES, which is what makes a match safe: a candidate with an equal
-    fingerprint computes the same thing as the target even in the rare case
-    it is not literally the same source expression.
+    The fields that remain are the ones that determine what the code DOES.
+    That is what makes a match meaningful, but it is NOT a proof of
+    interchangeability on its own -- see ``_resolve_lambda``, which additionally
+    requires the matching candidates to be the same expression.
     """
     return (
         code.co_argcount,
         code.co_posonlyargcount,
         code.co_kwonlyargcount,
+        code.co_flags & _BEHAVIORAL_CO_FLAGS,
         code.co_varnames,
         code.co_names,
         code.co_freevars,
@@ -1014,9 +1032,12 @@ def _resolve_lambda(
       which produces a more specific diagnostic for these.
     * ``_AMBIGUOUS`` -- compile-time constant folding is how this happens in
       practice: ``lambda x: x + (1 + 2)`` and ``lambda x: x + 3`` fold to the
-      same bytecode, so neither can be told from the other. Identical
-      bytecode means identical behavior, so falling back here costs speed and
-      never correctness.
+      same bytecode, so neither can be told from the other.
+
+    The ``ast.dump`` tie-break below is load-bearing, not a nicety: an equal
+    fingerprint does NOT by itself prove two lambdas are interchangeable, so
+    picking any match would be unsound. Requiring the matches to be the same
+    expression is what makes the answer safe.
 
     Byte-identical twins (``f = lambda x: x + 1; g = lambda x: x + 1``) do
     match more than once. They transpile to the same expression, so any of
@@ -1037,6 +1058,27 @@ def _resolve_lambda(
     return matches[0]
 
 
+def _call_dunder(func: Optional[Callable]) -> Any:
+    """``func``'s ``__call__`` as Python's call protocol resolves it: on the TYPE.
+
+    ``getattr(func, "__call__")`` is wrong in two ways that both end in the
+    transpiler lowering a body that never runs:
+
+    * a CLASS object finds its own ``__call__`` (the one its instances use),
+      but calling a class constructs an instance -- so ``udf(SomeClass, ...)``
+      would transpile ``SomeClass.__call__``'s body while interpreted Python
+      runs ``__init__``;
+    * an INSTANCE attribute ``obj.__call__ = ...`` shadows the type's for
+      ``getattr`` but is ignored by the call protocol, which always dispatches
+      through the type.
+
+    Returns ``None`` when the type has no ``__call__`` at all.
+    """
+    if func is None:
+        return None
+    return getattr(type(func), "__call__", None)
+
+
 def _target_code(func: Optional[Callable]) -> Optional[CodeType]:
     """The code object whose source ``_get_src_ast_from_func`` would have read.
 
@@ -1044,12 +1086,14 @@ def _target_code(func: Optional[Callable]) -> Optional[CodeType]:
     exposes ``__code__`` directly, while a callable class INSTANCE does not --
     its source is read from ``__call__``, so ``__call__``'s code object is the
     one to match candidates against. Returns ``None`` when no code object is
-    reachable (builtins, C callables), which keeps the caller on its
-    structural path.
+    reachable (builtins, C callables, or a class object, whose ``type.__call__``
+    is a C slot), which keeps the caller on its structural path.
     """
     code = getattr(func, "__code__", None)
-    if code is None:
-        code = getattr(getattr(func, "__call__", None), "__code__", None)
+    # Validate BEFORE deciding to fall back, or a truthy non-code ``__code__``
+    # (duck typing, a Mock) suppresses the ``__call__`` lookup entirely.
+    if not isinstance(code, CodeType):
+        code = getattr(_call_dunder(func), "__code__", None)
     return code if isinstance(code, CodeType) else None
 
 
@@ -1121,22 +1165,32 @@ def _get_function_from_ast(
     # lambdas happen to share the line.
     #
     # A failure to match is NOT the same as an ambiguous match, but neither one
-    # licenses a guess. When exactly one lambda appears in the source, whatever
-    # the structural path picks is provably the target's own node -- there is no
-    # other lambda to confuse it with -- so falling through is safe and gives a
-    # lone closure the far more precise "name is not in the parameter list"
-    # diagnostic. With two or more candidates, ``body.body[0]`` may hold a
-    # DIFFERENT lambda (``plain = lambda x: x + 9; clo = lambda x: x + n``,
-    # where the closure matches nothing), so falling through would resurrect the
-    # very wrong answer this exists to remove. Give up instead.
+    # licenses a guess. Falling through to the structural path is only safe when
+    # BOTH hold:
+    #
+    # * a closure EXPLAINS the mismatch. Captured names become global loads in
+    #   an isolated compile, so a lambda with ``co_freevars`` provably cannot
+    #   match and its mismatch carries no information. An unexplained mismatch
+    #   is instead positive evidence that ``inspect.getsource`` handed back
+    #   source that is not the target's (a stale ``linecache`` entry, say), and
+    #   lowering it would transpile a body the UDF never runs;
+    # * there is at most ONE lambda in the source, so whatever the structural
+    #   path picks is the target's own node. With two or more, ``body.body[0]``
+    #   can be a DIFFERENT lambda -- ``plain = lambda x: x + 9; clo = lambda x:
+    #   x + n``, where the closure matches nothing and would have silently
+    #   computed ``x + 9``.
+    #
+    # The narrow case that survives both is the common one worth keeping: a
+    # lone closure, which the structural path diagnoses precisely by naming the
+    # captured variable instead of reporting a generic extraction failure.
     target = _target_code(func)
     lambda_target = target is not None and target.co_name == "<lambda>"
-    if target is not None and lambda_target:
+    if lambda_target and target is not None:
         candidates = [node for node in ast.walk(body) if isinstance(node, ast.Lambda)]
         resolved = _resolve_lambda(target, candidates)
         if isinstance(resolved, ast.Lambda):
             return _lambda_to_function_def(resolved)
-        if resolved is _AMBIGUOUS or len(candidates) > 1:
+        if resolved is _AMBIGUOUS or len(candidates) > 1 or not target.co_freevars:
             return None
 
     stmt = body.body[0]
