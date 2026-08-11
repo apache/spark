@@ -1557,8 +1557,11 @@ case class StreamingDeduplicateExec(
   protected val extraOptionOnStateStore: Map[String, String] =
     Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false")
 
+  // Read via the null-safe `conf` accessor rather than `session.sessionState.conf`: on a
+  // session-less thread (e.g. during canonicalization) `session` is null, and `conf` falls back to
+  // SparkPlan's active/default conf instead of throwing.
   override protected val incrementalCleanupFactor: Long =
-    session.sessionState.conf.getConf(SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR)
+    conf.getConf(SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR)
 
   protected def initializeReusedDupInfoRow(): Option[UnsafeRow] = None
 
