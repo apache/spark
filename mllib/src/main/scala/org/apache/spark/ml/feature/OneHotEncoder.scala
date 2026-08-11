@@ -545,10 +545,11 @@ private[feature] object OneHotEncoderCommon {
       val value = coalesce(inputCol.cast(StringType), lit("null"))
       val invalidIndexError = raise_error(concat(
         lit(s"Values from column $inputColName must be indices, but got "), value, lit(".")))
+      val maxIndexError = raise_error(concat(
+        lit(s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got "), value,
+        lit(".")))
       when(inputCol.isNull, invalidIndexError)
-        .when(isnan(inputCol) || inputCol > Int.MaxValue, raise_error(concat(
-          lit(s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got "), value,
-          lit("."))))
+        .when(isnan(inputCol) || inputCol > Int.MaxValue, maxIndexError)
         .when(inputCol < 0.0 || inputCol =!= floor(inputCol), invalidIndexError)
         .otherwise(inputCol)
     }
