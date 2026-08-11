@@ -307,6 +307,30 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("-+~~a", -( +(~(~$"a"))))
   }
 
+  test("JSON_VALUE expressions") {
+    import org.apache.spark.sql.catalyst.expressions.JsonValueBehavior
+    // Bare form: default STRING RETURNING, NULL ON EMPTY / NULL ON ERROR.
+    assertEqual(
+      "json_value(a, '$.b')",
+      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Null, JsonValueBehavior.Null,
+        None, None))
+    // RETURNING.
+    assertEqual(
+      "json_value(a, '$.b' RETURNING INT)",
+      JsonValue($"a", "$.b", IntegerType, JsonValueBehavior.Null, JsonValueBehavior.Null,
+        None, None))
+    // ERROR ON EMPTY / ERROR ON ERROR.
+    assertEqual(
+      "json_value(a, '$.b' ERROR ON EMPTY ERROR ON ERROR)",
+      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Error, JsonValueBehavior.Error,
+        None, None))
+    // DEFAULT ON EMPTY / DEFAULT ON ERROR carry expressions.
+    assertEqual(
+      "json_value(a, '$.b' DEFAULT 'x' ON EMPTY DEFAULT 'y' ON ERROR)",
+      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Default, JsonValueBehavior.Default,
+        Some(Literal("x")), Some(Literal("y"))))
+  }
+
   test("cast expressions") {
     // Note that DataType parsing is tested elsewhere.
     assertEqual("cast(a as int)", $"a".cast(IntegerType))
