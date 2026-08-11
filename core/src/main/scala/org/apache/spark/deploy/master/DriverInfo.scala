@@ -57,6 +57,8 @@ private[deploy] class DriverInfo(
 
   def resources: Map[String, ResourceInformation] = _resources
 
+  // Any future non-transient field added to DriverInfo must be copied here
+  // to avoid silently dropping it from the serialized (redacted) form.
   private[deploy] def redactedCopy(conf: SparkConf): DriverInfo = {
     val redactedDesc = desc.copy(command = desc.command.redactedCopy(conf))
     val copy = new DriverInfo(startTime, id, redactedDesc, submitDate)

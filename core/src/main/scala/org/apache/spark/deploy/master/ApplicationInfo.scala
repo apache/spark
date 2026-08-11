@@ -206,6 +206,8 @@ private[spark] class ApplicationInfo(
     }
   }
 
+  // Any future non-transient field added to ApplicationInfo must be copied here
+  // to avoid silently dropping it from the serialized (redacted) form.
   private[deploy] def redactedCopy(conf: SparkConf): ApplicationInfo = {
     val redactedDesc = desc.copy(command = desc.command.redactedCopy(conf))
     new ApplicationInfo(startTime, id, redactedDesc, submitDate, driver, defaultCores)
