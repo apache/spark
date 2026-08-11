@@ -551,11 +551,11 @@ private[feature] object OneHotEncoderCommon {
         .when(
           doubleCol.isNull || doubleCol < 0.0 || doubleCol =!= intCol,
           invalidIndexError)
-        .otherwise(intCol + 1)
+        .otherwise(intCol)
     }
 
-    val maxValues = columns.map(c => coalesce(max(c), lit(1)))
-    val maxValuesRow = dataset.agg(maxValues.head, maxValues.tail: _*).head()
+    val maxValues = columns.map(c => coalesce(max(c) + 1, lit(1)))
+    val maxValuesRow = dataset.select(maxValues: _*).head()
     val numAttrsArray = Array.tabulate(maxValues.length)(maxValuesRow.getInt)
 
     outputColNames.zip(numAttrsArray).map { case (outputColName, numAttrs) =>
