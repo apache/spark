@@ -263,9 +263,10 @@ case class CacheId(sessionUUID: String, hash: String) extends BlockId {
 
 @DeveloperApi
 object BlockId {
-  // RDD ids come from a 32-bit counter (SparkContext.newRddId) that wraps around to negative
-  // values in applications long-lived enough to create more than Int.MaxValue RDDs, so the id
-  // may carry a leading minus sign.
+  // Safety net: newRddId() fail-fasts before minting negative ids, but names like
+  // rdd_-1330910599_36 may still appear from blocks cached before upgrade or from
+  // tests. Accept an optional minus so BlockId.apply does not throw
+  // UnrecognizedBlockId for those names.
   val RDD = "rdd_(-?[0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r

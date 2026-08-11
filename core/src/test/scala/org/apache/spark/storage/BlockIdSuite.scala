@@ -52,8 +52,8 @@ class BlockIdSuite extends SparkFunSuite {
   }
 
   test("SPARK-41246: rdd with a negative id") {
-    // The RDD id counter overflows in long-running applications, so block ids of cached
-    // partitions of such RDDs must still parse.
+    // Safety net: fail-fast prevents minting negative ids, but BlockId must still
+    // parse names from pre-upgrade caches or tests.
     val id = RDDBlockId(-1330910599, 36)
     assert(id.name === "rdd_-1330910599_36")
     assertSame(id, BlockId(id.name))
