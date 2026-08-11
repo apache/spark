@@ -1566,28 +1566,22 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # nothing), so these are coverage cases -- the silent wrong-answer
         # shape needs a semicolon and is pinned separately in
         # ``test_udf_transpile_semicolon_separated_lambdas``. Each lambda is
-        # now identified by compiling the candidates on its line and comparing
-        # bytecode with the callable being transpiled.
+        # now identified by its source position among the lambdas in the file.
         L, S = LongType(), StringType()
         num, txt = "a long", "a string"
-        # Differ only in the operator, so the constants alone cannot tell them
-        # apart -- the comparison has to reach the emitted bytecode.
+        # Differ only in the operator -- distinct positions regardless.
         plus_one, minus_one = lambda x: x + 1, lambda x: x - 1
         # Differ in arity only.
         double, double_first = lambda x: x * 2, lambda x, y: x * 2
         # Differ in a string literal only.
         suffix_a, suffix_b = lambda s: s + "a", lambda s: s + "b"
-        # Byte-identical twins: both candidates match, but they are the same
-        # expression, so either one is the right answer.
+        # Byte-identical twins: same source text, but at different positions, so
+        # each resolves to its own node.
         twin_a, twin_b = lambda x: x * 7, lambda x: x * 7
-        # Differ in the PARAMETER NAME only. Both bodies compute the same
-        # value, so this pins the mechanism rather than an answer: the names
-        # reach the fingerprint through ``co_varnames``, and without them both
-        # candidates would match while disagreeing on ``ast.dump``, which is
-        # the "ambiguous" verdict -- so both would fall back instead.
+        # Differ in the parameter NAME only -- again just distinct positions.
         by_x, by_y = lambda x: x + 3, lambda y: y + 3
-        # More than two on one line: resolution is a filter over every
-        # candidate, not a pairwise comparison. ``fmt: off`` because sharing the
+        # More than two on one line: resolution filters every candidate by
+        # position, not a pairwise comparison. ``fmt: off`` because sharing the
         # line IS the fixture -- this is 95 of 100 columns, so without the guard
         # a one-character edit would let the formatter split it into four
         # single-lambda lines and quietly retire the multi-candidate coverage.
@@ -1602,10 +1596,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         same = lambda f: f  # noqa: E731
         wrapped_a, wrapped_b = same(lambda x: x + 51), same(lambda x: x + 52)
 
-        # A callable class INSTANCE has no ``__code__`` of its own; its source
-        # is read from ``__call__``. Resolution therefore has to key on
-        # ``__call__``'s code object, or the sibling ``helper`` on this line
-        # wins and the UDF silently computes ``x * 100``.
+        # A callable class INSTANCE dispatches through ``type(obj).__call__``;
+        # resolution keys on that code object, or the sibling ``helper`` on this
+        # line wins and the UDF silently computes ``x * 100``.
         class Doubler:
             helper, __call__ = lambda self, x: x * 100, lambda self, x: x * 2
 
@@ -1690,10 +1683,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # A default whose value is itself a lambda once made the target's own
         # candidate unmatchable, so a line mate with the same body but NO default
         # was resolved instead -- silently bypassing the refusal to handle
-        # defaulted parameters and mis-numbering the parameter list. Locating a
-        # lambda by position is immune: the target resolves to its OWN node,
-        # defaults intact, so the refusal fires as intended, and the line mate
-        # resolves to its own node and lowers normally.
+        # defaulted parameters and mis-numbering the parameter list. Now the
+        # defaulted lambda falls back cleanly (recompiling it for verification
+        # yields two nested code objects -- its own and the default's -- so it
+        # does not verify), while the line mate, which the position path never
+        # confuses it with, resolves to its own node and lowers normally.
         defaulted, plain = lambda x, k=(lambda: 3)(): x + k, lambda x, k: x + k
         with self.sql_conf(_TRANSPILE_ON):
             u = UserDefinedFunction(defaulted, LongType())
@@ -1743,12 +1737,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual(expected, ast.unparse(resolved.body[0]))
                 self.assertEqual(["x"], [a.arg for a in resolved.args.args])
 
-    def test_udf_transpile_unresolvable_lambda_on_shared_line_falls_back(self):
-        # A lambda that cannot be pinned to one candidate on its line must fall
-        # back rather than guess. A closure is the common case: compiling the
-        # candidate on its own turns the captured name into a global load, so
-        # the bytecode never matches (closures do not transpile anyway -- see
-        # SPARK-55207). Its line mate is still resolved.
+    def test_udf_transpile_closure_on_shared_line_falls_back(self):
+        # A closure resolves to its own node -- verification recompiles it in a
+        # scope declaring the captured name, so it reproduces the target's
+        # ``LOAD_DEREF`` and matches -- but free variables are not supported, so
+        # it is rejected at lowering (see SPARK-55207) and the UDF falls back.
+        # The point here is that its line mate, which shares the source line, is
+        # resolved and lowered independently and is not dragged down with it.
         offset = 4
         closure, sibling = lambda x: x + offset, lambda x: x + 9
         with self.sql_conf(_TRANSPILE_ON):
@@ -1877,17 +1872,50 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     [6],
                 )
             with self.subTest(name="closure_after_a_line_mate"):
-                # A closure written SECOND on its line matches no candidate (an
-                # isolated compile turns ``n`` into a global load). Falling back
-                # to the structural path here would pick ``body.body[0]`` --
-                # the line mate ``plain`` -- and silently compute ``x + 9``.
-                # More than one candidate on the line means no fall-through.
+                # A closure written SECOND on its line resolves to ITS OWN node
+                # (``x + n``) by position, then falls back at lowering because
+                # free variables are unsupported. The bug this guards against is
+                # resolving the line mate ``plain`` (``x + 9``) instead and
+                # silently computing that -- position never confuses the two.
                 _, clo = module.mk(100)
                 with self.sql_conf(_TRANSPILE_ON):
                     u = UserDefinedFunction(clo, LongType())
                     self.assertEqual([], u.transpiled)
                     df = self.spark.createDataFrame([(5,)], "a long")
                     self.assertEqual(df.select(u("a")).first()[0], 105)
+
+    def test_udf_transpile_stale_source_falls_back_not_wrong(self):
+        # The soundness property of verify-by-recompile: position LOCATES a
+        # candidate, but if the file on disk has diverged from the compiled code
+        # -- edited in place after import, so ``linecache`` re-reads new text at
+        # the same span -- recompiling the located node yields different
+        # bytecode, the match is rejected, and the UDF falls back. It must never
+        # lower the body that now sits at that position while the runtime still
+        # runs the old one.
+        import importlib.util
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "spark_58650_stale.py")
+            with open(path, "w") as f:
+                f.write("f = lambda x: x + 1\n")
+            spec = importlib.util.spec_from_file_location("spark_58650_stale", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            func = module.f  # still runs x + 1
+            # Rewrite the file in place with a different body at the same span.
+            with open(path, "w") as f:
+                f.write("f = lambda x: x * 1000\n")
+            import linecache
+
+            linecache.checkcache(path)
+            with self.sql_conf(_TRANSPILE_ON):
+                u = UserDefinedFunction(func, LongType())
+                # Must NOT have lowered x * 1000; falls back to interpreted x + 1.
+                self.assertEqual([], u.transpiled)
+                df = self.spark.createDataFrame([(5,)], "a long")
+                self.assertEqual(df.select(u("a")).first()[0], 6)
 
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so

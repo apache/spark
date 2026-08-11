@@ -116,26 +116,47 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         skipping them alone would leave the lowered path across non-inner joins
         -- brand new, since it was previously unreachable -- entirely
         unasserted. Compare rows against the equivalent native condition for
-        every join type the old error covered.
+        every join type the old error covered, using the same two-conjunct ON
+        shape (UDF plus a native predicate) the original exercised.
         """
         from pyspark.sql import Row
         from pyspark.sql.functions import udf
         from pyspark.sql.types import BooleanType
+        from pyspark.testing.utils import assertDataFrameEqual
 
         left = self.spark.createDataFrame([Row(a=1, a1=1), Row(a=2, a1=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1), Row(b=1, b1=3)])
         eq = udf(lambda a, b: a == b, BooleanType())
         for how in ("inner", "leftouter", "rightouter", "leftanti", "leftsemi", "fullouter"):
             with self.subTest(how=how):
-                lowered = left.join(right, [eq("a", "b")], how)
-                native = left.join(right, left.a == right.b, how)
+                lowered = left.join(right, [eq("a", "b"), left.a1 == right.b1], how)
+                native = left.join(right, [left.a == right.b, left.a1 == right.b1], how)
                 # No Python UDF survives -- which is both why these join types
                 # are legal here at all, and why the rows must match native.
                 plan = lowered._jdf.queryExecution().executedPlan().toString()
                 self.assertNotIn("EvalPython", plan)
-                self.assertEqual(
-                    sorted(map(str, lowered.collect())), sorted(map(str, native.collect()))
-                )
+                assertDataFrameEqual(lowered, native.collect())
+
+    def test_non_lowerable_udf_still_refused_in_on_clause(self):
+        # A UDF that does NOT lower (a closure -- the common fallback case) must
+        # still be rejected in a non-inner ON clause under transpilation, exactly
+        # as before. Skipping test_udf_not_supported_in_join_condition dropped
+        # the only assertion of this; keep it with a deliberately non-lowerable
+        # UDF so a planner regression that dropped the check would be caught.
+        from pyspark.sql import Row
+        from pyspark.errors import AnalysisException
+        from pyspark.sql.functions import udf
+        from pyspark.sql.types import BooleanType
+
+        left = self.spark.createDataFrame([Row(a=1, a1=1)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1)])
+        captured = 0
+        # Free variable -> closure -> not transpilable, so it stays a Python UDF.
+        # The raise itself is the proof it stayed one: a lowered native condition
+        # would be legal here and would not raise.
+        closure_udf = udf(lambda a, b: a == b or captured > 0, BooleanType())
+        with self.assertRaisesRegex(AnalysisException, "Python UDF in the ON clause"):
+            left.join(right, closure_udf("a", "b"), "leftouter").collect()
 
 
 @unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)
