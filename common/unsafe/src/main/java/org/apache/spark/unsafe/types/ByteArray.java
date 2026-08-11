@@ -112,9 +112,6 @@ public final class ByteArray {
 
   public static byte[] subStringSQL(byte[] bytes, int pos, int len) {
     // This pos calculation is according to UTF8String#subStringSQL
-    if (pos > bytes.length) {
-      return EMPTY_BYTE;
-    }
     int start = 0;
     if (pos > 0) {
       start = pos - 1;
