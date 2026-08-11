@@ -154,6 +154,7 @@ __all__ = [  # noqa: F405
     "ltrim",
     "make_valid_utf8",
     "mask",
+    "normalize",
     "octet_length",
     "overlay",
     "position",
