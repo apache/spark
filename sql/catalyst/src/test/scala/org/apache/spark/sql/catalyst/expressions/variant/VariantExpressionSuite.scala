@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.types.variant.VariantBuilder
+import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils.createArray
@@ -1956,5 +1956,75 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkAppendUnrecoverableError("[]", "$", Literal(tooBig),
       "VARIANT_SIZE_LIMIT",
       name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
+  }
+
+  test("variant_strip_nulls") {
+    // Strip `input`, render the result back to JSON, and compare. `includeArrays` defaults to true.
+    def check(input: String, expected: String, includeArrays: Boolean = true): Unit = {
+      val expr = VariantStripNulls(Literal(parseJson(input)), Literal(includeArrays))
+      val result = replace(expr).eval().asInstanceOf[VariantVal]
+      val json = if (result == null) null
+        else new Variant(result.getValue, result.getMetadata).toJson(ZoneOffset.UTC)
+      assert(json == expected)
+    }
+
+    // The optional `include_arrays` argument defaults to true in the function signature.
+    assert(VariantStripNullsExpressionBuilder.functionSignature.get.parameters.last.default
+      .contains(Literal.create(true, BooleanType)))
+
+    // include_arrays must be a constant; a non-foldable expression is rejected.
+    assert(VariantStripNulls(
+      Literal(parseJson("[1, null]")), BoundReference(0, BooleanType, nullable = true))
+      .checkInputDataTypes().isFailure)
+
+    check("""{"a": 1, "b": null, "c": 3}""", """{"a":1,"c":3}""")
+    check("[1, null, 3]", "[1,3]")
+    check("""{"user": {"name": "Alice", "age": null}}""", """{"user":{"name":"Alice"}}""")
+    check("""{"a": [1, null, {"b": null, "c": 2}]}""", """{"a":[1,{"c":2}]}""")
+    check("[[1, null], [null]]", "[[1],[]]")
+
+    // Empty containers are preserved; the parent is never collapsed.
+    check("""{"a": null}""", "{}")
+    check("[null]", "[]")
+    check("""{"a": {"b": null}}""", """{"a":{}}""")
+    check("""{"a": [null]}""", """{"a":[]}""")
+    check("{}", "{}")
+    check("[]", "[]")
+
+    // Top-level variant null and scalars are returned unchanged.
+    check("null", "null")
+    check("42", "42")
+    check("\"hi\"", "\"hi\"")
+
+    check("""{"a": {"b": {"c": null, "d": 4}}}""", """{"a":{"b":{"d":4}}}""")
+
+    check("""{"a": 300, "b": null, "c": 100000, "d": 10000000000}""",
+      """{"a":300,"c":100000,"d":10000000000}""")
+    check("""[1000000, null, "hello world", null, 10000000000]""",
+      """[1000000,"hello world",10000000000]""")
+    val bigStr = "x".repeat(300)
+    check(s"""{"k": "$bigStr", "n": null, "m": 3}""", s"""{"k":"$bigStr","m":3}""")
+    check(s"""[null, "$bigStr", null, 100000]""", s"""["$bigStr",100000]""")
+
+    // `includeArrays = false`.
+    check("""{"a": [1, null, 3], "b": null}""", """{"a":[1,null,3]}""", includeArrays = false)
+    check(
+      """[{"a": 1, "b": null}, null, {"c": null, "d": 4}]""",
+      """[{"a":1},null,{"d":4}]""",
+      includeArrays = false)
+    // `includeArrays = true` (explicit) strips array nulls.
+    check("""{"a": [1, null, 3]}""", """{"a":[1,3]}""", includeArrays = true)
+
+    // SQL NULL variant input yields SQL NULL.
+    checkEvaluation(
+      Cast(VariantStripNulls(Literal.create(null, VariantType), Literal(true)), StringType),
+      null)
+    // NULL `includeArrays` yields SQL NULL (the expression is null intolerant).
+    checkEvaluation(
+      Cast(
+        VariantStripNulls(
+          Literal(parseJson("""{"a": null}""")), Literal.create(null, BooleanType)),
+        StringType),
+      null)
   }
 }
