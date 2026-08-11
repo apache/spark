@@ -231,7 +231,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
           {graph.makeNodeDetailsJson(metrics)}
         </div>
         <div class="plan-node-links">
-          {graph.nodes.map {
+          {graph.allNodes.map {
             case cluster: SparkPlanGraphCluster =>
               <div data-graph-node-id={cluster.id.toString}
                    data-plan-node-ids={cluster.subPlanNodeIds.mkString(",")}></div>
