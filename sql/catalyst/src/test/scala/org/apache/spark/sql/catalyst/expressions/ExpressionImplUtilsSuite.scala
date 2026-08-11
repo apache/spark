@@ -480,6 +480,10 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
     tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), null)
   }
 
+  // These vectors follow Unicode Standard Annex #15's decomposition/composition algorithm and
+  // pin normalize() to Spark's bundled ICU4J/Unicode data (see icu4j.version in pom.xml): a
+  // future ICU4J upgrade that changed these mappings would fail this test, rather than silently
+  // changing query results.
   test("Normalize with supported forms") {
     def normalize(input: String, form: String): String =
       ExpressionImplUtils.normalize(
@@ -494,6 +498,14 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
     assert(normalize("\u00BD", "NFD") == "\u00BD")
     assert(normalize("\uD835\uDC00", "NFKC") == "A")
     assert(normalize("", "NFC") == "")
+
+    // Combining marks with different combining classes are canonically reordered before
+    // composition (UAX #15 canonical ordering algorithm), so applying COMBINING DOT BELOW
+    // (U+0323) and COMBINING ACUTE ACCENT (U+0301) to the same base letter in either input
+    // order must normalize (NFC) to the same result.
+    val dotBelow = "\u0323"
+    val acute = "\u0301"
+    assert(normalize("a" + dotBelow + acute, "NFC") == normalize("a" + acute + dotBelow, "NFC"))
     // scalastyle:on nonascii
   }
 

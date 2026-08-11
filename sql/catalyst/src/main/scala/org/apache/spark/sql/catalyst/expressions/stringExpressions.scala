@@ -976,7 +976,11 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
 @ExpressionDescription(
   usage = """
     _FUNC_(str[, form]) - Returns the Unicode normalization of `str` using the normalization `form`.
-      Valid forms are 'NFC' (default), 'NFD', 'NFKC', and 'NFKD'. The form name is case-insensitive.
+      Valid forms are 'NFC' (default), 'NFD', 'NFKC', and 'NFKD', as defined by Unicode Standard
+      Annex #15: 'NFD'/'NFKD' apply canonical/compatibility decomposition; 'NFC'/'NFKC' apply the
+      same decomposition followed by canonical composition. The form name is case-insensitive.
+      Normalization is backed by Spark's bundled ICU4J library rather than the JVM's own Unicode
+      data, so results are stable across JVM vendors and versions.
   """,
   arguments = """
     Arguments:

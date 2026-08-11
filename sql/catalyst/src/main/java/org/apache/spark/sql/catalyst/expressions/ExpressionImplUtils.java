@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import com.ibm.icu.text.Normalizer2;
+
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 import java.text.BreakIterator;
 import java.text.DecimalFormat;
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -151,21 +152,25 @@ public class ExpressionImplUtils {
   }
 
   /**
-   * Normalizes the given string using the given Unicode normalization form.
+   * Normalizes the given string using the given Unicode normalization form, per the
+   * decomposition/composition algorithm in Unicode Standard Annex #15. Uses ICU4J, the same
+   * library backing Spark's collation support, instead of the JDK's {@code java.text.Normalizer}
+   * so the result is pinned to Spark's bundled ICU4J/Unicode data (see {@code icu4j.version} in
+   * pom.xml) and does not vary across JVM vendors or versions.
    *
    * @param input the input string to normalize.
    * @param form the normalization form, one of NFC, NFD, NFKC, NFKD (case-insensitive).
    * @return the normalized string.
    */
   public static UTF8String normalize(UTF8String input, UTF8String form) {
-    Normalizer.Form normalizerForm = switch (form.toString().toUpperCase(Locale.ROOT)) {
-      case "NFC" -> Normalizer.Form.NFC;
-      case "NFD" -> Normalizer.Form.NFD;
-      case "NFKC" -> Normalizer.Form.NFKC;
-      case "NFKD" -> Normalizer.Form.NFKD;
+    Normalizer2 normalizer = switch (form.toString().toUpperCase(Locale.ROOT)) {
+      case "NFC" -> Normalizer2.getNFCInstance();
+      case "NFD" -> Normalizer2.getNFDInstance();
+      case "NFKC" -> Normalizer2.getNFKCInstance();
+      case "NFKD" -> Normalizer2.getNFKDInstance();
       default -> throw QueryExecutionErrors.invalidNormalizeFormError(form.toString());
     };
-    return UTF8String.fromString(Normalizer.normalize(input.toString(), normalizerForm));
+    return UTF8String.fromString(normalizer.normalize(input.toString()));
   }
 
   public static byte[] aesEncrypt(byte[] input,

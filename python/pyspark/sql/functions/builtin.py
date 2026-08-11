@@ -15900,7 +15900,10 @@ def try_validate_utf8(str: "ColumnOrName") -> Column:
 @_try_remote_functions
 def normalize(str: "ColumnOrName", form: Optional["ColumnOrName"] = None) -> Column:
     """
-    Returns the Unicode normalization of ``str`` using the given normalization ``form``.
+    Returns the Unicode normalization of ``str`` using the given normalization ``form``, as
+    defined by Unicode Standard Annex #15. Normalization is backed by Spark's bundled ICU4J
+    library rather than the JVM's own Unicode data, so results are stable across JVM vendors
+    and versions.
 
     .. versionadded:: 4.4.0
 

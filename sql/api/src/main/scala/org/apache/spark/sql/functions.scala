@@ -7464,7 +7464,9 @@ object functions {
 
   /**
    * Returns the Unicode normalization of `str` using the given normalization `form`. Valid forms
-   * are 'NFC', 'NFD', 'NFKC', and 'NFKD'. The form name is case-insensitive.
+   * are 'NFC', 'NFD', 'NFKC', and 'NFKD', as defined by Unicode Standard Annex #15. The form name
+   * is case-insensitive. Normalization is backed by Spark's bundled ICU4J library rather than the
+   * JVM's own Unicode data, so results are stable across JVM vendors and versions.
    *
    * @param str
    *   the input string to normalize.
