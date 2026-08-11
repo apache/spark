@@ -1362,12 +1362,20 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     # contains "UDF" (so the "UDF" substring is unreliable).
     # ------------------------------------------------------------------
 
-    def _vals(self, func, return_type, schema, rows):
+    def _vals(self, func, return_type, schema, rows, require_lowered=False):
         with self.sql_conf(_TRANSPILE_ON):
             u = UserDefinedFunction(func, return_type)
             self.assertTrue(u.transpiled, str(func))
             df = self.spark.createDataFrame(rows, schema)
-            return [r[0] for r in df.select(u(*df.columns)).collect()]
+            projected = df.select(u(*df.columns))
+            # ``u.transpiled`` only says options were PRODUCED; the JVM may still
+            # discard them and run interpreted Python, which would return the
+            # right value and hide a wrong lowering. Pass ``require_lowered``
+            # where the point of the test is that the lowered plan is the one
+            # that ran.
+            if require_lowered:
+                self.assertEqual(0, self._eval_python_count(projected), str(func))
+            return [r[0] for r in projected.collect()]
 
     def _raises(self, func, schema, rows, needle="numeric"):
         with self.sql_conf(_TRANSPILE_ON):
@@ -1509,9 +1517,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_falls_back(self):
         # Shapes that must NOT transpile (and still compute via Python):
-        # inline/wrapped/partial lambdas, default/variadic/keyword-only args, and
-        # `%` string formatting. (String `+`/`*` now lower to concat/repeat -- see
-        # test_udf_transpile_string_operands -- but `%` as a format is not handled.)
+        # functools.partial, default/variadic/keyword-only args, and `%` string
+        # formatting. (String `+`/`*` now lower to concat/repeat -- see
+        # test_udf_transpile_string_operands -- but `%` as a format is not
+        # handled.) Inline and wrapper-call lambdas USED to be listed here
+        # because the structural path could not reach an `Assign(value=Call)`;
+        # SPARK-58650 identifies a lambda by matching code objects instead, so
+        # they now lower correctly and are asserted below.
         import functools
 
         def wrapper(fn):
@@ -1529,11 +1541,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         base = lambda v, w: v + w  # noqa: E731
         percent_fmt = lambda x: "n=%d" % x  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
-            # inline / wrapped / partial lambdas -> source can't be extracted
-            self.assertEqual([], UserDefinedFunction(lambda v: v + 1, LongType()).transpiled)
-            self.assertEqual(
-                [], UserDefinedFunction(wrapper(lambda v: v + 1), LongType()).transpiled
-            )
+            # functools.partial has no reachable source, so it still falls back.
             self.assertEqual(
                 [], UserDefinedFunction(functools.partial(base, 1), LongType()).transpiled
             )
@@ -1582,8 +1590,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # the "ambiguous" verdict -- so both would fall back instead.
         by_x, by_y = lambda x: x + 3, lambda y: y + 3
         # More than two on one line: resolution is a filter over every
-        # candidate, not a pairwise comparison.
+        # candidate, not a pairwise comparison. ``fmt: off`` because sharing the
+        # line IS the fixture -- this is 95 of 100 columns, so without the guard
+        # a one-character edit would let the formatter split it into four
+        # single-lambda lines and quietly retire the multi-candidate coverage.
+        # fmt: off
         t1, t2, t3, t4 = lambda x: x + 41, lambda x: x + 42, lambda x: x + 43, lambda x: x + 44
+        # fmt: on
         # Lambdas reachable only inside a collection literal -- the old
         # first-statement walk bailed out on these entirely.
         table = {"inc": lambda x: x + 100, "dec": lambda x: x - 100}
@@ -1627,7 +1640,95 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             (Tripler(), L, num, [(5,)], [15]),
         ]:
             with self.subTest(func=func):
-                self.assertEqual(self._vals(func, rt, schema, rows), expected)
+                self.assertEqual(self._vals(func, rt, schema, rows, require_lowered=True), expected)
+
+    def test_udf_transpile_inline_and_wrapped_lambdas_now_lower(self):
+        # SPARK-58650 side effect worth pinning: writing the lambda inline at the
+        # call site is the most common way to build a UDF, and it parses as
+        # ``Assign(value=Call(...))`` / a bare ``Call``, which the structural path
+        # never unwrapped -- so it silently fell back to interpreted Python.
+        # Matching the callable against the lambdas in the source reaches it.
+        def wrapper(fn):
+            return fn
+
+        with self.sql_conf(_TRANSPILE_ON):
+            inline = UserDefinedFunction(lambda v: v + 1, LongType())
+            wrapped = UserDefinedFunction(wrapper(lambda v: v * 3), LongType())
+            self.assertTrue(inline.transpiled)
+            self.assertTrue(wrapped.transpiled)
+            df = self.spark.createDataFrame([(5,)], "a long")
+            for udf_obj, expected in ((inline, 6), (wrapped, 15)):
+                with self.subTest(expected=expected):
+                    projected = df.select(udf_obj("a"))
+                    # Prove the lowered plan is what ran, not interpreted Python
+                    # returning the same number.
+                    self.assertEqual(0, self._eval_python_count(projected))
+                    self.assertEqual(projected.first()[0], expected)
+
+    def test_udf_transpile_lambda_in_a_decorator_above_a_def(self):
+        # SPARK-58650: the OTHER silent wrong answer, and the one a candidate
+        # count of 1 does not protect against. ``inspect.getsource`` on a lambda
+        # written inside a decorator returns the decorator line PLUS the whole
+        # decorated ``def``, which parses as that ``FunctionDef`` -- so the
+        # lambda used to be lowered from the DEF's body (``a * 12345``) even
+        # though only one lambda appears in the source. Matching now runs for a
+        # single candidate too, so the lambda is identified correctly; and if it
+        # ever failed to match, a lambda target is refused a ``def`` outright
+        # rather than silently taking its body.
+        captured = []
+
+        def capture(g):
+            captured.append(g)
+            return lambda fn: fn
+
+        @capture(lambda x: x + 1)
+        def unrelated(a):
+            return a * 12345
+
+        (lam,) = captured
+        self.assertEqual(6, lam(5))
+        self.assertEqual(self._vals(lam, LongType(), "a long", [(5,)], require_lowered=True), [6])
+
+    def test_udf_transpile_lambda_defaulted_by_a_lambda_falls_back(self):
+        # A default whose value is itself a lambda used to make the target's own
+        # candidate uncompilable (its module code held two nested code objects),
+        # so a line mate with the same body but NO default was resolved instead
+        # -- which silently bypassed the transpiler's refusal to handle
+        # defaulted parameters and mis-numbered the parameter list. Defaults are
+        # stripped before compiling now (they live on the function object, not
+        # the code object), so the target matches, its line mate matches too,
+        # and the pair is correctly reported ambiguous -> fall back.
+        defaulted, plain = lambda x, k=(lambda: 3)(): x + k, lambda x, k: x + k
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(defaulted, LongType())
+            self.assertEqual([], u.transpiled)
+            df = self.spark.createDataFrame([(5,)], "a long")
+            # Interpreted Python still applies the default.
+            self.assertEqual(df.select(u("a")).first()[0], 8)
+            # The line mate is byte-identical to the target once defaults are
+            # stripped, so it is ambiguous too rather than silently resolved.
+            self.assertEqual([], UserDefinedFunction(plain, LongType()).transpiled)
+
+    def test_udf_transpile_nested_lambda_resolves_to_the_outer_one(self):
+        # ``_code_identity`` recurses into nested code constants instead of
+        # keying them like any other constant. That branch is load-bearing and
+        # invisible from the outside: a lambda whose body holds another lambda
+        # does not lower today (``Call`` is unsupported), so an end-to-end test
+        # cannot see it. Without the recursion, a nested code object would be
+        # keyed by ``repr``, which embeds a memory address that never matches
+        # across two independent compiles -- so EVERY lambda containing a nested
+        # lambda would silently stop resolving. Assert resolution directly.
+        import ast
+
+        from pyspark.sql.transpile import _get_function_from_ast, _get_src_ast_from_func
+
+        nest_a, nest_b = lambda x: (lambda y: y + 1)(x), lambda x: (lambda y: y + 2)(x)
+        for func, expected in ((nest_a, "y + 1"), (nest_b, "y + 2")):
+            with self.subTest(expected=expected):
+                _, tree = _get_src_ast_from_func(func)
+                resolved = _get_function_from_ast(tree, func)
+                self.assertIsNotNone(resolved, "nested-lambda candidate failed to resolve")
+                self.assertIn(expected, ast.unparse(resolved.body[0]))
 
     def test_udf_transpile_unresolvable_lambda_on_shared_line_falls_back(self):
         # A lambda that cannot be pinned to one candidate on its line must fall
@@ -1678,6 +1779,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "cat_a = lambda s: s + 'a'; cat_b = lambda s: s + 'b'\n"
             "\n"
             "\n"
+            "def mk(n):\n"
+            "    plain = lambda x: x + 9; clo = lambda x: x + n\n"
+            "    return plain, clo\n"
+            "\n"
+            "\n"
             "class Incr:\n"
             "    helper = lambda self, x: x * 100; __call__ = lambda self, x: x + 1\n"
         )
@@ -1698,9 +1804,31 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ]
             for name, rt, schema, rows, expected in cases:
                 with self.subTest(name=name):
-                    self.assertEqual(self._vals(getattr(module, name), rt, schema, rows), expected)
+                    # require_lowered: these are the cases that used to compute
+                    # the WRONG value, so the test has to prove the lowered plan
+                    # is what ran, not interpreted Python returning the same
+                    # number with the transpiled option quietly discarded.
+                    self.assertEqual(
+                        self._vals(getattr(module, name), rt, schema, rows, require_lowered=True),
+                        expected,
+                    )
             with self.subTest(name="Incr"):
-                self.assertEqual(self._vals(module.Incr(), LongType(), "a long", [(5,)]), [6])
+                self.assertEqual(
+                    self._vals(module.Incr(), LongType(), "a long", [(5,)], require_lowered=True),
+                    [6],
+                )
+            with self.subTest(name="closure_after_a_line_mate"):
+                # A closure written SECOND on its line matches no candidate (an
+                # isolated compile turns ``n`` into a global load). Falling back
+                # to the structural path here would pick ``body.body[0]`` --
+                # the line mate ``plain`` -- and silently compute ``x + 9``.
+                # More than one candidate on the line means no fall-through.
+                _, clo = module.mk(100)
+                with self.sql_conf(_TRANSPILE_ON):
+                    u = UserDefinedFunction(clo, LongType())
+                    self.assertEqual([], u.transpiled)
+                    df = self.spark.createDataFrame([(5,)], "a long")
+                    self.assertEqual(df.select(u("a")).first()[0], 105)
 
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so

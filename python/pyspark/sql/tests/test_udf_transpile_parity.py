@@ -34,12 +34,14 @@ the transpiler directly live in ``test_udf_transpile_unit.py`` and
 ``test_udf_transpile_hypothesis.py``.
 
 Note on configuration: enabling transpilation requires ANSI mode, so an "on"
-run is unavoidably also an ANSI run. All inherited tests currently pass as-is
-under this configuration, so no per-test overrides are defined here. If a future
-change makes an inherited test diverge purely due to ANSI semantics or because
-transpilation bypasses a Python-side effect (rather than a genuine result
-change), override it here with a documented ``unittest.skip`` rather than
-editing the inherited test body.
+run is unavoidably also an ANSI run. Inherited tests pass as-is apart from the
+two join-condition tests overridden in ``TranspiledUDFParityTests``, which
+assert restrictions that only apply while a Python UDF survives in the plan. If
+a future change makes an inherited test diverge purely due to ANSI semantics,
+because transpilation bypasses a Python-side effect, or because lowering removes
+a Python-UDF-specific planner restriction (rather than a genuine result change),
+override it here with a documented ``unittest.skip`` rather than editing the
+inherited test body.
 """
 
 import unittest
@@ -81,6 +83,30 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         ReusedSQLTestCase.setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
         _enable_transpilation(cls)
+
+    # Both of these assert restrictions that exist BECAUSE a Python UDF is
+    # opaque to the planner: a UDF spanning both sides of a join has to be
+    # pulled out as Filter + Cross join (so a cartesian-product error is
+    # expected), and a Python UDF in the ON clause of a non-inner join is
+    # rejected outright. Their UDFs are inline lambdas, which SPARK-58650 now
+    # identifies and lowers, so no Python UDF survives in the plan and neither
+    # restriction applies -- that elimination is the entire point of the
+    # feature. The joins still produce the same rows (asserted natively in
+    # test_udf_and_common_filter_in_join_condition, which passes here), so this
+    # is a plan-shape divergence rather than a result change.
+    @unittest.skip(
+        "Transpilation lowers the inline lambda to a native join condition, so the "
+        "implicit-cartesian-product error this asserts no longer occurs (SPARK-58650)."
+    )
+    def test_udf_in_join_condition(self):
+        pass
+
+    @unittest.skip(
+        "Transpilation lowers the inline lambda to a native ON condition, so the "
+        "PYTHON_UDF_IN_ON_CLAUSE error this asserts no longer occurs (SPARK-58650)."
+    )
+    def test_udf_not_supported_in_join_condition(self):
+        pass
 
 
 @unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)
