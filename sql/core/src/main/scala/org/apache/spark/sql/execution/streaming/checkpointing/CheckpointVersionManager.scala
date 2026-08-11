@@ -190,9 +190,8 @@ object CheckpointVersionManager extends Logging {
    *
    * The state store format is clamped to 2 rather than set to the commit log version, because the
    * two version spaces are separate: the commit log has a VERSION_3 (sink metadata) with no state
-   * store counterpart, and every consumer of the state store config tests `>= 2` (see
-   * StatefulOperatorStateInfo.enableStateStoreCheckpointIds). Writing 3 here would behave the same
-   * but report a state store format that does not exist.
+   * store counterpart, while the state store config accepts only versions 1 and 2. Writing 3 here
+   * would report a state store format that does not exist.
    */
   private def setSparkSessionConfigsForCommitLog(
       sparkSessionForStream: SparkSession,
