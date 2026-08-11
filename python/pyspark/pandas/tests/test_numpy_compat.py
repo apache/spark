@@ -139,6 +139,23 @@ class NumPyCompatTestsMixin:
 
                 self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
 
+    def test_np_reciprocal_integer(self):
+        # np.reciprocal on an integer column does integer division (truncated
+        # toward zero): 1 -> 1, -1 -> -1, and every other magnitude -> 0. The
+        # value 0 overflows to the int64 minimum. Cover positive, negative, and
+        # zero inputs to lock in parity with pandas.
+        for values in (
+            [1, 2, 3, 64, 100],
+            [-1, -2, -3, -64, -100],
+            [-2, -1, 0, 1, 2],
+            [np.iinfo(np.int64).min, -1, 1, np.iinfo(np.int64).max],
+        ):
+            with self.subTest(values=values):
+                pdf = pd.DataFrame({"a": values})
+                psdf = ps.from_pandas(pdf)
+
+                self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
+
     def test_np_bitwise_shift_functions(self):
         pdf = pd.DataFrame(
             {
