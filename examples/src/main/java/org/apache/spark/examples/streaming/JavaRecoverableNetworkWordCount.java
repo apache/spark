@@ -159,7 +159,7 @@ public final class JavaRecoverableNetworkWordCount {
 
   public static void main(String[] args) throws Exception {
     if (args.length != 4) {
-      System.err.println("You arguments were " + Arrays.asList(args));
+      System.err.println("Your arguments were " + Arrays.asList(args));
       System.err.println(
           "Usage: JavaRecoverableNetworkWordCount <hostname> <port> <checkpoint-directory>\n" +
           "     <output-file>. <hostname> and <port> describe the TCP server that Spark\n" +
