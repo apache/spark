@@ -1690,7 +1690,6 @@ class SparkConnectClient(object):
         for hook in self._session_hooks:
             req = hook.on_execute_plan(req)
             req.operation_id = operation_id
-        metadata = self._execute_plan_metadata(req.operation_id)
 
         def handle_response(b: pb2.ExecutePlanResponse) -> None:
             self._verify_response_integrity(b)
@@ -1702,7 +1701,7 @@ class SparkConnectClient(object):
                     req,
                     self._stub,
                     self._retrying,
-                    metadata,
+                    self._execute_plan_metadata(req.operation_id),
                     reattachable_execute_plan_timeout=self._rpc_deadlines.reattachable_execute_plan,
                     reattach_execute_timeout=self._rpc_deadlines.reattach_execute,
                 )
@@ -1716,7 +1715,9 @@ class SparkConnectClient(object):
                 for attempt in self._retrying():
                     with attempt:
                         with disable_gc():
-                            for b in self._stub.ExecutePlan(req, metadata=metadata):
+                            for b in self._stub.ExecutePlan(
+                                req, metadata=self._execute_plan_metadata(req.operation_id)
+                            ):
                                 handle_response(b)
         except Exception as error:
             self._handle_error(error, req.operation_id)
@@ -1756,8 +1757,6 @@ class SparkConnectClient(object):
         for hook in self._session_hooks:
             req = hook.on_execute_plan(req)
             req.operation_id = operation_id
-        metadata = self._execute_plan_metadata(req.operation_id)
-
         num_records = 0
         arrow_batch_chunks_to_assemble: List[bytes] = []
 
@@ -1932,7 +1931,7 @@ class SparkConnectClient(object):
                     req,
                     self._stub,
                     self._retrying,
-                    metadata,
+                    self._execute_plan_metadata(req.operation_id),
                     reattachable_execute_plan_timeout=self._rpc_deadlines.reattachable_execute_plan,
                     reattach_execute_timeout=self._rpc_deadlines.reattach_execute,
                 )
@@ -1946,7 +1945,11 @@ class SparkConnectClient(object):
                 for attempt in self._retrying():
                     with attempt:
                         with disable_gc():
-                            it = iter(self._stub.ExecutePlan(req, metadata=metadata))
+                            it = iter(
+                                self._stub.ExecutePlan(
+                                    req, metadata=self._execute_plan_metadata(req.operation_id)
+                                )
+                            )
                         while True:
                             try:
                                 with disable_gc():
