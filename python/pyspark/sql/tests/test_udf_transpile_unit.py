@@ -1887,35 +1887,47 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def test_udf_transpile_stale_source_falls_back_not_wrong(self):
         # The soundness property of verify-by-recompile: position LOCATES a
         # candidate, but if the file on disk has diverged from the compiled code
-        # -- edited in place after import, so ``linecache`` re-reads new text at
-        # the same span -- recompiling the located node yields different
-        # bytecode, the match is rejected, and the UDF falls back. It must never
-        # lower the body that now sits at that position while the runtime still
-        # runs the old one.
+        # -- edited in place after import -- recompiling the located node yields
+        # a different code SIGNATURE, the match is rejected, and the UDF falls
+        # back. It must never lower the body now at that position while the
+        # runtime still runs the old one.
+        #
+        # Each edit below changes the body a DIFFERENT way. The constant- and
+        # name-only edits are the important ones: they leave ``co_code``
+        # byte-for-byte identical (the value lives in ``co_consts`` /
+        # ``co_names``), so a verify that compared only ``co_code`` would confirm
+        # the stale node and lower the wrong body -- the whole reason the
+        # comparison is the full signature.
         import importlib.util
+        import linecache
         import os
         import tempfile
 
+        # (original body, edited body, arg to run, interpreted result of ORIGINAL)
+        edits = [
+            ("x + 1", "x * 1000", 5, 6),  # operator: co_code differs
+            ("x + 1", "x + 2", 5, 6),  # constant only: co_code identical
+            ("x + BASE", "x + OTHR", 5, 15),  # global name only: co_code identical
+        ]
         with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "spark_58650_stale.py")
-            with open(path, "w") as f:
-                f.write("f = lambda x: x + 1\n")
-            spec = importlib.util.spec_from_file_location("spark_58650_stale", path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            func = module.f  # still runs x + 1
-            # Rewrite the file in place with a different body at the same span.
-            with open(path, "w") as f:
-                f.write("f = lambda x: x * 1000\n")
-            import linecache
-
-            linecache.checkcache(path)
-            with self.sql_conf(_TRANSPILE_ON):
-                u = UserDefinedFunction(func, LongType())
-                # Must NOT have lowered x * 1000; falls back to interpreted x + 1.
-                self.assertEqual([], u.transpiled)
-                df = self.spark.createDataFrame([(5,)], "a long")
-                self.assertEqual(df.select(u("a")).first()[0], 6)
+            for i, (orig, edited, arg, expected) in enumerate(edits):
+                with self.subTest(edit=edited):
+                    path = os.path.join(tmp, f"spark_58650_stale_{i}.py")
+                    with open(path, "w") as f:
+                        f.write(f"BASE = 10\nOTHR = 99\nf = lambda x: {orig}\n")
+                    spec = importlib.util.spec_from_file_location(f"spark_58650_stale_{i}", path)
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    func = module.f  # still runs the ORIGINAL body
+                    with open(path, "w") as f:
+                        f.write(f"BASE = 10\nOTHR = 99\nf = lambda x: {edited}\n")
+                    linecache.checkcache(path)
+                    with self.sql_conf(_TRANSPILE_ON):
+                        u = UserDefinedFunction(func, LongType())
+                        # Must NOT have lowered the edited body; falls back.
+                        self.assertEqual([], u.transpiled)
+                        df = self.spark.createDataFrame([(arg,)], "a long")
+                        self.assertEqual(df.select(u("a")).first()[0], expected)
 
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so

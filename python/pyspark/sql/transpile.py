@@ -975,18 +975,64 @@ def _recompiled_lambda_code(node: ast.Lambda, freevars: Tuple[str, ...]) -> Opti
     return nested[0] if len(nested) == 1 else None
 
 
+# ``co_flags`` bits that describe what the code DOES (as opposed to where it was
+# compiled). Two lambdas differing only here -- ``lambda *a: 1`` vs
+# ``lambda **a: 1`` -- share argument counts, ``co_varnames`` AND ``co_code``,
+# so a signature that omitted these could not tell them apart.
+_BEHAVIORAL_CO_FLAGS = (
+    inspect.CO_VARARGS
+    | inspect.CO_VARKEYWORDS
+    | inspect.CO_GENERATOR
+    | inspect.CO_COROUTINE
+    | inspect.CO_ASYNC_GENERATOR
+)
+
+
+def _code_signature(code: CodeType) -> tuple:
+    """A position-independent fingerprint of everything a code object DOES.
+
+    Covers signature shape, the behavioral ``co_flags``, local/global/closure
+    names, the emitted bytecode, and the constants -- constants keyed by
+    ``(type name, repr)`` so ``1``, ``1.0`` and ``True`` stay distinct (they
+    compare equal), and nested code objects recursed into rather than compared
+    by identity. Deliberately excludes ``co_filename`` / ``co_name`` /
+    ``co_firstlineno`` and ``CO_NESTED``, which differ between the target and a
+    standalone recompile of the same source.
+    """
+    return (
+        code.co_argcount,
+        code.co_posonlyargcount,
+        code.co_kwonlyargcount,
+        code.co_flags & _BEHAVIORAL_CO_FLAGS,
+        code.co_varnames,
+        code.co_names,
+        code.co_freevars,
+        code.co_cellvars,
+        code.co_code,
+        tuple(
+            _code_signature(const)
+            if isinstance(const, CodeType)
+            else (type(const).__name__, repr(const))
+            for const in code.co_consts
+        ),
+    )
+
+
 def _verifies(node: ast.Lambda, target: CodeType) -> bool:
-    """Whether ``node`` recompiles to the same bytecode as ``target``.
+    """Whether ``node`` recompiles to the same code as ``target``.
 
     Position LOCATES a candidate; this CONFIRMS it. Without it, source that has
     diverged from the compiled code -- an edited file re-read through
     ``linecache``, or a relative ``co_filename`` resolved against a different
     working directory -- would silently lower whatever now sits at that span.
-    Recompiling and comparing ``co_code`` means such a mismatch falls back
-    instead of lowering the wrong body.
+    The comparison is the full structural signature, NOT just ``co_code``: a
+    literal or global-name edit (``x + 1`` -> ``x + 2``, ``x + foo`` ->
+    ``x + bar``) leaves ``co_code`` identical because the value lives in
+    ``co_consts`` / ``co_names`` and is referenced by index, so a ``co_code``
+    check alone would confirm the stale node and lower the wrong body.
     """
     recompiled = _recompiled_lambda_code(node, target.co_freevars)
-    return recompiled is not None and recompiled.co_code == target.co_code
+    return recompiled is not None and _code_signature(recompiled) == _code_signature(target)
 
 
 # Cap on distinct source files whose parsed lambdas are cached at once.
