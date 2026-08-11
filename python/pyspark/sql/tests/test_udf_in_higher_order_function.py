@@ -833,6 +833,46 @@ class UDFInHigherOrderFunctionTestsMixin:
                 [([],), (None,), ([],), (None,)],
             )
 
+    def test_scalar_pandas_iter_udf_timestamp_after_empty_batch(self):
+        # A zero-length result chunk (from an input batch holding only empty/null arrays) must not
+        # pin the output stream's timestamp type to the UTC-typed default: the rows it emits and
+        # the rows emitted from a later real chunk (typed with the session timezone) would then
+        # disagree, and the Arrow stream writer would reject the second output batch. Assert against
+        # the equivalent non-iterator pandas UDF (identical driver-collection semantics), so the
+        # check proves the schema fix without depending on absolute timezone offsets.
+        from typing import Iterator
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.types import TimestampType
+
+        with self.sql_conf(
+            {
+                "spark.sql.session.timeZone": "America/Los_Angeles",
+                # One row per Arrow batch so the empty-array row forms its own (first) batch.
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "1",
+            }
+        ):
+            df = self.spark.createDataFrame([([],), ([1],)], "values array<int>").coalesce(1)
+
+            def compute(x):
+                return pd.to_datetime(x, unit="D", origin="2020-01-01")
+
+            @pandas_udf(TimestampType())
+            def to_ts(s: pd.Series) -> pd.Series:
+                return compute(s)
+
+            @pandas_udf(TimestampType())
+            def to_ts_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+                for s in it:
+                    yield compute(s)
+
+            # Without the fix this raises ArrowInvalid ("different schema") writing the second
+            # output batch; with it the iterator result matches the non-iterator pandas UDF.
+            assertDataFrameEqual(
+                df.select(sf.transform("values", lambda x: to_ts_iter(x)).alias("r")),
+                df.select(sf.transform("values", lambda x: to_ts(x)).alias("r")),
+            )
+
     def test_scalar_pandas_udf_struct_element_return_type(self):
         # A vectorized pandas UDF returning a struct element (a pandas.DataFrame per batch) inside a
         # lambda. Covers the struct-DataFrame result path of the element-wise pandas branch.

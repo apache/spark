@@ -3403,10 +3403,11 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             # and the UDF yields nothing, otherwise those rows would be dropped by the positional
             # JVM join. Chunks are held in a list and concatenated only when a shape spans more than
             # one, so a UDF that yields once per input batch (the common case) never re-copies the
-            # buffer. ``empty_type`` supplies the element type for a zero-length emit: the first
-            # chunk's type once seen (the pandas flavor types timestamps with the session timezone),
-            # else the UTC-typed ``arrow_element_type``. A partition that only ever emits
-            # zero-length rows never mixes the two, so the stream schema stays consistent.
+            # buffer. ``empty_type`` supplies the element type for a zero-length emit; it tracks the
+            # most recent chunk's type (even a zero-length chunk carries the flavor's type - the
+            # pandas flavor types timestamps with the session timezone), falling back to the
+            # UTC-typed ``arrow_element_type`` only before any chunk arrives, so all emitted batches
+            # share one schema.
             pending_chunks: "list" = []
             pending_len = 0
             empty_type = arrow_element_type
@@ -3455,10 +3456,15 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         raise PySparkRuntimeError(
                             errorClass="OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={}
                         )
+                    # Even a zero-length chunk carries the flavor's element type (the pandas flavor
+                    # types timestamps with the session timezone), so always take it: otherwise
+                    # rows emitted for an all-empty batch before the first non-empty chunk would use
+                    # the UTC-typed default and disagree with later batches, breaking the output
+                    # stream's single-schema contract.
+                    empty_type = chunk.type
                     if len(chunk):
                         pending_chunks.append(chunk)
                         pending_len += len(chunk)
-                        empty_type = chunk.type
                     yield from emit_ready()
 
                 # The iterator is exhausted: every input row's flat elements must have arrived.
