@@ -14657,6 +14657,32 @@ object functions {
     Column.fn("try_variant_array_append", v, lit(path), value)
 
   /**
+   * Recursively removes object fields and array elements whose value is a variant null. Returns
+   * NULL if `v` is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_strip_nulls(v: Column): Column = Column.fn("variant_strip_nulls", v)
+
+  /**
+   * Recursively removes object fields and array elements whose value is a variant null, unless
+   * `includeArrays` is false, in which case null array elements are kept. Returns NULL if any
+   * argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param includeArrays
+   *   whether null elements are also removed from arrays.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_strip_nulls(v: Column, includeArrays: Boolean): Column =
+    Column.fn("variant_strip_nulls", v, lit(includeArrays))
+
+  /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
    *
