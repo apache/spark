@@ -64,12 +64,18 @@ private[client] class GrpcExceptionConverter(
       .map(d => grpcStub.withDeadline(Deadline.after(d.toMillis, TimeUnit.MILLISECONDS)))
       .getOrElse(grpcStub)
 
-  def convert[T](sessionId: String, userContext: UserContext, clientType: String)(f: => T): T = {
+  def convert[T](
+      sessionId: String,
+      userContext: UserContext,
+      clientType: String,
+      operationId: Option[String] = None)(f: => T): T = {
     try {
       f
     } catch {
       case e: StatusRuntimeException =>
-        throw toThrowable(e, sessionId, userContext, clientType)
+        val converted = toThrowable(e, sessionId, userContext, clientType)
+        operationId.foreach(SparkConnectClient.attachOperationId(converted, _))
+        throw converted
     }
   }
 
@@ -77,25 +83,26 @@ private[client] class GrpcExceptionConverter(
       sessionId: String,
       userContext: UserContext,
       clientType: String,
-      iter: CloseableIterator[T]): CloseableIterator[T] = {
+      iter: CloseableIterator[T],
+      operationId: Option[String] = None): CloseableIterator[T] = {
     new WrappedCloseableIterator[T] {
 
       override def innerIterator: Iterator[T] = iter
 
       override def hasNext: Boolean = {
-        convert(sessionId, userContext, clientType) {
+        convert(sessionId, userContext, clientType, operationId) {
           iter.hasNext
         }
       }
 
       override def next(): T = {
-        convert(sessionId, userContext, clientType) {
+        convert(sessionId, userContext, clientType, operationId) {
           iter.next()
         }
       }
 
       override def close(): Unit = {
-        convert(sessionId, userContext, clientType) {
+        convert(sessionId, userContext, clientType, operationId) {
           iter.close()
         }
       }

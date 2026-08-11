@@ -1022,6 +1022,14 @@ class FunctionsTestsMixin:
         null_result = df.select(F.jaro_winkler_similarity(df.l, F.lit(None))).first()[0]
         self.assertIsNone(null_result)
 
+    def test_normalize_function(self):
+        df = self.spark.createDataFrame([("\ufb01",)], ["s"])
+        result = df.select(F.normalize(df.s, F.lit("NFKC"))).first()[0]
+        self.assertEqual(result, "fi")
+        # Null handling
+        null_result = df.select(F.normalize(F.lit(None), F.lit("NFC"))).first()[0]
+        self.assertIsNone(null_result)
+
     def test_between_function(self):
         df = self.spark.createDataFrame(
             [Row(a=1, b=2, c=3), Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)]
@@ -3641,6 +3649,15 @@ class FunctionsTestsMixin:
             df.select(F.to_json(F.try_variant_array_append(arr, df.arrpath, F.lit(9)))),
             ["[1,2,9]", "[[3,9],4]"],
         )
+        strip_v = F.parse_json(F.lit('{"a": 1, "b": null, "c": [1, null]}'))
+        check(
+            df.select(F.to_json(F.variant_strip_nulls(strip_v))),
+            ['{"a":1,"c":[1]}', '{"a":1,"c":[1]}'],
+        )
+        check(
+            df.select(F.to_json(F.variant_strip_nulls(strip_v, False))),
+            ['{"a":1,"c":[1,null]}', '{"a":1,"c":[1,null]}'],
+        )
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 
@@ -3723,6 +3740,23 @@ class FunctionsTestsMixin:
             F.to_json(F.to_variant_object(df.v)).alias("var"),
         ).collect()
         self.assertEqual("""{"a":1}""", actual[0]["var"])
+
+    def test_variant_from_arrays_and_entries(self):
+        df = self.spark.createDataFrame(
+            [(["a", "b"], [1, 2])], "keys array<string>, values array<int>"
+        )
+        actual = df.select(
+            F.to_json(F.variant_from_arrays("keys", "values")).alias("var"),
+        ).collect()
+        self.assertEqual("""{"a":1,"b":2}""", actual[0]["var"])
+
+        df2 = self.spark.createDataFrame(
+            [([("a", 1), ("b", 2)],)], "entries array<struct<k string, v int>>"
+        )
+        actual2 = df2.select(
+            F.to_json(F.variant_from_entries("entries")).alias("var"),
+        ).collect()
+        self.assertEqual("""{"a":1,"b":2}""", actual2[0]["var"])
 
     def test_schema_of_csv(self):
         with self.assertRaises(PySparkTypeError) as pe:

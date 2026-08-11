@@ -36,7 +36,7 @@ Identifiers in expressions can be references to any one of the following:
 Name resolution applies the following principles:
 
 - The _closest_ matching reference wins, and
-- Columns and parameter win over fields and keys.
+- Columns and parameters win over fields and keys.
 
 In detail, resolution of identifiers to a specific reference follows these rules in order:
 
@@ -62,7 +62,7 @@ In detail, resolution of identifiers to a specific reference follows these rules
 
       A. Remove the last identifier and treat it as a field or key.
 
-      B. Match the remainder to a column in table reference of the `FROM clause`.
+      B. Match the remainder to a column in a table reference of the `FROM clause`.
 
          - If there is more than one such match, raise an AMBIGUOUS_COLUMN_OR_FIELD error.
 
@@ -72,7 +72,7 @@ In detail, resolution of identifiers to a specific reference follows these rules
 
              If the field cannot be matched, raise a FIELD_NOT_FOUND error.
 
-             If there is more than one field, raise a AMBIGUOUS_COLUMN_OR_FIELD error.
+             If there is more than one field, raise an AMBIGUOUS_COLUMN_OR_FIELD error.
 
            - **`MAP`**: Raise an error if the key is qualified.
 
@@ -161,15 +161,15 @@ This restriction also applies to parameter references in SQL functions.
 > SELECT t.a FROM VALUES(named_struct('a', 1)) AS t(t);
  1
 
--- A column takes precendece over a field
+-- A column takes precedence over a field
 > SELECT t.a FROM VALUES(named_struct('a', 1), 2) AS t(t, a);
  2
 
--- Implict lateral column alias
+-- Implicit lateral column alias
 > SELECT c1 AS a, a + c1 FROM VALUES(2) AS T(c1);
  2  4
 
--- A local column reference takes precedence, over a lateral column alias
+-- A local column reference takes precedence over a lateral column alias
 > SELECT c1 AS a, a + c1 FROM VALUES(2, 3) AS T(c1, a);
  2  5
 
@@ -204,7 +204,7 @@ This restriction also applies to parameter references in SQL functions.
            WHERE c4 = c2 * 2);
  [UNRESOLVED_COLUMN] `c2`
 
--- Successsful usage of lateral correlation with keyword LATERAL
+-- Successful usage of lateral correlation with keyword LATERAL
 > SELECT c1, c2, c3
     FROM VALUES(1, 2) AS t(c1, c2),
          LATERAL(SELECT c3 FROM VALUES(3, 4) AS s(c3, c4)
@@ -318,7 +318,7 @@ the effective search path, for example
 > CREATE TABLE rel(c1 int);
 > INSERT INTO rel VALUES(1);
 
--- An fully qualified reference to rel:
+-- A fully qualified reference to rel:
 > SELECT c1 FROM spark_catalog.default.rel;
  1
 
@@ -428,7 +428,7 @@ effective search path, for example
 > CREATE FUNCTION func(a INT, b INT) RETURNS INT
     RETURN a / b;
 
--- The temporary function takes precedent
+-- The temporary function takes precedence
 > SELECT func(4, 2);
  2
 

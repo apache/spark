@@ -103,6 +103,7 @@ case class XmlToStructs(
   @transient
   private lazy val evaluator: XmlToStructsEvaluator =
     XmlToStructsEvaluator(options, nullableSchema, nameOfCorruptRecord, timeZoneId, child)
+  override def stateful: Boolean = true
 
   private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
 
@@ -295,6 +296,7 @@ case class StructsToXml(
 
   @transient
   private lazy val evaluator = StructsToXmlEvaluator(options, child.dataType, timeZoneId)
+  override def stateful: Boolean = true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

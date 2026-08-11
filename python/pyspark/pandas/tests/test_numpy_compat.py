@@ -139,6 +139,23 @@ class NumPyCompatTestsMixin:
 
                 self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
 
+    def test_np_reciprocal_integer(self):
+        # np.reciprocal on an integer column does integer division (truncated
+        # toward zero): 1 -> 1, -1 -> -1, and every other magnitude -> 0. The
+        # value 0 overflows to the int64 minimum. Cover positive, negative, and
+        # zero inputs to lock in parity with pandas.
+        for values in (
+            [1, 2, 3, 64, 100],
+            [-1, -2, -3, -64, -100],
+            [-2, -1, 0, 1, 2],
+            [np.iinfo(np.int64).min, -1, 1, np.iinfo(np.int64).max],
+        ):
+            with self.subTest(values=values):
+                pdf = pd.DataFrame({"a": values})
+                psdf = ps.from_pandas(pdf)
+
+                self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
+
     def test_np_bitwise_shift_functions(self):
         pdf = pd.DataFrame(
             {
@@ -169,6 +186,119 @@ class NumPyCompatTestsMixin:
                 np.float_power(psdf.base, psdf.exponent),
                 np.float_power(pdf.base, pdf.exponent),
                 almost=True,
+            )
+
+    def test_np_ldexp(self):
+        pdf = pd.DataFrame(
+            {
+                "x": [
+                    -np.inf,
+                    -64.0,
+                    -2.0,
+                    -0.0,
+                    0.0,
+                    1.0,
+                    2.0,
+                    64.0,
+                    np.inf,
+                    np.nan,
+                    1.0,
+                    1.0,
+                    1.0,
+                    0.0,
+                    -0.0,
+                    np.inf,
+                    -np.inf,
+                ],
+                "exp": [
+                    2,
+                    3,
+                    -2,
+                    -3,
+                    -3,
+                    0,
+                    -2,
+                    2,
+                    2,
+                    2,
+                    -1074,
+                    -1075,
+                    1024,
+                    1024,
+                    1024,
+                    -1075,
+                    -1075,
+                ],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        result = np.ldexp(psdf.x, psdf.exp)
+        expected = np.ldexp(pdf.x, pdf.exp)
+        self.assert_eq(result, expected, almost=True)
+        self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+
+    def test_np_fmod(self):
+        for pdf in (
+            pd.DataFrame(
+                {
+                    "x1": [-64, -2, -1, 0, 1, 2, 64],
+                    "x2": [2, 3, -2, -3, -3, 0, 2],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": [-np.inf, -64.0, -2.0, -0.0, 0.0, 2.0, 64.0, np.inf, np.nan, 1.0],
+                    "x2": [2.0, 3.0, -2.0, -3.0, -3.0, 0.0, -np.inf, np.inf, 2.0, 0.0],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": pd.array([1, 2, None, None], dtype="Int64"),
+                    "x2": pd.array([2, None, 2, 0], dtype="Int64"),
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+
+            self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2), almost=True)
+
+    def test_np_fmax_fmin(self):
+        for pdf in (
+            pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),
+            pd.DataFrame(
+                {
+                    "x1": [np.nan, 2.0, np.nan, -np.inf, -2.0, -0.0, 0.0, 2.0, np.inf],
+                    "x2": [2.0, np.nan, np.nan, np.inf, -np.inf, 0.0, -0.0, np.inf, -np.inf],
+                }
+            ),
+            pd.DataFrame({"x1": [-0.0, 0.0], "x2": [0.0, -0.0]}),
+        ):
+            psdf = ps.from_pandas(pdf)
+            for np_func in (np.fmax, np.fmin):
+                result = np_func(psdf.x1, psdf.x2)
+                expected = np_func(pdf.x1, pdf.x2)
+                self.assert_eq(result, expected, almost=True)
+                # NumPy's vectorized implementation may select either zero operand, whereas
+                # its scalar implementation consistently selects the first one.
+                expected_signbit = pd.Series(
+                    [np.signbit(np_func(x1, x2)) for x1, x2 in zip(pdf.x1, pdf.x2)]
+                )
+                self.assert_eq(np.signbit(result.to_pandas()), expected_signbit)
+
+    def test_np_heaviside(self):
+        for pdf in (
+            pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [-2, -1, 0, 1, 2]}),
+            pd.DataFrame(
+                {
+                    "x1": [-np.inf, -2.0, -0.0, 0.0, 0.0, 2.0, np.inf, np.nan],
+                    "x2": [2.0, -2.0, -0.0, 0.5, np.nan, np.nan, -0.0, 2.0],
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(
+                np.heaviside(psdf.x1, psdf.x2), np.heaviside(pdf.x1, pdf.x2), almost=True
             )
 
     def test_np_spark_compat_series(self):

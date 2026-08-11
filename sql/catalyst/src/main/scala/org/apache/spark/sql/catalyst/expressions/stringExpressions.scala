@@ -24,6 +24,8 @@ import java.util.{Base64 => JBase64, HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.commons.codec.binary.{Base32 => CommonsBase32}
+
 import org.apache.spark.QueryContext
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -968,6 +970,66 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
 }
 
 /**
+ * A function that returns the Unicode normalization of a string.
+ */
+// scalastyle:off
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str[, form]) - Returns the Unicode normalization of `str` using the normalization `form`.
+      Valid forms are 'NFC' (default), 'NFD', 'NFKC', and 'NFKD', as defined by Unicode Standard
+      Annex #15: 'NFD'/'NFKD' apply canonical/compatibility decomposition; 'NFC'/'NFKC' apply the
+      same decomposition followed by canonical composition. The form name is case-insensitive.
+      Normalization is backed by Spark's bundled ICU4J library rather than the JVM's own Unicode
+      data, so results are stable across JVM vendors and versions.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression to normalize.
+      * form - a string expression giving the normalization form: 'NFC', 'NFD', 'NFKC', or 'NFKD'.
+          If omitted, 'NFC' is used.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('ﬁ', 'NFKC');
+       fi
+  """,
+  since = "4.4.0",
+  group = "string_funcs")
+// scalastyle:on
+case class Normalize(input: Expression, form: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
+  override def nullIntolerant: Boolean = true
+
+  override lazy val replacement: Expression =
+    StaticInvoke(
+      classOf[ExpressionImplUtils],
+      input.dataType,
+      "normalize",
+      Seq(input, form),
+      inputTypes)
+
+  def this(input: Expression) = this(input, Literal("NFC"))
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def nodeName: String = "normalize"
+
+  override def nullable: Boolean = true
+
+  override def left: Expression = input
+
+  override def right: Expression = form
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Normalize = {
+    copy(input = newLeft, form = newRight)
+  }
+
+}
+
+/**
  * Replace all occurrences with string.
  */
 // scalastyle:off line.size.limit
@@ -1255,6 +1317,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   @transient private var lastMatching: UTF8String = _
   @transient private var lastReplace: UTF8String = _
   @transient private var dict: JMap[String, String] = _
+  override def stateful: Boolean = true
 
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
@@ -3355,6 +3418,110 @@ object UnBase64 {
   }
 }
 
+/**
+ * Converts the argument from binary to a base 32 string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(bin) - Converts the argument from a binary `bin` to a base 32 string.",
+  arguments = """
+    Arguments:
+      * bin - The binary value to encode as a base 32 string.
+        An expression that evaluates to a binary.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('foobar');
+       MZXW6YTBOI======
+      > SELECT _FUNC_(x'666f6f626172');
+       MZXW6YTBOI======
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+case class Base32(child: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[Base32],
+    dataType,
+    "encode",
+    Seq(child),
+    Seq(BinaryType),
+    returnNullable = false)
+
+  override def toString: String = s"$prettyName($child)"
+
+  override def prettyName: String = "to_base32"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+object Base32 {
+  private lazy val codec = new CommonsBase32()
+
+  def encode(input: Array[Byte]): UTF8String = {
+    UTF8String.fromBytes(codec.encode(input))
+  }
+}
+
+/**
+ * Converts the argument from a base 32 string to BINARY.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Converts the argument from a base 32 string `str` to a binary.",
+  arguments = """
+    Arguments:
+      * str - The base 32 string to decode to binary.
+        An expression that evaluates to a string.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('MZXW6YTBOI======');
+       foobar
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+case class UnBase32(child: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes {
+
+  override def dataType: DataType = BinaryType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[UnBase32],
+    dataType,
+    "decode",
+    Seq(child),
+    inputTypes,
+    returnNullable = false)
+
+  override def toString: String = s"$prettyName($child)"
+
+  override def prettyName: String = "from_base32"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+object UnBase32 {
+  private lazy val codec = new CommonsBase32()
+
+  def decode(input: UTF8String): Array[Byte] = {
+    codec.decode(input.getBytes)
+  }
+}
+
 object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
@@ -3743,6 +3910,7 @@ case class FormatNumber(x: Expression, d: Expression)
   // as a decimal separator.
   @transient
   private lazy val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
+  override def stateful: Boolean = true
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
     right.dataType match {

@@ -263,6 +263,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Eliminate Sorts", Once,
       EliminateSorts,
       RemoveRedundantSorts),
+    // Run after operator optimization normally folds accuracy expressions and before
+    // RewriteDistinctAggregates so fused distinct percentiles are rewritten correctly.
+    Batch("Combine Approximate Percentiles", Once,
+      CombineApproximatePercentiles),
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates),
     // This batch must run after "Decimal Optimizations", as that one may change the
@@ -351,10 +355,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       NormalizeFloatingNumbers,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
-      // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,
-      // so the grouping keys can only be attribute and literal which makes
-      // `InsertMapSortInGroupingExpressions` easy to insert `MapSort`.
-      InsertMapSortInGroupingExpressions,
+      // Put `InsertMapSortInAggregate` after `PullOutGroupingExpressions`,
+      // so grouping keys are attributes or literals. The rule also projects complex distinct
+      // aggregate arguments before inserting `MapSort`.
+      InsertMapSortInAggregate,
       InsertMapSortInRepartitionExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),

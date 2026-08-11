@@ -590,6 +590,61 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111'
+-- !query analysis
+Project [(2020-01-02 03:04:05.123456789 - 2020-01-01 03:04:05.000000111) AS (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456001'
+-- !query analysis
+Project [(2020-01-02 03:04:05.123456789 - 2020-01-02 03:04:05.123456001) AS (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456001')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789'
+-- !query analysis
+Project [(2020-01-01 03:04:05.000000111 - 2020-01-02 03:04:05.123456789) AS (TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ('2020-01-02 03:04:05.1234567' :: timestamp_ntz(7)) - ('2020-01-01 03:04:05.000000009' :: timestamp_ntz(9))
+-- !query analysis
+Project [(cast(cast(2020-01-02 03:04:05.1234567 as timestamp_ntz(7)) as timestamp_ntz(9)) - cast(2020-01-01 03:04:05.000000009 as timestamp_ntz(9))) AS (CAST(2020-01-02 03:04:05.1234567 AS TIMESTAMP_NTZ(7)) - CAST(2020-01-01 03:04:05.000000009 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05'
+-- !query analysis
+Project [(2020-01-02 03:04:05.123456789 - cast(2020-01-02 03:04:05 as timestamp_ntz(9))) AS (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01'
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' - TIMESTAMP_NTZ '1960-01-01 00:00:00.000000999'
+-- !query analysis
+Project [(2020-01-01 00:00:00.123456789 - 1960-01-01 00:00:00.000000999) AS (TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' - TIMESTAMP_NTZ '1960-01-01 00:00:00.000000999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS timestamp_ntz(9))
+-- !query analysis
+Project [(2020-01-02 03:04:05.123456789 - cast(null as timestamp_ntz(9))) AS (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT max(c), min(c) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
@@ -1071,6 +1126,62 @@ SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
 -- !query analysis
 Project [date_trunc(NANOSECOND, 2020-01-01 12:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(NANOSECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT typeof(localtimestamp(9)), typeof(localtimestamp(8)), typeof(localtimestamp(7))
+-- !query analysis
+Project [typeof(localtimestamp(9, Some(America/Los_Angeles))) AS typeof(localtimestamp())#x, typeof(localtimestamp(8, Some(America/Los_Angeles))) AS typeof(localtimestamp())#x, typeof(localtimestamp(7, Some(America/Los_Angeles))) AS typeof(localtimestamp())#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(localtimestamp()), typeof(localtimestamp(6))
+-- !query analysis
+Project [typeof(localtimestamp(Some(America/Los_Angeles))) AS typeof(localtimestamp())#x, typeof(localtimestamp(Some(America/Los_Angeles))) AS typeof(localtimestamp())#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(localtimestamp(8 + 1))
+-- !query analysis
+Project [typeof(localtimestamp(9, Some(America/Los_Angeles))) AS typeof(localtimestamp())#x]
++- OneRowRelation
+
+
+-- !query
+SELECT localtimestamp(9) = localtimestamp(9)
+-- !query analysis
+Project [(localtimestamp(9, Some(America/Los_Angeles)) = localtimestamp(9, Some(America/Los_Angeles))) AS (localtimestamp() = localtimestamp())#x]
++- OneRowRelation
+
+
+-- !query
+SELECT localtimestamp(3)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "3",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}
+
+
+-- !query
+SELECT localtimestamp(10)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}
 
 
 -- !query

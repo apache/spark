@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
@@ -451,6 +451,33 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-48973: Mask with supplementary characters") {
+    def cp(codePoint: Int): String = new String(Character.toChars(codePoint))
+    val smile = cp(0x1F642)
+    val boldA = cp(0x1D400)
+    val boldSmallA = cp(0x1D41A)
+    val boldZero = cp(0x1D7CE)
+
+    checkEvaluation(
+      new Mask(Literal(smile), Literal('Y'), Literal('y'), Literal('n'), Literal('*')), "*")
+    checkEvaluation(new Mask(Literal("ABC"), Literal(smile)), smile * 3)
+    checkEvaluation(new Mask(Literal(s"A$boldA 1$boldZero")), "XX nn")
+    // Supplementary upper-case, lower-case and digit characters are each classified and
+    // replaced like their BMP counterparts.
+    checkEvaluation(new Mask(Literal(s"$boldA$boldSmallA$boldZero")), "Xxn")
+    // A supplementary replacement applied to a supplementary input.
+    checkEvaluation(new Mask(Literal(boldSmallA), Literal('Y'), Literal(smile)), smile)
+
+    // A supplementary character must round-trip intact through the retain path, both when it
+    // falls into the otherChar category and when its own category is set to retain.
+    checkEvaluation(new Mask(Literal(smile)), smile)
+    checkEvaluation(new Mask(Literal(s"a${smile}1")), s"x${smile}n")
+    checkEvaluation(new Mask(Literal(boldA), Literal(null, StringType)), boldA)
+    checkEvaluation(
+      new Mask(Literal(boldZero), Literal('Y'), Literal('y'), Literal(null, StringType)),
+      boldZero)
+  }
+
   test("SPARK-42384: Mask with null input") {
     val NULL_LITERAL = Literal(null, StringType)
     checkEvaluation(
@@ -497,6 +524,30 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(UnBase64(a), null, create_row(null))
     checkEvaluation(UnBase64(Literal.create(null, StringType)), null, create_row("abdef"))
+  }
+
+  test("to_base32/from_base32 for string") {
+    // RFC 4648 (section 10) test vectors.
+    checkEvaluation(Base32(Literal("".getBytes("UTF-8"))), "")
+    checkEvaluation(Base32(Literal("f".getBytes("UTF-8"))), "MY======")
+    checkEvaluation(Base32(Literal("fo".getBytes("UTF-8"))), "MZXQ====")
+    checkEvaluation(Base32(Literal("foo".getBytes("UTF-8"))), "MZXW6===")
+    checkEvaluation(Base32(Literal("foob".getBytes("UTF-8"))), "MZXW6YQ=")
+    checkEvaluation(Base32(Literal("fooba".getBytes("UTF-8"))), "MZXW6YTB")
+    checkEvaluation(Base32(Literal("foobar".getBytes("UTF-8"))), "MZXW6YTBOI======")
+
+    assert(!Base32(Literal("foo".getBytes("UTF-8"))).nullable)
+    assert(Base32(Literal.create(null, BinaryType)).nullable)
+    assert(!UnBase32(Literal("MZXW6YTBOI======")).nullable)
+    assert(UnBase32(Literal.create(null, StringType)).nullable)
+
+    checkEvaluation(UnBase32(Literal("MZXW6YTBOI======")), "foobar".getBytes("UTF-8"))
+    checkEvaluation(UnBase32(Literal("MY======")), "f".getBytes("UTF-8"))
+
+    // Round trip.
+    checkEvaluation(Base32(UnBase32(Literal("MZXW6YTBOI======"))), "MZXW6YTBOI======")
+    checkEvaluation(Base32(UnBase32(Literal(""))), "")
+    checkEvaluation(Base32(UnBase32(Literal.create(null, StringType))), null)
   }
 
   test("encode/decode for string") {
@@ -2267,5 +2318,45 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           s"Expression $expr should be context independent foldable")
       }
     }
+  }
+
+  test("StringTranslate and FormatNumber are stateful and produce fresh copies") {
+    val src = Literal("aeiou")
+    val matching = Literal("aeiou")
+    val replace = Literal("12345")
+    val translate = StringTranslate(src, matching, replace)
+    assert(translate.stateful, "StringTranslate.stateful should be true")
+    val translateCopy = translate.freshCopyIfContainsStatefulExpression()
+    assert(translateCopy ne translate,
+      "freshCopyIfContainsStatefulExpression should return a new instance for StringTranslate")
+
+    val num = Literal(1234567.89)
+    val fmt = Literal(2)
+    val formatNumber = FormatNumber(num, fmt)
+    assert(formatNumber.stateful, "FormatNumber.stateful should be true")
+    val formatNumberCopy = formatNumber.freshCopyIfContainsStatefulExpression()
+    assert(formatNumberCopy ne formatNumber,
+      "freshCopyIfContainsStatefulExpression should return a new instance for FormatNumber")
+  }
+
+  test("Normalize") {
+    // scalastyle:off nonascii
+    checkEvaluation(new Normalize(Literal("A\u030A")), "\u00C5")
+    checkEvaluation(Normalize(Literal("A\u030A"), Literal("NFC")), "\u00C5")
+    checkEvaluation(Normalize(Literal("\u00C5"), Literal("NFD")), "A\u030A")
+    checkEvaluation(Normalize(Literal("\uFB01"), Literal("NFKC")), "fi")
+    // scalastyle:on nonascii
+    checkEvaluation(Normalize(Literal.create(null, StringType), Literal("NFC")), null)
+    checkEvaluation(Normalize(Literal("abc"), Literal.create(null, StringType)), null)
+  }
+
+  test("Normalize invalid form") {
+    checkErrorInExpression[SparkRuntimeException](
+      Normalize(Literal("abc"), Literal("NFE")),
+      "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+      Map(
+        "parameter" -> "`form`",
+        "functionName" -> "`normalize`",
+        "form" -> "'NFE'"))
   }
 }

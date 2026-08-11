@@ -57,4 +57,13 @@ trait ZipArchiveTestUtils {
   protected def writeCorruptArchive(dest: File): Unit =
     Files.write(dest.toPath, "this is not a valid zip archive, just some random bytes"
       .getBytes(StandardCharsets.UTF_8))
+
+  // Zip can't throw while *advancing*: a cut header reads as clean EOF, and a cut body only throws
+  // when the entry's bytes are read -- which a lazy reader (JSON) defers downstream. Tar is used
+  // for the mid-advance regression test instead.
+  protected def supportsMidAdvanceFailure: Boolean = false
+
+  protected def writeArchiveFailingAfterFirstEntry(
+      dest: File, firstEntry: (String, Array[Byte])): Unit =
+    throw new UnsupportedOperationException("zip cannot force a throw while advancing to an entry")
 }

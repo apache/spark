@@ -71,6 +71,12 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
  *   <li> SQL_SCALAR_ARROW_ITER_UDF for Scalar Iterator Arrow UDF
  *   <li> SQL_SCALAR_PANDAS_UDF for Scalar Pandas UDF
  *   <li> SQL_SCALAR_PANDAS_ITER_UDF for Scalar Iterator Pandas UDF
+ *   <li> SQL_ARROW_ELEMENTWISE_UDF for a row-at-a-time UDF lifted out of a higher-order function's
+ *        lambda (see ExtractPythonUDFFromLambda)
+ *   <li> SQL_SCALAR_PANDAS_ELEMENTWISE_UDF for a Scalar Pandas UDF lifted out of such a lambda
+ *   <li> SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF for a Scalar Iterator Pandas UDF lifted out of one
+ *   <li> SQL_SCALAR_ARROW_ELEMENTWISE_UDF for a Scalar Arrow UDF lifted out of such a lambda
+ *   <li> SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF for a Scalar Iterator Arrow UDF lifted out of one
  * </ul>
  *
  */
@@ -162,6 +168,11 @@ case class ArrowEvalPythonExec(
   private def supportedPythonEvalTypes: Array[Int] =
     Array(
       PythonEvalType.SQL_ARROW_BATCHED_UDF,
+      PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
+      PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
+      PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+      PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
+      PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
       PythonEvalType.SQL_SCALAR_ARROW_UDF,
       PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
       PythonEvalType.SQL_SCALAR_PANDAS_UDF,

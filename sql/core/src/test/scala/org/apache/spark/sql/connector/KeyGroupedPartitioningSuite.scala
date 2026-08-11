@@ -1199,7 +1199,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       enable <- Seq("true", "false")
     } yield {
       withSQLConf(
-          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
         // The left side uses a key-grouped partitioning to satisfy the WINDOW function's
@@ -1830,7 +1829,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         Seq(true, false).foreach { partiallyClustered =>
           Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
             withSQLConf(
-              SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
               SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
               SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
                   partiallyClustered.toString,
@@ -1972,7 +1970,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
         Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
           withSQLConf(
-            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
             SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
@@ -2132,7 +2129,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
         Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
           withSQLConf(
-            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
             SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
@@ -2310,7 +2306,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
 
         withSQLConf(
-          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
           SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
@@ -2375,7 +2370,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     Seq(true, false).foreach{ allowPushDown =>
       Seq(true, false).foreach{ partiallyClustered =>
         withSQLConf(
-          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> allowPushDown.toString,
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
             partiallyClustered.toString,
@@ -2433,7 +2427,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       Seq(true, false).foreach { partiallyClustered =>
         Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
           withSQLConf(
-            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key ->
                 pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
@@ -2496,7 +2489,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
 
           withSQLConf(
-            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
                 partiallyClustered.toString,
@@ -2708,7 +2700,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       "(6, 50.0, cast('2023-02-01' as timestamp))")
 
    withSQLConf(
-     SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
@@ -3210,7 +3201,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
   test("SPARK-55411: Fix ArrayIndexOutOfBoundsException when join keys " +
     "are less than cluster keys") {
     withSQLConf(
-      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
       SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
       SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
       SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
@@ -3286,7 +3276,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
   test("SPARK-55535: Multi table join granular partition grouping") {
     withSQLConf(
-      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
       SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val items_partitions = Array(identity("id"), years("arrive_time"))
@@ -3482,7 +3471,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     createTable(purchases, purchasesColumns, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (2, 10.0, cast('2021-01-01' as timestamp))")
     withSQLConf(
-      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
       SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
       SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
       val df = sql(
@@ -4494,5 +4482,27 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           "one union leg must be entirely pruned to None while its keys remain in the descriptor")
       }
     }
+  }
+
+  test("SPARK-58558: SPJ on a join key column partitioned by multiple transforms") {
+    // Partition expressions outnumber the join keys because `id` is partitioned twice, but
+    // every join key is covered, so SPJ works with default configs.
+    val items_partitions = Array(bucket(8, "id"), identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(bucket(8, "item_id"), identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 19.5, cast('2020-02-01' as timestamp))")
+
+    val df = createJoinTestDF(Seq("id" -> "item_id"))
+    val shuffles = collectShuffles(df.queryExecution.executedPlan)
+    assert(shuffles.isEmpty, "should not contain any shuffle")
+    checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 19.5)))
   }
 }

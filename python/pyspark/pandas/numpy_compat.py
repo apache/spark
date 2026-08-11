@@ -18,7 +18,7 @@ from typing import Any, Callable, no_type_check
 
 import numpy as np
 
-from pyspark.sql import functions as F
+from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
@@ -76,7 +76,13 @@ unary_np_spark_mappings = {
         )
         .otherwise(F.lit(1.0) / c),
     ).otherwise(
-        pandas_udf(np.reciprocal, DoubleType())(c)  # type: ignore[call-overload]
+        # Integer input: numpy does integer division (truncated toward zero),
+        # so casting the float quotient to long reproduces 1 -> 1, -1 -> -1,
+        # and every other magnitude -> 0. Dividing by 0 overflows to the int64
+        # minimum, matching numpy's behavior on integer arrays.
+        F.when(c == 0, F.lit(float(np.iinfo(np.int64).min))).otherwise(
+            (F.lit(1) / c).cast("long").cast("double")
+        )
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
@@ -99,6 +105,25 @@ unary_np_spark_mappings = {
     ),
 }
 
+
+def _fmod_func(c1: Column, c2: Column) -> Column:
+    c1_double = c1.cast("double")
+    c2_double = c2.cast("double")
+
+    return F.when(
+        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(c2_double == 0, F.lit(float("nan")))
+        .otherwise(F.try_mod(c1_double, c2_double)),
+    ).otherwise(
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(c2_double == 0, F.lit(0.0))
+        .otherwise(F.try_mod(c1_double, c2_double))
+    )
+
+
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
@@ -111,18 +136,27 @@ binary_np_spark_mappings = {
     "floor_divide": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.floor_divide(s1, s2), DoubleType()
     ),
-    "fmax": pandas_udf(lambda s1, s2: np.fmax(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "fmin": pandas_udf(lambda s1, s2: np.fmin(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "fmod": pandas_udf(lambda s1, s2: np.fmod(s1, s2), DoubleType()),  # type: ignore[call-overload]
+    "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
+    .when(F.isnan(c2.cast("double")), c1)
+    .when(c1 == c2, c1)
+    .otherwise(F.greatest(c1, c2))
+    .cast("double"),
+    "fmin": lambda c1, c2: F.when(c1 == c2, c1).otherwise(F.least(c1, c2)).cast("double"),
+    "fmod": _fmod_func,
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "heaviside": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.heaviside(s1, s2), DoubleType()
-    ),
+    "heaviside": lambda c1, c2: F.when(
+        c1.isNull() | F.isnan(c1.cast("double")),
+        c1.cast("double"),
+    )
+    .when(c1 < 0, F.lit(0.0))
+    .when(c1 == 0, c2.cast("double"))
+    .otherwise(F.lit(1.0)),
     "hypot": F.hypot,
     "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "ldexp": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.ldexp(s1, s2), DoubleType()
-    ),
+    "ldexp": lambda c1, c2: F.when(
+        c1.cast("double").isin(0.0, float("-inf"), float("inf")),
+        c1.cast("double"),
+    ).otherwise(c1.cast("double") * F.pow(F.lit(2.0), c2)),
     # F.shiftleft accepts literal counts only; call_function also accepts a column.
     # NumPy returns zero for counts outside an int64's bit width, unlike JVM shifts.
     "left_shift": lambda c1, c2: F.when((c2 < 0) | (c2 >= 64), F.lit(0)).otherwise(

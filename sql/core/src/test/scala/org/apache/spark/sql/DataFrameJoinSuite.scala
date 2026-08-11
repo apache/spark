@@ -630,4 +630,13 @@ class DataFrameJoinSuite extends SharedSparkSession
       checkAnswer(df1, df2)
     })
   }
+
+  test("SPARK-58384: preserve null semantics under NOT in join condition") {
+    val left = Seq((Some(0), 10), (None, 11)).toDF("a", "b").as("left")
+    val right = Seq((None, 20), (Some(0), 21), (Some(1), 22)).toDF("x", "y").as("right")
+    val condition = !(($"left.a" === $"right.x") ||
+      ($"left.a".isNull && $"right.x".isNull))
+
+    checkAnswer(left.join(right, condition), Row(0, 10, 1, 22))
+  }
 }

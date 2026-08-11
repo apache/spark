@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, WriteFiles, WriteFilesExec}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
@@ -560,6 +560,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
+
+    /**
+     * Whether this plan reads a streaming source in Real-Time Mode, which is the case when the
+     * relation carries a real-time mode duration -- the same signal that decides whether to plan
+     * a [[org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec]] for it.
+     */
+    private def isRealTimeMode(plan: LogicalPlan): Boolean = {
+      plan.collectLeaves().exists {
+        case s: StreamingDataSourceV2ScanRelation =>
+          s.relation.realTimeModeDuration.isDefined
+        case _ => false
+      }
+    }
+
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
@@ -601,12 +615,26 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           case None =>
             val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
 
-            AggUtils.planStreamingAggregation(
-              normalizedGroupingExpressions,
-              aggregateExpressions,
-              rewrittenResultExpressions,
-              stateVersion,
-              planLater(child))
+            // A Real-Time Mode batch runs until its duration elapses rather than until its input
+            // is exhausted, so an aggregation that only emits once the batch ends would hold every
+            // result back for the whole batch. Plan the streamline operator instead, which merges
+            // each input row against state and emits immediately.
+            if (isRealTimeMode(child) ||
+              conf.getConf(SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR)) {
+              AggUtils.planStreamlineStreamingAggregation(
+                normalizedGroupingExpressions,
+                aggregateExpressions,
+                rewrittenResultExpressions,
+                stateVersion,
+                planLater(child))
+            } else {
+              AggUtils.planStreamingAggregation(
+                normalizedGroupingExpressions,
+                aggregateExpressions,
+                rewrittenResultExpressions,
+                stateVersion,
+                planLater(child))
+            }
         }
 
       case _ => Nil
@@ -802,25 +830,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object WindowGroupLimit extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child) =>
-        // When the partial window group limit is bypassed, skip the pre-shuffle partial
-        // WindowGroupLimit and run only a single WindowGroupLimit after the shuffle. This can
-        // improve performance when the pre-shuffle reduction ratio is low.
-        //
-        // The bypass is only gated on a non-empty partitionSpec. With an empty partitionSpec the
-        // final WindowGroupLimit requires AllTuples, so for a multi-partition input the shuffle
-        // funnels everything into a single reducer; the partial pass we would drop bounds each
-        // input partition to `limit` rank groups before that shuffle, so keeping it is a sensible
-        // default (an already-single-partition child needs no shuffle, so the partial cannot reduce
-        // the shuffle input there and only adds another pass). This mirrors the grouping-keys
-        // carve-out in bypassPartialAggregation (see AggUtils.planAggregateWithoutDistinct).
-        val finalChild = if (conf.bypassPartialWindowGroupLimit && partitionSpec.nonEmpty) {
-          planLater(child)
-        } else {
-          execution.window.WindowGroupLimitExec(partitionSpec,
-            orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
-        }
+        val partialWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec,
+          orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
         val finalWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec, orderSpec,
-          rankLikeFunction, limit, execution.window.Final, finalChild)
+          rankLikeFunction, limit, execution.window.Final, partialWindowGroupLimit)
         finalWindowGroupLimit :: Nil
       case _ => Nil
     }
