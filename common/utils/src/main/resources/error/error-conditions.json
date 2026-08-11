@@ -1958,6 +1958,16 @@
           "Input schema <schema> can only contain STRING as a key type for a MAP."
         ]
       },
+      "INVALID_JSON_PATH" : {
+        "message" : [
+          "<functionName> has an invalid or unsupported JSON path <path>. Only simple, wildcard-free paths are supported."
+        ]
+      },
+      "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a scalar (string, numeric, boolean, or datetime) type."
+        ]
+      },
       "INVALID_JSON_SCHEMA" : {
         "message" : [
           "Input schema <schema> must be a struct, an array, a map or a variant."
@@ -5573,6 +5583,24 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ],
     "sqlState" : "42K0E"
+  },
+  "JSON_VALUE_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not extract a scalar value at path <path>."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The path matched no value. This error was requested by the ERROR ON EMPTY clause."
+        ]
+      },
+      "ERROR" : {
+        "message" : [
+          "The input is not valid JSON, the matched value is not a scalar, or it could not be cast to the RETURNING type. This error was requested by the ERROR ON ERROR clause."
+        ]
+      }
+    },
+    "sqlState" : "2203G"
   },
   "KAFKA_DATA_SOURCE_NOT_ENABLED" : {
     "message" : [
