@@ -102,6 +102,7 @@ import ast
 import contextlib
 import inspect
 import itertools
+import operator
 import sys
 import textwrap
 import threading
@@ -146,6 +147,16 @@ if TYPE_CHECKING:
 # CheckAnalysis walks each copy.
 _MAX_CHAIN_OPS = 4
 _MAX_IN_ELEMENTS = 64
+
+# The four ordering comparisons, which all lower through
+# ``_lower_value_compare`` and differ only in the operator to apply and the
+# symbol to name it in an error message.
+_ORDERING_OPS: dict[type, Tuple[Callable[[Any, Any], Column], str]] = {
+    ast.Lt: (operator.lt, "<"),
+    ast.LtE: (operator.le, "<="),
+    ast.Gt: (operator.gt, ">"),
+    ast.GtE: (operator.ge, ">="),
+}
 
 
 class AbstractTranspiler(object):
@@ -201,6 +212,50 @@ def _is_definitely_basic_type(node: ast.AST) -> bool:
             return False
 
 
+def _is_boolean_expr(node: ast.AST, *, allow_null: bool) -> bool:
+    """Shared traversal behind ``_is_definitely_boolean`` (``allow_null=True``)
+    and ``_is_never_null_boolean`` (``allow_null=False``).
+
+    The two predicates differ only in whether a NULL-valued operand is
+    acceptable, so they share one match rather than two near-copies: with
+    separate copies every new lowering had to be reflected in both, and
+    forgetting one silently re-admits a NULL operand into ``_lazy_and``, where a
+    NULL ``CASE WHEN`` condition reads as not-taken and turns Python's ``None``
+    into ``False``.
+    """
+    match node:
+        case ast.Constant(value=v):
+            # A literal None is "boolean" for coalesce purposes but IS NULL, so
+            # only the NULL-tolerant caller may accept it.
+            return isinstance(v, bool) or (allow_null and v is None)
+        case ast.Compare(left=left, ops=ops, comparators=comparators):
+            # Every Python comparison produces a bool, chained ones and
+            # ``in`` / ``not in`` included, and every comparison lowering is
+            # total (see ``_lower_compare_pair``) -- so a NULL-intolerant caller
+            # needs no extra restriction here, only the operand shapes below.
+            # Don't inspect an ``in`` right operand: it is a CONTAINER, which
+            # ``_is_definitely_basic_type`` rejects, yet the position still
+            # produces a bool. Being over-permissive is safe --
+            # ``_convert_chunk`` fails closed on anything it cannot lower.
+            return _is_definitely_basic_type(left) and all(
+                isinstance(op, (ast.In, ast.NotIn)) or _is_definitely_basic_type(c)
+                for op, c in zip(ops, comparators)
+            )
+        case ast.UnaryOp(op=ast.Not()):
+            # `not x` always produces bool, and lowers to
+            # ``coalesce(~operand, lit(True))``, which is total.
+            return True
+        case ast.BoolOp(values=values):
+            return all(_is_boolean_expr(v, allow_null=allow_null) for v in values)
+        case ast.IfExp(body=body, orelse=orelse):
+            # Ternary is boolean only if both branches are.
+            return _is_boolean_expr(body, allow_null=allow_null) and _is_boolean_expr(
+                orelse, allow_null=allow_null
+            )
+        case _:
+            return False
+
+
 def _is_definitely_boolean(node: ast.AST) -> bool:
     """Return True when ``node`` is statically guaranteed to produce a Python
     ``bool`` (or ``None``, which round-trips through ``coalesce``).
@@ -211,30 +266,7 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
     subscript, ...) must force a fallback to interpreted Python instead of
     silently diverging.
     """
-    match node:
-        case ast.Constant(value=v):
-            return v is None or isinstance(v, bool)
-        case ast.Compare(left=left, ops=ops, comparators=comparators):
-            # Every Python comparison produces a bool, chained ones and
-            # ``in`` / ``not in`` included. Don't inspect an ``in`` right
-            # operand: it is a CONTAINER, which ``_is_definitely_basic_type``
-            # rejects, yet the position still produces a bool. Being
-            # over-permissive is safe -- ``_convert_chunk`` fails closed on
-            # anything it cannot lower.
-            return _is_definitely_basic_type(left) and all(
-                isinstance(op, (ast.In, ast.NotIn)) or _is_definitely_basic_type(c)
-                for op, c in zip(ops, comparators)
-            )
-        case ast.BoolOp(values=values):
-            return all(_is_definitely_boolean(v) for v in values)
-        case ast.UnaryOp(op=ast.Not()):
-            # `not x` always produces bool.
-            return True
-        case ast.IfExp(body=body, orelse=orelse):
-            # Ternary is boolean only if both branches are.
-            return _is_definitely_boolean(body) and _is_definitely_boolean(orelse)
-        case _:
-            return False
+    return _is_boolean_expr(node, allow_null=True)
 
 
 def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
@@ -269,23 +301,7 @@ def _is_never_null_boolean(node: ast.AST) -> bool:
     ``not`` and if/ternary *tests* keep using ``_is_definitely_boolean``, since
     they wrap the operand in ``coalesce`` and so handle NULL explicitly.
     """
-    match node:
-        case ast.Constant(value=v):
-            # A literal None is "boolean" for coalesce purposes but is NULL.
-            return isinstance(v, bool)
-        case ast.Compare():
-            # Every comparison lowering is total (see ``_lower_compare_pair``),
-            # so only the operand shapes still need checking.
-            return _is_definitely_boolean(node)
-        case ast.UnaryOp(op=ast.Not()):
-            # Lowered as ``coalesce(~operand, lit(True))``, which is total.
-            return True
-        case ast.BoolOp(values=values):
-            return all(_is_never_null_boolean(v) for v in values)
-        case ast.IfExp(body=body, orelse=orelse):
-            return _is_never_null_boolean(body) and _is_never_null_boolean(orelse)
-        case _:
-            return False
+    return _is_boolean_expr(node, allow_null=False)
 
 
 def _lazy_and(cols: List[Column]) -> Column:
@@ -672,22 +688,11 @@ class CatalystTranspiler(AbstractTranspiler):
                 return self._lower_eq(params, left_node, right_node, equal=True)
             case ast.NotEq():
                 return self._lower_eq(params, left_node, right_node, equal=False)
-            case ast.Lt():
-                return self._lower_value_compare(
-                    params, left_node, right_node, lambda l, r: l < r, "<"
-                )
-            case ast.LtE():
-                return self._lower_value_compare(
-                    params, left_node, right_node, lambda l, r: l <= r, "<="
-                )
-            case ast.Gt():
-                return self._lower_value_compare(
-                    params, left_node, right_node, lambda l, r: l > r, ">"
-                )
-            case ast.GtE():
-                return self._lower_value_compare(
-                    params, left_node, right_node, lambda l, r: l >= r, ">="
-                )
+            case ast.Lt() | ast.LtE() | ast.Gt() | ast.GtE():
+                # All four orderings share `_lower_value_compare` and differ only
+                # in the operator, so look it up rather than repeating the call.
+                op_fn, op_str = _ORDERING_OPS[type(op)]
+                return self._lower_value_compare(params, left_node, right_node, op_fn, op_str)
             case _:
                 raise UnsupportedOperationException(
                     f"comparison operator {type(op).__name__} is not supported by the transpiler"
