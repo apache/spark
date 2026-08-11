@@ -290,15 +290,20 @@ class CommitLogSuite extends SharedSparkSession {
   }
 
   test("recording a commit log version sets the implied state store format") {
+    val sinkMetadataMap = Map("sink" -> SinkMetadataInfo(
+      sinkName = "sink",
+      commitOffset = OffsetSeqLog.SERIALIZED_VOID_OFFSET,
+      providerName = "provider",
+      apiVersion = "DSv2"))
     val session = spark.cloneSession()
-    val v3WithStateIds = CommitMetadataV3(0, Some(Map.empty), Map.empty)
+    val v3WithStateIds = CommitMetadataV3(0, Some(Map.empty), sinkMetadataMap)
     CheckpointVersionManager.setFormatVersion(
       session, CommitLogType, CommitLog.VERSION_3, Some(v3WithStateIds))
     assert(session.conf.get(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key) === "2",
       "state checkpoint ids in a V3 commit imply state store format v2")
 
     val v3WithoutStateIdsSession = spark.cloneSession()
-    val v3WithoutStateIds = CommitMetadataV3(0, None, Map.empty)
+    val v3WithoutStateIds = CommitMetadataV3(0, None, sinkMetadataMap)
     CheckpointVersionManager.setFormatVersion(
       v3WithoutStateIdsSession, CommitLogType, CommitLog.VERSION_3, Some(v3WithoutStateIds))
     assert(v3WithoutStateIdsSession.conf.get(

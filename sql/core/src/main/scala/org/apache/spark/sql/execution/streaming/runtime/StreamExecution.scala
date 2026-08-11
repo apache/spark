@@ -471,10 +471,10 @@ abstract class StreamExecution(
    *
    * Every setting here is a SOFT DEFAULT: applied only when the user has not set the key, so an
    * explicit choice always wins. The state store settings, `changelogCheckpointing`, and
-   * `sortBeforeRepartition` are these. An explicit value that is incompatible with Real-Time Mode
-   * is not overridden here -- it is rejected up front by the preflight in StreamingQueryManager
-   * (throwIfConfsAreRealTimeModeIncompatible), so by the time this runs an explicit value is always
-   * a safe one to keep.
+   * `sortBeforeRepartition` are these. Except for checkpoint format v1 when its escape hatch is
+   * enabled, an explicit value that is incompatible with Real-Time Mode is rejected up front by the
+   * preflight in StreamingQueryManager (throwIfConfsAreRealTimeModeIncompatible). Therefore, an
+   * explicit value that reaches this method is safe to keep or was explicitly allowed.
    *
    * Every default applied here is logged, so those changes are recoverable from the driver log.
    *

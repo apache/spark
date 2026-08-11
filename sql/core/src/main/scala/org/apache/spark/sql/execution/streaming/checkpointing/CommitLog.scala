@@ -73,11 +73,7 @@ class CommitLog(
    *
    * [[commitLogFormatVersion]] is a required parameter rather than a field read from the session
    * config, so that a caller always supplies the version it resolved for this query run. Reading
-   * the config here would capture whatever value happened to be set when this log was constructed
-   * -- which is during
-   * [[org.apache.spark.sql.execution.streaming.runtime.StreamExecution]]'s own initialization,
-   * before per-query configuration is applied -- and would ignore the format an existing
-   * checkpoint was created with.
+   * the config here would ignore the format an existing checkpoint was created with.
    *
    * For [[VERSION_3]], [[sinkMetadataMap]] must be non-empty and contain exactly one active
    * sink; [[CommitMetadataV3]] enforces this invariant.
