@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
-import org.apache.spark.sql.execution.streaming.{StreamingErrors, StreamingQueryPlanTraverseHelper}
+import org.apache.spark.sql.execution.streaming.{ProjectAggregationBufferExec, StatefulStreamlineAggregateExec, StreamingErrors, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
@@ -195,6 +195,9 @@ class IncrementalExecution(
 
       case a: UpdatingSessionsExec if a.isStreaming =>
         a.copy(numShufflePartitions = Some(numStateStores))
+
+      case a: ProjectAggregationBufferExec if a.isStreaming =>
+        a.copy(numShufflePartitions = Some(numStateStores))
     }
   }
 
@@ -317,6 +320,15 @@ class IncrementalExecution(
 
   object StateOpIdRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      case a: StatefulStreamlineAggregateExec =>
+        val aggStateInfo = nextStatefulOperationStateInfo()
+        a.copy(
+          numShufflePartitions = Some(aggStateInfo.numPartitions),
+          stateInfo = Some(aggStateInfo),
+          outputMode = Some(outputMode),
+          eventTimeWatermarkForLateEvents = None,
+          eventTimeWatermarkForEviction = None)
+
       case StateStoreSaveExec(keys, None, None, None, None, stateFormatVersion,
       UnaryExecNode(agg,
       StateStoreRestoreExec(_, None, _, child))) =>
@@ -441,6 +453,12 @@ class IncrementalExecution(
     }
 
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      case a: StatefulStreamlineAggregateExec if a.stateInfo.isDefined =>
+        a.copy(
+          eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(a.stateInfo.get),
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(a.stateInfo.get)
+        )
+
       case s: StateStoreSaveExec if s.stateInfo.isDefined =>
         s.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
@@ -585,6 +603,23 @@ class IncrementalExecution(
       rulesToCompose.reduceLeft { (ruleA, ruleB) => ruleA orElse ruleB }
     }
 
+    /**
+     * Returns true if a checkpoint whose metadata records operator `oldOpName` may be reopened by a
+     * plan whose operator is `newOpName`, without tripping the operator-mismatch guard.
+     *
+     * A streaming aggregation may move between the micro-batch operator ([[StateStoreSaveExec]],
+     * "stateStoreSave") and the streamline operator ([[StatefulStreamlineAggregateExec]]) in either
+     * direction: the two share [[StreamingAggregationStateManager]] and the same state format
+     * version, so the on-disk state written by one is readable by the other.
+     */
+    private def isOperatorMetadataConvertible(oldOpName: String, newOpName: String): Boolean = {
+      oldOpName == newOpName || ((oldOpName, newOpName) match {
+        case ("stateStoreSave", "StatefulStreamlineAggregate") => true
+        case ("StatefulStreamlineAggregate", "stateStoreSave") => true
+        case _ => false
+      })
+    }
+
     private def checkOperatorValidWithMetadata(
         planWithStateOpId: SparkPlan,
         batchId: Long): Unit = {
@@ -640,7 +675,7 @@ class IncrementalExecution(
         (opMapInMetadata.keySet ++ opMapInPhysicalPlan.keySet).foreach { opId =>
           val opInMetadata = opMapInMetadata.getOrElse(opId, "not found")
           val opInCurBatch = opMapInPhysicalPlan.getOrElse(opId, "not found")
-          if (opInMetadata != opInCurBatch) {
+          if (!isOperatorMetadataConvertible(opInMetadata, opInCurBatch)) {
             throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
               opMapInMetadata,
               opMapInPhysicalPlan)

@@ -6070,6 +6070,53 @@ object functions {
   def round(e: Column, scale: Column): Column = Column.fn("round", e, scale)
 
   /**
+   * Truncates the value of `e` toward zero to 0 decimal places.
+   *
+   * @param e
+   *   the value to truncate. A column that evaluates to a numeric.
+   * @return
+   *   Returns a column of the same type as the input, except that a decimal input may return a
+   *   decimal of different precision and scale.
+   * @group math_funcs
+   * @since 4.4.0
+   */
+  def truncate(e: Column): Column = truncate(e, 0)
+
+  /**
+   * Truncates the value of `e` toward zero to `scale` decimal places when `scale` is greater than
+   * or equal to 0, or to the left of the decimal point when `scale` is less than 0.
+   *
+   * @param e
+   *   the value to truncate. A column that evaluates to a numeric.
+   * @param scale
+   *   the number of decimal places to keep. A column that evaluates to an integral. Must be a
+   *   constant.
+   * @return
+   *   Returns a column of the same type as the input, except that a decimal input may return a
+   *   decimal of different precision and scale.
+   * @group math_funcs
+   * @since 4.4.0
+   */
+  def truncate(e: Column, scale: Int): Column = Column.fn("truncate", e, lit(scale))
+
+  /**
+   * Truncates the value of `e` toward zero to `scale` decimal places when `scale` is greater than
+   * or equal to 0, or to the left of the decimal point when `scale` is less than 0.
+   *
+   * @param e
+   *   the value to truncate. A column that evaluates to a numeric.
+   * @param scale
+   *   the number of decimal places to keep. A column that evaluates to an integral. Must be a
+   *   constant.
+   * @return
+   *   Returns a column of the same type as the input, except that a decimal input may return a
+   *   decimal of different precision and scale.
+   * @group math_funcs
+   * @since 4.4.0
+   */
+  def truncate(e: Column, scale: Column): Column = Column.fn("truncate", e, scale)
+
+  /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
    *
    * @param e
@@ -6592,6 +6639,30 @@ object functions {
    */
   @scala.annotation.varargs
   def xxhash64(cols: Column*): Column = Column.fn("xxhash64", cols: _*)
+
+  /**
+   * Returns a 64-bit hash value of the argument using the XXH3 algorithm.
+   *
+   * @param col
+   *   the column to hash, which must have string or binary type.
+   * @group hash_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
+   */
+  def xxh3_64(col: Column): Column = Column.fn("xxh3_64", col)
+
+  /**
+   * Returns a 128-bit XXH3 hash of the argument as a 32-character hex string.
+   *
+   * @param col
+   *   the column to hash, which must have string or binary type.
+   * @group hash_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a string.
+   */
+  def xxh3_128(col: Column): Column = Column.fn("xxh3_128", col)
 
   /**
    * Returns null if the condition is true, and throws an exception otherwise.
@@ -14731,6 +14802,19 @@ object functions {
    *   Returns a column that evaluates to an array.
    */
   def json_object_keys(e: Column): Column = Column.fn("json_object_keys", e)
+
+  /**
+   * Returns the type of the outermost JSON value as a string: one of 'object', 'array', 'string',
+   * 'number', 'boolean', or 'null'. Returns null for invalid or empty input.
+   *
+   * @param e
+   *   the JSON string column. A column that evaluates to a string.
+   * @group json_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a string.
+   */
+  def json_typeof(e: Column): Column = Column.fn("json_typeof", e)
 
   // scalastyle:off line.size.limit
   /**

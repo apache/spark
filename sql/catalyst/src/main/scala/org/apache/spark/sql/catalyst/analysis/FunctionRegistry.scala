@@ -473,6 +473,7 @@ object FunctionRegistry {
     expression[ToRadians]("radians"),
     expression[Rint]("rint"),
     expression[Round]("round"),
+    expression[Truncate]("truncate"),
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
     expression[ShiftRightUnsigned]("shiftrightunsigned"),
@@ -849,6 +850,8 @@ object FunctionRegistry {
     expression[Uuid]("uuid"),
     expression[Murmur3Hash]("hash"),
     expression[XxHash64]("xxhash64"),
+    expression[Xxh364]("xxh3_64"),
+    expression[Xxh3128]("xxh3_128"),
     expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
@@ -978,6 +981,7 @@ object FunctionRegistry {
     expression[SchemaOfJson]("schema_of_json"),
     expression[LengthOfJsonArray]("json_array_length"),
     expression[JsonObjectKeys]("json_object_keys"),
+    expression[JsonTypeof]("json_typeof"),
 
     // Variant
     expressionBuilder("parse_json", ParseJsonExpressionBuilder),

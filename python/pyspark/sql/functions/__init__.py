@@ -110,6 +110,7 @@ __all__ = [  # noqa: F405
     "sqrt",
     "tan",
     "tanh",
+    "truncate",
     "try_add",
     "try_divide",
     "try_mod",
@@ -294,6 +295,8 @@ __all__ = [  # noqa: F405
     "sha",
     "sha1",
     "sha2",
+    "xxh3_128",
+    "xxh3_64",
     "xxhash64",
     # Collection Functions
     "aggregate",
@@ -474,6 +477,7 @@ __all__ = [  # noqa: F405
     "json_array_length",
     "json_object_keys",
     "json_tuple",
+    "json_typeof",
     "schema_of_json",
     "to_json",
     # VARIANT Functions

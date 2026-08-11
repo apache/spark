@@ -8067,6 +8067,22 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       s"expected reason to mention '$reasonSubstring', got: $msg")
   }
 
+  test("submitMapStage on an RDD with 0 partitions reports an internal error") {
+    val shuffleMapRdd = new MyRDD(sc, 0, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    // `ShuffleExchangeExec` guards this case, so reaching it means an internal invariant broke.
+    checkError(
+      exception = intercept[SparkException] {
+        scheduler.submitMapStage(shuffleDep, (_: MapOutputStatistics) => (), CallSite("", ""),
+          new Properties())
+      },
+      condition = "INTERNAL_ERROR",
+      sqlState = Some("XX000"),
+      parameters = scala.collection.immutable.Map(
+        "message" -> "Can't run submitMapStage on RDD with 0 partitions."))
+    assertDataStructuresEmpty()
+  }
+
 }
 
 class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {

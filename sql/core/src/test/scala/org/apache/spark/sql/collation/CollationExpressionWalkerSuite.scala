@@ -34,7 +34,6 @@ import org.apache.spark.util.Utils
  *  collations
  */
 class CollationExpressionWalkerSuite extends SharedSparkSession {
-  import testImplicits._
 
   // Trait to distinguish different cases for generation
   sealed trait CollationType
@@ -386,6 +385,8 @@ class CollationExpressionWalkerSuite extends SharedSparkSession {
       "sha2",
       "sha",
       "crc32",
+      "xxh3_64",
+      "xxh3_128",
       "ascii",
       "time_trunc",
       // The result/sketch embeds the original item value, which now preserves the

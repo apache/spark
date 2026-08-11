@@ -143,6 +143,7 @@ Mathematical Functions
     sqrt
     tan
     tanh
+    truncate
     try_add
     try_divide
     try_mod
@@ -351,6 +352,8 @@ Hash Functions
     sha
     sha1
     sha2
+    xxh3_128
+    xxh3_64
     xxhash64
 
 
@@ -589,6 +592,7 @@ JSON Functions
     json_array_length
     json_object_keys
     json_tuple
+    json_typeof
     schema_of_json
     to_json
 

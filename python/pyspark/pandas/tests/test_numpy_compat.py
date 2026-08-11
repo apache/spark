@@ -139,6 +139,23 @@ class NumPyCompatTestsMixin:
 
                 self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
 
+    def test_np_reciprocal_integer(self):
+        # np.reciprocal on an integer column does integer division (truncated
+        # toward zero): 1 -> 1, -1 -> -1, and every other magnitude -> 0. The
+        # value 0 overflows to the int64 minimum. Cover positive, negative, and
+        # zero inputs to lock in parity with pandas.
+        for values in (
+            [1, 2, 3, 64, 100],
+            [-1, -2, -3, -64, -100],
+            [-2, -1, 0, 1, 2],
+            [np.iinfo(np.int64).min, -1, 1, np.iinfo(np.int64).max],
+        ):
+            with self.subTest(values=values):
+                pdf = pd.DataFrame({"a": values})
+                psdf = ps.from_pandas(pdf)
+
+                self.assert_eq(np.reciprocal(psdf.a), np.reciprocal(pdf.a), almost=True)
+
     def test_np_bitwise_shift_functions(self):
         pdf = pd.DataFrame(
             {
@@ -255,12 +272,19 @@ class NumPyCompatTestsMixin:
                     "x2": [2.0, np.nan, np.nan, np.inf, -np.inf, 0.0, -0.0, np.inf, -np.inf],
                 }
             ),
+            pd.DataFrame({"x1": [-0.0, 0.0], "x2": [0.0, -0.0]}),
         ):
             psdf = ps.from_pandas(pdf)
             for np_func in (np.fmax, np.fmin):
                 result = np_func(psdf.x1, psdf.x2)
                 expected = np_func(pdf.x1, pdf.x2)
                 self.assert_eq(result, expected, almost=True)
+                # NumPy's vectorized implementation may select either zero operand, whereas
+                # its scalar implementation consistently selects the first one.
+                expected_signbit = pd.Series(
+                    [np.signbit(np_func(x1, x2)) for x1, x2 in zip(pdf.x1, pdf.x2)]
+                )
+                self.assert_eq(np.signbit(result.to_pandas()), expected_signbit)
 
     def test_np_heaviside(self):
         for pdf in (

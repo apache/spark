@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream, IOException, StringWriter}
+import java.lang.reflect.{Member, Method, Modifier}
 import java.net.{JarURLConnection, URI, URL}
 import java.util.Locale
 import java.util.concurrent.{Callable, ExecutionException, ExecutorService}
@@ -143,10 +144,11 @@ object CodeCompiler extends Logging {
    *
    * The configured backend ([[SQLConf.CODEGEN_COMPILER]]) governs ordinary codegen. The
    * exception is codegen the JDK compiler is fundamentally *incapable* of compiling - not
-   * merely slower at - which is always routed to Janino regardless of the configured
-   * backend. This is deterministic routing decided up front from the execution context and
-   * the generated source; it is never a fallback after a failed compile. Two such cases,
-   * both classes the JDK compiler cannot name that Janino's lenient loader/lexer accepts:
+   * merely slower at compiling - which is always routed to Janino regardless of the
+   * configured backend. This is deterministic routing decided up front from the execution
+   * context and the generated source; it is never a fallback after a failed compile. Three
+   * such cases, all involving classes the JDK compiler cannot name that Janino's lenient
+   * loader/lexer accepts:
    *
    *   - REPL / interactive sessions (spark-shell `$line*` wrappers, Spark Connect /
    *     Ammonite session artifacts): reachable only through a runtime class loader and
@@ -159,17 +161,34 @@ object CodeCompiler extends Logging {
    *     an identifier in any form - Java has no backtick/escape, unlike Scala - so javac
    *     can neither parse `a.b.package.Inner` nor resolve the flat `a.b.package$Inner`.
    *     See [[requiresJaninoSource]].
+   *   - A reference to a class the Java language forbids naming, i.e. an anonymous or local
+   *     class (`a.b.Outer$1`, `a.b.Outer$$anon$1`) or a class nested inside one
+   *     (`a.b.Outer$1$Inner`), that is shown to be unnarrowable. The JDK backend rewrites
+   *     such a reference to the nearest nameable supertype, which works only while that
+   *     supertype is itself referenceable and offers every member the generated code could
+   *     access; this arm covers the classes for which reflection positively reports it does
+   *     not. A class whose verdict reflection cannot determine is not routed: a reference to
+   *     it in code position keeps its binary name, which javac rejects for these shapes.
+   *     See [[JdkCodeCompiler.referencesUnnarrowableClass]].
    */
   def active(code: CodeAndComment): CodeCompiler = {
-    val requested = SQLConf.get.codegenCompiler
-    if (requested != JANINO && isReplContext) {
+    // Resolve the configured backend first: when it is already Janino - by configuration or
+    // because javac is absent - none of the overrides below can change the outcome, and
+    // their source scans would be pure overhead.
+    val configured = forBackend(SQLConf.get.codegenCompiler)
+    if (configured eq JaninoCodeCompiler) {
+      configured
+    } else if (isReplContext) {
       logReplRoutingOnce()
       JaninoCodeCompiler
-    } else if (requested != JANINO && requiresJaninoSource(code)) {
+    } else if (requiresJaninoSource(code)) {
       logPackageObjectRoutingOnce()
       JaninoCodeCompiler
+    } else if (code != null && JdkCodeCompiler.referencesUnnarrowableClass(code.body)) {
+      logUnnarrowableClassRoutingOnce()
+      JaninoCodeCompiler
     } else {
-      forBackend(requested)
+      configured
     }
   }
 
@@ -191,6 +210,16 @@ object CodeCompiler extends Logging {
         log"routed to Janino although ${MDC(LogKeys.CONFIG, SQLConf.CODEGEN_COMPILER.key)} " +
         log"requests another backend (`package` is a Java reserved word the JDK compiler " +
         log"cannot name). This notice is logged once per JVM.")
+    }
+  }
+  private val unnarrowableClassRoutingLogged = new java.util.concurrent.atomic.AtomicBoolean(false)
+  private def logUnnarrowableClassRoutingOnce(): Unit = {
+    if (unnarrowableClassRoutingLogged.compareAndSet(false, true)) {
+      logInfo(log"Generated code references a class Java cannot name (anonymous, local, or " +
+        log"nested in one) that cannot be narrowed to a nameable supertype; that unit is " +
+        log"routed to Janino although " +
+        log"${MDC(LogKeys.CONFIG, SQLConf.CODEGEN_COMPILER.key)} requests another backend. " +
+        log"This notice is logged once per JVM.")
     }
   }
 
@@ -513,6 +542,10 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
    * backend compiled it. `classLoader` resolves the candidate inner-class
    * references for the `$`-rewrite (see [[rewriteInnerClassRefs]]); it must be the
    * same loader the compile resolves classes through.
+   *
+   * Hoisted imports are deliberately left un-rewritten: an `import` requires a canonical
+   * name, so a binary inner-class name there is a javac error whether or not it is
+   * narrowed.
    */
   private[codegen] def wrapAsCompilationUnit(body: String, classLoader: ClassLoader): String = {
     val (extraImports, cleanedBody) = extractLeadingImports(body)
@@ -731,58 +764,76 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
    * prefix resolves (e.g. inner classes of the not-yet-compiled generated unit).
    */
   private def rewriteQualifiedName(token: String, classLoader: ClassLoader): String = {
+    loadLongestPrefix(token, classLoader) match {
+      case Some((cls, rest)) =>
+        val sourceName = narrowedSourceName(cls)
+        val resolved = if (rest.isEmpty) sourceName else s"$sourceName.$rest"
+        // `split('.')` drops a trailing empty segment, so a token that ends in `.`
+        // (member access wrapped onto the next line) must get its dot restored.
+        if (token.endsWith(".")) resolved + "." else resolved
+      case None =>
+        InnerClassRefPattern.replaceAllIn(token, ".")
+    }
+  }
+
+  /**
+   * The source name to emit for `cls`: the name of the nearest class Java can name, in the
+   * form javac accepts.
+   *
+   * Narrowing happens only on a positive [[Narrowable]] verdict; anything else keeps the
+   * binary name. Consulting the verdict is the load-bearing part, because the reflective
+   * failures are not symmetric: the supertype climb can succeed while member enumeration
+   * throws, so climbing here without it would narrow a class whose members were never
+   * checked, to a public supertype javac happily accepts. Taking the target from the verdict
+   * rather than re-deriving it costs one climb instead of two. Keeping the binary name of a
+   * class Java cannot name yields a name javac rejects, so the unit fails to compile rather
+   * than compiling into a wrong answer.
+   */
+  private def narrowedSourceName(cls: Class[_]): String = narrowingVerdict(cls) match {
+    case Narrowable(target) => sourceNameOf(target)
+    case Unnarrowable => cls.getName
+    case Unknown(cause) =>
+      // Logged from here, not from the verdict: this is the one call site that knows the
+      // token really is a type reference in code position, so the message's claim that the
+      // unit will fail to compile actually holds. The routing scan reads the raw body and
+      // can evaluate a token inside a literal, where the same verdict costs nothing.
+      logUnevaluableClassOnce(cls, cause)
+      cls.getName
+  }
+
+  /**
+   * Find the longest dot-delimited prefix of `token` that loads as a class, and return it
+   * with the remaining member access. Only a prefix containing `$` is tried, since only
+   * such a prefix can be a binary inner-class name. Returns None when nothing loads (e.g.
+   * an inner class of the not-yet-compiled generated unit).
+   */
+  private def loadLongestPrefix(
+      token: String,
+      classLoader: ClassLoader): Option[(Class[_], String)] = {
     val parts = token.split('.')
     var k = parts.length
     while (k >= 1) {
       val prefix = parts.iterator.take(k).mkString(".")
-      // Only a prefix that itself contains `$` can be a binary inner-class name.
       if (prefix.indexOf('$') >= 0) {
-        resolveSourceName(prefix, classLoader) match {
-          case Some(sourceName) =>
-            val rest = parts.iterator.drop(k).mkString(".")
-            val resolved = if (rest.isEmpty) sourceName else s"$sourceName.$rest"
-            // `split('.')` drops a trailing empty segment, so a token that ends in `.`
-            // (member access wrapped onto the next line) must get its dot restored.
-            return if (token.endsWith(".")) resolved + "." else resolved
+        loadWithoutInit(prefix, classLoader) match {
+          case Some(cls) => return Some((cls, parts.iterator.drop(k).mkString(".")))
           case None => // try a shorter prefix
         }
       }
       k -= 1
     }
-    InnerClassRefPattern.replaceAllIn(token, ".")
+    None
   }
 
-  /**
-   * Load `binaryName` without initializing it and return the source name the JDK
-   * compiler accepts: the canonical name when it is a plain dotted identifier
-   * name (regular nesting, e.g. `java.util.Map.Entry`), otherwise the binary
-   * name itself. The binary name is required for classes nested in Scala objects
-   * and for Scala companion-object classes, whose canonical form carries a
-   * module `$` that javac cannot resolve, and for Scala operator-named classes
-   * (e.g. `scala.collection.immutable.::`) whose canonical form is not a valid
-   * Java identifier - in all those cases the binary name is itself a legal Java
-   * type reference. Returns None when the name is not a loadable class.
-   *
-   * The canonical name is also rejected when it is not a faithful rename of the
-   * binary name - it must keep the same package. Scala REPL classes (e.g.
-   * `$line21.$read$$iw$TestCaseClass`) report a misleading `getCanonicalName` that
-   * drops the package and returns just the simple name (`TestCaseClass`); using it
-   * would corrupt the reference into an unqualified one javac cannot resolve.
-   */
-  private def resolveSourceName(binaryName: String, classLoader: ClassLoader): Option[String] = {
+  /** Load `binaryName` without initializing it; None when it is not a loadable class. */
+  private def loadWithoutInit(binaryName: String, classLoader: ClassLoader): Option[Class[_]] = {
     try {
       // scalastyle:off classforname
       // Load with the exact loader passed in (the task's context loader), not the Spark
       // class loader, so the JDK compiler sees what the runtime would; Utils.classForName
       // cannot target an arbitrary loader.
-      val loaded = Class.forName(binaryName, false, classLoader)
+      Some(Class.forName(binaryName, false, classLoader))
       // scalastyle:on classforname
-      val cls = nameableSupertype(loaded)
-      val canonical = cls.getCanonicalName
-      val pkg = cls.getPackageName
-      val usableCanonical = canonical != null && isPlainDottedName(canonical) &&
-        (pkg.isEmpty || canonical.startsWith(pkg + "."))
-      Some(if (usableCanonical) canonical else cls.getName)
     } catch {
       case _: ClassNotFoundException | _: LinkageError => None
       case NonFatal(_) => None
@@ -790,26 +841,362 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
   }
 
   /**
-   * Climb to the nearest class that can be named in Java source. Anonymous and local
-   * classes (e.g. a Scala `new HashMap[..]() {...}` compiled to `Outer$$anon$1`) have no
-   * source-referenceable name: the JDK compiler rejects a qualified reference to them
-   * even when the `.class` file is on the classpath, because the Java language forbids
-   * naming them. Janino does not - it resolves any class by its runtime binary name -
-   * so this only matters for the JDK backend. The generated code casts an object to
-   * this type and then invokes methods declared on it; every such method is inherited
-   * from the supertype, so the nearest nameable supertype is a sound cast target. For an
-   * anonymous class implementing an interface (`new Comparator() {...}`, whose superclass
-   * is `Object`), the implemented interface is preferred over `Object`.
+   * The source name the JDK compiler accepts for `cls`: the canonical name when it is a
+   * plain dotted identifier name (regular nesting, e.g. `java.util.Map.Entry`), otherwise
+   * the binary name. The binary name is required for classes nested in Scala objects and
+   * for Scala companion-object classes, whose canonical form carries a module `$` that
+   * javac cannot resolve, and for Scala operator-named classes (e.g.
+   * `scala.collection.immutable.::`) whose canonical form is not a valid Java identifier -
+   * in all those cases the binary name is itself a legal Java type reference.
+   *
+   * The canonical name is also rejected when it is not a faithful rename of the binary
+   * name - it must keep the same package. Scala REPL classes (e.g.
+   * `$line21.$read$$iw$TestCaseClass`) report a misleading `getCanonicalName` that drops
+   * the package and returns just the simple name (`TestCaseClass`); using it would corrupt
+   * the reference into an unqualified one javac cannot resolve.
+   *
+   * Reflection here can raise a `LinkageError` when the class loaded but its enclosing
+   * class did not (a partial or shaded jar); `NonFatal` does not cover that, so it is
+   * caught explicitly and the binary name used, matching what an unresolvable prefix
+   * yields in [[loadLongestPrefix]].
+   */
+  private def sourceNameOf(cls: Class[_]): String = {
+    val canonical =
+      try cls.getCanonicalName
+      catch {
+        case _: LinkageError => null
+        case NonFatal(_) => null
+      }
+    val pkg = cls.getPackageName
+    val usableCanonical = canonical != null && isPlainDottedName(canonical) &&
+      (pkg.isEmpty || canonical.startsWith(pkg + "."))
+    if (usableCanonical) canonical else cls.getName
+  }
+
+  /**
+   * Climb to the nearest class that can be named in Java source. A class whose
+   * `getCanonicalName` is null has no source-referenceable name: the JDK compiler rejects
+   * a qualified reference to it even when the `.class` file is on the classpath, because
+   * the Java language forbids naming it. That covers anonymous classes (a Scala
+   * `new HashMap[..]() {...}` compiles to `Outer$$anon$1`), local classes, and classes
+   * nested inside either of those (`Outer$1$Inner`), which are themselves neither
+   * anonymous nor local. Janino does not care - it resolves any class by its runtime
+   * binary name - so this only matters for the JDK backend. For an anonymous class
+   * implementing an interface (`new Comparator() {...}`, whose superclass is `Object`),
+   * the implemented interface is preferred over `Object`.
+   *
+   * Narrowing a reference this way is only sound while every member the generated code
+   * could access remains reachable through the replacement type; a unit referencing a class
+   * for which reflection shows that does not hold is routed to Janino instead of being
+   * rewritten. When reflection cannot tell, the unit stays on the JDK backend and the
+   * reference keeps its binary name, which javac rejects, so the unit fails to compile
+   * rather than compiling into a wrong answer (see [[referencesUnnarrowableClass]] and
+   * [[CodeCompiler.active]]).
    */
   private def nameableSupertype(start: Class[_]): Class[_] = {
     var c: Class[_] = start
-    while (c != null && (c.isAnonymousClass || c.isLocalClass)) {
+    while (c != null && c.getCanonicalName == null) {
       val sup: Class[_] = c.getSuperclass
       c =
         if (sup != null && (sup ne classOf[Object])) sup
         else c.getInterfaces.headOption.getOrElse(sup)
     }
     if (c == null) classOf[Object] else c
+  }
+
+  /**
+   * True when `body` references a class that [[nameableSupertype]] cannot narrow soundly,
+   * i.e. the class carries a public member that the replacement type does not offer, or
+   * the replacement type is itself one javac cannot reference. Such a unit must go to
+   * Janino: rewriting the reference would either drop the member or emit a type name javac
+   * rejects.
+   *
+   * Called from [[CodeCompiler.active]] on every compile, so it is gated behind a scan for
+   * `$` followed by a digit. Every class the Java language forbids naming carries that in
+   * its binary name (`Outer$1`, `Outer$1Local`, Scala's `Outer$$anon$1`, and their nested
+   * members `Outer$1$Inner`). The other `$` forms the rewrite handles do not: regular
+   * nesting (`Map$Entry`), Scala modules (`Foo$`, `Model$Load$Leaf`), package objects
+   * (`pkg$Inner`), specialized (`Function1$mcII$sp`) and operator-named (`$colon$colon`)
+   * classes. Runtime-synthesized classes need not carry it at all: a lambda is
+   * `Outer$$Lambda$14/0x...` on JDK 17 but `Outer$$Lambda/0x...` on 21 and later, and a
+   * hidden class is `Host$Named/0x...`. Neither routes on its own name: the tokenizer stops
+   * at `/`, and the truncated remainder either resolves to nothing (a lambda) or to the
+   * ordinary class the hidden class was defined from, whose own verdict is then the one that
+   * answers. On JDK 17 the lambda shape does pass the gate, at the cost of one failed load.
+   *
+   * The scan adds one linear pass over the body ahead of the compile-cache lookup, behind
+   * the intrinsified `$`-digit gate that ordinary generated code fails immediately.
+   *
+   * The scan reads the raw body, so a `$`-digit sequence outside code position (inside a
+   * string literal, say a regex the optimizer folded in, or inside a comment) can trigger
+   * the resolution attempt. That is harmless: an unloadable token is ignored, and a loadable
+   * one only ever picks Janino, which accepts a superset of what javac does.
+   */
+  private[codegen] def referencesUnnarrowableClass(body: String): Boolean = {
+    if (!containsDollarDigit(body)) return false
+    val classLoader = Utils.getContextOrSparkClassLoader
+    val checked = mutable.HashSet.empty[String]
+    var i = 0
+    val n = body.length
+    while (i < n) {
+      if (isNameStart(body.charAt(i))) {
+        val start = i
+        i += 1
+        while (i < n && isNamePart(body.charAt(i))) i += 1
+        val token = body.substring(start, i)
+        if (containsDollarDigit(token) && checked.add(token) &&
+            routesOnToken(token, classLoader)) {
+          return true
+        }
+      } else {
+        i += 1
+      }
+    }
+    false
+  }
+
+  /**
+   * True when `token` resolves to a class whose reference has to go to Janino, i.e. one
+   * [[narrowingVerdict]] positively reports as [[Unnarrowable]].
+   *
+   * An [[Unknown]] verdict does not route: it is no evidence that narrowing is unsafe, only
+   * that reflection could not tell. The token then contributes nothing to the decision, so
+   * unless some other token in the same body is [[Unnarrowable]] the unit stays on the
+   * configured backend, where a reference in code position keeps its binary name and javac
+   * rejects it, so the unit fails to compile rather than compiling into a wrong answer.
+   * Routing it to Janino would compile it instead, which is the better outcome for this one
+   * unit, but it would also let a truncated classpath quietly move work off the configured
+   * backend. The routing arms exist for source Spark knows javac cannot express, not for a
+   * broken deployment.
+   */
+  private def routesOnToken(token: String, classLoader: ClassLoader): Boolean = {
+    loadLongestPrefix(token, classLoader).exists {
+      case (cls, _) => narrowingVerdict(cls) match {
+        case Unnarrowable => true
+        case Narrowable(_) | Unknown(_) => false
+      }
+    }
+  }
+
+  /** True iff `s` holds a `$` immediately followed by an ASCII digit. */
+  private[codegen] def containsDollarDigit(s: String): Boolean = {
+    var i = s.indexOf('$')
+    while (i >= 0 && i < s.length - 1) {
+      val next = s.charAt(i + 1)
+      if (next >= '0' && next <= '9') return true
+      i = s.indexOf('$', i + 1)
+    }
+    false
+  }
+
+  /**
+   * Whether a reference to a class can be replaced by the nearest class Java can name.
+   *
+   * [[Narrowable]] carries the replacement type, so the decision and the name emitted for it
+   * come from one evaluation. The other two both keep the JDK backend from rewriting a
+   * reference, but they differ in what a caller may conclude: [[Unnarrowable]] is positive
+   * evidence that narrowing loses access, so the unit is routed to Janino, while [[Unknown]]
+   * means reflection could not answer (a partial or shaded jar) and is no evidence either
+   * way.
+   */
+  private sealed trait NarrowingVerdict
+  private case class Narrowable(target: Class[_]) extends NarrowingVerdict
+  private case object Unnarrowable extends NarrowingVerdict
+  private case class Unknown(cause: Throwable) extends NarrowingVerdict
+
+  /**
+   * The verdict for replacing a reference to `cls` with [[nameableSupertype]]. A class that
+   * is already nameable needs no narrowing, and only has to pass the accessibility check
+   * below on itself.
+   *
+   * Otherwise two things must hold. First, the replacement type must be one the generated
+   * unit can reference: it and every enclosing class must be public. Same-package is NOT
+   * sufficient even though javac would accept it - the generated class is defined into
+   * `org.apache.spark.sql.catalyst.expressions` but loaded by [[InMemoryClassLoader]], so
+   * its runtime package differs from the same-named package on the app loader and a
+   * package-private access would fail with `IllegalAccessError` at execution time instead
+   * of at compile time. Second, every public member of the concrete class - including
+   * inherited ones, since the generated code may access any of them - must be reachable on
+   * the replacement type.
+   *
+   * A member is matched by its exact erased signature, with one allowance for bridges: an
+   * override of a generic method has a narrower erasure than the supertype declaration it
+   * implements (`compare(String, String)` against `Comparator.compare(Object, Object)`),
+   * and the compiler emits a bridge carrying the supertype's signature. Such a method is
+   * safe to narrow because `invokevirtual` on the supertype signature still dispatches to
+   * the override. An overload has no bridge of its own, so it is rejected - and it must be,
+   * because narrowing binds the call to the supertype's method instead: `Invoke` codegen
+   * always wraps the call in an explicit cast, which would hide the type mismatch from
+   * javac and silently produce the wrong result rather than fail to compile.
+   *
+   * Telling the two apart needs the bridge to be matched to the specific method it forwards
+   * to, not merely to some method of the same name and arity. A class can hold both shapes
+   * at once - an anonymous `Comparator[String]` that also declares `compare(int, int)` has
+   * a bridge for the override and an unrelated overload sharing its name and arity - and
+   * excusing the whole name/arity group would let the overload through. So a bridge covers
+   * a method only when their parameter types line up (boxing counts as equivalent, since a
+   * specialized primitive override such as `apply(int)` is reached through an
+   * `apply(Object)` bridge), and only when it is the group's sole non-bridge method: with
+   * two of them the bridge cannot forward to both, so at least one becomes unreachable
+   * after narrowing.
+   *
+   * Fields and static methods get no such allowance. Both are bound statically, so they are
+   * matched by declaring class rather than by signature: a class that redeclares an inherited
+   * public field, or hides an inherited public static method, exposes it under a name the
+   * replacement type also answers to, and the narrowed reference would silently reach the
+   * replacement type's member instead. `getFields`/`getMethods` report the hiding and the
+   * hidden member both, so a name- or signature-based check would accept the pair. There is
+   * no counterpart to `invokevirtual`'s re-dispatch here, so the only safe such member is one
+   * the replacement type declares or inherits itself.
+   *
+   * Reflection over either class can raise a `LinkageError` when a signature or an
+   * enclosing class names something the loader cannot find (a partial or shaded jar), and
+   * the failure is not symmetric: the climb can succeed while member enumeration throws, so
+   * a verdict of [[Narrowable]] would let the rewrite emit a supertype name javac accepts
+   * for a class whose members were never checked. Such a class is reported [[Unknown]]
+   * instead, which keeps both the routing decision and the rewrite from acting on it.
+   *
+   * A non-`LinkageError` failure is caught the same way, because this file already treats
+   * this reflection as fallible in both directions: [[sourceNameOf]] guards
+   * `getCanonicalName` with `NonFatal`, as did the `resolveSourceName` that it and
+   * [[loadWithoutInit]] were split out of, over its whole load-climb-name sequence. Catching
+   * both is also what lets the routing scan read the raw body safely. A token there need not
+   * be a type reference in this unit at all: a class name embedded in a generated
+   * error-message literal reaches this method exactly as a real reference does, and an
+   * escaping exception would cost the unit its compile over one, at the routing step before
+   * any compile is attempted (`CodeGenerator.compile` only unwraps cache exceptions).
+   */
+  private def narrowingVerdict(cls: Class[_]): NarrowingVerdict = {
+    try {
+      // An array class cannot arrive from the tokenizer: `javaType` renders an array as
+      // `component[]` and neither `[` nor `;` is a name character, so `foo.Bar$1[]` yields
+      // the component token, which is the one that needs the verdict. A future caller could
+      // still pass one, and it would narrow silently: an array of an unnameable component
+      // type has a null canonical name and only Object's members, so the climb lands on
+      // `Cloneable` and the member check passes. Reporting it unnarrowable routes the unit
+      // to Janino, which needs no rewrite for the component name it would find there.
+      if (cls.isArray) return Unnarrowable
+      val target = nameableSupertype(cls)
+      // A nameable class needs no narrowing, only a check that the generated unit can reach
+      // it at run time. That is the class's own modifier, NOT [[isPubliclyNameable]]'s walk
+      // over the enclosing chain: for a nested class `getModifiers` reports the source-level
+      // modifier from the InnerClasses attribute, while the JVM checks the class file's own
+      // `ACC_PUBLIC`, and a public class nested in a package-private one has it and is
+      // reachable across loaders. The walk is the right test for the climbed target below,
+      // where rejecting means routing to Janino. Here it would mean emitting this class's own
+      // binary name, which javac resolves for no nested class at all, turning a reference
+      // that compiled and ran into a compile error. The two arms answer different questions
+      // and disagree on this shape by design.
+      if (cls eq target) {
+        return if (Modifier.isPublic(cls.getModifiers)) Narrowable(cls) else Unnarrowable
+      }
+      // The climbed target is emitted by canonical name, so here nameability is what matters:
+      // a target javac cannot name from the generated unit's package must not be narrowed to.
+      if (!isPubliclyNameable(target)) return Unnarrowable
+      val reachable: Seq[Class[_]] = Seq(target, classOf[Object])
+      // Statics are excluded: they are matched by declaring class below, and letting one
+      // satisfy the signature set would accept an INSTANCE method of `cls` whose only
+      // counterpart on the target is static, a call the narrowed reference would bind
+      // statically to the target's method. scalac produces that pair, since it does not
+      // treat a Java static as an inherited member.
+      val targetSignatures = reachable.flatMap(_.getMethods)
+        .filterNot(m => Modifier.isStatic(m.getModifiers)).map(erasedSignature).toSet
+      val targetStaticSignatures = reachable.flatMap(_.getMethods)
+        .filter(m => Modifier.isStatic(m.getModifiers)).map(erasedSignature).toSet
+      val methods = cls.getMethods
+      val bridges = methods.filter(m => m.isBridge && targetSignatures.contains(erasedSignature(m)))
+      val nonBridgeCount = methods.iterator.filterNot(_.isBridge)
+        .foldLeft(Map.empty[(String, Int), Int]) { (counts, m) =>
+          val key = (m.getName, m.getParameterCount)
+          counts.updated(key, counts.getOrElse(key, 0) + 1)
+        }
+      def coveredByBridge(m: Method): Boolean =
+        nonBridgeCount.getOrElse((m.getName, m.getParameterCount), 0) <= 1 &&
+          bridges.exists(b => forwardsTo(b, m))
+      def declaredOnTarget(m: Member): Boolean = m.getDeclaringClass.isAssignableFrom(target)
+      val targetFieldNames = Seq(target, classOf[Object]).flatMap(_.getFields).map(_.getName).toSet
+      // A synthetic member is invisible to javac's source-level lookup: referencing one is
+      // "cannot find symbol" even though `getMethods`/`getFields` report it, so no generated
+      // reference can reach it and its loss to narrowing costs nothing. scalac emits several:
+      // a lambda body in the class becomes a `public static final $anonfun$...`, and an inner
+      // class carries a public `$outer` field and accessor. The exemption is withheld when the
+      // target answers to the same name and kind, because the JVM ignores `ACC_SYNTHETIC` when
+      // it resolves a statically-bound member. There the synthetic one shadows the target's,
+      // and narrowing would change which is read.
+      def exemptSynthetic(m: Method): Boolean = m.isSynthetic && {
+        val shadowed =
+          if (Modifier.isStatic(m.getModifiers)) targetStaticSignatures else targetSignatures
+        !shadowed.contains(erasedSignature(m))
+      }
+      val membersLineUp = methods.forall { m =>
+        if (Modifier.isStatic(m.getModifiers)) declaredOnTarget(m) || exemptSynthetic(m)
+        else targetSignatures.contains(erasedSignature(m)) || coveredByBridge(m) ||
+          exemptSynthetic(m)
+      } && cls.getFields.forall { f =>
+        declaredOnTarget(f) || (f.isSynthetic && !targetFieldNames.contains(f.getName))
+      }
+      if (membersLineUp) Narrowable(target) else Unnarrowable
+    } catch {
+      case e: LinkageError => Unknown(e)
+      case NonFatal(e) => Unknown(e)
+    }
+  }
+
+  private val unevaluableClassLogged = new java.util.concurrent.atomic.AtomicBoolean(false)
+  // The one outcome an operator cannot diagnose from the routing logs: reflection over a
+  // referenced class threw, so Spark cannot tell whether narrowing it is safe. The unit stays
+  // on the configured backend with the reference spelled as a binary name javac rejects, which
+  // surfaces as a compile error that looks like a codegen bug rather than a classpath one, and
+  // repeats, since the compile cache does not retain failures. Called only from
+  // [[narrowedSourceName]], so the once-per-JVM budget is spent on a real type reference.
+  private def logUnevaluableClassOnce(cls: Class[_], e: Throwable): Unit = {
+    if (unevaluableClassLogged.compareAndSet(false, true)) {
+      logWarning(log"Reflection over ${MDC(LogKeys.CLASS_NAME, cls.getName)} failed, so " +
+        log"Spark cannot tell whether a reference to it can be narrowed to a name the JDK " +
+        log"compiler accepts; the reference keeps its binary name, which that compiler " +
+        log"rejects. This usually means a partial or shaded jar on the classpath. Setting " +
+        log"${MDC(LogKeys.CONFIG, SQLConf.CODEGEN_COMPILER.key)} to 'janino' compiles such " +
+        log"units anyway. This notice is logged once per JVM.", e)
+    }
+  }
+
+  /**
+   * True when `bridge` can be the bridge the compiler emitted for `impl`: same name and
+   * arity, and every bridge parameter accepts the corresponding one of `impl`. Boxing is
+   * treated as equivalence so that a specialized primitive override (`apply(int)` reached
+   * through an `apply(Object)` bridge) matches.
+   */
+  private def forwardsTo(bridge: Method, impl: Method): Boolean =
+    bridge.getName == impl.getName &&
+      bridge.getParameterCount == impl.getParameterCount &&
+      bridge.getParameterTypes.zip(impl.getParameterTypes).forall {
+        case (bridgeParam, implParam) => boxed(bridgeParam).isAssignableFrom(boxed(implParam))
+      }
+
+  /** The wrapper type for a primitive, or `cls` itself when it is already a reference type. */
+  private def boxed(cls: Class[_]): Class[_] = cls match {
+    case Integer.TYPE => classOf[java.lang.Integer]
+    case java.lang.Long.TYPE => classOf[java.lang.Long]
+    case java.lang.Double.TYPE => classOf[java.lang.Double]
+    case java.lang.Float.TYPE => classOf[java.lang.Float]
+    case java.lang.Short.TYPE => classOf[java.lang.Short]
+    case java.lang.Byte.TYPE => classOf[java.lang.Byte]
+    case Character.TYPE => classOf[java.lang.Character]
+    case java.lang.Boolean.TYPE => classOf[java.lang.Boolean]
+    case other => other
+  }
+
+  private def erasedSignature(m: Method): (String, Seq[Class[_]]) =
+    (m.getName, m.getParameterTypes.toSeq)
+
+  /** True iff `cls` and every class enclosing it are public, i.e. javac can name it. */
+  private def isPubliclyNameable(cls: Class[_]): Boolean = {
+    var c = cls
+    while (c != null) {
+      if (!Modifier.isPublic(c.getModifiers)) return false
+      c = c.getEnclosingClass
+    }
+    true
   }
 
   /** True iff `s` contains only `[A-Za-z0-9_.]` - a dotted Java identifier path. */
