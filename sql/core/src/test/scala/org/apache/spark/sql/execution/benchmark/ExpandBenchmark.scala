@@ -190,7 +190,7 @@ object ExpandBenchmark extends SqlBasedBenchmark {
    *    -> 10 Expand branches (one per conditional COUNT(DISTINCT) plus one for
    *    the SUMs), daysSince evaluated 18 times per input row;
    *  - +rewrite: rewriteCountDistinctConditional on, CSE off -> the 9
-   *    conditional COUNT(DISTINCT) collapse into one distinct group, so the
+   *    conditional COUNT(DISTINCT) expressions collapse into one distinct group, so the
    *    Expand has 2 branches (data amplification drops from 10x to 2x), but
    *    daysSince is still evaluated 18 times per input row;
    *  - +rewrite+CSE: both on -> the Expand runs the standard whole-stage
