@@ -538,7 +538,7 @@ private[feature] object OneHotEncoderCommon {
         lit(s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got %s."),
         doubleCol))
       when(
-        doubleCol.isNull || isnan(doubleCol) || doubleCol < 0.0 || doubleCol =!= intCol,
+        isnull(doubleCol) || isnan(doubleCol) || doubleCol < 0.0 || doubleCol =!= intCol,
         invalidIndexError)
         .when(doubleCol > Int.MaxValue, maxIndexError)
         .otherwise(intCol)
