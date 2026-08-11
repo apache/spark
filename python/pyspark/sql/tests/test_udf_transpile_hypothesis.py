@@ -241,10 +241,21 @@ if _have_hypothesis:
         return wrapper
 
     def _seed_tuple_examples(tuples, keys=("x", "y", "z")):
-        """Stack one ``@example`` decorator per seed tuple, zipped onto ``keys``."""
+        """Stack one ``@example`` decorator per seed tuple, zipped onto ``keys``.
+
+        The arity check is load-bearing: ``zip`` stops at the shorter argument,
+        so a seed tuple whose length does not match ``keys`` would silently
+        register an ``@example`` for a different input than intended and quietly
+        shrink the seeded NULL-combination coverage. Fail loudly instead.
+        """
 
         def wrapper(method):
             for values in reversed(tuples):
+                if len(values) != len(keys):
+                    raise ValueError(
+                        f"seed tuple {values!r} has {len(values)} value(s) but "
+                        f"{len(keys)} key(s) {keys!r}"
+                    )
                 method = example(**dict(zip(keys, values)))(method)
             return method
 
