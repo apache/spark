@@ -266,7 +266,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
       nodes = Seq.empty, planDescription = "")
   }
 
-  test("SQL text is only returned when requested") {
+  test("SPARK-58701: SQL text is only returned when requested") {
     val withoutSqlText =
       sqlResource invokePrivate prepareExecutionData(
         sqlExecutionUIData, SparkPlanGraph(Seq.empty, Seq.empty), false, false, false)

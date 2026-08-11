@@ -116,7 +116,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
     assert(readBack == event)
   }
 
-  test("SparkListenerSQLExecutionStart SQL text JSON round-trip") {
+  test("SPARK-58701: SparkListenerSQLExecutionStart SQL text JSON round-trip") {
     val event = SparkListenerSQLExecutionStart(
       executionId = 1,
       rootExecutionId = Some(1),

@@ -55,7 +55,7 @@ class QueryExecutionSuite extends SharedSparkSession {
   override protected def sparkConf =
     super.sparkConf.set(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key, "0")
 
-  test("SQL text is only attached to QueryExecution created from SparkSession.sql") {
+  test("SPARK-58701: SQL text is only attached to QueryExecution created from SparkSession.sql") {
     assert(spark.sql("SELECT 1").queryExecution.sqlText === Some("SELECT 1"))
     assert(spark.range(1).queryExecution.sqlText.isEmpty)
   }
