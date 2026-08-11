@@ -2984,7 +2984,7 @@ object SQLConf {
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("janino", "jdk"))
-    .createWithDefault("janino")
+    .createWithDefault(sys.env.getOrElse("SPARK_CODEGEN_COMPILER", "janino"))
 
   val WHOLESTAGE_HUGE_METHOD_LIMIT = buildConf("spark.sql.codegen.hugeMethodLimit")
     .internal()
