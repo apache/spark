@@ -25,8 +25,10 @@ import org.apache.spark.{SparkConf, TaskContext, TaskContextImpl}
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute, AttributeReference, Expression, GenericInternalRow, MutableProjection}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -76,8 +78,23 @@ class DistinctWindowFunctionFrameSuite extends QueryTest with SharedSparkSession
     override def currentUpperBound(): Int = 0
   }
 
-  private def withAllocationFailures[T](numFailures: Int)(
-      body: (TestDistinctWindowFunctionFrame, Seq[(UnsafeRow, UnsafeRow)]) => T): T = {
+  private final class CountingCurrentRowBoundOrdering extends BoundOrdering {
+    var numComparisons: Int = 0
+
+    def reset(): Unit = numComparisons = 0
+
+    override def compare(
+        inputRow: InternalRow,
+        inputIndex: Int,
+        outputRow: InternalRow,
+        outputIndex: Int): Int = {
+      numComparisons += 1
+      Integer.compare(inputRow.getInt(0), outputRow.getInt(0))
+    }
+  }
+
+  private def withTaskMemoryManager[T](
+      body: (TestMemoryManager, TaskMemoryManager) => T): T = {
     val memoryManager = new TestMemoryManager(
       new SparkConf(false).set("spark.buffer.pageSize", "1m"))
     val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
@@ -93,36 +110,43 @@ class DistinctWindowFunctionFrameSuite extends QueryTest with SharedSparkSession
       localProperties = new Properties,
       metricsSystem = null))
 
-    var frame: TestDistinctWindowFunctionFrame = null
     try {
-      val inputAttribute = AttributeReference("key", IntegerType, nullable = false)()
-      frame = new TestDistinctWindowFunctionFrame(
-        inputAttribute,
-        SQLMetrics.createSizeMetric(sparkContext, "spill size"))
-      val keyProjection = UnsafeProjection.create(Array[DataType](IntegerType))
-      val positionProjection =
-        UnsafeProjection.create(Array[DataType](IntegerType, IntegerType))
-      def key(value: Int): UnsafeRow =
-        keyProjection(new GenericInternalRow(Array[Any](value))).copy()
-      def position(firstVisibleIndex: Int, inputIndex: Int): UnsafeRow =
-        positionProjection(
-          new GenericInternalRow(Array[Any](firstVisibleIndex, inputIndex))).copy()
-      val rows = Seq(
-        key(1) -> position(0, 0),
-        key(1) -> position(1, 1),
-        key(2) -> position(2, 2))
-
-      memoryManager.markConsequentOOM(numFailures)
-      body(frame, rows)
+      body(memoryManager, taskMemoryManager)
     } finally {
-      if (frame != null) {
-        frame.close()
-      }
       assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0L)
       if (previousContext != null) {
         TaskContext.setTaskContext(previousContext)
       } else {
         TaskContext.unset()
+      }
+    }
+  }
+
+  private def withAllocationFailures[T](numFailures: Int)(
+      body: (TestDistinctWindowFunctionFrame, Seq[(UnsafeRow, UnsafeRow)]) => T): T = {
+    withTaskMemoryManager { (memoryManager, _) =>
+      val inputAttribute = AttributeReference("key", IntegerType, nullable = false)()
+      val frame = new TestDistinctWindowFunctionFrame(
+        inputAttribute,
+        SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+      try {
+        val keyProjection = UnsafeProjection.create(Array[DataType](IntegerType))
+        val positionProjection =
+          UnsafeProjection.create(Array[DataType](IntegerType, IntegerType))
+        def key(value: Int): UnsafeRow =
+          keyProjection(new GenericInternalRow(Array[Any](value))).copy()
+        def position(firstVisibleIndex: Int, inputIndex: Int): UnsafeRow =
+          positionProjection(
+            new GenericInternalRow(Array[Any](firstVisibleIndex, inputIndex))).copy()
+        val rows = Seq(
+          key(1) -> position(0, 0),
+          key(1) -> position(1, 1),
+          key(2) -> position(2, 2))
+
+        memoryManager.markConsequentOOM(numFailures)
+        body(frame, rows)
+      } finally {
+        frame.close()
       }
     }
   }
@@ -137,6 +161,89 @@ class DistinctWindowFunctionFrameSuite extends QueryTest with SharedSparkSession
     withAllocationFailures(2) { (frame, rows) =>
       intercept[SparkOutOfMemoryError] {
         frame.deduplicate(rows)
+      }
+    }
+  }
+
+  test("track range upper bounds lazily across partitions") {
+    withTaskMemoryManager { (_, _) =>
+      val inputAttribute = AttributeReference("value", IntegerType, nullable = false)()
+      val target = new GenericInternalRow(1)
+      val processor = AggregateProcessor(
+        Array[Expression](Count(Seq(inputAttribute))),
+        ordinal = 0,
+        inputAttributes = Seq(inputAttribute),
+        (expressions, schema) => MutableProjection.create(expressions, schema),
+        filters = Array[Option[Expression]](None))
+      val upperBound = new CountingCurrentRowBoundOrdering
+      val frame = new UnboundedPrecedingDistinctWindowFunctionFrame(
+        target,
+        processor,
+        distinctExpressions = Seq(inputAttribute),
+        filter = None,
+        inputSchema = Seq(inputAttribute),
+        upperBound,
+        SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+        hashFallbackThreshold = Int.MaxValue,
+        spillThreshold = Int.MaxValue,
+        spillSizeThreshold = Long.MaxValue)
+      val rows = new ExternalAppendOnlyUnsafeRowArray(
+        Int.MaxValue,
+        Long.MaxValue,
+        Int.MaxValue,
+        Long.MaxValue)
+      val projection = UnsafeProjection.create(Array[DataType](IntegerType))
+
+      def addRows(values: Seq[Int]): Unit = {
+        values.foreach { value =>
+          rows.add(projection(new GenericInternalRow(Array[Any](value))))
+        }
+      }
+
+      try {
+        addRows(Seq(1, 1, 3))
+        frame.prepare(rows)
+        upperBound.reset()
+
+        val firstPartition = rows.generateIterator()
+        frame.write(0, firstPartition.next())
+        assert(target.getLong(0) === 1L)
+        assert(upperBound.numComparisons === 0)
+        assert(frame.currentUpperBound() === 2)
+        assert(upperBound.numComparisons === 3)
+
+        frame.write(1, firstPartition.next())
+        assert(target.getLong(0) === 1L)
+        assert(upperBound.numComparisons === 3)
+        assert(frame.currentUpperBound() === 2)
+        assert(upperBound.numComparisons === 4)
+
+        frame.write(2, firstPartition.next())
+        assert(target.getLong(0) === 2L)
+        assert(upperBound.numComparisons === 4)
+        assert(frame.currentUpperBound() === 3)
+        assert(upperBound.numComparisons === 5)
+
+        rows.clear()
+        addRows(Seq(2, 4))
+        frame.prepare(rows)
+        upperBound.reset()
+
+        val secondPartition = rows.generateIterator()
+        frame.write(0, secondPartition.next())
+        assert(target.getLong(0) === 1L)
+        assert(upperBound.numComparisons === 0)
+        assert(frame.currentUpperBound() === 1)
+        assert(upperBound.numComparisons === 2)
+
+        frame.write(1, secondPartition.next())
+        assert(target.getLong(0) === 2L)
+        assert(upperBound.numComparisons === 2)
+        assert(frame.currentUpperBound() === 2)
+        assert(upperBound.numComparisons === 3)
+      } finally {
+        frame.close()
+        rows.clear()
       }
     }
   }

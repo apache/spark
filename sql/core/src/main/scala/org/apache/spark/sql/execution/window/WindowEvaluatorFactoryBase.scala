@@ -151,7 +151,7 @@ trait WindowEvaluatorFactoryBase {
       ae.aggregateFunction.children.filterNot(_.foldable).map {
         case sortOrder: SortOrder => sortOrder.child
         case expression => expression
-      }
+      }.distinctBy(_.canonicalized)
     }
 
     // Add a function and its function to the map for a given frame.

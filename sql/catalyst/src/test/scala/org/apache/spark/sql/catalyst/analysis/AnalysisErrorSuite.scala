@@ -208,6 +208,25 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
          | ROWS BETWEEN CURRENT ROW AND CURRENT ROW)"
          |""".stripMargin.replaceAll("\n", "")))
 
+  errorConditionTest(
+    "distinct Python UDAF in window",
+    testRelation2.select(
+      WindowExpression(
+        PythonUDAF(
+          "python_udaf",
+          null,
+          LongType,
+          UnresolvedAttribute("b") :: Nil,
+          udfDeterministic = true).toAggregateExpression(isDistinct = true),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          Nil,
+          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("window")),
+    condition = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+    messageParameters = Map("windowExpr" -> (
+      "\"python_udaf(DISTINCT b) OVER (PARTITION BY a " +
+        "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"")))
+
   test("distinct function") {
     assertAnalysisErrorCondition(
       CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),

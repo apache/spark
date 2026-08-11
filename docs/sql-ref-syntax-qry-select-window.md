@@ -50,6 +50,10 @@ window_function [ nulls_option ] OVER
 
       Please refer to the [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) document for a complete list of Spark aggregate functions.
 
+      `DISTINCT` aggregate window functions require an `UNBOUNDED PRECEDING` lower frame bound
+      and orderable arguments. This includes `OVER ()` and the default frame of an ordered window.
+      Python UDAFs and bounded or sliding lower frame bounds are not supported.
+
 * **nulls_option**
 
     Specifies whether or not to skip null values when evaluating the window function. `RESPECT NULLS` means not skipping null values, while `IGNORE NULLS` means skipping. If not specified, the default is `RESPECT NULLS`.

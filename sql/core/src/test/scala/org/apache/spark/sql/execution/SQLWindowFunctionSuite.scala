@@ -202,8 +202,15 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
             |from windowData
           """.stripMargin)
       }
-      assert(e.getMessage.contains("Distinct window functions are not supported"))
+      assert(e.getMessage.contains("Unsupported DISTINCT window function"))
     }
+  }
+
+  test("window function: distinct rejects unorderable inputs") {
+    val e = intercept[AnalysisException] {
+      sql("SELECT count(DISTINCT map('key', id)) OVER () FROM range(1)")
+    }
+    assert(e.getCondition === "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED")
   }
 
   test("window function: distinct aggregates with an unbounded preceding frame") {
@@ -421,6 +428,27 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("window function: distinct keeps variable-length inputs across row reuse") {
+    withSQLConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT id,
+            |  max(DISTINCT value) OVER (
+            |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
+            |  first(DISTINCT value) OVER (
+            |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
+            |  max(DISTINCT value) OVER ()
+            |FROM VALUES (0, 'z'), (1, 'a'), (2, 'b') AS data(id, value)
+            |ORDER BY id
+          """.stripMargin),
+        Seq(
+          Row(0, "z", "z", "z"),
+          Row(1, "z", "z", "z"),
+          Row(2, "z", "z", "z")))
+    }
+  }
+
   test("window function: distinct aggregates use normalized floating-point inputs") {
     val rows = sql(
       """
@@ -486,6 +514,18 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
         Row(0, "a", Seq("a")),
         Row(1, "a", Seq("a")),
         Row(2, "a,b", Seq("a", "b"))))
+  }
+
+  test("window function: listagg distinct reuses its ordering argument as a key") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT id,
+          |  listagg(DISTINCT value) WITHIN GROUP (ORDER BY value) OVER () AS concatenated
+          |FROM VALUES (0, 'b'), (1, 'a'), (2, 'b') AS data(id, value)
+          |ORDER BY id
+        """.stripMargin),
+      Seq(Row(0, "ab"), Row(1, "ab"), Row(2, "ab")))
   }
 
   test("window function: distinct foldable inputs share an empty-key frame") {
