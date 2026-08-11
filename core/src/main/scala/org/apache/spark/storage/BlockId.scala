@@ -263,7 +263,7 @@ case class CacheId(sessionUUID: String, hash: String) extends BlockId {
 
 @DeveloperApi
 object BlockId {
-  // Safety net: newRddId() fail-fasts before minting negative ids, but names like
+  // Safety net: newRddId() fails fast before minting negative ids, but names like
   // rdd_-1330910599_36 may still appear from blocks cached before upgrade or from
   // tests. Accept an optional minus so BlockId.apply does not throw
   // UnrecognizedBlockId for those names.
