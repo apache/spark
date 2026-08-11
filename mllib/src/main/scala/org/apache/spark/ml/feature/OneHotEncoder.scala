@@ -547,10 +547,10 @@ private[feature] object OneHotEncoderCommon {
       val maxIndexError = raise_error(printf(
         lit(s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got %s."),
         doubleCol))
-      when(!isnan(doubleCol) && doubleCol > Int.MaxValue, maxIndexError)
-        .when(
-          doubleCol.isNull || isnan(doubleCol) || doubleCol < 0.0 || doubleCol =!= intCol,
-          invalidIndexError)
+      when(
+        doubleCol.isNull || isnan(doubleCol) || doubleCol < 0.0 || doubleCol =!= intCol,
+        invalidIndexError)
+        .when(doubleCol > Int.MaxValue, maxIndexError)
         .otherwise(intCol)
     }
 
