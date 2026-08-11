@@ -309,6 +309,7 @@ class NumPyCompatTestsMixin:
                 psdf.spark.frame()
                 .select(_floor_divide_func(F.col("x1"), F.col("x2")).alias("result"))
                 .toPandas()["result"]
+                .rename(None)
             )
             self.assert_eq(result, np.floor_divide(pdf.x1, pdf.x2), almost=True)
 
