@@ -1358,3 +1358,151 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "json_value('{}', '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)"
   } ]
 }
+
+
+-- !query
+select json_exists('{"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}', '$.addr.city')
+-- !query analysis
+Project [json_exists({"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}, $.addr.city, False) AS JSON_EXISTS({"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}, '$.addr.city')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"score":null}', '$.score')
+-- !query analysis
+Project [json_exists({"score":null}, $.score, False) AS JSON_EXISTS({"score":null}, '$.score')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.addr.zip')
+-- !query analysis
+Project [json_exists({"addr":{"city":"NYC"}}, $.addr.zip, False) AS JSON_EXISTS({"addr":{"city":"NYC"}}, '$.addr.zip')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.addr')
+-- !query analysis
+Project [json_exists({"addr":{"city":"NYC"}}, $.addr, False) AS JSON_EXISTS({"addr":{"city":"NYC"}}, '$.addr')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"tags":["x","y"]}', '$.tags[0]')
+-- !query analysis
+Project [json_exists({"tags":["x","y"]}, $.tags[0], False) AS JSON_EXISTS({"tags":["x","y"]}, '$.tags[0]')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists(cast(null as string), '$.a')
+-- !query analysis
+Project [json_exists(cast(null as string), $.a, False) AS JSON_EXISTS(CAST(NULL AS STRING), '$.a')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('not json', '$.a')
+-- !query analysis
+Project [json_exists(not json, $.a, False) AS JSON_EXISTS(not json, '$.a')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('not json', '$.a' TRUE ON ERROR)
+-- !query analysis
+Project [json_exists(not json, $.a, True) AS JSON_EXISTS(not json, '$.a' TRUE ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('not json', '$.a' FALSE ON ERROR)
+-- !query analysis
+Project [json_exists(not json, $.a, False) AS JSON_EXISTS(not json, '$.a')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('not json', '$.a' UNKNOWN ON ERROR)
+-- !query analysis
+Project [json_exists(not json, $.a, Unknown) AS JSON_EXISTS(not json, '$.a' UNKNOWN ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('not json', '$.a' ERROR ON ERROR)
+-- !query analysis
+Project [json_exists(not json, $.a, Error) AS JSON_EXISTS(not json, '$.a' ERROR ON ERROR)#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":[1,2]}', '$.a[*]')
+-- !query analysis
+Project [json_exists({"a":[1,2]}, $.a[*], False) AS JSON_EXISTS({"a":[1,2]}, '$.a[*]')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":[]}', '$.a[*]')
+-- !query analysis
+Project [json_exists({"a":[]}, $.a[*], False) AS JSON_EXISTS({"a":[]}, '$.a[*]')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":5}', '$.a[*]')
+-- !query analysis
+Project [json_exists({"a":5}, $.a[*], False) AS JSON_EXISTS({"a":5}, '$.a[*]')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":[{"b":1},{"c":2}]}', '$.a[*].b')
+-- !query analysis
+Project [json_exists({"a":[{"b":1},{"c":2}]}, $.a[*].b, False) AS JSON_EXISTS({"a":[{"b":1},{"c":2}]}, '$.a[*].b')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":[1,2]}', '$.a[5]')
+-- !query analysis
+Project [json_exists({"a":[1,2]}, $.a[5], False) AS JSON_EXISTS({"a":[1,2]}, '$.a[5]')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":[{"b":1},{"b":2}]}', '$.a.b')
+-- !query analysis
+Project [json_exists({"a":[{"b":1},{"b":2}]}, $.a.b, False) AS JSON_EXISTS({"a":[{"b":1},{"b":2}]}, '$.a.b')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.*')
+-- !query analysis
+Project [json_exists({"addr":{"city":"NYC"}}, $.*, False) AS JSON_EXISTS({"addr":{"city":"NYC"}}, '$.*')#x]
++- OneRowRelation
+
+
+-- !query
+select json_exists('{"a":1}', '$[')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_PATH",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_exists`",
+    "path" : "'$['",
+    "sqlExpr" : "\"JSON_EXISTS({\"a\":1}, '$[')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "json_exists('{\"a\":1}', '$[')"
+  } ]
+}

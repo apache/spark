@@ -1960,7 +1960,7 @@
       },
       "INVALID_JSON_PATH" : {
         "message" : [
-          "<functionName> has an invalid or unsupported JSON path <path>. Only simple, wildcard-free paths are supported."
+          "<functionName> has an invalid or unsupported JSON path <path>."
         ]
       },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
@@ -5588,6 +5588,12 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ],
     "sqlState" : "42K0E"
+  },
+  "JSON_EXISTS_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not evaluate the path <path>: the input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
+    ],
+    "sqlState" : "2203G"
   },
   "JSON_VALUE_ON_ERROR" : {
     "message" : [

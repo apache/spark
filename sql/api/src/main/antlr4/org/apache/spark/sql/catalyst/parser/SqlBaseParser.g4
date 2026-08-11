@@ -1466,6 +1466,8 @@ primaryExpression
       (RETURNING returning=dataType)?
       (emptyBehavior=jsonValueBehavior ON EMPTY)?
       (errorBehavior=jsonValueBehavior ON ERROR)? RIGHT_PAREN                                  #jsonValue
+    | JSON_EXISTS LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (errorBehavior=jsonExistsErrorBehavior ON ERROR)? RIGHT_PAREN                             #jsonExists
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
@@ -1498,6 +1500,15 @@ jsonValueBehavior
     : NULL                                                                                     #jsonValueBehaviorNull
     | ERROR                                                                                     #jsonValueBehaviorError
     | DEFAULT defaultExpr=expression                                                            #jsonValueBehaviorDefault
+    ;
+
+// The behavior selected by a JSON_EXISTS `... ON ERROR` clause: the boolean (or UNKNOWN, i.e. a
+// BOOLEAN NULL) to produce when the input is not a single well-formed JSON value.
+jsonExistsErrorBehavior
+    : TRUE
+    | FALSE
+    | UNKNOWN
+    | ERROR
     ;
 
 semiStructuredExtractionPath
@@ -2244,6 +2255,7 @@ ansiNonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_EXISTS
     | JSON_TABLE
     | JSON_VALUE
     | KEY
@@ -2683,6 +2695,7 @@ nonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_EXISTS
     | JSON_TABLE
     | JSON_VALUE
     | KEY
