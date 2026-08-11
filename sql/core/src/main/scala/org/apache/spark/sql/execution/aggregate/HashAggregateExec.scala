@@ -166,31 +166,32 @@ case class HashAggregateExec(
    *     single-row buffers, so the output contract is unchanged. `Final`/`Complete` produce the
    *     result themselves and have no such downstream. `PartialMerge` does have one and could be
    *     supported by passing its incoming buffer through unchanged, but that is left for later.
+   *     The mode check is also what excludes the intermediate phase of a DISTINCT plan, whose
+   *     modes are `PartialMerge ++ Partial`.
    *   - grouping keys present: a global aggregation produces a single output row, so partial
    *     aggregation achieves the maximum reduction and must never be bypassed.
-   *   - DISTINCT aggregate functions are allowed: the intermediate phase of the multi-phase
-   *     distinct plan mixes `PartialMerge` with `Partial`, so the mode check excludes it and it
-   *     always aggregates and de-duplicates. The rows reaching the distinct `Partial` phase
-   *     therefore carry exactly one distinct value each.
+   *   - no required distribution: with no aggregate functions (a group-by-only aggregate) the
+   *     mode check is vacuously true for both phases, so `requiredChildDistributionExpressions`
+   *     tells them apart, the `Final` phase requiring a distribution and the pre-shuffle phase
+   *     not. It is not a general pre-shuffle test, because `AggUtils.planAggregateWithOneDistinct`
+   *     leaves it `None` on a post-shuffle aggregate. DISTINCT aggregate functions are allowed:
+   *     the phase that de-duplicates on (keys ++ distinct columns) requires a distribution, so
+   *     this check keeps it out, while the distinct `Partial` phase that groups on the keys
+   *     alone is eligible even though it sits after a shuffle: another `Exchange` and a `Final`
+   *     follow it, so its passed-through buffers are still merged.
    *   - batch only: a streaming partial aggregate keeps state across batches, and it is built
    *     with all-`Partial` modes and no required distribution, so it would otherwise qualify.
+   *     A batch `session_window` grouping likewise qualifies, but its partial aggregate feeds a
+   *     `MergingSessionsExec` that merges overlapping sessions, so it is kept out for now. The
+   *     static sibling `spark.sql.execution.bypassPartialAggregation` likewise stays away from
+   *     streaming and `session_window` groupings.
    */
   private val adaptivePartialAggEnabled: Boolean = {
     conf.adaptivePartialAggregationEnabled &&
       groupingExpressions.nonEmpty &&
-      // Streaming aggregation carries state across batches and its partial phase also has no
-      // required distribution, so keep this batch-only. The static sibling
-      // `spark.sql.execution.bypassPartialAggregation` likewise stays away from it.
       !isStreaming &&
-      // Every aggregate function must be in `Partial` mode, so a downstream `Final` is there to
-      // merge the passed-through single-row buffers. This is also what excludes the intermediate
-      // phase of a DISTINCT plan, whose modes are `PartialMerge ++ Partial`.
+      !groupingExpressions.exists(_.metadata.contains(SessionWindow.marker)) &&
       aggregateExpressions.forall(a => a.mode == Partial) &&
-      // A group-by-only aggregate has no aggregate functions at all, so the `forall` above is
-      // vacuously true for both its phases. `requiredChildDistributionExpressions` tells them
-      // apart: the `Final` phase requires a distribution, the pre-shuffle phase does not. (It is
-      // not a general pre-shuffle test -- `AggUtils.planAggregateWithOneDistinct` leaves it `None`
-      // on an aggregate that sits after a shuffle -- but the mode check covers that case.)
       requiredChildDistributionExpressions.isEmpty
   }
 
@@ -644,12 +645,16 @@ case class HashAggregateExec(
     // once the outer class passes the code-size threshold), the bare field
     // reference fails with `IllegalAccessError`.
 
-    // Generate code for output. This must happen before the `doAgg` helper below, because with
-    // adaptive partial aggregation enabled, `doConsumeWithKeys` (invoked from the child's produce
-    // inside `doAgg`) emits pass-through rows by calling this output function directly.
+    // Generate code for output. With adaptive partial aggregation enabled this must happen before
+    // the `doAgg` helper below, because `doConsumeWithKeys` (invoked from the child's produce
+    // inside `doAgg`) emits pass-through rows by calling this output function directly. Otherwise
+    // the output function is generated after `doAgg`, so the early `consume(...)` inside it cannot
+    // change the codegen layout for plans the feature never touches.
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
-    outputFunc = generateResultFunction(ctx)
+    if (adaptivePartialAggEnabled) {
+      outputFunc = generateResultFunction(ctx)
+    }
 
     // After the child input is consumed, finish the build: with adaptive partial aggregation mark
     // that the child is fully consumed (to support re-entry; the map iterators are set up inside
@@ -764,6 +769,12 @@ case class HashAggregateExec(
          |  $postChildProduce
          |}
        """.stripMargin)
+    // For a non-adaptive plan, generate the output function only after `doAgg` so its
+    // `consume(...)` cannot reorder the codegen layout (see above). It must still land before
+    // `adaptiveFinalOutput` reads it below.
+    if (!adaptivePartialAggEnabled) {
+      outputFunc = generateResultFunction(ctx)
+    }
 
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
@@ -1253,19 +1264,23 @@ case class HashAggregateExec(
     // skips both the fast map and the regular map.
     //
     // The maps were frozen when pass-through fired, so they are drained to preserve the merge order
-    // -- trigger row, then the maps, then the rest of the input. Where the drain runs depends on
+    // (trigger row, then the maps, then the rest of the input). Where the drain runs depends on
     // the plan shape. Split by an exchange, the partial is the whole-stage root and its output
     // function appends a reference to the reusable output row; draining in the same call would
     // overwrite that row while still buffered and silently drop the trigger, so the drain is left
     // to `doProduceWithKeys` on the next `processNext` (the buffered trigger is pulled first).
-    // Fused with the Final (no exchange), the output is consumed directly by the Final's
-    // `doConsume` and never buffered, so there is no aliasing hazard; the drain runs here, right
-    // after the trigger, because nothing else would yield the build loop -- with no append there is
-    // no `shouldStop()` -- and the maps would otherwise come out only after all the remaining
+    // A one-to-many child that cannot yield mid-fan-out changes the trade: without a stop check
+    // its whole batch is appended before the deferred drain runs, flipping the merge order for a
+    // group that straddles the freeze point. Such children report `needCopyResult`, so every row
+    // is a copy, the aliasing hazard is gone, and the drain runs here right after the trigger,
+    // between fan-out rows. Fused with the Final (no exchange), the output is consumed directly
+    // by the Final's `doConsume` and never buffered, so there is no aliasing hazard either; the
+    // drain runs here too, because nothing else would yield the build loop (with no append there
+    // is no `shouldStop()`), and the maps would otherwise come out only after all the remaining
     // streamed rows, flipping the merge order.
     val emitPassThroughRow = if (adaptivePartialAggEnabled) {
       val numBypassingRows = metricTerm(ctx, "numBypassingRows")
-      val drainFused = if (isWholeStageRoot) {
+      val drainFused = if (isWholeStageRoot && !needCopyResult) {
         ""
       } else {
         s"""

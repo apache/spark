@@ -194,15 +194,20 @@ When adaptive partial aggregation is enabled, hash aggregation measures the comp
 number of processed rows divided by the number of keys held in its aggregation maps) at runtime
 and, if the partial aggregation is not collapsing enough rows to be worthwhile, stops populating
 the aggregation map and passes the remaining rows through as single-row partial aggregation buffers
-for the final aggregation to merge. Query results are unchanged. The ratio is evaluated
-periodically, and again right before the aggregation map would spill, in which case the spill is
-skipped entirely. Periodic evaluations use the cumulative rows and keys of the current map epoch,
-so a favorable prefix can mask a later distinct-heavy tail. A spill restarts the accounting, so a
-query that becomes ineffective only later in its input is then caught. To catch such a turn
-without waiting for a spill, raise `minCompaction` so the cumulative ratio trips the threshold on
-a weaker late turn (a higher threshold also bypasses more readily on other inputs). To avoid
-committing to pass-through on an unfavorable prefix before an aggregatable tail shows up, raise
-`minRows` so the periodic evaluations start later.
+for the final aggregation to merge. If the first bypassed row is a duplicate of a key already in the
+frozen map, it is emitted ahead of that key's accumulated rows, so an order-sensitive aggregate
+such as `first`/`last` can return different values. The ratio is evaluated periodically, and again
+right before the aggregation map would spill, in which case the spill is skipped entirely.
+
+Both evaluations use the cumulative rows and keys of the current map epoch and, once triggered,
+pass-through is not reversed for the rest of the task, so a skewed prefix biases the outcome in
+either direction. A favorable prefix can mask a later distinct-heavy tail, keeping the aggregation
+on until a spill restarts the accounting; conversely, a distinct-heavy prefix can trip the
+pass-through early and keep it tripped even where the rest of the input would aggregate well. To
+catch the former without waiting for a spill, raise `minCompaction` so the cumulative ratio trips
+the threshold on a weaker late turn (a higher threshold also bypasses more readily on other inputs).
+To avoid committing the task to pass-through on the latter, raise `minRows` so the periodic
+evaluations start later.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>

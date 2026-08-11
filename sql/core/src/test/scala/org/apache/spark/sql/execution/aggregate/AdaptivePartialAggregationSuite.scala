@@ -337,7 +337,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
 
   test("results unchanged with a mix of many aggregate functions and buffer types") {
     // Exercises a wide pass-through buffer spanning several aggregate buffer layouts at once:
-    // sum (decimal), avg (double), count, min/max, first/last, and stddev (imperative buffer).
+    // sum (decimal), avg (double), count, min/max, first/last, and stddev (declarative buffer).
+    // The imperative-buffer case is covered separately (see the `approx_count_distinct` test).
     checkAdaptiveMatchesReference { parts =>
       spark.range(0, 400, 1, parts)
         .select(
@@ -354,6 +355,22 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           first($"dbl") as "f",
           last($"dbl") as "l",
           stddev($"dbl") as "sd2")
+    }
+  }
+
+  test("results unchanged with an imperative-buffer aggregate") {
+    // `approx_count_distinct` uses `HyperLogLogPlusPlus`, an `ImperativeAggregate` whose buffer
+    // state is written by `initialize(buffer)` rather than by a projection, so a pass-through
+    // single-row buffer has to be re-initialized with `copyFrom(initialAggregationBuffer)` for
+    // every row. No declarative aggregate exercises that reset. It also reports
+    // `supportCodegen = false`, so the operator only ever runs on `TungstenAggregationIterator`;
+    // keep it in its own test rather than folding it into a codegen cell that would quietly
+    // become interpreted.
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 300, 1, parts)
+        .select($"id".cast("string") as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(approx_count_distinct($"v") as "c")
     }
   }
 
@@ -693,6 +710,23 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("fan-out below a split aggregate preserves the merge order") {
+    // A `GenerateExec` expands a collection without checking `shouldStop()`, so in the
+    // exchange-split shape the whole fan-out batch of the trigger input row used to be appended
+    // before the frozen maps drained. A group whose rows straddle the freeze point then merged in
+    // a different order than a non-bypassed run, and the generated path disagreed with the
+    // interpreted one. The fan-out child reports `needCopyResult`, so the drained maps can run
+    // right after the trigger row, restoring the merge order.
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 20, 1, parts)
+        .select($"id", explode(array(
+          $"id" * 2,
+          when($"id" === 4, lit(0L)).otherwise($"id" * 2 + 1))) as "k")
+        .select($"k", ($"id" * 100 + $"k") as "v")
+        .groupBy($"k").agg(first($"v") as "f", last($"v") as "l")
+    }
+  }
+
   test("results unchanged below a generator that cannot yield mid-fan-out") {
     // `GenerateExec` expands a collection without checking `shouldStop()`, so the aggregate cannot
     // rely on the child to bound the output buffer -- each streamed row has to be able to leave
@@ -822,6 +856,22 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           "a global aggregation is not eligible and must never bypass")
       }
     }
+  }
+
+  test("no pass-through for a session_window grouping key") {
+    // A batch `session_window` grouping is not streaming, but its partial aggregate feeds a
+    // `MergingSessionsExec` that merges overlapping sessions, and passing single-row buffers into
+    // it is untested. It is gated out in `adaptivePartialAggEnabled`. This input has fully
+    // distinct sessions (ratio 1.0) and a small `minRows`, so without the gate the periodic check
+    // would bypass and the `expectBypass = false` assertion would fail.
+    checkAdaptiveMatchesReference(
+      expectBypass = false,
+      build = { parts =>
+        spark.range(0, 40, 1, parts)
+          .select($"id" as "v", timestamp_seconds($"id" * 60) as "time")
+          .groupBy(session_window($"time", "10 seconds"))
+          .agg(sum($"v") as "s")
+      })
   }
 
   test("rows absorbed by the fast map count toward the compaction ratio") {
