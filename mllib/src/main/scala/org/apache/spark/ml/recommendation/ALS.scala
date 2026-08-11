@@ -293,8 +293,6 @@ class ALSModel private[ml] (
   @Since("3.0.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
 
-  private val predict = ALSModel.getPredictUDF(rank)
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
@@ -314,7 +312,8 @@ class ALSModel private[ml] (
       .join(itemFactors.alias(itemFactorsAlias),
         col(s"${validatedInputAlias}.${$(itemCol)}") === col(s"${itemFactorsAlias}.id"), "left")
       .select(col(s"${validatedInputAlias}.*"),
-        predict(col(s"${userFactorsAlias}.features"), col(s"${itemFactorsAlias}.features"))
+        ALSModel.getPredictUDF(rank)(
+          col(s"${userFactorsAlias}.features"), col(s"${itemFactorsAlias}.features"))
           .alias($(predictionCol)))
 
     getColdStartStrategy match {
