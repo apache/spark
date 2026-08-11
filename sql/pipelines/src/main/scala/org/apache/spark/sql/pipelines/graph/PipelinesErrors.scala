@@ -67,6 +67,12 @@ object PipelinesErrors extends Logging {
    * Returns true if `ex` (or any of its causes) indicates that a streaming flow's set of sources
    * changed since the last run. This is unrecoverable without a full refresh, so a flow that fails
    * with this error must not be retried.
+   *
+   * Structured Streaming reports this as a bare `AssertionError`, so the only signal available
+   * here is the message text. It is produced by the source-count assertion in
+   * `org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq.toStreamProgress`; since
+   * this predicate now drives the retry decision, a change to that message silently turns these
+   * failures back into retried ones. Keep the two in sync.
    */
   private[graph] def streamingSourcesChanged(ex: Throwable): Boolean = {
     checkCauses(

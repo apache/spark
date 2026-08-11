@@ -60,6 +60,10 @@ trait OffsetSeqBase {
    */
   def toStreamProgress(sources: Seq[SparkDataStream]): StreamProgress = {
     assert(!this.isInstanceOf[OffsetMap], "toStreamProgress must be called with map")
+    // Declarative Pipelines matches on this message text to decide that a flow failure is a
+    // source-set change and must not be retried. See
+    // `org.apache.spark.sql.pipelines.graph.PipelinesErrors.streamingSourcesChanged`, and keep the
+    // two in sync when editing this message.
     assert(sources.size == offsets.size, s"There are [${offsets.size}] sources in the " +
       s"checkpoint offsets and now there are [${sources.size}] sources requested by " +
       s"the query. Cannot continue.")

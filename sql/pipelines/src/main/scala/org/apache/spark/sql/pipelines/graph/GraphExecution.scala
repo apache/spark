@@ -270,7 +270,7 @@ object GraphExecution extends Logging {
       flowDisplayName: String
   ) extends FlowExecutionStopReason {
     override lazy val runTerminationReason: RunTerminationReason = {
-      QueryExecutionFailure(flowDisplayName, maxRetries = 0, Option(cause))
+      StreamingSourcesChangedFailure(flowDisplayName, Option(cause))
     }
     override lazy val failureMessage: String = {
       s"Flow '$flowDisplayName' had streaming sources added or removed. It will not be " +
