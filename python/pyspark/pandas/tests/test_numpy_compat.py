@@ -268,6 +268,8 @@ class NumPyCompatTestsMixin:
                         np.inf,
                         np.nan,
                         -1000.0,
+                        -np.inf,
+                        -0.0,
                     ],
                     "x2": [
                         -np.inf,
@@ -281,13 +283,18 @@ class NumPyCompatTestsMixin:
                         np.inf,
                         2.0,
                         1000.0,
+                        -0.0,
+                        -np.inf,
                     ],
                 }
             ),
         ):
             psdf = ps.from_pandas(pdf)
             for np_func in (np.logaddexp, np.logaddexp2):
-                self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2), almost=True)
+                result = np_func(psdf.x1, psdf.x2)
+                expected = np_func(pdf.x1, pdf.x2)
+                self.assert_eq(result, expected, almost=True)
+                self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
 
     def test_np_fmax_fmin(self):
         for pdf in (

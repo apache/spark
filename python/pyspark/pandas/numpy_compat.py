@@ -132,8 +132,8 @@ def _logaddexp_func(c1: Column, c2: Column, base2: bool = False) -> Column:
         F.when(c1_double.isNull() | F.isnan(c1_double), c1_double)
         .when(c2_double.isNull() | F.isnan(c2_double), c2_double)
         .when((c1_double == float("inf")) | (c2_double == float("inf")), F.lit(float("inf")))
-        .when(c1_double == float("-inf"), c2_double)
-        .when(c2_double == float("-inf"), c1_double)
+        .when(c1_double == float("-inf"), c2_double + F.lit(0.0))
+        .when(c2_double == float("-inf"), c1_double + F.lit(0.0))
         .otherwise(maximum + log_term)
     )
 
