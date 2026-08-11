@@ -69,15 +69,11 @@ def determine_java_executable():
 # -------------------------------------------------------------------------------------------------
 
 
-_in_titled_block = False
-
-
 @contextmanager
 def titled_block(title):
-    global _in_titled_block
-    if _in_titled_block:
+    if getattr(titled_block, "_entered", False):
         raise RuntimeError(f"titled_block({title!r}) cannot be nested")
-    _in_titled_block = True
+    titled_block._entered = True
     line_str = "=" * 72
     if "GITHUB_ACTIONS" in os.environ:
         print(f"::group::{title}", flush=True)
@@ -88,7 +84,7 @@ def titled_block(title):
     try:
         yield
     finally:
-        _in_titled_block = False
+        titled_block._entered = False
         if "GITHUB_ACTIONS" in os.environ:
             print("::endgroup::", flush=True)
 
