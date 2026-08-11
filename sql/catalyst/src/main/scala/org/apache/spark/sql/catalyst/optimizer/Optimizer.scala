@@ -2196,8 +2196,8 @@ object PushDownPredicates extends Rule[LogicalPlan] {
  *
  * Note: if a new push-through case is added here, or the translation applied to pushed
  * conditions changes (e.g. how aliases are substituted), also update
- * [[PushdownPredicatesAndPruneColumnsForCTEDef.removePushedDownFilter]], which mirrors this
- * rule's cases to locate and remove filters previously pushed into CTE definitions.
+ * `removePushedDownFilter` in [[PushdownPredicatesAndPruneColumnsForCTEDef]], which mirrors
+ * this rule's cases to locate and remove filters previously pushed into CTE definitions.
  */
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally

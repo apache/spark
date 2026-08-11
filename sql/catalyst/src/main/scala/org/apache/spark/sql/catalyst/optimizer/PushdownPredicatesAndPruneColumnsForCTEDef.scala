@@ -154,6 +154,9 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
           basePlan
         }
         cteDef.copy(child = Filter(newCombinedPred, newChild),
+          // The plan component of `originalPlanWithPredicates` is recorded but never read
+          // back: on the next iteration only the pushed predicates are consulted (see the
+          // `basePlan` computation above).
           originalPlanWithPredicates = Some((basePlan, newPreds)))
       } else if (needsPruning(cteDef.child, newAttrSet)) {
         cteDef.copy(child = Project(newAttrSet.toSeq, cteDef.child))
@@ -187,6 +190,10 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
    * operators that remap attributes in other ways (e.g. `Generate`, `Expand`): if the filter
    * cannot be located, the input plan is returned unchanged, and the caller re-pushes on top,
    * which is redundant but always semantics-preserving.
+   *
+   * Ancestors of the removed filter are rebuilt with `withNewChildren` rather than direct
+   * case-class copies so that `TreeNode` tags (e.g. `Project.hiddenOutputTag`, which the
+   * analyzer sets on the projection above a natural/USING join) survive the rebuild.
    */
   private def removePushedDownFilter(plan: LogicalPlan, predicate: Expression): LogicalPlan = {
     def remove(current: LogicalPlan, target: Expression): (LogicalPlan, Boolean) = current match {
@@ -197,24 +204,25 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
         // aliases with the same helper it uses to move the filter below the projection.
         val translated = replaceAlias(target, getAliasMap(p))
         val (newChild, removed) = remove(p.child, translated)
-        if (removed) (p.copy(child = newChild), true) else (p, false)
+        if (removed) (p.withNewChildren(Seq(newChild)), true) else (p, false)
       case j: Join =>
         val (newLeft, removedFromLeft) = remove(j.left, target)
         if (removedFromLeft) {
-          (j.copy(left = newLeft), true)
+          (j.withNewChildren(Seq(newLeft, j.right)), true)
         } else {
           val (newRight, removedFromRight) = remove(j.right, target)
-          if (removedFromRight) (j.copy(right = newRight), true) else (j, false)
+          if (removedFromRight) (j.withNewChildren(Seq(j.left, newRight)), true) else (j, false)
         }
       case u: Union =>
         // PushDownPredicates copies the filter into every branch, mapping the union output
         // attributes to each branch's output positionally; remove it from every branch where
-        // it is found.
+        // it is found. The ExprId-to-output-index map is built once for all branches.
+        val outputIndexByExprId = u.output.map(_.exprId).zipWithIndex.toMap
         var removedAny = false
         val newChildren = u.children.map { branch =>
           val branchTarget = target.transform {
-            case a: Attribute if u.output.exists(_.exprId == a.exprId) =>
-              branch.output(u.output.indexWhere(_.exprId == a.exprId))
+            case a: Attribute if outputIndexByExprId.contains(a.exprId) =>
+              branch.output(outputIndexByExprId(a.exprId))
           }
           val (newBranch, removed) = remove(branch, branchTarget)
           if (removed) {
@@ -232,12 +240,12 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
         // found above this node).
         val translated = replaceAlias(target, getAliasMap(agg))
         val (newChild, removed) = remove(agg.child, translated)
-        if (removed) (agg.copy(child = newChild), true) else (agg, false)
+        if (removed) (agg.withNewChildren(Seq(newChild)), true) else (agg, false)
       case w: Window =>
         // PushDownPredicates pushes filters referencing only partition columns below the
         // window unchanged (partition columns are input attributes, so no translation).
         val (newChild, removed) = remove(w.child, target)
-        if (removed) (w.copy(child = newChild), true) else (w, false)
+        if (removed) (w.withNewChildren(Seq(newChild)), true) else (w, false)
       case other if other.children.length == 1 &&
           other.outputSet == other.children.head.outputSet =>
         val (newChild, removed) = remove(other.children.head, target)

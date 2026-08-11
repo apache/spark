@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CTERelationDef, CTERelationRef}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, JoinHint, LocalRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union, Window, WithCTE}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -245,6 +246,57 @@ class PushdownPredicatesForCTEDefStalenessSuite extends PlanTest {
     assertSingleEnrichedTopFilter(consumed,
       "previous push-down was not removed below the window")
   }
+
+  test("rebuild preserves TreeNode tags on the nodes it rebuilds") {
+    val t1a = AttributeReference("a", IntegerType, nullable = true)()
+    val t2b = AttributeReference("b", IntegerType, nullable = true)()
+    val t1 = LocalRelation(t1a)
+    val t2 = LocalRelation(t2b)
+    val join = Join(t1, t2, Inner, Some(EqualTo(t1a, t2b)), JoinHint.NONE)
+    // Identity projection mimicking the analyzer-inserted projection above a natural or
+    // USING join, which carries the hidden join-key columns in Project.hiddenOutputTag.
+    val project = Project(Seq(t1a, t2b), join)
+
+    val cteId = 0L
+    val cteDef = CTERelationDef(project, cteId)
+    val plan = withTwoRefs(cteDef)(
+      out => EqualTo(out(0), Literal(5)),
+      out => EqualTo(out(0), Literal(7)))
+
+    val afterPass1 = PushdownPredicatesAndPruneColumnsForCTEDef.apply(plan)
+
+    // The real push-down rules move the pushed filter below the projection and then into
+    // the join's left branch (the predicate references only the left side of the inner
+    // join), so the next rebuild has to rebuild both the projection and the join.
+    val consumed = addIsNotNullToRef(
+      PushPredicateThroughJoin.apply(PushPredicateThroughNonJoin.apply(afterPass1)),
+      cteId, Literal(7))
+    assert(theOnlyDef(consumed).child match {
+      case Project(_, Join(_: Filter, _, _, _, _)) => true
+      case _ => false
+    }, "test setup failed: push-down did not move the filter into the join branch")
+
+    // Tag the nodes on the removal path in place, so the tags are present when the rule
+    // under test rebuilds them. (The intermediate push-down rules rebuild nodes with
+    // plain copies of their own; their tag handling is out of scope here.)
+    val taggedProject = theOnlyDef(consumed).child.asInstanceOf[Project]
+    val taggedJoin = taggedProject.child.asInstanceOf[Join]
+    taggedProject.setTagValue(Project.hiddenOutputTag, Seq(t2b))
+    taggedJoin.setTagValue(testTag, "preserved")
+
+    // Pass 2: removing the previous push-down from the join branch rebuilds both the
+    // join and the projection. The rebuild must carry their tags over.
+    val rebuilt = theOnlyDef(PushdownPredicatesAndPruneColumnsForCTEDef.apply(consumed)).child
+    val rebuiltProject = rebuilt.collect { case p: Project => p }.head
+    val rebuiltJoin = rebuilt.collect { case j: Join => j }.head
+    assert(rebuiltProject.getTagValue(Project.hiddenOutputTag).contains(Seq(t2b)),
+      s"rebuild dropped Project.hiddenOutputTag: $rebuilt")
+    assert(rebuiltJoin.getTagValue(testTag).contains("preserved"),
+      s"rebuild dropped tags on the join: $rebuilt")
+  }
+
+  /** A tag with no consumer, used to verify that rebuilds preserve arbitrary tags. */
+  private val testTag = TreeNodeTag[String]("cte_pushdown_test_tag")
 
   /**
    * Applies the rule under test to `plan` (pass 2) and asserts that the rebuilt CTE
