@@ -1192,7 +1192,7 @@ class SessionCatalog(
     col: Expression,
     toField: StructField,
     schemaMode: ViewSchemaMode): NamedExpression = {
-    val viewSchemaDataType =
+    val fieldDataType =
       DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(toField.dataType)
     val cast = schemaMode match {
       /*
@@ -1202,13 +1202,13 @@ class SessionCatalog(
       *  in ansi mode.
       ** For schema (type) evolution, we take the column as is.
       */
-      case SchemaBinding => UpCast(col, viewSchemaDataType)
+      case SchemaBinding => UpCast(col, fieldDataType)
       case SchemaUnsupported => if (conf.viewSchemaCompensation) {
-        Cast(col, viewSchemaDataType, ansiEnabled = true)
+        Cast(col, fieldDataType, ansiEnabled = true)
       } else {
-        UpCast(col, viewSchemaDataType)
+        UpCast(col, fieldDataType)
       }
-      case SchemaCompensation => Cast(col, viewSchemaDataType, ansiEnabled = true)
+      case SchemaCompensation => Cast(col, fieldDataType, ansiEnabled = true)
       case SchemaTypeEvolution => col
       case other => throw SparkException.internalError("Unexpected ViewSchemaMode")
     }

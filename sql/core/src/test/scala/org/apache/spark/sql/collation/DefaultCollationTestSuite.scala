@@ -813,17 +813,25 @@ abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
     val prefix = "SYSTEM.BUILTIN"
     withTable(testTable1) {
       sql(s"CREATE TABLE $testTable1 (c1 STRING, d DATE)")
-      sql(s"INSERT INTO $testTable1 VALUES ('hello', DATE'2026-07-31')")
+      sql(
+        s"""INSERT INTO $testTable1 VALUES
+           |('ignored', DATE'2026-08-10'),
+           |('matched', DATE'2026-08-11')""".stripMargin)
 
       withView(testView) {
         sql(
           s"""CREATE VIEW $testView
              |DEFAULT COLLATION UTF8_LCASE AS
-             |SELECT c1, lower(d) AS d_text FROM $testTable1""".stripMargin)
+             |SELECT c1, lower(d) AS d_text
+             |FROM $testTable1
+             |WHERE lower(d) = '2026-08-11'""".stripMargin)
 
         checkAnswer(
           sql(s"SELECT COLLATION(c1), COLLATION(d_text) FROM $testView"),
           Row(s"$prefix.UTF8_BINARY", s"$prefix.UTF8_LCASE"))
+        checkAnswer(
+          sql(s"SELECT c1, d_text FROM $testView"),
+          Row("matched", "2026-08-11"))
       }
     }
   }
