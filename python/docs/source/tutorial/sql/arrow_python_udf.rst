@@ -490,6 +490,11 @@ handle those cases inside the function itself. This path is enabled by
 ``spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled`` (default ``true``); set it to
 ``false`` to reject such queries at analysis instead.
 
+This works for a plain Python UDF as well as for a vectorized scalar UDF - a scalar pandas UDF
+(``pandas_udf``), a scalar Arrow UDF (``arrow_udf``), and their iterator variants. A vectorized
+UDF still receives its native batch (a ``pandas.Series`` / ``pyarrow.Array``, or an iterator of
+them) over the flattened array elements, and one output value is produced per input element.
+
 The Arrow data type of the returned ``pyarrow.Array`` should match the declared ``returnType``.
 When there is a mismatch, Spark will attempt to convert the returned data to the expected type
 using Arrow's safe casting, which raises an error on overflow or precision loss.

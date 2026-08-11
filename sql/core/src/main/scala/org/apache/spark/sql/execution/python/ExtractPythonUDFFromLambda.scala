@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -40,10 +39,15 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  *   transform(arrays_zip(values AS c0, plus_one_over_array(values) AS u0), s -> s.u0)
  * }}}
  *
- * `plus_one_over_array` is the same function re-typed as `array<T> => array<R>` and run with
- * [[PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF]]. The array-at-a-time behaviour lives in the Python
- * worker: it flattens each list column once, calls the function over all elements of the batch, and
- * re-nests by the input's offsets - one row in, one row out, one Python round trip per batch.
+ * `plus_one_over_array` is the same function re-typed as `array<T> => array<R>` and run with an
+ * element-wise eval type chosen from the UDF's own flavor (see
+ * [[PythonUDF.liftedElementwiseEvalType]]): the row-at-a-time UDFs share the pickle-based
+ * [[org.apache.spark.api.python.PythonEvalType]]'s SQL_ARROW_ELEMENTWISE_UDF, while a scalar pandas
+ * / Arrow UDF (and its iterator variant) lifts to its own element-wise type so the worker keeps
+ * that flavor's batching contract.
+ * The array-at-a-time behaviour lives in the Python worker: it flattens each list column once,
+ * calls the function over all elements of the batch, and re-nests by the input's offsets - one row
+ * in, one row out, one Python round trip per batch.
  *
  * Every lifted argument is a single-level `array<T>` aligned with the iterated array (an
  * element-independent value is repeated into one with a native `transform`), so the worker flattens
@@ -61,7 +65,6 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  *    transform(udf(x), y -> y))`, is fine - `udf(x)` lifts onto `arr`.)
  *  - a UDF in `aggregate` / `reduce`: the fold is sequential, so the UDF sees earlier steps'
  *    outputs, not array elements.
- *  - a vectorized (scalar pandas / arrow) UDF, which is not supported.
  */
 object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
@@ -397,7 +400,10 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         // containsNull = true.
         ArrayType(udf.dataType, containsNull = true),
         arrayArgs,
-        PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
+        // Each rewritable flavor lifts to its own element-wise eval type so the worker keeps that
+        // flavor's batching contract (pickle row-at-a-time, pandas Series, Arrow Array, or an
+        // iterator of batches). See `PythonUDF.liftedElementwiseEvalType`.
+        PythonUDF.liftedElementwiseEvalType(udf.evalType),
         udf.udfDeterministic)
       val signature: Expression = if (udf.udfDeterministic) lifted.canonicalized else lifted
       val ordinal = ordinalBySignature.getOrElseUpdate(signature, {
