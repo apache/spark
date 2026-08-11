@@ -661,7 +661,7 @@ class UDFInHigherOrderFunctionTestsMixin:
             df.select(sf.transform("values", lambda x: plus_one_pandas(x)).alias("r")),
             [([2, 3, 4],), ([],), (None,), ([11, None],)],
         )
-        # Composition around the UDF result, filter and array_sort key all work too.
+        # Arithmetic composition around the UDF result is ordinary JVM work.
         assertDataFrameEqual(
             df.select(sf.transform("values", lambda x: plus_one_pandas(x) * 2).alias("r")),
             [([4, 6, 8],), ([],), (None,), ([22, None],)],
@@ -889,6 +889,73 @@ class UDFInHigherOrderFunctionTestsMixin:
 
         assertDataFrameEqual(
             df.select(sf.transform("values", lambda x: to_struct(x)).alias("r")),
+            [
+                ([(1, -1), (2, -2), (3, -3)],),
+                ([],),
+                (None,),
+            ],
+        )
+
+    def test_chained_vectorized_udfs_in_lambda(self):
+        # Nested calls f(g(x)) inside a lambda: g is lifted first, then f consumes g's array result.
+        # Cover both the non-iterator and iterator vectorized flavors.
+        from typing import Iterator
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,), ([10],)], "values array<int>"
+        )
+
+        @pandas_udf(IntegerType())
+        def plus_one(s: pd.Series) -> pd.Series:
+            return s + 1
+
+        @pandas_udf(IntegerType())
+        def times_two(s: pd.Series) -> pd.Series:
+            return s * 2
+
+        @pandas_udf(IntegerType())
+        def plus_one_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                yield s + 1
+
+        @pandas_udf(IntegerType())
+        def times_two_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                yield s * 2
+
+        # (x + 1) * 2, verified against the equivalent native expression.
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: times_two(plus_one(x))).alias("r")),
+            df.select(sf.transform("values", lambda x: (x + 1) * 2).alias("r")),
+        )
+        assertDataFrameEqual(
+            df.select(
+                sf.transform("values", lambda x: times_two_iter(plus_one_iter(x))).alias("r")
+            ),
+            df.select(sf.transform("values", lambda x: (x + 1) * 2).alias("r")),
+        )
+
+    def test_scalar_iter_udf_struct_element_return_type(self):
+        # A scalar iterator pandas UDF returning a struct element (a pandas.DataFrame per batch)
+        # inside a lambda. Covers the struct-DataFrame result path of the iterator element-wise
+        # branch (Iterator[pd.DataFrame] contract).
+        from typing import Iterator
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.types import StructType, StructField
+
+        df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
+        ret = StructType([StructField("v", IntegerType()), StructField("neg", IntegerType())])
+
+        @pandas_udf(ret)
+        def to_struct_iter(it: Iterator[pd.Series]) -> Iterator[pd.DataFrame]:
+            for s in it:
+                yield pd.DataFrame({"v": s, "neg": -s})
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: to_struct_iter(x)).alias("r")),
             [
                 ([(1, -1), (2, -2), (3, -3)],),
                 ([],),

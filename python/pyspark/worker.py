@@ -3304,9 +3304,14 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                                 "Invalid return type. Please make sure that the UDF returns a "
                                 "pandas.DataFrame when the specified return type is StructType."
                             )
-                    # Verify the flat length before re-nesting so a wrong-length result raises the
-                    # friendly RESULT_ROWS_MISMATCH rather than an opaque pyarrow offset error.
-                    verify_result_row_count(len(result), total_elements)
+                        # Verify the flat length before re-nesting so a wrong-length result raises
+                        # the friendly RESULT_ROWS_MISMATCH rather than an opaque pyarrow error.
+                        verify_result_row_count(len(result), total_elements)
+                    else:
+                        # Arrow flavor: a non-array-like result (e.g. a bare int) raises the
+                        # friendly UDF_RETURN_TYPE rather than a bare TypeError from len(), matching
+                        # the base SQL_SCALAR_ARROW_UDF path, and also checks the flat length.
+                        verify_scalar_result(result, total_elements)
 
                     flat_arr = _elementwise_result_to_arrow(
                         result, return_type, arrow_element_type, is_pandas, runner_conf

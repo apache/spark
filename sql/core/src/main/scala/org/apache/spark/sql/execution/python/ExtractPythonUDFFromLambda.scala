@@ -42,8 +42,9 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  * `plus_one_over_array` is the same function re-typed as `array<T> => array<R>` and run with an
  * element-wise eval type chosen from the UDF's own flavor (see
  * [[PythonUDF.liftedElementwiseEvalType]]): the row-at-a-time UDFs share the pickle-based
- * [[PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF]], while a scalar pandas / Arrow UDF (and its iterator
- * variant) lifts to its own element-wise type so the worker keeps that flavor's batching contract.
+ * [[org.apache.spark.api.python.PythonEvalType]]'s SQL_ARROW_ELEMENTWISE_UDF, while a scalar pandas
+ * / Arrow UDF (and its iterator variant) lifts to its own element-wise type so the worker keeps
+ * that flavor's batching contract.
  * The array-at-a-time behaviour lives in the Python worker: it flattens each list column once,
  * calls the function over all elements of the batch, and re-nests by the input's offsets - one row
  * in, one row out, one Python round trip per batch.
