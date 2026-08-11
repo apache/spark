@@ -38,8 +38,13 @@ object PythonUDF {
     PythonEvalType.SQL_ARROW_BATCHED_UDF,
     // Element-wise UDFs are row-shaped from the plan's point of view: one array column in, one
     // array column out per row. They are extracted by `ExtractPythonUDFs` like any other scalar
-    // UDF; only the Python worker treats them element-wise.
+    // UDF; only the Python worker treats them element-wise. One eval type per lifted flavor keeps
+    // the worker's pandas- vs. Arrow-shaped batching and the iterator contract distinct.
     PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
+    PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
+    PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+    PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
+    PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
     PythonEvalType.SQL_SCALAR_ARROW_UDF,
@@ -54,15 +59,20 @@ object PythonUDF {
    * Whether `e` is a Python UDF that can be lifted out of a higher-order function's lambda by
    * `ExtractPythonUDFFromLambda`, which applies it to the whole array outside the lambda.
    *
-   * Only the row-at-a-time eval types qualify, since the rule lifts a UDF that takes one value per
-   * call. Otherwise-eligible shapes are excluded because the rewrite cannot preserve them:
+   * Both the row-at-a-time eval types (plain and Arrow batched) and the vectorized scalar eval
+   * types (scalar pandas / Arrow and their iterator variants) qualify: the rule lifts the UDF
+   * structurally over `array<T>` arguments, and the Python worker flattens each array, invokes the
+   * function on the flat element column with its own batching contract, and re-nests. See
+   * [[liftedElementwiseEvalType]] for the mapping to the eval type the lifted UDF runs under.
+   *
+   * Otherwise-eligible shapes are excluded because the rewrite cannot preserve them:
    *   - a zero-argument call, `f()`: the lift turns each argument into an aligned array, so with no
    *     argument there is no array to carry the iterated shape, and the element-wise UDF would
    *     reach the worker with no input column and crash there instead of failing analysis;
    *   - a call with named arguments: its `NamedArgumentExpression` children would be buried inside
    *     the generated `ArrayTransform`, losing the kwargs mapping the runner derives from the
    *     direct children;
-   *   - a UDF whose argument or return type involves a UDT: the lift forces the Arrow element-wise
+   *   - a UDF whose argument or return type involves a UDT: the lift forces an Arrow element-wise
    *     eval type, which has no UDT fallback (unlike `correctEvalType`'s Arrow -> pickle path), so
    *     it would fail at runtime instead of at analysis.
    * All keep the previous behavior (an analysis error) rather than being rewritten.
@@ -72,13 +82,44 @@ object PythonUDF {
    */
   def isElementwiseRewritableUDF(e: Expression): Boolean = e match {
     case udf: PythonUDF =>
-      (udf.evalType == PythonEvalType.SQL_BATCHED_UDF ||
-        udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) &&
+      isElementwiseRewritableEvalType(udf.evalType) &&
         udf.children.nonEmpty &&
         !udf.children.exists(_.isInstanceOf[NamedArgumentExpression]) &&
         !containsUDT(udf.dataType) &&
         !udf.children.exists(c => containsUDT(c.dataType))
     case _ => false
+  }
+
+  private def isElementwiseRewritableEvalType(evalType: Int): Boolean = evalType match {
+    case PythonEvalType.SQL_BATCHED_UDF |
+         PythonEvalType.SQL_ARROW_BATCHED_UDF |
+         PythonEvalType.SQL_SCALAR_PANDAS_UDF |
+         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF |
+         PythonEvalType.SQL_SCALAR_ARROW_UDF |
+         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF => true
+    case _ => false
+  }
+
+  /**
+   * The eval type a rewritable UDF runs under once lifted out of the lambda. Each maps to the
+   * element-wise flavor that preserves its worker contract: the row-at-a-time types share the one
+   * pickle-based element-wise path, while each vectorized scalar type keeps its own pandas- vs.
+   * Arrow-shaped batching and iterator behavior. `evalType` must satisfy
+   * [[isElementwiseRewritableEvalType]].
+   */
+  def liftedElementwiseEvalType(evalType: Int): Int = evalType match {
+    case PythonEvalType.SQL_BATCHED_UDF | PythonEvalType.SQL_ARROW_BATCHED_UDF =>
+      PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
+    case PythonEvalType.SQL_SCALAR_PANDAS_UDF =>
+      PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF
+    case PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
+      PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF
+    case PythonEvalType.SQL_SCALAR_ARROW_UDF =>
+      PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF
+    case PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF =>
+      PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF
+    case other =>
+      throw internalError(s"Not a rewritable elementwise UDF eval type: $other")
   }
 
   /**
@@ -88,7 +129,6 @@ object PythonUDF {
    *     `i` is not a real column. (A UDF in a nested *argument*, `transform(arr, x ->
    *     transform(udf(x), y -> y))`, is fine - `udf(x)` lifts onto `arr`.)
    *   - a UDF in `aggregate` / `reduce`: the fold is sequential, so it sees earlier steps' outputs;
-   *   - a vectorized (scalar pandas / arrow) UDF, which is not supported;
    *   - a *nondeterministic iterated argument*, `filter(shuffle(arr), x -> f(x))`: the rewrite
    *     references that argument several times (the carrier's `c0`, each lifted UDF's argument, the
    *     `map_keys`/`map_values` desugar, the pairwise `array_sort` path), and nondeterministic
