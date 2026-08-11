@@ -193,6 +193,7 @@ String Functions
     ltrim
     make_valid_utf8
     mask
+    normalize
     octet_length
     overlay
     position

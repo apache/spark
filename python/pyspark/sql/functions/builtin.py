@@ -16025,6 +16025,46 @@ def try_validate_utf8(str: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def normalize(str: "ColumnOrName", form: Optional["ColumnOrName"] = None) -> Column:
+    """
+    Returns the Unicode normalization of ``str`` using the given normalization ``form``, as
+    defined by Unicode Standard Annex #15. Normalization is backed by Spark's bundled ICU4J
+    library rather than the JVM's own Unicode data, so results are stable across JVM vendors
+    and versions.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or column name
+        the input string to normalize.
+    form : :class:`~pyspark.sql.Column` or column name, optional
+        the normalization form, one of 'NFC', 'NFD', 'NFKC', 'NFKD' (case-insensitive).
+        If omitted, 'NFC' is used.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the normalized string.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("\ufb01",)], ["s"])
+    >>> df.select(sf.normalize(df.s, sf.lit("NFKC"))).show()
+    +------------------+
+    |normalize(s, NFKC)|
+    +------------------+
+    |                fi|
+    +------------------+
+    """
+    if form is None:
+        return _invoke_function_over_columns("normalize", str)
+    else:
+        return _invoke_function_over_columns("normalize", str, form)
+
+
+@_try_remote_functions
 def format_number(col: "ColumnOrName", d: int) -> Column:
     """
     Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
