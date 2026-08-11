@@ -1595,9 +1595,14 @@ case class StreamingDeduplicateExec(
       store,
       store.iterator(),
       keyExpressions,
-      // Match the event-time-column resolution the previous full-eviction path used (via
-      // watermarkExpression -> findEventTimeColumn), so behavior is unchanged: when multiple
-      // stateful operators are allowed, a single event time column is required.
+      // The previous full-eviction predicate (watermarkPredicateForKeysForEviction) also resolved
+      // the event time from `keyExpressions`, and matched the `allowMultipleStatefulOperators`
+      // knob, so pass !allowMultipleStatefulOperators here. This matches the aggregation eviction
+      // path and the runtime. (The old path additionally forced the watermark *expression* over
+      // child.output, which could throw MULTIPLE_EVENT_TIME_COLUMNS when child.output -- not the
+      // dedup key -- carried several event-time columns; resolving from the key here does not, but
+      // that only differs under the non-default allowMultiple=false with 2+ event-time columns
+      // outside the dedup key.)
       allowMultipleEventTimeColumns = !allowMultipleStatefulOperators,
       evictionWatermark)
 
