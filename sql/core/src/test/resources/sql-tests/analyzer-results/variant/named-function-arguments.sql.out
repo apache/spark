@@ -16,6 +16,22 @@ Project [pos#x, key#x, value#x]
 
 
 -- !query
+SELECT * FROM variant_explode(input => parse_json('{"a": [1, 2]}'), recursive => true)
+-- !query analysis
+Project [path#x, pos#x, key#x, value#x]
++- Generate variant_explode(parse_json({"a": [1, 2]}, true), true), false, [path#x, pos#x, key#x, value#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM variant_explode_outer(recursive => true, input => parse_json('{"a": [1, 2]}'))
+-- !query analysis
+Project [path#x, pos#x, key#x, value#x]
++- Generate variant_explode(parse_json({"a": [1, 2]}, true), true), true, [path#x, pos#x, key#x, value#x]
+   +- OneRowRelation
+
+
+-- !query
 SELECT * FROM variant_explode(parse_json('["hello", "world"]')), variant_explode(parse_json('{"a": true, "b": 3.14}'))
 -- !query analysis
 Project [pos#x, key#x, value#x, pos#x, key#x, value#x]
