@@ -143,7 +143,7 @@ class BlockManagerMaster(
    * plurality checksum), evict divergent copies, and reject future divergent registrations. Returns
    * the count of present blocks that had no recorded checksum and so could not be sealed.
    */
-  def sealRddChecksums(rddId: Int): Int = {
+  def sealRddChecksums(rddId: Long): Int = {
     driverEndpoint.askSync[Int](SealRddChecksums(rddId))
   }
 
@@ -151,7 +151,7 @@ class BlockManagerMaster(
    * Verify every block of a sealed RDD is sealed and the directory tracks only replicas carrying
    * the sealed checksum. Returns None if the invariant holds, else a diagnostic string.
    */
-  def verifyRddChecksumSeal(rddId: Int): Option[String] = {
+  def verifyRddChecksumSeal(rddId: Long): Option[String] = {
     driverEndpoint.askSync[Option[String]](VerifyRddChecksumSeal(rddId))
   }
 
@@ -221,7 +221,7 @@ class BlockManagerMaster(
   }
 
   /** Remove all blocks belonging to the given RDD. */
-  def removeRdd(rddId: Int, blocking: Boolean): Unit = {
+  def removeRdd(rddId: Long, blocking: Boolean): Unit = {
     val future = driverEndpoint.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
     future.failed.foreach(e =>
       logWarning(log"Failed to remove RDD ${MDC(RDD_ID, rddId)} - " +

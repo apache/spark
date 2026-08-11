@@ -107,7 +107,7 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     // but assertions should be caught and None should be returned.
     assert(deser.lastAttemptValueForHighestRDDId() === None)
     assert(deser.lastAttemptValueForRDDId(1) === None)
-    assert(deser.lastAttemptValueForRDDIds(Seq(1, 2, 3)) === None)
+    assert(deser.lastAttemptValueForRDDIds(Seq(1L, 2L, 3L)) === None)
     assert(deser.lastAttemptValueForAllRDDs() === None)
     // mergeLastAttempt shouldn't be used on the deserialized metric,
     // but it should catch error and not fail.
@@ -141,7 +141,7 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     // but assertions should be caught and None should be returned.
     assert(acc.lastAttemptValueForHighestRDDId() === None)
     assert(acc.lastAttemptValueForRDDId(1) === None)
-    assert(acc.lastAttemptValueForRDDIds(Seq(1, 2, 3)) === None)
+    assert(acc.lastAttemptValueForRDDIds(Seq(1L, 2L, 3L)) === None)
     assert(acc.lastAttemptValueForAllRDDs() === None)
     // mergeLastAttempt shouldn't be used on the copy,
     // but it should catch error and not fail.

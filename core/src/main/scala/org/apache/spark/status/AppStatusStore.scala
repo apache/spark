@@ -773,7 +773,7 @@ private[spark] class AppStatusStore(
     }
   }
 
-  def rdd(rddId: Int): v1.RDDStorageInfo = {
+  def rdd(rddId: Long): v1.RDDStorageInfo = {
     store.read(classOf[RDDStorageInfoWrapper], rddId).info
   }
 

@@ -2311,7 +2311,7 @@ private[spark] class BlockManager(
    *
    * @return The number of blocks removed.
    */
-  def removeRdd(rddId: Int): Int = {
+  def removeRdd(rddId: Long): Int = {
     logInfo(log"Removing RDD ${MDC(RDD_ID, rddId)}")
     val blocksToRemove = blockInfoManager.rddBlockIds(rddId)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }

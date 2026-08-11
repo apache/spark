@@ -428,7 +428,7 @@ private[spark] class TaskDataWrapper(
 private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
 
   @JsonIgnore @KVIndex
-  def id: Int = info.id
+  def id: Long = info.id
 
   @JsonIgnore @KVIndex("cached")
   def cached: Boolean = info.numCachedPartitions > 0

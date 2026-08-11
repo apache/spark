@@ -46,7 +46,7 @@ private[spark] case class RDDOperationGraph(
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
 private[spark] case class RDDOperationNode(
-    id: Int,
+    id: Long,
     name: String,
     cached: Boolean,
     barrier: Boolean,
@@ -57,7 +57,7 @@ private[spark] case class RDDOperationNode(
  * A directed edge connecting two nodes in an RDDOperationGraph.
  * This represents an RDD dependency.
  */
-private[spark] case class RDDOperationEdge(fromId: Int, toId: Int)
+private[spark] case class RDDOperationEdge(fromId: Long, toId: Long)
 
 /**
  * A cluster that groups nodes together in an RDDOperationGraph.
@@ -130,7 +130,7 @@ private[spark] object RDDOperationGraph extends Logging {
    */
   def makeOperationGraph(stage: StageInfo, retainedNodes: Int): RDDOperationGraph = {
     val edges = new ListBuffer[RDDOperationEdge]
-    val nodes = new mutable.HashMap[Int, RDDOperationNode]
+    val nodes = new mutable.HashMap[Long, RDDOperationNode]
     val clusters = new mutable.HashMap[String, RDDOperationCluster] // indexed by cluster ID
 
     // Root cluster is the stage cluster
@@ -141,8 +141,8 @@ private[spark] object RDDOperationGraph extends Logging {
     val rootCluster = new RDDOperationCluster(stageClusterId, false, stageClusterName)
 
     var rootNodeCount = 0
-    val addRDDIds = new mutable.HashSet[Int]()
-    val dropRDDIds = new mutable.HashSet[Int]()
+    val addRDDIds = new mutable.HashSet[Long]()
+    val dropRDDIds = new mutable.HashSet[Long]()
 
     // Find nodes, edges, and operation scopes that belong to this stage
     stage.rddInfos.sortBy(_.id).foreach { rdd =>

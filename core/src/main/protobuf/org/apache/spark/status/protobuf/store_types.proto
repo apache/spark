@@ -262,7 +262,7 @@ message RDDPartitionInfo {
 }
 
 message RDDStorageInfo {
-  int32 id = 1;
+  int64 id = 1;
   optional string name = 2;
   int32 num_partitions = 3;
   int32 num_cached_partitions = 4;
@@ -462,8 +462,8 @@ message SparkPlanGraphWrapper {
 }
 
 message RDDOperationEdge {
-  int32 from_id = 1;
-  int32 to_id = 2;
+  int64 from_id = 1;
+  int64 to_id = 2;
 }
 
 enum DeterministicLevel {
@@ -474,7 +474,7 @@ enum DeterministicLevel {
 }
 
 message RDDOperationNode {
-  int32 id = 1;
+  int64 id = 1;
   optional string name = 2;
   bool cached = 3;
   bool barrier = 4;

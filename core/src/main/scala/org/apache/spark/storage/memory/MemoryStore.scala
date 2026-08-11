@@ -456,7 +456,7 @@ private[spark] class MemoryStore(
   /**
    * Return the RDD ID that a given block ID is from, or None if it is not an RDD block.
    */
-  private def getRddId(blockId: BlockId): Option[Int] = {
+  private def getRddId(blockId: BlockId): Option[Long] = {
     blockId.asRDDId.map(_.rddId)
   }
 

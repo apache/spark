@@ -52,7 +52,7 @@ sealed abstract class BlockId {
 }
 
 @DeveloperApi
-case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
+case class RDDBlockId(rddId: Long, splitIndex: Int) extends BlockId {
   override def name: String = "rdd_" + rddId + "_" + splitIndex
 }
 
@@ -263,11 +263,10 @@ case class CacheId(sessionUUID: String, hash: String) extends BlockId {
 
 @DeveloperApi
 object BlockId {
-  // RDD ids come from SparkContext.newRddId (AtomicLong). Under the default
-  // overflow policy they stay non-negative and fit in Int. The optional minus
-  // supports legacy wrap-around (spark.rdd.id.overflow.policy=legacy) and any
-  // negative names already in flight, so BlockId.apply does not throw
-  // UnrecognizedBlockId for names like rdd_-1330910599_36.
+  // RDD ids come from SparkContext.newRddId (AtomicLong) and may exceed
+  // Int.MaxValue. The optional minus keeps BlockId.apply from throwing
+  // UnrecognizedBlockId for any negative names already in flight
+  // (e.g. rdd_-1330910599_36).
   val RDD = "rdd_(-?[0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
@@ -294,7 +293,7 @@ object BlockId {
 
   def apply(name: String): BlockId = name match {
     case RDD(rddId, splitIndex) =>
-      RDDBlockId(rddId.toInt, splitIndex.toInt)
+      RDDBlockId(rddId.toLong, splitIndex.toInt)
     case SHUFFLE(shuffleId, mapId, reduceId) =>
       ShuffleBlockId(shuffleId.toInt, mapId.toLong, reduceId.toInt)
     case SHUFFLE_BATCH(shuffleId, mapId, startReduceId, endReduceId) =>

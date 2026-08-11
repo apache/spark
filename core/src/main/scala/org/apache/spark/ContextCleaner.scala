@@ -36,11 +36,11 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, ThreadUtils, Ut
  * Classes that represent cleaning tasks.
  */
 private sealed trait CleanupTask
-private case class CleanRDD(rddId: Int) extends CleanupTask
+private case class CleanRDD(rddId: Long) extends CleanupTask
 private case class CleanShuffle(shuffleId: Int) extends CleanupTask
 private case class CleanBroadcast(broadcastId: Long) extends CleanupTask
 private case class CleanAccum(accId: Long) extends CleanupTask
-private case class CleanCheckpoint(rddId: Int) extends CleanupTask
+private case class CleanCheckpoint(rddId: Long) extends CleanupTask
 private case class CleanSparkListener(listener: SparkListener) extends CleanupTask
 
 /**
@@ -153,7 +153,7 @@ private[spark] class ContextCleaner(
 
   /** Register an RDD for cleanup when it is garbage collected. */
   def registerRDDForCleanup(rdd: RDD[_]): Unit = {
-    registerForCleanup(rdd, CleanRDD(rdd.id))
+    registerForCleanup(rdd, CleanRDD(rdd.idLong))
   }
 
   def registerAccumulatorForCleanup(a: AccumulatorV2[_, _]): Unit = {
@@ -171,7 +171,7 @@ private[spark] class ContextCleaner(
   }
 
   /** Register a RDDCheckpointData for cleanup when it is garbage collected. */
-  def registerRDDCheckpointDataForCleanup[T](rdd: RDD[_], parentId: Int): Unit = {
+  def registerRDDCheckpointDataForCleanup[T](rdd: RDD[_], parentId: Long): Unit = {
     registerForCleanup(rdd, CleanCheckpoint(parentId))
   }
 
@@ -222,7 +222,7 @@ private[spark] class ContextCleaner(
   }
 
   /** Perform RDD cleanup. */
-  def doCleanupRDD(rddId: Int, blocking: Boolean): Unit = {
+  def doCleanupRDD(rddId: Long, blocking: Boolean): Unit = {
     try {
       logDebug("Cleaning RDD " + rddId)
       sc.unpersistRDD(rddId, blocking)
@@ -299,7 +299,7 @@ private[spark] class ContextCleaner(
    * Clean up checkpoint files written to a reliable storage.
    * Locally checkpointed files are cleaned up separately through RDD cleanups.
    */
-  def doCleanCheckpoint(rddId: Int): Unit = {
+  def doCleanCheckpoint(rddId: Long): Unit = {
     try {
       logDebug("Cleaning rdd checkpoint data " + rddId)
       ReliableRDDCheckpointData.cleanCheckpoint(sc, rddId)
@@ -337,7 +337,7 @@ private object ContextCleaner {
  * Listener class used when any item has been cleaned by the Cleaner class.
  */
 private[spark] trait CleanerListener {
-  def rddCleaned(rddId: Int): Unit
+  def rddCleaned(rddId: Long): Unit
   def shuffleCleaned(shuffleId: Int): Unit
   def broadcastCleaned(broadcastId: Long): Unit
   def accumCleaned(accId: Long): Unit

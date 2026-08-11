@@ -37,12 +37,12 @@ import org.apache.spark.storage.RDDBlockId
  */
 private[spark] class LocalCheckpointRDD[T: ClassTag](
     sc: SparkContext,
-    rddId: Int,
+    rddId: Long,
     numPartitions: Int)
   extends CheckpointRDD[T](sc) {
 
   def this(rdd: RDD[T]) = {
-    this(rdd.context, rdd.id, rdd.partitions.length)
+    this(rdd.context, rdd.idLong, rdd.partitions.length)
   }
 
   protected override def getPartitions: Array[Partition] = {

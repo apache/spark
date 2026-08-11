@@ -52,7 +52,7 @@ class BlockIdSuite extends SparkFunSuite {
   }
 
   test("SPARK-41246: rdd with a negative id") {
-    // Legacy overflow wraps to negative Int ids; BlockId must still parse them.
+    // Optional minus in BlockId.RDD keeps negative names parseable.
     val id = RDDBlockId(-1330910599, 36)
     assert(id.name === "rdd_-1330910599_36")
     assertSame(id, BlockId(id.name))

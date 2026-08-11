@@ -449,7 +449,7 @@ private[spark] class ExecutorMonitor(
     case _ =>
   }
 
-  override def rddCleaned(rddId: Int): Unit = { }
+  override def rddCleaned(rddId: Long): Unit = { }
 
   override def shuffleCleaned(shuffleId: Int): Unit = {
     // Only post the event if tracking is enabled
@@ -550,7 +550,7 @@ private[spark] class ExecutorMonitor(
 
     // Maps RDD IDs to the partition IDs stored in the executor.
     // This should only be used in the event thread.
-    val cachedBlocks = new mutable.HashMap[Int, mutable.BitSet]()
+    val cachedBlocks = new mutable.HashMap[Long, mutable.BitSet]()
 
     // The set of shuffles for which shuffle data is held by the executor.
     // This should only be used in the event thread.

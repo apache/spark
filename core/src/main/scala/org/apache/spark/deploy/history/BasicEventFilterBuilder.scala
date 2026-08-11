@@ -32,7 +32,7 @@ import org.apache.spark.storage.BlockManagerId
 private[spark] class BasicEventFilterBuilder extends SparkListener with EventFilterBuilder {
   private val liveJobToStages = new mutable.HashMap[Int, Set[Int]]
   private val stageToTasks = new mutable.HashMap[Int, mutable.Set[Long]]
-  private val stageToRDDs = new mutable.HashMap[Int, Set[Int]]
+  private val stageToRDDs = new mutable.HashMap[Int, Set[Long]]
   private val _liveExecutors = new mutable.HashSet[String]
 
   private var totalJobs: Long = 0L
@@ -42,7 +42,7 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
   private[history] def liveJobs: Set[Int] = liveJobToStages.keySet.toSet
   private[history] def liveStages: Set[Int] = stageToRDDs.keySet.toSet
   private[history] def liveTasks: Set[Long] = stageToTasks.values.flatten.toSet
-  private[history] def liveRDDs: Set[Int] = stageToRDDs.values.flatten.toSet
+  private[history] def liveRDDs: Set[Long] = stageToRDDs.values.flatten.toSet
   private[history] def liveExecutors: Set[String] = _liveExecutors.toSet
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -98,7 +98,7 @@ private[spark] abstract class JobEventFilter(
     liveJobs: Set[Int],
     liveStages: Set[Int],
     liveTasks: Set[Long],
-    liveRDDs: Set[Int]) extends EventFilter with Logging {
+    liveRDDs: Set[Long]) extends EventFilter with Logging {
 
   logDebug(s"jobs : $liveJobs")
   logDebug(s"stages : $liveStages")
@@ -143,7 +143,7 @@ private[spark] class BasicEventFilter(
     liveJobs: Set[Int],
     liveStages: Set[Int],
     liveTasks: Set[Long],
-    liveRDDs: Set[Int],
+    liveRDDs: Set[Long],
     liveExecutors: Set[String])
   extends JobEventFilter(
     Some(stats),

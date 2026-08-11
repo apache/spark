@@ -37,7 +37,47 @@ object MimaExcludes {
   lazy val v50excludes: Seq[Problem => Boolean] = v44excludes
 
   // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
-  lazy val v44excludes: Seq[Problem => Boolean] = v43excludes
+  lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(
+    // [SPARK-41246] Widen RDD identity to Long for allocation/storage; keep RDD.id as Int
+    // accessor for Java `int id = rdd.id()` compatibility (throws past Int.MaxValue).
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.rdd.RDD.id"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.rdd.RDD.id"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.rdd.RDD.id"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.SparkContext.getPersistentRDDs"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.api.java.JavaSparkContext.getPersistentRDDs"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.storage.RDDBlockId.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.storage.RDDBlockId.apply"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.storage.RDDBlockId.copy"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.storage.RDDBlockId.rddId"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.storage.RDDBlockId.copy$default$1"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.storage.RDDInfo.id"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.storage.RDDInfo.parentIds"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.storage.RDDInfo.this"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.status.api.v1.RDDStorageInfo.id"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.status.api.v1.StageData.rddIds"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.scheduler.SparkListenerUnpersistRDD.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.scheduler.SparkListenerUnpersistRDD.apply"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.scheduler.SparkListenerUnpersistRDD.copy"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.scheduler.SparkListenerUnpersistRDD.rddId"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.scheduler.SparkListenerUnpersistRDD.copy$default$1")
+  )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
   lazy val v43excludes: Seq[Problem => Boolean] = v42excludes ++ Seq(

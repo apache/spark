@@ -730,14 +730,14 @@ class BasicOperationsSuite extends TestSuiteBase {
         val input = Seq(1, 2, 3, 4, 5, 6)
 
         val blockRdds = new mutable.HashMap[Time, BlockRDD[_]]
-        val persistentRddIds = new mutable.HashMap[Time, Int]
+        val persistentRddIds = new mutable.HashMap[Time, Long]
 
         def collectRddInfo(): Unit = { // get all RDD info required for verification
           networkStream.generatedRDDs.foreach { case (time, rdd) =>
             blockRdds(time) = rdd.asInstanceOf[BlockRDD[_]]
           }
           mappedStream.generatedRDDs.foreach { case (time, rdd) =>
-            persistentRddIds(time) = rdd.id
+            persistentRddIds(time) = rdd.idLong
           }
         }
 

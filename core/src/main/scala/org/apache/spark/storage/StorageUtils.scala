@@ -43,11 +43,11 @@ private[spark] class StorageStatus(
   /**
    * Internal representation of the blocks stored in this block manager.
    */
-  private val _rddBlocks = new mutable.HashMap[Int, mutable.Map[BlockId, BlockStatus]]
+  private val _rddBlocks = new mutable.HashMap[Long, mutable.Map[BlockId, BlockStatus]]
   private val _nonRddBlocks = new mutable.HashMap[BlockId, BlockStatus]
 
   private case class RddStorageInfo(memoryUsage: Long, diskUsage: Long, level: StorageLevel)
-  private val _rddStorageInfo = new mutable.HashMap[Int, RddStorageInfo]
+  private val _rddStorageInfo = new mutable.HashMap[Long, RddStorageInfo]
 
   private case class NonRddStorageInfo(var onHeapUsage: Long, var offHeapUsage: Long,
       var diskUsage: Long)
@@ -148,7 +148,7 @@ private[spark] class StorageStatus(
   def diskUsed: Long = _nonRddStorageInfo.diskUsage + _rddBlocks.keys.toSeq.map(diskUsedByRdd).sum
 
   /** Return the disk space used by the given RDD in this block manager in O(1) time. */
-  def diskUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_.diskUsage).getOrElse(0L)
+  def diskUsedByRdd(rddId: Long): Long = _rddStorageInfo.get(rddId).map(_.diskUsage).getOrElse(0L)
 
   /**
    * Update the relevant storage info, taking into account any existing status for this block.

@@ -48,14 +48,14 @@ import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Ut
 import org.apache.spark.util.ArrayImplicits._
 
 private[spark] class NewHadoopPartition(
-    rddId: Int,
+    rddId: Long,
     val index: Int,
     rawSplit: InputSplit with Writable)
   extends Partition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
 
-  override def hashCode(): Int = 31 * (31 + rddId) + index
+  override def hashCode(): Int = 31 * (31 + java.lang.Long.hashCode(rddId)) + index
 
   override def equals(other: Any): Boolean = super.equals(other)
 }
@@ -184,7 +184,7 @@ class NewHadoopRDD[K, V](
       val result = new Array[Partition](rawSplits.size)
       for (i <- rawSplits.indices) {
         result(i) =
-            new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+            new NewHadoopPartition(idLong, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
       }
       result
     } catch {

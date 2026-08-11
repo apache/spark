@@ -46,9 +46,10 @@ class SQLLastAttemptMetricIntegrationSuite
     assert(withRetries || slam.value === 10)
     assert(slam.lastAttemptValueForAllRDDs() === Some(10))
     assert(slam.lastAttemptValueForRDDId(rdd1.id) === Some(10))
-    assert(slam.lastAttemptValueForRDDIds(Seq(rdd1.id, rdd1.id)) === Some(10))
-    assert(slam.lastAttemptValueForRDDIds(Seq(rdd1.id + 1, rdd1.id + 2)) === Some(0))
-    assert(slam.lastAttemptValueForRDDIds(Seq(rdd1.id, rdd1.id + 10, rdd1.id)) === Some(10))
+    assert(slam.lastAttemptValueForRDDIds(Seq(rdd1.idLong, rdd1.idLong)) === Some(10))
+    assert(slam.lastAttemptValueForRDDIds(Seq(rdd1.idLong + 1, rdd1.idLong + 2)) === Some(0))
+    assert(slam.lastAttemptValueForRDDIds(
+      Seq(rdd1.idLong, rdd1.idLong + 10, rdd1.idLong)) === Some(10))
     assert(slam.lastAttemptValueForHighestRDDId() === Some(10))
 
     val rdd2 = spark.sparkContext.parallelize(1 to 50, 3).map { x =>
@@ -128,11 +129,11 @@ class SQLLastAttemptMetricIntegrationSuite
     assert(slam1.lastAttemptValueForRDDId(mapStageRddId) === Some(10))
 
     // Test passing multiple ids.
-    assert(slam1.lastAttemptValueForRDDIds(Seq(rdd1.id, repartition.id)) === Some(0))
+    assert(slam1.lastAttemptValueForRDDIds(Seq(rdd1.idLong, repartition.idLong)) === Some(0))
     assert(slam1.lastAttemptValueForRDDIds(
-      Seq(rdd1.id, mapStageRddId, repartition.id)) === Some(10))
-    assert(slam1.lastAttemptValueForRDDIds(Seq(rdd1.id, rdd2.id)) === Some(0))
-    assert(slam1.lastAttemptValueForRDDIds(Seq(-10)) === Some(0))
+      Seq(rdd1.idLong, mapStageRddId, repartition.idLong)) === Some(10))
+    assert(slam1.lastAttemptValueForRDDIds(Seq(rdd1.idLong, rdd2.idLong)) === Some(0))
+    assert(slam1.lastAttemptValueForRDDIds(Seq(-10L)) === Some(0))
 
     rdd2.collect()
     // Repartition stage is reused, but result stage is re-executed.
@@ -409,7 +410,7 @@ class SQLLastAttemptMetricIntegrationSuite
     assert(slam.getNumRDDs === 0)
     // When specific RDDs are requested, driver value is not returned.
     assert(slam.lastAttemptValueForRDDId(42) === Some(0))
-    assert(slam.lastAttemptValueForRDDIds(Seq(7, 42)) === Some(0))
+    assert(slam.lastAttemptValueForRDDIds(Seq(7L, 42L)) === Some(0))
 
     // Incrementing works
     slam.add(5)
@@ -451,7 +452,7 @@ class SQLLastAttemptMetricIntegrationSuite
     assert(slam.lastAttemptValueForHighestRDDId() === None)
     assert(slam.lastAttemptValueForAllRDDs() === None)
     assert(slam.lastAttemptValueForRDDId(42) === None)
-    assert(slam.lastAttemptValueForRDDIds(Seq(7, 42)) === None)
+    assert(slam.lastAttemptValueForRDDIds(Seq(7L, 42L)) === None)
     assert(slam.lastAttemptValueForDataset(df) === None)
     assert(!slam.getValid)
     assert(slam.getNumRDDs === 0) // invalidated before RDD got recorded
@@ -466,7 +467,7 @@ class SQLLastAttemptMetricIntegrationSuite
     assert(slam.lastAttemptValueForHighestRDDId() === None)
     assert(slam.lastAttemptValueForAllRDDs() === None)
     assert(slam.lastAttemptValueForRDDId(42) === None)
-    assert(slam.lastAttemptValueForRDDIds(Seq(7, 42)) === None)
+    assert(slam.lastAttemptValueForRDDIds(Seq(7L, 42L)) === None)
     assert(slam.lastAttemptValueForDataset(df) === None)
     assert(!slam.getValid)
     // SLAM info doesn't get updated anymore when invalid, but stays around for debugging purposes.

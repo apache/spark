@@ -25,12 +25,12 @@ import org.apache.spark.util.Utils
 
 @DeveloperApi
 class RDDInfo(
-    val id: Int,
+    val id: Long,
     var name: String,
     val numPartitions: Int,
     var storageLevel: StorageLevel,
     val isBarrier: Boolean,
-    val parentIds: Seq[Int],
+    val parentIds: Seq[Long],
     val callSite: String = "",
     val scope: Option[RDDOperationScope] = None,
     val outputDeterministicLevel: DeterministicLevel.Value = DeterministicLevel.DETERMINATE)
@@ -51,14 +51,14 @@ class RDDInfo(
   }
 
   override def compare(that: RDDInfo): Int = {
-    this.id - that.id
+    java.lang.Long.compare(this.id, that.id)
   }
 }
 
 private[spark] object RDDInfo {
   def fromRdd(rdd: RDD[_]): RDDInfo = {
     val rddName = Option(rdd.name).getOrElse(Utils.getFormattedClassName(rdd))
-    val parentIds = rdd.dependencies.map(_.rdd.id)
+    val parentIds = rdd.dependencies.map(_.rdd.idLong)
     val ifCallSiteLongForm = Option(SparkEnv.get).exists(_.conf.get(EVENT_LOG_CALLSITE_LONG_FORM))
 
     val callSite = if (ifCallSiteLongForm) {
@@ -66,7 +66,7 @@ private[spark] object RDDInfo {
     } else {
       rdd.creationSite.shortForm
     }
-    new RDDInfo(rdd.id, rddName, rdd.partitions.length,
+    new RDDInfo(rdd.idLong, rddName, rdd.partitions.length,
       rdd.getStorageLevel, rdd.isBarrier(), parentIds, callSite, rdd.scope,
       rdd.outputDeterministicLevel)
   }

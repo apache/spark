@@ -218,7 +218,7 @@ class JobData private[spark](
     val killedTasksSummary: Map[String, Int])
 
 class RDDStorageInfo private[spark](
-    val id: Int,
+    val id: Long,
     val name: String,
     val numPartitions: Int,
     val numCachedPartitions: Int,
@@ -306,7 +306,7 @@ class StageData private[spark](
     val details: String,
     val schedulingPool: String,
 
-    val rddIds: collection.Seq[Int],
+    val rddIds: collection.Seq[Long],
     val accumulatorUpdates: collection.Seq[AccumulableInfo],
     val tasks: Option[Map[Long, TaskData]],
     val executorSummary: Option[Map[String, ExecutorStageSummary]],

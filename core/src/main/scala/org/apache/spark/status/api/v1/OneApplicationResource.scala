@@ -101,7 +101,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
 
   @GET
   @Path("storage/rdd/{rddId: \\d+}")
-  def rddData(@PathParam("rddId") rddId: Int): RDDStorageInfo = withUI { ui =>
+  def rddData(@PathParam("rddId") rddId: Long): RDDStorageInfo = withUI { ui =>
     try {
       ui.store.rdd(rddId)
     } catch {

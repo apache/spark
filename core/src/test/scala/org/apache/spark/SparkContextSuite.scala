@@ -1531,37 +1531,24 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(rdd.id >= 0)
   }
 
-  test("SPARK-41246: fail policy rejects RDD id overflow") {
-    val conf = new SparkConf()
-      .setAppName("test")
-      .setMaster("local[1]")
-      .set(RDD_ID_OVERFLOW_POLICY, "fail")
-    sc = new SparkContext(conf)
-    sc.setNextRddIdForTesting(Int.MaxValue.toLong)
-    // Consumes Int.MaxValue (allowed, with warning).
-    val last = sc.parallelize(Seq(1), 1)
-    assert(last.id === Int.MaxValue)
-    assert(last.idLong === Int.MaxValue.toLong)
-    val err = intercept[SparkException] {
-      sc.parallelize(Seq(2), 1)
-    }
-    assert(err.getMessage.contains("Int.MaxValue"))
-    assert(err.getMessage.contains("overflow"))
-  }
-
-  test("SPARK-41246: legacy policy wraps and BlockId still parses") {
-    val conf = new SparkConf()
-      .setAppName("test")
-      .setMaster("local[1]")
-      .set(RDD_ID_OVERFLOW_POLICY, "legacy")
+  test("SPARK-41246: Long RDD ids past Int.MaxValue") {
+    val conf = new SparkConf().setAppName("test").setMaster("local[1]")
     sc = new SparkContext(conf)
     sc.setNextRddIdForTesting(Int.MaxValue.toLong + 1L)
     val rdd = sc.parallelize(Seq(1), 1)
     assert(rdd.idLong === Int.MaxValue.toLong + 1L)
-    assert(rdd.id === Int.MinValue) // two's-complement wrap of the Int view
-    val block = RDDBlockId(rdd.id, 0)
-    assert(block.name === s"rdd_${rdd.id}_0")
+    assert(rdd.idLong > Int.MaxValue)
+    val err = intercept[SparkException] {
+      rdd.id
+    }
+    assert(err.getMessage.contains("exceeds Int.MaxValue"))
+    assert(err.getMessage.contains("idLong"))
+    val block = RDDBlockId(rdd.idLong, 0)
+    assert(block.name === s"rdd_${rdd.idLong}_0")
     assert(BlockId(block.name) === block)
+    // Cache and count should work with Long-backed block ids.
+    rdd.cache()
+    assert(rdd.count() === 1)
   }
 }
 

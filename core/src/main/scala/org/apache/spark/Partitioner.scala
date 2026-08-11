@@ -227,7 +227,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         if (imbalancedPartitions.nonEmpty) {
           // Re-sample imbalanced partitions with the desired sampling probability.
           val imbalanced = new PartitionPruningRDD(rdd.map(_._1), imbalancedPartitions.contains)
-          val seed = byteswap32(-rdd.id - 1)
+          val seed = byteswap32(-rdd.idLong.hashCode - 1)
           val reSampled = imbalanced.sample(withReplacement = false, fraction, seed).collect()
           val weight = (1.0 / fraction).toFloat
           candidates ++= reSampled.map(x => (x, weight))

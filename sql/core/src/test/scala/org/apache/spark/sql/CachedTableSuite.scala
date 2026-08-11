@@ -485,7 +485,7 @@ class CachedTableSuite extends SharedSparkSession
       toBeCleanedAccIds += accId2
 
       val cleanerListener = new CleanerListener {
-        def rddCleaned(rddId: Int): Unit = {}
+        def rddCleaned(rddId: Long): Unit = {}
         def shuffleCleaned(shuffleId: Int): Unit = {}
         def broadcastCleaned(broadcastId: Long): Unit = {}
         def accumCleaned(accId: Long): Unit = {

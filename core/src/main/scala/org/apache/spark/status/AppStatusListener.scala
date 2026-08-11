@@ -78,7 +78,7 @@ private[spark] class AppStatusListener(
   private[spark] val liveExecutors = new HashMap[String, LiveExecutor]()
   private[spark] val deadExecutors = new HashMap[String, LiveExecutor]()
   private val liveTasks = new HashMap[Long, LiveTask]()
-  private val liveRDDs = new HashMap[Int, LiveRDD]()
+  private val liveRDDs = new HashMap[Long, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
   private val liveResourceProfiles = new HashMap[Int, LiveResourceProfile]()
   private[spark] val liveMiscellaneousProcess = new HashMap[String, LiveMiscellaneousProcess]()

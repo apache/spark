@@ -37,7 +37,7 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
   // The directory to which the associated RDD has been checkpointed to
   // This is assumed to be a non-local path that points to some reliable storage
   private val cpDir: String =
-    ReliableRDDCheckpointData.checkpointPath(rdd.context, rdd.id)
+    ReliableRDDCheckpointData.checkpointPath(rdd.context, rdd.idLong)
       .map(_.toString)
       .getOrElse { throw SparkCoreErrors.mustSpecifyCheckpointDirError() }
 
@@ -63,12 +63,13 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
     // Optionally clean our checkpoint files if the reference is out of scope
     if (rdd.conf.get(CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS)) {
       rdd.context.cleaner.foreach { cleaner =>
-        cleaner.registerRDDCheckpointDataForCleanup(newRDD, rdd.id)
+        cleaner.registerRDDCheckpointDataForCleanup(newRDD, rdd.idLong)
       }
     }
 
-    logInfo(log"Done checkpointing RDD ${MDC(RDD_ID, rdd.id)}" +
-      log" to ${MDC(RDD_CHECKPOINT_DIR, cpDir)}, new parent is RDD ${MDC(NEW_RDD_ID, newRDD.id)}")
+    logInfo(log"Done checkpointing RDD ${MDC(RDD_ID, rdd.idLong)}" +
+      log" to ${MDC(RDD_CHECKPOINT_DIR, cpDir)}, new parent is RDD " +
+      log"${MDC(NEW_RDD_ID, newRDD.idLong)}")
     newRDD
   }
 
@@ -77,12 +78,12 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
 private[spark] object ReliableRDDCheckpointData extends Logging {
 
   /** Return the path of the directory to which this RDD's checkpoint data is written. */
-  def checkpointPath(sc: SparkContext, rddId: Int): Option[Path] = {
+  def checkpointPath(sc: SparkContext, rddId: Long): Option[Path] = {
     sc.checkpointDir.map { dir => new Path(dir, s"rdd-$rddId") }
   }
 
   /** Clean up the files associated with the checkpoint data for this RDD. */
-  def cleanCheckpoint(sc: SparkContext, rddId: Int): Unit = {
+  def cleanCheckpoint(sc: SparkContext, rddId: Long): Unit = {
     checkpointPath(sc, rddId).foreach { path =>
       path.getFileSystem(sc.hadoopConfiguration).delete(path, true)
     }

@@ -249,7 +249,7 @@ private[spark] class DAGScheduler(
     if (injectShuffleFetchFailuresCleanerAttached) return
     sc.cleaner.foreach { cleaner =>
       cleaner.attachListener(new CleanerListener {
-        override def rddCleaned(rddId: Int): Unit = {}
+        override def rddCleaned(rddId: Long): Unit = {}
         override def shuffleCleaned(shuffleId: Int): Unit = {
           injectShuffleFetchFailuresCorruptedAttempt.remove(shuffleId)
           injectShuffleFetchFailuresPendingDelayedCorruption.remove(shuffleId)
@@ -292,7 +292,7 @@ private[spark] class DAGScheduler(
    * first synchronize on the RDD, and then synchronize on this map to avoid deadlocks. The RDD
    * could try to access the cache locations after synchronizing on the RDD.
    */
-  private val cacheLocs = new HashMap[Int, IndexedSeq[Seq[TaskLocation]]]
+  private val cacheLocs = new HashMap[Long, IndexedSeq[Seq[TaskLocation]]]
 
   /**
    * Tracks the latest epoch of a fully processed error related to the given executor. (We use
@@ -596,20 +596,20 @@ private[spark] class DAGScheduler(
   def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = rdd.stateLock.synchronized {
     cacheLocs.synchronized {
       // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
-      if (!cacheLocs.contains(rdd.id)) {
+      if (!cacheLocs.contains(rdd.idLong)) {
         // Note: if the storage level is NONE, we don't need to get locations from block manager.
         val locs: IndexedSeq[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
           IndexedSeq.fill(rdd.partitions.length)(Nil)
         } else {
           val blockIds =
-            rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
+            rdd.partitions.indices.map(index => RDDBlockId(rdd.idLong, index)).toArray[BlockId]
           blockManagerMaster.getLocations(blockIds).map { bms =>
             bms.map(bm => TaskLocation(bm.host, bm.executorId))
           }
         }
-        cacheLocs(rdd.id) = locs
+        cacheLocs(rdd.idLong) = locs
       }
-      cacheLocs(rdd.id)
+      cacheLocs(rdd.idLong)
     }
   }
 
@@ -1212,7 +1212,7 @@ private[spark] class DAGScheduler(
     // Walk the whole RDD graph once, collecting for each pipelined shuffleId the distinct consumer
     // RDDs that read it (for the fan-out check), the producer RDDs that write it (roots of producer
     // member stages), and every reliably-checkpointed RDD (to locate ones inside a member stage).
-    val consumersByShuffleId = new HashMap[Int, HashSet[Int]]
+    val consumersByShuffleId = new HashMap[Int, HashSet[Long]]
     val producerRoots = new HashSet[RDD[_]]           // RDDs that WRITE a pipelined shuffle
     val reliablyCheckpointed = new HashSet[RDD[_]]     // RDDs with a reliable checkpoint pending
     var hasNonDefaultResourceProfile = false          // any member RDD with a non-default RP
@@ -1230,7 +1230,8 @@ private[spark] class DAGScheduler(
       }
       rdd.dependencies.foreach {
         case pd: PipelinedShuffleDependency[_, _, _] =>
-          consumersByShuffleId.getOrElseUpdate(pd.shuffleId, new HashSet[Int]) += rdd.id
+          consumersByShuffleId.getOrElseUpdate(pd.shuffleId, new HashSet[Long]) +=
+            rdd.idLong
           producerRoots += pd.rdd
           enqueue(pd.rdd)
         case dep =>

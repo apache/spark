@@ -147,8 +147,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * A unique ID for this RDD (within its SparkContext), as a 64-bit value.
-   * Prefer this in new code. Under the default overflow policy, successfully
-   * created RDDs always have idLong within Int range, so [[id]] matches.
+   * Prefer this in new code, especially once ids exceed Int.MaxValue.
    */
   @Since("4.4.0")
   val idLong: Long = sc.newRddId()
@@ -157,10 +156,16 @@ abstract class RDD[T: ClassTag](
    * A unique ID for this RDD (within its SparkContext).
    *
    * Retained as Int for compatibility with existing callers such as
-   * `int id = rdd.id()` in Java. Equal to [[idLong]].toInt (two's-complement
-   * wrap if spark.rdd.id.overflow.policy=legacy after Int.MaxValue).
+   * `int id = rdd.id()` in Java. Throws if [[idLong]] exceeds Int.MaxValue;
+   * use [[idLong]] in that case.
    */
-  val id: Int = idLong.toInt
+  def id: Int = {
+    if (idLong > Int.MaxValue) {
+      throw new SparkException(
+        "RDD id " + idLong + " exceeds Int.MaxValue; use idLong instead.")
+    }
+    idLong.toInt
+  }
 
   /** A friendly name for this RDD */
   @transient var name: String = _
@@ -230,8 +235,8 @@ abstract class RDD[T: ClassTag](
       logWarning(log"RDD ${MDC(RDD_ID, id)} was locally checkpointed, its lineage has been" +
         log" truncated and cannot be recomputed after unpersisting")
     }
-    logInfo(log"Removing RDD ${MDC(RDD_ID, id)} from persistence list")
-    sc.unpersistRDD(id, blocking)
+    logInfo(log"Removing RDD ${MDC(RDD_ID, idLong)} from persistence list")
+    sc.unpersistRDD(idLong, blocking)
     storageLevel = StorageLevel.NONE
     this
   }
@@ -428,7 +433,7 @@ abstract class RDD[T: ClassTag](
         log"marked for checksum verification; nothing to seal.")
       return
     }
-    val unverified = SparkEnv.get.blockManager.master.sealRddChecksums(id)
+    val unverified = SparkEnv.get.blockManager.master.sealRddChecksums(idLong)
     if (unverified > 0) {
       // A partition with no checksum was materialized before this RDD was marked for verification
       // (e.g. a prior persist() + action), or under a deserialized storage level.
@@ -442,7 +447,7 @@ abstract class RDD[T: ClassTag](
    * Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached.
    */
   private[spark] def getOrCompute(partition: Partition, context: TaskContext): Iterator[T] = {
-    val blockId = RDDBlockId(id, partition.index)
+    val blockId = RDDBlockId(idLong, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
     SparkEnv.get.blockManager.getOrElseUpdateRDDBlock(
@@ -2083,7 +2088,7 @@ abstract class RDD[T: ClassTag](
       import Utils.bytesToString
 
       val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
-      val storageInfo = rdd.context.getRDDStorageInfo(_.id == rdd.id).map(info =>
+      val storageInfo = rdd.context.getRDDStorageInfo(_.id == rdd.idLong).map(info =>
         "    CachedPartitions: %d; MemorySize: %s; DiskSize: %s".format(
           info.numCachedPartitions, bytesToString(info.memSize), bytesToString(info.diskSize)))
       (s"$rdd [$persistence]" +: storageInfo).toImmutableArraySeq

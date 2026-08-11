@@ -1120,7 +1120,7 @@ private[spark] object JsonProtocol extends JsonUtils {
   }
 
   def unpersistRDDFromJson(json: JsonNode): SparkListenerUnpersistRDD = {
-    SparkListenerUnpersistRDD(json.get("RDD ID").extractInt)
+    SparkListenerUnpersistRDD(json.get("RDD ID").extractLong)
   }
 
   def applicationStartFromJson(json: JsonNode): SparkListenerApplicationStart = {
@@ -1518,14 +1518,14 @@ private[spark] object JsonProtocol extends JsonUtils {
   }
 
   def rddInfoFromJson(json: JsonNode): RDDInfo = {
-    val rddId = json.get("RDD ID").extractInt
+    val rddId = json.get("RDD ID").extractLong
     val name = json.get("Name").extractString
     val scope = jsonOption(json.get("Scope"))
       .map(_.asText)
       .map(RDDOperationScope.fromJson)
     val callsite = jsonOption(json.get("Callsite")).map(_.asText).getOrElse("")
     val parentIds = jsonOption(json.get("Parent IDs"))
-      .map { l => l.extractElements.map(_.extractInt).toArray.toImmutableArraySeq }
+      .map { l => l.extractElements.map(_.extractLong).toArray.toImmutableArraySeq }
       .getOrElse(Seq.empty)
     val storageLevel = storageLevelFromJson(json.get("Storage Level"))
     // The "Barrier" field was added in Spark 3.0.0:

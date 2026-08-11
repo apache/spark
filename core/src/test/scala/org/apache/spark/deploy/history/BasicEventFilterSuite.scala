@@ -34,7 +34,7 @@ class BasicEventFilterSuite extends SparkFunSuite {
     val liveJobs = Set(2)
     val liveStages = Set(2, 3)
     val liveTasks = Set(3L, 4L, 5L, 6L)
-    val liveRDDs = Set(3, 4, 5, 6)
+    val liveRDDs = Set(3L, 4L, 5L, 6L)
     val liveExecutors: Set[String] = Set("1", "2")
     val filterStats = FilterStatistics(
       // counts finished job 1

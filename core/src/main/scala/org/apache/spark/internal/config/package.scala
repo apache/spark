@@ -2494,20 +2494,6 @@ package object config {
     .booleanConf
     .createWithDefault(true)
 
-  private[spark] val RDD_ID_OVERFLOW_POLICY =
-    ConfigBuilder("spark.rdd.id.overflow.policy")
-      .doc("Policy when the RDD id counter would exceed Int.MaxValue. " +
-        "'fail' (default) aborts further RDD creation so overflow is not " +
-        "silent across BlockManager, UI, and other id-keyed state. " +
-        "'legacy' wraps like a 32-bit counter (negative ids) for emergency " +
-        "use only; BlockId parsing accepts those names. Prefer restarting " +
-        "the application over 'legacy'.")
-      .version("4.4.0")
-      .stringConf
-      .transform(_.toLowerCase(Locale.ROOT))
-      .checkValues(Set("fail", "legacy"))
-      .createWithDefault("fail")
-
   private[spark] val RDD_PARALLEL_LISTING_THRESHOLD =
     ConfigBuilder("spark.rdd.parallelListingThreshold")
       .version("2.0.0")

@@ -323,7 +323,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
    * Keys are (rdd ID, partition ID). Anything not present will return an empty
    * list of cache locations silently.
    */
-  val cacheLocations = new HashMap[(Int, Int), Seq[BlockManagerId]]
+  val cacheLocations = new HashMap[(Long, Int), Seq[BlockManagerId]]
   // stub out BlockManagerMaster.getLocations to use our cacheLocations
   class MyBlockManagerMaster(conf: SparkConf) extends BlockManagerMaster(null, null, conf, true) {
     override def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
@@ -852,7 +852,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("cache location preferences w/ dependency") {
     val baseRdd = new MyRDD(sc, 1, Nil).cache()
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
-    cacheLocations(baseRdd.id -> 0) =
+    cacheLocations(baseRdd.idLong -> 0) =
       Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
     submit(finalRdd, Array(0))
     val taskSet = taskSets(0)
@@ -863,11 +863,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("regression test for getCacheLocs") {
     val rdd = new MyRDD(sc, 3, Nil).cache()
-    cacheLocations(rdd.id -> 0) =
+    cacheLocations(rdd.idLong -> 0) =
       Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
-    cacheLocations(rdd.id -> 1) =
+    cacheLocations(rdd.idLong -> 1) =
       Seq(makeBlockManagerId("hostB"), makeBlockManagerId("hostC"))
-    cacheLocations(rdd.id -> 2) =
+    cacheLocations(rdd.idLong -> 2) =
       Seq(makeBlockManagerId("hostC"), makeBlockManagerId("hostD"))
     val locs = scheduler.getCacheLocs(rdd).map(_.map(_.host))
     assert(locs === Seq(Seq("hostA", "hostB"), Seq("hostB", "hostC"), Seq("hostC", "hostD")))
@@ -892,7 +892,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       tracker = mapOutputTracker)
     val rddC = new MyRDD(sc, 1, List(new OneToOneDependency(rddB))).cache()
     val rddD = new MyRDD(sc, 1, List(new OneToOneDependency(rddC)))
-    cacheLocations(rddC.id -> 0) =
+    cacheLocations(rddC.idLong -> 0) =
       Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
     submit(rddD, Array(0))
     assert(scheduler.runningStages.size === 1)
@@ -2224,8 +2224,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, new HashPartitioner(1))
     val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo), tracker = mapOutputTracker)
     submit(finalRdd, Array(0))
-    cacheLocations(shuffleTwoRdd.id -> 0) = Seq(makeBlockManagerId("hostD"))
-    cacheLocations(shuffleTwoRdd.id -> 1) = Seq(makeBlockManagerId("hostC"))
+    cacheLocations(shuffleTwoRdd.idLong -> 0) = Seq(makeBlockManagerId("hostD"))
+    cacheLocations(shuffleTwoRdd.idLong -> 1) = Seq(makeBlockManagerId("hostC"))
     // complete stage 0
     completeShuffleMapStageSuccessfully(0, 0, 2)
     // complete stage 1
@@ -6277,8 +6277,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep1), tracker = mapOutputTracker)
 
     // Cache for shuffleMapRdd1 are available
-    cacheLocations(shuffleMapRdd1.id -> 0) = Seq(makeBlockManagerId("hostA"))
-    cacheLocations(shuffleMapRdd1.id -> 1) = Seq(makeBlockManagerId("hostB"))
+    cacheLocations(shuffleMapRdd1.idLong -> 0) = Seq(makeBlockManagerId("hostA"))
+    cacheLocations(shuffleMapRdd1.idLong -> 1) = Seq(makeBlockManagerId("hostB"))
 
     val callCount = new AtomicInteger(0)
     doAnswer(invocation => {

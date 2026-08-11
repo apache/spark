@@ -38,14 +38,14 @@ private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilte
   private val liveExecutionToJobs = new mutable.HashMap[Long, mutable.Set[Int]]
   private val jobToStages = new mutable.HashMap[Int, Set[Int]]
   private val stageToTasks = new mutable.HashMap[Int, mutable.Set[Long]]
-  private val stageToRDDs = new mutable.HashMap[Int, Set[Int]]
+  private val stageToRDDs = new mutable.HashMap[Int, Set[Long]]
   private val stages = new mutable.HashSet[Int]
 
   private[history] def liveSQLExecutions: Set[Long] = liveExecutionToJobs.keySet.toSet
   private[history] def liveJobs: Set[Int] = liveExecutionToJobs.values.flatten.toSet
   private[history] def liveStages: Set[Int] = stageToRDDs.keySet.toSet
   private[history] def liveTasks: Set[Long] = stageToTasks.values.flatten.toSet
-  private[history] def liveRDDs: Set[Int] = stageToRDDs.values.flatten.toSet
+  private[history] def liveRDDs: Set[Long] = stageToRDDs.values.flatten.toSet
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     val executionIdString = jobStart.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -118,7 +118,7 @@ private[spark] class SQLLiveEntitiesEventFilter(
     liveJobs: Set[Int],
     liveStages: Set[Int],
     liveTasks: Set[Long],
-    liveRDDs: Set[Int])
+    liveRDDs: Set[Long])
   extends JobEventFilter(None, liveJobs, liveStages, liveTasks, liveRDDs) with Logging {
 
   logDebug(s"live SQL executions : $liveSQLExecutions")

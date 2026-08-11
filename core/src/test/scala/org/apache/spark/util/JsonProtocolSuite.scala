@@ -550,7 +550,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     // "Callsite" was introduced in Spark 1.6.0
     // "Barrier" was introduced in Spark 3.0.0
     // "DeterministicLevel" was introduced in Spark 3.2.0
-    val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, true, Seq(1, 6, 8),
+    val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, true, Seq(1L, 6L, 8L),
       "callsite", Some(new RDDOperationScope("fable")), DeterministicLevel.INDETERMINATE)
     val oldRddInfoJson = toJsonString(JsonProtocol.rddInfoToJson(rddInfo, _))
       .removeField("Parent IDs")
@@ -1503,7 +1503,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long,
       deterministic: DeterministicLevel.Value) = {
     val r =
-      new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, false, Seq(1, 4, 7), a.toString,
+      new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, false, Seq(1L, 4L, 7L), a.toString,
         outputDeterministicLevel = deterministic)
     r.numCachedPartitions = c
     r.memSize = d

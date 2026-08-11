@@ -94,7 +94,7 @@ class BlockManagerMasterEndpoint(
 
   // rddId -> its sealed block ids, letting `removeRdd` reclaim the `sealedChecksums` tombstones by
   // rddId without scanning the whole map.
-  private val sealedBlocksByRdd = new mutable.HashMap[Int, mutable.HashSet[RDDBlockId]]
+  private val sealedBlocksByRdd = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
 
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
@@ -365,7 +365,7 @@ class BlockManagerMasterEndpoint(
       }
   }
 
-  private def removeRdd(rddId: Int): Future[Seq[Int]] = {
+  private def removeRdd(rddId: Long): Future[Seq[Int]] = {
     // First remove the metadata for the given RDD, and then asynchronously remove the blocks
     // from the storage endpoints.
 
@@ -956,7 +956,7 @@ class BlockManagerMasterEndpoint(
    *
    * Returns the number of present blocks that had no recorded checksum and so could not be sealed.
    */
-  private def sealRddChecksums(rddId: Int): Int = {
+  private def sealRddChecksums(rddId: Long): Int = {
     val rddBlocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId).toSeq
     var unchecksummed = 0
     rddBlocks.foreach { blockId =>
@@ -991,7 +991,7 @@ class BlockManagerMasterEndpoint(
    * message-handler thread, so it observes a consistent snapshot of the directory and the checksum
    * maps.
    */
-  private def verifyRddChecksumSeal(rddId: Int): Option[String] = {
+  private def verifyRddChecksumSeal(rddId: Long): Option[String] = {
     val rddBlocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
     rddBlocks.iterator.map { blockId =>
       val sealedValue = Option(sealedChecksums.get(blockId)).map(_.longValue)

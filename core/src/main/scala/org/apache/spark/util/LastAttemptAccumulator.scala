@@ -124,7 +124,7 @@ import org.apache.spark.scheduler.TaskInfo
 
 
 private class LastAttemptRDDVals[@specialized T](
-    val rddId: Int,
+    val rddId: Long,
     val rddScopeId: Option[String],
     // Array of partial metric values, indexed by RDD partition id.
     // Metric updates to a given RDD partition can come from different stageAttempts if a retry
@@ -345,7 +345,7 @@ private object LastAttemptRDDVals {
   val EMPTY_ID: Int = -1
 
   def apply[@specialized T](
-      rddId: Int,
+      rddId: Long,
       rddScopeId: Option[String],
       numPartitions: Int)(implicit ct: ClassTag[T]): LastAttemptRDDVals[T] = {
     new LastAttemptRDDVals[T](rddId, rddScopeId, new Array[T](numPartitions))
@@ -395,7 +395,7 @@ private class LastAttemptMap[K, V] {
 
 private case class AccumulatorPartialVal[PARTIAL](
     partialMergeVal: PARTIAL,
-    rddId: Int,
+    rddId: Long,
     rddPartitionId: Int,
     rddNumPartitions: Int,
     rddScopeId: Option[String],
@@ -482,13 +482,13 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
 
   // For every RDD that participated in the computation of this accumulator, keep the partial
   // value of the accumulator for the latest stage and stage attempt that computed it.
-  // Keyed by rdd.id.
+  // Keyed by rdd.idLong.
   // Only kept and accessed on the driver, in the instance of the LastAttemptAccumulator that was
   // created and registered with AccumulatorContext with AccumulatorV2.register().
   // Should not be copied / reset by the implementation of copy() / reset() functions.
   // Transient: only needed on the driver and doesn't need to be serialized.
   @transient
-  private var lastAttemptRddsMap: LastAttemptMap[Int, LastAttemptRDDVals[PARTIAL]] = _
+  private var lastAttemptRddsMap: LastAttemptMap[Long, LastAttemptRDDVals[PARTIAL]] = _
 
   // ClassTag for PARTIAL, captured at initialization time.
   @transient private var partialClassTag: ClassTag[PARTIAL] = _
@@ -536,7 +536,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
     assert(lastAttemptRddsMap == null)
     assert(lastAttemptDirectDriverValue == null)
     partialClassTag = ct
-    lastAttemptRddsMap = new LastAttemptMap[Int, LastAttemptRDDVals[PARTIAL]]
+    lastAttemptRddsMap = new LastAttemptMap[Long, LastAttemptRDDVals[PARTIAL]]
     lastAttemptDirectDriverValue = None
     lastAttemptAccumulatorInitialized = true
   } catch {
@@ -730,7 +730,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
 
     val update = AccumulatorPartialVal(
       partialMergeVal = lastAttemptOther.partialMergeVal,
-      rddId = rdd.id,
+      rddId = rdd.idLong,
       rddPartitionId = taskInfo.partitionId,
       rddNumPartitions = rdd.getNumPartitions,
       rddScopeId = rdd.scope.map(_.id),
@@ -807,7 +807,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
   }
 
   /** Accumulates last attempt values from given RDD into an acc. */
-  private def lastAttemptValueAggregateInternal(rddId: Int, acc: this.type) = {
+  private def lastAttemptValueAggregateInternal(rddId: Long, acc: this.type) = {
     // Note: even if the given RDD is not present, we can't tell if it executed but just never
     // updated this accumulator, so we still report the zero value back.
     for {
@@ -831,7 +831,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
    *
    * @return None if the last attempt value cannot be established, Some(value) otherwise.
    */
-  def lastAttemptValueForRDDIds(rddIds: Seq[Int]): Option[OUT] = try {
+  def lastAttemptValueForRDDIds(rddIds: Seq[Long]): Option[OUT] = try {
     if (lastAttemptAccumulatorInvalid) return None
     assertValid()
     if (lastAttemptDirectDriverValue.isDefined) {
@@ -859,7 +859,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
    *
    * @return None if the last attempt value cannot be established, Some(value) otherwise.
    */
-  def lastAttemptValueForRDDId(rddId: Int): Option[OUT] = try {
+  def lastAttemptValueForRDDId(rddId: Long): Option[OUT] = try {
     lastAttemptValueForRDDIds(Seq(rddId))
   } catch {
     case NonFatal(e) =>
@@ -968,7 +968,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
   }
 
   /** Visible for testing */
-  def getHighestRDDId: Option[Int] = {
+  def getHighestRDDId: Option[Long] = {
     if (lastAttemptRddsMap.nonEmpty) Some(lastAttemptRddsMap.keys.max) else None
   }
 

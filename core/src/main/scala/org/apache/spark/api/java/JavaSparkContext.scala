@@ -824,9 +824,10 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    *
    * @note This does not necessarily mean the caching or computation was successful.
    */
-  def getPersistentRDDs: JMap[java.lang.Integer, JavaRDD[_]] = {
-    sc.getPersistentRDDs.toMap.transform((_, s) => JavaRDD.fromRDD(s))
-      .asJava.asInstanceOf[JMap[java.lang.Integer, JavaRDD[_]]]
+  def getPersistentRDDs: JMap[java.lang.Long, JavaRDD[_]] = {
+    sc.getPersistentRDDs.map { case (k, v) =>
+      (java.lang.Long.valueOf(k), JavaRDD.fromRDD(v))
+    }.asJava
   }
 
 }

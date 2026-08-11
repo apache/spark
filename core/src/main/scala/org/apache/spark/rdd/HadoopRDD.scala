@@ -51,12 +51,12 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
  */
-private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: InputSplit)
+private[spark] class HadoopPartition(rddId: Long, override val index: Int, s: InputSplit)
   extends Partition {
 
   val inputSplit = new SerializableWritable[InputSplit](s)
 
-  override def hashCode(): Int = 31 * (31 + rddId) + index
+  override def hashCode(): Int = 31 * (31 + java.lang.Long.hashCode(rddId)) + index
 
   override def equals(other: Any): Boolean = super.equals(other)
 
@@ -252,7 +252,7 @@ class HadoopRDD[K, V](
       }
       val array = new Array[Partition](inputSplits.size)
       for (i <- 0 until inputSplits.size) {
-        array(i) = new HadoopPartition(id, i, inputSplits(i))
+        array(i) = new HadoopPartition(idLong, i, inputSplits(i))
       }
       array
     } catch {

@@ -1521,14 +1521,14 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void testGetPersistentRDDs() {
-    java.util.Map<Integer, JavaRDD<?>> cachedRddsMap = sc.getPersistentRDDs();
+    java.util.Map<Long, JavaRDD<?>> cachedRddsMap = sc.getPersistentRDDs();
     assertTrue(cachedRddsMap.isEmpty());
     JavaRDD<String> rdd1 = sc.parallelize(Arrays.asList("a", "b")).setName("RDD1").cache();
     JavaRDD<String> rdd2 = sc.parallelize(Arrays.asList("c", "d")).setName("RDD2").cache();
     cachedRddsMap = sc.getPersistentRDDs();
     assertEquals(2, cachedRddsMap.size());
-    assertEquals("RDD1", cachedRddsMap.get(0).name());
-    assertEquals("RDD2", cachedRddsMap.get(1).name());
+    assertEquals("RDD1", cachedRddsMap.get(0L).name());
+    assertEquals("RDD2", cachedRddsMap.get(1L).name());
   }
 
 }

@@ -1297,7 +1297,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       description = Some("test description"),
       details = details,
       schedulingPool = schedulingPool,
-      rddIds = Seq(1, 2, 3, 4, 5, 6),
+      rddIds = Seq(1L, 2L, 3L, 4L, 5L, 6L),
       accumulatorUpdates = accumulatorUpdates,
       tasks = tasks,
       executorSummary = executorSummary,
