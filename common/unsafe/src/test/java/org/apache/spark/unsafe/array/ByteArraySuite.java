@@ -122,4 +122,73 @@ public class ByteArraySuite {
     byte[] result4 = ByteArray.concatWS(separator, x4, y4);
     Assertions.assertArrayEquals(null, result4);
   }
+
+  @Test
+  public void testSubStringSQL() {
+    byte[] bytes = new byte[]{(byte) 1, (byte) 2, (byte) 3, (byte) 4, (byte) 5};
+    byte[] empty = new byte[0];
+
+    // Positive, zero and negative positions.
+    Assertions.assertArrayEquals(new byte[]{(byte) 2, (byte) 3},
+            ByteArray.subStringSQL(bytes, 2, 2));
+    Assertions.assertArrayEquals(new byte[]{(byte) 1, (byte) 2},
+            ByteArray.subStringSQL(bytes, 0, 2));
+    Assertions.assertArrayEquals(new byte[]{(byte) 4, (byte) 5},
+            ByteArray.subStringSQL(bytes, -2, 2));
+
+    // A position past the end of the input, and a length that runs past it.
+    Assertions.assertArrayEquals(empty, ByteArray.subStringSQL(bytes, 6, 2));
+    Assertions.assertArrayEquals(new byte[]{(byte) 4, (byte) 5},
+            ByteArray.subStringSQL(bytes, 4, 100));
+
+    // A non-positive length yields the empty byte sequence.
+    Assertions.assertArrayEquals(empty, ByteArray.subStringSQL(bytes, 2, 0));
+    Assertions.assertArrayEquals(empty, ByteArray.subStringSQL(bytes, 2, -1));
+
+    // SPARK-58708: `start + len` must be computed without overflowing the `int` range.
+    // Before the fix these returned a byte sequence longer than the input, zero-padded by
+    // `Arrays.copyOfRange`, instead of the empty byte sequence.
+    Assertions.assertArrayEquals(empty,
+            ByteArray.subStringSQL(bytes, -1207959552, -1207959552));
+    Assertions.assertArrayEquals(empty,
+            ByteArray.subStringSQL(bytes, -2147483647, Integer.MIN_VALUE));
+    Assertions.assertArrayEquals(empty,
+            ByteArray.subStringSQL(bytes, Integer.MIN_VALUE, 5));
+
+    // The same offsets, in combinations that do have a non-empty result.
+    Assertions.assertArrayEquals(bytes, ByteArray.subStringSQL(bytes, 1, Integer.MAX_VALUE));
+    Assertions.assertArrayEquals(new byte[]{(byte) 1, (byte) 2, (byte) 3, (byte) 4},
+            ByteArray.subStringSQL(bytes, Integer.MIN_VALUE, Integer.MAX_VALUE));
+  }
+
+  @Test
+  public void testPad() {
+    byte[] bytes = new byte[]{(byte) 1, (byte) 2};
+    byte[] pad = new byte[]{(byte) 3, (byte) 4};
+    byte[] emptyPad = new byte[0];
+    byte[] empty = new byte[0];
+
+    // Sanity: positive lengths are unaffected.
+    Assertions.assertArrayEquals(new byte[]{(byte) 3, (byte) 4, (byte) 3, (byte) 1, (byte) 2},
+            ByteArray.lpad(bytes, 5, pad));
+    Assertions.assertArrayEquals(new byte[]{(byte) 1, (byte) 2, (byte) 3, (byte) 4, (byte) 3},
+            ByteArray.rpad(bytes, 5, pad));
+    Assertions.assertArrayEquals(new byte[]{(byte) 1}, ByteArray.lpad(bytes, 1, pad));
+    Assertions.assertArrayEquals(new byte[]{(byte) 1}, ByteArray.rpad(bytes, 1, pad));
+
+    // SPARK-58708: a non-positive length yields the empty byte sequence, matching
+    // `UTF8String.lpad` and `UTF8String.rpad`. Before the fix a negative length reached
+    // `new byte[len]` and threw `NegativeArraySizeException`.
+    for (int len : new int[]{0, -1, -100, Integer.MIN_VALUE}) {
+      Assertions.assertArrayEquals(empty, ByteArray.lpad(bytes, len, pad));
+      Assertions.assertArrayEquals(empty, ByteArray.rpad(bytes, len, pad));
+      // The empty-padding-pattern path allocates separately and must be guarded too.
+      Assertions.assertArrayEquals(empty, ByteArray.lpad(bytes, len, emptyPad));
+      Assertions.assertArrayEquals(empty, ByteArray.rpad(bytes, len, emptyPad));
+    }
+
+    // A null input or padding pattern still yields null.
+    Assertions.assertArrayEquals(null, ByteArray.lpad(null, -1, pad));
+    Assertions.assertArrayEquals(null, ByteArray.rpad(bytes, -1, null));
+  }
 }
