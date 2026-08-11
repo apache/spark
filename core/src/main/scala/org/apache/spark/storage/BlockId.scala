@@ -263,7 +263,12 @@ case class CacheId(sessionUUID: String, hash: String) extends BlockId {
 
 @DeveloperApi
 object BlockId {
-  val RDD = "rdd_([0-9]+)_([0-9]+)".r
+  // RDD ids come from SparkContext.newRddId (AtomicLong). Under the default
+  // overflow policy they stay non-negative and fit in Int. The optional minus
+  // supports legacy wrap-around (spark.rdd.id.overflow.policy=legacy) and any
+  // negative names already in flight, so BlockId.apply does not throw
+  // UnrecognizedBlockId for names like rdd_-1330910599_36.
+  val RDD = "rdd_(-?[0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r

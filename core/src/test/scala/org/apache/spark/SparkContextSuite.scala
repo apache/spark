@@ -47,6 +47,7 @@ import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.storage.{BlockId, RDDBlockId}
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -1520,6 +1521,47 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .set(MEMORY_OFFHEAP_SIZE, 5L * 1024 * 1024)
     sc = new SparkContext(conf)
     assert(sc.env.memoryManager.maxOffHeapStorageMemory > 0)
+  }
+
+  test("SPARK-41246: id and idLong stay in sync for normal RDD ids") {
+    val conf = new SparkConf().setAppName("test").setMaster("local[1]")
+    sc = new SparkContext(conf)
+    val rdd = sc.parallelize(1 to 2, 1)
+    assert(rdd.idLong === rdd.id.toLong)
+    assert(rdd.id >= 0)
+  }
+
+  test("SPARK-41246: fail policy rejects RDD id overflow") {
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local[1]")
+      .set(RDD_ID_OVERFLOW_POLICY, "fail")
+    sc = new SparkContext(conf)
+    sc.setNextRddIdForTesting(Int.MaxValue.toLong)
+    // Consumes Int.MaxValue (allowed, with warning).
+    val last = sc.parallelize(Seq(1), 1)
+    assert(last.id === Int.MaxValue)
+    assert(last.idLong === Int.MaxValue.toLong)
+    val err = intercept[SparkException] {
+      sc.parallelize(Seq(2), 1)
+    }
+    assert(err.getMessage.contains("Int.MaxValue"))
+    assert(err.getMessage.contains("overflow"))
+  }
+
+  test("SPARK-41246: legacy policy wraps and BlockId still parses") {
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local[1]")
+      .set(RDD_ID_OVERFLOW_POLICY, "legacy")
+    sc = new SparkContext(conf)
+    sc.setNextRddIdForTesting(Int.MaxValue.toLong + 1L)
+    val rdd = sc.parallelize(Seq(1), 1)
+    assert(rdd.idLong === Int.MaxValue.toLong + 1L)
+    assert(rdd.id === Int.MinValue) // two's-complement wrap of the Int view
+    val block = RDDBlockId(rdd.id, 0)
+    assert(block.name === s"rdd_${rdd.id}_0")
+    assert(BlockId(block.name) === block)
   }
 }
 

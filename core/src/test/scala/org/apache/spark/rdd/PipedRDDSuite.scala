@@ -275,7 +275,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
   def generateFakeHadoopPartition(): HadoopPartition = {
     val split = new FileSplit(new Path("/some/path"), 0, 1,
       Array[String]("loc1", "loc2", "loc3", "loc4", "loc5"))
-    new HadoopPartition(sc.newRddId(), 1, split)
+    new HadoopPartition(sc.newRddId().toInt, 1, split)
   }
 
 }

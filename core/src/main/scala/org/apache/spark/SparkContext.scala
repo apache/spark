@@ -21,7 +21,7 @@ import java.io._
 import java.net.URI
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
 import scala.collection.Map
 import scala.collection.concurrent.{Map => ScalaConcurrentMap}
@@ -2901,10 +2901,55 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def newShuffleId(): Int = nextShuffleId.getAndIncrement()
 
-  private val nextRddId = new AtomicInteger(0)
+  private val nextRddId = new AtomicLong(0)
 
-  /** Register a new RDD, returning its RDD ID */
-  private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+  /**
+   * Testing helper: set the next value that [[newRddId]] will return.
+   */
+  private[spark] def setNextRddIdForTesting(value: Long): Unit = nextRddId.set(value)
+
+  /**
+   * Register a new RDD, returning its 64-bit id.
+   *
+   * The public [[org.apache.spark.rdd.RDD.id]] API remains a 32-bit Int for
+   * source/binary compatibility (`int id = rdd.id()` still compiles). The
+   * allocator uses AtomicLong so overflow past Int.MaxValue is detected
+   * instead of silently wrapping to negative values (which breaks
+   * BlockId parsing and other id-keyed state).
+   *
+   * Under spark.rdd.id.overflow.policy=fail (default), allocation past
+   * Int.MaxValue throws. Under 'legacy', ids wrap like AtomicInteger and
+   * BlockId accepts the resulting negative names.
+   */
+  private[spark] def newRddId(): Long = {
+    val id = nextRddId.getAndIncrement()
+    if (id > Int.MaxValue) {
+      conf.get(RDD_ID_OVERFLOW_POLICY) match {
+        case "legacy" =>
+          if (id == Int.MaxValue.toLong + 1L) {
+            logError("The RDD id counter has overflowed Int.MaxValue under " +
+              "spark.rdd.id.overflow.policy=legacy. Negative RDD ids will be " +
+              "used; this can affect BlockManager, UI, and other id-keyed " +
+              "state. Restart the application. Prefer the default 'fail' " +
+              "policy.")
+          }
+          id
+        case _ =>
+          // Stay pegged so subsequent allocations keep failing clearly.
+          nextRddId.set(id)
+          throw new SparkException(
+            "RDD id counter would exceed Int.MaxValue (" + Int.MaxValue +
+              "). This application has created too many RDDs; restart it. " +
+              "Set spark.rdd.id.overflow.policy=legacy only as an emergency " +
+              "workaround (negative ids; not recommended).")
+      }
+    } else if (id == Int.MaxValue) {
+      logWarning("Allocated the last valid 32-bit RDD id (Int.MaxValue). " +
+        "Further RDD creation will fail under " +
+        "spark.rdd.id.overflow.policy=fail.")
+    }
+    id
+  }
 
   /**
    * Registers listeners specified in spark.extraListeners, then starts the listener bus.

@@ -145,8 +145,22 @@ abstract class RDD[T: ClassTag](
   /** The SparkContext that created this RDD. */
   def sparkContext: SparkContext = sc
 
-  /** A unique ID for this RDD (within its SparkContext). */
-  val id: Int = sc.newRddId()
+  /**
+   * A unique ID for this RDD (within its SparkContext), as a 64-bit value.
+   * Prefer this in new code. Under the default overflow policy, successfully
+   * created RDDs always have idLong within Int range, so [[id]] matches.
+   */
+  @Since("4.4.0")
+  val idLong: Long = sc.newRddId()
+
+  /**
+   * A unique ID for this RDD (within its SparkContext).
+   *
+   * Retained as Int for compatibility with existing callers such as
+   * `int id = rdd.id()` in Java. Equal to [[idLong]].toInt (two's-complement
+   * wrap if spark.rdd.id.overflow.policy=legacy after Int.MaxValue).
+   */
+  val id: Int = idLong.toInt
 
   /** A friendly name for this RDD */
   @transient var name: String = _
