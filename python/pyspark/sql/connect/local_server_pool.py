@@ -18,7 +18,6 @@
 """Filesystem-backed state storage for local Spark Connect server pools.
 
 This internal foundation owns the pool directory layout, locking, and JSON state-file access.
-Member validation, claiming, and process lifecycle are layered on top in follow-up changes.
 """
 
 import contextlib
@@ -31,10 +30,18 @@ from typing import Any, Dict, List, Optional, Tuple
 class PoolDirectory:
     """Path layout, file access, and the cross-process lock of one pool directory.
 
-    Used as a context manager that holds the directory's exclusive lock::
+    Used as a context manager that holds the directory's exclusive lock:
 
-        with PoolDirectory() as directory:
-            ...read and write state files...
+        directory = PoolDirectory()
+        with directory:
+            path = directory.pending_path(uid)
+            directory.write_json(path, data)
+            stored = directory.read_json(path)
+            directory.rename(path, directory.server_path(uid))
+
+    Entering the context creates the directory and acquires its lock. Callers then use path
+    builders and the locked accessors to enumerate, read, write, rename, or remove state. Exiting
+    the context releases the lock.
 
     Pool operations are infrequent, so one exclusive lock for every state transition is simpler
     than a finer-grained scheme. A context can be entered again after exiting, allowing callers
