@@ -252,4 +252,56 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalRoot
     when(bm.TempFileBasedBlockStoreUpdater).thenAnswer(_ => throw new Exception())
     KubernetesLocalDiskShuffleExecutorComponents.recoverDiskStore(sparkConf, bm)
   }
+
+  // A sentinel thrown from the block-store updater. Reaching it proves the scan actually
+  // walked down to a recoverable shuffle file, so the test cannot pass vacuously.
+  private val sentinelMessage = "reached a shuffle file"
+
+  private def sentinelBlockManager(): BlockManager = {
+    val bm = mock(classOf[BlockManager])
+    when(bm.TempFileBasedBlockStoreUpdater)
+      .thenAnswer(_ => throw new IllegalStateException(sentinelMessage))
+    bm
+  }
+
+  private def createRecoverableShuffleFile(localDir: String): Unit = {
+    val dir = new File(localDir, "blockmgr-z/00")
+    Files.createDirectories(dir.toPath())
+    Files.write(new File(dir, "shuffle_0_0_0.index").toPath(), Array[Byte](0, 0, 0, 0))
+  }
+
+  test("SPARK-58693: a local dir with fewer than three path components is skipped") {
+    val deepDir = conf.get("spark.local.dir") + "/spark-x/executor-y"
+    createRecoverableShuffleFile(deepDir)
+    // "/data" is what the Local Storage example in running-on-kubernetes.md configures, and
+    // walking two levels up from it yields null. The deep dir must still be recovered.
+    val sparkConf = conf.clone.set("spark.local.dir", s"/data,$deepDir")
+
+    val m = intercept[IllegalStateException] {
+      KubernetesLocalDiskShuffleExecutorComponents
+        .recoverDiskStore(sparkConf, sentinelBlockManager())
+    }.getMessage
+    assert(m.contains(sentinelMessage))
+  }
+
+  test("SPARK-58693: an unlistable directory in the scan does not abort recovery") {
+    val deepDir = conf.get("spark.local.dir") + "/spark-x/executor-y"
+    createRecoverableShuffleFile(deepDir)
+    // Shaped like the ext4 lost+found that sits at the root of a freshly formatted PVC: a
+    // directory the executor can see but not list, so listFiles() returns null.
+    val unlistable = new File(conf.get("spark.local.dir") + "/spark-x/lost+found")
+    Files.createDirectories(unlistable.toPath())
+    assert(unlistable.setReadable(false, false))
+    assume(!unlistable.canRead, "requires an unreadable directory; skipped when run as root")
+
+    try {
+      val m = intercept[IllegalStateException] {
+        KubernetesLocalDiskShuffleExecutorComponents
+          .recoverDiskStore(conf.clone.set("spark.local.dir", deepDir), sentinelBlockManager())
+      }.getMessage
+      assert(m.contains(sentinelMessage))
+    } finally {
+      unlistable.setReadable(true, false)
+    }
+  }
 }
