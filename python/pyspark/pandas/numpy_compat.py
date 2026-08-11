@@ -154,9 +154,15 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
         .when(c1_double == 0, c1_double / c2_double)
         .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0))),
     ).otherwise(
+        # np.floor_divide on pandas Series returns IEEE values for an integral zero divisor.
         F.when(c1.isNull() | F.isnan(c1), c1_double)
         .when(c2.isNull() | F.isnan(c2), c2_double)
-        .when(c2_double == 0, F.lit(0.0))
+        .when(
+            c2_double == 0,
+            F.when(c1_double == 0, F.lit(float("nan")))
+            .when(c1_double < 0, F.lit(float("-inf")))
+            .otherwise(F.lit(float("inf"))),
+        )
         .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0)))
     )
 

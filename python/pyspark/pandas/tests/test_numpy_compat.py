@@ -253,8 +253,8 @@ class NumPyCompatTestsMixin:
         for pdf in (
             pd.DataFrame(
                 {
-                    "x1": [-64, -2, -1, 0, 1, 2, 64],
-                    "x2": [2, 3, -2, -3, -3, 0, 2],
+                    "x1": [-64, -2, -1, 0, 1, 2, 64, -1, 0],
+                    "x2": [2, 3, -2, -3, -3, 0, 2, 0, 0],
                 }
             ),
             pd.DataFrame(
