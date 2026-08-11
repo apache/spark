@@ -92,6 +92,38 @@ def _create_udf(
     return udf_obj._wrapped()
 
 
+# Eval types the transpiler is allowed to rewrite.
+#
+# The first two are per-row scalar Python UDFs, where the function receives one Python scalar
+# per argument per row and returns one Python scalar. SQL_ARROW_BATCHED_UDF is the
+# Arrow-OPTIMIZED regular Python UDF; Arrow is only the transport there -- the worker still
+# calls the function once per row with Python scalars -- so its Python-level semantics are
+# exactly what the transpiler reproduces. Mind the naming collision: SQL_SCALAR_ARROW_UDF
+# (250) is a genuinely vectorized UDF that receives a pyarrow.Array, and
+# SQL_ARROW_BATCHED_UDF (101) is not.
+#
+# SQL_SCALAR_PANDAS_UDF is genuinely vectorized: the function receives a pandas.Series per
+# argument and must return a Series. It is admitted because a Series applies the arithmetic
+# and text operators element-wise with the same result Catalyst produces -- but only those.
+# Everything the scalar transpiler lowers around control flow and comparison would be wrong
+# on a Series (`if s:` raises, `s is None` is always False, `s < 0` treats a missing value as
+# False), so pyspark.sql.transpile gates the body on a strict allowlist and reproduces
+# pandas' NaN-is-missing rule explicitly. Read that module's "Scalar pandas UDFs" section
+# before widening this set.
+#
+# Membership rather than a negation, deliberately: a newly added eval type must be admitted
+# here consciously rather than inheriting transpilation because it failed to match an
+# exclusion. pyspark.sql.tests.arrow.test_arrow_python_udf_transpile has a canary over every
+# PythonEvalType that fails until a new one is triaged.
+_TRANSPILABLE_EVAL_TYPES = frozenset(
+    {
+        PythonEvalType.SQL_BATCHED_UDF,
+        PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+    }
+)
+
+
 def _create_py_udf(
     f: Callable[..., Any],
     returnType: "DataTypeOrString",
@@ -254,9 +286,10 @@ class UserDefinedFunction:
         # transpilation (or mis-trigger the ANSI warning below).
         #
         # Each conf read is a JVM roundtrip, so keep the default construction
-        # path cheap: the experimental gate is only read for deterministic
-        # batched UDFs (the only shape we transpile), and the ANSI conf is only
-        # read once the gate is known to be on. When ``default`` is given it is
+        # path cheap: the experimental gate is only read for a deterministic UDF of a
+        # transpilable eval type, and the ANSI conf is only read once that gate is known to
+        # be on. The two regime confs below are read only for the one eval type each
+        # governs. When ``default`` is given it is
         # passed through to ``RuntimeConfig.get`` so construction never depends
         # on the JVM having the (experimental) conf registered -- e.g. a newer
         # Python client against an older driver. No default is passed for
@@ -274,8 +307,39 @@ class UserDefinedFunction:
         try:
             transpile_enabled = (
                 deterministic
-                and evalType == PythonEvalType.SQL_BATCHED_UDF
+                and evalType in _TRANSPILABLE_EVAL_TYPES
                 and _conf_is_true("spark.sql.experimental.optimizer.transpilePyUDFs", "false")
+                # The legacy pandas conversion regime routes an Arrow-optimized UDF's
+                # inputs and outputs through pandas, which changes what the Python
+                # function actually receives: an integer column containing NULL arrives
+                # as float64 NaN, so `x is None` is False where the transpiled
+                # `isnull(a)` is true. The transpiler models the non-legacy Arrow
+                # semantics only, so refuse to rewrite in that regime. This conf can also
+                # be flipped after construction, so ConvertToCatalyst repeats the check.
+                and not (
+                    evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF
+                    and _conf_is_true(
+                        "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled",
+                        "false",
+                    )
+                )
+                # A scalar pandas UDF's NaN handling depends on this conf, and not in a way
+                # any single expression can cover. The return path masks with
+                # ``series.isnull()`` only for a numpy-backed Series; a pandas masked
+                # extension array is handed to Arrow with ``mask=None`` instead (see
+                # ``PandasToArrowConversion.convert``), and its ``isnull()`` is False for NaN
+                # anyway. So with this conf off a NaN result arrives as NULL, and with it on
+                # the same NaN arrives as NaN. The transpiler reproduces the off case (the
+                # default) with an isnan-to-NULL normalization, which would be exactly wrong
+                # here, so refuse instead. Also re-checked in ConvertToCatalyst, since the
+                # conf can be flipped after construction.
+                and not (
+                    evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+                    and _conf_is_true(
+                        "spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype",
+                        "false",
+                    )
+                )
             )
             # Transpilation only attempts to reproduce ANSI-mode Spark SQL
             # semantics (no silent integer overflow, divide-by-zero raises,
@@ -308,14 +372,17 @@ class UserDefinedFunction:
                     self._transpiled_param_names,
                     self._transpiled_input_categories,
                     positional_only,
-                ) = _transpile_func(session, func, self.returnType)
+                ) = _transpile_func(session, func, self.returnType, evalType)
                 self._positional_only_param_names = frozenset(positional_only)
                 if not self.transpiled:
                     detail = f": {errors}" if errors else ""
                     warnings.warn(f"Unable to transpile UDF {func}{detail}")
         except PySparkNotImplementedError:
-            # ``self.returnType`` parses DDL and rejects CHAR/VARCHAR. That is
-            # not a transpilation failure; do not swallow it as a warning.
+            # ``self.returnType`` parses DDL and rejects CHAR/VARCHAR, and runs
+            # ``_check_return_type``, which rejects return types the eval type
+            # cannot represent (e.g. the interval types for the Arrow-optimized
+            # eval type). Those are user errors, not transpilation failures; do
+            # not swallow them as a warning.
             raise
         except Exception as e:
             # An inability to transpile must never break a working UDF -- fall
