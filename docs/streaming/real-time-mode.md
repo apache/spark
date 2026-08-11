@@ -98,12 +98,13 @@ merged into state, and emitted -- all without a batch boundary. The regrouped st
 in Spark's usual state store and checkpointed each batch, so the exactly-once and recovery
 guarantees are the same as the micro-batch engine (see [Fault Tolerance](#fault-tolerance)).
 
-This mechanism is enabled automatically for supported stateful queries in Real-time Mode; there is
-nothing to configure. It applies only to the shuffle a supported stateful operator needs -- a bare
-`repartition` (a shuffle with no stateful operator) is still not supported. Shuffles that would
-require a separate preparatory job, such as range partitioning (`repartitionByRange`, or an
-`ORDER BY` that plans to a range shuffle), are also not supported, because that preparatory job
-cannot complete while the source keeps producing; such a query fails to start with
+This mechanism is enabled automatically in Real-time Mode; there is nothing to configure. It applies
+to every shuffle on the streaming path -- the shuffle a stateful operator needs, and also a bare
+`repartition` (a hash or round-robin shuffle with no stateful operator), which runs as a pipelined
+shuffle in the same way. The one exception is a shuffle that would require a separate preparatory
+job: range partitioning (`repartitionByRange`, or an `ORDER BY` that plans to a range shuffle) needs
+a sampling job to compute range bounds, and that job cannot complete while the source keeps
+producing, so such a query fails to start with
 `STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST`.
 
 ## Batch Duration Is a Checkpoint Interval
@@ -333,12 +334,10 @@ fails to start with `STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST`
 - Stateful operations other than deduplication and aggregation: **stream-stream joins**,
   `flatMapGroupsWithState`, `transformWithState`, session-window aggregation, and
   `dropDuplicatesWithinWatermark`.
-- A bare **`repartition`** -- a shuffle with no stateful operator. Real-time Mode runs a shuffle only
-  as part of a supported stateful operator (see
-  [How Stateful Queries Work](#how-stateful-queries-work)).
 - **Range partitioning**: `repartitionByRange`, or an `ORDER BY` / sort that plans to a range
   shuffle, because computing range bounds needs a separate sampling job that cannot complete while
-  the source keeps producing.
+  the source keeps producing. (A plain `repartition` -- hash or round-robin -- is supported; it runs
+  as a pipelined shuffle. See [How Stateful Queries Work](#how-stateful-queries-work).)
 
 **Distinct aggregates** such as `count(distinct ...)` are not supported either, but this is a
 general Structured Streaming restriction rather than a Real-time Mode one: any streaming distinct
@@ -717,15 +716,17 @@ spark
 
 A stateful Real-time query needs a low-latency, recovery-correct state store configuration. Because
 that configuration is not the right default for the engine as a whole, Real-time Mode applies it
-automatically at query start, only for Real-time queries. These are **soft defaults**: if you have
-set the config explicitly, your value is kept.
+automatically at query start, only for Real-time queries. These are **soft defaults**: each is set
+only when you have not set the config yourself, so an explicit value is preserved -- with the
+exception of a few explicit values that are incompatible with Real-time Mode and are rejected at
+query start rather than kept (see [Incompatible configurations](#incompatible-configurations)).
 
 | Configuration | Real-time default | Meaning |
 |---|---|---|
 | `spark.sql.streaming.stateStore.providerClass` | `RocksDBStateStoreProvider` | Real-time Mode defaults to the RocksDB state store, which checkpoint format v2 (below) requires. |
 | `spark.sql.streaming.stateStore.checkpointFormatVersion` | `2` | Format v2 gives each batch its own state store checkpoint ids, which is what lets a failed batch be rerun correctly from committed offsets. Real-time Mode requires v2 for stateful queries (see below). |
 | `spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled` | `true` | Writes a changelog instead of a full snapshot at each commit, shortening the state-commit step that sits on the critical path between Real-time batches. Applied only when the state store is RocksDB. |
-| `spark.sql.execution.sortBeforeRepartition` | `false` (forced) | Unlike the others this is a **hard override**, not a soft default: the local sort inserted before a round-robin repartition never drains an unbounded stream and would hang a Real-time query, so it is disabled even if you set it to `true`. Determinism from the sort is not needed because Real-time Mode does not retry tasks. |
+| `spark.sql.execution.sortBeforeRepartition` | `false` | The local sort inserted before a round-robin repartition never drains an unbounded stream and would hang a Real-time query, so Real-time Mode defaults it off. Determinism from the sort is not needed because Real-time Mode does not retry tasks. Like the others this is a soft default -- but an explicit `true` is incompatible, so rather than being kept it is rejected at query start (see [Incompatible configurations](#incompatible-configurations)). |
 
 A stateful Real-time query requires a checkpoint written with commit log format v2 (the state store
 format above). Starting a stateful Real-time query on a version 1 checkpoint -- for example, when
@@ -734,6 +735,19 @@ switching an existing micro-batch query to Real-time Mode, or when
 `STREAMING_REAL_TIME_MODE.CHECKPOINT_FORMAT_V1_NOT_SUPPORTED`. Use a fresh checkpoint location, or,
 accepting the risk of state loss on failure, set
 `spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled=true`.
+
+### Incompatible configurations
+
+The defaults above are applied only when you have not set the config. If you instead set one of the
+following to a value that Real-time Mode cannot run with, the query fails to start with
+`STREAMING_REAL_TIME_MODE.SQL_CONFIGURATION_NOT_SUPPORTED` rather than having your value silently
+overridden:
+
+- `spark.sql.streaming.stateStore.checkpointFormatVersion` set below `2` (unless
+  `spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled=true`).
+- `spark.sql.streaming.stateStore.providerClass` set to a provider other than
+  `RocksDBStateStoreProvider`.
+- `spark.sql.execution.sortBeforeRepartition` set to `true`.
 
 ## Best Practices
 
