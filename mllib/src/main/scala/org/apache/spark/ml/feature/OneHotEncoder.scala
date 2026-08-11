@@ -34,7 +34,6 @@ import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{
   coalesce,
   col,
-  floor,
   isnan,
   lit,
   max,
@@ -43,7 +42,7 @@ import org.apache.spark.sql.functions.{
   udf,
   when
 }
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SizeEstimator
 
@@ -541,21 +540,23 @@ private[feature] object OneHotEncoderCommon {
       outputColNames: Seq[String],
       dropLast: Boolean): Seq[AttributeGroup] = {
     val columns = inputColNames.map { inputColName =>
-      val inputCol = col(inputColName).cast(DoubleType)
+      val doubleCol = col(inputColName).cast(DoubleType)
+      val intCol = doubleCol.cast(IntegerType)
       val invalidIndexError = raise_error(printf(
-        lit(s"Values from column $inputColName must be indices, but got %s."), inputCol))
+        lit(s"Values from column $inputColName must be indices, but got %s."), doubleCol))
       val maxIndexError = raise_error(printf(
         lit(s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got %s."),
-        inputCol))
-      when(inputCol.isNull, invalidIndexError)
-        .when(isnan(inputCol) || inputCol > Int.MaxValue, maxIndexError)
-        .when(inputCol < 0.0 || inputCol =!= floor(inputCol), invalidIndexError)
-        .otherwise(inputCol)
+        doubleCol))
+      when(isnan(doubleCol) || doubleCol > Int.MaxValue, maxIndexError)
+        .when(
+          doubleCol.isNull || doubleCol < 0.0 || doubleCol =!= intCol,
+          invalidIndexError)
+        .otherwise(intCol + 1)
     }
 
-    val maxValues = columns.map(c => coalesce(max(c), lit(0.0)))
+    val maxValues = columns.map(c => coalesce(max(c), lit(1)))
     val maxValuesRow = dataset.agg(maxValues.head, maxValues.tail: _*).head()
-    val numAttrsArray = Array.tabulate(maxValues.length)(i => maxValuesRow.getDouble(i).toInt + 1)
+    val numAttrsArray = Array.tabulate(maxValues.length)(maxValuesRow.getInt)
 
     outputColNames.zip(numAttrsArray).map { case (outputColName, numAttrs) =>
       createAttrGroupForAttrNames(outputColName, numAttrs, dropLast, keepInvalid = false)
