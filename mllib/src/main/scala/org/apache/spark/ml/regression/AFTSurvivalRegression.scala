@@ -432,19 +432,31 @@ class AFTSurvivalRegressionModel private[ml] (
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
+    val localCoefficients = coefficients
+    val localIntercept = intercept
+    val predictFunc = (features: Vector) => {
+      math.exp(BLAS.dot(localCoefficients, features) + localIntercept)
+    }
 
     if ($(predictionCol).nonEmpty) {
-      val predCol = udf(predict _).apply(col($(featuresCol)))
+      val predCol = udf(predictFunc).apply(col($(featuresCol)))
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predCol
         .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (hasQuantilesCol) {
+      val localQuantiles = _quantiles
+      val lambda2QuantilesFunc = (lambda: Double) => {
+        val quantiles = localQuantiles.copy
+        BLAS.scal(lambda, quantiles)
+        quantiles
+      }
       val quanCol = if ($(predictionCol).nonEmpty) {
-        udf(lambda2Quantiles _).apply(predictionColumns.head)
+        udf(lambda2QuantilesFunc).apply(predictionColumns.head)
       } else {
-        udf(predictQuantiles _).apply(col($(featuresCol)))
+        udf((features: Vector) => lambda2QuantilesFunc(predictFunc(features)))
+          .apply(col($(featuresCol)))
       }
       predictionColNames :+= $(quantilesCol)
       predictionColumns :+= quanCol
