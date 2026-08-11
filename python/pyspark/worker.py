@@ -3384,12 +3384,17 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             flat_args_iter = map(extract_flat, data)
 
             if not is_pandas:
-                expected_iter_type = Iterator[pa.Array]  # type: ignore[type-abstract]
-            elif isinstance(return_type, StructType):
-                expected_iter_type = Iterator[pd.DataFrame]
+                verified_iter = verify_return_type(
+                    udf_func(flat_args_iter),
+                    Iterator[pa.Array],  # type: ignore[type-abstract]
+                )
             else:
-                expected_iter_type = Iterator[pd.Series]
-            verified_iter = verify_return_type(udf_func(flat_args_iter), expected_iter_type)
+                pandas_iter_type = (
+                    Iterator[pd.DataFrame]
+                    if isinstance(return_type, StructType)
+                    else Iterator[pd.Series]
+                )
+                verified_iter = verify_return_type(udf_func(flat_args_iter), pandas_iter_type)
 
             # Buffer the streamed flat element results and emit an ``array<R>`` row as soon as the
             # shape at the head of the FIFO is fully covered. A row whose length is 0 (an empty
@@ -3402,7 +3407,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             # chunk's type once seen (the pandas flavor types timestamps with the session timezone),
             # else the UTC-typed ``arrow_element_type``. A partition that only ever emits
             # zero-length rows never mixes the two, so the stream schema stays consistent.
-            pending_chunks = []
+            pending_chunks: "list" = []
             pending_len = 0
             empty_type = arrow_element_type
             num_output_elements = 0
