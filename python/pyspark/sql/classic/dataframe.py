@@ -2053,6 +2053,7 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        *,
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
@@ -2064,7 +2065,7 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
-    def replace(  # type: ignore[misc]
+    def replace(
         self,
         to_replace: Union[List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]],
         value: Optional[

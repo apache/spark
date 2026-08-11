@@ -18,7 +18,7 @@ import json
 import re
 import sys
 import pickle
-from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import cast, overload, Callable, Dict, List, Optional, Sequence, TYPE_CHECKING, Union
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.plan import (
@@ -508,11 +508,11 @@ class DataStreamWriter:
     def partitionBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter": ...
+    def partitionBy(self, __cols: Sequence[str]) -> "DataStreamWriter": ...
 
-    def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]
+    def partitionBy(self, *cols: Union[str, Sequence[str]]) -> "DataStreamWriter":
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
+            cols = tuple(cols[0])
         # Clear any existing columns (if any).
         while len(self._write_proto.partitioning_column_names) > 0:
             self._write_proto.partitioning_column_names.pop()
@@ -525,11 +525,11 @@ class DataStreamWriter:
     def clusterBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter": ...
+    def clusterBy(self, __cols: Sequence[str]) -> "DataStreamWriter": ...
 
-    def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]
+    def clusterBy(self, *cols: Union[str, Sequence[str]]) -> "DataStreamWriter":
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
+            cols = tuple(cols[0])
         # Clear any existing columns (if any).
         while len(self._write_proto.clustering_column_names) > 0:
             self._write_proto.clustering_column_names.pop()
@@ -681,7 +681,7 @@ class DataStreamWriter:
         tableName: Optional[str] = None,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> StreamingQuery:
@@ -727,7 +727,7 @@ class DataStreamWriter:
         path: Optional[str] = None,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> "StreamingQuery":
@@ -748,7 +748,7 @@ class DataStreamWriter:
         tableName: str,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> "StreamingQuery":
