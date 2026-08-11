@@ -469,9 +469,12 @@ private[window] final class UnboundedPrecedingDistinctWindowFunctionFrame(
   }
 
   private var partitionSize = 0
+  private var boundaryRows: ExternalAppendOnlyUnsafeRowArray = _
   private var boundaryIterator: Iterator[UnsafeRow] = Iterator.empty
   private var nextBoundaryRow: UnsafeRow = _
   private var boundaryInputIndex = 0
+  private var currentOutput: InternalRow = _
+  private var currentOutputIndex = 0
 
   override protected def populateFirstVisibleRows(
       rows: ExternalAppendOnlyUnsafeRowArray,
@@ -523,10 +526,14 @@ private[window] final class UnboundedPrecedingDistinctWindowFunctionFrame(
   override protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     partitionSize = rows.length
     boundaryInputIndex = 0
+    currentOutput = null
+    currentOutputIndex = 0
     if (rowOffset.isEmpty) {
-      boundaryIterator = rows.generateIterator()
-      nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
+      boundaryRows = rows
+      boundaryIterator = Iterator.empty
+      nextBoundaryRow = null
     } else {
+      boundaryRows = null
       boundaryIterator = Iterator.empty
       nextBoundaryRow = null
     }
@@ -541,13 +548,29 @@ private[window] final class UnboundedPrecedingDistinctWindowFunctionFrame(
         boundaryInputIndex = math.max(0L, math.min(upperBoundIndex, partitionSize.toLong)).toInt
 
       case None =>
-        while (nextBoundaryRow != null &&
-            upperBound.compare(nextBoundaryRow, boundaryInputIndex, current, index) <= 0) {
-          boundaryInputIndex += 1
-          nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
-        }
+        currentOutput = current
+        currentOutputIndex = index
     }
   }
 
-  override def currentUpperBound(): Int = boundaryInputIndex
+  override def currentUpperBound(): Int = {
+    if (rowOffset.isEmpty && currentOutput != null) {
+      // Only the Arrow Python evaluator reads frame bounds. Avoid this extra partition scan for
+      // ordinary SQL evaluation, where DISTINCT aggregate frames never need the bounds.
+      if (boundaryRows != null) {
+        boundaryIterator = boundaryRows.generateIterator()
+        nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
+        boundaryRows = null
+      }
+      while (nextBoundaryRow != null && upperBound.compare(
+          nextBoundaryRow,
+          boundaryInputIndex,
+          currentOutput,
+          currentOutputIndex) <= 0) {
+        boundaryInputIndex += 1
+        nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
+      }
+    }
+    boundaryInputIndex
+  }
 }
