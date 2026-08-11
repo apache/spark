@@ -90,6 +90,74 @@ inline a deterministic one again where that is faster, as they may for any other
 expression. A draw is never inlined, because those rules check determinism.
 
 An argument the body never reads is not computed at all.
+
+
+Scalar pandas UDFs
+------------------
+A scalar pandas UDF receives one ``pandas.Series`` per argument and must return a
+Series, so most of the lowerings above -- which were written against Python
+scalars -- do NOT carry over. Only the subset whose Python-scalar meaning
+coincides with pandas' element-wise meaning is reused, selected by the strict
+allowlist in :func:`_check_series_semantics`: parameter references, ``int`` /
+``float`` / ``str`` constants, ``+`` ``-`` ``*`` ``%``, unary ``+`` / ``-``, and
+``<param>.isnull()`` (with the ``.isna()`` / ``.notnull()`` / ``.notna()``
+aliases). Everything else falls back to interpreted Python. The exclusions are
+not conservatism for its own sake -- each one is a construct whose scalar
+lowering would be actively wrong on a Series:
+
+* ``if x:``, ``x and y``, ``not x`` -- pandas raises
+  ``ValueError: The truth value of a Series is ambiguous``. Lowering them to
+  ``CASE WHEN`` / ``AND`` / ``NOT`` would turn a UDF that raises today into one
+  that returns values.
+* ``x is None`` -- always ``False``, because the *Series object* is not None.
+  ``isnull(a)`` would answer a different question; ``x.isnull()`` is the
+  construct that means what ``x is None`` means for a scalar.
+* ``x < y`` and friends -- a missing value compares ``False`` under numpy
+  (never ``NULL``, and never a ``TypeError``, so the ``raise_error`` guard the
+  scalar lowering emits is wrong), and NaN compares ``False`` where Spark orders
+  it above every value.
+* a body that never references a parameter (``return 1``) -- the result is a
+  scalar, which the interpreted path rejects with ``UDF_RETURN_TYPE``.
+
+Two pandas-specific value rules are then reproduced explicitly:
+
+* NaN in the result is serialized as NULL -- but only in the default dtype regime,
+  where the result Series is numpy-backed and the return path masks it with
+  ``series.isnull()``. A pandas masked extension array (which is what
+  ``spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype=true`` produces,
+  including for any float arithmetic promoted off an ``Int64`` column) is handed
+  to Arrow with ``mask=None`` instead, and its ``isnull()`` is False for NaN in
+  any case, so there the same NaN arrives as NaN. Catalyst keeps NaN, so a numeric
+  body is wrapped in an ``isnan -> NULL`` normalization that reproduces the
+  default regime -- and transpilation is refused outright when that conf is on,
+  since no single expression covers both.
+* ``Series.isnull()`` is True for NaN on a numpy-backed Series -- by the time the
+  UDF runs, the Arrow-to-pandas conversion has already collapsed a NULL in a
+  fractional column into NaN and pandas cannot tell them apart -- so it lowers to
+  ``isnull(a) OR isnan(a)`` rather than to ``isnull(a)`` alone. (On a masked
+  extension array ``isnull()`` is the mask alone, but that regime is refused per
+  the previous point.)
+
+What remains divergent is numpy's fixed-width arithmetic, and it is documented
+rather than guarded because it cannot be detected without the runtime values.
+Every case is one where the transpiled expression raises or is exact and the
+interpreted one is lossy, silent, or inconsistent:
+
+* integer overflow wraps under numpy where ANSI raises ARITHMETIC_OVERFLOW. This
+  also covers the ``%`` boundaries the ``Mod`` lowering notes below
+  (``Long.MinValue % -1``), and a literal too wide for the column's dtype, where
+  numpy raises ``OverflowError`` and Catalyst widens exactly.
+* ``a % 0`` has no single interpreted answer to reproduce: pandas promotes to
+  ``float64`` and yields NaN (so, NULL), unless
+  ``spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype`` is on, in which
+  case it yields ``0``. ANSI raises REMAINDER_BY_ZERO, and that is what the
+  transpiled expression does.
+* a ``float32`` column keeps ``float32`` through a ``float`` literal (NEP 50)
+  where Catalyst promotes to double.
+* an integral column is converted to ``float64`` as soon as the batch contains a
+  NULL, losing precision above 2**53 -- which makes the interpreted answer depend
+  on how rows happen to be batched, and is avoided by
+  ``preferIntExtensionDtype=true``.
 """
 
 import ast
@@ -111,6 +179,7 @@ from pyspark.sql.functions import (
     coalesce,
     col,
     concat,
+    isnan,
     length,
     lit,
     pmod,
@@ -126,6 +195,7 @@ from pyspark.sql.types import (
     NumericType,
     StringType,
 )
+from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -151,7 +221,8 @@ class AbstractTranspiler(object):
         function_ast: ast.FunctionDef,
         params: List[str],
         returnType: "DataTypeOrString",
-        param_categories: Optional[dict] = None,
+        param_categories: Optional[dict],
+        series_semantics: bool,
     ) -> Optional[Column]:
         """Lower ``function_ast`` to a :class:`Column`, or return ``None`` to decline.
 
@@ -161,6 +232,20 @@ class AbstractTranspiler(object):
         on a method or callable instance, has been removed, so ``params[i]`` is the
         name bound to placeholder ``_udf_param_i`` with no offsetting needed. It is
         also the list ``param_categories`` is keyed by.
+
+        ``series_semantics`` is True when the arguments are ``pandas.Series`` rather than
+        Python scalars (a scalar pandas UDF), which admits only the element-wise subset in
+        the module docstring. It has no default on purpose: a transpiler that silently
+        received False for a pandas UDF would apply the Python-scalar lowerings to a Series,
+        turning one that raises ValueError into one that returns values. The trade-off is
+        that a third-party transpiler (registered via
+        ``spark.sql.experimental.optimizer.pyTranspilers``) written to the older
+        signature raises TypeError on the new keyword, which ``_transpile_func`` records
+        as a per-variant failure -- so it now falls back to interpreted Python for EVERY
+        eval type, including the pickled one where it previously worked. That is a
+        fallback, not a wrong answer, and this is an experimental extension point, so
+        requiring the argument (correctness) is preferred over a default
+        (bug-compatibility for an unknown subclass).
         """
         pass
 
@@ -233,6 +318,174 @@ def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
     return None
 
 
+# ----------------------------------------------------------------------------
+# Scalar pandas UDF (Series in / Series out) support. See the module docstring
+# for why the subset below is an allowlist rather than a set of exclusions.
+# ----------------------------------------------------------------------------
+
+# ``pandas.Series`` methods meaning "is this element missing", mapped to whether the method
+# is the positive form. All four are the same lowering up to a negation.
+_SERIES_NULL_METHODS = {"isnull": True, "isna": True, "notnull": False, "notna": False}
+
+# Binary and unary operators pandas applies element-wise with the same result Catalyst
+# produces, given operands of a matching category (`_category` still decides add-vs-concat
+# and multiply-vs-repeat). `**` and `/` are absent because the scalar transpiler does not
+# lower them either.
+#
+# `Mult` is in the allowlist for numeric multiply and for string-repeat by an integer
+# LITERAL only (`s * 2`). Repeat by a numeric COLUMN is refused under series semantics in
+# `_convert_chunk`, because a Series count is unsound in every batch shape: pandas raises
+# TypeError on any genuine float value (so `_masked_arith_op` only succeeds when the whole
+# batch is missing, yielding NULL), while the lowered `repeat(s, cast(n as int))` returns a
+# repeated string for a real value and raises CAST_OVERFLOW for a NaN -- so an all-missing
+# batch turns a NULL-returning query into an error. See `_reject_series_string_repeat`.
+_SERIES_SAFE_BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Mod)
+_SERIES_SAFE_UNARYOPS = (ast.UAdd, ast.USub)
+
+
+def _is_int_literal(node: ast.AST) -> bool:
+    """True for an ``int`` constant that is not a ``bool`` (``bool`` subclasses ``int``).
+
+    This is the only repeat count that is safe under series semantics: it cannot be NaN or
+    NULL, and it is fixed at transpile time so no column value can make it fractional.
+    """
+    return (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, int)
+        and not isinstance(node.value, bool)
+    )
+
+
+# Raised from both the up-front ``_check_series_semantics`` call and ``_transpile_from_ast``
+# itself; a single constant keeps the two paths reporting the same reason.
+_MULTI_STATEMENT_ERROR = (
+    "functions with more than one top-level statement are not supported by the transpiler"
+)
+
+
+def _match_series_null_check(node: ast.AST, params: List[str]) -> Optional[Tuple[ast.Name, bool]]:
+    """Match ``<param>.isnull()`` and its aliases, returning ``(receiver, positive)``.
+
+    ``None`` when ``node`` is any other call. The receiver must be a bare parameter: on an
+    intermediate expression the ``isnan`` arm of the lowering would have to reason about
+    which sub-expression can produce NaN, so those fall back to interpreted Python instead.
+    Arguments are refused too (``isna()`` takes none, but a future keyword should not be
+    silently ignored).
+    """
+    match node:
+        case ast.Call(
+            func=ast.Attribute(value=ast.Name(id=receiver_name) as receiver, attr=attr),
+            args=[],
+            keywords=[],
+        ) if receiver_name in params and attr in _SERIES_NULL_METHODS:
+            return receiver, _SERIES_NULL_METHODS[attr]
+        case _:
+            return None
+
+
+def _describe_unsupported_series_node(node: ast.AST) -> str:
+    """A short user-facing label for a node refused by :func:`_check_series_semantics`.
+
+    These end up in the ``Unable to transpile UDF ...`` warning, which is the only place a
+    user learns why the rewrite did not happen, so name the pandas-specific reason rather
+    than just the AST class.
+    """
+    match node:
+        case ast.Compare(ops=[ast.Is() | ast.IsNot(), *_]):
+            return (
+                "an `is` / `is not` test (a Series object is never None, so this is always "
+                "False at runtime -- write `x.isnull()` for a per-element check)"
+            )
+        case ast.Compare():
+            return (
+                "a comparison (on a Series a missing value compares False rather than "
+                "raising or yielding NULL, and NaN compares False where Spark orders it "
+                "above every value)"
+            )
+        case ast.BoolOp() | ast.UnaryOp(op=ast.Not()):
+            return "`and` / `or` / `not` (these raise ValueError on a Series)"
+        case ast.If() | ast.IfExp():
+            return "an `if` (testing a Series for truth raises ValueError)"
+        case ast.Name(id=name):
+            return f"the free variable {name!r}"
+        case ast.Call():
+            return "a function call other than the `.isnull()` family"
+        case ast.BinOp(op=op):
+            return f"the binary operator `{type(op).__name__}`"
+        case ast.UnaryOp(op=op):
+            return f"the unary operator `{type(op).__name__}`"
+        case ast.Constant(value=value):
+            return f"the constant {value!r} ({type(value).__name__})"
+        case _:
+            return f"an unsupported `{type(node).__name__}` node"
+
+
+def _check_series_semantics(function_ast: ast.FunctionDef, params: List[str]) -> None:
+    """Raise unless the body is element-wise-equivalent for a scalar pandas UDF.
+
+    Two properties are checked together because both are about the body as a whole:
+
+    * every node is in the allowlist, so no lowering written for Python scalars is reused
+      where pandas would raise or answer differently;
+    * the body references at least one parameter. With only the allowlisted operators, an
+      expression containing a parameter is a Series and one without is a Python scalar --
+      and returning a scalar makes the interpreted UDF fail with ``UDF_RETURN_TYPE``, so a
+      rewrite that returned a value per row would not be a faithful reproduction.
+    """
+    # Match the statement-count guard in ``_transpile_from_ast`` first, and with the same
+    # message (shared constant): this walk only visits ``body[0]``, so without this a
+    # multi-statement body would be rejected as "an unsupported `Assign` node" (its first
+    # statement) rather than for the real reason, and the warning is the only place the user
+    # learns why.
+    if len(function_ast.body) != 1:
+        raise UnsupportedOperationException(_MULTI_STATEMENT_ERROR)
+    references_param = False
+
+    def visit(node: Optional[ast.AST]) -> None:
+        nonlocal references_param
+        if node is None:
+            # A bare `return` (or, via `_convert_chunk`'s None case, an absent one).
+            raise UnsupportedOperationException(
+                "a scalar pandas UDF must return a pandas.Series, but this body returns "
+                "None; the interpreted path fails with UDF_RETURN_TYPE, so the transpiler "
+                "falls back to interpreted Python"
+            )
+        match node:
+            case ast.Return(value=value):
+                visit(value)
+            case ast.Name(id=name) if name in params:
+                references_param = True
+            # bool is a subclass of int, and bytes has no element-wise operator here, so
+            # neither is admitted by the numeric/string constant arm.
+            case ast.Constant(value=value) if isinstance(value, (int, float, str)) and not (
+                isinstance(value, bool)
+            ):
+                pass
+            case ast.BinOp(left=left, op=op, right=right) if isinstance(op, _SERIES_SAFE_BINOPS):
+                visit(left)
+                visit(right)
+            case ast.UnaryOp(op=op, operand=operand) if isinstance(op, _SERIES_SAFE_UNARYOPS):
+                visit(operand)
+            case ast.Call() if _match_series_null_check(node, params) is not None:
+                references_param = True
+            case _:
+                raise UnsupportedOperationException(
+                    f"{_describe_unsupported_series_node(node)} has no element-wise "
+                    "pandas.Series equivalent the transpiler can reuse, so this scalar "
+                    "pandas UDF falls back to interpreted Python. The supported subset is "
+                    "parameter references, int/float/str constants, `+` `-` `*` `%`, unary "
+                    "`+`/`-`, and `<param>.isnull()` / `.isna()` / `.notnull()` / `.notna()`"
+                )
+
+    visit(function_ast.body[0] if function_ast.body else None)
+    if not references_param:
+        raise UnsupportedOperationException(
+            "the body of this scalar pandas UDF never references a parameter, so it "
+            "produces a Python scalar rather than a pandas.Series; the interpreted path "
+            "fails with UDF_RETURN_TYPE, so the transpiler falls back to interpreted Python"
+        )
+
+
 class CatalystTranspiler(AbstractTranspiler):
     """Transpiler that attempts to convert a Python UDF into native Spark SQL expressions."""
 
@@ -241,6 +494,10 @@ class CatalystTranspiler(AbstractTranspiler):
     def __init__(self) -> None:
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
+        # True while lowering a scalar pandas UDF, whose arguments are ``pandas.Series``
+        # rather than Python scalars. Set per call by ``_transpile_from_ast``; the default
+        # keeps the scalar behavior for anything that reaches ``_convert_chunk`` directly.
+        self._series_semantics = False
 
     # TODO (SPARK-55218): handle implicit-None return bodies like
     # ``def f(x): x + x`` -- no return statement means return None;
@@ -451,6 +708,56 @@ class CatalystTranspiler(AbstractTranspiler):
         )
         return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
 
+    def _reject_series_string_repeat(self, count_node: ast.AST) -> None:
+        """Refuse string-repeat by a non-literal count under series semantics.
+
+        For a Python scalar, `'ab' * n` is a fine repeat and the lowering matches. For a
+        pandas Series the count is a whole column, and `Series(str) * Series(numeric)` is
+        unsound: pandas raises TypeError on any genuine float, so it only produces a value
+        when the batch is entirely missing (yielding NULL), while the lowered
+        `repeat(s, cast(n as int))` returns a repeated string for a real value and raises
+        CAST_OVERFLOW for a NaN. An integer literal count avoids all of this -- it cannot be
+        NaN or NULL -- so `s * 2` is kept and everything else falls back to interpreted
+        Python. A no-op for the scalar eval types (``series_semantics`` is False), which keep
+        the broader behavior, including the documented `s * 1.5` -> truncated-repeat wart.
+        """
+        if self._series_semantics and not _is_int_literal(count_node):
+            raise UnsupportedOperationException(
+                "string repeat by a non-literal count is not supported for a scalar pandas "
+                "UDF: the count is a Series, and `str * numeric` there is NULL for an "
+                "all-missing batch but a repeated string or CAST_OVERFLOW otherwise, so the "
+                "transpiler falls back to interpreted Python. Use an integer literal (`s * 2`)"
+            )
+
+    def _lower_series_null_check(
+        self, params: List[str], receiver: ast.Name, positive: bool
+    ) -> Column:
+        """Lower ``s.isnull()`` / ``.isna()`` / ``.notnull()`` / ``.notna()`` for a Series.
+
+        ``pandas.Series.isnull`` is True for NaN as well as for a missing value on a
+        numpy-backed Series, and by the time a scalar pandas UDF runs there is no difference
+        left to observe: the Arrow-to-pandas conversion turns a NULL in a fractional column
+        into NaN. Catalyst's ``isnull`` covers only the NULL, so the NaN arm is what makes the
+        two agree. (On a pandas masked extension array ``isnull()`` is the mask alone and NaN
+        is not missing -- but ``preferIntExtensionDtype`` is refused before we get here, see
+        the module docstring.)
+
+        That arm is emitted for every numeric category rather than only for float/double
+        because the bound column's width is not known here -- options are pruned against the
+        argument types later, on the JVM. ``isnan(cast(<integral> as double))`` is
+        constant-false, so on an integral column this is one extra node and no change in
+        result. A string column needs no arm: its missing values are exactly the NULLs.
+
+        Neither ``isnull`` nor ``isnan`` ever returns NULL, so the ``notnull`` negation is
+        total two-valued logic and matches pandas without a ``coalesce``.
+        """
+        subject = self._convert_chunk(params, receiver)
+        if self._category(params, receiver) == "numeric":
+            missing = subject.isNull() | isnan(subject.cast("double"))
+        else:
+            missing = subject.isNull()
+        return missing if positive else ~missing
+
     def _category(self, params: List[str], node: ast.AST) -> str:
         """Infer ``"numeric"`` or ``"string"`` for ``node`` under the current
         ``self._param_categories`` assumption (set per input-type variant).
@@ -552,6 +859,13 @@ class CatalystTranspiler(AbstractTranspiler):
                 # Labeling them "numeric" (the old catch-all) let booleans into
                 # arithmetic/equality lowerings where ANSI analysis fails (e.g.
                 # `(x > 0) + 1`, valid Python) instead of falling back.
+                return "bool"
+            case ast.Call() if (
+                self._series_semantics and _match_series_null_check(node, params) is not None
+            ):
+                # `s.isnull()` is a boolean Series. Without this arm the catch-all below
+                # would call it numeric, which would demand a numeric return type and put a
+                # boolean through the NaN normalization's cast.
                 return "bool"
             case _:
                 # Remaining nodes (unsupported calls, subscripts, ...) don't
@@ -763,8 +1077,10 @@ class CatalystTranspiler(AbstractTranspiler):
                         if lc == "numeric" and rc == "numeric":
                             return left_col.__mul__(right_col)
                         if lc == "string" and rc == "numeric":
+                            self._reject_series_string_repeat(right)
                             return repeat(left_col, right_col.cast("int"))
                         if lc == "numeric" and rc == "string":
+                            self._reject_series_string_repeat(left)
                             return repeat(right_col, left_col.cast("int"))
                     case ast.Mod():
                         if lc == rc == "numeric":
@@ -835,6 +1151,20 @@ class CatalystTranspiler(AbstractTranspiler):
                     "`is not None` guard or filter NULLs upstream."
                 )
                 return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
+            case ast.Call() if self._series_semantics:
+                # The only calls a scalar pandas UDF may use. `_check_series_semantics` has
+                # already refused the others before we get here; this keeps the invariant
+                # local for anything that drives `_convert_chunk` directly. A call in the
+                # Python-scalar regimes still falls through to the catch-all below.
+                null_check = _match_series_null_check(body, params)
+                if null_check is None:
+                    raise UnsupportedOperationException(
+                        "the only calls the transpiler lowers for a scalar pandas UDF are "
+                        "`<param>.isnull()` / `.isna()` / `.notnull()` / `.notna()`; "
+                        f"falling back to interpreted Python for {ast.dump(body)[:120]}"
+                    )
+                receiver, positive = null_check
+                return self._lower_series_null_check(params, receiver, positive)
             case _:
                 raise UnsupportedOperationException(
                     f"AST node {type(body).__name__} is not supported by the "
@@ -848,23 +1178,34 @@ class CatalystTranspiler(AbstractTranspiler):
         function_ast: ast.FunctionDef,
         params: List[str],
         returnType: "DataTypeOrString",
-        param_categories: Optional[dict] = None,
+        param_categories: Optional[dict],
+        series_semantics: bool,
     ) -> Optional[Column]:
         # Short circuit on nothing to transpile.
         if src == "" or ast_info is None:
             return None
+        if series_semantics:
+            # Enforced here, next to the lowerings it constrains, so the two cannot drift:
+            # every construct `_check_series_semantics` refuses has a lowering below that
+            # would be wrong on a Series, and `_convert_chunk` only guards `ast.Call`.
+            # `_transpile_func` also checks it once up front, so that a refused body reports
+            # one reason rather than one per input-type variant; this call is what makes the
+            # guarantee hold for any other caller.
+            _check_series_semantics(function_ast, params)
         # Per-variant input-type assumption ({public_param_index -> category}),
         # read by ``_category`` to choose str vs numeric operators.
         self._param_categories = param_categories or {}
         # Category inference depends on the per-variant assumptions above. Cache
         # each AST node only for this lowering so recursive conversion stays linear.
         self._category_cache = {}
+        # Whether the arguments are ``pandas.Series`` rather than Python scalars. Required
+        # rather than defaulted, so that the unsafe value can never be the quiet one; see
+        # ``AbstractTranspiler._transpile_from_ast``.
+        self._series_semantics = series_semantics
         function_body = function_ast.body
         if len(function_body) != 1:
-            raise UnsupportedOperationException(
-                "functions with more than one top-level statement are not "
-                "supported by the transpiler"
-            )
+            raise UnsupportedOperationException(_MULTI_STATEMENT_ERROR)
+        body_cat = self._safe_category(params, function_body[0])
         # Refuse variants whose body category does not MATCH the declared
         # return type's category. Two distinct failure modes hide here:
         #
@@ -891,7 +1232,6 @@ class CatalystTranspiler(AbstractTranspiler):
         # documented as the transpiled-cast behavior pinned by
         # test_udf_transpile_casts_to_return_type.
         if isinstance(returnType, DataType):
-            body_cat = self._safe_category(params, function_body[0])
             cast_ok = (
                 body_cat is None
                 or (
@@ -912,6 +1252,38 @@ class CatalystTranspiler(AbstractTranspiler):
                     "interpreted Python"
                 )
         converted = self._convert_chunk(params, function_body[0])
+        if series_semantics and body_cat == "numeric":
+            # A scalar pandas UDF's numpy-backed result Series is serialized with
+            # ``mask = series.isnull()``, and ``isnull`` is True for NaN, so every NaN the
+            # function produces reaches Spark as NULL. Catalyst keeps NaN, so normalize to
+            # match. Two ways to get there: a fractional input column carrying NaN (the
+            # interpreted path cannot even tell that from a NULL, since the Arrow-to-pandas
+            # conversion merges them), and NaN arising from arithmetic on infinities.
+            #
+            # This models the DEFAULT dtype regime only. A pandas masked extension array
+            # takes ``mask=None`` instead, so there a NaN stays NaN and this normalization
+            # would be exactly backwards -- which is why ``preferIntExtensionDtype`` refuses
+            # transpilation outright, in udf.py and again in ConvertToCatalyst.
+            #
+            # Emitted for every numeric body rather than only the fractional ones, because
+            # the bound column's width is not known until the JVM prunes the options against
+            # the argument types. ``isnan(cast(<integral> as double))`` is constant-false, so
+            # on an integral column this is an extra node and no change in result. The cast
+            # exists only to satisfy ``isnan``'s float/double input type; the value returned
+            # is always the un-cast one, so no precision is lost.
+            #
+            # This references ``converted`` twice, so the lowered body appears twice in the
+            # option (subexpression elimination does not extract a value used in a CaseWhen
+            # condition and only one branch). The clean single-reference form is
+            # ``NaNvl(body, null)``, but that is only type-valid for float/double, and the
+            # body's resolved type is not known until the JVM prunes options -- and by then
+            # the cast to the return type is already baked in below, past the fractional
+            # value ``NaNvl`` would need. Applying it type-aware in
+            # ``ResolveTranspiledPythonUDFOptions`` (before that cast) would remove the
+            # duplication; it is left for a separate change, since the duplication is a
+            # plan-size/CPU cost only and the baseline it replaces is a per-row Python call.
+            # Correctness is unaffected.
+            converted = when(isnan(converted.cast("double")), lit(None)).otherwise(converted)
         # Cast to the declared return type so the rewritten plan reports a
         # known data type to the optimizer's plan validator (otherwise it
         # sees an UnresolvedFunction tree and reports VOID, which fails
@@ -1209,9 +1581,18 @@ def _transpile_func(
     session: "SparkSession",
     func: Callable[..., Any],
     returnType: "DataTypeOrString",
+    evalType: int,
 ) -> Tuple[List[Column], List[str], List[str], List[List[str]], List[str]]:
     """
     An experimental internal function that attempts to transpile a callable function.
+
+    ``evalType`` selects the semantics to reproduce, and is required rather than defaulted:
+    the row-at-a-time eval types (``SQL_BATCHED_UDF``, ``SQL_ARROW_BATCHED_UDF``) hand the
+    function Python scalars, while ``SQL_SCALAR_PANDAS_UDF`` hands it ``pandas.Series``, which
+    admits a much smaller subset of bodies (see the module docstring). A default would make
+    the wrong value the quiet one -- a caller that forgot to pass it would get the Python
+    scalar lowerings applied to a Series -- so omitting it is an error instead. The set of
+    eval types allowed to reach here at all lives in ``pyspark.sql.udf``.
 
     Returns
     -------
@@ -1228,6 +1609,7 @@ def _transpile_func(
     (positional-only) -- the caller must NOT resolve a kwarg matching one of these
     to a position, since Python itself rejects that call.
     """
+    series_semantics = evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
     try:
         # The transpiler lowers to atomic (numeric/string/boolean/binary)
         # expressions and casts the result to the declared return type. For a
@@ -1367,6 +1749,14 @@ def _transpile_func(
         # keyword call to one of these, since Python itself would reject it.
         posonly_names = {arg.arg for arg in function_ast.args.posonlyargs}
         positional_only_public_params = [p for p in public_params if p in posonly_names]
+        # The Series-safe subset does not depend on the input-type variant, so check it once
+        # here rather than per combo: otherwise a rejected body would report the same reason
+        # once per option in the warning.
+        if series_semantics:
+            try:
+                _check_series_semantics(function_ast, public_params)
+            except UnsupportedOperationException as e:
+                return ([], [str(e)], [], [], [])
         transpiled: list[Column] = []
         input_categories: list[list[str]] = []
         errors = []
@@ -1380,7 +1770,13 @@ def _transpile_func(
             for combo in combos:
                 try:
                     transpiled_column = transpiler._transpile_from_ast(
-                        src, ast_info, function_ast, public_params, returnType, combo
+                        src,
+                        ast_info,
+                        function_ast,
+                        public_params,
+                        returnType,
+                        combo,
+                        series_semantics=series_semantics,
                     )
                     if transpiled_column is not None:
                         transpiled.append(transpiled_column)

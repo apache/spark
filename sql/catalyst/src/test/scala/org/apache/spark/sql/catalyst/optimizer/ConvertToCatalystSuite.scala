@@ -47,6 +47,17 @@ class ConvertToCatalystSuite extends PlanTest {
     PythonUDF("udf", null, LongType, Seq(input),
       PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
 
+  // The Arrow-optimized regular Python UDF. Still per-row on the worker, so transpilable --
+  // unlike the genuinely vectorized SQL_SCALAR_ARROW_UDF.
+  private def makeArrowPyUDF(input: Expression = attrA): PythonUDF =
+    PythonUDF("udf", null, LongType, Seq(input),
+      PythonEvalType.SQL_ARROW_BATCHED_UDF, udfDeterministic = true)
+
+  // The scalar pandas UDF: vectorized, and transpilable only for element-wise bodies.
+  private def makeScalarPandasUDF(input: Expression = attrA): PythonUDF =
+    PythonUDF("udf", null, LongType, Seq(input),
+      PythonEvalType.SQL_SCALAR_PANDAS_UDF, udfDeterministic = true)
+
   // A leaf PythonUDAF (grouped-agg pandas eval type, return type Long for parity
   // with Count's output). func=null is intentional, as with makePyUDF.
   private def makePyUDAF(input: Expression = attrA): PythonUDAF =
@@ -139,6 +150,18 @@ class ConvertToCatalystSuite extends PlanTest {
       SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "false") { block }
 
+  private def legacyPandasOn[T](block: => T): T =
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
+      SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key -> "true") { block }
+
+  private def intExtDtypeOn[T](block: => T): T =
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
+      SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE.key -> "true") { block }
+
   // ---- tests ----
 
   test("transpiles when not nested (parentIsUdf = false)") {
@@ -222,6 +245,69 @@ class ConvertToCatalystSuite extends PlanTest {
       val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
       assert(result.isInstanceOf[PythonUDF])
       assert(!result.isInstanceOf[TranspiledPythonUDF])
+    }
+  }
+
+  test("falls back for an Arrow-optimized UDF when legacy pandas conversion is enabled") {
+    // udf.py refuses to transpile under this conf, but it can be enabled after the UDF was
+    // built, so the rule has to re-check. The legacy conversion changes what the Python
+    // function receives (an integer column with NULLs arrives as float64 NaN), so a
+    // transpiled option would answer differently from the interpreted path.
+    legacyPandasOn {
+      val tpudf = makeTPUDF(makeArrowPyUDF(), catalystExpr)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result.isInstanceOf[PythonUDF])
+      assert(!result.isInstanceOf[TranspiledPythonUDF])
+    }
+  }
+
+  test("still transpiles a pickled UDF when legacy pandas conversion is enabled") {
+    // The conf only governs the Arrow-optimized regime, so it must not disable the rewrite
+    // for the pickled eval type.
+    legacyPandasOn {
+      val tpudf = makeTPUDF(makePyUDF(), catalystExpr)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result == catalystExpr)
+    }
+  }
+
+  test("still transpiles an Arrow-optimized UDF when legacy pandas conversion is off") {
+    transpileOn {
+      val tpudf = makeTPUDF(makeArrowPyUDF(), catalystExpr)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result == catalystExpr)
+    }
+  }
+
+  test("falls back for a scalar pandas UDF when the int extension dtype is enabled") {
+    // The transpiled option normalizes a NaN result to NULL, which reproduces the default
+    // dtype regime. Under this conf the result Series is a pandas masked array whose NaN
+    // reaches Spark as NaN, so the normalization would be backwards. udf.py refuses to
+    // transpile when this is set, but it can be enabled after the UDF was built.
+    intExtDtypeOn {
+      val tpudf = makeTPUDF(makeScalarPandasUDF(), catalystExpr)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result.isInstanceOf[PythonUDF])
+      assert(!result.isInstanceOf[TranspiledPythonUDF])
+    }
+  }
+
+  test("int extension dtype does not disable the pickled or Arrow-optimized paths") {
+    // The conf only governs the scalar pandas regime, so it must not disable the rewrite for
+    // the row-at-a-time eval types, whose values it does not touch.
+    intExtDtypeOn {
+      for (udf <- Seq(makePyUDF(), makeArrowPyUDF())) {
+        val result = ConvertToCatalyst.applyExpr(makeTPUDF(udf, catalystExpr), parentIsUdf = false)
+        assert(result == catalystExpr)
+      }
+    }
+  }
+
+  test("still transpiles a scalar pandas UDF when the int extension dtype is off") {
+    transpileOn {
+      val tpudf = makeTPUDF(makeScalarPandasUDF(), catalystExpr)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result == catalystExpr)
     }
   }
 

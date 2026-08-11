@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
@@ -1332,6 +1333,34 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
           keepPython
+        } else if (conf.legacyPandasConversionUDF &&
+            isPythonUDFWithEvalType(s.pythonUDFExpr, PythonEvalType.SQL_ARROW_BATCHED_UDF)) {
+          // The legacy pandas conversion routes an Arrow-optimized UDF's inputs and outputs
+          // through pandas, changing what the Python function receives -- an integer column
+          // with NULLs arrives as float64 NaN, so `x is None` is False where a transpiled
+          // isnull() is true. udf.py refuses to transpile when this is set, but it can also
+          // be enabled after the UDF was built, so re-check here like the ANSI gate above.
+          logWarning(log"Skipping Python UDF transpilation: " +
+            log"${MDC(LogKeys.CONFIG,
+              SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key)} is enabled, which " +
+            log"changes the coercion an Arrow-optimized Python UDF sees. Falling back to " +
+            log"interpreted Python.")
+          keepPython
+        } else if (conf.preferIntExtDtype &&
+            isPythonUDFWithEvalType(s.pythonUDFExpr, PythonEvalType.SQL_SCALAR_PANDAS_UDF)) {
+          // With the extension dtype a scalar pandas UDF's Series is a pandas masked array,
+          // which Arrow receives with mask=None (and whose isnull() is False for NaN), so a
+          // NaN result arrives as NaN. Without it the Series is numpy-backed and masked with
+          // isnull(), so the same NaN arrives as NULL. The transpiled option reproduces the
+          // latter via an isnan-to-NULL normalization, which would be wrong here. udf.py
+          // refuses to transpile when this is set, but it can also be enabled after the UDF
+          // was built, so re-check here like the ANSI gate above.
+          logWarning(log"Skipping Python UDF transpilation: " +
+            log"${MDC(LogKeys.CONFIG,
+              SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE.key)} is enabled, which " +
+            log"changes whether a NaN result of a scalar pandas UDF reaches Spark as NaN or " +
+            log"as NULL. Falling back to interpreted Python.")
+          keepPython
         } else if (!callIsIntact(s)) {
           // PullOutNondeterministic moves a nondeterministic call into a projection below and
           // leaves an attribute here, so `arguments` is empty while the option still refers to
@@ -1414,6 +1443,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         expression.mapChildren(applyExpr(_, parentIsUdf = chainsInWorker(expression),
           preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))
     }
+  }
+
+  private def isPythonUDFWithEvalType(e: Expression, evalType: Int): Boolean = e match {
+    case u: PythonUDF => u.evalType == evalType
+    case _ => false
   }
 }
 

@@ -1534,6 +1534,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ["a"],
             LongType(),
             {0: "numeric"},
+            series_semantics=False,
         )
 
         self.assertIsNotNone(converted)
