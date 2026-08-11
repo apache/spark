@@ -558,7 +558,7 @@ def main():
 
     if scala_version is not None:
         # If not set, assume this is default and doesn't need to change.
-        with titled_block("Switching Scala version"):
+        with titled_block(f"Switching to Scala version: {scala_version}"):
             switch_scala_version(scala_version)
 
     should_run_java_style_checks = False
