@@ -31,11 +31,25 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Heap entry storing an index into the broadcast array alongside its ranking value.
- * Mutable so that evicted entries can be reused: once the heap reaches capacity k,
- * new candidates reuse the polled (worst) entry instead of allocating, bounding total
- * heap-entry allocations to k per left row regardless of right-side size.
+ * Mutable so that a fixed pool of entries can be reused across all left rows in a
+ * partition: the pool is sized to min(k, rightRows.length) and allocated once per
+ * partition, bounding total HeapEntry allocations to min(k, rightRows.length) per task
+ * regardless of the number of left rows.
  */
-private[joins] class HeapEntry(var index: Int, var rankingValue: Any)
+private[joins] class HeapEntry(var index: Int, var rankingValue: Any) {
+  HeapEntry.allocationCount += 1
+}
+
+private[joins] object HeapEntry {
+  /**
+   * Test-only allocation counter. Incremented by the HeapEntry constructor.
+   * Used to verify the per-partition pooling invariant: total allocations should be
+   * bounded by min(k, rightRows.length) per partition, NOT by leftRows * k.
+   */
+  @volatile var allocationCount: Long = 0L
+
+  def resetAllocationCount(): Unit = { allocationCount = 0L }
+}
 
 /**
  * Physical operator for NearestByJoin that avoids materializing the full cross product.
@@ -43,10 +57,12 @@ private[joins] class HeapEntry(var index: Int, var rankingValue: Any)
  * queue of size k, then emits the top-k matches directly.
  *
  * The right side is fully broadcast unconditionally when
- * `spark.sql.join.nearestBy.broadcast.enabled` is on.
- * [[org.apache.spark.sql.catalyst.optimizer.RewriteNearestByJoin]] leaves every
- * [[org.apache.spark.sql.catalyst.plans.logical.NearestByJoin]] intact for this operator;
- * there is no size test and no fallback.
+ * `spark.sql.join.nearestBy.broadcast.enabled` is on -- except when the ranking
+ * expression contains a scalar Python UDF referencing both children, in which case
+ * [[org.apache.spark.sql.catalyst.optimizer.RewriteNearestByJoin]] falls back to the
+ * aggregate rewrite for correctness (ExtractPythonUDFs cannot split a two-sided UDF
+ * across a binary operator).
+ * For nodes that reach this operator, there is no size test and no fallback.
  * A right side too large to broadcast will fail the query. Tie-breaking among equal
  * ranking values is non-deterministic (matches the rewrite).
  *
@@ -133,10 +149,21 @@ case class BroadcastNearestByJoinExec(
         // Hoisted here so it is built once per partition rather than once per left row.
         val nullRight: InternalRow = new GenericInternalRow(rightOutput.size)
 
-        // Hoist heap outside flatMap to reduce GC pressure.
-        // Size the heap to min(k, rightRows.length) + 1 to avoid over-allocating when
-        // the right side is smaller than k.
-        val heapCapacity = math.min(k, rightRows.length) + 1
+        // Pool of HeapEntry objects allocated ONCE per partition and reused across all
+        // left rows. The pool size is min(k, rightRows.length) -- the maximum number of
+        // entries that can simultaneously live in the heap. This bounds total HeapEntry
+        // allocations to min(k, rightRows.length) per partition (per task), regardless
+        // of the number of left rows processed.
+        val poolSize = math.min(k, rightRows.length)
+        val entryPool = new Array[HeapEntry](poolSize)
+        var pi = 0
+        while (pi < poolSize) {
+          entryPool(pi) = new HeapEntry(0, null)
+          pi += 1
+        }
+
+        // Hoist heap outside flatMap -- created once per partition, cleared per left row.
+        val heapCapacity = poolSize + 1
         val heap = if (isDistance) {
           new JPriorityQueue[HeapEntry](heapCapacity,
             new Comparator[HeapEntry] {
@@ -151,9 +178,13 @@ case class BroadcastNearestByJoinExec(
             })
         }
 
+        // Index into entryPool for the next unused pooled entry during heap filling.
+        var nextPoolIdx = 0
+
         leftIter.flatMap { leftRow =>
           streamedRowsMetric += 1
           heap.clear()
+          nextPoolIdx = 0
 
           var i = 0
           while (i < rightRows.length) {
@@ -181,12 +212,14 @@ case class BroadcastNearestByJoinExec(
                   rawValue
                 }
                 if (heap.size() < k) {
-                  // Heap has room -- allocate a new entry.
-                  heap.offer(new HeapEntry(i, rankingValue))
+                  // Heap has room -- use the next pooled entry.
+                  val entry = entryPool(nextPoolIdx)
+                  nextPoolIdx += 1
+                  entry.index = i
+                  entry.rankingValue = rankingValue
+                  heap.offer(entry)
                 } else {
-                  // Heap is at capacity -- reuse the evicted (worst) entry to avoid
-                  // allocating a new HeapEntry per candidate. Total allocations are
-                  // bounded by k per left row.
+                  // Heap is at capacity -- reuse the evicted (worst) entry.
                   val evicted = heap.poll()
                   evicted.index = i
                   evicted.rankingValue = rankingValue
@@ -197,22 +230,28 @@ case class BroadcastNearestByJoinExec(
             i += 1
           }
 
+          // CORRECTNESS: results must be fully materialized (output rows copied) BEFORE
+          // returning from this flatMap closure, because the pooled HeapEntry objects
+          // will be reused for the next left row. The resultProj(joinedRow).copy() below
+          // produces a standalone UnsafeRow that does not alias the pool or the heap.
+          // The Array[InternalRow] is eagerly built and its iterator consumed lazily,
+          // but since flatMap fully drains each inner iterator before advancing leftIter,
+          // the pool is not touched until all output rows for this left row are consumed.
           if (heap.isEmpty && localJoinType == LeftOuter) {
             joinedRow(leftRow, nullRight)
             numOutput += 1
             Iterator.single(resultProj(joinedRow).copy())
           } else {
-            val results = new Array[HeapEntry](heap.size())
+            val results = new Array[InternalRow](heap.size())
             var idx = heap.size() - 1
             while (!heap.isEmpty) {
-              results(idx) = heap.poll()
-              idx -= 1
-            }
-            results.iterator.map { entry =>
+              val entry = heap.poll()
               joinedRow(leftRow, rightRows(entry.index))
               numOutput += 1
-              resultProj(joinedRow).copy()
+              results(idx) = resultProj(joinedRow).copy()
+              idx -= 1
             }
+            results.iterator
           }
         }
       }

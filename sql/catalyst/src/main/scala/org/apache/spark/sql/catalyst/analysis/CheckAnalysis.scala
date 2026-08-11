@@ -711,11 +711,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map.empty)
 
           case j: NearestByJoin if !conf.crossJoinEnabled &&
-              !conf.nearestByBroadcastEnabled =>
-            // The cross-join check only applies on the REWRITE path (flag OFF) where
-            // a synthetic unconditioned Join node is created. On the OPERATOR path
-            // (flag ON), no Join node is built and the operator produces at most k rows
-            // per left row, so it is not a true cross product.
+              (!conf.nearestByBroadcastEnabled ||
+                NearestByJoin.hasCrossChildPythonUDF(j)) =>
+            // The cross-join check applies on the REWRITE path (flag OFF) where a synthetic
+            // unconditioned Join node is created, AND on the flag-ON path when the ranking
+            // expression contains a cross-child scalar Python UDF (which forces the rewrite
+            // fallback and therefore also creates a Join node). On the surviving OPERATOR
+            // path (flag ON, no cross-child Python UDF) no Join node is built and the
+            // operator produces at most k rows per left row, so it is not a true cross
+            // product and crossJoin.enabled does not apply.
             j.failAnalysis(
               errorClass = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
               messageParameters = Map.empty)

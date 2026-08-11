@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.PythonUDF.isScalarPythonUDF
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -76,24 +75,12 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
    * Returns true when the ranking expression of a [[NearestByJoin]] contains a scalar
    * Python UDF whose attribute references span both the left and right children.
    *
-   * `ExtractPythonUDFs` cannot evaluate a Python UDF that requires attributes from more
-   * than one child of its parent operator. On the rewrite path (flag OFF) this is not a
-   * problem because the rewrite produces a `Join` node that merges both sides into a single
-   * child before any UDF extraction runs. On the operator path (flag ON) the `NearestByJoin`
-   * node is left as a binary operator; if a scalar Python UDF in the ranking expression
-   * references both children, `ExtractPythonUDFs` will throw. Detecting this case here
-   * lets us fall back to the rewrite for correctness.
+   * Delegates to [[NearestByJoin.hasCrossChildPythonUDF]] -- a single source of truth shared
+   * with `CheckAnalysis` (which needs the same predicate to decide whether to waive the
+   * cross-join error).
    */
-  private def containsCrossChildPythonUDF(j: NearestByJoin): Boolean = {
-    val leftSet = j.left.outputSet
-    val rightSet = j.right.outputSet
-    j.rankingExpression.exists { e =>
-      isScalarPythonUDF(e) && {
-        val refs = e.references
-        refs.intersect(leftSet).nonEmpty && refs.intersect(rightSet).nonEmpty
-      }
-    }
-  }
+  private def containsCrossChildPythonUDF(j: NearestByJoin): Boolean =
+    NearestByJoin.hasCrossChildPythonUDF(j)
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
     case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction)
@@ -121,12 +108,14 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
       //    pairings, so `LEFT OUTER` and `INNER` are equivalent in that case.
       //
       //    This synthetic join is an unconditioned cross-product, so on the REWRITE path
-      //    (flag OFF) `NEAREST BY` queries are subject to `CheckCartesianProducts` and will
-      //    be rejected when the user has set `spark.sql.crossJoin.enabled = false`. That is
-      //    intentional: if the user has opted out of cross-products, the rewrite -- which is
-      //    itself a bounded cross-product today -- should not silently bypass that choice.
-      //    (On the OPERATOR path -- flag ON -- no Join node is built, so
-      //    CheckCartesianProducts does not apply and crossJoin.enabled is irrelevant.)
+      //    (flag OFF, or flag ON with a cross-child scalar Python UDF that forces fallback)
+      //    `NEAREST BY` queries are subject to `CheckCartesianProducts` and will be rejected
+      //    when the user has set `spark.sql.crossJoin.enabled = false`. That is intentional:
+      //    if the user has opted out of cross-products, the rewrite -- which is itself a
+      //    bounded cross-product today -- should not silently bypass that choice.
+      //    (On the OPERATOR path -- flag ON, for NearestByJoin nodes that this rule does
+      //    NOT rewrite because they have no cross-child Python UDF -- no Join node is built,
+      //    so CheckCartesianProducts does not apply and crossJoin.enabled is irrelevant.)
       val join = Join(taggedLeft, right, joinType, None, JoinHint.NONE)
 
       // A LEFT OUTER join widens the right-side columns to nullable. The synthesized Aggregate

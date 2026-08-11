@@ -820,4 +820,43 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession
     assert(orderedResults(true).toSeq == orderedResults(false).toSeq,
       "ORDERED RESULTS: operator and rewrite should produce identical best-first order")
   }
+
+  // ==========================================================================
+  // Per-partition HeapEntry pooling: allocation-bound invariant test
+  // ==========================================================================
+
+  test("SPARK-57091: HeapEntry allocations bounded by min(k, rightRows) per partition") {
+    // This test verifies the per-partition pooling invariant: the total number of
+    // HeapEntry allocations must be bounded by min(k, rightRows.length), NOT by
+    // leftRows * k. With per-left-row allocation the count would be ~100 * 2 = 200;
+    // with per-partition pooling it must be <= min(k=2, rightRows=5) = 2.
+    withStreamingHeap {
+      // Reset the allocation counter before the query.
+      HeapEntry.resetAllocationCount()
+
+      // 100 left rows, 5 right rows, k=2. Force a single partition so the entire
+      // workload runs in one task with one pool.
+      val left = spark.range(100).toDF("id").withColumn("x", col("id").cast("double"))
+        .coalesce(1)
+      val right = Seq((10, 1.0), (11, 2.0), (12, 3.0), (13, 4.0), (14, 5.0))
+        .toDF("rid", "y")
+      val result = left.nearestByJoin(right, abs(col("x") - col("y")),
+        numResults = 2, mode = "exact", direction = "distance")
+      val plan = result.queryExecution.executedPlan
+      assert(plan.treeString.contains("BroadcastNearestByJoin"),
+        "Expected BroadcastNearestByJoinExec in plan but got:\n" + plan.treeString)
+
+      // Force execution to populate the counter.
+      val rows = result.collect()
+      assert(rows.length == 200, s"Expected 200 rows (100 left * k=2) but got ${rows.length}")
+
+      // The invariant: total allocations bounded by min(k, rightRows.length) = min(2, 5) = 2
+      // per partition. With a single partition, the counter must be <= 2.
+      // Under the old per-left-row code this would be ~200 (100 left rows * k=2).
+      val allocations = HeapEntry.allocationCount
+      assert(allocations <= 2,
+        s"HeapEntry allocations should be bounded by min(k=2, rightRows=5) = 2 per " +
+          s"partition, but got $allocations (indicates per-left-row allocation, not pooling)")
+    }
+  }
 }
