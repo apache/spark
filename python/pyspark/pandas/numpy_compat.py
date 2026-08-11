@@ -170,6 +170,8 @@ binary_np_spark_mappings = {
         lambda s1, s2: np.copysign(s1, s2), DoubleType()
     ),
     "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
+    # np.floor_divide dispatches to the pandas-on-Spark floordiv dunder operation
+    # before this registry is consulted, so this mapping is not used for that case.
     "floor_divide": _floor_divide_func,
     "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
     .when(F.isnan(c2.cast("double")), c1)
