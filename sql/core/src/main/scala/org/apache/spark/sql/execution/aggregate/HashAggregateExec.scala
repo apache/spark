@@ -134,6 +134,7 @@ case class HashAggregateExec(
             avgHashProbe,
             numTasksFallBacked,
             numBypassingRows,
+            aggTime,
             adaptivePartialAggEnabled,
             adaptiveMinRows,
             adaptiveMinCompaction)

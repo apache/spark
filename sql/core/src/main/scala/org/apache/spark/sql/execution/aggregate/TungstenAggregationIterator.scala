@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import java.util.concurrent.TimeUnit.NANOSECONDS
+
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -98,6 +100,7 @@ class TungstenAggregationIterator(
     avgHashProbe: SQLMetric,
     numTasksFallBacked: SQLMetric,
     numBypassingRows: SQLMetric,
+    aggTime: SQLMetric,
     adaptivePartialAggEnabled: Boolean,
     adaptiveMinRows: Long,
     adaptiveMinCompaction: Double)
@@ -444,6 +447,13 @@ class TungstenAggregationIterator(
   private def passThroughHasNext: Boolean =
     passThrough && (pendingPassThroughRow != null || inputIter.hasNext)
 
+  // `aggTime` only covers the build, which runs to completion in the constructor before
+  // pass-through is known; the interpreted path consumes the rest of the input lazily through
+  // `next()`. The drain is therefore timed there, bracketed once per drain (not per row) so the
+  // timing call does not distort the per-row work, mirroring the generated path which times the
+  // drain around each resume of the build.
+  private var passThroughDrainStart: Long = -1L
+
   // Emits the next input row as a single-row partial aggregation buffer, i.e. a group of size one.
   // The output (grouping key ++ buffer) is a valid partial buffer that the downstream Final
   // aggregation merges, so the result is identical to running partial aggregation on this row.
@@ -522,7 +532,11 @@ class TungstenAggregationIterator(
         // flip happens on the last input row there is no such row, and only the map (or sort)
         // output remains.
         passThroughTriggerPending = false
-        nextPassThroughOutput()
+        passThroughDrainStart = System.nanoTime()
+        val out = nextPassThroughOutput()
+        aggTime += NANOSECONDS.toMillis(System.nanoTime() - passThroughDrainStart)
+        passThroughDrainStart = -1L
+        out
       } else if (sortBased && sortedInputHasNewGroup) {
         // Process the current group.
         processCurrentSortedGroup()
@@ -556,7 +570,15 @@ class TungstenAggregationIterator(
       } else {
         // Adaptive partial aggregation bypassed partial aggregation: emit the remaining input
         // rows as single-row partial buffers, after the frozen map output above.
-        nextPassThroughOutput()
+        if (passThroughDrainStart == -1L) {
+          passThroughDrainStart = System.nanoTime()
+        }
+        val out = nextPassThroughOutput()
+        if (!passThroughHasNext) {
+          aggTime += NANOSECONDS.toMillis(System.nanoTime() - passThroughDrainStart)
+          passThroughDrainStart = -1L
+        }
+        out
       }
 
       numOutputRows += 1
