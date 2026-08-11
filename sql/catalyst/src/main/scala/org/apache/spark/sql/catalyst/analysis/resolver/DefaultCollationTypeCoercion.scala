@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{
   Cast,
   DefaultStringProducingExpression,
   Expression,
   Literal
 }
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
@@ -37,7 +39,7 @@ import org.apache.spark.sql.types.{DataType, StringType}
  * but isn't the same by reference, we shouldn't change the dataType, since that means the user
  * explicitly specified UTF8_BINARY collation.
  */
-object DefaultCollationTypeCoercion {
+object DefaultCollationTypeCoercion extends SQLConfHelper {
 
   /**
    * Apply [[View]]'s default collation to the expression.
@@ -52,7 +54,7 @@ object DefaultCollationTypeCoercion {
           literal.copy(dataType = replaceDefaultStringType(literal.dataType, collatedStringType))
         newLiteral.copyTagsFrom(literal)
         newLiteral
-      case cast: Cast if hasDefaultStringType(cast.dataType) =>
+      case cast: Cast if shouldApplyCollationToCast(cast) =>
         val newCast =
           cast.copy(dataType = replaceDefaultStringType(cast.dataType, collatedStringType))
         newCast.copyTagsFrom(cast)
@@ -91,4 +93,10 @@ object DefaultCollationTypeCoercion {
       case stringType: StringType => stringType.eq(StringType)
       case _ => false
     }
+
+  private def shouldApplyCollationToCast(cast: Cast): Boolean = {
+    hasDefaultStringType(cast.dataType) &&
+      (conf.getConf(SQLConf.APPLY_DEFAULT_COLLATION_TO_IMPLICIT_CASTS) ||
+        cast.containsTag(Cast.USER_SPECIFIED_CAST))
+  }
 }
