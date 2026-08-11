@@ -182,6 +182,29 @@ SELECT TIMESTAMP_LTZ '1960-01-31 03:04:05.123456789 UTC' + INTERVAL '1' MONTH;
 -- legacy calendar interval is still rejected by TimestampAddInterval's type check.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0);
 
+-- SPARK-57832: TIMESTAMP_LTZ(p) - TIMESTAMP_LTZ(p) yields a microsecond-grid DayTimeIntervalType.
+-- Only each operand's epochMicros participates, so the sub-microsecond remainder is truncated: the
+-- 789/111 sub-micro digits drop out and the difference is exactly 1 day + 0.123456 s. Like the
+-- micro TIMESTAMP_LTZ case, the subtraction runs on session-zone local date-times, so a DST
+-- transition between the two instants could shift the interval; there is none in the UTC span here.
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC';
+-- Two values inside the same microsecond subtract to zero once the remainder is truncated.
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05.123456001 UTC';
+-- The subtraction is antisymmetric.
+SELECT TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC';
+-- Mixed precision (7 vs 9) widens to the common nanos type before subtracting.
+SELECT ('2020-01-02 03:04:05.1234567 UTC' :: timestamp_ltz(7)) - ('2020-01-01 03:04:05.000000009 UTC' :: timestamp_ltz(9));
+-- Mixed with a micro TIMESTAMP_LTZ operand.
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05 UTC';
+-- A DATE operand is cast to the nanos LTZ type (midnight in the session time zone); the
+-- fraction below the micro grid drops. The bare LTZ literal and the DATE both read in the session
+-- zone (America/Los_Angeles), so the difference is exactly 1 day.
+SELECT TIMESTAMP_LTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01';
+-- Pre-epoch operand exercises the negative-epoch path.
+SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' - TIMESTAMP_LTZ '1960-01-01 00:00:00.000000999 UTC';
+-- NULL operand propagates.
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - CAST(NULL AS timestamp_ltz(9));
+
 -- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_LTZ. The aggregate preserves the
 -- nanosecond type and orders by the sub-microsecond remainder; NULLs are ignored. Values are
 -- rendered in the session time zone (America/Los_Angeles).

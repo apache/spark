@@ -2407,6 +2407,92 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57832: subtract nanosecond-precision timestamps") {
+    // The difference between two nanosecond timestamps is reported on the microsecond grid: only
+    // each operand's epochMicros participates, so the sub-microsecond remainder is truncated. The
+    // first pair below differs by a whole day plus 0.123456 s at the microsecond level, and the
+    // 789/111 sub-microsecond digits drop out entirely. The zero-result case (two values inside the
+    // same microsecond) is exercised by the second pair further down.
+    val ntzType = TimestampNTZNanosType(9)
+    val ntzLeft = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2020-01-02T03:04:05.123456789"), precision = 9)
+    val ntzRight = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2020-01-01T03:04:05.000000111"), precision = 9)
+    // 1 day + 0.123456 s; the 789/111 sub-microsecond digits drop out.
+    checkEvaluation(
+      SubtractTimestamps(
+        Literal.create(ntzLeft, ntzType),
+        Literal.create(ntzRight, ntzType),
+        legacyInterval = false,
+        timeZoneId = Some("UTC")),
+      Duration.ofDays(1).plus(123456, ChronoUnit.MICROS))
+    // Two values inside the same microsecond subtract to exactly zero (remainder truncated).
+    checkEvaluation(
+      SubtractTimestamps(
+        Literal.create(ntzLeft, ntzType),
+        Literal.create(
+          DateTimeUtils.localDateTimeToTimestampNanos(
+            LocalDateTime.parse("2020-01-02T03:04:05.123456001"), precision = 9),
+          ntzType),
+        legacyInterval = false,
+        timeZoneId = Some("UTC")),
+      Duration.ZERO)
+    // Legacy calendar-interval result carries the same microsecond difference.
+    checkEvaluation(
+      SubtractTimestamps(
+        Literal.create(ntzLeft, ntzType),
+        Literal.create(ntzRight, ntzType),
+        legacyInterval = true,
+        timeZoneId = Some("UTC")),
+      new CalendarInterval(0, 0, MICROS_PER_DAY + 123456L))
+
+    // LTZ nanos: subtraction reads the local wall clock at the session zone. Evaluated at UTC the
+    // instants and their local date-times coincide, so the difference matches the NTZ case above.
+    val ltzType = TimestampLTZNanosType(9)
+    val ltzLeft = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2020-01-02T03:04:05.123456789Z"), precision = 9)
+    val ltzRight = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2020-01-01T03:04:05.000000111Z"), precision = 9)
+    checkEvaluation(
+      SubtractTimestamps(
+        Literal.create(ltzLeft, ltzType),
+        Literal.create(ltzRight, ltzType),
+        legacyInterval = false,
+        timeZoneId = Some("UTC")),
+      Duration.ofDays(1).plus(123456, ChronoUnit.MICROS))
+
+    // Pre-epoch operand exercises the negative-epoch path; the result stays on the micros grid.
+    val ntzPreEpoch = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("1960-01-01T00:00:00.000000999"), precision = 9)
+    checkEvaluation(
+      SubtractTimestamps(
+        Literal.create(ntzLeft, ntzType),
+        Literal.create(ntzPreEpoch, ntzType),
+        legacyInterval = false,
+        timeZoneId = Some("UTC")),
+      Duration.between(
+        LocalDateTime.parse("1960-01-01T00:00:00"),
+        LocalDateTime.parse("2020-01-02T03:04:05.123456")))
+
+    // NULL operands propagate.
+    checkEvaluation(
+      SubtractTimestamps(
+        Literal.create(null, ntzType),
+        Literal.create(ntzRight, ntzType),
+        legacyInterval = false,
+        timeZoneId = Some("UTC")),
+      null)
+
+    Seq(false, true).foreach { legacy =>
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (l: Expression, r: Expression) => SubtractTimestamps(l, r, legacy, Some("UTC")),
+        ntzType, ntzType)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (l: Expression, r: Expression) => SubtractTimestamps(l, r, legacy, Some("UTC")),
+        ltzType, ltzType)
+    }
+  }
+
   test("SPARK-37552: convert a timestamp_ntz to another time zone") {
     checkEvaluation(
       ConvertTimezone(
