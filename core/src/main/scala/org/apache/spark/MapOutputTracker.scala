@@ -19,7 +19,6 @@ package org.apache.spark
 
 import java.io._
 import java.nio.ByteBuffer
-import java.util.{HashMap => JHashMap}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
@@ -802,9 +801,12 @@ private[spark] class MapOutputTrackerMaster(
     private[spark] val isLocal: Boolean)
   extends MapOutputTracker(conf) with ShuffleOutputTrackerMaster {
 
-  // Keep track of last access times for shuffle based TTL. Note: we don't use concurrent
-  // here because we don't care about overwriting times that are "close."
-  private[spark] val shuffleAccessTime = new JHashMap[Int, Long]
+  // Keep track of last access times for shuffle based TTL. We don't care about overwriting times
+  // that are "close", but this is written concurrently by the (multi-threaded) map-output
+  // dispatcher, the DAGScheduler, and the TTL cleaner thread, so it must be a concurrent map:
+  // plain HashMap structural mutation from multiple threads can corrupt the map, not merely skew
+  // a timestamp.
+  private[spark] val shuffleAccessTime = new ConcurrentHashMap[Int, Long]
 
   // The size at which we use Broadcast to send the map output statuses to the executors
   private val minSizeForBroadcast = conf.get(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST).toInt
@@ -1064,7 +1066,6 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatus.removeOutputsByFilter(x => true)
     shuffleStatus.removeMergeResultsByFilter(x => true)
     shuffleStatus.removeShuffleMergerLocations()
-    shuffleAccessTime.remove(shuffleId)
     incrementEpoch()
   }
 

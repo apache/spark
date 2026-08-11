@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.IOException
 import java.util.{HashMap => JHashMap}
-import java.util.concurrent.{ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ThreadPoolExecutor, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future, TimeoutException}
@@ -96,10 +96,11 @@ class BlockManagerMasterEndpoint(
   // rddId without scanning the whole map.
   private val sealedBlocksByRdd = new mutable.HashMap[Int, mutable.HashSet[RDDBlockId]]
 
-  // Keep track of last access times if we're using block TTLs
-  // We intentionally use a non-concurrent datastructure since "close"
-  // is good enough for atimes and reducing update cost matters.
-  private[spark] val rddAccessTime = new JHashMap[Int, Long]
+  // Keep track of last access times if we're using block TTLs. "Close" is good enough for atimes,
+  // but the TTL cleaner thread iterates and removes from this map while the dispatcher thread puts
+  // to it, so it must be concurrent: plain HashMap structural mutation from two threads can corrupt
+  // the map, not merely skew a timestamp.
+  private[spark] val rddAccessTime = new ConcurrentHashMap[Int, Long]
 
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
@@ -333,7 +334,13 @@ class BlockManagerMasterEndpoint(
                   try {
                     // Always remove the RDD from our tracking list first incase an error occurs.
                     rddAccessTime.remove(rddId)
-                    removeRdd(rddId)
+                    // Route the removal through our own message loop rather than calling
+                    // removeRdd directly: this endpoint is an IsolatedThreadSafeRpcEndpoint whose
+                    // non-concurrent maps (blockLocations, blockChecksums, sealedChecksums, ...)
+                    // are only safe because a single dispatcher thread touches them. Doing the
+                    // mutation here on the cleaner thread would race that dispatcher thread; asking
+                    // ourselves keeps removeRdd on the dispatcher thread where it belongs.
+                    self.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
                   } catch {
                     case NonFatal(e) =>
                       logDebug(log"Error removing rdd ${MDC(RDD_ID, rddId)} with TTL cleaner", e)
