@@ -192,10 +192,76 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             discovery.save(
                 {k: getattr(server, k) for k in ("host", "port", "token", "pid", "spark_version")}
             )
-        with mock.patch.object(os, "kill") as kill:
+        # Avoid inspecting or signaling a real process while exercising the stop path.
+        ps_result = subprocess.CompletedProcess([], 0, stdout=local_server._SERVER_CLASS)
+        with (
+            mock.patch.object(subprocess, "run", return_value=ps_result) as run,
+            mock.patch.object(os, "kill") as kill,
+        ):
             self.assertTrue(local_server.stop_local_connect_server())
+        run.assert_called_once_with(
+            ["ps", "-ww", "-p", "12345", "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         kill.assert_called_once_with(12345, signal.SIGTERM)
         self.assertIsNone(self._discovered_server().pid)
+
+    def test_stop_does_not_signal_reused_pid(self) -> None:
+        from unittest import mock
+
+        with Discovery() as discovery:
+            server = self._server(pid=12345)
+            discovery.save(
+                {k: getattr(server, k) for k in ("host", "port", "token", "pid", "spark_version")}
+            )
+        # Model a recycled pid without depending on host process state.
+        ps_result = subprocess.CompletedProcess([], 0, stdout="unrelated process")
+        with (
+            mock.patch.object(subprocess, "run", return_value=ps_result),
+            mock.patch.object(os, "kill") as kill,
+        ):
+            self.assertFalse(local_server.stop_local_connect_server())
+        kill.assert_not_called()
+        self.assertIsNone(self._discovered_server().pid)
+
+    def test_stop_preserves_discovery_when_process_cannot_be_inspected(self) -> None:
+        from unittest import mock
+
+        with Discovery() as discovery:
+            server = self._server(pid=12345)
+            discovery.save(
+                {k: getattr(server, k) for k in ("host", "port", "token", "pid", "spark_version")}
+            )
+        with (
+            mock.patch.object(subprocess, "run", side_effect=subprocess.TimeoutExpired("ps", 5)),
+            mock.patch.object(os, "kill") as kill,
+        ):
+            self.assertIsNone(local_server.stop_local_connect_server())
+        kill.assert_not_called()
+        self.assertEqual(self._discovered_server().pid, 12345)
+        with Discovery() as discovery:
+            discovery.clear()
+
+    def test_server_launcher_binds_to_loopback(self) -> None:
+        from unittest import mock
+
+        with Discovery() as discovery:
+            launcher = local_server.ServerLauncher("local[2]", {}, discovery)
+            # Capture the launcher argv without starting an external daemon.
+            with (
+                mock.patch.dict(os.environ, {"SPARK_HOME": self._tmpdir}),
+                mock.patch.object(os.path, "isfile", return_value=True) as isfile,
+                mock.patch.object(
+                    subprocess, "run", return_value=subprocess.CompletedProcess([], 0)
+                ) as run,
+            ):
+                launcher._run_script(15002, "token", None)
+        isfile.assert_called_once_with(
+            os.path.join(self._tmpdir, "sbin", "start-connect-server.sh")
+        )
+        self.assertIn("spark.connect.grpc.binding.address=127.0.0.1", run.call_args.args[0])
 
     def test_stop_cli_reports_when_no_server(self) -> None:
         result = subprocess.run(
@@ -207,6 +273,17 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("No running persistent local Spark Connect server", result.stdout)
+
+    def test_stop_cli_fails_when_process_cannot_be_inspected(self) -> None:
+        from unittest import mock
+
+        with (
+            mock.patch.object(sys, "argv", ["local_server", "--stop"]),
+            mock.patch.object(local_server, "stop_local_connect_server", return_value=None),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            local_server.main()
+        self.assertEqual(raised.exception.code, 1)
 
     def test_reuse_or_start_requires_posix(self) -> None:
         from unittest import mock
