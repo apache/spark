@@ -118,6 +118,49 @@ def _fmod_func(c1: Column, c2: Column) -> Column:
     )
 
 
+def _floor_divide_func(c1: Column, c2: Column) -> Column:
+    c1_double = c1.cast("double")
+    c2_double = c2.cast("double")
+
+    return F.when(
+        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(
+            c1_double.isin(float("-inf"), float("inf")),
+            F.when(
+                c2_double == 0,
+                F.when(
+                    (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
+                    F.lit(float("-inf")),
+                ).otherwise(F.lit(float("inf"))),
+            ).otherwise(F.lit(float("nan"))),
+        )
+        .when(
+            c2_double.isin(float("-inf"), float("inf")),
+            F.when(c1_double == 0, c1_double / c2_double)
+            .when((c1_double < 0) != (c2_double < 0), F.lit(-1.0))
+            .otherwise(F.lit(0.0)),
+        )
+        .when(
+            c2_double == 0,
+            F.when(c1_double == 0, F.lit(float("nan")))
+            .when(
+                (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
+                F.lit(float("-inf")),
+            )
+            .otherwise(F.lit(float("inf"))),
+        )
+        .when(c1_double == 0, c1_double / c2_double)
+        .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0))),
+    ).otherwise(
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(c2_double == 0, F.lit(0.0))
+        .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0)))
+    )
+
+
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
@@ -127,6 +170,7 @@ binary_np_spark_mappings = {
         lambda s1, s2: np.copysign(s1, s2), DoubleType()
     ),
     "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
+    "floor_divide": _floor_divide_func,
     "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
     .when(F.isnan(c2.cast("double")), c1)
     .when(c1 == c2, c1)
