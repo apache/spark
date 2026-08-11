@@ -408,11 +408,8 @@ class AFTSurvivalRegressionModel private[ml] (
     }
   }
 
-  private def lambda2Quantiles(lambda: Double): Vector = {
-    val quantiles = _quantiles.copy
-    BLAS.scal(lambda, quantiles)
-    quantiles
-  }
+  private def lambda2Quantiles(lambda: Double): Vector =
+    AFTSurvivalRegressionModel.lambda2Quantiles(lambda, _quantiles)
 
   @Since("2.0.0")
   def predictQuantiles(features: Vector): Vector = {
@@ -447,11 +444,8 @@ class AFTSurvivalRegressionModel private[ml] (
 
     if (hasQuantilesCol) {
       val localQuantiles = _quantiles
-      val lambda2QuantilesFunc = (lambda: Double) => {
-        val quantiles = localQuantiles.copy
-        BLAS.scal(lambda, quantiles)
-        quantiles
-      }
+      val lambda2QuantilesFunc = (lambda: Double) =>
+        AFTSurvivalRegressionModel.lambda2Quantiles(lambda, localQuantiles)
       val quanCol = if ($(predictionCol).nonEmpty) {
         udf(lambda2QuantilesFunc).apply(predictionColumns.head)
       } else {
@@ -512,6 +506,12 @@ class AFTSurvivalRegressionModel private[ml] (
 @Since("1.6.0")
 object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel] {
   private[ml] case class Data(coefficients: Vector, intercept: Double, scale: Double)
+
+  private def lambda2Quantiles(lambda: Double, quantiles: Vector): Vector = {
+    val scaledQuantiles = quantiles.copy
+    BLAS.scal(lambda, scaledQuantiles)
+    scaledQuantiles
+  }
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
     import ReadWriteUtils._
