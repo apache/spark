@@ -949,17 +949,19 @@ public class AwsStsCredentialProviderSuite {
         () -> p.resolve(user, TEST_TARGET));
   }
 
-  // ========== resolve() after close() (Item 5) ==========
+  // ========== resolve() wraps SDK IllegalStateException (Item 5) ==========
 
   @Test
-  public void testResolveAfterCloseThrowsCredentialResolutionException() {
+  public void testResolveWrapsSdkIllegalStateExceptionAsCredentialResolutionException() {
     StsClient mockSts = mock(StsClient.class);
     when(mockSts.assumeRoleWithWebIdentity(any(AssumeRoleWithWebIdentityRequest.class)))
         .thenThrow(new IllegalStateException("client has been closed"));
 
     AwsStsCredentialProvider p = new AwsStsCredentialProvider(
         mockSts, TEST_ROLE_ARN, "test-session", null);
-    p.close();
+    // Do NOT call p.close() -- keep the provider's closed flag false so that
+    // resolve() reaches the STS call, where the mock throws IllegalStateException.
+    // This exercises the catch (IllegalStateException e) branch in resolve().
 
     UserContext user = new UserContext(TEST_PRINCIPAL, TEST_ISSUER, TEST_TOKEN,
         Instant.now(), Instant.now().plusSeconds(300));
@@ -968,9 +970,18 @@ public class AwsStsCredentialProviderSuite {
         () -> p.resolve(user, TEST_TARGET));
 
     assertTrue(ex.getMessage().contains("closed"),
-        "Message should indicate the client was closed");
+        "Message should indicate the STS client has been closed");
     assertFalse(ex.getMessage().contains(TEST_TOKEN),
         "Raw token must never appear in exception messages");
+
+    // Verify the cause is the original IllegalStateException from the SDK client
+    assertTrue(ex.getCause() instanceof IllegalStateException,
+        "Cause should be the IllegalStateException thrown by the STS client");
+    assertEquals("client has been closed", ex.getCause().getMessage());
+
+    // Verify the mock was actually invoked (proving the closed-flag short-circuit
+    // was NOT hit and the test truly exercises the ISE catch branch)
+    verify(mockSts).assumeRoleWithWebIdentity(any(AssumeRoleWithWebIdentityRequest.class));
   }
 
   // ========== Helpers ==========
