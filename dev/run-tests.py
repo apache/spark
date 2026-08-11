@@ -674,7 +674,7 @@ def main():
     if modules_with_python_tests and not os.environ.get("SKIP_PYTHON"):
         relevant_changed_files = None
         if changed_files:
-            # Filter out all devl_tools files because they are not relevant
+            # Filter out all dev_tools files because they are not relevant
             relevant_changed_files = [
                 f for f in changed_files if not modules.dev_tools.contains_file(f)
             ]
