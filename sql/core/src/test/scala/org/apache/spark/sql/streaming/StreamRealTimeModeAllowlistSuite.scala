@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import scala.concurrent.duration._
 
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.sql.execution.streaming.LowLatencyMemoryStream
+import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -70,7 +70,6 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
             "errorType" -> "operator",
             "message" -> (
               "org.apache.spark.sql.execution.SortExec, " +
-                "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec, " +
                 "org.apache.spark.sql.execution.joins.SortMergeJoinExec are"
               )
           )
@@ -107,41 +106,18 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
     }
   }
 
-  // TODO(SPARK-54237) : Remove this test after RTM can shuffle to multiple stages
-  test("repartition not allowed") {
-      val inputData = LowLatencyMemoryStream[Int](2)
-
-      val df = inputData.toDF()
-        .select(col("value").as("key"))
-        .repartition(4, col("key"))
-
-      val query = runStreamingQuery("repartition_allowlist", df)
-
-      eventually(timeout(60.seconds)) {
-        checkError(
-          exception = query.exception.get.getCause.asInstanceOf[SparkIllegalArgumentException],
-          condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
-          parameters = Map(
-            "errorType" -> "operator",
-            "message" -> (
-                "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec is"
-              )
-          )
-        )
-      }
-  }
-
-  // TODO(SPARK-54236) : Remove this test after RTM supports stateful queries
-  test("stateful queries not allowed") {
+  // A repartitionByRange produces a range-partitioned shuffle. Building its RangePartitioner runs a
+  // separate job that samples the input to compute range bounds, which cannot complete while the
+  // source keeps producing, so it must be rejected up front rather than stalling the query.
+  test("range-partitioned shuffle not allowed") {
     val inputData = LowLatencyMemoryStream[Int](2)
 
     val df = inputData.toDF()
       .select(col("value").as("key"))
-      .groupBy(col("key"))
-      .count()
-      .select(concat(col("key"), lit("-"), col("count")))
+      .repartitionByRange(3, col("key"))
+      .select(col("key"))
 
-    val query = runStreamingQuery("repartition_allowlist", df)
+    val query = runStreamingQuery("range_shuffle_allowlist", df)
 
     eventually(timeout(60.seconds)) {
       checkError(
@@ -149,15 +125,16 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
         condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
         parameters = Map(
           "errorType" -> "operator",
-          "message" -> (
-            "org.apache.spark.sql.execution.aggregate.HashAggregateExec, " +
-              "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec, " +
-              "org.apache.spark.sql.execution.streaming" +
-              ".operators.stateful.StateStoreRestoreExec, " +
-              "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec are"
-            )
+          "message" -> "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec is"
         )
       )
     }
   }
+
+  // The "stateful queries not allowed" test that used to live here asserted that a streaming
+  // aggregation was rejected, because it planned into the micro-batch aggregation operators and
+  // HashAggregateExec is not allowlisted. A Real-Time Mode aggregation is now planned as the
+  // streamline aggregate operator, which is allowlisted, so there is no rejection left to assert.
+  // StreamlineStreamingAggregationRealTimeSuite covers the aggregation itself end to end, and the
+  // generic operator-allowlist test above still guards the operators that remain unsupported.
 }

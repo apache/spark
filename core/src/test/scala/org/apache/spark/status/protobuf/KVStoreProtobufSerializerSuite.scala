@@ -316,7 +316,11 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           ),
           taskResources = Map(
             "0" -> new TaskResourceRequest(resourceName = "exec1", amount = 1),
-            "1" -> new TaskResourceRequest(resourceName = "exec2", amount = 1)
+            "1" -> new TaskResourceRequest(resourceName = "exec2", amount = 1),
+            // A pre-4.3 store can carry any cpus amount the old `<= 1.0 || whole` check
+            // accepted, including -Infinity; deserialization must restore it unchanged.
+            "cpus" -> new TaskResourceRequest(resourceName = "cpus",
+              amount = Double.NegativeInfinity)
           )
         ))
       )
@@ -395,7 +399,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         duration = 100,
         sparkUser = null,
         completed = true,
-        appSparkVersion = null
+        appSparkVersion = null,
+        exitCode = Some(1)
       ))
     val input = new ApplicationInfoWrapper(
       ApplicationInfo(

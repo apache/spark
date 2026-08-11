@@ -41,6 +41,7 @@ object TreePattern extends Enumeration  {
   val BINARY_COMPARISON: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
+  val CAST_TO_TIMESTAMP: Value = Value
   val COALESCE: Value = Value
   val COMMON_EXPR_REF: Value = Value
   val CONCAT: Value = Value
@@ -58,6 +59,7 @@ object TreePattern extends Enumeration  {
   val FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION: Value = Value
   val GENERATOR: Value = Value
   val GROUPING_ANALYTICS: Value = Value
+  val GET_JSON_OBJECT: Value = Value
   val HIGH_ORDER_FUNCTION: Value = Value
   val IF: Value = Value
   val IN: Value = Value
@@ -104,7 +106,9 @@ object TreePattern extends Enumeration  {
   val TEMP_RESOLVED_COLUMN: Value = Value
   val TIME_WINDOW: Value = Value
   val TIME_ZONE_AWARE_EXPRESSION: Value = Value
+  val TRANSPILED_PYTHON_UDF: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
+  val USER_DEFINED_AGGREGATION: Value = Value
   val VARIANT_GET: Value = Value
   val WINDOW_EXPRESSION: Value = Value
   val WINDOW_TIME: Value = Value

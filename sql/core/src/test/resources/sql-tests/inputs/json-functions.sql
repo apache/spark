@@ -75,6 +75,7 @@ select to_json(array(array(1, 2, 3), array(4)));
 select schema_of_json('{"c1":1}', map('primitivesAsString', 'true'));
 select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'true', 'prefersDecimal', 'true'));
 select schema_of_json(null);
+select schema_of_json(42);
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a');
 SELECT schema_of_json(jsonField) FROM jsonTable;
 
@@ -106,6 +107,27 @@ select json_object_keys('{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}');
 select json_object_keys('{[1,2]}');
 select json_object_keys('{"key": 45, "random_string"}');
 select json_object_keys('[1, 2, 3]');
+
+-- json_typeof
+select json_typeof();
+select json_typeof(null);
+select json_typeof(200);
+select json_typeof('');
+select json_typeof('{}');
+select json_typeof('{"key": 1, "arr": [1, 2]}');
+select json_typeof('[]');
+select json_typeof('[1, 2, 3]');
+select json_typeof('"hello"');
+select json_typeof('123');
+select json_typeof('1.5');
+select json_typeof('-123');
+select json_typeof('-1.5');
+select json_typeof('true');
+select json_typeof('false');
+select json_typeof('null');
+select json_typeof('bad');
+select json_typeof('{"key": 45, "random_string"}');
+select json_typeof('123 true');
 
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;

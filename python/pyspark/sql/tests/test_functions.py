@@ -2148,6 +2148,56 @@ class FunctionsTestsMixin:
             ["1", "2", "2", "2"],
         )
 
+    def test_collect_union(self):
+        # array<int>: distinct union across rows; NULL arrays ignored.
+        df = self.spark.createDataFrame([([1, 2],), ([2, 3],), ([1],), (None,)], ["value"])
+        self.assertEqual(
+            sorted(df.select(F.collect_union(df.value).alias("r")).collect()[0].r),
+            [1, 2, 3],
+        )
+
+        # array<string>
+        sdf = self.spark.createDataFrame([(["a", "b"],), (["b", "c"],), (["a"],)], ["value"])
+        self.assertEqual(
+            sorted(sdf.select(F.collect_union("value").alias("r")).collect()[0].r),
+            ["a", "b", "c"],
+        )
+
+        # array<double> (buffer keyed by bit pattern; values round-trip)
+        ddf = self.spark.createDataFrame([([1.5, 2.5],), ([2.5, 3.5],)], ["value"])
+        self.assertEqual(
+            sorted(ddf.select(F.collect_union("value").alias("r")).collect()[0].r),
+            [1.5, 2.5, 3.5],
+        )
+
+        # NULL elements inside a non-null array are dropped by default (IGNORE NULLS) ...
+        ndf = self.spark.createDataFrame([([1, None],), ([2],)], "value: array<int>")
+        self.assertEqual(
+            sorted(ndf.select(F.collect_union("value").alias("r")).collect()[0].r),
+            [1, 2],
+        )
+        # ... and kept (a single null) with RESPECT NULLS (SQL clause via expr).
+        respect = ndf.select(F.expr("collect_union(value) RESPECT NULLS").alias("r")).collect()[0].r
+        self.assertEqual(sorted(respect, key=lambda x: (x is not None, x)), [None, 1, 2])
+
+        # array<struct>: the motivating case (dedups whole structs, stays element-wise).
+        struct_data = [
+            ([{"id": 1, "flag": True}, {"id": 2, "flag": False}],),
+            ([{"id": 2, "flag": False}, {"id": 3, "flag": True}],),
+        ]
+        stdf = self.spark.createDataFrame(struct_data, "value: array<struct<id:int,flag:boolean>>")
+        struct_rows = stdf.select(F.collect_union("value").alias("r")).collect()[0].r
+        self.assertEqual(
+            sorted((row.id, row.flag) for row in struct_rows),
+            [(1, True), (2, False), (3, True)],
+        )
+
+        # Per-group union.
+        gdf = self.spark.createDataFrame([("a", [1, 2]), ("a", [2, 3]), ("b", [4])], ["k", "value"])
+        rows = gdf.groupBy("k").agg(F.collect_union("value").alias("r")).orderBy("k").collect()
+        self.assertEqual(sorted(rows[0].r), [1, 2, 3])
+        self.assertEqual(sorted(rows[1].r), [4])
+
     def test_listagg_functions(self):
         df = self.spark.createDataFrame(
             [(1, "1"), (2, "2"), (None, None), (1, "2")], ["key", "value"]
@@ -3507,7 +3557,16 @@ class FunctionsTestsMixin:
 
     def test_variant_expressions(self):
         df = self.spark.createDataFrame(
-            [Row(json="""{ "a" : 1 }""", path="$.a"), Row(json="""{ "b" : 2 }""", path="$.b")]
+            [
+                Row(json="""{ "a" : 1 }""", path="$.a", newpath="$.z", arr="[1, 2]", arrpath="$"),
+                Row(
+                    json="""{ "b" : 2 }""",
+                    path="$.b",
+                    newpath="$.z",
+                    arr="[[3], 4]",
+                    arrpath="$[0]",
+                ),
+            ]
         )
         v = F.parse_json(df.json)
 
@@ -3516,6 +3575,72 @@ class FunctionsTestsMixin:
 
         check(df.select(F.is_variant_null(v)), [False, False])
         check(df.select(F.is_valid_variant(v)), [True, True])
+        check(df.select(F.to_json(F.variant_delete(v, "$.a"))), ["{}", '{"b":2}'])
+        check(df.select(F.to_json(F.variant_delete(v, df.path))), ["{}", "{}"])
+        check(
+            df.select(F.to_json(F.variant_delete(v, F.lit(None)))),
+            ['{"a":1}', '{"b":2}'],
+        )
+        check(
+            df.select(F.to_json(F.variant_insert(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(df.select(F.to_json(F.variant_insert(v, "$.z", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_insert(v, df.newpath, F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.try_variant_insert(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(df.select(F.to_json(F.try_variant_insert(v, df.path, F.lit(9)))), [None, None])
+        check(df.select(F.to_json(F.try_variant_insert(v, "$.z", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_set(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.variant_set(v, "$.z", F.lit(9), False))),
+            ['{"a":1}', '{"b":2}'],
+        )
+        check(df.select(F.to_json(F.variant_set(v, "$.z", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_set(v, df.newpath, F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.try_variant_set(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.try_variant_set(v, "$.z", F.lit(9), False))),
+            ['{"a":1}', '{"b":2}'],
+        )
+        check(df.select(F.to_json(F.try_variant_set(v, "$[0]", F.lit(9)))), [None, None])
+        check(
+            df.select(F.to_json(F.try_variant_set(v, df.newpath, F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        arr = F.parse_json(df.arr)
+        check(
+            df.select(F.to_json(F.variant_array_append(arr, "$", F.lit(9)))),
+            ["[1,2,9]", "[[3],4,9]"],
+        )
+        check(df.select(F.to_json(F.variant_array_append(arr, "$", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_array_append(arr, df.arrpath, F.lit(9)))),
+            ["[1,2,9]", "[[3,9],4]"],
+        )
+        check(
+            df.select(F.to_json(F.try_variant_array_append(arr, "$", F.lit(9)))),
+            ["[1,2,9]", "[[3],4,9]"],
+        )
+        check(df.select(F.to_json(F.try_variant_array_append(arr, "$.a", F.lit(9)))), [None, None])
+        check(
+            df.select(F.to_json(F.try_variant_array_append(arr, df.arrpath, F.lit(9)))),
+            ["[1,2,9]", "[[3,9],4]"],
+        )
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 
@@ -3598,6 +3723,23 @@ class FunctionsTestsMixin:
             F.to_json(F.to_variant_object(df.v)).alias("var"),
         ).collect()
         self.assertEqual("""{"a":1}""", actual[0]["var"])
+
+    def test_variant_from_arrays_and_entries(self):
+        df = self.spark.createDataFrame(
+            [(["a", "b"], [1, 2])], "keys array<string>, values array<int>"
+        )
+        actual = df.select(
+            F.to_json(F.variant_from_arrays("keys", "values")).alias("var"),
+        ).collect()
+        self.assertEqual("""{"a":1,"b":2}""", actual[0]["var"])
+
+        df2 = self.spark.createDataFrame(
+            [([("a", 1), ("b", 2)],)], "entries array<struct<k string, v int>>"
+        )
+        actual2 = df2.select(
+            F.to_json(F.variant_from_entries("entries")).alias("var"),
+        ).collect()
+        self.assertEqual("""{"a":1,"b":2}""", actual2[0]["var"])
 
     def test_schema_of_csv(self):
         with self.assertRaises(PySparkTypeError) as pe:

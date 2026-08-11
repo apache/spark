@@ -58,6 +58,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(kmeans.getTol === 1e-4)
     assert(kmeans.getSolver === KMeans.AUTO)
     assert(kmeans.getDistanceMeasure === KMeans.EUCLIDEAN)
+    assert(kmeans.getIntermediateStorageLevel === "MEMORY_AND_DISK")
     val model = kmeans.setMaxIter(1).fit(dataset)
 
     val transformed = model.transform(dataset)
@@ -67,6 +68,14 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
+  }
+
+  test("KMeansModel estimated size") {
+    val model = new KMeans().setK(2).fit(dataset)
+    val maxSize = 1024 * 16
+    assert(
+      model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
 
   test("KMeans validate input dataset") {
@@ -85,6 +94,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       .setSeed(123)
       .setTol(1e-3)
       .setDistanceMeasure(KMeans.COSINE)
+      .setIntermediateStorageLevel("MEMORY_ONLY")
 
     assert(kmeans.getK === 9)
     assert(kmeans.getFeaturesCol === "test_feature")
@@ -95,6 +105,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(kmeans.getSeed === 123)
     assert(kmeans.getTol === 1e-3)
     assert(kmeans.getDistanceMeasure === KMeans.COSINE)
+    assert(kmeans.getIntermediateStorageLevel === "MEMORY_ONLY")
   }
 
   test("parameters validation") {
@@ -109,6 +120,12 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     }
     intercept[IllegalArgumentException] {
       new KMeans().setDistanceMeasure("no_such_a_measure")
+    }
+    intercept[IllegalArgumentException] {
+      new KMeans().setIntermediateStorageLevel("NONE")
+    }
+    intercept[IllegalArgumentException] {
+      new KMeans().setIntermediateStorageLevel("no_such_a_level")
     }
   }
 

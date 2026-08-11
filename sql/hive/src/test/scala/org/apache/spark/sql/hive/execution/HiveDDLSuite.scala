@@ -610,7 +610,7 @@ class HiveDDLSuite
       exception = intercept[AnalysisException] {
         sql(sql1)
       },
-      condition = "_LEGACY_ERROR_TEMP_1076",
+      condition = "INVALID_PARTITION_SPEC",
       parameters = Map(
         "details" -> "The spec ([partCol1=]) contains an empty partition column value")
     )
@@ -3415,6 +3415,68 @@ class HiveDDLSuite
       verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
       verify(spyCatalog, times(1)).alterTableSchema(
         any[String], any[String], any[StructType])
+    }
+  }
+
+  test("SPARK-57835: read persisted nanos-typed tables when the preview flag is off") {
+    withTable("nanos_ddl_tbl") {
+      // Create the table with the preview flag on (the test default via Utils.isTesting).
+      sql(
+        """CREATE TABLE nanos_ddl_tbl (id INT, ntz TIMESTAMP_NTZ(9), ltz TIMESTAMP_LTZ(7))
+          |USING parquet""".stripMargin)
+
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+        // Read-through policy (SPARK-57835): metadata reads succeed and render the nanos columns
+        // with their precision, even though the preview flag is off. Before this change these
+        // commands failed at getTable time with FEATURE_NOT_ENABLED.
+        val describeRows = sql("DESCRIBE TABLE nanos_ddl_tbl").collect()
+          .map(r => r.getString(0) -> r.getString(1)).toMap
+        assert(describeRows("ntz") === "timestamp_ntz(9)")
+        assert(describeRows("ltz") === "timestamp_ltz(7)")
+
+        val showCreate = sql("SHOW CREATE TABLE nanos_ddl_tbl").head().getString(0)
+        assert(showCreate.contains("TIMESTAMP_NTZ(9)"))
+        assert(showCreate.contains("TIMESTAMP_LTZ(7)"))
+
+        // But actually reading the data still fails with an actionable, feature-flag error.
+        checkError(
+          exception = intercept[SparkException] {
+            sql("SELECT * FROM nanos_ddl_tbl").collect()
+          },
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"))
+
+        // The table remains droppable with the flag off (a key reason for read-through: a table
+        // written with the flag on must never become un-manageable once it is off).
+        sql("DROP TABLE nanos_ddl_tbl")
+        assert(!spark.sessionState.catalog.tableExists(TableIdentifier("nanos_ddl_tbl")))
+      }
+    }
+  }
+
+  test("SPARK-57835: read a persisted view over a nanos column when the preview flag is off") {
+    withTable("nanos_view_base") {
+      withView("nanos_view") {
+        sql("CREATE TABLE nanos_view_base (id INT, ntz TIMESTAMP_NTZ(9)) USING parquet")
+        // The view persists its analyzed output schema (which includes the nanos column) into
+        // table properties; this is created with the flag on.
+        sql("CREATE VIEW nanos_view AS SELECT id, ntz FROM nanos_view_base")
+
+        withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+          // Restoring the view schema from properties (DataType.fromJson) succeeds, so DESCRIBE
+          // renders the nanos column.
+          val describeRows = sql("DESCRIBE TABLE nanos_view").collect()
+            .map(r => r.getString(0) -> r.getString(1)).toMap
+          assert(describeRows("ntz") === "timestamp_ntz(9)")
+
+          // The view can still be dropped with the flag off.
+          sql("DROP VIEW nanos_view")
+          assert(!spark.sessionState.catalog.tableExists(TableIdentifier("nanos_view")))
+        }
+      }
     }
   }
 }

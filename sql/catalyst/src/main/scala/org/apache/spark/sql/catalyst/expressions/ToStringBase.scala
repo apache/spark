@@ -22,12 +22,12 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, FractionTimeFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
@@ -85,8 +85,6 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
     case TimestampNTZType =>
       acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
-    case _: TimeType =>
-      acceptAny[Long](t => UTF8String.fromString(timeFormatter.format(t)))
     case ArrayType(et, _) =>
       acceptAny[ArrayData](array => {
         val builder = new UTF8StringBuilder
@@ -219,10 +217,19 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
     from match {
       case BinaryType =>
+        // Pass the public BinaryFormatter trait as the reference's cast type.
+        // `binaryFormatter` is a lambda (UTF8String.fromBytes); its runtime class is a
+        // non-nameable synthetic (e.g. ToStringBase$$anonfun$binaryFormatter$N), which
+        // the JDK compiler cannot reference ("cannot find symbol"); Janino tolerates it.
         val bf = JavaCode.global(
-          ctx.addReferenceObj("binaryFormatter", binaryFormatter),
+          ctx.addReferenceObj("binaryFormatter", binaryFormatter, classOf[BinaryFormatter].getName),
           classOf[BinaryFormatter])
-        (c, evPrim) => code"$evPrim = $bf.apply($c);"
+        // `BinaryFormatter` extends `Array[Byte] => UTF8String` (a Function1). The JDK
+        // compiler resolves `bf.apply(c)` through the parameterised signature and infers
+        // `UTF8String`, but Janino binds it to the erased `apply(Object)` and infers
+        // `Object`, so the assignment to the `UTF8String` result needs an explicit cast
+        // to compile under both backends.
+        (c, evPrim) => code"$evPrim = (UTF8String) $bf.apply($c);"
       case DateType =>
         val df = JavaCode.global(
           ctx.addReferenceObj("dateFormatter", dateFormatter),

@@ -412,16 +412,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   override def getLastUpdatedTime(): Long = lastScanTime.get()
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
-    val logPath = RollingEventLogFilesWriter.EVENT_LOG_DIR_NAME_PREFIX +
-        EventLogFileWriter.nameForAppAndAttempt(appId, attemptId)
     val app = try {
       load(appId)
      } catch {
-      case _: NoSuchElementException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
-        loadFromFallbackLocation(appId, attemptId, logPath) match {
-          case Some(wrapper) => wrapper
-          case None => return None
-        }
+      case _: NoSuchElementException if isOnDemandLogLoadEnabled =>
+        loadFromFallbackLocations(appId, attemptId).getOrElse(return None)
       case _: NoSuchElementException =>
         return None
     }
@@ -460,6 +455,27 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     Some(loadedUI)
+  }
+
+  private def loadFromFallbackLocations(
+      appId: String,
+      attemptId: Option[String]): Option[ApplicationInfoWrapper] = {
+    val logPaths = mutable.ArrayBuffer.empty[String]
+    if (conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED)) {
+      logPaths += RollingEventLogFilesWriter.EVENT_LOG_DIR_NAME_PREFIX +
+        EventLogFileWriter.nameForAppAndAttempt(appId, attemptId)
+    }
+    if (conf.get(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED)) {
+      logPaths ++= SingleEventLogFileWriter.getLogFileNames(appId, attemptId)
+    }
+    logPaths.iterator.map(loadFromFallbackLocation(appId, attemptId, _)).collectFirst {
+      case Some(app) => app
+    }
+  }
+
+  private def isOnDemandLogLoadEnabled: Boolean = {
+    conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) ||
+      conf.get(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED)
   }
 
   private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
@@ -1859,6 +1875,7 @@ private[history] class AppListingListener(
     attempt.lastUpdated = new Date(reader.modificationTime)
     attempt.duration = event.time - attempt.startTime.getTime()
     attempt.completed = true
+    attempt.exitCode = event.exitCode
   }
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
@@ -1926,6 +1943,7 @@ private[history] class AppListingListener(
     var duration = 0L
     var sparkUser: String = null
     var completed = false
+    var exitCode = Option.empty[Int]
     var appSparkVersion = ""
 
     var adminAcls: Option[String] = None
@@ -1944,6 +1962,7 @@ private[history] class AppListingListener(
         sparkUser,
         completed,
         appSparkVersion,
+        exitCode,
         Some(logSourceName),
         Some(logSourceFullPath))
       new AttemptInfoWrapper(

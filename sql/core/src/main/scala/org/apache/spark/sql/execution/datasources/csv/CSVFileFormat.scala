@@ -46,7 +46,7 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     val parsedOptions = getCsvOptions(sparkSession, options)
     // A tar archive is decompressed/unpacked as a sequential stream, so it must be read as a
     // single split rather than carved into byte ranges.
-    if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(path)) {
+    if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       return false
     }
     CSVDataSource(parsedOptions).isSplitable && super.isSplitable(sparkSession, options, path)
@@ -57,8 +57,6 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = getCsvOptions(sparkSession, options)
-    // The v1 file format routes archives to `readArchive` (see `buildReader`), so archive schema
-    // inference is supported here.
     CSVDataSource(parsedOptions)
       .inferSchema(sparkSession, files, parsedOptions, supportsArchiveScan = true)
   }
@@ -107,6 +105,9 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val parsedOptions = getCsvOptions(sparkSession, options)
     val isColumnPruningEnabled = parsedOptions.isColumnPruningEnabled(requiredSchema)
+    // The effective `ignoredPathSegmentRegex` for skipping hidden archive entries. Reused from the
+    // options' lazily-compiled Pattern (Serializable) instead of re-compiling per file or entry.
+    val ignoredPathSegmentRegex = parsedOptions.ignoredPathSegmentRegexPattern
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
@@ -139,9 +140,10 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
 
       // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
       // archive reads are enabled; otherwise the file is parsed directly.
-      if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
+      if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         CSVDataSource(parsedOptions).readArchive(
-          conf, file, () => newParser(), getHeaderChecker, requiredSchema)
+          conf, file, () => newParser(), getHeaderChecker, requiredSchema, ignoredPathSegmentRegex,
+          parsedOptions.archivePathFilterPattern)
       } else {
         val parser = newParser()
         val headerChecker = getHeaderChecker(file.start == 0, s"CSV file: ${file.urlEncodedPath}")
@@ -166,9 +168,6 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     case _: VariantType => allowVariant
 
     case _: GeometryType | _: GeographyType => false
-
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: AnyTimestampNanoType => false
 
     case _: AtomicType => true
 

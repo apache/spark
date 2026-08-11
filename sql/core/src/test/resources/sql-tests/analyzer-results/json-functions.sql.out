@@ -447,6 +447,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select schema_of_json(42)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_json(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "schema_of_json(42)"
+  } ]
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a')
 -- !query analysis
 CreateViewCommand `jsonTable`, [(jsonField,None), (a,None)], SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a'), false, false, LocalTempView, UNSUPPORTED, true
@@ -715,6 +739,172 @@ Project [json_object_keys({"key": 45, "random_string"}) AS json_object_keys({"ke
 select json_object_keys('[1, 2, 3]')
 -- !query analysis
 Project [json_object_keys([1, 2, 3]) AS json_object_keys([1, 2, 3])#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`json_typeof`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "json_typeof()"
+  } ]
+}
+
+
+-- !query
+select json_typeof(null)
+-- !query analysis
+Project [json_typeof(null) AS json_typeof(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof(200)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"200\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"json_typeof(200)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "json_typeof(200)"
+  } ]
+}
+
+
+-- !query
+select json_typeof('')
+-- !query analysis
+Project [json_typeof() AS json_typeof()#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('{}')
+-- !query analysis
+Project [json_typeof({}) AS json_typeof({})#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('{"key": 1, "arr": [1, 2]}')
+-- !query analysis
+Project [json_typeof({"key": 1, "arr": [1, 2]}) AS json_typeof({"key": 1, "arr": [1, 2]})#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('[]')
+-- !query analysis
+Project [json_typeof([]) AS json_typeof([])#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('[1, 2, 3]')
+-- !query analysis
+Project [json_typeof([1, 2, 3]) AS json_typeof([1, 2, 3])#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('"hello"')
+-- !query analysis
+Project [json_typeof("hello") AS json_typeof("hello")#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('123')
+-- !query analysis
+Project [json_typeof(123) AS json_typeof(123)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('1.5')
+-- !query analysis
+Project [json_typeof(1.5) AS json_typeof(1.5)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('-123')
+-- !query analysis
+Project [json_typeof(-123) AS json_typeof(-123)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('-1.5')
+-- !query analysis
+Project [json_typeof(-1.5) AS json_typeof(-1.5)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('true')
+-- !query analysis
+Project [json_typeof(true) AS json_typeof(true)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('false')
+-- !query analysis
+Project [json_typeof(false) AS json_typeof(false)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('null')
+-- !query analysis
+Project [json_typeof(null) AS json_typeof(null)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('bad')
+-- !query analysis
+Project [json_typeof(bad) AS json_typeof(bad)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('{"key": 45, "random_string"}')
+-- !query analysis
+Project [json_typeof({"key": 45, "random_string"}) AS json_typeof({"key": 45, "random_string"})#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('123 true')
+-- !query analysis
+Project [json_typeof(123 true) AS json_typeof(123 true)#x]
 +- OneRowRelation
 
 

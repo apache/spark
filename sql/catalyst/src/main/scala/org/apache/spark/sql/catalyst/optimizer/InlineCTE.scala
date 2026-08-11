@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
-import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, OuterScopeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -49,20 +50,61 @@ case class InlineCTE(
       val cteMap = mutable.SortedMap.empty[Long, CTEReferenceInfo]
       buildCTEMap(plan, cteMap)
       cleanCTEMap(cteMap)
-      inlineCTE(plan, cteMap)
+      val inlined = inlineCTE(plan, cteMap)
+      // A CTE that opts out of inlining must be self-contained: it cannot carry an outer
+      // reference across its boundary, because after the CTE is materialized there is no
+      // surrounding operator to resolve that reference against.
+      inlined.foreachWithSubqueries {
+        case cteDef: CTERelationDef if cteDef.forceSkipInline =>
+          validateNoOuterReferencesAcrossCTEBoundary(cteDef)
+        case _ =>
+      }
+      inlined
     } else {
       plan
     }
   }
 
-  private def shouldInline(cteDef: CTERelationDef, refCount: Int): Boolean = alwaysInline || {
-    // We do not need to check enclosed `CTERelationRef`s for `deterministic` or `OuterReference`,
-    // because:
-    // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
-    // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
-    refCount == 1 ||
-      cteDef.deterministic ||
-      cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
+  private def shouldInline(cteDef: CTERelationDef, refCount: Int): Boolean = {
+    // A CTE definition that requests to skip inlining is never inlined, even in `alwaysInline`
+    // mode, so that a producer can guarantee the CTE is materialized rather than duplicated.
+    !cteDef.forceSkipInline && (alwaysInline || {
+      // We do not need to check enclosed `CTERelationRef`s for `deterministic` or
+      // `OuterReference`, because:
+      // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
+      // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
+      refCount == 1 ||
+        cteDef.deterministic ||
+        cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
+    })
+  }
+
+  private def validateNoOuterReferencesAcrossCTEBoundary(cteDef: CTERelationDef): Unit = {
+    val outerRefs = cteDef.child.flatMap(
+      _.expressions.flatMap(_.collect { case o: OuterReference => o }))
+    if (outerRefs.nonEmpty) {
+      throw SparkException.internalError(
+        "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
+          s"found outer reference '${outerRefs.head.name}' in the CTE definition " +
+          s"(cteId=${cteDef.id}).")
+    }
+
+    val outerScopeSubqueries = cteDef.child.flatMap(
+      _.expressions.flatMap(_.collect {
+        case s: SubqueryExpression if s.outerScopeAttrs.nonEmpty => s
+      }))
+    if (outerScopeSubqueries.nonEmpty) {
+      // `outerScopeAttrs` are expressions that contain an `OuterScopeReference` and may be
+      // compound (e.g. `Add(OuterScopeReference(a), Literal(1))`), so collect the reference node
+      // rather than assuming the attribute itself is one.
+      val outerScopeRef = outerScopeSubqueries.head.outerScopeAttrs
+        .flatMap(_.collect { case r: OuterScopeReference => r }).head
+      throw SparkException.internalError(
+        "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
+          "found a subquery with outer-scope reference " +
+          s"'${outerScopeRef.name}' in the CTE definition " +
+          s"(cteId=${cteDef.id}).")
+    }
   }
 
   /**

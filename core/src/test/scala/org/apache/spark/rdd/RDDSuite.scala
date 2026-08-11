@@ -974,6 +974,70 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(count === 10)
   }
 
+  test("zipWithIndex reuses start indices from an ancestor ZippedWithIndexRDD") {
+    val numJobs = new AtomicInteger(0)
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        numJobs.incrementAndGet()
+      }
+    }
+    sc.addSparkListener(listener)
+    try {
+      val n = 10
+      val expected = (0 until n).map(_.toLong)
+
+      // Building the first zipWithIndex submits one counting job: the source has
+      // multiple partitions and no materialized ancestor to reuse.
+      val base = sc.parallelize(0 until n, 3).zipWithIndex()
+      sc.listenerBus.waitUntilEmpty()
+      assert(numJobs.get() === 1)
+
+      // The parent is a ZippedWithIndexRDD whose start indices are already computed,
+      // so they are reused directly and no extra job is submitted.
+      numJobs.set(0)
+      val rezipped = base.zipWithIndex()
+      sc.listenerBus.waitUntilEmpty()
+      assert(numJobs.get() === 0)
+      assert(rezipped.map(_._2).collect().toSeq === expected)
+
+      // map preserves partition sizes, so getAncestorWithSamePartitionSizes walks up
+      // to `base` and reuses its start indices, again without a job.
+      sc.listenerBus.waitUntilEmpty()
+      numJobs.set(0)
+      val mapped = base.map { case (v, _) => v }.zipWithIndex()
+      sc.listenerBus.waitUntilEmpty()
+      assert(numJobs.get() === 0)
+      assert(mapped.map(_._2).collect().toSeq === expected)
+    } finally {
+      sc.removeSparkListener(listener)
+    }
+  }
+
+  test("zipWithIndex recomputes start indices when an intervening op changes partition sizes") {
+    val numJobs = new AtomicInteger(0)
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        numJobs.incrementAndGet()
+      }
+    }
+    sc.addSparkListener(listener)
+    try {
+      val n = 10
+      val base = sc.parallelize(0 until n, 3).zipWithIndex()
+      sc.listenerBus.waitUntilEmpty()
+
+      // filter does not preserve partition sizes, so the ancestor walk stops before
+      // `base`; a fresh counting job runs and the indices reflect the filtered rows.
+      numJobs.set(0)
+      val filtered = base.filter { case (v, _) => v % 2 == 0 }.zipWithIndex()
+      sc.listenerBus.waitUntilEmpty()
+      assert(numJobs.get() === 1)
+      assert(filtered.map(_._2).collect().toSeq === (0 until 5).map(_.toLong))
+    } finally {
+      sc.removeSparkListener(listener)
+    }
+  }
+
   test("zipWithUniqueId") {
     val n = 10
     val data = sc.parallelize(0 until n, 3)

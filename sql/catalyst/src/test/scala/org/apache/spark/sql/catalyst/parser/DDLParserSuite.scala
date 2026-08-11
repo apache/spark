@@ -30,7 +30,8 @@ import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after,
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampType}
+import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampType, TimeType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -131,6 +132,37 @@ class DDLParserSuite extends AnalysisTest {
           "configKey" -> "spark.sql.timestampNanosTypes.enabled",
           "configValue" -> "true"))
     }
+  }
+
+  test("SPARK-57564: TIME type in CREATE TABLE / ALTER TABLE columns") {
+    Seq(
+      "TIME" -> TimeType(),
+      "TIME(0)" -> TimeType(0),
+      "TIME(3)" -> TimeType(3),
+      "TIME(6)" -> TimeType(6)).foreach {
+      case (spelling, expected) =>
+        // CREATE TABLE column.
+        val created = parsePlan(s"CREATE TABLE t (c $spelling) USING parquet")
+        assert(created.asInstanceOf[CreateTable].columns.head.dataType === expected)
+        // ALTER TABLE ... ADD COLUMNS.
+        val added = parsePlan(s"ALTER TABLE t ADD COLUMNS (c $spelling)")
+        assert(added.asInstanceOf[AddColumns].columnsToAdd.head.dataType === expected)
+        // ALTER TABLE ... ALTER COLUMN ... TYPE.
+        val altered = parsePlan(s"ALTER TABLE t ALTER COLUMN c TYPE $spelling")
+        assert(altered.asInstanceOf[AlterColumns].specs.head.newDataType === Some(expected))
+    }
+    // A column DEFAULT declared with a TIME type and a TIME typed-literal default.
+    val withDefault = parsePlan(
+      "CREATE TABLE t (c TIME DEFAULT TIME '12:34:56') USING parquet")
+    val colDef = withDefault.asInstanceOf[CreateTable].columns.head
+    assert(colDef.dataType === TimeType())
+    assert(colDef.defaultValue.isDefined)
+    // PARTITIONED BY a TIME column.
+    val partitioned = parsePlan(
+      "CREATE TABLE t (id INT, c TIME) USING parquet PARTITIONED BY (c)")
+    val createTable = partitioned.asInstanceOf[CreateTable]
+    assert(createTable.columns.exists(col => col.name == "c" && col.dataType === TimeType()))
+    assert(createTable.partitioning === Seq(IdentityTransform(FieldReference("c"))))
   }
 
   test("create/replace table - with IF NOT EXISTS") {
@@ -1814,23 +1846,30 @@ class DDLParserSuite extends AnalysisTest {
   test("insert table: REPLACE WHERE with BY NAME") {
     parseCompare(
       "INSERT INTO testcat.ns1.ns2.tbl BY NAME REPLACE WHERE a > 5 SELECT * FROM source",
-      OverwriteByExpression.byName(
-        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
-        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        GreaterThan(
-          UnresolvedAttribute("a"),
-          Literal(5))))
+      InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Nil,
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = true,
+        replaceCriteriaOpt = Some(InsertReplaceWhere(
+          GreaterThan(UnresolvedAttribute("a"), Literal(5))))))
   }
 
   test("insert table: REPLACE WHERE without BY NAME") {
     parseCompare(
       "INSERT INTO testcat.ns1.ns2.tbl REPLACE WHERE a > 5 SELECT * FROM source",
-      OverwriteByExpression.byPosition(
-        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
-        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        GreaterThan(
-          UnresolvedAttribute("a"),
-          Literal(5))))
+      InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Nil,
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        replaceCriteriaOpt = Some(InsertReplaceWhere(
+          GreaterThan(UnresolvedAttribute("a"), Literal(5))))))
   }
 
   test("insert table: REPLACE WHERE rejects tableAlias with BY NAME") {
@@ -1855,6 +1894,99 @@ class DDLParserSuite extends AnalysisTest {
       context = ExpectedContext(
         fragment = "INSERT INTO testcat.ns1.ns2.tbl AS t REPLACE WHERE a > 5",
         start = 0, stop = 55))
+  }
+
+  test("insert table: REPLACE WHERE rejects tableAlias with column list") {
+    checkError(
+      exception = parseException(
+        "INSERT INTO testcat.ns1.ns2.tbl AS t (a, b) REPLACE WHERE a > 5 SELECT * FROM source"),
+      condition = "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "INSERT INTO testcat.ns1.ns2.tbl AS t (a, b) REPLACE WHERE a > 5",
+        start = 0, stop = 62))
+  }
+
+  test("insert table: REPLACE WHERE with column list") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl (a, b) REPLACE WHERE a > 5 SELECT * FROM source",
+      InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq("a", "b"),
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        replaceCriteriaOpt = Some(InsertReplaceWhere(
+          GreaterThan(UnresolvedAttribute("a"), Literal(5))))))
+  }
+
+  test("insert table: REPLACE WHERE rejects BY NAME with column list") {
+    checkError(
+      exception = parseException(
+        "INSERT INTO testcat.ns1.ns2.tbl BY NAME (a, b) REPLACE WHERE a > 5 SELECT * FROM source"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'a'", "hint" -> ""))
+
+    checkError(
+      exception = parseException(
+        "INSERT INTO testcat.ns1.ns2.tbl (a, b) BY NAME REPLACE WHERE a > 5 SELECT * FROM source"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'BY'", "hint" -> ""))
+  }
+
+  test("insert table: REPLACE WHERE rejects column list when the feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_WHERE_COLUMN_LIST_ENABLED.key -> "false") {
+      checkError(
+        exception = parseException(
+          "INSERT INTO testcat.ns1.ns2.tbl (a, b) REPLACE WHERE a > 5 SELECT * FROM source"),
+        condition = "INSERT_REPLACE_WHERE_COLUMN_LIST_NOT_ENABLED",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "INSERT INTO testcat.ns1.ns2.tbl (a, b) REPLACE WHERE a > 5",
+          start = 0,
+          stop = 57))
+    }
+  }
+
+  test("insert table: REPLACE WHERE rejects empty column list") {
+    checkError(
+      exception = parseException(
+        "INSERT INTO testcat.ns1.ns2.tbl () REPLACE WHERE a > 5 SELECT * FROM source"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "')'", "hint" -> ""))
+  }
+
+  test("insert table: INSERT WITH SCHEMA EVOLUTION INTO ... (cols) REPLACE WHERE") {
+    parseCompare(
+      "INSERT WITH SCHEMA EVOLUTION INTO testcat.ns1.ns2.tbl (a, b) " +
+        "REPLACE WHERE a > 5 SELECT * FROM source",
+      InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq("a", "b"),
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        replaceCriteriaOpt = Some(InsertReplaceWhere(
+          GreaterThan(UnresolvedAttribute("a"), Literal(5)))),
+        withSchemaEvolution = true))
+  }
+
+  test("insert table: REPLACE WHERE with column list and options") {
+    val opts = new CaseInsensitiveStringMap(java.util.Map.of("key", "value"))
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl WITH (key = 'value') (a, b) " +
+        "REPLACE WHERE a > 5 SELECT * FROM source",
+      InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"), opts),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq("a", "b"),
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        replaceCriteriaOpt = Some(InsertReplaceWhere(
+          GreaterThan(UnresolvedAttribute("a"), Literal(5))))))
   }
 
   for {
@@ -2050,6 +2182,18 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
+  test("insert table: REPLACE ON rejects a column list") {
+    checkError(
+      exception = parseException(
+        "INSERT INTO testcat.ns1.ns2.tbl (a, b) REPLACE ON col1 = col2 SELECT * FROM source"),
+      condition = "INSERT_REPLACE_ON_COLUMN_LIST_NOT_ALLOWED",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "INSERT INTO testcat.ns1.ns2.tbl (a, b) REPLACE ON col1 = col2",
+        start = 0,
+        stop = 60))
+  }
+
   test("INSERT INTO REPLACE ON with source query alias") {
     val table = "testcat.ns1.ns2.tbl"
     parseCompare(
@@ -2104,12 +2248,15 @@ class DDLParserSuite extends AnalysisTest {
         """INSERT INTO testcat.ns1.ns2.tbl
           |REPLACE WHERE a > 5
           |(SELECT * FROM source) AS s""".stripMargin,
-      expected = OverwriteByExpression.byPosition(
-        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
-        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        GreaterThan(
-          UnresolvedAttribute("a"),
-          Literal(5))))
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Nil,
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        replaceCriteriaOpt = Some(InsertReplaceWhere(
+          GreaterThan(UnresolvedAttribute("a"), Literal(5))))))
   }
 
   test("INSERT INTO REPLACE ON with compound condition") {
@@ -2180,6 +2327,33 @@ class DDLParserSuite extends AnalysisTest {
         stop = 56))
   }
 
+  test("SPARK-58008: delete from table: with options") {
+    parseCompare(
+      """
+        |DELETE FROM testcat.ns1.ns2.tbl WITH (`write.split-size` = 10)
+        |WHERE a = 1
+      """.stripMargin,
+      DeleteFromTable(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"),
+          new CaseInsensitiveStringMap(
+            java.util.Map.of("write.split-size", "10"))),
+        EqualTo(UnresolvedAttribute("a"), Literal(1))))
+  }
+
+  test("SPARK-58008: delete from table: with options and alias") {
+    parseCompare(
+      """
+        |DELETE FROM testcat.ns1.ns2.tbl AS t WITH (`k` = 'v')
+        |WHERE t.a = 2
+      """.stripMargin,
+      DeleteFromTable(
+        SubqueryAlias("t",
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(
+              java.util.Map.of("k", "v")))),
+        EqualTo(UnresolvedAttribute("t.a"), Literal(2))))
+  }
+
   test("update table: basic") {
     parseCompare(
       """
@@ -2222,6 +2396,38 @@ class DDLParserSuite extends AnalysisTest {
         stop = 70))
   }
 
+  test("SPARK-57681: update table: with options") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl WITH (`write.split-size` = 10)
+        |SET a='Robert', b=32
+      """.stripMargin,
+      UpdateTable(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"),
+          new CaseInsensitiveStringMap(
+            java.util.Map.of("write.split-size", "10"))),
+        Seq(Assignment(UnresolvedAttribute("a"), Literal("Robert")),
+          Assignment(UnresolvedAttribute("b"), Literal(32))),
+        None))
+  }
+
+  test("SPARK-57681: update table: with options and alias") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl AS t WITH (`k` = 'v')
+        |SET t.a='Robert', t.b=32
+        |WHERE t.c=2
+      """.stripMargin,
+      UpdateTable(
+        SubqueryAlias("t",
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(
+              java.util.Map.of("k", "v")))),
+        Seq(Assignment(UnresolvedAttribute("t.a"), Literal("Robert")),
+          Assignment(UnresolvedAttribute("t.b"), Literal(32))),
+        Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
+  }
+
   test("merge into table: basic") {
     parseCompare(
       """
@@ -2250,6 +2456,55 @@ class DDLParserSuite extends AnalysisTest {
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("update"))),
             Seq(Assignment(UnresolvedAttribute("target.col3"), Literal("delete"))))),
+        withSchemaEvolution = false))
+  }
+
+  test("SPARK-58007: merge into table: with target and source options") {
+    parseCompare(
+      """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target WITH (`write.split-size` = 10)
+        |USING testcat2.ns1.ns2.tbl WITH (`split-size` = 5) AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED THEN UPDATE SET target.col2 = source.col2
+        |WHEN NOT MATCHED THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+      """.stripMargin,
+      MergeIntoTable(
+        SubqueryAlias("target",
+          UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(java.util.Map.of("write.split-size", "10")))),
+        SubqueryAlias("source",
+          UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(java.util.Map.of("split-size", "5")))),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq(UpdateAction(None,
+          Seq(Assignment(UnresolvedAttribute("target.col2"),
+            UnresolvedAttribute("source.col2"))))),
+        Seq(InsertAction(None,
+          Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))))),
+        Seq.empty,
+        withSchemaEvolution = false))
+  }
+
+  test("SPARK-58007: merge into table: with target options only") {
+    parseCompare(
+      """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target WITH (`k` = 'v')
+        |USING testcat2.ns1.ns2.tbl AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED THEN UPDATE SET target.col2 = source.col2
+      """.stripMargin,
+      MergeIntoTable(
+        SubqueryAlias("target",
+          UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(java.util.Map.of("k", "v")))),
+        SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq(UpdateAction(None,
+          Seq(Assignment(UnresolvedAttribute("target.col2"),
+            UnresolvedAttribute("source.col2"))))),
+        Seq.empty,
+        Seq.empty,
         withSchemaEvolution = false))
   }
 
@@ -3029,6 +3284,87 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
       CommentOnTable(UnresolvedTable(Seq("a", "b", "c"), "COMMENT ON TABLE"), "xYz"))
+
+    // `comment` is the new comment value, or None for `IS NULL` (which removes the comment).
+    def alterColumnComment(
+        tableIdent: Seq[String],
+        columnComments: Seq[(Seq[String], Option[String])],
+        commandName: String): AlterColumns = {
+      AlterColumns(
+        UnresolvedTable(tableIdent, commandName),
+        columnComments.map { case (column, comment) =>
+          AlterColumnSpec(
+            UnresolvedFieldName(column),
+            newDataType = None,
+            newNullability = None,
+            newComment = comment,
+            newPosition = None,
+            newDefaultExpression = None,
+            dropComment = comment.isEmpty)
+        },
+        fromCommentOn = true)
+    }
+
+    // COMMENT ON COLUMN: last identifier part is the column name
+    Seq(
+      ("a.b", Seq("a"), Seq("b")),
+      ("a.b.c", Seq("a", "b"), Seq("c")),
+      ("a.b.c.d", Seq("a", "b", "c"), Seq("d"))
+    ).foreach { case (columnIdentifier, tableIdent, columnIdent) =>
+      comparePlans(
+        parsePlan(s"COMMENT ON COLUMN $columnIdentifier IS 'comment'"),
+        alterColumnComment(tableIdent, Seq((columnIdent, Some("comment"))), "COMMENT ON COLUMN"))
+    }
+
+    // COMMENT ON COLUMN: IS NULL removes the comment (dropComment), while IS '' sets an empty one.
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN a.b.c.d IS NULL"),
+      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), None)), "COMMENT ON COLUMN"))
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN a.b.c.d IS ''"),
+      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), Some(""))), "COMMENT ON COLUMN"))
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN a.b.c.d IS 'NULL'"),
+      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), Some("NULL"))), "COMMENT ON COLUMN"))
+
+    // COMMENT ON COLUMN requires at least two identifier parts.
+    checkError(
+      exception = parseException("COMMENT ON COLUMN a IS 'comment'"),
+      condition = "INVALID_SQL_SYNTAX.COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "COMMENT ON COLUMN a IS 'comment'",
+        start = 0,
+        stop = 31))
+
+    // COMMENT ON TABLE ... COLUMN (...) supports multiple columns and nested fields.
+    comparePlans(
+      parsePlan("COMMENT ON TABLE a.b COLUMN (c IS 'comment')"),
+      alterColumnComment(
+        Seq("a", "b"),
+        Seq((Seq("c"), Some("comment"))),
+        "COMMENT ON TABLE ... COLUMN"))
+    comparePlans(
+      parsePlan(
+        """COMMENT ON TABLE a.b COLUMN (
+          | c IS 'comment 1',
+          | c.d IS 'comment 2',
+          | c.d.e IS 'comment 3')""".stripMargin),
+      alterColumnComment(
+        Seq("a", "b"),
+        Seq(
+          (Seq("c"), Some("comment 1")),
+          (Seq("c", "d"), Some("comment 2")),
+          (Seq("c", "d", "e"), Some("comment 3"))),
+        "COMMENT ON TABLE ... COLUMN"))
+
+    // COMMENT ON TABLE ... COLUMN: IS NULL removes a column comment.
+    comparePlans(
+      parsePlan("COMMENT ON TABLE a.b COLUMN (c IS NULL, d IS 'keep')"),
+      alterColumnComment(
+        Seq("a", "b"),
+        Seq((Seq("c"), None), (Seq("d"), Some("keep"))),
+        "COMMENT ON TABLE ... COLUMN"))
   }
 
   test("create table - without using") {

@@ -71,7 +71,9 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       builder.setBufferedIo(false)
       builder.setConfiguration(config)
       builder.withFileName(localLogFile)
-      builder.setIgnoreExceptions(false)
+      // SPARK-57774: Set to true to avoid propagating log4j internal exception
+      // (e.g., due to log4j bugs) to the caller.
+      builder.setIgnoreExceptions(true)
       builder.setLayout(layout)
       builder.setName(DriverLogger.APPENDER_NAME)
       builder.build()

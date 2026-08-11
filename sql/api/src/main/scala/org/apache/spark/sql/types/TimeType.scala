@@ -21,12 +21,12 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.errors.DataTypeErrors
 
 /**
- * The time type represents a time value with fields hour, minute, second, up to microseconds. The
- * range of times supported is 00:00:00.000000 to 23:59:59.999999.
+ * The time type represents a time value with fields hour, minute, second, up to nanoseconds. The
+ * range of times supported is 00:00:00.000000000 to 23:59:59.999999999.
  *
  * @param precision
  *   The time fractional seconds precision which indicates the number of decimal digits maintained
- *   following the decimal point in the seconds value. The supported range is [0, 6].
+ *   following the decimal point in the seconds value. The supported range is [0, 9].
  *
  * @since 4.1.0
  */
@@ -50,9 +50,9 @@ case class TimeType(precision: Int) extends AnyTimeType {
 object TimeType {
   val MIN_PRECISION: Int = 0
   val MICROS_PRECISION: Int = 6
-  val MAX_PRECISION: Int = MICROS_PRECISION
-  val DEFAULT_PRECISION: Int = MICROS_PRECISION
   val NANOS_PRECISION: Int = 9
+  val MAX_PRECISION: Int = NANOS_PRECISION
+  val DEFAULT_PRECISION: Int = MICROS_PRECISION
 
   def apply(): TimeType = new TimeType(DEFAULT_PRECISION)
 }

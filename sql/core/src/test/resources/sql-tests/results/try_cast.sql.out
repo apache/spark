@@ -229,3 +229,35 @@ SELECT TRY_CAST("2021-101-01 00:00:00" AS timestamp)
 struct<TRY_CAST(2021-101-01 00:00:00 AS TIMESTAMP):timestamp>
 -- !query output
 NULL
+
+
+-- !query
+SELECT TRY_CAST("12:34:56" AS time)
+-- !query schema
+struct<TRY_CAST(12:34:56 AS TIME(6)):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT TRY_CAST("12:34:56.789012" AS time(6))
+-- !query schema
+struct<TRY_CAST(12:34:56.789012 AS TIME(6)):time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT TRY_CAST("24:00:00" AS time)
+-- !query schema
+struct<TRY_CAST(24:00:00 AS TIME(6)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT TRY_CAST("12:34:56 abc" AS time)
+-- !query schema
+struct<TRY_CAST(12:34:56 abc AS TIME(6)):time(6)>
+-- !query output
+NULL

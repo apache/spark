@@ -62,7 +62,8 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
       f: SparkSession => Unit,
       targetPostShuffleInputSize: Int,
       minNumPostShufflePartitions: Option[Int],
-      enableIOEncryption: Boolean = false): Unit = {
+      enableIOEncryption: Boolean = false,
+      maxReducerPartitionsPerTask: Int = Int.MaxValue): Unit = {
     val sparkConf =
       new SparkConf(false)
         .setMaster("local[*]")
@@ -83,11 +84,48 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
       case None =>
         sparkConf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "1")
     }
+    if (maxReducerPartitionsPerTask < Int.MaxValue) {
+      sparkConf.set(
+        SQLConf.COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK.key,
+        maxReducerPartitionsPerTask.toString)
+    }
 
     val spark = SparkSession.builder()
       .config(sparkConf)
       .getOrCreate()
     try f(spark) finally spark.stop()
+  }
+
+  test("limit the number of reducer partitions per coalesced task") {
+    val test: SparkSession => Unit = { spark =>
+      val agg = spark.range(0, 100, 1, numInputPartitions)
+        .selectExpr("id % 5 as key")
+        .groupBy("key")
+        .count()
+
+      QueryTest.checkAnswer(
+        agg,
+        spark.range(0, 5).selectExpr("id as key", "20L as count")
+          .collect().toImmutableArraySeq)
+
+      val finalPlan = stripAQEPlan(agg.queryExecution.executedPlan)
+      val shuffleReads = finalPlan.collect {
+        case r @ CoalescedShuffleRead() => r
+      }
+      assert(shuffleReads.length === 1)
+      val reducerRanges = shuffleReads.head.partitionSpecs.map {
+        case spec: CoalescedPartitionSpec =>
+          (spec.startReducerIndex, spec.endReducerIndex)
+        case spec => fail(s"Unexpected shuffle partition spec: $spec")
+      }
+      assert(reducerRanges === Seq((0, 2), (2, 4), (4, 5)))
+    }
+
+    withSparkSession(
+      test,
+      targetPostShuffleInputSize = 1024 * 1024,
+      minNumPostShufflePartitions = None,
+      maxReducerPartitionsPerTask = 2)
   }
 
   Seq(Some(5), None).foreach { minNumPostShufflePartitions =>

@@ -257,6 +257,8 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 
 \*\*\* For a complex type, the precedence rule applies recursively to its component elements.
 
+The `TIME` type does not promote to any other type. Note that Spark's `TIME` type deviates from the SQL standard in two ways: the default fractional-seconds precision is `6` (the ANSI default is `0`), and `TIME WITH TIME ZONE` is not supported.
+
 Special rules apply for untyped NULL. A NULL can be promoted to any other type.
 
 This is a graphical depiction of the precedence list as a directed tree:
@@ -421,15 +423,18 @@ Below is a list of all the keywords in Spark SQL.
 |ANTI|non-reserved|strict-non-reserved|non-reserved|
 |ANY|reserved|non-reserved|reserved|
 |ANY_VALUE|non-reserved|non-reserved|non-reserved|
+|APPLY|non-reserved|non-reserved|non-reserved|
 |APPROX|non-reserved|non-reserved|non-reserved|
 |ARCHIVE|non-reserved|non-reserved|non-reserved|
 |ARRAY|non-reserved|non-reserved|reserved|
 |AS|reserved|non-reserved|reserved|
 |ASC|non-reserved|non-reserved|non-reserved|
 |ASENSITIVE|non-reserved|non-reserved|non-reserved|
+|ASOF|non-reserved|non-reserved|non-reserved|
 |AT|non-reserved|non-reserved|reserved|
 |ATOMIC|non-reserved|non-reserved|non-reserved|
 |AUTHORIZATION|reserved|non-reserved|reserved|
+|AUTO|non-reserved|non-reserved|non-reserved|
 |BEGIN|non-reserved|non-reserved|non-reserved|
 |BERNOULLI|non-reserved|non-reserved|non-reserved|
 |BETWEEN|non-reserved|non-reserved|reserved|
@@ -454,6 +459,7 @@ Below is a list of all the keywords in Spark SQL.
 |CAST|reserved|non-reserved|reserved|
 |CATALOG|non-reserved|non-reserved|non-reserved|
 |CATALOGS|non-reserved|non-reserved|non-reserved|
+|CDC|non-reserved|non-reserved|non-reserved|
 |CHANGE|non-reserved|non-reserved|non-reserved|
 |CHANGES|non-reserved|non-reserved|non-reserved|
 |CHAR|non-reserved|non-reserved|reserved|
@@ -533,6 +539,7 @@ Below is a list of all the keywords in Spark SQL.
 |ELSEIF|non-reserved|non-reserved|non-reserved|
 |END|reserved|non-reserved|reserved|
 |ENFORCED|non-reserved|non-reserved|non-reserved|
+|ERROR|non-reserved|non-reserved|non-reserved|
 |ESCAPE|reserved|non-reserved|reserved|
 |ESCAPED|non-reserved|non-reserved|non-reserved|
 |EVOLUTION|non-reserved|non-reserved|non-reserved|
@@ -577,6 +584,7 @@ Below is a list of all the keywords in Spark SQL.
 |GROUPING|non-reserved|non-reserved|reserved|
 |HANDLER|non-reserved|non-reserved|non-reserved|
 |HAVING|reserved|non-reserved|reserved|
+|HISTORY|non-reserved|non-reserved|non-reserved|
 |HOUR|non-reserved|non-reserved|non-reserved|
 |HOURS|non-reserved|non-reserved|non-reserved|
 |IDENTIFIER|non-reserved|non-reserved|non-reserved|
@@ -609,6 +617,7 @@ Below is a list of all the keywords in Spark SQL.
 |ITERATE|non-reserved|non-reserved|non-reserved|
 |JOIN|reserved|strict-non-reserved|reserved|
 |JSON|non-reserved|non-reserved|non-reserved|
+|JSON_TABLE|non-reserved|non-reserved|reserved|
 |KEY|non-reserved|non-reserved|non-reserved|
 |KEYS|non-reserved|non-reserved|non-reserved|
 |LANGUAGE|non-reserved|non-reserved|reserved|
@@ -626,6 +635,7 @@ Below is a list of all the keywords in Spark SQL.
 |LIST|non-reserved|non-reserved|non-reserved|
 |LOAD|non-reserved|non-reserved|non-reserved|
 |LOCAL|non-reserved|non-reserved|reserved|
+|LOCALTIME|reserved|non-reserved|reserved|
 |LOCATION|non-reserved|non-reserved|non-reserved|
 |LOCK|non-reserved|non-reserved|non-reserved|
 |LOCKS|non-reserved|non-reserved|non-reserved|
@@ -635,6 +645,7 @@ Below is a list of all the keywords in Spark SQL.
 |MACRO|non-reserved|non-reserved|non-reserved|
 |MAP|non-reserved|non-reserved|non-reserved|
 |MATCHED|non-reserved|non-reserved|non-reserved|
+|MATCH_CONDITION|non-reserved|non-reserved|non-reserved|
 |MATERIALIZED|non-reserved|non-reserved|non-reserved|
 |MAX|non-reserved|non-reserved|non-reserved|
 |MEASURE|non-reserved|non-reserved|non-reserved|
@@ -675,6 +686,7 @@ Below is a list of all the keywords in Spark SQL.
 |OPTIONS|non-reserved|non-reserved|non-reserved|
 |OR|reserved|non-reserved|reserved|
 |ORDER|reserved|non-reserved|reserved|
+|ORDINALITY|non-reserved|non-reserved|non-reserved|
 |OUT|non-reserved|non-reserved|reserved|
 |OUTER|reserved|non-reserved|reserved|
 |OUTPUTFORMAT|non-reserved|non-reserved|non-reserved|
@@ -733,6 +745,7 @@ Below is a list of all the keywords in Spark SQL.
 |ROLLUP|non-reserved|non-reserved|reserved|
 |ROW|non-reserved|non-reserved|reserved|
 |ROWS|non-reserved|non-reserved|reserved|
+|SCD|non-reserved|non-reserved|non-reserved|
 |SCHEMA|non-reserved|non-reserved|non-reserved|
 |SCHEMAS|non-reserved|non-reserved|non-reserved|
 |SECOND|non-reserved|non-reserved|non-reserved|
@@ -741,6 +754,7 @@ Below is a list of all the keywords in Spark SQL.
 |SELECT|reserved|non-reserved|reserved|
 |SEMI|non-reserved|strict-non-reserved|non-reserved|
 |SEPARATED|non-reserved|non-reserved|non-reserved|
+|SEQUENCE|non-reserved|non-reserved|non-reserved|
 |SERDE|non-reserved|non-reserved|non-reserved|
 |SERDEPROPERTIES|non-reserved|non-reserved|non-reserved|
 |SESSION_USER|reserved|non-reserved|reserved|
@@ -794,6 +808,7 @@ Below is a list of all the keywords in Spark SQL.
 |TINYINT|non-reserved|non-reserved|non-reserved|
 |TO|reserved|non-reserved|reserved|
 |TOUCH|non-reserved|non-reserved|non-reserved|
+|TRACK|non-reserved|non-reserved|non-reserved|
 |TRAILING|reserved|non-reserved|reserved|
 |TRANSACTION|non-reserved|non-reserved|non-reserved|
 |TRANSACTIONS|non-reserved|non-reserved|non-reserved|
@@ -811,6 +826,7 @@ Below is a list of all the keywords in Spark SQL.
 |UNIQUE|reserved|non-reserved|reserved|
 |UNKNOWN|reserved|non-reserved|reserved|
 |UNLOCK|non-reserved|non-reserved|non-reserved|
+|UNNEST|non-reserved|non-reserved|non-reserved|
 |UNPIVOT|non-reserved|non-reserved|non-reserved|
 |UNSET|non-reserved|non-reserved|non-reserved|
 |UNTIL|non-reserved|non-reserved|non-reserved|

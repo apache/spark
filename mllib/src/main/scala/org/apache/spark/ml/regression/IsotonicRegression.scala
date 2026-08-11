@@ -38,6 +38,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for isotonic regression.
@@ -244,6 +245,17 @@ class IsotonicRegressionModel private[ml] (
   @Since("1.5.0")
   override def copy(extra: ParamMap): IsotonicRegressionModel = {
     copyValues(new IsotonicRegressionModel(uid, oldModel), extra).setParent(parent)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (oldModel != null) {
+      // boundaries: Array[Double]
+      size += SizeEstimator.estimate(oldModel.boundaries)
+      // predictions: Array[Double]
+      size += SizeEstimator.estimate(oldModel.predictions)
+    }
+    size
   }
 
   @Since("2.0.0")

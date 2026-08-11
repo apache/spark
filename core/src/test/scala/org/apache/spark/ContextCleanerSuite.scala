@@ -20,6 +20,7 @@ package org.apache.spark
 import scala.collection.mutable.HashSet
 import scala.util.Random
 
+import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration
@@ -127,6 +128,52 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     assert(rdd.collect().toList.equals(collected))
   }
 
+  test("cleanup shuffle unregisters a pipelined shuffle from the streaming output tracker") {
+    // A pipelined shuffle lives ONLY in the driver-only StreamingShuffleOutputTracker -- it is
+    // never registered with the MapOutputTracker (see DAGScheduler.createShuffleMapStage). So the
+    // MapOutputTracker.containsShuffle guard is false for it, and doCleanupShuffle must still clean
+    // it up via its own streaming branch; otherwise the tracker grows without bound across
+    // micro-batches in Real-Time Mode.
+    val streamingTracker = sc.env.streamingShuffleOutputTracker.get
+      .asInstanceOf[StreamingShuffleOutputTrackerMaster]
+    val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+
+    // Register a shuffle id in the streaming tracker ONLY, exactly as the scheduler now does for a
+    // pipelined shuffle (nothing is put in the MapOutputTracker).
+    val shuffleId = 1000
+    streamingTracker.registerShuffle(shuffleId, numMaps = 2, numReduces = 2, jobId = 0)
+    assert(streamingTracker.containsShuffle(shuffleId))
+    assert(!mapOutputTracker.containsShuffle(shuffleId),
+      "a pipelined shuffle must not be registered with the MapOutputTracker")
+
+    cleaner.doCleanupShuffle(shuffleId, blocking = true)
+
+    // The streaming tracker entry is gone -- cleanup fired even though the shuffle was never in the
+    // MapOutputTracker, proving the streaming cleanup branch is independent of MapOutputTracker.
+    assert(!streamingTracker.containsShuffle(shuffleId))
+  }
+
+  test("cleanup shuffle leaves a regular shuffle's streaming tracker untouched and quiet") {
+    // A regular (non-pipelined) shuffle is registered only with the MapOutputTracker, never the
+    // streaming tracker. doCleanupShuffle must take the MapOutputTracker branch and never touch the
+    // streaming tracker -- in particular it must not emit the streaming tracker's "attempting to
+    // unregister a shuffle that hasn't been registered" warning.
+    val streamingTracker = sc.env.streamingShuffleOutputTracker.get
+      .asInstanceOf[StreamingShuffleOutputTrackerMaster]
+
+    val (rdd, shuffleDeps) = newRDDWithShuffleDependencies()
+    rdd.collect()
+    shuffleDeps.foreach(s => assert(!streamingTracker.containsShuffle(s.shuffleId)))
+
+    val logAppender = new LogAppender("unregister streaming shuffle")
+    logAppender.setThreshold(Level.WARN)
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      shuffleDeps.foreach(s => cleaner.doCleanupShuffle(s.shuffleId, blocking = true))
+    }
+    assert(!logAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("hasn't been registered")))
+  }
+
   test("cleanup broadcast") {
     val broadcast = newBroadcast()
     val tester = new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
@@ -172,6 +219,49 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     rdd = null  // Make RDD out of scope, so that corresponding shuffle goes out of scope
     runGC()
     postGCTester.assertCleanup()
+  }
+
+  test("automatically cleanup pipelined shuffle from the streaming output tracker") {
+    // The load-bearing leak guarantee for a pipelined (streaming) shuffle: it is registered ONLY
+    // with the driver-only StreamingShuffleOutputTracker (never the MapOutputTracker), and its only
+    // cleanup channel is the ContextCleaner weak-reference path fired when the
+    // PipelinedShuffleDependency is garbage-collected (registerShuffleForCleanup in the
+    // ShuffleDependency constructor). If that GC path did not reach the streaming tracker,
+    // the tracker would grow without bound across Real-Time Mode micro-batches. The sibling
+    // doCleanupShuffle tests call cleanup directly; this one proves the end-to-end
+    // GC -> ContextCleaner -> streaming-tracker unregister link.
+    val streamingTracker = sc.env.streamingShuffleOutputTracker.get
+      .asInstanceOf[StreamingShuffleOutputTrackerMaster]
+    val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+
+    // Build a real PipelinedShuffleDependency (registers itself for cleanup on construction) and
+    // register its shuffleId in the streaming tracker exactly as DAGScheduler.createShuffleMapStage
+    // does for a pipelined shuffle (nothing is put in the MapOutputTracker).
+    var pipelinedDep: PipelinedShuffleDependency[Int, Int, Int] =
+      new PipelinedShuffleDependency(newPairRDD(), new HashPartitioner(2))
+    val shuffleId = pipelinedDep.shuffleId
+    streamingTracker.registerShuffle(shuffleId, numMaps = 2, numReduces = 2, jobId = 0)
+    assert(streamingTracker.containsShuffle(shuffleId))
+    assert(!mapOutputTracker.containsShuffle(shuffleId),
+      "a pipelined shuffle must not be registered with the MapOutputTracker")
+
+    // A strong reference to the dependency must prevent GC-triggered cleanup.
+    runGC()
+    intercept[Exception] {
+      eventually(timeout(1.second), interval(100.milliseconds)) {
+        assert(!streamingTracker.containsShuffle(shuffleId),
+          "cleanup must NOT fire while the dependency is strongly referenced")
+      }
+    }
+
+    // Dereference the dependency; GC must then drive ContextCleaner to unregister it from the
+    // streaming tracker (and only there -- it was never in the MapOutputTracker).
+    pipelinedDep = null
+    runGC()
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      assert(!streamingTracker.containsShuffle(shuffleId),
+        "GC of the PipelinedShuffleDependency must unregister it from the streaming tracker")
+    }
   }
 
   test("automatically cleanup broadcast") {
@@ -335,6 +425,16 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       case BroadcastBlockId(`taskClosureBroadcastId`, _) => true
       case _ => false
     }, askStorageEndpoints = true).isEmpty)
+  }
+
+  test("SPARK-57873: non-positive spark.cleaner.periodicGC.interval disables periodic GC") {
+    sc.stop()
+    val conf = new SparkConf()
+      .setMaster("local[2]")
+      .setAppName("periodicGCDisabled")
+      .set(CLEANER_PERIODIC_GC_INTERVAL.key, "0s")
+    sc = new SparkContext(conf)
+    assert(sc.cleaner.isDefined)
   }
 }
 

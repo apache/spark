@@ -24,13 +24,13 @@ import java.util.TimeZone
 import scala.language.implicitConversions
 import scala.util.Random
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData, TimestampNanosTestUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC, UTC_OPT}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.DataTypeErrorsBase
@@ -1184,6 +1184,39 @@ class CollectionExpressionsSuite
       Seq(-1.toByte, -2.toByte, -3.toByte))
   }
 
+  test("SPARK-58440: illegal sequence boundaries carry String message parameters") {
+    // Codegen-only: the interpreted path reports this through `require`, which throws a plain
+    // IllegalArgumentException with no error class or parameters, so the two-mode
+    // `checkErrorInExpression` cannot be used here.
+    // The parameter map is built in generated Java source. Janino erases the
+    // `Map<String, String>` type arguments, so non-String values used to slip in and reach
+    // `SparkThrowable.getMessageParameters`, whose declared value type is String.
+    withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      // Numeric start/stop/step (IntegralSequenceImpl).
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          evaluateWithMutableProjection(new Sequence(Literal(1), Literal(2), Literal(0)))
+        },
+        condition = "_LEGACY_ERROR_TEMP_3243",
+        parameters = Map("start" -> "1", "stop" -> "2", "step" -> "0"))
+
+      // Interval step (InternalSequenceBase): `step` is a CalendarInterval, not a number. A
+      // month-granularity step is required to reach this path; a day-granularity one is
+      // delegated to the integral implementation with a plain `int` step.
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          evaluateWithMutableProjection(Sequence(
+            Literal(Date.valueOf("1970-01-01")),
+            Literal(Date.valueOf("1970-02-01")),
+            Some(Literal(negateExact(stringToInterval("interval 1 month")))),
+            UTC_OPT))
+        },
+        condition = "_LEGACY_ERROR_TEMP_3243",
+        parameters = Map("start" -> "0", "stop" -> "2678400000000", "step" -> "-1 months"))
+    }
+  }
+
   test("Sequence of timestamps") {
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
@@ -2130,6 +2163,47 @@ class CollectionExpressionsSuite
         val dupTimeMap = Literal.create(dupTimeMapData, MapType(timeType, IntegerType))
         checkEvaluation(ElementAt(dupTimeMap, Literal(t1, timeType)), 10)
         checkEvaluation(ElementAt(dupTimeMap, Literal(t2, timeType)), 20)
+
+        // Nanosecond timestamp keys (SPARK-57841). element_at routes through the same
+        // GetMapValueUtil map-lookup path as GetMapValue, so it must also distinguish keys that
+        // share epochMicros and differ only in nanosWithinMicro, on both the hash (threshold 0) and
+        // linear (threshold Int.MaxValue) paths. Physical TimestampNanosVal objects use the
+        // hashCode()/equals() fall-through arm (not the primitive-long arm). Built from internal
+        // values via ArrayBasedMapData (Literal.create of a Scala nanos-keyed Map would route
+        // through the schema-aware converter, which only accepts LocalDateTime / Instant keys).
+        val ntz9 = TimestampNTZNanosType(9)
+        val micros = 1577836800000000L // 2020-01-01T00:00:00Z
+        val n1 = TimestampNanosTestUtils.nanosVal(micros, 1)
+        val n2 = TimestampNanosTestUtils.nanosVal(micros, 999) // same micro as n1, must not alias
+        val n3 = TimestampNanosTestUtils.nanosVal(micros + 1, 0)
+        val ntzNanosMap = Literal.create(
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](n1, n2, n3)),
+            new GenericArrayData(Array[Any](10, 20, 30))),
+          MapType(ntz9, IntegerType))
+        checkEvaluation(ElementAt(ntzNanosMap, Literal(n1, ntz9)), 10)
+        checkEvaluation(ElementAt(ntzNanosMap, Literal(n2, ntz9)), 20)
+        checkEvaluation(ElementAt(ntzNanosMap, Literal(n3, ntz9)), 30)
+        checkEvaluation(ElementAt(ntzNanosMap,
+          Literal(TimestampNanosTestUtils.nanosVal(micros, 500), ntz9)), null)
+
+        // LTZ family + null value + duplicate-key first-wins.
+        val ltz9 = TimestampLTZNanosType(9)
+        val l1 = TimestampNanosTestUtils.nanosVal(micros, 100)
+        val l2 = TimestampNanosTestUtils.nanosVal(micros, 900)
+        val ltzNanosMap = Literal.create(
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](l1, l2)),
+            new GenericArrayData(Array[Any](10, null))),
+          MapType(ltz9, IntegerType))
+        checkEvaluation(ElementAt(ltzNanosMap, Literal(l1, ltz9)), 10)
+        checkEvaluation(ElementAt(ltzNanosMap, Literal(l2, ltz9)), null) // present, null value
+        val dupNanosMap = Literal.create(
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](n1, n2, n1)),
+            new GenericArrayData(Array[Any](10, 20, 30))),
+          MapType(ntz9, IntegerType))
+        checkEvaluation(ElementAt(dupNanosMap, Literal(n1, ntz9)), 10)
 
         // Array Keys
         val arrayType = ArrayType(IntegerType)
@@ -3323,5 +3397,27 @@ class CollectionExpressionsSuite
         "numberOfElements" -> (-BigInt(Int.MinValue) + 1).toString,
         "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
         "functionName" -> "`array_insert`"))
+  }
+
+  test("SPARK-57335: element_at with index = Int.MinValue") {
+    val a = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    // Non-ANSI: an out-of-bounds index must return null. `Math.abs(Int.MinValue)`
+    // overflows back to a negative value, which previously bypassed the bounds check
+    // and leaked an internal IndexOutOfBoundsException.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(ElementAt(a, Literal(Int.MinValue)), null)
+    }
+    // ANSI: the documented error is raised instead of an internal exception.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[SparkArrayIndexOutOfBoundsException](
+        ElementAt(a, Literal(Int.MinValue)),
+        "INVALID_ARRAY_INDEX_IN_ELEMENT_AT")
+    }
+    // try_element_at must not throw even under ANSI, since it hardcodes
+    // failOnError = false. Without the widened bounds check this leaked
+    // an internal IndexOutOfBoundsException.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkEvaluation(ElementAt(a, Literal(Int.MinValue), None, failOnError = false), null)
+    }
   }
 }

@@ -146,15 +146,17 @@ private[deploy] object RPackageUtils extends Logging {
       val entryRIndex = entry.getName.indexOf(RJarEntries)
       if (entryRIndex > -1) {
         val entryPath = entry.getName.substring(entryRIndex)
+        val outPath = new File(tempDir, entryPath).getCanonicalFile
+        if (!outPath.getCanonicalPath.startsWith(tempDir.getCanonicalPath + File.separator)) {
+          throw new IOException(s"Malicious zip entry escaping target dir: ${entry.getName}")
+        }
         if (entry.isDirectory) {
-          val dir = new File(tempDir, entryPath)
           if (verbose) {
-            print(log"Creating directory: ${MDC(PATH, dir)}", printStream)
+            print(log"Creating directory: ${MDC(PATH, outPath)}", printStream)
           }
-          Utils.createDirectory(dir)
+          Utils.createDirectory(outPath)
         } else {
           val inStream = jar.getInputStream(entry)
-          val outPath = new File(tempDir, entryPath)
           Utils.createParentDirs(outPath)
           val outStream = new FileOutputStream(outPath)
           if (verbose) {

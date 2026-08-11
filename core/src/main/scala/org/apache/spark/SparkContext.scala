@@ -423,10 +423,6 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
-    // HADOOP-19229 Vector IO on cloud storage: increase threshold for range merging
-    // We can remove this after Apache Hadoop 3.4.2 releases
-    conf.setIfMissing("spark.hadoop.fs.s3a.vectored.read.min.seek.size", "128K")
-    conf.setIfMissing("spark.hadoop.fs.s3a.vectored.read.max.merged.size", "2M")
     // This should be set as early as possible.
     SparkContext.enableMagicCommitterIfNeeded(_conf)
 
@@ -582,7 +578,10 @@ class SparkContext(config: SparkConf) extends Logging {
       // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to this executor
       // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
       // see https://github.com/numpy/numpy/issues/10455
-      executorEnvs.put("OMP_NUM_THREADS", _conf.get("spark.task.cpus", "1"))
+      // `spark.task.cpus` may be fractional, so round up to an integer number of threads. It is
+      // validated to be > 0, so the ceiling is always >= 1.
+      executorEnvs.put("OMP_NUM_THREADS",
+        _conf.get(CPUS_PER_TASK).setScale(0, BigDecimal.RoundingMode.CEILING).intValue.toString)
     }
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
@@ -594,7 +593,11 @@ class SparkContext(config: SparkConf) extends Logging {
     _plugins = PluginContainer(this, _resources.asJava)
     _resourceProfileManager = new ResourceProfileManager(_conf, _listenerBus)
     _env.initializeShuffleManager()
-    _env.initializeMemoryManager(SparkContext.numDriverCores(master, conf))
+    // The driver in non-local deployments never runs tasks or stores off-heap blocks, and its
+    // container memory is not sized for spark.memory.offHeap.size, so don't reserve off-heap
+    // memory there.
+    _env.initializeMemoryManager(
+      SparkContext.numDriverCores(master, conf), offHeapAllowed = isLocal)
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
@@ -3154,6 +3157,7 @@ object SparkContext extends Logging {
   private[spark] val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   private[spark] val DATASET_QUERY_EXECUTION_ID_KEY =
     "spark.sql.dataset.queryExecution.id"
+  private[spark] val SPARK_CONNECT_OPERATION_ID_PROPERTY = "spark.connect.operation_id"
 
   /**
    * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was

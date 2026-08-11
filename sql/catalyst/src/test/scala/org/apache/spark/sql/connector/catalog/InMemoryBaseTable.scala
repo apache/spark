@@ -20,17 +20,16 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
-import java.util.Locale
 import java.util.Objects
 import java.util.OptionalLong
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, EvalMode, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -44,7 +43,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{ColumnImpl, SupportsStreamingUpdateAsAppend}
+import org.apache.spark.sql.internal.connector.{ColumnImpl, SupportsRuntimeCatalystFiltering, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -75,15 +74,9 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
-  // Assign column IDs to columns that do not have one.
-  // This simulates connectors that support column identity tracking.
-  private var tableColumns: Array[Column] = initialColumns.map { c =>
-    if (c.id() == null) {
-      c.asInstanceOf[ColumnImpl].copy(id = InMemoryBaseTable.nextColumnId().toString)
-    } else {
-      c
-    }
-  }
+  // Assign column IDs to columns that do not have one, including nested struct fields within
+  // arrays and maps. This simulates connectors that support column identity tracking.
+  private var tableColumns: Array[Column] = InMemoryBaseTable.assignMissingIds(initialColumns)
 
   override def columns(): Array[Column] = tableColumns
 
@@ -202,6 +195,8 @@ abstract class InMemoryBaseTable(
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
     .toBoolean
+  private val generateColumnValuesOnWrite =
+    properties.getOrDefault("generate-column-values-on-write", "true").toBoolean
 
   partitioning.foreach {
     case _: IdentityTransform =>
@@ -495,7 +490,10 @@ abstract class InMemoryBaseTable(
   override def capabilities(): util.Set[TableCapability] =
     (baseCapabiilities ++
       (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
-      (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty))
+      (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty) ++
+      (if (generateColumnValuesOnWrite) {
+        Seq(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
+      } else Seq.empty))
       .asJava
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
@@ -523,21 +521,33 @@ abstract class InMemoryBaseTable(
     private var _pushedFilters: Array[Filter] = Array.empty
 
     override def build: Scan = {
-      val scan = if (InMemoryBaseTable.this.ordering.nonEmpty) {
-        new InMemoryBatchScanWithOrdering(
-          data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema,
-          options)
-      } else {
-        InMemoryBatchScan(
-          data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema,
-          options)
+      val scan = createScan(
+        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema, options)
+      scan match {
+        case s: InMemoryBatchScan =>
+          if (evaluableFilters.nonEmpty) {
+            s.filter(evaluableFilters)
+          }
+          s.pushedFilters = _pushedFilters
+        case _ =>
       }
-      if (evaluableFilters.nonEmpty) {
-        scan.filter(evaluableFilters)
-      }
-      scan.pushedFilters = _pushedFilters
       recordScanEvent(_pushedFilters)
       scan
+    }
+
+    /**
+     * Creates the batch scan for [[build]].
+     */
+    protected def createScan(
+        partitions: Seq[InputPartition],
+        readSchema: StructType,
+        tableSchema: StructType,
+        options: CaseInsensitiveStringMap): BatchScanBaseClass = {
+      if (InMemoryBaseTable.this.ordering.nonEmpty) {
+        new InMemoryBatchScanWithOrdering(partitions, readSchema, tableSchema, options)
+      } else {
+        InMemoryBatchScan(partitions, readSchema, tableSchema, options)
+      }
     }
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
@@ -693,6 +703,69 @@ abstract class InMemoryBaseTable(
       new InMemoryMicroBatchStream(readSchema, tableSchema)
   }
 
+  /**
+   * Reference implementation of [[SupportsRuntimeCatalystFiltering.filter]] for the in-memory
+   * fixtures: records what was pushed, and for expressions referencing only partition columns
+   * binds them against the partition key and drops partitions that do not match. Binding and
+   * interpreting rather than pattern matching a fixed set of operators is what lets the fixture
+   * honor an arbitrary pushed expression, the same way `PartitionPredicateImpl` does. Mixing
+   * classes supply their own `filterAttributes()`.
+   */
+  trait CatalystRuntimeFilteringScan extends SupportsRuntimeCatalystFiltering {
+    self: BatchScanBaseClass =>
+
+    /** The full table schema, used to locate partition columns pruned out of `readSchema`. */
+    protected def tableSchema: StructType
+
+    private val catalystPredicates = ArrayBuffer.empty[CatalystExpression]
+
+    override def filter(expressions: Array[CatalystExpression]): Unit = {
+      catalystPredicates ++= expressions
+      val partAttrs = partitionAttributes
+      if (partAttrs.isEmpty) return
+
+      val resolver = SQLConf.get.resolver
+      expressions.foreach { expr =>
+        val remapped = expr.transform {
+          case a: AttributeReference =>
+            partAttrs.find(p => resolver(p.name, a.name)).getOrElse(a)
+        }
+        // Only evaluate expressions whose refs are all partition columns, so we can bind
+        // against the partition key InternalRow (same approach as PartitionPredicateImpl).
+        if (remapped.references.forall(r => partAttrs.exists(_.exprId == r.exprId))) {
+          val bound = BindReferences.bindReference(remapped, partAttrs)
+          val pred = CatalystPredicate.createInterpreted(bound)
+          self.data = self.data.filter { p =>
+            try {
+              pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
+            } catch {
+              // Keep the partition on eval failure, which is safe here because every predicate
+              // the fixture pushes evaluates cleanly. `PartitionPredicateImpl` fails open for a
+              // reason of its own: Spark keeps the post-scan `FilterExec` on that path, so
+              // failing open costs just a pruning opportunity. A scan declaring an attribute in
+              // `fullyPushedFilterAttributes()` stands alone as the evaluator, so keeping an
+              // unevaluated partition would return nonmatching rows.
+              case _: Exception => true
+            }
+          }
+        }
+      }
+    }
+
+    /** Predicates recorded by [[filter]], for test assertions only. */
+    def pushedCatalystPredicates: Seq[CatalystExpression] = catalystPredicates.toSeq
+
+    /** AttributeReferences matching the partition-key InternalRow field order. */
+    private def partitionAttributes: Seq[AttributeReference] = {
+      partitioning.flatMap(_.references()).flatMap { ref =>
+        val name = ref.fieldNames.mkString(".")
+        readSchema.find(_.name == name).orElse(tableSchema.find(_.name == name)).map { f =>
+          AttributeReference(f.name, f.dataType, f.nullable)()
+        }
+      }.toSeq
+    }
+  }
+
   case class InMemoryBatchScan(
       var _data: Seq[InputPartition],
       readSchema: StructType,
@@ -780,10 +853,8 @@ abstract class InMemoryBaseTable(
         val mergedSchema = mergeSchema(
           oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
           newType = newSchema)
-        val newColumns = CatalogV2Util.structTypeToV2Columns(mergedSchema)
         tableColumns = InMemoryBaseTable.assignMissingIds(
-          oldColumns = columns(),
-          newColumns = newColumns)
+          CatalogV2Util.structTypeToV2Columns(mergedSchema))
         writer
       }
 
@@ -916,30 +987,62 @@ abstract class InMemoryBaseTable(
 object InMemoryBaseTable {
   private val columnIdGlobalCounter = new AtomicLong(0)
   def nextColumnId(): Long = columnIdGlobalCounter.incrementAndGet()
+  def nextColumnIdString(): String = nextColumnId().toString
 
-  private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
+  // SQL conf key that enables column ID assignment
+  val ASSIGN_COLUMN_IDS = "spark.sql.test.inMemoryTable.assignColumnIds"
 
   /**
-   * Preserves column IDs from `oldColumns` when the column name matches,
-   * and assigns new IDs to columns that do not already have one.
+   * Assigns fresh IDs to any top-level column or nested struct field that does not already
+   * have one. Recurses into struct fields within ArrayType and MapType so that every field
+   * at every depth gets an ID.
    *
-   * IDs are preserved across type changes, keeping the same column ID through type
-   * widening and nested field additions. [[TypeChangeResetsColIdTableCatalog]] overrides
-   * this behavior for testing scenarios where type changes should produce a new ID.
+   * Existing IDs are preserved: Column -> StructType -> Column round-trip encodes them in
+   * StructField metadata (see StructField.FIELD_ID_METADATA_KEY), so only genuinely new fields
+   * arrive here without an ID.
    */
-  def assignMissingIds(
-      oldColumns: Array[Column],
-      newColumns: Array[Column]): Array[Column] = {
-    newColumns.map { newCol =>
-      oldColumns.find(c => normalize(c.name()) == normalize(newCol.name())) match {
-        case Some(oldCol) if oldCol.id() != null =>
-          newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
-        case _ if newCol.id() == null =>
-          newCol.asInstanceOf[ColumnImpl].copy(id = nextColumnId().toString)
-        case _ =>
-          newCol
+  def assignMissingIds(columns: Array[Column]): Array[Column] = {
+    if (!SQLConf.get.getConfString(ASSIGN_COLUMN_IDS, "false").toBoolean) return columns
+    columns.map { col =>
+      val impl = col.asInstanceOf[ColumnImpl]
+      val colWithId = if (col.id == null) impl.copy(id = nextColumnIdString()) else impl
+      val updatedType = assignFieldIds(colWithId.dataType)
+      if (updatedType ne colWithId.dataType) {
+        colWithId.copy(dataType = updatedType)
+      } else {
+        colWithId
       }
     }
+  }
+
+  private def assignFieldIds(dataType: DataType): DataType = dataType match {
+    case s: StructType =>
+      val newFields = s.fields.map { field =>
+        val fieldWithId = if (field.id.isEmpty) field.withId(nextColumnIdString()) else field
+        val updatedType = assignFieldIds(fieldWithId.dataType)
+        if (updatedType ne fieldWithId.dataType) {
+          fieldWithId.copy(dataType = updatedType)
+        } else {
+          fieldWithId
+        }
+      }
+      if (newFields.zip(s.fields).forall { case (n, e) => n eq e }) s else StructType(newFields)
+
+    case a: ArrayType =>
+      val updatedElement = assignFieldIds(a.elementType)
+      if (updatedElement ne a.elementType) a.copy(elementType = updatedElement) else a
+
+    case m: MapType =>
+      val updatedKeyType = assignFieldIds(m.keyType)
+      val updatedValueType = assignFieldIds(m.valueType)
+      if ((updatedKeyType ne m.keyType) || (updatedValueType ne m.valueType)) {
+        m.copy(keyType = updatedKeyType, valueType = updatedValueType) }
+      else {
+        m
+      }
+
+    case other =>
+      other
   }
 
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"

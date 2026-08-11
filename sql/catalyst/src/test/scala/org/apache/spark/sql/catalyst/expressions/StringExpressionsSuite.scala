@@ -451,6 +451,33 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-48973: Mask with supplementary characters") {
+    def cp(codePoint: Int): String = new String(Character.toChars(codePoint))
+    val smile = cp(0x1F642)
+    val boldA = cp(0x1D400)
+    val boldSmallA = cp(0x1D41A)
+    val boldZero = cp(0x1D7CE)
+
+    checkEvaluation(
+      new Mask(Literal(smile), Literal('Y'), Literal('y'), Literal('n'), Literal('*')), "*")
+    checkEvaluation(new Mask(Literal("ABC"), Literal(smile)), smile * 3)
+    checkEvaluation(new Mask(Literal(s"A$boldA 1$boldZero")), "XX nn")
+    // Supplementary upper-case, lower-case and digit characters are each classified and
+    // replaced like their BMP counterparts.
+    checkEvaluation(new Mask(Literal(s"$boldA$boldSmallA$boldZero")), "Xxn")
+    // A supplementary replacement applied to a supplementary input.
+    checkEvaluation(new Mask(Literal(boldSmallA), Literal('Y'), Literal(smile)), smile)
+
+    // A supplementary character must round-trip intact through the retain path, both when it
+    // falls into the otherChar category and when its own category is set to retain.
+    checkEvaluation(new Mask(Literal(smile)), smile)
+    checkEvaluation(new Mask(Literal(s"a${smile}1")), s"x${smile}n")
+    checkEvaluation(new Mask(Literal(boldA), Literal(null, StringType)), boldA)
+    checkEvaluation(
+      new Mask(Literal(boldZero), Literal('Y'), Literal('y'), Literal(null, StringType)),
+      boldZero)
+  }
+
   test("SPARK-42384: Mask with null input") {
     val NULL_LITERAL = Literal(null, StringType)
     checkEvaluation(
@@ -497,6 +524,30 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(UnBase64(a), null, create_row(null))
     checkEvaluation(UnBase64(Literal.create(null, StringType)), null, create_row("abdef"))
+  }
+
+  test("to_base32/from_base32 for string") {
+    // RFC 4648 (section 10) test vectors.
+    checkEvaluation(Base32(Literal("".getBytes("UTF-8"))), "")
+    checkEvaluation(Base32(Literal("f".getBytes("UTF-8"))), "MY======")
+    checkEvaluation(Base32(Literal("fo".getBytes("UTF-8"))), "MZXQ====")
+    checkEvaluation(Base32(Literal("foo".getBytes("UTF-8"))), "MZXW6===")
+    checkEvaluation(Base32(Literal("foob".getBytes("UTF-8"))), "MZXW6YQ=")
+    checkEvaluation(Base32(Literal("fooba".getBytes("UTF-8"))), "MZXW6YTB")
+    checkEvaluation(Base32(Literal("foobar".getBytes("UTF-8"))), "MZXW6YTBOI======")
+
+    assert(!Base32(Literal("foo".getBytes("UTF-8"))).nullable)
+    assert(Base32(Literal.create(null, BinaryType)).nullable)
+    assert(!UnBase32(Literal("MZXW6YTBOI======")).nullable)
+    assert(UnBase32(Literal.create(null, StringType)).nullable)
+
+    checkEvaluation(UnBase32(Literal("MZXW6YTBOI======")), "foobar".getBytes("UTF-8"))
+    checkEvaluation(UnBase32(Literal("MY======")), "f".getBytes("UTF-8"))
+
+    // Round trip.
+    checkEvaluation(Base32(UnBase32(Literal("MZXW6YTBOI======"))), "MZXW6YTBOI======")
+    checkEvaluation(Base32(UnBase32(Literal(""))), "")
+    checkEvaluation(Base32(UnBase32(Literal.create(null, StringType))), null)
   }
 
   test("encode/decode for string") {
@@ -866,6 +917,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringTranslate(Literal("translate"), Literal("rnlt"), Literal("123")), "1a2s3ae")
     checkEvaluation(StringTranslate(Literal("translate"), Literal(""), Literal("123")), "translate")
     checkEvaluation(StringTranslate(Literal("translate"), Literal("rnlt"), Literal("")), "asae")
+    // A literal U+0000 in `to` is preserved as a one-character replacement, not deletion.
+    checkEvaluation(StringTranslate(Literal("A"), Literal("A"), Literal("\u0000")), "\u0000")
+    // Mixed literal U+0000 replacement and deletion: A -> U+0000, B -> X, C and D deleted.
+    checkEvaluation(
+      StringTranslate(Literal("ABCD"), Literal("ABCD"), Literal("\u0000" + "X")), "\u0000" + "X")
     // test for multiple mapping
     checkEvaluation(StringTranslate(Literal("abcd"), Literal("aba"), Literal("123")), "12cd")
     checkEvaluation(StringTranslate(Literal("abcd"), Literal("aba"), Literal("12")), "12cd")
@@ -1025,6 +1081,90 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(StringInstr(Literal("\"quote"), Literal("\"quote")) :: Nil)
+
+    // Test instr with start and occurrence
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("b"), Literal(3), Literal(1)), 5)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("b"), Literal(1), Literal(2)), 5)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("b"), Literal(3), Literal(2)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("b"), Literal(-1), Literal(1)), 5)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("b"), Literal(-1), Literal(2)), 2)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("a"), Literal(-2), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("a"), Literal(-1), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-1), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-2), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-3), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-1), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-2), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-3), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-1), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-2), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-3), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abc"), Literal("b"), Literal(0), Literal(1)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abc"), Literal("b"), Literal(0), Literal(2)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abc"), Literal("b"), Literal(1), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abc"), Literal("b"), Literal(-1), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abc"), Literal("d"), Literal(1), Literal(1)), 0)
+
+    // NULL
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal.create(null, StringType), Literal("de"), Literal(1), Literal(1)), null)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("aaads"), Literal.create(null, StringType), Literal(1), Literal(1)), null)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("aaads"), Literal("aa"), Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("aaads"), Literal("aa"), Literal(1), Literal.create(null, IntegerType)), null)
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(StringInstrWithOccurrence(
+      s1, s2, Literal(1), Literal(1)), 3, create_row("花花世界", "世界"))
+    checkEvaluation(StringInstrWithOccurrence(
+      s1, s2, Literal(1), Literal(2)), 0, create_row("花花世界", "世界"))
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("你好世界你好"), Literal("你好"), Literal(1), Literal(2)), 5)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("你好世界你好"), Literal("你好"), Literal(-1), Literal(1)), 5)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("你好世界你好"), Literal("你好"), Literal(-1), Literal(2)), 1)
+    // scalastyle:on
+  }
+
+  test("StringInstrExpressionBuilder") {
+    val seq1 = Seq(Literal("abcabc"), Literal("a"), Literal(-1), Literal(2))
+    val seq2 = Seq(Literal("abcabc"), Literal("a"), Literal(-1))
+    val seq3 = Seq(Literal("abcabc"), Literal("a"))
+
+    val instrExp1 = StringInstrExpressionBuilder.build("instr", seq1)
+    val instrExp2 = StringInstrExpressionBuilder.build("instr", seq2)
+    val instrExp3 = StringInstrExpressionBuilder.build("instr", seq3)
+
+    assert(instrExp1 == StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("a"), Literal(-1), Literal(2)))
+    assert(instrExp2 == StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("a"), Literal(-1), Literal(1)))
+    assert(instrExp3 == StringInstr(Literal("abcabc"), Literal("a")))
   }
 
   test("LOCATE") {
@@ -2178,5 +2318,24 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           s"Expression $expr should be context independent foldable")
       }
     }
+  }
+
+  test("StringTranslate and FormatNumber are stateful and produce fresh copies") {
+    val src = Literal("aeiou")
+    val matching = Literal("aeiou")
+    val replace = Literal("12345")
+    val translate = StringTranslate(src, matching, replace)
+    assert(translate.stateful, "StringTranslate.stateful should be true")
+    val translateCopy = translate.freshCopyIfContainsStatefulExpression()
+    assert(translateCopy ne translate,
+      "freshCopyIfContainsStatefulExpression should return a new instance for StringTranslate")
+
+    val num = Literal(1234567.89)
+    val fmt = Literal(2)
+    val formatNumber = FormatNumber(num, fmt)
+    assert(formatNumber.stateful, "FormatNumber.stateful should be true")
+    val formatNumberCopy = formatNumber.freshCopyIfContainsStatefulExpression()
+    assert(formatNumberCopy ne formatNumber,
+      "freshCopyIfContainsStatefulExpression should return a new instance for FormatNumber")
   }
 }

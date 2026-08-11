@@ -85,7 +85,6 @@ __all__ = ["SparkContext"]
 # the default ones for Spark if they are not configured by user.
 DEFAULT_CONFIGS: Dict[str, Any] = {
     "spark.serializer.objectStreamReset": 100,
-    "spark.rdd.compress": True,
     # Disable artifact isolation in PySpark, or user-added .py file won't work
     "spark.sql.artifact.isolation.enabled": "false",
 }

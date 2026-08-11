@@ -132,6 +132,17 @@ class DataFrameAggregateSuite extends SharedSparkSession
     )
   }
 
+  test("cube()/rollup() with no grouping columns return one grand-total row over empty input") {
+    // With no grouping columns, cube()/rollup() lower to a global aggregate (the grand total),
+    // which returns one row even over empty input -- like an aggregation with no GROUP BY clause.
+    // This is the DataFrame-API surface for the empty CUBE/ROLLUP case (not expressible in SQL).
+    checkAnswer(spark.range(0).cube().count(), Row(0L))
+    checkAnswer(spark.range(0).rollup().count(), Row(0L))
+    // Non-empty input still collapses to the single grand-total row.
+    checkAnswer(spark.range(3).cube().count(), Row(3L))
+    checkAnswer(spark.range(3).rollup().count(), Row(3L))
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
@@ -578,6 +589,59 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Row(null, null, null, null, null))
   }
 
+  test("SPARK-58291: empty-buffer merge must not overflow to NaN for statistical aggregates") {
+    // A single-partition group with two equal, very large finite values has zero variance, so
+    // var_pop / covar_pop / regr_sxy must be 0.0. Previously, when adjacent Partial/Final
+    // aggregates were NOT combined (the old default), the Final merge of the non-empty Partial
+    // buffer into the empty Final buffer computed `delta * deltaN * n1 * n2` where `n1 == 0`;
+    // `delta * deltaN` overflowed to Infinity and `Infinity * 0 = NaN`, corrupting the moments.
+    // CombineAdjacentAggregation (Complete mode) sidesteps the merge and returned 0.0, so the two
+    // configurations disagreed. The merge fix makes both paths return 0.0.
+    // This must hold with and without AQE, and with combining on and off.
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val df = Seq(1e155, 1e155).toDF("a").repartition(1)
+        Seq(true, false).foreach { combine =>
+          withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+            checkAnswer(
+              df.selectExpr("var_pop(a)", "covar_pop(a, a)", "regr_sxy(a, a)"),
+              Row(0.0, 0.0, 0.0))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58291: empty-buffer merge must not overflow to NaN for Pearson correlation") {
+    // Two finite points are perfectly linearly correlated, so corr / regr_r2 are finite. The
+    // Pearson merge computes `dx * dxN * n1 * n2` (and the dy variant) for xMk / yMk. When one
+    // side is an empty buffer (n1 == 0 or n2 == 0) and the other has a large average, `dx * dxN`
+    // overflows to Infinity before being multiplied by the zero count, and `Infinity * 0 = NaN`
+    // corrupts the merged moments. The old default (no combining) hit this Final-merge path and
+    // returned NaN, while CombineAdjacentAggregation (Complete mode) sidestepped the merge, so the
+    // two configurations disagreed. The merge fix makes both paths return the same finite result.
+    // This must hold with and without AQE, and with combining on and off.
+    val data = Seq((1.0e155, 1.0e-150), (1.000000000000001e155, 2.0e-150))
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val df = data.toDF("x", "y").repartition(1)
+        // Reference result from the combined (Complete-mode) path, which never runs the merge.
+        val expected = withSQLConf(
+            SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+          df.selectExpr("corr(x, y)", "regr_r2(y, x)").collect()
+        }
+        expected.head.toSeq.foreach { v =>
+          assert(!v.asInstanceOf[Double].isNaN, "corr / regr_r2 must be finite, not NaN")
+        }
+        Seq(true, false).foreach { combine =>
+          withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+            checkAnswer(df.selectExpr("corr(x, y)", "regr_r2(y, x)"), expected.toSeq)
+          }
+        }
+      }
+    }
+  }
+
   test("collect functions") {
     val df = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
     checkAnswer(
@@ -610,6 +674,72 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.select(array_agg($"a"), array_agg($"b")),
       Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
     )
+  }
+
+  test("collect_union function") {
+    // Distinct union of array elements across rows.
+    val df = Seq(Seq(1, 2), Seq(2, 3), Seq(1)).toDF("arr")
+    checkDataset(
+      df.select(collect_union($"arr").as("u")).as[Set[Int]],
+      Set(1, 2, 3))
+    checkAnswer(
+      df.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2, 3))))
+    checkAnswer(
+      df.selectExpr("sort_array(collect_union(arr))"),
+      Seq(Row(Seq(1, 2, 3))))
+
+    // NULL array inputs are always skipped.
+    val dfNulls = Seq(Seq(1, 2), null, Seq(2, 3)).toDF("arr")
+    checkAnswer(
+      dfNulls.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2, 3))))
+
+    // NULL elements: dropped by default (IGNORE NULLS, matching collect_set) ...
+    val dfNullElem = Seq(Seq(Integer.valueOf(1), null), Seq(Integer.valueOf(2))).toDF("arr")
+    checkAnswer(
+      dfNullElem.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2))))
+    // ... and kept (a single null) with RESPECT NULLS, matching
+    // array_distinct(flatten(collect_list(...))). sort_array puts null first in asc order.
+    checkAnswer(
+      dfNullElem.selectExpr("sort_array(collect_union(arr) RESPECT NULLS)"),
+      Seq(Row(Seq(null, 1, 2))))
+    // Equivalent to array_distinct(flatten(collect_list(...))) under RESPECT NULLS. Compare
+    // order-insensitively via sort_array, since element order in either result is unspecified.
+    checkAnswer(
+      dfNullElem.selectExpr("sort_array(collect_union(arr) RESPECT NULLS)"),
+      dfNullElem.selectExpr("sort_array(array_distinct(flatten(collect_list(arr))))"))
+
+    // Per-group union.
+    val g = Seq(("a", Seq(1, 2)), ("a", Seq(2, 3)), ("b", Seq(4))).toDF("k", "arr")
+    checkAnswer(
+      g.groupBy("k").agg(sort_array(collect_union($"arr"))).orderBy("k"),
+      Seq(Row("a", Seq(1, 2, 3)), Row("b", Seq(4))))
+
+    // Empty result: only-NULL arrays produce an empty array, not null.
+    val dfEmpty = Seq[Seq[Int]](null, null).toDF("arr")
+    checkAnswer(
+      dfEmpty.select(collect_union($"arr")),
+      Seq(Row(Seq.empty[Int])))
+  }
+
+  test("collect_union requires an array input") {
+    // A non-array (scalar) input is rejected at analysis time.
+    val df = Seq(1, 2, 3).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(collect_union($"a")).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"collect_union(a)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"ARRAY\""),
+      context = ExpectedContext(
+        fragment = "collect_union", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-55256: array_agg and collect_list skip nulls by default") {
@@ -1091,6 +1221,56 @@ class DataFrameAggregateSuite extends SharedSparkSession
     )
   }
 
+  test("SPARK-57329: mode normalizes -0.0/0.0 in the frequency buffer") {
+    checkAnswer(
+      Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d, 9.0d, 9.0d).toDF("d").select(expr("mode(d)")),
+      Row(0.0d))
+    checkAnswer(
+      Seq(0.0f, 0.0f, -0.0f, -0.0f, 9.0f, 9.0f, 9.0f).toDF("f").select(expr("mode(f)")),
+      Row(0.0f))
+
+    checkAnswer(
+      Seq(Array(-0.0d), Array(-0.0d), Array(0.0d), Array(0.0d),
+          Array(9.0d), Array(9.0d), Array(9.0d)).toDF("a").select(expr("mode(a)")),
+      Row(Seq(0.0d)))
+
+    // pandas_mode shares the same normalization path; cover it explicitly. It is an
+    // internal expression, so invoke it via Column.internalFn rather than SQL.
+    checkAnswer(
+      Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d).toDF("d")
+        .select(Column.internalFn("pandas_mode", col("d"), lit(true))),
+      Row(Seq(0.0d)))
+    checkAnswer(
+      Seq(0.0f, 0.0f, -0.0f, -0.0f, 9.0f).toDF("f")
+        .select(Column.internalFn("pandas_mode", col("f"), lit(true))),
+      Row(Seq(0.0f)))
+    checkAnswer(
+      Seq(Array(-0.0d), Array(-0.0d), Array(0.0d), Array(0.0d), Array(9.0d)).toDF("a")
+        .select(Column.internalFn("pandas_mode", col("a"), lit(true))),
+      Row(Seq(Seq(0.0d))))
+
+    // Struct complex type: same recursive NormalizeFloatingNumbers path as the array case
+    // above, but a different shape. -0.0/0.0 collapse to 4 occurrences, outvoting 9.0's 3.
+    checkAnswer(
+      sql("SELECT mode(named_struct('a', v)) FROM " +
+        "VALUES (-0.0D), (-0.0D), (0.0D), (0.0D), (9.0D), (9.0D), (9.0D) AS t(v)"),
+      Row(Row(0.0d)))
+
+    // NaN with differing bit patterns nested in a complex type. The normalization lambda
+    // canonicalizes the NaN bits so the two patterns collapse to 4 occurrences, outvoting
+    // 9.0's 3. Without normalization each pattern forms its own group of 2 and 9.0 (3) wins,
+    // so the expected NaN result genuinely distinguishes fixed from buggy behavior.
+    val nan1 = java.lang.Double.longBitsToDouble(0x7ff8000000000000L)
+    val nan2 = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
+    assert(nan1.isNaN && nan2.isNaN &&
+      java.lang.Double.doubleToRawLongBits(nan1) !=
+        java.lang.Double.doubleToRawLongBits(nan2))
+    checkAnswer(
+      Seq(nan1, nan1, nan2, nan2, 9.0d, 9.0d, 9.0d).toDF("v")
+        .select(struct(col("v")).as("s")).select(expr("mode(s)")),
+      Row(Row(Double.NaN)))
+  }
+
   test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
     val df = sql("select id % 100 from range(100000)")
     val distinctCount1 = df.select(expr("count(distinct(*))"))
@@ -1555,7 +1735,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
         percentile(col("year"), lit(0.3), lit(2)),
         percentile(col("year"), lit(Array(0.25, 0.75)), lit(2))
       ),
-      Row("Java", 2012.2999999999997, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
+      Row("Java", 2012.3, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
         Row("dotNET", 2012.0, Seq(2012.0, 2012.5), 2012.0, Seq(2012.0, 2012.75)) :: Nil
     )
 

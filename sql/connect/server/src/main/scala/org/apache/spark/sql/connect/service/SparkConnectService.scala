@@ -41,7 +41,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.IllegalStateErrors
-import org.apache.spark.sql.connect.config.Connect.{getAuthenticateToken, CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
+import org.apache.spark.sql.connect.config.Connect.{getAuthenticateToken, CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_KEEPALIVE_ENABLED, CONNECT_GRPC_KEEPALIVE_TIME, CONNECT_GRPC_KEEPALIVE_TIMEOUT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
@@ -314,6 +314,14 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
  */
 object SparkConnectService extends Logging {
 
+  // Floor for permitKeepAliveTime: the minimum interval the server tolerates between a client's
+  // keepalive PINGs before striking the connection as "too_many_pings" (gRFC A8). This is
+  // independent of the server's own keepAlive.time (its probe interval for detecting dead
+  // clients) and must stay well below any supported client grpc_keepalive_time_ms, not derived
+  // from it -- otherwise a faster client (or an operator raising keepAlive.time) gets its
+  // healthy connection torn down. 10s leaves a wide margin below the 60s client/server default.
+  private[connect] val GRPC_KEEPALIVE_PERMIT_TIME_SECONDS: Long = 10
+
   private[connect] var server: Server = _
   private[connect] var bindingAddress: InetSocketAddress = _
 
@@ -408,7 +416,25 @@ object SparkConnectService extends Logging {
         case _ => NettyServerBuilder.forPort(port)
       }
       sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
-        .addService(sparkConnectService)
+      if (SparkEnv.get.conf.get(CONNECT_GRPC_KEEPALIVE_ENABLED)) {
+        val keepAliveTimeSeconds = SparkEnv.get.conf.get(CONNECT_GRPC_KEEPALIVE_TIME)
+        // Detects a silently-dead client connection (e.g. a NAT gateway/load balancer dropping
+        // an idle connection mapping without sending a TCP RST/FIN) via gRPC/HTTP2 keepalive
+        // PINGs.
+        sb.keepAliveTime(keepAliveTimeSeconds, TimeUnit.SECONDS)
+        sb.keepAliveTimeout(
+          SparkEnv.get.conf.get(CONNECT_GRPC_KEEPALIVE_TIMEOUT),
+          TimeUnit.SECONDS)
+      }
+      // Independent of the server's own dead-client detection above (gRFC A8: these are
+      // separate axes), this tolerates client-initiated keepalive PINGs so a default-on client
+      // (which pings regardless of this server's CONNECT_GRPC_KEEPALIVE_ENABLED setting) is
+      // never hit with a "too_many_pings" GOAWAY on an otherwise-healthy connection. Left
+      // ungated so disabling only this server's own keepalive detection cannot regress a
+      // healthy connection to the client into disruptive reconnects.
+      sb.permitKeepAliveTime(GRPC_KEEPALIVE_PERMIT_TIME_SECONDS, TimeUnit.SECONDS)
+      sb.permitKeepAliveWithoutCalls(true)
+      sb.addService(sparkConnectService)
 
       getAuthenticateToken.foreach { token =>
         sb.intercept(new PreSharedKeyAuthenticationInterceptor(token))

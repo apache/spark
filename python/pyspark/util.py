@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -91,6 +90,11 @@ if typing.TYPE_CHECKING:
     )
     from pyspark.sql._typing import (
         SQLArrowBatchedUDFType,
+        SQLArrowElementwiseUDFType,
+        SQLScalarPandasElementwiseUDFType,
+        SQLScalarPandasIterElementwiseUDFType,
+        SQLScalarArrowElementwiseUDFType,
+        SQLScalarArrowIterElementwiseUDFType,
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
@@ -663,6 +667,11 @@ class PythonEvalType:
 
     SQL_BATCHED_UDF: "SQLBatchedUDFType" = 100
     SQL_ARROW_BATCHED_UDF: "SQLArrowBatchedUDFType" = 101
+    SQL_ARROW_ELEMENTWISE_UDF: "SQLArrowElementwiseUDFType" = 102
+    SQL_SCALAR_PANDAS_ELEMENTWISE_UDF: "SQLScalarPandasElementwiseUDFType" = 103
+    SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF: "SQLScalarPandasIterElementwiseUDFType" = 104
+    SQL_SCALAR_ARROW_ELEMENTWISE_UDF: "SQLScalarArrowElementwiseUDFType" = 105
+    SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF: "SQLScalarArrowIterElementwiseUDFType" = 106
 
     SQL_SCALAR_PANDAS_UDF: "PandasScalarUDFType" = 200
     SQL_GROUPED_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 201
@@ -979,7 +988,7 @@ class _FaulthandlerHelper:
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
         if self._log_path:
             self._log_path = os.path.join(self._log_path, str(os.getpid()))
-            self._log_file = open(self._log_path, "w")
+            self._log_file = open(self._log_path, "w", encoding="utf-8")
 
             faulthandler.enable(file=self._log_file)
 

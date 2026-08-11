@@ -137,6 +137,23 @@ public interface VectorizedValuesReader {
   }
 
   void readBinary(int total, WritableColumnVector c, int rowId);
+
+  /**
+   * Reads {@code total} fixed-length byte arrays of exactly {@code len} bytes each into
+   * {@code c} starting at {@code c[rowId]}. Unlike {@link #readBinary(int, WritableColumnVector,
+   * int)} which reads length-prefixed variable-length BYTE_ARRAY values, this method reads
+   * FIXED_LEN_BYTE_ARRAY data where each value is exactly {@code len} raw bytes with no
+   * length prefix in the encoded stream.
+   *
+   * <p>The default implementation falls back to a per-row loop calling
+   * {@link #readBinary(int)} for each value; subclasses may override for better performance.
+   */
+  default void readFixedLenByteArray(int total, int len, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i++) {
+      c.putByteArray(rowId + i, readBinary(len).getBytesUnsafe());
+    }
+  }
+
   void readGeometry(int total, WritableColumnVector c, int rowId);
   void readGeography(int total, WritableColumnVector c, int rowId);
 

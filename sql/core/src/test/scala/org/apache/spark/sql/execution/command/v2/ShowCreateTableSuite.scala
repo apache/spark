@@ -17,13 +17,20 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.FieldMetadataUtils
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
 import org.apache.spark.sql.execution.command
 
 /**
  * The class contains tests for the `SHOW CREATE TABLE` command to check V2 table catalogs.
  */
 class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with CommandSuiteBase {
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(InMemoryBaseTable.ASSIGN_COLUMN_IDS, "true")
+
   override def fullName: String = s"$catalog.$ns.$table"
 
   test("SPARK-33898: show create table as serde") {
@@ -197,6 +204,20 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
           "COMMENT 'This is a comment'"
         )
       )
+    }
+  }
+
+  test("SPARK-57544: show create table does not expose column IDs; schema does") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(s"CREATE TABLE $t (id INT, salary INT) $defaultUsing")
+
+      // Column IDs assigned by the catalog must NOT appear in SHOW CREATE TABLE output.
+      val showDDL = getShowCreateDDL(t)
+      assert(!showDDL.exists(_.contains(FieldMetadataUtils.FIELD_ID_METADATA_KEY)))
+
+      // Column IDs must be accessible via df.schema.
+      val fields = spark.table(t).schema.fields
+      assert(fields.forall(_.id.isDefined))
     }
   }
 

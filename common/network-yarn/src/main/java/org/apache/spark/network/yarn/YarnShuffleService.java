@@ -285,8 +285,11 @@ public class YarnShuffleService extends AuxiliaryService {
       if (shuffleMergeManager == null) {
         shuffleMergeManager = newMergedShuffleFileManagerInstance(transportConf, mergeManagerFile);
       }
+      // Constrain registered localDirs to the NodeManager's configured local directories
+      // (yarn.nodemanager.local-dirs) and to the registering application's own directory.
+      String[] nmLocalDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
       blockHandler = new ExternalBlockHandler(
-        transportConf, registeredExecutorFile, shuffleMergeManager);
+        transportConf, registeredExecutorFile, shuffleMergeManager, nmLocalDirs, true);
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
@@ -433,7 +436,8 @@ public class YarnShuffleService extends AuxiliaryService {
             MDC.of(LogKeys.APP_ID, appId));
         }
       } catch (IOException ioe) {
-        logger.warn("Unable to parse application data for service: " + payload);
+        logger.warn("Unable to parse the application data for application {}",
+          MDC.of(LogKeys.APP_ID, appId));
         metaInfo = null;
       }
       if (isAuthenticationEnabled()) {

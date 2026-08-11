@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
@@ -35,7 +36,7 @@ import java.util.Set;
  * Catalog API for connectors that expose tables.
  * <p>
  * Connectors that expose <i>only</i> tables implement this interface. Connectors that expose
- * both tables and views must implement {@link TableViewCatalog} (which extends both this
+ * both tables and views must implement {@link RelationCatalog} (which extends both this
  * interface and {@link ViewCatalog} and adds the cross-cutting contract for the combined
  * case); the methods on this interface remain table-only -- they do not interact with views.
  * <p>
@@ -192,6 +193,50 @@ public interface TableCatalog extends CatalogPlugin {
    */
   default Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
     throw QueryCompilationErrors.noSuchTableError(name(), ident);
+  }
+
+  /**
+   * Load table metadata by {@link Identifier identifier} from the catalog, forwarding all
+   * user-specified options.
+   * <p>
+   * The default implementation ignores {@code options} and delegates to the existing
+   * {@code loadTable} overloads based on {@code context}. Catalogs that want to receive the user
+   * options while reading a table must override this method.
+   * <p>
+   * An override replaces that dispatch and must honor {@code context} itself: apply the time
+   * travel in {@link TableContext#timeTravel()}, and authorize the requested
+   * {@link TableContext#writePrivileges()} as it would in {@link #loadTable(Identifier, Set)}.
+   * Spark does not re-check either afterwards.
+   *
+   * @param ident a table identifier
+   * @param context the parsed load parameters (time travel, write privileges)
+   * @param options all options passed to the read, including any keys that are also parsed into
+   *                {@code context}
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist
+   *
+   * @since 4.3.0
+   */
+  default Table loadTable(
+      Identifier ident,
+      TableContext context,
+      CaseInsensitiveStringMap options) throws NoSuchTableException {
+    if (context.timeTravel().isPresent()) {
+      TimeTravel timeTravel = context.timeTravel().get();
+      if (timeTravel instanceof TimeTravel.AsOfVersion v) {
+        return loadTable(ident, v.version());
+      } else if (timeTravel instanceof TimeTravel.AsOfTimestamp ts) {
+        return loadTable(ident, ts.micros());
+      } else {
+        throw new SparkIllegalArgumentException(
+            "INTERNAL_ERROR",
+            Map.of("message", "Unsupported time travel spec: " + timeTravel));
+      }
+    } else if (!context.writePrivileges().isEmpty()) {
+      return loadTable(ident, context.writePrivileges());
+    } else {
+      return loadTable(ident);
+    }
   }
 
   /**

@@ -129,8 +129,10 @@ private[spark] class ContextCleaner(
     cleaningThread.setDaemon(true)
     cleaningThread.setName("Spark Context Cleaner")
     cleaningThread.start()
-    periodicGCService.scheduleAtFixedRate(() => System.gc(),
-      periodicGCInterval, periodicGCInterval, TimeUnit.SECONDS)
+    if (periodicGCInterval > 0) {
+      periodicGCService.scheduleAtFixedRate(() => System.gc(),
+        periodicGCInterval, periodicGCInterval, TimeUnit.SECONDS)
+    }
   }
 
   /**
@@ -234,6 +236,10 @@ private[spark] class ContextCleaner(
   /** Perform shuffle cleanup. */
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     try {
+      // A shuffle lives in exactly one tracker, split by dependency type: a regular shuffle in the
+      // MapOutputTracker, a pipelined shuffle in the driver-only StreamingShuffleOutputTracker (see
+      // DAGScheduler.createShuffleMapStage). Clean up whichever holds it -- the two branches are
+      // independent, each keyed on its own tracker's membership, so neither depends on the other.
       if (mapOutputTrackerMaster.containsShuffle(shuffleId)) {
         logDebug("Cleaning shuffle " + shuffleId)
         // Shuffle must be removed before it's unregistered from the output tracker
@@ -242,6 +248,19 @@ private[spark] class ContextCleaner(
         mapOutputTrackerMaster.unregisterShuffle(shuffleId)
         listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
         logDebug("Cleaned shuffle " + shuffleId)
+      } else if (streamingShuffleOutputTrackerMaster.exists(_.containsShuffle(shuffleId))) {
+        // A pipelined shuffle's output state is driver-only (the worker tracker caches nothing), so
+        // it is unregistered directly from the StreamingShuffleOutputTracker rather than the
+        // MapOutputTracker. Still call shuffleDriverComponents.removeShuffle to balance the
+        // registerShuffle that the ShuffleDependency constructor issues for EVERY shuffle (incl. a
+        // pipelined one): a custom components impl may track per-shuffle driver state that would
+        // otherwise leak. For the default impl this is just a RemoveShuffle RPC that finds no
+        // blocks (a pipelined shuffle has none), matching the regular branch's ordering.
+        logDebug("Cleaning pipelined shuffle " + shuffleId)
+        shuffleDriverComponents.removeShuffle(shuffleId, blocking)
+        streamingShuffleOutputTrackerMaster.foreach(_.unregisterShuffle(shuffleId))
+        listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
+        logDebug("Cleaned pipelined shuffle " + shuffleId)
       } else {
         logDebug("Asked to cleanup non-existent shuffle (maybe it was already removed)")
       }
@@ -306,6 +325,8 @@ private[spark] class ContextCleaner(
 
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+  private def streamingShuffleOutputTrackerMaster: Option[StreamingShuffleOutputTrackerMaster] =
+    sc.env.streamingShuffleOutputTracker.map(_.asInstanceOf[StreamingShuffleOutputTrackerMaster])
 }
 
 private object ContextCleaner {

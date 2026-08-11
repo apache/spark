@@ -652,6 +652,39 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     widenTest(IntegerType, TimestampType, None)
     widenTest(StringType, TimestampType, None)
 
+    // Nanosecond-precision timestamp types (SPARK-57454).
+    // nanos(p1) <-> nanos(p2) within the same family widen to the max precision.
+    widenTest(TimestampLTZNanosType(7), TimestampLTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    widenTest(TimestampLTZNanosType(8), TimestampLTZNanosType(8), Some(TimestampLTZNanosType(8)))
+    widenTest(TimestampNTZNanosType(7), TimestampNTZNanosType(9), Some(TimestampNTZNanosType(9)))
+    // micro <-> nanos within the same family widen to the nanos type.
+    widenTest(TimestampType, TimestampLTZNanosType(7), Some(TimestampLTZNanosType(7)))
+    widenTest(TimestampNTZType, TimestampNTZNanosType(8), Some(TimestampNTZNanosType(8)))
+    // Mixed time-zone families widen to the LTZ family (mirrors TIMESTAMP + TIMESTAMP_NTZ).
+    widenTest(TimestampLTZNanosType(7), TimestampNTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    widenTest(TimestampLTZNanosType(7), TimestampNTZType, Some(TimestampLTZNanosType(7)))
+    widenTest(TimestampType, TimestampNTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    // nanos <-> date widen to the nanos type of the same family.
+    widenTest(DateType, TimestampLTZNanosType(8), Some(TimestampLTZNanosType(8)))
+    widenTest(DateType, TimestampNTZNanosType(7), Some(TimestampNTZNanosType(7)))
+    // nanos <-> TIME has no common datetime type.
+    widenTest(TimestampLTZNanosType(9), TimeType(6), None)
+    widenTest(TimestampNTZNanosType(9), TimeType(6), None)
+
+    // TIME(p) types (SPARK-57585).
+    // Two TIME operands widen to the larger fractional-seconds precision.
+    widenTest(TimeType(3), TimeType(6), Some(TimeType(6)))
+    widenTest(TimeType(6), TimeType(3), Some(TimeType(6)))
+    widenTest(TimeType(0), TimeType(9), Some(TimeType(9)))
+    widenTest(TimeType(6), TimeType(6), Some(TimeType(6)))
+    // TIME has no common datetime type with DATE or the TIMESTAMP families.
+    widenTest(TimeType(6), DateType, None)
+    widenTest(TimeType(6), TimestampType, None)
+    widenTest(TimeType(6), TimestampNTZType, None)
+    // No common type with non-datetime types.
+    widenTest(IntegerType, TimestampLTZNanosType(9), None)
+    widenTest(StringType, TimestampNTZNanosType(9), None)
+
     // ComplexType
     widenTest(NullType,
       MapType(IntegerType, StringType, false),
@@ -962,6 +995,22 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       new StructType().add("a", StringType),
       new StructType().add("a", IntegerType),
       Some(new StructType().add("a", StringType)))
+
+    // Nanosecond-precision timestamp types (SPARK-57454).
+    widenTestWithStringPromotion(
+      TimestampType, TimestampLTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    widenTestWithStringPromotion(
+      TimestampLTZNanosType(7), TimestampNTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    widenTestWithStringPromotion(
+      DateType, TimestampNTZNanosType(7), Some(TimestampNTZNanosType(7)))
+    widenTestWithoutStringPromotion(
+      TimestampType, TimestampLTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    widenTestWithoutStringPromotion(
+      ArrayType(TimestampType), ArrayType(TimestampNTZNanosType(8)),
+      Some(ArrayType(TimestampLTZNanosType(8))))
+    // nanos <-> string promotes to string with promotion, no common type without it.
+    widenTestWithStringPromotion(StringType, TimestampLTZNanosType(9), Some(StringType))
+    widenTestWithoutStringPromotion(StringType, TimestampNTZNanosType(9), None)
   }
 
   test("cast NullType for expressions that implement ExpectsInputTypes") {
@@ -1652,6 +1701,66 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       EqualTo(Cast(date0301, TimestampType), timestamp0301000000))
     ruleTest(rule, LessThan(date0301, timestamp0301000001),
       LessThan(Cast(date0301, TimestampType), timestamp0301000001))
+
+    // SPARK-57811: a string operand is coerced to the nanosecond timestamp type in comparisons
+    // and predicates, mirroring the microsecond timestamp handling above. The concrete operand
+    // type (family + precision) is preserved, so the string is cast to that exact nanos type.
+    Seq(7, 8, 9).foreach { p =>
+      Seq(TimestampLTZNanosType(p), TimestampNTZNanosType(p)).foreach { nt =>
+        val tsn = AttributeReference("tsn", nt)()
+        val strLit = Literal("2020-01-02 03:04:05.123456789")
+        // Equality path: the string is cast to the nanos operand's own type so subsecond rounding
+        // does not affect the comparison. LTZ takes the explicit StringPromotionTypeCoercion
+        // Equality arm; NTZ has no arm and reaches the same cast via the general BinaryComparison
+        // fall-through (findCommonTypeForBinaryComparison returns the config-blind nanos type),
+        // mirroring how micros TimestampType (arm) vs TimestampNTZType (fall-through) are handled.
+        // The `Equality` extractor matches both 3VL `EqualTo` and null-safe `EqualNullSafe`, so
+        // both are covered.
+        ruleTest(rule, EqualTo(tsn, strLit), EqualTo(tsn, Cast(strLit, nt)))
+        ruleTest(rule, EqualTo(strLit, tsn), EqualTo(Cast(strLit, nt), tsn))
+        ruleTest(rule, EqualNullSafe(tsn, strLit), EqualNullSafe(tsn, Cast(strLit, nt)))
+        ruleTest(rule, EqualNullSafe(strLit, tsn), EqualNullSafe(Cast(strLit, nt), tsn))
+        // Range path (findCommonTypeForBinaryComparison).
+        ruleTest(rule, LessThan(tsn, strLit), LessThan(tsn, Cast(strLit, nt)))
+        ruleTest(rule, GreaterThanOrEqual(strLit, tsn),
+          GreaterThanOrEqual(Cast(strLit, nt), tsn))
+      }
+    }
+
+    // SPARK-57811: under legacy `castDatetimeToString`, the two nanos families mirror their micros
+    // counterparts. LTZ has a range arm in findCommonTypeForBinaryComparison, so its range
+    // comparisons promote both operands to string (like micros TimestampType); NTZ has no arm and
+    // stays config-blind (like micros TimestampNTZType), casting the string to the nanos type. In
+    // both families equality still casts the string to nanos, because the Equality arm fires before
+    // the range arm and reads no config. This block is the assertion that distinguishes the new
+    // production arms: in the default config the generic string-promotion fall-through already
+    // yields the nanos common type, so only the legacy branch separates the LTZ arm's effect.
+    withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+      val ltzType = TimestampLTZNanosType(9)
+      val ltz = AttributeReference("ltz", ltzType)()
+      val ntzType = TimestampNTZNanosType(9)
+      val ntz = AttributeReference("ntz", ntzType)()
+      val strLit = Literal("2020-01-02 03:04:05.123456789")
+      // LTZ range: both operands become strings (matches micros TimestampType).
+      ruleTest(rule, LessThan(ltz, strLit), LessThan(Cast(ltz, StringType), strLit))
+      ruleTest(rule, GreaterThanOrEqual(strLit, ltz),
+        GreaterThanOrEqual(strLit, Cast(ltz, StringType)))
+      // NTZ range: config-blind, the string is cast to the nanos type (matches micros
+      // TimestampNTZType, which has no arm and falls through to canPromoteAsInBinaryComparison).
+      ruleTest(rule, LessThan(ntz, strLit), LessThan(ntz, Cast(strLit, ntzType)))
+      ruleTest(rule, GreaterThanOrEqual(strLit, ntz),
+        GreaterThanOrEqual(Cast(strLit, ntzType), ntz))
+      // Equality: for both families the string is still cast to nanos so subseconds are compared
+      // exactly -- LTZ via the explicit Equality arm (which fires before the range arm), NTZ via
+      // the config-blind BinaryComparison fall-through. Holds for both 3VL `EqualTo` and null-safe
+      // `EqualNullSafe`.
+      Seq(ltzType -> ltz, ntzType -> ntz).foreach { case (nt, tsn) =>
+        ruleTest(rule, EqualTo(tsn, strLit), EqualTo(tsn, Cast(strLit, nt)))
+        ruleTest(rule, EqualTo(strLit, tsn), EqualTo(Cast(strLit, nt), tsn))
+        ruleTest(rule, EqualNullSafe(tsn, strLit), EqualNullSafe(tsn, Cast(strLit, nt)))
+        ruleTest(rule, EqualNullSafe(strLit, tsn), EqualNullSafe(Cast(strLit, nt), tsn))
+      }
+    }
   }
 
   test("cast WindowFrame boundaries to the type they operate upon") {

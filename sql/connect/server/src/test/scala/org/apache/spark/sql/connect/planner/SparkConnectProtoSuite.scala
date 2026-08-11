@@ -986,6 +986,23 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelation.select(col("id").cast("string")))
   }
 
+  test("SPARK-57618: cast TIMESTAMP_NTZ to TIME") {
+    // The cast logic itself lives in Catalyst (covered by CastSuite*); this confirms the
+    // TIMESTAMP_NTZ -> TIME pair round-trips through the Connect planner. The target TIME type is
+    // carried as a type string and parsed server-side, so this does not depend on TIME being
+    // serializable in the Connect schema proto (only the NTZ column is). The reverse direction
+    // (TIME -> TIMESTAMP_NTZ) is not exercisable here until the TIME type is supported by the
+    // Connect DataType proto converter; it is covered by the Catalyst suites.
+    val connectRel =
+      createLocalRelationProto(Seq(AttributeReference("ts", TimestampNTZType)()), Seq.empty)
+    val sparkRel = spark.createDataFrame(
+      new java.util.ArrayList[Row](),
+      StructType(Seq(StructField("ts", TimestampNTZType))))
+    comparePlans(
+      connectRel.select("ts".protoAttr.cast("time")),
+      sparkRel.select(col("ts").cast("time")))
+  }
+
   test("Test colRegex") {
     comparePlans(
       connectTestRelation.select("id".colRegex),

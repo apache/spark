@@ -198,7 +198,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   /**
    * Normalize proto messages for stable comparison:
    *   - Trim JVM origin fields (lines, stack traces, anonymous function names)
-   *   - Populate default StringType collation when missing (UTF8_BINARY)
    */
   private def normalizeProtoForComparison[T <: protobuf.Message](message: T): T = {
     def trim(builder: proto.JvmOrigin.Builder): Unit = {
@@ -221,17 +220,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     val builder = message.toBuilder
 
     builder match {
-      // For comparison only, we add UTF8_BINARY when StringType collation is missing
-      // to ensure deterministic plan equality across environments.
-      case dt: proto.DataType.Builder if dt.getKindCase == proto.DataType.KindCase.STRING =>
-        val sb = dt.getStringBuilder
-        if (sb.getCollation.isEmpty) {
-          val defaultCollationName =
-            CollationFactory
-              .fetchCollation(CollationFactory.UTF8_BINARY_COLLATION_ID)
-              .collationName
-          sb.setCollation(defaultCollationName)
-        }
       case exp: proto.Relation.Builder
           if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
         trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
@@ -1635,6 +1623,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.round(fn.col("b"), 2)
   }
 
+  functionTest("truncate") {
+    fn.truncate(fn.col("b"), 2)
+  }
+
   functionTest("sec") {
     fn.sec(fn.col("b"))
   }
@@ -1721,6 +1713,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("crc32") {
     fn.crc32(fn.col("g").cast("binary"))
+  }
+
+  functionTest("xxh3_64") {
+    fn.xxh3_64(fn.col("g").cast("binary"))
+  }
+
+  functionTest("xxh3_128") {
+    fn.xxh3_128(fn.col("g").cast("binary"))
   }
 
   functionTest("hash") {
@@ -1865,6 +1865,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("unbase64") {
     fn.unbase64(fn.col("g"))
+  }
+
+  functionTest("to_base32") {
+    fn.to_base32(fn.col("g").cast("binary"))
+  }
+
+  functionTest("from_base32") {
+    fn.from_base32(fn.col("g"))
   }
 
   functionTest("rpad") {
@@ -2368,6 +2376,18 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.make_date(fn.lit(2018), fn.lit(5), fn.lit(14))
   }
 
+  temporalFunctionTest("make_time") {
+    fn.make_time(fn.lit(12), fn.lit(13), fn.lit(14))
+  }
+
+  temporalFunctionTest("current_time") {
+    fn.current_time()
+  }
+
+  temporalFunctionTest("current_time with precision") {
+    fn.current_time(3)
+  }
+
   temporalFunctionTest("months_between") {
     fn.months_between(fn.current_date(), fn.col("d"))
   }
@@ -2759,6 +2779,42 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.is_valid_variant(fn.parse_json(fn.col("g")))
   }
 
+  functionTest("variant_delete") {
+    fn.variant_delete(fn.parse_json(fn.col("g")), "$.a", "$.b")
+  }
+
+  functionTest("variant_insert") {
+    fn.variant_insert(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("try_variant_insert") {
+    fn.try_variant_insert(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("variant_set") {
+    fn.variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("variant_set with create_if_missing") {
+    fn.variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1), false)
+  }
+
+  functionTest("try_variant_set") {
+    fn.try_variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("try_variant_set with create_if_missing") {
+    fn.try_variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1), false)
+  }
+
+  functionTest("variant_array_append") {
+    fn.variant_array_append(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("try_variant_array_append") {
+    fn.try_variant_array_append(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
   functionTest("variant_get") {
     fn.variant_get(fn.parse_json(fn.col("g")), "$", "int")
   }
@@ -2769,6 +2825,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("schema_of_variant") {
     fn.schema_of_variant(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("variant_from_arrays") {
+    fn.variant_from_arrays(fn.array(lit("a"), lit("b")), fn.array(lit(1), lit(2)))
+  }
+
+  functionTest("variant_from_entries") {
+    fn.variant_from_entries(fn.array(fn.struct(lit("a"), lit(1)), fn.struct(lit("b"), lit(2))))
   }
 
   functionTest("schema_of_variant_agg") {
@@ -3091,6 +3155,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("json_object_keys") {
     fn.json_object_keys(fn.col("g"))
+  }
+
+  functionTest("json_typeof") {
+    fn.json_typeof(fn.col("g"))
   }
 
   functionTest("mask with specific upperChar lowerChar digitChar otherChar") {
@@ -3436,6 +3504,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
       fn.lit(Array(java.sql.Date.valueOf("2023-02-23"), java.sql.Date.valueOf("2023-03-01"))),
       fn.lit(Array(java.time.Duration.ofSeconds(100L), java.time.Duration.ofSeconds(200L))),
       fn.lit(Array(java.time.Period.ofDays(100), java.time.Period.ofDays(200))),
+      fn.lit(
+        Array(java.time.LocalTime.of(23, 59, 59, 999999999), java.time.LocalTime.of(12, 0, 0))),
       fn.lit(Array(new CalendarInterval(2, 20, 100L), new CalendarInterval(2, 21, 200L))))
   }
 

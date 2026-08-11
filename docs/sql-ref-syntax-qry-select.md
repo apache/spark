@@ -89,10 +89,13 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      Specifies a source of input for the query. It can be one of the following:
      * Table relation
      * [Join relation](sql-ref-syntax-qry-select-join.html)
+     * [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html)
      * [Pivot relation](sql-ref-syntax-qry-select-pivot.html)
      * [Unpivot relation](sql-ref-syntax-qry-select-unpivot.html)
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
+     * [JSON_TABLE](sql-ref-syntax-qry-select-json-table.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
+     * [UNNEST relation](sql-ref-syntax-qry-select-unnest.html)
      * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )
      * [File](sql-ref-syntax-qry-select-file.html)
      
@@ -205,6 +208,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
 * [File](sql-ref-syntax-qry-select-file.html)
 * [JOIN](sql-ref-syntax-qry-select-join.html)
+* [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html)
 * [LIKE Predicate](sql-ref-syntax-qry-select-like.html)
 * [Set Operators](sql-ref-syntax-qry-select-setops.html)
 * [TABLESAMPLE](sql-ref-syntax-qry-select-sampling.html)

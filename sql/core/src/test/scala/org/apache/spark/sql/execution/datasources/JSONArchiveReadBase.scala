@@ -21,10 +21,9 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NullType, StringType}
-import org.apache.spark.util.Utils
 
 /**
  * Binds [[ArchiveReadSuiteBase]]'s file-format hooks to JSON. JSON opts into the shared
@@ -43,24 +42,6 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   override protected def readOptions: Map[String, String] = Map.empty
 
   override protected def readSchema: String = "id INT, name STRING"
-
-  override protected def encodeFile(
-      df: DataFrame,
-      writeOptions: Map[String, String]): Array[Byte] = {
-    val dir = Utils.createTempDir(namePrefix = "archive-test-encode")
-    try {
-      df.coalesce(1).write.format("json")
-        .options(writeOptions)
-        .mode("overwrite").save(dir.getCanonicalPath)
-      val parts = dir.listFiles().filter { f =>
-        f.isFile && !f.getName.startsWith("_") && !f.getName.startsWith(".") &&
-          !f.getName.endsWith(".crc")
-      }
-      assert(parts.length == 1,
-        s"expected exactly one data file, got: ${parts.map(_.getName).toList}")
-      Files.readAllBytes(parts.head.toPath)
-    } finally Utils.deleteRecursively(dir)
-  }
 
   /** Raw JSON bytes, for tests that need precise control over the record layout. */
   protected def jsonBytes(s: String): Array[Byte] = s.getBytes(StandardCharsets.UTF_8)
@@ -203,11 +184,30 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
       schema = corruptSchema)
   }
 
+  if (supportsMidAdvanceFailure) {
+    test("JSON: multiLine inference keeps entries read before a mid-advance failure " +
+        "(ignoreCorruptFiles)") {
+      // Entry 0 is read, then advancing to a later entry throws (not at open). A whole-archive drop
+      // would lose entry 0's `extra`; aborting the traversal would lose the sibling file's `later`.
+      val opts = Map("multiLine" -> "true")
+      withArchiveFile() { archive =>
+        writeArchiveFailingAfterFirstEntry(archive,
+          entryName(0) -> jsonBytes("{\n  \"id\": 1,\n  \"name\": \"Alice\",\n  \"extra\": 9\n}"))
+        Files.write(new File(archive.getParentFile, s"later.$fileExtension").toPath,
+          jsonBytes("{\n  \"id\": 2,\n  \"name\": \"Bob\",\n  \"later\": 7\n}"))
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          val schema = inferredSchema(Seq(archive.getParentFile.getCanonicalPath), opts)
+          assert(schema.fieldNames.toSet == Set("id", "name", "extra", "later"),
+            "expected `extra` (pre-failure entry) and `later` (sibling file) in the inferred " +
+              s"schema after the mid-advance skip, got $schema")
+        }
+      }
+    }
+  }
+
   test("JSON: the DSv2 path refuses to infer a schema for an archive (UNABLE_TO_INFER_SCHEMA)") {
-    // Archive scanning is wired into the v1 file source only, so the DSv2 reader cannot read
-    // archives. On the v2 path inference must keep returning None for an archive input -- raising
-    // UNABLE_TO_INFER_SCHEMA -- rather than inferring a schema the v2 scan would then mis-read as
-    // raw archive bytes. Forcing json off the v1 source list routes the read through JsonTable.
+    // Forcing json off the v1 source list routes the archive read through the DSv2 JsonTable, which
+    // cannot read archives and must fail with UNABLE_TO_INFER_SCHEMA, not parse raw bytes.
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
@@ -221,3 +221,18 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 }
+
+class JSONTarArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with JSONArchiveReadBase
+  with TarArchiveReadBase
+
+class JSONZipArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with JSONArchiveReadBase
+  with ZipArchiveReadBase
+
+class JSONSevenZArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with JSONArchiveReadBase
+  with SevenZArchiveReadBase

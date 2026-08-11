@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.encoders
 
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
+import java.time.LocalTime
 import java.util.Arrays
 
 import scala.collection.mutable
@@ -210,6 +211,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
   encodeDecodeTest(Timestamp.valueOf("2016-01-29 10:00:00"), "timestamp")
   encodeDecodeTest(Array(Timestamp.valueOf("2016-01-29 10:00:00")), "array of timestamp")
+  encodeDecodeTest(LocalTime.of(12, 34, 56), "SPARK-57564: time")
+  encodeDecodeTest(LocalTime.MIDNIGHT, "SPARK-57564: midnight time")
+  encodeDecodeTest(LocalTime.of(23, 59, 59, 999999000), "SPARK-57564: max micros time")
+  encodeDecodeTest(Array(LocalTime.of(12, 34, 56)), "SPARK-57564: array of time")
   encodeDecodeTest(Array[Byte](13, 21, -23), "binary")
 
   encodeDecodeTest(Seq(31, -123, 4), "seq of int")
@@ -454,6 +459,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     "SPARK-45896: seq of option of date")
   encodeDecodeTest(Map(0 -> Some(Date.valueOf("2023-01-01"))),
     "SPARK-45896: map of option of date")
+  encodeDecodeTest(Seq(Some(LocalTime.of(12, 34, 56))),
+    "SPARK-57564: seq of option of time")
+  encodeDecodeTest(Map(0 -> Some(LocalTime.of(12, 34, 56))),
+    "SPARK-57564: map of option of time")
   encodeDecodeTest(Seq(Some(BigDecimal(200))), "SPARK-45896: seq of option of bigdecimal")
   encodeDecodeTest(Map(0 -> Some(BigDecimal(200))), "SPARK-45896: map of option of bigdecimal")
 

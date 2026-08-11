@@ -394,7 +394,7 @@ class ProfilerCollector(ABC):
                 os.makedirs(path, exist_ok=True)
                 p = os.path.join(path, f"udf_{id}_memory.txt")
 
-                with open(p, "w+") as f:
+                with open(p, "w+", encoding="utf-8") as f:
                     MemoryProfiler._show_results(cm, stream=f)
 
         if id is not None:

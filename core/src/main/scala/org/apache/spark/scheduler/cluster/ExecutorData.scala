@@ -26,7 +26,10 @@ import org.apache.spark.scheduler.ExecutorResourceInfo
  * @param executorEndpoint The RpcEndpointRef representing this executor
  * @param executorAddress The network address of this executor
  * @param executorHost The hostname that this executor is running on
- * @param freeCores  The current number of cores available for work on the executor
+ * @param freeCores  The current number of cores available for work on the executor, in the
+ *                   internal exact BigDecimal representation so it can be fractional (e.g. when
+ *                   `spark.task.cpus` is set to a fractional value like 0.2, multiple tasks can
+ *                   share a single core).
  * @param totalCores The total number of cores available to the executor
  * @param resourcesInfo The information of the currently available resources on the executor
  * @param resourceProfileId The id of the ResourceProfile being used by this executor
@@ -37,7 +40,7 @@ private[cluster] class ExecutorData(
     val executorEndpoint: RpcEndpointRef,
     val executorAddress: RpcAddress,
     override val executorHost: String,
-    var freeCores: Int,
+    var freeCores: BigDecimal,
     override val totalCores: Int,
     override val logUrlMap: Map[String, String],
     override val attributes: Map[String, String],

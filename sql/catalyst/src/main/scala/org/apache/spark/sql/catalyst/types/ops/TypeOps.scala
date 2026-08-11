@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableVa
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
-import org.apache.spark.sql.types.ops.TypeApiOps
 
 /**
  * Server-side (catalyst) type operations for the Types Framework.

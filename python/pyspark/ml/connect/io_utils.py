@@ -131,7 +131,7 @@ class ParamsReadWrite(Params):
 
     def _save_to_local(self, path: str) -> None:
         metadata = self._save_to_node_path(path, [])
-        with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
+        with open(os.path.join(path, _META_DATA_FILE_NAME), "w", encoding="utf-8") as fp:
             json.dump(metadata, fp)
 
     def saveToLocal(self, path: str, *, overwrite: bool = False) -> None:
@@ -195,7 +195,7 @@ class ParamsReadWrite(Params):
 
     @classmethod
     def _load_from_local(cls, path: str) -> "Params":
-        with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
+        with open(os.path.join(path, _META_DATA_FILE_NAME), "r", encoding="utf-8") as fp:
             metadata = json.load(fp)
 
         return cls._load_instance_from_metadata(metadata, path)

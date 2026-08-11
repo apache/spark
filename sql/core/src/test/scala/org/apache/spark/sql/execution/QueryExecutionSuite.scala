@@ -52,6 +52,9 @@ case class QueryExecutionTestRecord(
 class QueryExecutionSuite extends SharedSparkSession {
   import testImplicits._
 
+  override protected def sparkConf =
+    super.sparkConf.set(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key, "0")
+
   def checkDumpedPlans(path: String, expected: Int): Unit = Utils.tryWithResource(
     Source.fromFile(path)) { source =>
     assert(source.getLines().toList

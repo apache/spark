@@ -17,16 +17,22 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils, JsonToStructsEvaluator, JsonTupleEvaluator, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
+import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
+  JsonPathParser, JsonPathResult, JsonTableEvaluator, JsonTablePathTrie, JsonToStructsEvaluator,
+  JsonTupleEvaluator, MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator,
+  StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, RUNTIME_REPLACEABLE, TreePattern}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
+  RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
@@ -38,6 +44,13 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @ExpressionDescription(
   usage = "_FUNC_(json_txt, path) - Extracts a json object from `path`.",
+  arguments = """
+    Arguments:
+      * json_txt - The JSON text to extract from.
+        An expression that evaluates to a string.
+      * path - The path identifying the JSON object to extract.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
@@ -63,12 +76,15 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
+
   @transient
   private lazy val evaluator = if (path.foldable) {
     new GetJsonObjectEvaluator(path.eval().asInstanceOf[UTF8String])
   } else {
     new GetJsonObjectEvaluator()
   }
+  override def stateful: Boolean = true
 
   override def eval(input: InternalRow): Any = {
     evaluator.setJson(json.eval(input).asInstanceOf[UTF8String])
@@ -136,9 +152,109 @@ case class GetJsonObject(json: Expression, path: Expression)
     copy(json = newLeft, path = newRight)
 }
 
+object GetJsonObject {
+  import PathInstruction._
+
+  private[sql] sealed trait SimpleJsonPathSegment
+  private[sql] case class NamedPathSegment(name: String) extends SimpleJsonPathSegment
+  private[sql] case class IndexedPathSegment(index: Long) extends SimpleJsonPathSegment
+
+  private[sql] def simplePath(path: UTF8String): Option[Seq[SimpleJsonPathSegment]] = {
+    try {
+      Option(path).flatMap(value => JsonPathParser.parse(value.toString)).flatMap { instructions =>
+        val segments = instructions.grouped(2).map {
+          case List(Key, Named(fieldName)) => Some(NamedPathSegment(fieldName))
+          case List(Subscript, Index(index)) if index >= 0 => Some(IndexedPathSegment(index))
+          case _ => None
+        }.toSeq
+        if (segments.nonEmpty && segments.forall(_.isDefined)) Some(segments.flatten) else None
+      }
+    } catch {
+      // Numeric subscripts are parsed as Long and can overflow before the parser returns None.
+      case _: NumberFormatException => None
+    }
+  }
+
+}
+
+/**
+ * Extracts multiple simple object-key and array-index paths from a JSON string in one parse. This
+ * is an internal expression used to share sibling [[GetJsonObject]] expressions; unsupported and
+ * prefix-conflicting JSON paths remain as independent GetJsonObject expressions.
+ */
+case class MultiGetJsonObject(
+    json: Expression,
+    fallbackPaths: Seq[String])
+  extends UnaryExpression
+  with ExpectsInputTypes {
+
+  // OptimizeCsvJsonExprs caps shared path depth to keep evaluator recursion stack-safe.
+  require(fallbackPaths.nonEmpty)
+
+  override def child: Expression = json
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  override lazy val dataType: DataType = StructType(fallbackPaths.indices.map { index =>
+    StructField(s"_$index", StringType, nullable = true)
+  })
+
+  override def nullable: Boolean = true
+
+  // This internal unary expression always returns null when its JSON child is null.
+  override def nullIntolerant: Boolean = true
+
+  override def prettyName: String = "multi_get_json_object"
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
+
+  @transient
+  private lazy val simplePaths = fallbackPaths.map { path =>
+    GetJsonObject.simplePath(UTF8String.fromString(path)).getOrElse {
+      throw new IllegalArgumentException(s"Unsupported shared JSON path: $path")
+    }
+  }
+
+  override def stateful: Boolean = true
+
+  @transient
+  private lazy val evaluator = MultiGetJsonObjectEvaluator(
+    fallbackPaths.map(UTF8String.fromString),
+    simplePaths)
+
+  override def eval(input: InternalRow): Any = {
+    evaluator.evaluate(json.eval(input).asInstanceOf[UTF8String])
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
+    val jsonEval = json.genCode(ctx)
+    val resultType = CodeGenerator.javaType(dataType)
+    ev.copy(code = code"""
+       |${jsonEval.code}
+       |boolean ${ev.isNull} = ${jsonEval.isNull};
+       |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+       |if (!${ev.isNull}) {
+       |  ${ev.value} = ($resultType) $refEvaluator.evaluate(${jsonEval.value});
+       |  ${ev.isNull} = ${ev.value} == null;
+       |}
+       |""".stripMargin)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): MultiGetJsonObject =
+    copy(json = newChild)
+}
+
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
+  arguments = """
+    Arguments:
+      * jsonStr - A JSON string to extract fields from.
+      * pN - The field names to extract. Each name yields one output column with
+          the corresponding field value.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
@@ -195,6 +311,7 @@ case class JsonTuple(children: Seq[Expression])
 
   @transient
   private lazy val evaluator: JsonTupleEvaluator = JsonTupleEvaluator(foldableFieldNames)
+  override def stateful: Boolean = true
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
@@ -235,12 +352,306 @@ case class JsonTuple(children: Seq[Expression])
 }
 
 /**
+ * The kind of a single `JSON_TABLE` column.
+ */
+sealed trait JsonTableColumnKind
+object JsonTableColumnKind {
+  /** A `FOR ORDINALITY` column: a 1-based sequential row counter. */
+  case object Ordinality extends JsonTableColumnKind
+  /** A regular value column: extracts the value at `path` and casts it to `dataType`. */
+  case object Value extends JsonTableColumnKind
+  /** An `EXISTS` column: true when `path` matches, cast to `dataType`. */
+  case object Exists extends JsonTableColumnKind
+}
+
+/**
+ * A single column definition of a `JSON_TABLE` invocation.
+ *
+ * @param name     the output column name
+ * @param dataType the declared Spark type of the column (LongType for ORDINALITY columns)
+ * @param path     the SQL/JSON path relative to a row item; None for ORDINALITY columns
+ * @param kind     the column kind (ordinality / value / exists)
+ */
+case class JsonTableColumn(
+    name: String,
+    dataType: DataType,
+    path: Option[String],
+    kind: JsonTableColumnKind)
+
+/**
+ * Behavior when the JSON input is malformed.
+ */
+sealed trait JsonTableErrorMode
+object JsonTableErrorMode {
+  /** Produce no rows on malformed input (the SQL-standard default). */
+  case object NullOnError extends JsonTableErrorMode
+  /** Raise an error on malformed input. */
+  case object ErrorOnError extends JsonTableErrorMode
+}
+
+// scalastyle:off line.size.limit
+/**
+ * The SQL:2016 `JSON_TABLE` table-valued function. Shreds a JSON document into a relational table:
+ * the `rowPath` selects a sequence of row items and each [[JsonTableColumn]] projects a value out
+ * of each item. Implemented as a [[Generator]] so it plugs into the existing, well-tested
+ * [[org.apache.spark.sql.catalyst.plans.logical.Generate]] operator; no new execution operator is
+ * introduced.
+ *
+ * Only the flat (non-`NESTED PATH`) subset of the standard is supported. Row-source and value
+ * extraction use the token-aware [[JsonTableEvaluator]], which (unlike `get_json_object`)
+ * distinguishes a missing path from a JSON `null` value; type coercion reuses [[Cast]].
+ *
+ * {{{
+ *   SELECT t.* FROM json_table(
+ *     '{"items":[{"id":1,"n":"a"},{"id":2,"n":"b"}]}',
+ *     '$.items[*]'
+ *     COLUMNS (seq FOR ORDINALITY, id INT PATH '$.id', name STRING PATH '$.n')
+ *   ) AS t;
+ * }}}
+ */
+// scalastyle:on line.size.limit
+case class JsonTable(
+    child: Expression,
+    rowPath: String,
+    columns: Seq[JsonTableColumn],
+    errorMode: JsonTableErrorMode,
+    timeZoneId: Option[String] = None,
+    // Captured at plan-construction time so column casts do not change behavior if the session's
+    // ANSI mode is flipped between building the plan and executing it (matching `Cast`, which
+    // fixes its eval mode when the expression is constructed).
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryExpression
+  with Generator
+  with TimeZoneAwareExpression
+  with CodegenFallback
+  with ImplicitCastInputTypes
+  with QueryErrorsBase {
+
+  // Declared via ImplicitCastInputTypes so the analyzer coerces the JSON input to STRING. In
+  // particular an untyped SQL NULL (NullType) is cast to STRING rather than rejected, so
+  // `JSON_TABLE(NULL, ...)` reaches the runtime and applies the NULL ON ERROR behavior.
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  // ORDINALITY columns always hold a non-null counter; value/EXISTS columns may be null.
+  override def elementSchema: StructType =
+    StructType(columns.map { c =>
+      val nullable = c.kind != JsonTableColumnKind.Ordinality
+      StructField(c.name, c.dataType, nullable = nullable)
+    })
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // First the standard input-type check (STRING for the JSON input, with NULL coerced).
+    val inputCheck = super.checkInputDataTypes()
+    if (inputCheck.isFailure) {
+      inputCheck
+    } else {
+      // Validate the row path and every column path. A path is valid here iff it parses and is
+      // free of wildcards -- except the row path may end in a single `[*]`, which is stripped into
+      // `containerInstructions`, so the row path is checked on that already-stripped list.
+      val rowPathValid = JsonPathParser.parse(rowPath).isDefined &&
+        !containerInstructions.contains(PathInstruction.Wildcard)
+      val invalid: Option[(String, String)] = if (!rowPathValid) {
+        Some(("row path", rowPath))
+      } else {
+        columns.iterator.collect { case c if c.path.isDefined => (c.name, c.path.get) }
+          .collectFirst {
+            // Valid column path: parses and is wildcard-free, i.e. hasWildcard == Some(false).
+            case (name, path) if !JsonPathParser.hasWildcard(path).contains(false) =>
+              (s"column '$name'", path)
+          }
+      }
+      invalid match {
+        case Some((location, path)) =>
+          DataTypeMismatch(
+            errorSubClass = "INVALID_JSON_TABLE_PATH",
+            messageParameters = Map("location" -> location, "path" -> toSQLValue(path)))
+        case None =>
+          // Every value/EXISTS column is produced by casting from a source type (StringType for
+          // value columns, BooleanType for EXISTS columns) to the declared column type. Reject a
+          // non-castable declared type (e.g. a value column declared STRUCT/ARRAY/MAP) here rather
+          // than failing at runtime. Ordinality columns are always LongType and need no check.
+          // The castability rules differ between ANSI and non-ANSI mode (e.g. BOOLEAN -> TIMESTAMP
+          // is allowed by non-ANSI casts but not ANSI casts), so this must use the same eval mode
+          // as the actual per-column `Cast` built in `columnCasts`.
+          def sourceType(c: JsonTableColumn): Option[DataType] = c.kind match {
+            case JsonTableColumnKind.Value => Some(StringType)
+            case JsonTableColumnKind.Exists => Some(BooleanType)
+            case JsonTableColumnKind.Ordinality => None
+          }
+          def castable(src: DataType, target: DataType): Boolean =
+            if (ansiEnabled) Cast.canAnsiCast(src, target) else Cast.canCast(src, target)
+          columns.iterator.flatMap(c => sourceType(c).map((c, _)))
+            .collectFirst { case (c, src) if !castable(src, c.dataType) => (c, src) } match {
+            case Some((c, srcType)) =>
+              DataTypeMismatch(
+                errorSubClass = "CAST_WITHOUT_SUGGESTION",
+                messageParameters = Map(
+                  "srcType" -> toSQLType(srcType),
+                  "targetType" -> toSQLType(c.dataType)))
+            case None =>
+              TypeCheckResult.TypeCheckSuccess
+          }
+      }
+    }
+  }
+
+  // The row path is `containerRowPath` plus an optional trailing `[*]`. Splitting on the parsed
+  // instruction list (rather than the raw string) is whitespace-insensitive and unambiguous.
+  // `checkInputDataTypes` guarantees the path parses and is wildcard-free at this point.
+  @transient private lazy val (containerInstructions, explodeRoot)
+      : (Seq[PathInstruction], Boolean) = {
+    val parsed = JsonPathParser.parse(rowPath).getOrElse(Nil)
+    parsed match {
+      case init :+ PathInstruction.Subscript :+ PathInstruction.Wildcard =>
+        (init, true)
+      case other =>
+        (other, false)
+    }
+  }
+
+  @transient private lazy val rowEvaluator: JsonTableEvaluator =
+    JsonTableEvaluator(containerInstructions, explodeRoot)
+
+  // Parsed instruction list per column (empty for ordinality columns, which have no path).
+  @transient private lazy val columnPaths: Array[Seq[PathInstruction]] =
+    columns.map(c => c.path.flatMap(JsonPathParser.parse).getOrElse(Nil)).toArray
+
+  // Column kinds snapshotted into an array, like `columnPaths` and `columnCasts`: `columns` is a
+  // `List` (the parser builds it with `.map(...).toSeq`), so `columns(i)` is O(i) and indexing it
+  // in the per-row projection loop would make `projectRow` O(n^2) in the column count.
+  @transient private lazy val columnKinds: Array[JsonTableColumnKind] = columns.map(_.kind).toArray
+
+  // Prefix trie over the column paths, built once so every row's value/EXISTS columns are resolved
+  // in a single traversal of the item rather than one re-parse per column. Ordinality columns have
+  // no path and are excluded (their empty path must not be confused with a root path `$`, which is
+  // an included column reading the whole item).
+  @transient private lazy val columnTrie: JsonTablePathTrie = {
+    val include = columnKinds.map(_ != JsonTableColumnKind.Ordinality)
+    rowEvaluator.buildPathTrie(columnPaths, include)
+  }
+
+  // One reusable Cast per non-ordinality column, evaluated against a single-slot mutable input
+  // row. Building the Cast once (over a BoundReference) avoids allocating an expression tree per
+  // row/column on the hot path. The source type is BooleanType for EXISTS, StringType otherwise.
+  @transient private lazy val columnCasts: Array[Expression] = {
+    val evalMode = EvalMode.fromBoolean(ansiEnabled)
+    columns.map { c =>
+      c.kind match {
+        case JsonTableColumnKind.Ordinality => null
+        case JsonTableColumnKind.Exists =>
+          Cast(BoundReference(0, BooleanType, nullable = false), c.dataType, timeZoneId, evalMode)
+        case JsonTableColumnKind.Value =>
+          Cast(BoundReference(0, StringType, nullable = true), c.dataType, timeZoneId, evalMode)
+      }
+    }.toArray
+  }
+
+  // Reusable single-slot input row for the per-column casts above.
+  @transient private lazy val castInput: GenericInternalRow = new GenericInternalRow(1)
+
+  private def castColumn(i: Int, value: Any): Any = {
+    castInput.update(0, value)
+    columnCasts(i).eval(castInput)
+  }
+
+  private def projectRow(item: UTF8String, ordinal: Long): InternalRow = {
+    val numColumns = columnKinds.length
+    // Resolve every value/EXISTS column in a single traversal of the item; ordinality slots are
+    // not in the trie and come back as Missing (filled below).
+    val resolved = rowEvaluator.navigateColumns(item, columnTrie, numColumns)
+    val values = new Array[Any](numColumns)
+    var i = 0
+    while (i < numColumns) {
+      values(i) = columnKinds(i) match {
+        case JsonTableColumnKind.Ordinality =>
+          ordinal
+        case JsonTableColumnKind.Exists =>
+          // Present (including an explicit JSON null) counts as existing; only Missing is false.
+          val exists = resolved(i) != JsonPathResult.Missing
+          castColumn(i, exists)
+        case JsonTableColumnKind.Value =>
+          resolved(i) match {
+            // `raw` is a re-parseable JSON fragment; unquote a scalar string so the column gets
+            // its content (e.g. `"hi"` -> `hi`), then cast to the declared type.
+            case JsonPathResult.Found(raw) => castColumn(i, rowEvaluator.unquotedString(raw))
+            // A missing path and an explicit JSON null both yield SQL NULL for a value column.
+            case _ => null
+          }
+      }
+      i += 1
+    }
+    new GenericInternalRow(values)
+  }
+
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    rowEvaluator.evaluate(json) match {
+      case Some(items) =>
+        // A manual Long counter for FOR ORDINALITY: `zipWithIndex` is Int-based and would wrap
+        // past Int.MaxValue for a very large array, whereas ordinality is a BIGINT.
+        var ordinal = 0L
+        items.map { item =>
+          ordinal += 1L
+          projectRow(item, ordinal)
+        }
+      case None =>
+        // `errorMode` governs the row-source JSON only (null / malformed input, or `[*]` over a
+        // non-array). Per-column value extraction follows normal `Cast` semantics: a bad cast is
+        // NULL in non-ANSI mode and raises in ANSI mode, independent of ON ERROR.
+        errorMode match {
+          case JsonTableErrorMode.NullOnError => Iterator.empty
+          case JsonTableErrorMode.ErrorOnError =>
+            throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+              if (json == null) "null" else json.toString,
+              SparkException.internalError("JSON_TABLE encountered malformed JSON input."))
+        }
+    }
+  }
+
+  override def prettyName: String = "json_table"
+
+  // The default `Expression.sql` renders only children, i.e. `json_table(<json_expr>)`, dropping
+  // the row path, columns, and ON ERROR mode. Render the full `JSON_TABLE(...)` syntax so
+  // analysis/type-check diagnostics (e.g. INVALID_JSON_TABLE_PATH) point at the whole invocation.
+  override def sql: String = {
+    val columnsSQL = columns.map { c =>
+      val pathSQL = c.path.map(p => s" PATH '$p'").getOrElse("")
+      c.kind match {
+        case JsonTableColumnKind.Ordinality => s"${c.name} FOR ORDINALITY"
+        case JsonTableColumnKind.Exists => s"${c.name} ${c.dataType.sql} EXISTS$pathSQL"
+        case JsonTableColumnKind.Value => s"${c.name} ${c.dataType.sql}$pathSQL"
+      }
+    }.mkString(", ")
+    val errorSQL = errorMode match {
+      case JsonTableErrorMode.NullOnError => "NULL ON ERROR"
+      case JsonTableErrorMode.ErrorOnError => "ERROR ON ERROR"
+    }
+    s"JSON_TABLE(${child.sql}, '$rowPath' COLUMNS ($columnsSQL) $errorSQL)"
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): JsonTable =
+    copy(child = newChild)
+}
+
+/**
  * Converts an json input string to a [[StructType]], [[ArrayType]] or [[MapType]]
  * with the specified schema.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
+  arguments = """
+    Arguments:
+      * jsonStr - A JSON string to parse.
+      * schema - The schema to use when parsing the JSON string, given as a DDL
+          formatted string or a schema expression.
+      * options - Optional. A map of string key-value pairs that control how the
+          JSON is parsed. By default no options are set.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
@@ -293,14 +704,22 @@ case class JsonToStructs(
       child = child,
       timeZoneId = None)
 
-  override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
-      val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
-      if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
-    case _ =>
-      DataTypeMismatch(
-        errorSubClass = "INVALID_JSON_SCHEMA",
-        messageParameters = Map("schema" -> toSQLType(nullableSchema)))
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // `from_json` parses each input string as one JSON document, so the embedded array
+    // splitting can never apply.
+    if (CaseInsensitiveMap(options).contains(JSONOptions.EXPLODE_EMBEDDED_ARRAY)) {
+      throw QueryCompilationErrors.explodeEmbeddedArrayUnsupportedUsage(
+        "the from_json function")
+    }
+    nullableSchema match {
+      case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
+        val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
+        if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "INVALID_JSON_SCHEMA",
+          messageParameters = Map("schema" -> toSQLType(nullableSchema)))
+    }
   }
 
   override def dataType: DataType = nullableSchema
@@ -314,6 +733,7 @@ case class JsonToStructs(
   @transient
   private lazy val evaluator = new JsonToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
+  override def stateful: Boolean = true
 
   override def nullSafeEval(json: Any): Any = evaluator.evaluate(json.asInstanceOf[UTF8String])
 
@@ -343,6 +763,13 @@ object JsonToStructs {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a JSON string with a given struct value",
+  arguments = """
+    Arguments:
+      * expr - The struct value to convert to a JSON string.
+        An expression that evaluates to a struct, array, map, or variant.
+      * options - Options controlling how the JSON string is produced.
+        An expression that evaluates to a map. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
@@ -429,6 +856,12 @@ case class StructsToJson(
  */
 @ExpressionDescription(
   usage = "_FUNC_(json[, options]) - Returns schema in the DDL format of JSON string.",
+  arguments = """
+    Arguments:
+      * json - A JSON string whose schema is inferred.
+      * options - Optional. A map of string key-value pairs that control how the
+          JSON is parsed. By default no options are set.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
@@ -454,23 +887,28 @@ case class SchemaOfJson(
 
   override def nullable: Boolean = false
 
-  @transient
-  private lazy val json = child.eval().asInstanceOf[UTF8String]
-
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.foldable && json != null) {
-      super.checkInputDataTypes()
-    } else if (!child.foldable) {
+    if (!child.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("json"),
           "inputType" -> toSQLType(child.dataType),
           "inputExpr" -> toSQLExpr(child)))
-    } else {
+    } else if (child.eval() == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "json"))
+    } else if (child.dataType != StringType) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType),
+          "requiredType" -> toSQLType(StringType)))
+    } else {
+      super.checkInputDataTypes()
     }
   }
 
@@ -500,6 +938,7 @@ case class SchemaOfJson(
     Arguments:
       * jsonArray - A JSON array. `NULL` is returned in case of any other valid JSON string,
           `NULL` or an invalid JSON.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -546,6 +985,7 @@ case class LengthOfJsonArray(child: Expression)
       * json_object - A JSON object. If a valid JSON object is given, all the keys of the outermost
           object will be returned as an array. If it is any other valid JSON string, an invalid JSON
           string or an empty string, the function returns null.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -580,5 +1020,51 @@ case class JsonObjectKeys(child: Expression)
   )
 
   override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =
+    copy(child = newChild)
+}
+
+/**
+ * A function which returns the type of the outermost JSON value as a string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(json) - Returns the type of the outermost JSON value, or null if invalid.",
+  arguments = """
+    Arguments:
+      * json - A JSON string. Returns the type of the outermost value ('object', 'array',
+          'string', 'number', 'boolean', 'null'), or null for an invalid or empty string.
+        An expression that evaluates to a string.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a": 1}');
+        object
+      > SELECT _FUNC_('[1, 2, 3]');
+        array
+      > SELECT _FUNC_('123');
+        number
+  """,
+  group = "json_funcs",
+  since = "4.4.0"
+)
+case class JsonTypeof(child: Expression)
+  extends UnaryExpression
+  with ExpectsInputTypes
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_typeof"
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[JsonExpressionUtils],
+    dataType,
+    "jsonTypeof",
+    Seq(child),
+    inputTypes
+  )
+
+  override protected def withNewChildInternal(newChild: Expression): JsonTypeof =
     copy(child = newChild)
 }

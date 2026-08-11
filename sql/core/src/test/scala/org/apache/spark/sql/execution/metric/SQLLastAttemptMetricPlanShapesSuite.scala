@@ -22,7 +22,7 @@ import scala.util.Random
 import org.scalatest.Tag
 
 import org.apache.spark.internal.config
-import org.apache.spark.sql.execution.{CollectLimitExec, RDDScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{CollectLimitExec, RDDScanExec, ReusedSubqueryExec, SparkPlan, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQETestHelper, DisableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange._
@@ -116,9 +116,6 @@ class SQLLastAttemptMetricPlanShapesSuite
 
     def isAQE: Boolean = SQLConf.get.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
 
-    def hasStageRetries: Boolean = spark.sparkContext.conf
-      .getOption(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key).contains("true")
-
     def hasAQEReplans: Boolean = AQETestHelper.isForcedCancellationEnabled
   }
 
@@ -132,10 +129,10 @@ class SQLLastAttemptMetricPlanShapesSuite
   )(testTags: Tag*): Unit = {
     for {
       useAQE <- BOOLEAN_DOMAIN
-      stageRetries <- BOOLEAN_DOMAIN
+      failureMode <- FailureMode.all
       aqeReplans <- if (useAQE) BOOLEAN_DOMAIN else Seq(false)
     } test(s"$label - " +
-        s"useAQE=$useAQE, stageRetries=$stageRetries, aqeReplans=$aqeReplans",
+        s"useAQE=$useAQE, failureMode=$failureMode, aqeReplans=$aqeReplans",
         testTags: _*) {
 
       // There is some special handling for df.cache() / df.persist() / df.localCheckpoint() tests.
@@ -147,13 +144,12 @@ class SQLLastAttemptMetricPlanShapesSuite
         withSQLConf(extraSQLConfs.toSeq: _*) {
           val aqeRetryMetrics = if (aqeReplans) Seq(testSLAMetric) else Seq.empty
           AQETestHelper.withForcedCancellation(aqeRetryMetrics: _*) {
-            withSparkContextConf(
-                config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> stageRetries.toString) {
+            withSparkContextConf(failureMode.sparkContextConfs: _*) {
               val resultDf = spark.sql(sqlQuery)
               val _ = resultDf.collect()
 
               // normal value of the metrics shall not work with retries or replans
-              if (!stageRetries && !aqeReplans) {
+              if (!failureMode.causesStageRetries && !aqeReplans) {
                 metricValueCheck(Some(testSLAMetric.value))
               }
               // test LastRDDValue
@@ -301,6 +297,31 @@ class SQLLastAttemptMetricPlanShapesSuite
          |   WHERE increment_metric())""".stripMargin,
     metricValueCheck = MetricValue.exactly(NUM_RECORDS)
   )
+
+  testPhysicalPlanShape(
+    // The inner `(SELECT MIN(id) FROM range(5))` subquery gets pushed into the outer subquery's
+    // scan DataFilters and duplicated, so subquery reuse turns one copy into a
+    // ReusedSubqueryExec. extractStageRDDScopes must handle that node instead of bailing out
+    // (which would make lastAttemptValueForDataset return None for the whole plan).
+    label = "subquery - scalar - reused",
+    sqlQuery =
+      s"""SELECT *
+         | FROM $TABLE_NAME
+         | WHERE id == (
+         |   SELECT MAX(low_cardinality_col)
+         |   FROM $TABLE_NAME
+         |   WHERE increment_metric()
+         |     AND low_cardinality_col >= (
+         |       SELECT MIN(id)
+         |       FROM range(5)))""".stripMargin,
+    metricValueCheck = MetricValue.exactly(NUM_RECORDS),
+    executedPlanCheck = PhysicalPlan.exists {
+      case _: ReusedSubqueryExec => true
+      // Forced AQE replans bypass subquery reuse, so the duplicated inner subquery stays as two
+      // separate SubqueryExec nodes instead of a ReusedSubqueryExec.
+      case _: SubqueryExec if PhysicalPlan.hasAQEReplans => true
+    }
+  )()
 
   testPhysicalPlanShape(
     label = "subquery - EXISTS",
@@ -487,4 +508,27 @@ object SQLLastAttemptMetricPlanShapesSuite {
   val LARGE_CARDINALITY: Int = 111
 
   val TABLE_NAME: String = "test_table"
+
+  sealed trait FailureMode {
+    def sparkContextConfs: Seq[(String, String)]
+    def causesStageRetries: Boolean
+  }
+  object FailureMode {
+    case object NoFailure extends FailureMode {
+      val sparkContextConfs: Seq[(String, String)] = Seq.empty
+      val causesStageRetries: Boolean = false
+    }
+    case object FetchFailure extends FailureMode {
+      val sparkContextConfs: Seq[(String, String)] =
+        Seq(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true")
+      val causesStageRetries: Boolean = true
+    }
+    case object ChecksumMismatch extends FailureMode {
+      val sparkContextConfs: Seq[(String, String)] = Seq(
+        config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true",
+        config.Tests.INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE.key -> "true")
+      val causesStageRetries: Boolean = true
+    }
+    val all: Seq[FailureMode] = Seq(NoFailure, FetchFailure, ChecksumMismatch)
+  }
 }

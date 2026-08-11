@@ -197,8 +197,6 @@ case class OrcFileFormat() extends FileFormat
 
     case _: AnsiIntervalType => false
     case _: TimeType => false
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: AnyTimestampNanoType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -226,6 +224,26 @@ case class OrcFileFormat() extends FileFormat
 
 private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
   extends HiveInspectors {
+  private def toHiveCompatibleDataType(dataType: DataType): DataType = {
+    dataType match {
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+        TimestampType
+      case StructType(fields) =>
+        StructType(fields.map(f => f.copy(dataType = toHiveCompatibleDataType(f.dataType))))
+      case ArrayType(elementType, containsNull) =>
+        ArrayType(toHiveCompatibleDataType(elementType), containsNull)
+      case MapType(keyType, valueType, valueContainsNull) =>
+        MapType(
+          toHiveCompatibleDataType(keyType),
+          toHiveCompatibleDataType(valueType),
+          valueContainsNull)
+      case other =>
+        other
+    }
+  }
+
+  private[this] val hiveCompatibleSchema = StructType(
+    dataSchema.map(f => f.copy(dataType = toHiveCompatibleDataType(f.dataType))))
 
   def serialize(row: InternalRow): Writable = {
     wrapOrcStruct(cachedOrcStruct, structOI, row)
@@ -235,7 +253,9 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
   private[this] val serializer = {
     val table = new Properties()
     table.setProperty("columns", dataSchema.fieldNames.mkString(","))
-    table.setProperty("columns.types", dataSchema.map(_.dataType.catalogString).mkString(":"))
+    table.setProperty(
+      "columns.types",
+      hiveCompatibleSchema.map(_.dataType.catalogString).mkString(":"))
 
     val serde = new OrcSerde
     serde.initialize(conf, table)
@@ -244,7 +264,7 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 
   // Object inspector converted from the schema of the relation to be serialized.
   val structOI = {
-    val typeInfo = TypeInfoUtils.getTypeInfoFromTypeString(dataSchema.catalogString)
+    val typeInfo = TypeInfoUtils.getTypeInfoFromTypeString(hiveCompatibleSchema.catalogString)
     OrcStruct.createObjectInspector(typeInfo.asInstanceOf[StructTypeInfo])
       .asInstanceOf[SettableStructObjectInspector]
   }
@@ -337,6 +357,8 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     val unsafeProjection = UnsafeProjection.create(requiredSchema)
     val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
 
+    def isNanosTimestamp(dt: DataType): Boolean = dt.isInstanceOf[AnyTimestampNanoType]
+
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
       val (fieldRefs, fieldOrdinals) = requiredSchema.zipWithIndex.map {
         case (field, ordinal) =>
@@ -352,7 +374,17 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
           ref -> ordinal
       }.unzip
 
-      val unwrappers = fieldRefs.map(r => if (r == null) null else unwrapperFor(r))
+      val unwrappers = fieldRefs.zip(requiredSchema).map {
+        case (null, _) => null
+        // Nanos timestamps (including those nested in struct/array/map) need the target Catalyst
+        // type to produce TimestampNanosVal; the data-type-aware unwrapper handles both the
+        // top-level and nested cases, while everything else keeps the primitive fast paths.
+        case (fieldRef, field) if field.dataType.existsRecursively(isNanosTimestamp) =>
+          val unwrapper = unwrapperFor(fieldRef.getFieldObjectInspector, field.dataType)
+          (value: Any, row: InternalRow, ordinal: Int) => row.update(ordinal, unwrapper(value))
+        case (fieldRef, _) =>
+          unwrapperFor(fieldRef)
+      }
 
       iterator.map { value =>
         val raw = deserializer.deserialize(value)

@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, WriteFiles, WriteFilesExec}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
@@ -206,8 +206,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def checkHintNonEquiJoin(hint: JoinHint): Unit = {
-      if (hintToShuffleHashJoin(hint) || hintToPreferShuffleHashJoin(hint) ||
-          hintToSortMergeJoin(hint)) {
+      if (hintToShuffleHashJoin(hint) || hintToSortMergeJoin(hint)) {
         assert(hint.leftHint.orElse(hint.rightHint).isDefined)
         hintErrorHandler.joinHintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
           "no equi-join keys")
@@ -426,24 +425,28 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Plans AS-OF joins using a dedicated sort-merge operator when the
-   * conf is enabled.
+   * Plans AS-OF joins using a dedicated sort-merge operator when enabled for the
+   * DataFrame API, or implicitly for SQL ASOF JOIN (`requiresSortMergeAsOfJoin`).
    */
   object AsOfJoinSelection extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case j @ AsOfJoin(left, right, asOfCondition, condition, joinType,
-          orderExpression, _) if conf.sortMergeAsOfJoinEnabled =>
-        val (leftKeys, rightKeys, residual) = condition match {
-          case Some(cond) => extractEquiJoinKeys(cond, left, right)
+      case j: AsOfJoin if conf.useSortMergeAsOfJoinOperator(j.requiresSortMergeAsOfJoin) =>
+        val (leftKeys, rightKeys, residual) = j.condition match {
+          case Some(cond) => extractEquiJoinKeys(cond, j.left, j.right)
           case None => (Seq.empty[Expression], Seq.empty[Expression], None)
         }
-        val (leftAsOf, rightAsOf) = extractAsOfExprs(
-          asOfCondition, orderExpression, left, right)
+        val (leftSort, rightSort) =
+          if (j.leftSortExprs.nonEmpty && j.rightSortExprs.nonEmpty) {
+            (j.leftSortExprs, j.rightSortExprs)
+          } else {
+            val (leftAsOf, rightAsOf) = extractAsOfExprs(j.orderExpression, j.left, j.right)
+            (Seq(leftAsOf), Seq(rightAsOf))
+          }
 
         joins.SortMergeAsOfJoinExec(
-          leftKeys, rightKeys, leftAsOf, rightAsOf,
-          asOfCondition, orderExpression, joinType, residual,
-          planLater(left), planLater(right)) :: Nil
+          leftKeys, rightKeys, leftSort, rightSort,
+          j.asOfCondition, j.orderExpression, j.joinType, residual,
+          planLater(j.left), planLater(j.right)) :: Nil
       case _ => Nil
     }
 
@@ -493,7 +496,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * allowExactMatches variations that complicate asOfCondition's shape.
      */
     private def extractAsOfExprs(
-        asOfCondition: Expression,
         orderExpression: Expression,
         left: LogicalPlan,
         right: LogicalPlan): (Expression, Expression) = {
@@ -558,6 +560,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
+
+    /**
+     * Whether this plan reads a streaming source in Real-Time Mode, which is the case when the
+     * relation carries a real-time mode duration -- the same signal that decides whether to plan
+     * a [[org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec]] for it.
+     */
+    private def isRealTimeMode(plan: LogicalPlan): Boolean = {
+      plan.collectLeaves().exists {
+        case s: StreamingDataSourceV2ScanRelation =>
+          s.relation.realTimeModeDuration.isDefined
+        case _ => false
+      }
+    }
+
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
@@ -599,12 +615,26 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           case None =>
             val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
 
-            AggUtils.planStreamingAggregation(
-              normalizedGroupingExpressions,
-              aggregateExpressions,
-              rewrittenResultExpressions,
-              stateVersion,
-              planLater(child))
+            // A Real-Time Mode batch runs until its duration elapses rather than until its input
+            // is exhausted, so an aggregation that only emits once the batch ends would hold every
+            // result back for the whole batch. Plan the streamline operator instead, which merges
+            // each input row against state and emits immediately.
+            if (isRealTimeMode(child) ||
+              conf.getConf(SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR)) {
+              AggUtils.planStreamlineStreamingAggregation(
+                normalizedGroupingExpressions,
+                aggregateExpressions,
+                rewrittenResultExpressions,
+                stateVersion,
+                planLater(child))
+            } else {
+              AggUtils.planStreamingAggregation(
+                normalizedGroupingExpressions,
+                aggregateExpressions,
+                rewrittenResultExpressions,
+                stateVersion,
+                planLater(child))
+            }
         }
 
       case _ => Nil
@@ -1001,7 +1031,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case cmv: CreateMaterializedViewAsSelect =>
         throw QueryCompilationErrors.unsupportedCreatePipelineDatasetQueryExecutionError(
             pipelineDatasetType = "MATERIALIZED VIEW")
-      case cst: CreateStreamingTableAsSelect =>
+      case _: CreateStreamingTableAsSelect | _: CreateStreamingTable |
+          _: CreateStreamingTableAutoCdc =>
         throw QueryCompilationErrors.unsupportedCreatePipelineDatasetQueryExecutionError(
             pipelineDatasetType = "STREAMING TABLE")
       case _ => Nil
@@ -1042,9 +1073,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw SparkException.internalError(
           "Deduplicate operator for non streaming data source should have been replaced " +
             "by aggregate in the optimizer")
-      case _: logical.BinBy =>
-        throw new SparkUnsupportedOperationException("UNSUPPORTED_FEATURE.BIN_BY")
-
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
       case logical.SerializeFromObject(serializer, child) =>
@@ -1151,7 +1179,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case f: logical.TypedFilter =>
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
-        execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
+        val useSingleTask = e.getTagValue(
+          datasources.MarkSingleTaskExecution.markTag).getOrElse(false)
+        execution.ExpandExec(e.projections, e.output, planLater(child), useSingleTask) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child, sampleMethod) =>
         if (sampleMethod == logical.SampleMethod.System) {
           // V2ScanRelationPushDown is non-excludable and always handles SYSTEM samples
@@ -1161,8 +1191,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             "TABLESAMPLE SYSTEM node was not properly handled by V2ScanRelationPushDown.")
         }
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
-      case logical.LocalRelation(output, data, _, stream) =>
-        LocalTableScanExec(output, data, stream) :: Nil
+      case r @ logical.LocalRelation(output, data, _, stream) =>
+        val useSingleTask = r.getTagValue(
+          datasources.MarkSingleTaskExecution.markTag).getOrElse(false)
+        LocalTableScanExec(output, data, stream, useSingleTask) :: Nil
       case logical.EmptyRelation(l) => EmptyRelationExec(l) :: Nil
       case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
       // We should match the combination of limit and offset first, to get the optimal physical
@@ -1229,6 +1261,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           staticPartitions) :: Nil
       case MultiResult(children) =>
         MultiResultExec(children.map(planLater)) :: Nil
+      case b: logical.BinBy =>
+        execution.BinByExec(
+          binWidthMicros = b.binWidthMicros,
+          originMicros = b.originMicros,
+          rangeStart = b.rangeStart,
+          rangeEnd = b.rangeEnd,
+          distributeColumns = b.distributeColumns,
+          scaledDistributeColumns = b.scaledDistributeColumns,
+          appendedAttributes = b.appendedAttributes,
+          timeZoneId = b.timeZoneId,
+          child = planLater(b.child)) :: Nil
       case _ => Nil
     }
   }

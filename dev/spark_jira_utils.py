@@ -78,14 +78,16 @@ def list_components(asf_jira):
         print(c.name)
 
 
-def create_jira_issue(asf_jira, title, component, parent=None, issue_type=None, version=None):
+def create_jira_issue(
+    asf_jira, title, component, parent=None, issue_type=None, version=None, description=""
+):
     """Create a JIRA issue and return the issue key (e.g. SPARK-12345)."""
     affected_version = version if version else detect_affected_version(asf_jira)
 
     issue_dict = {
         "project": {"key": "SPARK"},
         "summary": title,
-        "description": "",
+        "description": description or "",
         "versions": [{"name": affected_version}],
         "components": [{"name": component}],
     }

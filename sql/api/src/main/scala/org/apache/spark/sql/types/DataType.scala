@@ -27,7 +27,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
+import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
@@ -215,13 +215,50 @@ object DataType {
       .toMap
   }
 
+  /**
+   * Parses an integer type parameter captured from a JSON type name (e.g. the length in
+   * `char(10)`). The capture group is `\d+`, an unbounded digit run, so a value outside the
+   * 32-bit integer range surfaces a proper Spark error instead of a raw `NumberFormatException`.
+   * Mirrors the guard on the parser path in `DataTypeAstBuilder`.
+   */
+  private def parseIntTypeParameterFromJson(
+      text: String,
+      parameter: String,
+      typeName: String): Int = {
+    try text.toInt
+    catch {
+      case _: NumberFormatException =>
+        throw DataTypeErrors.datatypeParameterValueOutOfRangeError(parameter, text, typeName)
+    }
+  }
+
+  /**
+   * Parses the precision captured from a `decimal(p,s)` JSON type name, reusing the dedicated
+   * `DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION` error when the value is outside the 32-bit integer
+   * range.
+   */
+  private def parseDecimalPrecisionFromJson(text: String): Int = {
+    try text.toInt
+    catch {
+      case _: NumberFormatException =>
+        throw DataTypeErrors.decimalPrecisionExceedsMaxPrecisionError(
+          text,
+          DecimalType.MAX_PRECISION)
+    }
+  }
+
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
-      case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case CHAR_TYPE(length) => CharType(length.toInt)
-      case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      case FIXED_DECIMAL(precision, scale) =>
+        DecimalType(
+          parseDecimalPrecisionFromJson(precision),
+          parseIntTypeParameterFromJson(scale, "scale", "DECIMAL"))
+      case CHAR_TYPE(length) =>
+        CharType(parseIntTypeParameterFromJson(length, "length", "CHAR"))
+      case VARCHAR_TYPE(length) =>
+        VarcharType(parseIntTypeParameterFromJson(length, "length", "VARCHAR"))
       case STRING_WITH_COLLATION(collation) => StringType(collation)
       // If the coordinate reference system (CRS) value is omitted, Parquet and other storage
       // formats (Delta, Iceberg) consider "OGC:CRS84" to be the default value of the crs.
@@ -248,11 +285,18 @@ object DataType {
           TimestampType
         } else if (p < TimestampLTZNanosType.MIN_PRECISION ||
           p > TimestampLTZNanosType.MAX_PRECISION) {
-          // Reject out-of-range precisions before the feature-flag check so the error is always
-          // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED.
+          // Reject out-of-range precisions so the error is always INVALID_TIMESTAMP_PRECISION.
           throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
         } else {
-          DataTypeErrors.checkTimestampNanosTypesEnabled()
+          // The nanos preview flag is intentionally NOT enforced here (SPARK-57835). This JSON
+          // path is how a persisted schema is reconstructed from the catalog (e.g.
+          // HiveExternalCatalog.getTable -> DataType.fromJson), so gating it would make a table
+          // written with the flag on completely inaccessible once it is off -- DESCRIBE, SHOW
+          // CREATE TABLE, and even DROP would fail. Instead we mirror TIME (also flag-gated but
+          // reconstructed unconditionally): metadata reads succeed, and the flag is enforced at
+          // analysis/execution time via TypeUtils.failUnsupportedDataType when the data is
+          // actually read, written, or queried. The user-facing SQL parser path
+          // (DataTypeAstBuilder) stays gated, so DDL like TIMESTAMP_LTZ(9) still fails fast.
           TimestampLTZNanosType(p)
         }
       case TIMESTAMP_NTZ_NANOS_TYPE(precision) =>
@@ -268,11 +312,12 @@ object DataType {
           TimestampNTZType
         } else if (p < TimestampNTZNanosType.MIN_PRECISION ||
           p > TimestampNTZNanosType.MAX_PRECISION) {
-          // Reject out-of-range precisions before the feature-flag check so the error is always
-          // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED.
+          // Reject out-of-range precisions so the error is always INVALID_TIMESTAMP_PRECISION.
           throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
         } else {
-          DataTypeErrors.checkTimestampNanosTypesEnabled()
+          // Not flag-gated on purpose (SPARK-57835); see the TIMESTAMP_LTZ branch above for the
+          // rationale (catalog restoration must be able to reconstruct persisted nanos schemas
+          // regardless of the preview flag).
           TimestampNTZNanosType(p)
         }
       case "timestamp_ltz" => TimestampType
@@ -337,7 +382,28 @@ object DataType {
           ("pyClass", _),
           ("sqlType", _),
           ("type", JString("udt"))) =>
-      SparkClassUtils.classForName[UserDefinedType[_]](udtClass).getConstructor().newInstance()
+      if (!SqlApiConf.get.allowCreatingUDTFromString &&
+        !SqlApiConf.get.allowedDynamicUDTClasses.contains(udtClass)) {
+        throw DataTypeErrors.udtClassLoadingDisabledError(
+          udtClass,
+          SqlApiConf.get.allowedDynamicUDTClasses)
+      }
+      // Defense in depth: resolve the class without initializing it and verify that it really is a
+      // UserDefinedType subclass before constructing it.
+      val clazz =
+        try {
+          SparkClassUtils.classForName[UserDefinedType[_]](udtClass, initialize = false)
+        } catch {
+          case e: ClassNotFoundException =>
+            throw new SparkClassNotFoundException(
+              errorClass = "UDT_CLASS_NOT_FOUND.WITHOUT_USER_CLASS",
+              messageParameters = Map("udtClass" -> udtClass),
+              cause = e)
+        }
+      if (!classOf[UserDefinedType[_]].isAssignableFrom(clazz)) {
+        throw DataTypeErrors.udtClassNotUserDefinedTypeError(udtClass)
+      }
+      clazz.getConstructor().newInstance()
 
     // Python UDT
     case JSortedObject(

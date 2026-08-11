@@ -277,6 +277,18 @@ case class ExecutorLostFailure(
 
 /**
  * :: DeveloperApi ::
+ * The task failed because the executor's thread pool rejected it during executor shutdown.
+ * This is not a task fault - the executor was shutting down when the task was submitted.
+ */
+@DeveloperApi
+case class ExecutorShutdownFailure(executorId: String) extends TaskFailedReason {
+  override def toErrorString: String =
+    s"ExecutorShutdownFailure (executor $executorId was shutting down)"
+  override def countTowardsTaskFailures: Boolean = false
+}
+
+/**
+ * :: DeveloperApi ::
  * We don't know why the task ended -- for example, because of a ClassNotFound exception when
  * deserializing the task result.
  */

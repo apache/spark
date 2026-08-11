@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.vectorized
 
+import java.time.LocalTime
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal}
 import org.apache.spark.unsafe.types.UTF8String
@@ -256,5 +258,99 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
   testConstantColumnVector("fill null array", 10, ArrayType(IntegerType)) { vector =>
     ColumnVectorUtils.populate(vector, InternalRow(null), 0)
     assert(vector.hasNull)
+  }
+
+  private def timeNanos(s: String): Long = DateTimeUtils.localTimeToNanos(LocalTime.parse(s))
+
+  // TimeType is physically a long (nanoseconds since midnight). Precision affects display only,
+  // not storage, so every TimeType(p) is filled through the same PhysicalLongType code path.
+  Seq(
+    0 -> "12:30:45",
+    6 -> "12:30:45.123456",
+    7 -> "12:30:45.1234567",
+    9 -> "12:30:45.123456789").foreach { case (p, s) =>
+    testConstantColumnVector(s"fill time p=$p", 10, TimeType(p)) { vector =>
+      val nanos = timeNanos(s)
+      ColumnVectorUtils.populate(vector, InternalRow(nanos), 0)
+      (0 until 10).foreach { i =>
+        assert(vector.getLong(i) == nanos)
+      }
+    }
+  }
+
+  testConstantColumnVector("fill time boundaries", 10, TimeType(9)) { vector =>
+    Seq(0L, 86399999999999L).foreach { nanos =>
+      ColumnVectorUtils.populate(vector, InternalRow(nanos), 0)
+      (0 until 10).foreach { i =>
+        assert(vector.getLong(i) == nanos)
+      }
+    }
+  }
+
+  testConstantColumnVector("fill time null", 10, TimeType(6)) { vector =>
+    ColumnVectorUtils.populate(vector, InternalRow(null), 0)
+    assert(vector.hasNull)
+    assert(vector.numNulls() == 10)
+    (0 until 10).foreach { i =>
+      assert(vector.isNullAt(i))
+    }
+  }
+
+  testConstantColumnVector("fill struct with time field", 10,
+    new StructType().add("t", TimeType(6)).add("flag", BooleanType)) { vector =>
+    val nanos = timeNanos("01:02:03.456789")
+    ColumnVectorUtils.populate(vector, InternalRow(InternalRow(nanos, true)), 0)
+    (0 until 10).foreach { i =>
+      assert(vector.getChild(0).getLong(i) == nanos)
+      assert(vector.getChild(1).getBoolean(i))
+    }
+  }
+
+  testConstantColumnVector("fill struct with null time field", 10,
+    new StructType().add("t", TimeType(6), nullable = true).add("flag", BooleanType)) { vector =>
+    ColumnVectorUtils.populate(vector, InternalRow(InternalRow(null, true)), 0)
+    (0 until 10).foreach { i =>
+      assert(vector.getChild(0).isNullAt(i))
+      assert(vector.getChild(1).getBoolean(i))
+    }
+  }
+
+  testConstantColumnVector("fill array of time", 10, ArrayType(TimeType(9))) { vector =>
+    val n0 = timeNanos("00:00:01")
+    val n1 = timeNanos("12:00:00.123456789")
+    val n2 = 86399999999999L
+    val arr = new GenericArrayData(Array[Any](n0, n1, n2))
+    ColumnVectorUtils.populate(vector, InternalRow(arr), 0)
+    (0 until 10).foreach { i =>
+      val a = vector.getArray(i)
+      assert(a.numElements() == 3)
+      assert(a.getLong(0) == n0)
+      assert(a.getLong(1) == n1)
+      assert(a.getLong(2) == n2)
+    }
+  }
+
+  testConstantColumnVector("fill null array of time", 10, ArrayType(TimeType(6))) { vector =>
+    ColumnVectorUtils.populate(vector, InternalRow(null), 0)
+    assert(vector.hasNull)
+  }
+
+  testConstantColumnVector("fill map of int -> time", 10,
+    MapType(IntegerType, TimeType(6))) { vector =>
+    val keys = new GenericArrayData(Array[Any](1, 2, 3))
+    val v0 = timeNanos("00:00:00")
+    val v1 = timeNanos("06:30:15.123456")
+    val v2 = 86399999999999L
+    val values = new GenericArrayData(Array[Any](v0, v1, v2))
+    val map = new ArrayBasedMapData(keys, values)
+    ColumnVectorUtils.populate(vector, InternalRow(map), 0)
+    (0 until 10).foreach { i =>
+      val m = vector.getMap(i)
+      assert(m.numElements() == 3)
+      assert(m.keyArray().toIntArray === Array(1, 2, 3))
+      assert(m.valueArray().getLong(0) == v0)
+      assert(m.valueArray().getLong(1) == v1)
+      assert(m.valueArray().getLong(2) == v2)
+    }
   }
 }

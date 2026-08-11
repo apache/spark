@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.stat.Summarizer
@@ -39,10 +39,10 @@ private[feature] trait MaxAbsScalerParams extends Params with HasInputCol with H
 
    /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
+    val outputFields = schema.fields :+ StructField($(outputCol), SQLDataTypes.VectorType, false)
     StructType(outputFields)
   }
 }
@@ -111,6 +111,14 @@ class MaxAbsScalerModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", Vectors.empty)
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (maxAbs != null) {
+      size += maxAbs.getSizeInBytes
+    }
+    size
+  }
 
   /** @group setParam */
   @Since("2.0.0")

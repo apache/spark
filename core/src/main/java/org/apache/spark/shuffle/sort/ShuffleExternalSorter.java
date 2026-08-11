@@ -304,7 +304,8 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     }
 
     writeSortedFile(false);
-    final long spillSize = freeMemory();
+    final long spillSize = getMemoryUsage();
+    freeMemory();
     inMemSorter.reset();
     // Reset the in-memory sorter's pointer array only after freeing up the memory pages holding the
     // records. Otherwise, if the task is over allocated memory, then without freeing the memory
@@ -363,6 +364,11 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     }
   }
 
+  private void allocateInitialPointerArray() {
+    LongArray array = allocateArray(inMemSorter.getInitialSizeWithUsableCapacity());
+    inMemSorter.expandPointerArray(array);
+  }
+
   /**
    * Checks whether there is enough space to insert an additional record in to the sort pointer
    * array and grows the array if additional space is required. If the required space cannot be
@@ -371,29 +377,59 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
   private void growPointerArrayIfNecessary() throws IOException {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
+      if (!inMemSorter.hasPointerArray()) {
+        allocateInitialPointerArray();
+        return;
+      }
+
       long used = inMemSorter.getMemoryUsage();
-      LongArray array;
+      LongArray array = null;
       try {
         // could trigger spilling
         array = allocateArray(used / 8 * 2);
       } catch (TooLargePageException e) {
         // The pointer array is too big to fix in a single page, spill.
         spill();
-        return;
       } catch (SparkOutOfMemoryError e) {
         // should have trigger spilling
-        if (!inMemSorter.hasSpaceForAnotherRecord()) {
+        if (!"UNABLE_TO_ACQUIRE_MEMORY".equals(e.getCondition()) ||
+            inMemSorter.hasPointerArray()) {
           logger.error("Unable to grow the pointer array");
           throw e;
         }
-        return;
       }
       // check if spilling is triggered or not
-      if (inMemSorter.hasSpaceForAnotherRecord()) {
-        freeArray(array);
-      } else {
-        inMemSorter.expandPointerArray(array);
+      if (!inMemSorter.hasPointerArray()) {
+        // A spill reset the pointer array while allocateArray() was in progress. Reuse a successful
+        // growth allocation, or restore the minimum usable initial array if allocation failed.
+        if (array != null) {
+          inMemSorter.expandPointerArray(array);
+        } else {
+          allocateInitialPointerArray();
+        }
+        return;
       }
+      inMemSorter.expandPointerArray(array);
+    }
+  }
+
+  private void acquireNewPageWithPointerArrayFallback(int required) {
+    try {
+      acquireNewPageIfNecessary(required);
+    } catch (SparkOutOfMemoryError e) {
+      long minimumPointerArrayBytes =
+        Math.multiplyExact(inMemSorter.getInitialSizeWithUsableCapacity(), 8L);
+      if (!"UNABLE_TO_ACQUIRE_MEMORY".equals(e.getCondition()) ||
+          inMemSorter.numRecords() != 0 ||
+          inMemSorter.getMemoryUsage() <= minimumPointerArrayBytes) {
+        throw e;
+      }
+      // A growth allocation retained after spilling can consume all memory made available by the
+      // spill. Since the sorter is still empty, shrink the pointer array and retry the data page
+      // once so that pointer growth cannot starve record storage.
+      inMemSorter.reset();
+      allocateInitialPointerArray();
+      acquireNewPageIfNecessary(required);
     }
   }
 
@@ -447,7 +483,24 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     final int uaoSize = UnsafeAlignedOffset.getUaoSize();
     // Need 4 or 8 bytes to store the record length.
     final int required = length + uaoSize;
-    acquireNewPageIfNecessary(required);
+    acquireNewPageWithPointerArrayFallback(required);
+    // Data page allocation may spill and reset the pointer array, so check its capacity again.
+    try {
+      growPointerArrayIfNecessary();
+    } catch (SparkOutOfMemoryError e) {
+      if (!"UNABLE_TO_ACQUIRE_MEMORY".equals(e.getCondition()) ||
+          inMemSorter.hasPointerArray() ||
+          inMemSorter.numRecords() != 0 ||
+          currentPage == null ||
+          allocatedPages.size() != 1) {
+        throw e;
+      }
+      // The newly acquired empty data page consumed the remaining fair-share memory. Release it,
+      // restore the minimum pointer array first, and retry the data page once.
+      freeMemory();
+      allocateInitialPointerArray();
+      acquireNewPageIfNecessary(required);
+    }
 
     assert(currentPage != null);
     final Object base = currentPage.getBaseObject();

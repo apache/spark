@@ -62,10 +62,10 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
+    val outputFields = schema.fields :+ StructField($(outputCol), SQLDataTypes.VectorType, false)
     StructType(outputFields)
   }
 
@@ -150,6 +150,17 @@ class StandardScalerModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", Vectors.empty, Vectors.empty)
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (std != null) {
+      size += std.getSizeInBytes
+    }
+    if (mean != null) {
+      size += mean.getSizeInBytes
+    }
+    size
+  }
 
   /** @group setParam */
   @Since("1.2.0")

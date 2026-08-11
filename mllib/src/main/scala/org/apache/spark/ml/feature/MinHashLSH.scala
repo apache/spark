@@ -24,11 +24,12 @@ import scala.util.Random
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Model produced by [[MinHashLSH]], where multiple hash functions are stored. Each hash function
@@ -52,6 +53,13 @@ class MinHashLSHModel private[ml](
 
   // For ml connect only
   private[ml] def this() = this("", Array.empty)
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    // randCoefficients: Array[(Int, Int)]
+    size += SizeEstimator.estimate(randCoefficients)
+    size
+  }
 
   /** @group setParam */
   @Since("2.4.0")
@@ -193,7 +201,7 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with Has
 
   @Since("2.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     validateAndTransformSchema(schema)
   }
 

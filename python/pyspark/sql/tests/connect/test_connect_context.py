@@ -22,8 +22,13 @@ from unittest.mock import patch
 from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql import HiveContext as ClassicHiveContext
 from pyspark.sql import SQLContext as ClassicSQLContext
-from pyspark.sql.connect.context import HiveContext, SQLContext
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
+
+# Connect HiveContext/SQLContext are only importable when grpc is present; the guard keeps the
+# module collectable on grpc-less images, where these tests are skipped anyway. They are referenced
+# only inside test method bodies (never in annotations), so no quoting is needed here.
+if should_test_connect:
+    from pyspark.sql.connect.context import HiveContext, SQLContext
 
 
 class SQLContextConnectTests(ReusedConnectTestCase):

@@ -43,3 +43,11 @@ select to_timestamp('12-31-365', 'MM-dd-DDD');
 select to_timestamp('2020-30-365', 'yyyy-dd-DDD');
 select to_timestamp('2020-12-350', 'yyyy-MM-DDD');
 select to_timestamp('2020-12-31-366', 'yyyy-MM-dd-DDD');
+
+-- parsing TIME with `to_time`
+select to_time('00:00:00');
+select to_time('12', 'HH');
+select to_time('12:34', 'HH:mm');
+select to_time('12:34:56', 'HH:mm:ss');
+select to_time('12:34:56.123456', 'HH:mm:ss.SSSSSS');
+select to_time('01:02:03 PM', 'hh:mm:ss a');

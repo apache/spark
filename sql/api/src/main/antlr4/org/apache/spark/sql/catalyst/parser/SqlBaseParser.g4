@@ -75,7 +75,7 @@ options { tokenVocab = SqlBaseLexer; }
            la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||
            la == TABLESAMPLE || la == INNER || la == CROSS || la == LEFT ||
            la == RIGHT || la == FULL || la == NATURAL || la == SEMI ||
-           la == ANTI || la == JOIN || la == UNION || la == EXCEPT ||
+           la == ANTI || la == ASOF || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
@@ -199,6 +199,10 @@ singleExpression
 
 singleTableIdentifier
     : tableIdentifier EOF
+    ;
+
+singleTemporalTableIdentifier
+    : temporalTableIdentifier EOF
     ;
 
 singleMultipartIdentifier
@@ -373,7 +377,7 @@ statement
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) identifierReference)?
         (LIKE? pattern=stringLit)?                                        #showViews
-    | SHOW PARTITIONS identifierReference partitionSpec?               #showPartitions
+    | SHOW PARTITIONS identifierReference partitionSpec? (AS JSON)?    #showPartitions
     | SHOW functionScope=simpleIdentifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
     | SHOW PROCEDURES ((FROM | IN) identifierReference)?               #showProcedures
@@ -391,6 +395,9 @@ statement
     | COMMENT ON namespace identifierReference IS
         comment                                                        #commentNamespace
     | COMMENT ON TABLE identifierReference IS comment                  #commentTable
+    | COMMENT ON TABLE identifierReference COLUMN
+        LEFT_PAREN columns=columnCommentList RIGHT_PAREN               #commentColumn
+    | COMMENT ON COLUMN columnComment                                  #commentColumn
     | REFRESH TABLE identifierReference                                #refreshTable
     | REFRESH FUNCTION identifierReference                             #refreshFunction
     | REFRESH (stringLit | .*?)                                        #refreshResource
@@ -416,8 +423,9 @@ statement
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     | createPipelineDatasetHeader (LEFT_PAREN tableElementList? RIGHT_PAREN)? tableProvider?
         createTableClauses
-        (AS query)?                                                    #createPipelineDataset
+        (AS query | FLOW autoCdcBody)?                                 #createPipelineDataset
     | createPipelineFlowHeader insertInto query                        #createPipelineInsertIntoFlow
+    | createPipelineFlowHeader autoCdcCommand                          #createFlowAutoCdc
     ;
 
 materializedView
@@ -589,7 +597,7 @@ query
 insertInto
     : INSERT (WITH SCHEMA EVOLUTION)? OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
     | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? (BY NAME)?
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? ((BY NAME) | identifierList)?
         REPLACE (WHERE | ON) replaceCondition=booleanExpression        #insertIntoReplaceBooleanCond
     | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? (BY NAME)?
         REPLACE USING identifierList                                   #insertIntoReplaceUsing
@@ -739,15 +747,59 @@ resource
 dmlStatementNoWith
     : insertInto (query | LEFT_PAREN query RIGHT_PAREN queryAlias=tableAlias)      #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
-    | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
-    | UPDATE identifierReference tableAlias setClause whereClause?                 #updateTable
+    | DELETE FROM identifierReference tableAlias optionsClause? whereClause?       #deleteFromTable
+    | UPDATE identifierReference tableAlias optionsClause? setClause whereClause?  #updateTable
     | MERGE (WITH SCHEMA EVOLUTION)? INTO target=identifierReference targetAlias=tableAlias
-        USING (source=identifierReference |
+        targetOptions=optionsClause?
+        USING (source=identifierReference sourceOptions=optionsClause? |
           LEFT_PAREN sourceQuery=query RIGHT_PAREN) sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
         matchedClause*
         notMatchedClause*
         notMatchedBySourceClause*                                                  #mergeIntoTable
+    ;
+
+autoCdcCommand
+    : AUTO CDC INTO target=multipartIdentifier
+        autoCdcParameters
+    ;
+
+autoCdcBody
+    : AUTO CDC autoCdcParameters
+    ;
+
+autoCdcParameters
+    : FROM source=relationPrimary
+        KEYS LEFT_PAREN keys=identifierSeq RIGHT_PAREN
+        (autoCdcDeleteClause
+        | autoCdcSequenceByClause
+        | autoCdcColumnsClause
+        | autoCdcStoredAsClause
+        | autoCdcTrackHistoryClause)*
+    ;
+
+autoCdcDeleteClause
+    : APPLY AS DELETE WHEN deleteCondition=booleanExpression
+    ;
+
+autoCdcSequenceByClause
+    : SEQUENCE BY sequence=expression
+    ;
+
+autoCdcColumnsClause
+    : COLUMNS (
+        LEFT_PAREN columns=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN exceptCols=identifierSeq RIGHT_PAREN)
+    ;
+
+autoCdcStoredAsClause
+    : STORED AS SCD TYPE scdType=INTEGER_VALUE
+    ;
+
+autoCdcTrackHistoryClause
+    : TRACK HISTORY ON (
+        LEFT_PAREN trackCols=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN nonTrackCols=identifierSeq RIGHT_PAREN)
     ;
 
 identifierReference
@@ -1068,8 +1120,24 @@ relationExtension
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary (joinCriteria | nearestByClause)?
+    : (joinType) JOIN LATERAL? right=relationPrimary joinPostfix?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
+    | asofJoinType ASOF JOIN right=relationPrimary asofJoinCriteria
+    ;
+
+asofJoinType
+    : INNER?
+    | LEFT OUTER?
+    ;
+
+joinPostfix
+    : joinCriteria
+    | nearestByClause
+    ;
+
+asofJoinCriteria
+    : MATCH_CONDITION LEFT_PAREN matchExpr=booleanExpression RIGHT_PAREN
+      ( ON onExpr=booleanExpression | USING identifierList )?
     ;
 
 joinType
@@ -1133,14 +1201,45 @@ relationPrimary
     : streamRelationPrimary                                 #streamRelation
     | identifierReference changesClause
       optionsClause? tableAlias                             #changelogTableName
-    | identifierReference temporalClause?
+    | temporalTableIdentifierReference temporalClause?
       optionsClause? sample? watermarkClause? tableAlias    #tableName
     | LEFT_PAREN query RIGHT_PAREN sample? watermarkClause?
       tableAlias                                            #aliasedQuery
     | LEFT_PAREN relation RIGHT_PAREN sample?
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
+    | unnest                                                #unnestTable
+    | jsonTable                                             #jsonTableRelation
     | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
+    ;
+
+// ANSI SQL UNNEST of one or more arrays in the FROM clause, with an optional
+// trailing ordinality column (WITH ORDINALITY). Multiple arrays are expanded in
+// parallel, padded with NULLs to the length of the longest array.
+unnest
+    : UNNEST LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+      (WITH ORDINALITY)? tableAlias
+    ;
+
+// The ANSI SQL:2016 JSON_TABLE table-valued function. Because the COLUMNS clause is not a normal
+// function-argument list, it has a dedicated production rather than going through
+// tableFunctionCall. Only the flat (non-NESTED) subset is currently supported.
+jsonTable
+    : JSON_TABLE LEFT_PAREN jsonExpr=expression COMMA rowPath=stringLit
+        COLUMNS LEFT_PAREN jsonTableColumn (COMMA jsonTableColumn)* RIGHT_PAREN
+        jsonTableOnErrorClause?
+      RIGHT_PAREN tableAlias
+    ;
+
+jsonTableColumn
+    : colName=errorCapturingIdentifier FOR ORDINALITY                           #jsonTableOrdinalityColumn
+    | colName=errorCapturingIdentifier dataType
+        EXISTS (PATH path=stringLit)?                                           #jsonTableExistsColumn
+    | colName=errorCapturingIdentifier dataType (PATH path=stringLit)?          #jsonTableValueColumn
+    ;
+
+jsonTableOnErrorClause
+    : (NULL | ERROR) ON ERROR
     ;
 
 optionsClause
@@ -1237,6 +1336,18 @@ multipartIdentifierProperty
 
 tableIdentifier
     : (db=errorCapturingIdentifier DOT)? table=errorCapturingIdentifier
+    ;
+
+temporalTableIdentifier
+    : id=multipartIdentifier AT_SIGN timestamp=INTEGER_VALUE
+    | id=multipartIdentifier AT_VERSION version
+    | id=multipartIdentifier
+    ;
+
+temporalTableIdentifierReference
+    : identifierReference AT_SIGN timestamp=INTEGER_VALUE
+    | identifierReference AT_VERSION version
+    | identifierReference
     ;
 
 functionIdentifier
@@ -1338,7 +1449,7 @@ datetimeUnit
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME | CURRENT_PATH)             #currentLike
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME | CURRENT_PATH | LOCALTIME)             #currentLike
     | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
     | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
@@ -1874,6 +1985,14 @@ alterColumnAction
     | dropDefault=DROP DEFAULT
     ;
 
+columnCommentList
+    : columnComment (COMMA columnComment)*
+    ;
+
+columnComment
+    : column=multipartIdentifier IS comment
+    ;
+
 // Matches exactly one string literal without coalescing or parameter markers.
 // Used in type constructors where coalescing is not allowed.
 singleStringLitWithoutMarker
@@ -1959,13 +2078,16 @@ ansiNonReserved
     | ANALYZE
     | ANTI
     | ANY_VALUE
+    | APPLY
     | APPROX
     | ARCHIVE
     | ARRAY
     | ASC
     | ASENSITIVE
+    | ASOF
     | AT
     | ATOMIC
+    | AUTO
     | BEGIN
     | BERNOULLI
     | BETWEEN
@@ -1987,6 +2109,7 @@ ansiNonReserved
     | CASCADE
     | CATALOG
     | CATALOGS
+    | CDC
     | CHANGE
     | CHANGES
     | CHAR
@@ -2049,6 +2172,7 @@ ansiNonReserved
     | DROP
     | ELSEIF
     | ENFORCED
+    | ERROR
     | ESCAPED
     | EVOLUTION
     | EXACT
@@ -2080,6 +2204,7 @@ ansiNonReserved
     | GLOBAL
     | GROUPING
     | HANDLER
+    | HISTORY
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -2106,6 +2231,7 @@ ansiNonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_TABLE
     | KEY
     | KEYS
     | LANGUAGE
@@ -2129,6 +2255,7 @@ ansiNonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MATCH_CONDITION
     | MATERIALIZED
     | MAX
     | MEASURE
@@ -2160,6 +2287,7 @@ ansiNonReserved
     | OPEN
     | OPTION
     | OPTIONS
+    | ORDINALITY
     | OUT
     | OUTPUTFORMAT
     | OVER
@@ -2211,6 +2339,7 @@ ansiNonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SCD
     | SCHEMA
     | SCHEMAS
     | SECOND
@@ -2218,6 +2347,7 @@ ansiNonReserved
     | SECURITY
     | SEMI
     | SEPARATED
+    | SEQUENCE
     | SERDE
     | SERDEPROPERTIES
     | SET
@@ -2264,6 +2394,7 @@ ansiNonReserved
     | TIMESTAMPDIFF
     | TINYINT
     | TOUCH
+    | TRACK
     | TRANSACTION
     | TRANSACTIONS
     | TRANSFORM
@@ -2277,6 +2408,7 @@ ansiNonReserved
     | UNCACHE
     | UNIFORM
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL
@@ -2346,15 +2478,18 @@ nonReserved
     | AND
     | ANY
     | ANY_VALUE
+    | APPLY
     | APPROX
     | ARCHIVE
     | ARRAY
     | AS
     | ASC
     | ASENSITIVE
+    | ASOF
     | AT
     | ATOMIC
     | AUTHORIZATION
+    | AUTO
     | BEGIN
     | BERNOULLI
     | BETWEEN
@@ -2380,6 +2515,7 @@ nonReserved
     | CAST
     | CATALOG
     | CATALOGS
+    | CDC
     | CHANGE
     | CHANGES
     | CHAR
@@ -2458,6 +2594,7 @@ nonReserved
     | ELSEIF
     | END
     | ENFORCED
+    | ERROR
     | ESCAPE
     | ESCAPED
     | EVOLUTION
@@ -2500,6 +2637,7 @@ nonReserved
     | GROUPING
     | HANDLER
     | HAVING
+    | HISTORY
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -2529,6 +2667,7 @@ nonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_TABLE
     | KEY
     | KEYS
     | LANGUAGE
@@ -2545,6 +2684,7 @@ nonReserved
     | LIST
     | LOAD
     | LOCAL
+    | LOCALTIME
     | LOCATION
     | LOCK
     | LOCKS
@@ -2554,6 +2694,7 @@ nonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MATCH_CONDITION
     | MATERIALIZED
     | MAX
     | MEASURE
@@ -2591,6 +2732,7 @@ nonReserved
     | OPTIONS
     | OR
     | ORDER
+    | ORDINALITY
     | OUT
     | OUTER
     | OUTPUTFORMAT
@@ -2647,6 +2789,7 @@ nonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SCD
     | SCHEMA
     | SCHEMAS
     | SECOND
@@ -2654,6 +2797,7 @@ nonReserved
     | SECURITY
     | SELECT
     | SEPARATED
+    | SEQUENCE
     | SERDE
     | SERDEPROPERTIES
     | SESSION_USER
@@ -2706,6 +2850,7 @@ nonReserved
     | TINYINT
     | TO
     | TOUCH
+    | TRACK
     | TRAILING
     | TRANSACTION
     | TRANSACTIONS
@@ -2722,6 +2867,7 @@ nonReserved
     | UNIQUE
     | UNKNOWN
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL

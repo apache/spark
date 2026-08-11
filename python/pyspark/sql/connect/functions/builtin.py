@@ -847,6 +847,18 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 round.__doc__ = pysparkfuncs.round.__doc__
 
 
+def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("truncate", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("truncate", col, scale)
+
+
+truncate.__doc__ = pysparkfuncs.truncate.__doc__
+
+
 def sec(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sec", col)
 
@@ -1080,6 +1092,13 @@ def collect_set(col: "ColumnOrName") -> Column:
 
 
 collect_set.__doc__ = pysparkfuncs.collect_set.__doc__
+
+
+def collect_union(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("collect_union", col)
+
+
+collect_union.__doc__ = pysparkfuncs.collect_union.__doc__
 
 
 def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None) -> Column:
@@ -2060,6 +2079,13 @@ def json_object_keys(col: "ColumnOrName") -> Column:
 json_object_keys.__doc__ = pysparkfuncs.json_object_keys.__doc__
 
 
+def json_typeof(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("json_typeof", col)
+
+
+json_typeof.__doc__ = pysparkfuncs.json_typeof.__doc__
+
+
 def inline(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("inline", col)
 
@@ -2185,6 +2211,20 @@ def to_variant_object(col: "ColumnOrName") -> Column:
 to_variant_object.__doc__ = pysparkfuncs.to_variant_object.__doc__
 
 
+def variant_from_arrays(keys: "ColumnOrName", values: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("variant_from_arrays", keys, values)
+
+
+variant_from_arrays.__doc__ = pysparkfuncs.variant_from_arrays.__doc__
+
+
+def variant_from_entries(entries: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("variant_from_entries", entries)
+
+
+variant_from_entries.__doc__ = pysparkfuncs.variant_from_entries.__doc__
+
+
 def parse_json(col: "ColumnOrName") -> Column:
     return _invoke_function("parse_json", _to_col(col))
 
@@ -2204,6 +2244,87 @@ def is_valid_variant(v: "ColumnOrName") -> Column:
 
 
 is_valid_variant.__doc__ = pysparkfuncs.is_valid_variant.__doc__
+
+
+def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
+    if len(paths) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "paths"},
+        )
+    cols = [p if isinstance(p, Column) else lit(p) for p in paths]
+    return _invoke_function("variant_delete", _to_col(v), *cols)
+
+
+variant_delete.__doc__ = pysparkfuncs.variant_delete.__doc__
+
+
+def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName") -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("variant_insert", _to_col(v), path_col, _to_col(value))
+
+
+variant_insert.__doc__ = pysparkfuncs.variant_insert.__doc__
+
+
+def try_variant_insert(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("try_variant_insert", _to_col(v), path_col, _to_col(value))
+
+
+try_variant_insert.__doc__ = pysparkfuncs.try_variant_insert.__doc__
+
+
+def variant_set(
+    v: "ColumnOrName",
+    path: Union[Column, str],
+    value: "ColumnOrName",
+    create_if_missing: bool = True,
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "variant_set", _to_col(v), path_col, _to_col(value), lit(create_if_missing)
+    )
+
+
+variant_set.__doc__ = pysparkfuncs.variant_set.__doc__
+
+
+def try_variant_set(
+    v: "ColumnOrName",
+    path: Union[Column, str],
+    value: "ColumnOrName",
+    create_if_missing: bool = True,
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "try_variant_set", _to_col(v), path_col, _to_col(value), lit(create_if_missing)
+    )
+
+
+try_variant_set.__doc__ = pysparkfuncs.try_variant_set.__doc__
+
+
+def variant_array_append(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("variant_array_append", _to_col(v), path_col, _to_col(value))
+
+
+variant_array_append.__doc__ = pysparkfuncs.variant_array_append.__doc__
+
+
+def try_variant_array_append(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("try_variant_array_append", _to_col(v), path_col, _to_col(value))
+
+
+try_variant_array_append.__doc__ = pysparkfuncs.try_variant_array_append.__doc__
 
 
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
@@ -2513,11 +2634,25 @@ def base64(col: "ColumnOrName") -> Column:
 base64.__doc__ = pysparkfuncs.base64.__doc__
 
 
+def to_base32(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_base32", col)
+
+
+to_base32.__doc__ = pysparkfuncs.to_base32.__doc__
+
+
 def unbase64(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unbase64", col)
 
 
 unbase64.__doc__ = pysparkfuncs.unbase64.__doc__
+
+
+def from_base32(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("from_base32", col)
+
+
+from_base32.__doc__ = pysparkfuncs.from_base32.__doc__
 
 
 def ltrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
@@ -2613,8 +2748,21 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
 format_string.__doc__ = pysparkfuncs.format_string.__doc__
 
 
-def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
-    return _invoke_function("instr", _to_col(str), lit(substr))
+def instr(
+    str: "ColumnOrName",
+    substr: Union[Column, str],
+    start: Optional[Union[Column, int]] = None,
+    occurrence: Optional[Union[Column, int]] = None,
+) -> Column:
+    if start is None and occurrence is None:
+        return _invoke_function_over_columns("instr", str, lit(substr))
+    elif start is not None and occurrence is None:
+        start = lit(start)
+        return _invoke_function_over_columns("instr", str, lit(substr), start)
+    else:
+        start = lit(start) if start is not None else lit(1)
+        occurrence = lit(occurrence)
+        return _invoke_function_over_columns("instr", str, lit(substr), start, occurrence)
 
 
 instr.__doc__ = pysparkfuncs.instr.__doc__
@@ -3518,6 +3666,13 @@ def unix_millis(col: "ColumnOrName") -> Column:
 unix_millis.__doc__ = pysparkfuncs.unix_millis.__doc__
 
 
+def unix_nanos(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_nanos", col)
+
+
+unix_nanos.__doc__ = pysparkfuncs.unix_nanos.__doc__
+
+
 def unix_seconds(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unix_seconds", col)
 
@@ -3753,6 +3908,13 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
+
+
+def timestamp_nanos(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestamp_nanos", col)
+
+
+timestamp_nanos.__doc__ = pysparkfuncs.timestamp_nanos.__doc__
 
 
 def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
@@ -4581,6 +4743,20 @@ def md5(col: "ColumnOrName") -> Column:
 md5.__doc__ = pysparkfuncs.md5.__doc__
 
 
+def xxh3_64(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xxh3_64", col)
+
+
+xxh3_64.__doc__ = pysparkfuncs.xxh3_64.__doc__
+
+
+def xxh3_128(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xxh3_128", col)
+
+
+xxh3_128.__doc__ = pysparkfuncs.xxh3_128.__doc__
+
+
 def sha1(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sha1", col)
 
@@ -5288,6 +5464,20 @@ def zeroifnull(col: "ColumnOrName") -> Column:
 
 
 zeroifnull.__doc__ = pysparkfuncs.zeroifnull.__doc__
+
+
+def hmac(
+    key: "ColumnOrName",
+    message: "ColumnOrName",
+    algorithm: Optional["ColumnOrName"] = None,
+) -> Column:
+    if algorithm is None:
+        return _invoke_function_over_columns("hmac", key, message)
+    else:
+        return _invoke_function_over_columns("hmac", key, message, algorithm)
+
+
+hmac.__doc__ = pysparkfuncs.hmac.__doc__
 
 
 def aes_encrypt(

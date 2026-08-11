@@ -85,6 +85,12 @@ Choosing the batch duration is a trade-off:
 The duration is set on the Real-time trigger, as shown under
 [Enabling Real-time Mode](#enabling-real-time-mode).
 
+Progress is committed using **asynchronous progress tracking**: the offset and commit logs are
+written off the record-processing path so that checkpointing does not stall processing. This is
+enabled automatically for Real-time Mode queries and every batch is checkpointed (the async
+progress tracking checkpoint interval is fixed at 0 in Real-time Mode). It can be turned off with
+the `asyncProgressTrackingEnabled` writer option, in which case progress is committed synchronously.
+
 ## Comparison with Other Modes
 
 The table below summarizes how Real-time Mode relates to the default micro-batch engine and to the
@@ -268,8 +274,7 @@ Stateful operations of any kind are not supported in this release. This includes
 aggregations, `dropDuplicates` / `dropDuplicatesWithinWatermark`, stream-stream joins, `repartition`
 and other operations that introduce a shuffle, and stateful operators such as
 `flatMapGroupsWithState` and `transformWithState`. Support for stateful operations is planned
-starting in Spark 4.3. Asynchronous progress tracking is also not supported; enabling it fails with
-`STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED`.
+starting in Spark 4.3.
 
 ## Fault Tolerance
 

@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.datasources.orc.types.ops.OrcTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -148,7 +149,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case DateType => PredicateLeaf.Type.DATE
     case TimestampType => PredicateLeaf.Type.TIMESTAMP
     case _: DecimalType => PredicateLeaf.Type.DECIMAL
-    case _ => throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dataType)
+    // Framework types (e.g. TimeType) supply their own predicate-leaf type. A framework type whose
+    // predicateLeafType is None (like the nanos-timestamp types), or any other unmapped type,
+    // reaches the same unsupported-type error as before this change.
+    case dt => OrcTypeOps(dt).flatMap(_.predicateLeafType)
+      .getOrElse(throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dt))
   }
 
   /**
@@ -174,6 +179,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       IntervalUtils.periodToMonths(value.asInstanceOf[Period]).longValue()
     case _: DayTimeIntervalType =>
       IntervalUtils.durationToMicros(value.asInstanceOf[Duration])
+    // Framework types (e.g. TimeType) cast their own filter literals; the default is identity, so
+    // non-framework types and non-matching values fall through unchanged.
+    case OrcTypeOps(ops) => ops.castFilterLiteral(value)
     case _ => value
   }
 
