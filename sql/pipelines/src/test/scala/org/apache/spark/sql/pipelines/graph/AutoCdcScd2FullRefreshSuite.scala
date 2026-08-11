@@ -39,6 +39,8 @@ class AutoCdcScd2FullRefreshSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  import testImplicits._
+
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
   private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
 
@@ -51,9 +53,6 @@ class AutoCdcScd2FullRefreshSuite
   }
 
   test("full refresh wipes target rows and the auxiliary table for the refreshed flow") {
-    val session = spark
-    import session.implicits._
-
     createScd2Target(s"$catalog.$namespace.target")
 
     // Run #1: populate target + auxiliary table.
@@ -109,9 +108,6 @@ class AutoCdcScd2FullRefreshSuite
 
   test("after a full refresh, an event with a sequence below the previous run's " +
     "watermark now lands") {
-    val session = spark
-    import session.implicits._
-
     createScd2Target(s"$catalog.$namespace.target")
 
     // Run #1: delete at seq=10 sets a high watermark in the auxiliary table.
@@ -169,9 +165,6 @@ class AutoCdcScd2FullRefreshSuite
   }
 
   test("selective full refresh wipes only the requested target's auxiliary state") {
-    val session = spark
-    import session.implicits._
-
     createScd2Target(s"$catalog.$namespace.t_a")
     createScd2Target(s"$catalog.$namespace.t_b")
 

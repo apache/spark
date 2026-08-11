@@ -42,13 +42,12 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  import testImplicits._
+
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
   private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
 
   test("a higher-sequence event in a later pipeline run correctly closes and opens records") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -90,9 +89,6 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
 
   test("an event with a sequence lower than what was applied in a prior pipeline run " +
     "is woven in as a closed prior record") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -133,9 +129,6 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
 
   test("the SCD2 auxiliary table schema is the full target row schema plus the " +
     "deleted-by-batch-id marker, and records the key columns property") {
-    val session = spark
-    import session.implicits._
-
     // Source DF column order is (name, id, version): the AutoCDC key column `id` does NOT appear
     // first in the source DF. The SCD2 auxiliary table mirrors the full target row schema (all
     // user + framework columns) with the aux-only deleted-by-batch-id marker appended, and records
@@ -164,9 +157,6 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
 
   test("the auxiliary table preserves the user's declared key order in the key-columns " +
     "property, independent of the source DataFrame and target table column orders") {
-    val session = spark
-    import session.implicits._
-
     // The user declares `keys = Seq("region", "id")` -- the OPPOSITE order from how those columns
     // appear in both the source DF and the target. The recorded key-column-names property should
     // honor the user's declared key order so subsequent runs compare keys against the same layout.
@@ -191,9 +181,6 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
 
   test("a dry run resolves and validates the graph without provisioning the auxiliary " +
     "table") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -217,9 +204,6 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
 
   test("if the SCD2 AutoCDC auxiliary table is dropped between runs, it is transparently " +
     "recreated") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -266,9 +250,6 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
 
   test("the auxiliary table durably holds state absent from the target: a tombstone from a " +
     "delete-only run closes a later lower-sequence upsert") {
-    val session = spark
-    import session.implicits._
-
     // Unlike the transparently-recreated test above (where the surviving state also lived in the
     // target as a visible row), here the auxiliary table is the SOLE holder of the state. A
     // delete-only first run leaves the target empty but records a tombstone at seq=10 in the aux;
@@ -318,9 +299,6 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
 
   test("auxiliary key-column-names property survives identifiers containing special " +
     "characters that exercise both JSON and SQL string-literal escaping") {
-    val session = spark
-    import session.implicits._
-
     // This test exercises the full identifier-text persistence path with composite keys whose
     // names collectively cover every escape class:
     //   - `it's`              -- single quote: not escaped by JSON; the writer must double it

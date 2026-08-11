@@ -35,6 +35,8 @@ class AutoCdcScd2TargetTableDurabilitySuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  import testImplicits._
+
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
   private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
 
@@ -89,9 +91,6 @@ class AutoCdcScd2TargetTableDurabilitySuite
   }
 
   test("pre-loaded current record: a higher-sequence upsert closes it and opens a new record") {
-    val session = spark
-    import session.implicits._
-
     createScd2Target(s"$catalog.$namespace.target")
     insertPreloadedCurrentRecord(s"$catalog.$namespace.target", "1, 'alice', 5", 5L)
 
@@ -122,9 +121,6 @@ class AutoCdcScd2TargetTableDurabilitySuite
   }
 
   test("pre-loaded current record: a lower-sequence upsert is woven in as a closed prior record") {
-    val session = spark
-    import session.implicits._
-
     createScd2Target(s"$catalog.$namespace.target")
     insertPreloadedCurrentRecord(s"$catalog.$namespace.target", "1, 'alice', 10", 10L)
 
@@ -156,15 +152,11 @@ class AutoCdcScd2TargetTableDurabilitySuite
   }
 
   test("pre-loaded closed record: an event landing inside its interval bisects it") {
-    val session = spark
-    import session.implicits._
-
-    // The interop shape unique to SCD2: a hand-loaded *closed* record (a target row with no aux
-    // counterpart) reaches decomposeOutOfOrderRows with a target row that must be split. Pre-load
-    // [__START_AT=5, __END_AT=20); feed an event at seq=10, strictly inside that interval. The
-    // event bisects the pre-existing record into a head [5, 10) and a tail [10, 20): the head
-    // closes where the incoming event opens, the incoming event closes where the tail begins, and
-    // the redundant closed upsert the event itself would form drops out against the tail.
+    // The interop shape unique to SCD2: a hand-loaded *closed* record -- a target row with no aux
+    // counterpart -- split by an event landing inside its interval. Pre-load [5, 20) and feed an
+    // event at seq=10. The pre-existing record is closed early, at 10, and the incoming event
+    // takes over the remainder of the span, [10, 20), so the two records partition the original
+    // interval with no row left open.
     createScd2Target(s"$catalog.$namespace.target")
     insertPreloadedClosedRecord(s"$catalog.$namespace.target", "1, 'alice', 5", startAt = 5L,
       endAt = 20L)
@@ -199,9 +191,6 @@ class AutoCdcScd2TargetTableDurabilitySuite
 
   test("pre-loaded target rows merge correctly on the first AutoCDC run, and the " +
     "auxiliary table is created lazily") {
-    val session = spark
-    import session.implicits._
-
     // Target was populated by some external process; this is the first AutoCDC run.
     createScd2Target(s"$catalog.$namespace.target")
     insertPreloadedCurrentRecord(s"$catalog.$namespace.target", "1, 'alice', 1", 1L)
@@ -243,9 +232,6 @@ class AutoCdcScd2TargetTableDurabilitySuite
 
   test("a target table created without the framework columns gets them " +
     "auto-added on the first AutoCDC run") {
-    val session = spark
-    import session.implicits._
-
     // User creates the target without the AutoCDC framework columns. DatasetManager evolves the
     // existing table schema by merging it with the AutoCdcMergeFlow's output schema, which
     // includes __START_AT / __END_AT and the metadata column. The first run therefore proceeds

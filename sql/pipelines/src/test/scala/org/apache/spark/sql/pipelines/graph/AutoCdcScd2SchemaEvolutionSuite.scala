@@ -61,13 +61,12 @@ class AutoCdcScd2SchemaEvolutionSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  import testImplicits._
+
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
   private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
 
   test("a nullable non-key column merges correctly with mixed NULL and non-NULL values") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -105,9 +104,6 @@ class AutoCdcScd2SchemaEvolutionSuite
 
   test("widening a non-key column's type between runs fails with " +
     "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, age INT, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -147,9 +143,6 @@ class AutoCdcScd2SchemaEvolutionSuite
 
   test("narrowing a non-key column's type between runs fails with " +
     "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, payload BIGINT, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -190,9 +183,6 @@ class AutoCdcScd2SchemaEvolutionSuite
 
   test("a new top-level nullable column appearing in the source DF between runs is " +
     "added to the target") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -239,9 +229,6 @@ class AutoCdcScd2SchemaEvolutionSuite
   }
 
   test("adding a source column under default tracking is rejected as track-history drift") {
-    val session = spark
-    import session.implicits._
-
     // The counterpart to the additive tests above, which pin `trackHistorySelection` precisely to
     // avoid this: with default tracking the tracked set is derived from the selected non-key
     // columns (see `Scd2BatchProcessor.computeTrackedHistoryColumns`), so adding `email` silently
@@ -298,9 +285,6 @@ class AutoCdcScd2SchemaEvolutionSuite
   }
 
   test("additive target-column evolution extends the SCD2 auxiliary table schema") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -352,9 +336,6 @@ class AutoCdcScd2SchemaEvolutionSuite
 
   test("a new field added inside an array<struct> element between runs is added to the " +
     "target") {
-    val session = spark
-    import session.implicits._
-
     // SCD2 analog of AutoCdcScd1SchemaEvolutionSuite's array<struct> additive case: unlike the
     // top-level scalar additions above, this exercises unionByName / mergeSchemas recursing into
     // an array element struct. Unlike SCD1's overwrite-in-place, the SCD2 upsert closes the prior
@@ -416,9 +397,6 @@ class AutoCdcScd2SchemaEvolutionSuite
 
   test("broadening the column selection between runs adds the newly-included column to " +
     "the target") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -465,9 +443,6 @@ class AutoCdcScd2SchemaEvolutionSuite
 
   test("a source DF column whose name differs from the target only by case folds onto the " +
     "target column under case-insensitive resolution") {
-    val session = spark
-    import session.implicits._
-
     // SPARK-58517: schema evolution honors `spark.sql.caseSensitive`, so a source `Value` maps onto
     // the target's existing `value` instead of evolving the target to carry both spellings. The
     // target keeps its own spelling (the merge is left-biased) and no new column appears.
@@ -511,9 +486,6 @@ class AutoCdcScd2SchemaEvolutionSuite
 
   test("changing a non-key column type from TIMESTAMP to STRING between runs fails with " +
     "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(key INT NOT NULL, version BIGINT NOT NULL, value TIMESTAMP, $scd2MetadataDdl)"
