@@ -31,8 +31,19 @@ import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInput
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{col, lit, udf}
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.functions.{
+  coalesce,
+  col,
+  concat,
+  floor,
+  isnan,
+  lit,
+  max,
+  raise_error,
+  udf,
+  when
+}
+import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SizeEstimator
 
@@ -529,34 +540,22 @@ private[feature] object OneHotEncoderCommon {
       inputColNames: Seq[String],
       outputColNames: Seq[String],
       dropLast: Boolean): Seq[AttributeGroup] = {
-    // The RDD approach has advantage of early-stop if any values are invalid. It seems that
-    // DataFrame ops don't have equivalent functions.
     val columns = inputColNames.map { inputColName =>
-      col(inputColName).cast(DoubleType)
+      val inputCol = col(inputColName).cast(DoubleType)
+      val value = coalesce(inputCol.cast(StringType), lit("null"))
+      val invalidIndexError = raise_error(concat(
+        lit(s"Values from column $inputColName must be indices, but got "), value, lit(".")))
+      when(inputCol.isNull, invalidIndexError)
+        .when(isnan(inputCol) || inputCol > Int.MaxValue, raise_error(concat(
+          lit(s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got "), value,
+          lit("."))))
+        .when(inputCol < 0.0 || inputCol =!= floor(inputCol), invalidIndexError)
+        .otherwise(inputCol)
     }
-    val numOfColumns = columns.length
 
-    val numAttrsArray = dataset.select(columns: _*).rdd.map { row =>
-      (0 until numOfColumns).map(idx => row.getDouble(idx)).toArray
-    }.treeAggregate(new Array[Double](numOfColumns))(
-      (maxValues, curValues) => {
-        (0 until numOfColumns).foreach { idx =>
-          val x = curValues(idx)
-          assert(x <= Int.MaxValue,
-            s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got $x.")
-          assert(x >= 0.0 && x == x.toInt,
-            s"Values from column ${inputColNames(idx)} must be indices, but got $x.")
-          maxValues(idx) = math.max(maxValues(idx), x)
-        }
-        maxValues
-      },
-      (m0, m1) => {
-        (0 until numOfColumns).foreach { idx =>
-          m0(idx) = math.max(m0(idx), m1(idx))
-        }
-        m0
-      }
-    ).map(_.toInt + 1)
+    val maxValues = columns.map(c => coalesce(max(c), lit(0.0)))
+    val maxValuesRow = dataset.agg(maxValues.head, maxValues.tail: _*).head()
+    val numAttrsArray = Array.tabulate(maxValues.length)(i => maxValuesRow.getDouble(i).toInt + 1)
 
     outputColNames.zip(numAttrsArray).map { case (outputColName, numAttrs) =>
       createAttrGroupForAttrNames(outputColName, numAttrs, dropLast, keepInvalid = false)
