@@ -47,20 +47,24 @@ class OrderedFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
     val len = requiredSchema.fields.length
     val groupedPredicates = Array.fill[BasePredicate](len)(null)
     val groupedFilters = Array.fill(len)(Seq.empty[sources.Filter])
-    for (filter <- filters) {
-      val refs = filter.references
-      val index = if (refs.isEmpty) {
-        // For example, `AlwaysTrue` and `AlwaysFalse` doesn't have any references
-        // Filters w/o refs always return the same result. Taking into account
-        // that predicates are combined via `And`, we can apply such filters only
-        // once at the position 0.
-        0
-      } else {
-        // readSchema must contain attributes of all filters.
-        // Accordingly, `fieldIndex()` returns a valid index always.
-        refs.map(requiredSchema.fieldIndex).max
+    // Nothing to group when the required schema has no fields, for example `SELECT COUNT(*)`.
+    // Filters w/o references have no position to be applied at, and `skipRow()` is never called.
+    if (len > 0) {
+      for (filter <- filters) {
+        val refs = filter.references
+        val index = if (refs.isEmpty) {
+          // For example, `AlwaysTrue` and `AlwaysFalse` doesn't have any references
+          // Filters w/o refs always return the same result. Taking into account
+          // that predicates are combined via `And`, we can apply such filters only
+          // once at the position 0.
+          0
+        } else {
+          // readSchema must contain attributes of all filters.
+          // Accordingly, `fieldIndex()` returns a valid index always.
+          refs.map(requiredSchema.fieldIndex).max
+        }
+        groupedFilters(index) :+= filter
       }
-      groupedFilters(index) :+= filter
     }
     if (len > 0 && groupedFilters(0).nonEmpty) {
       // We assume that filters w/o refs like `AlwaysTrue` and `AlwaysFalse`

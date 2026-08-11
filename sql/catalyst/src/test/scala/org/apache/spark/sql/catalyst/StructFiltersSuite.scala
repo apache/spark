@@ -58,6 +58,14 @@ abstract class StructFiltersSuite extends SparkFunSuite {
     case _ => StructType.fromDDL(str)
   }
 
+  test("SPARK-58484: reference-free filters with an empty required schema") {
+    // Filters w/o references are not excluded by an empty required schema.
+    Seq(AlwaysTrue, AlwaysFalse).foreach { filter =>
+      val structFilters = createFilters(Seq(filter), getSchema(""))
+      structFilters.reset()
+    }
+  }
+
   test("skipping rows") {
     def check(
       requiredSchema: String = "i INTEGER, d DOUBLE",

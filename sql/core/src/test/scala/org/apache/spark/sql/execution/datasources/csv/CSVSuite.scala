@@ -4072,6 +4072,14 @@ abstract class CSVSuite
       }
     }
   }
+
+  test("SPARK-58484: count with a pushed filter that has no column references") {
+    withTable("m") {
+      sql("CREATE TABLE m(c0 INT) USING CSV")
+      sql("INSERT INTO m VALUES (1)")
+      checkAnswer(sql("SELECT COUNT(*) FROM m WHERE (SELECT BOOL_OR(true) FROM m)"), Row(1))
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
