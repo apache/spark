@@ -164,7 +164,8 @@ object WindowBenchmark extends SqlBasedBenchmark {
         rows: Long,
         halfW: Int,
         stressMark: String,
-        labelSuffix: String = ""): Unit = {
+        labelSuffix: String = "",
+        withSegBs: Boolean = true): Unit = {
       val frame = frameFor(halfW)
       val dNaive = digest(aggFn, frame, SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false")
       val dSeg = digest(
@@ -183,15 +184,17 @@ object WindowBenchmark extends SqlBasedBenchmark {
       }
 
       // Section A (W=1001) also verifies non-default block size at this window width.
-      val dSegBs = digest(
-        aggFn,
-        frame,
-        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
-        SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
-        SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "256")
-      require(
-        dNaive == dSegBs,
-        s"$aggFn segtree bs=256 digest mismatch: naive=$dNaive segBs=$dSegBs")
+      if (withSegBs) {
+        val dSegBs = digest(
+          aggFn,
+          frame,
+          SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
+          SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+          SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "256")
+        require(
+          dNaive == dSegBs,
+          s"$aggFn segtree bs=256 digest mismatch: naive=$dNaive segBs=$dSegBs")
+      }
 
       val W = 2 * halfW + 1
       val benchmark = new Benchmark(
@@ -203,8 +206,11 @@ object WindowBenchmark extends SqlBasedBenchmark {
       // in allCaseNames and incorrect metric merging in the Memory/Spill trailer.
       val nNaive = s"$aggFn naive (current, baseline)$labelSuffix"
       val nSeg = s"$aggFn segtree (default)$labelSuffix"
+      allCaseNames ++= Seq(nNaive, nSeg)
       val nSegBs = s"$aggFn segtree (blockSize=256)$labelSuffix"
-      allCaseNames ++= Seq(nNaive, nSeg, nSegBs)
+      if (withSegBs) {
+        allCaseNames += nSegBs
+      }
 
       benchmark.addCase(nNaive, numIters = iters) { _ =>
         currentCase = nNaive
@@ -220,13 +226,15 @@ object WindowBenchmark extends SqlBasedBenchmark {
           spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
         }
       }
-      benchmark.addCase(nSegBs, numIters = iters) { _ =>
-        currentCase = nSegBs
-        withSQLConf(
-          SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
-          SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
-          SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "256") {
-          spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
+      if (withSegBs) {
+        benchmark.addCase(nSegBs, numIters = iters) { _ =>
+          currentCase = nSegBs
+          withSQLConf(
+            SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
+            SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+            SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "256") {
+            spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
+          }
         }
       }
       if (isMinOrMax) {
@@ -413,9 +421,8 @@ object WindowBenchmark extends SqlBasedBenchmark {
         runBenchmark("SMOKE: Section A MAX") {
           runSectionA("MAX", ITERS_STRESS, smokeRowCount, smokeHalfW, "")
         }
-        setupIntTable(B_N_W10)
         runBenchmark("SMOKE: Section B SUM W sweep point") {
-          runSectionB(5, stressBs = false, smokeRowCount, ITERS_STRESS, " (stress)")
+          runSectionB(smokeHalfW, stressBs = smokeHalfW >= 2000, smokeRowCount, ITERS_STRESS, "")
         }
       } else {
         setupIntTable(A_N_INT)
@@ -498,22 +505,22 @@ object WindowBenchmark extends SqlBasedBenchmark {
         // gate is needed before enabling the conf by default.
         setupIntTable(H_N)
         runBenchmark("Section H - MIN W=1 scaling (2M rows)") {
-          runSectionA("MIN", ITERS_STRESS, H_N, 0, "", " [H W=1]")
+          runSectionA("MIN", ITERS_STRESS, H_N, 0, "", " [H W=1]", withSegBs = false)
         }
         runBenchmark("Section H - MAX W=1 scaling (2M rows)") {
-          runSectionA("MAX", ITERS_STRESS, H_N, 0, "", " [H W=1]")
+          runSectionA("MAX", ITERS_STRESS, H_N, 0, "", " [H W=1]", withSegBs = false)
         }
         runBenchmark("Section H - MIN W=3 scaling (2M rows)") {
-          runSectionA("MIN", ITERS_STRESS, H_N, 1, "", " [H W=3]")
+          runSectionA("MIN", ITERS_STRESS, H_N, 1, "", " [H W=3]", withSegBs = false)
         }
         runBenchmark("Section H - MAX W=3 scaling (2M rows)") {
-          runSectionA("MAX", ITERS_STRESS, H_N, 1, "", " [H W=3]")
+          runSectionA("MAX", ITERS_STRESS, H_N, 1, "", " [H W=3]", withSegBs = false)
         }
         runBenchmark("Section H - MIN W=11 scaling (stress, 2M rows)") {
-          runSectionA("MIN", ITERS_STRESS, H_N, 5, " (stress)", " [H W=11]")
+          runSectionA("MIN", ITERS_STRESS, H_N, 5, " (stress)", " [H W=11]", withSegBs = false)
         }
         runBenchmark("Section H - MAX W=11 scaling (stress, 2M rows)") {
-          runSectionA("MAX", ITERS_STRESS, H_N, 5, " (stress)", " [H W=11]")
+          runSectionA("MAX", ITERS_STRESS, H_N, 5, " (stress)", " [H W=11]", withSegBs = false)
         }
       }
 

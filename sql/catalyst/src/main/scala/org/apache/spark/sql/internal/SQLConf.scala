@@ -4845,7 +4845,7 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("Use O(N) monotonic deque for sliding window MIN/MAX. It replaces the O(N * W) " +
         "naive loop and O(N log W) segment tree with an optimized ring-buffer deque.")
-      .version("4.2.0")
+      .version("4.4.0")
       .booleanConf
       .createWithDefault(false)
 
