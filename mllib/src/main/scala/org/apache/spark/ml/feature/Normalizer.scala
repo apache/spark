@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, SQLDataTypes, Vector, Vectors,
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, SQLDataTypes, Vector, Vectors,
   VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamValidators}
 import org.apache.spark.ml.util._
@@ -65,14 +65,22 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         vector match {
           case DenseVector(vs) =>
             val values = vs.clone()
-            val normalized = Vectors.dense(values)
-            BLAS.scal(1.0 / norm, normalized)
-            normalized
+            val size = values.length
+            var i = 0
+            while (i < size) {
+              values(i) /= norm
+              i += 1
+            }
+            Vectors.dense(values)
           case SparseVector(size, ids, vs) =>
             val values = vs.clone()
-            val normalized = Vectors.sparse(size, ids, values)
-            BLAS.scal(1.0 / norm, normalized)
-            normalized
+            val nnz = values.length
+            var i = 0
+            while (i < nnz) {
+              values(i) /= norm
+              i += 1
+            }
+            Vectors.sparse(size, ids, values)
           case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
         }
       } else {
