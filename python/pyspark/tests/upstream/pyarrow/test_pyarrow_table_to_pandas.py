@@ -91,12 +91,15 @@ class _PyArrowTableToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
     def _to_pandas_cell(self, table, **to_pandas_kwargs) -> str:
         """
         Convert ``table`` via ``to_pandas(**to_pandas_kwargs)`` and format the result
-        as a golden-file cell, returning ``ERR@<ExceptionClass>`` if it raises.
+        as a golden-file cell, returning ``ERR@<ExceptionClass>`` if the conversion
+        raises. Only the conversion is guarded: a formatting error is a test bug, not
+        a conversion signal, so it propagates instead of masquerading as ``ERR@``.
         """
         try:
-            return self._repr_dataframe(table.to_pandas(**to_pandas_kwargs))
+            pdf = table.to_pandas(**to_pandas_kwargs)
         except Exception as e:
             return f"ERR@{type(e).__name__}"
+        return self._repr_dataframe(pdf)
 
     def _structural_tables(self):
         """Assembly shapes and empty edges (no temporal coercion involved)."""
