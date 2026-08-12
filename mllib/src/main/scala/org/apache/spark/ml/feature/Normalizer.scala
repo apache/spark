@@ -59,6 +59,7 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     vector => {
       val norm = Vectors.norm(vector, localP)
       if (norm != 0.0) {
+        val scale = 1.0 / norm
         // For dense vector, we've to allocate new memory for new output vector.
         // However, for sparse vector, the `index` array will not be changed,
         // so we can re-use it to save memory.
@@ -68,7 +69,7 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
             val size = values.length
             var i = 0
             while (i < size) {
-              values(i) /= norm
+              values(i) *= scale
               i += 1
             }
             Vectors.dense(values)
@@ -77,7 +78,7 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
             val nnz = values.length
             var i = 0
             while (i < nnz) {
-              values(i) /= norm
+              values(i) *= scale
               i += 1
             }
             Vectors.sparse(size, ids, values)
