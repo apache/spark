@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.catalog
 
 import org.mockito.ArgumentMatchers.{any, eq => mockEq}
-import org.mockito.Mockito.{mock, verify, when, withSettings}
+import org.mockito.Mockito.{mock, verify, when}
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, TimeTravelSpec}
@@ -28,12 +28,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CatalogV2UtilSuite extends SparkFunSuite {
 
-  private def catalogWithStateOptions(keys: java.util.Set[String]): SupportsTableStateOptions = {
-    new SupportsTableStateOptions {
-      override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
-      override def name(): String = "state-options"
-      override def tableStateOptionKeys(): java.util.Set[String] = keys
-    }
+  private def catalogWithStateOptions(keys: java.util.Set[String]): TableCatalog = {
+    val catalog = mock(classOf[TableCatalog])
+    when(catalog.tableStateOptionKeys()).thenReturn(keys)
+    catalog
   }
 
   // CatalogV2Util.getTable routes through the options-aware TableCatalog.loadTable, whose default
@@ -42,6 +40,7 @@ class CatalogV2UtilSuite extends SparkFunSuite {
   // null) that we then `verify`.
   private def mockCatalogWithRealDispatch(): TableCatalog = {
     val testCatalog = mock(classOf[TableCatalog])
+    when(testCatalog.tableStateOptionKeys()).thenCallRealMethod()
     when(testCatalog.loadTable(
       any[Identifier], any[TableContext], any[CaseInsensitiveStringMap])).thenCallRealMethod()
     testCatalog
@@ -123,10 +122,7 @@ class CatalogV2UtilSuite extends SparkFunSuite {
   }
 
   test("getTable forwards only declared table-state options") {
-    val catalogBase = mock(
-      classOf[TableCatalog],
-      withSettings().extraInterfaces(classOf[SupportsTableStateOptions]))
-    val catalog = catalogBase.asInstanceOf[TableCatalog with SupportsTableStateOptions]
+    val catalog = mock(classOf[TableCatalog])
     when(catalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("snapshot"))
     val ident = mock(classOf[Identifier])
     val options = new CaseInsensitiveStringMap(
@@ -141,8 +137,9 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       mockEq(expected))
   }
 
-  test("getTable forwards no options to catalogs without table-state support") {
+  test("getTable forwards no options when a catalog declares no table-state options") {
     val catalog = mock(classOf[TableCatalog])
+    when(catalog.tableStateOptionKeys()).thenCallRealMethod()
     val ident = mock(classOf[Identifier])
     val options = new CaseInsensitiveStringMap(
       java.util.Map.of("snapshot", "s1", "split-size", "5"))
@@ -194,8 +191,9 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(lowerCaseValue != upperCaseValue)
   }
 
-  test("extractTableStateOptions returns no options for catalogs without capability") {
-    val catalog = mock(classOf[CatalogPlugin])
+  test("extractTableStateOptions returns no options by default") {
+    val catalog = mock(classOf[TableCatalog])
+    when(catalog.tableStateOptionKeys()).thenCallRealMethod()
     val options = new CaseInsensitiveStringMap(
       java.util.Map.of("branch", "Main", "split-size", "5"))
 

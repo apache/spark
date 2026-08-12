@@ -21,7 +21,7 @@ import java.net.URI
 import java.util.Collections
 
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, when, withSettings}
+import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.SparkUnsupportedOperationException
@@ -38,7 +38,6 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.connector.catalog.SupportsTableStateOptions
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
@@ -3582,11 +3581,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         Int) = {
       val currentTable = newTable("table-id")
       val cachedTable = newTable("table-id")
-      val catalogBase = mock(
-        classOf[TableCatalog],
-        withSettings().extraInterfaces(classOf[SupportsTableStateOptions]))
-      val catalog = catalogBase
-        .asInstanceOf[TableCatalog with SupportsTableStateOptions]
+      val catalog = mock(classOf[TableCatalog])
       when(catalog.name()).thenReturn("statecat")
       when(catalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("state"))
       var loads = 0

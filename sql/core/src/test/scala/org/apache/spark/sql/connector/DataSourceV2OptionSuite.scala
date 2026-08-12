@@ -35,7 +35,6 @@ import org.apache.spark.sql.connector.catalog.{
   InMemoryBaseTable,
   InMemoryCatalog,
   InMemoryRowLevelOperationTableCatalog,
-  SupportsTableStateOptions,
   Table,
   TableChange,
   TableWritePrivilege,
@@ -54,8 +53,7 @@ class LoadCountingInMemoryCatalog extends InMemoryCatalog {
   }
 }
 
-class StateAwareInMemoryCatalog extends LoadCountingInMemoryCatalog
-  with SupportsTableStateOptions {
+class StateAwareInMemoryCatalog extends LoadCountingInMemoryCatalog {
   // Include Spark's internal marker so the write-context test detects if it leaks before state
   // option projection. Production catalogs should declare only raw user option keys.
   override def tableStateOptionKeys(): util.Set[String] =
@@ -570,7 +568,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("execution refresh filters load options for catalogs without state-option support") {
+  test("execution refresh filters load options when a catalog declares no state options") {
     registerCatalog("loadcounting", classOf[LoadCountingInMemoryCatalog])
     val loadCountingCatalog =
       catalog("loadcounting").asInstanceOf[LoadCountingInMemoryCatalog]
@@ -596,14 +594,14 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("catalogs without state-option support share table state across option bags") {
+  test("catalogs with no declared state options share table state across option bags") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
       inMemoryCatalog.resetLoadTableCalls()
 
-      // The catalog does not classify its options, so none of them affect table state.
+      // The catalog declares no table-state option keys, so none of them affect table state.
       val df = sql(s"SELECT a.id FROM $t1 WITH (`split-size` = 5) a " +
         s"JOIN $t1 WITH (`split-size` = 9) b ON a.id = b.id")
       df.queryExecution.analyzed
@@ -1202,7 +1200,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("recaching a non-relation plan filters table load options") {
+  test("recaching a filtered plan filters table load options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -1219,9 +1217,9 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         spark.catalog.refreshTable(t1)
 
         val recacheLoads = inMemoryCatalog.loadTableCalls
-        assert(recacheLoads.nonEmpty, "expected non-relation recache to reload the table")
+        assert(recacheLoads.nonEmpty, "expected filtered recache to reload the table")
         assert(recacheLoads.forall(_._2.isEmpty),
-          s"expected non-relation recache to filter split-size, got: $recacheLoads")
+          s"expected filtered recache to filter split-size, got: $recacheLoads")
 
         val samePlan = spark.read.option("split-size", "5").table(t1).filter("id > 0")
         assert(spark.sharedState.cacheManager.lookupCachedData(samePlan).isDefined,

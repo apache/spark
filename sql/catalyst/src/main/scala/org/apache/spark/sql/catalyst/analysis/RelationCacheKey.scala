@@ -22,9 +22,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /**
  * Key for the per-query relation cache in [[AnalysisContext]], shared by [[RelationResolution]].
  *
- * Options are part of the key because a finalized relation preserves each reference's complete
- * option map for scan planning. References with different option maps may share a pinned `Table`,
- * but must not share the same cached relation.
+ * The complete option map is part of the key because the resolved relation carries it into scan
+ * and write planning. References may reuse the same `Table` when their table-state options match,
+ * but references with different options must not reuse the same cached relation.
  */
 private[sql] case class RelationCacheKey(
     nameParts: Seq[String],

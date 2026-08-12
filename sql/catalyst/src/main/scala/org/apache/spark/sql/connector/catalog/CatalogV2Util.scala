@@ -487,18 +487,15 @@ private[sql] object CatalogV2Util {
    */
   def extractTableStateOptions(
       catalog: CatalogPlugin,
-      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = catalog match {
-    case supports: SupportsTableStateOptions =>
-      val stateKeys = supports.tableStateOptionKeys().asScala
-        .map(_.toLowerCase(Locale.ROOT))
-        .toSet
-      val projected = options.entrySet().asScala.collect {
-        case entry if stateKeys.contains(entry.getKey.toLowerCase(Locale.ROOT)) =>
-          entry.getKey -> entry.getValue
-      }.toMap
-      new CaseInsensitiveStringMap(projected.asJava)
-    case _ =>
-      CaseInsensitiveStringMap.empty()
+      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val stateKeys = catalog.asTableCatalog.tableStateOptionKeys().asScala
+      .map(_.toLowerCase(Locale.ROOT))
+      .toSet
+    val projected = options.entrySet().asScala.collect {
+      case entry if stateKeys.contains(entry.getKey.toLowerCase(Locale.ROOT)) =>
+        entry.getKey -> entry.getValue
+    }.toMap
+    new CaseInsensitiveStringMap(projected.asJava)
   }
 
   def getTable(
