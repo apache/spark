@@ -34,7 +34,9 @@ from pandas.plotting._matplotlib import KdePlot as PandasKdePlot
 from pandas.plotting._matplotlib import LinePlot as PandasLinePlot
 from pandas.plotting._matplotlib import PiePlot as PandasPiePlot
 from pandas.plotting._matplotlib import ScatterPlot as PandasScatterPlot
-from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot
+from pandas.plotting._matplotlib.core import (
+    MPLPlot as PandasMPLPlot,  # type: ignore[import-not-found]
+)
 
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas.plot import (
