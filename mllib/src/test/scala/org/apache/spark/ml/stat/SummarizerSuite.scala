@@ -572,6 +572,52 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
   }
 
+  test("summarizer buffer min/max with NaN values (SPARK-20711)") {
+    val summarizer = new SummarizerBuffer()
+      .add(Vectors.dense(
+        Double.NaN, Double.NaN, Double.NaN, 0.0, Double.MinValue, Double.MaxValue))
+      .add(Vectors.dense(
+        Double.NaN, -1.0, 0.0, 0.0, Double.MinValue, Double.MaxValue))
+      .add(Vectors.dense(
+        Double.NaN, 2.0, Double.NaN, 0.0, Double.MinValue, Double.MaxValue))
+
+    val min = summarizer.min
+    val max = summarizer.max
+    assert(min(0).isNaN)
+    assert(max(0).isNaN)
+    assert(min(1) === -1.0)
+    assert(max(1) === 2.0)
+    assert(min(2) === 0.0)
+    assert(max(2) === 0.0)
+    assert(min(3) === 0.0)
+    assert(max(3) === 0.0)
+    assert(min(4) === Double.MinValue)
+    assert(max(4) === Double.MinValue)
+    assert(min(5) === Double.MaxValue)
+    assert(max(5) === Double.MaxValue)
+
+    def create(values: Double*): SummarizerBuffer = {
+      new SummarizerBuffer().add(Vectors.dense(values.toArray))
+    }
+
+    val mergedSummarizers = Seq(
+      create(Double.NaN, Double.NaN, Double.NaN)
+        .merge(create(Double.NaN, 2.0, 0.0)),
+      create(Double.NaN, 2.0, 0.0)
+        .merge(create(Double.NaN, Double.NaN, Double.NaN)))
+
+    mergedSummarizers.foreach { merged =>
+      val mergedMin = merged.min
+      val mergedMax = merged.max
+      assert(mergedMin(0).isNaN)
+      assert(mergedMax(0).isNaN)
+      assert(mergedMin(1) === 2.0)
+      assert(mergedMax(1) === 2.0)
+      assert(mergedMin(2) === 0.0)
+      assert(mergedMax(2) === 0.0)
+    }
+  }
+
   test("support new metrics: sum, std, numFeatures, sumL2, weightSum") {
     val summarizer1 = new SummarizerBuffer()
       .add(Vectors.dense(10.0, -10.0), 1e10)
