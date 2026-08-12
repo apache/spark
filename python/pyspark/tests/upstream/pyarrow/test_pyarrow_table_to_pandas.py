@@ -78,9 +78,11 @@ class _PyArrowTableToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         ``repr_pandas_series_value`` for the Series case.
 
         This deliberately does NOT go through ``repr_value``/``repr_pandas_value``
-        (which use ``to_json``): Table.to_pandas() can yield dates far outside the
-        nanosecond range (e.g. date_as_object=False on a year-9999 date), which
-        ``DataFrame.to_json`` cannot serialize (OverflowError). tolist() is safe.
+        (which use ``to_json``). With the default date_as_object=True a far-future
+        date (year 9999) comes back as an object column of Python ``datetime.date``
+        objects, and ``DataFrame.to_json`` overflows converting each to an epoch
+        nanosecond int (OverflowError); tolist() returns the objects as-is, so
+        nothing overflows.
         """
         body = str({name: col.tolist() for name, col in df.items()}).replace("\n", " ")
         schema = ", ".join(f"{t} {d.name}" for t, d in df.dtypes.items())
