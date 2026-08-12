@@ -179,7 +179,7 @@ class StreamRealTimeModeCoexistenceSuite extends StreamRealTimeModeSuiteBase {
       val sawBothRunning = new AtomicBoolean(false)
       val listener = new SparkListener {
         override def onJobStart(e: SparkListenerJobStart): Unit = {
-          val qid = e.properties.getProperty(StreamExecution.QUERY_ID_KEY)
+          val qid = Option(e.properties).map(_.getProperty(StreamExecution.QUERY_ID_KEY)).orNull
           if (qid != null && qid == idA.get()) e.stageIds.foreach(stagesA.add(_))
           else if (qid != null && qid == idB.get()) e.stageIds.foreach(stagesB.add(_))
         }
@@ -215,30 +215,27 @@ class StreamRealTimeModeCoexistenceSuite extends StreamRealTimeModeSuiteBase {
         eventually(timeout(60.seconds)) {
           assert(handleB.isActive, "second RTM query failed to start")
         }
-        // Keep query B continuously fed so its pipelined group stays actively scheduled while query
-        // A runs, rather than going idle between batches.
-        inputB.addData(("p", 1), ("q", 1))
-        eventually(timeout(60.seconds)) {
-          assert(handleB.exception.isEmpty,
-            s"second RTM query failed: ${handleB.exception.map(_.getMessage).getOrElse("")}")
-          assert(handleB.recentProgress.map(_.sources.map(_.numInputRows).sum).sum > 0,
-            "second RTM query has not processed any input yet")
-        }
         val execB = handleB.asInstanceOf[StreamingQueryWrapper].streamingQuery
 
         testStream(queryA, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
           AddData(inputA, ("x", 1), ("y", 1), ("x", 2)),
           StartStream(),
+          // StartStream only launches the query; its id is not known until it is running. Record it
+          // here, then drive a SECOND batch below so the listener observes a batch of query A whose
+          // jobs all start after idA is set (the first batch's jobs may fire before this and be
+          // dropped from stagesA). This mirrors the mitigation in the sibling co-scheduling test.
           Execute(q => idA.set(q.id.toString)),
           CheckAnswerWithTimeout(60000, "x", "y"),
+          AddData(inputA, ("z", 1), ("w", 1)),
+          CheckAnswerWithTimeout(60000, "x", "y", "z", "w"),
           Execute { q =>
-            // Both queries' pipelined groups must be running at the same time. Keep feeding B so it
-            // keeps scheduling stages, and wait until the listener has observed A and B stages
-            // running simultaneously.
+            assert(handleB.isActive, "the second RTM query must still be running")
+            assert(handleB.exception.isEmpty,
+              s"second RTM query failed: ${handleB.exception.map(_.getMessage).getOrElse("")}")
+            // Query A's pipelined group is running now. Feed query B so it keeps scheduling its own
+            // group (an idle RTM query can run empty batches), and wait until the listener has seen
+            // a stage of A and a stage of B running at the same time.
             eventually(timeout(60.seconds)) {
-              assert(handleB.isActive, "the second RTM query must still be running")
-              assert(handleB.exception.isEmpty,
-                s"second RTM query failed: ${handleB.exception.map(_.getMessage).getOrElse("")}")
               inputB.addData(("p", 1), ("q", 1))
               assert(sawBothRunning.get(),
                 "expected a stage of query A and a stage of query B to run concurrently")
