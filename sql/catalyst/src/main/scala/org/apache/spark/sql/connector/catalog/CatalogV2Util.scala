@@ -482,7 +482,8 @@ private[sql] object CatalogV2Util {
     }
 
   /**
-   * Extracts the options that may select table state from a complete option map.
+   * Extracts the options that may select table state from a complete option map. These are the
+   * only options passed to `loadTable` and used to identify a pinned table state.
    */
   def extractTableStateOptions(
       catalog: CatalogPlugin,
@@ -512,7 +513,8 @@ private[sql] object CatalogV2Util {
       case None => null
     }
     val context = new TableContext(timeTravel, parseWritePrivileges(writePrivilegesString))
-    catalog.asTableCatalog.loadTable(ident, context, options)
+    val stateOptions = extractTableStateOptions(catalog, options)
+    catalog.asTableCatalog.loadTable(ident, context, stateOptions)
   }
 
   /**

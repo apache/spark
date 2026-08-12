@@ -56,7 +56,10 @@ class LoadCountingInMemoryCatalog extends InMemoryCatalog {
 
 class StateAwareInMemoryCatalog extends LoadCountingInMemoryCatalog
   with SupportsTableStateOptions {
-  override def tableStateOptionKeys(): util.Set[String] = util.Set.of("snapshot")
+  // Include Spark's internal marker so the write-context test detects if it leaks before state
+  // option projection. Production catalogs should declare only raw user option keys.
+  override def tableStateOptionKeys(): util.Set[String] =
+    util.Set.of("snapshot", UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
 }
 
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
@@ -79,6 +82,16 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         f(catalog("statecat").asInstanceOf[StateAwareInMemoryCatalog], tableName)
       }
     }
+  }
+
+  private def assertOnlySnapshotOptions(
+      catalog: StateAwareInMemoryCatalog,
+      expectedSnapshot: String): Unit = {
+    val loadOptions = catalog.loadTableCalls.map(_._2)
+    assert(loadOptions.nonEmpty, "expected at least one options-aware table load")
+    assert(loadOptions.forall { options =>
+      options.size() == 1 && options.get("snapshot") == expectedSnapshot
+    }, s"expected only snapshot=$expectedSnapshot to be forwarded, got: $loadOptions")
   }
 
   test("SPARK-36680: Supports Dynamic Table Options for SQL Select") {
@@ -477,44 +490,45 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("options are forwarded to loadTable - DataFrame API") {
-    val t1 = s"${catalogAndNamespace}table"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string)")
-      spark.read.option("customOption", "customValue").table(t1).collect()
+  test("only table-state options are forwarded to loadTable - DataFrame API") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      stateCatalog.resetLoadTableCalls()
+      spark.read
+        .option("snapshot", "s1")
+        .option("customOption", "customValue")
+        .table(tableName)
+        .collect()
 
-      val opts = inMemoryCatalog.lastLoadTableOptions
-      assert(opts.isDefined)
-      assert(opts.get.get("customOption") === "customValue")
+      assertOnlySnapshotOptions(stateCatalog, "s1")
     }
   }
 
-  test("options are forwarded to loadTable - SQL") {
-    val t1 = s"${catalogAndNamespace}table"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string)")
-      sql(s"SELECT * FROM $t1 WITH ('customOption' = 'customValue')").collect()
+  test("only table-state options are forwarded to loadTable - SQL") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      stateCatalog.resetLoadTableCalls()
+      sql(s"SELECT * FROM $tableName " +
+        "WITH ('snapshot' = 's1', 'customOption' = 'customValue')").collect()
 
-      val opts = inMemoryCatalog.lastLoadTableOptions
-      assert(opts.isDefined)
-      assert(opts.get.get("customOption") === "customValue")
+      assertOnlySnapshotOptions(stateCatalog, "s1")
     }
   }
 
-  test("options are forwarded to loadTable - DataStreamReader") {
-    val t1 = s"${catalogAndNamespace}table"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+  test("only table-state options are forwarded to loadTable - DataStreamReader") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      stateCatalog.resetLoadTableCalls()
       // Trigger analysis of the streaming relation.
-      spark.readStream.option("customOption", "customValue").table(t1).queryExecution.analyzed
+      spark.readStream
+        .option("snapshot", "s1")
+        .option("customOption", "customValue")
+        .table(tableName)
+        .queryExecution
+        .analyzed
 
-      val opts = inMemoryCatalog.lastLoadTableOptions
-      assert(opts.isDefined)
-      assert(opts.get.get("customOption") === "customValue")
+      assertOnlySnapshotOptions(stateCatalog, "s1")
     }
   }
 
-  test("options are forwarded to loadTable alongside time travel") {
+  test("time travel is passed in TableContext and excluded from load options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -535,29 +549,28 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       val opts = inMemoryCatalog.lastLoadTableOptions
       assert(opts.isDefined)
-      assert(opts.get.get("customOption") === "customValue")
-      assert(opts.get.get("versionAsOf") === "v1")
+      assert(opts.get.isEmpty)
     }
   }
 
   test("write privileges are carried in TableContext, internal key stripped") {
-    val t1 = s"${catalogAndNamespace}table"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string)")
-      sql(s"INSERT INTO $t1 VALUES (1, 'a')")
+    withStateAwareTable { (stateCatalog, tableName) =>
+      stateCatalog.resetLoadTableCalls()
+      sql(s"INSERT INTO $tableName WITH ('snapshot' = 's1') VALUES (3, 'c')")
 
-      val ctx = inMemoryCatalog.lastTableContext
+      val ctx = stateCatalog.lastTableContext
       assert(ctx.isDefined)
       assert(!ctx.get.writePrivileges().isEmpty)
 
-      val opts = inMemoryCatalog.lastLoadTableOptions
+      val opts = stateCatalog.lastLoadTableOptions
       assert(opts.isDefined)
+      assert(opts.get.get("snapshot") === "s1")
       // The internal write-privileges marker must not leak to the connector as a user option.
       assert(opts.get.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES) === null)
     }
   }
 
-  test("SPARK-58389: execution refresh forwards options on a plain table read") {
+  test("execution refresh filters load options for catalogs without state-option support") {
     registerCatalog("loadcounting", classOf[LoadCountingInMemoryCatalog])
     val loadCountingCatalog =
       catalog("loadcounting").asInstanceOf[LoadCountingInMemoryCatalog]
@@ -570,13 +583,13 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       spark.read.option("split-size", "5").table(t1).collect()
 
-      // Both analysis and the execution-time refresh must enter through the options-aware
-      // overload. Each then delegates to the single-argument overload in this test catalog.
+      // Both analysis and the execution-time refresh enter through the options-aware overload,
+      // but this catalog declares no table-state options, so each receives an empty option map.
       val optionAwareLoads = loadCountingCatalog.loadTableCalls
-        .map(_._2.get("split-size"))
-        .filter(_ != null)
-      assert(optionAwareLoads === Seq("5", "5"),
-        s"expected analysis and refresh to forward split-size=5, got: $optionAwareLoads")
+      assert(optionAwareLoads.size === 2,
+        s"expected one analysis load and one refresh load, got: $optionAwareLoads")
+      assert(optionAwareLoads.forall(_._2.isEmpty),
+        s"expected analysis and refresh to filter split-size, got: $optionAwareLoads")
       assert(loadCountingCatalog.singleArgLoads.get() === 2,
         s"expected two delegated single-argument loads, got: " +
           loadCountingCatalog.singleArgLoads.get())
@@ -596,23 +609,21 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       df.queryExecution.analyzed
 
       // The first reference loads the table and the second reuses that table state.
-      val loadedOptions = inMemoryCatalog.loadTableCalls
-        .map(_._2.get("split-size"))
-        .filter(_ != null)
-        .sorted
-      assert(loadedOptions === Seq("5"),
-        s"expected the second option bag to reuse the loaded table state, got: $loadedOptions")
+      val analysisLoads = inMemoryCatalog.loadTableCalls
+      assert(analysisLoads.size === 1,
+        s"expected the second option bag to reuse the loaded table state, got: $analysisLoads")
+      assert(analysisLoads.head._2.isEmpty,
+        s"expected no table-state options to be forwarded, got: $analysisLoads")
 
       // The execution-time refresh loads the first reference and reuses its table state for the
       // second reference.
       inMemoryCatalog.resetLoadTableCalls()
       df.collect()
-      val refreshedOptions = inMemoryCatalog.loadTableCalls
-        .map(_._2.get("split-size"))
-        .filter(_ != null)
-        .sorted
-      assert(refreshedOptions === Seq("5"),
-        s"expected refresh to share table state across option bags, got: $refreshedOptions")
+      val refreshLoads = inMemoryCatalog.loadTableCalls
+      assert(refreshLoads.size === 1,
+        s"expected refresh to share table state across option bags, got: $refreshLoads")
+      assert(refreshLoads.head._2.isEmpty,
+        s"expected refresh to filter scan options, got: $refreshLoads")
 
       // Each scan also keeps its own option end-to-end (neither reference inherits the other's).
       val splitSizes = df.queryExecution.optimizedPlan.collect {
@@ -642,6 +653,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       val analysisLoads = stateCatalog.loadTableCalls.filter(_._2.get("snapshot") == "s1")
       assert(analysisLoads.size == 1,
         s"expected one catalog load for state s1 during analysis, got: $analysisLoads")
+      assert(analysisLoads.head._2.size() == 1,
+        s"expected scan options to be filtered during analysis, got: $analysisLoads")
 
       stateCatalog.resetLoadTableCalls()
       stateCatalog.singleArgLoads.set(0)
@@ -650,6 +663,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       val refreshLoads = stateCatalog.loadTableCalls.filter(_._2.get("snapshot") == "s1")
       assert(refreshLoads.size == 1,
         s"expected one catalog load for state s1 during refresh, got: $refreshLoads")
+      assert(refreshLoads.head._2.size() == 1,
+        s"expected scan options to be filtered during refresh, got: $refreshLoads")
       val refreshedRelations = df.queryExecution.optimizedPlan.collect {
         case s: DataSourceV2ScanRelation if s.relation.options.containsKey("split-size") =>
           s.relation
@@ -872,7 +887,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert(stateCatalog.loadTableCalls.count(
         _._1.writePrivileges().contains(TableWritePrivilege.INSERT)) == 1)
       assert(stateCatalog.loadTableCalls.forall(_._2.get("snapshot") == "s1"))
-      assert(stateCatalog.loadTableCalls.forall(_._2.get("split-size") == "5"))
+      assert(stateCatalog.loadTableCalls.forall(_._2.size() == 1))
     }
   }
 
@@ -926,7 +941,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert(stateCatalog.singleArgLoads.get() == 2)
       assert(stateCatalog.loadTableCalls.size == 1)
       assert(stateCatalog.loadTableCalls.head._2.get("snapshot") == "s1")
-      assert(stateCatalog.loadTableCalls.head._2.get("split-size") == "5")
+      assert(stateCatalog.loadTableCalls.head._2.size() == 1)
     }
   }
 
@@ -999,7 +1014,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert(stateCatalog.singleArgLoads.get() == 1)
       assert(stateCatalog.loadTableCalls.size == 1)
       assert(stateCatalog.loadTableCalls.head._2.get("snapshot") == "s1")
-      assert(stateCatalog.loadTableCalls.head._2.get("split-size") == "5")
+      assert(stateCatalog.loadTableCalls.head._2.size() == 1)
     }
   }
 
@@ -1034,7 +1049,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
               stateCatalog.singleArgLoads.get())
           assert(stateCatalog.loadTableCalls.size == 1)
           assert(stateCatalog.loadTableCalls.head._2.get("snapshot") == "s1")
-          assert(stateCatalog.loadTableCalls.head._2.get("split-size") == "5")
+          assert(stateCatalog.loadTableCalls.head._2.size() == 1)
         } finally {
           cached.unpersist()
         }
@@ -1055,18 +1070,20 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         s"JOIN $t1 WITH (`split-size` = 5) b ON a.id = b.id")
       df.queryExecution.analyzed
 
-      val splitSizeLoads = inMemoryCatalog.loadTableCalls
-        .count(_._2.get("split-size") === "5")
-      assert(splitSizeLoads === 1,
-        s"expected a single loadTable for identical option bags, got: $splitSizeLoads")
+      val analysisLoads = inMemoryCatalog.loadTableCalls
+      assert(analysisLoads.size === 1,
+        s"expected a single loadTable for identical option bags, got: $analysisLoads")
+      assert(analysisLoads.head._2.isEmpty,
+        s"expected scan options to be filtered during analysis, got: $analysisLoads")
 
       // The refresh phase also reuses one load for repeated references with identical options.
       inMemoryCatalog.resetLoadTableCalls()
       df.collect()
-      val refreshedSplitSizeLoads = inMemoryCatalog.loadTableCalls
-        .count(_._2.get("split-size") === "5")
-      assert(refreshedSplitSizeLoads === 1,
-        s"expected refresh to load identical option bags once, got: $refreshedSplitSizeLoads")
+      val refreshLoads = inMemoryCatalog.loadTableCalls
+      assert(refreshLoads.size === 1,
+        s"expected refresh to load identical option bags once, got: $refreshLoads")
+      assert(refreshLoads.head._2.isEmpty,
+        s"expected scan options to be filtered during refresh, got: $refreshLoads")
     }
   }
 
@@ -1145,7 +1162,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: recaching preserves and forwards table options") {
+  test("recaching preserves relation options and filters table load options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -1156,14 +1173,15 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       try {
         assert(cached.count() === 2)
 
-        // Refreshing a cached table rebuilds its CacheManager entry. The rebuilt relation must
-        // retain the original options, and the catalog must use them when it reloads the Table.
+        // Refreshing a cached table rebuilds its CacheManager entry. The rebuilt relation retains
+        // the original options, but this catalog declares no state options for the table reload.
         inMemoryCatalog.resetLoadTableCalls()
         spark.catalog.refreshTable(t1)
 
-        val recacheLoads = inMemoryCatalog.loadTableCalls.map(_._2.get("split-size"))
-        assert(recacheLoads.contains("5"),
-          s"expected recache to forward split-size=5, got: $recacheLoads")
+        val recacheLoads = inMemoryCatalog.loadTableCalls
+        assert(recacheLoads.nonEmpty, "expected recache to reload the table")
+        assert(recacheLoads.forall(_._2.isEmpty),
+          s"expected recache to filter split-size, got: $recacheLoads")
 
         val cacheManager = spark.sharedState.cacheManager
         val sameOptions = spark.read.option("split-size", "5").table(t1)
@@ -1184,7 +1202,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: recaching a non-relation plan forwards table options") {
+  test("recaching a non-relation plan filters table load options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -1201,10 +1219,9 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         spark.catalog.refreshTable(t1)
 
         val recacheLoads = inMemoryCatalog.loadTableCalls
-          .map(_._2.get("split-size"))
-          .filter(_ != null)
-        assert(recacheLoads.contains("5"),
-          s"expected non-relation recache to forward split-size=5, got: $recacheLoads")
+        assert(recacheLoads.nonEmpty, "expected non-relation recache to reload the table")
+        assert(recacheLoads.forall(_._2.isEmpty),
+          s"expected non-relation recache to filter split-size, got: $recacheLoads")
 
         val samePlan = spark.read.option("split-size", "5").table(t1).filter("id > 0")
         assert(spark.sharedState.cacheManager.lookupCachedData(samePlan).isDefined,

@@ -196,12 +196,16 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
-   * Load table metadata by {@link Identifier identifier} from the catalog, forwarding all
-   * user-specified options.
+   * Load table metadata by {@link Identifier identifier} from the catalog, forwarding the
+   * user-specified options that may affect table state.
    * <p>
    * The default implementation ignores {@code options} and delegates to the existing
    * {@code loadTable} overloads based on {@code context}. Catalogs that want to receive the user
-   * options while reading a table must override this method.
+   * options while reading a table must implement {@link SupportsTableStateOptions} and override
+   * this method. Spark passes only the options declared by
+   * {@link SupportsTableStateOptions#tableStateOptionKeys()}; catalogs that do not implement that
+   * interface receive an empty option map. Spark preserves the complete option map separately for
+   * scan planning.
    * <p>
    * An override replaces that dispatch and must honor {@code context} itself: apply the time
    * travel in {@link TableContext#timeTravel()}, and authorize the requested
@@ -210,8 +214,8 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param ident a table identifier
    * @param context the parsed load parameters (time travel, write privileges)
-   * @param options all options passed to the read, including any keys that are also parsed into
-   *                {@code context}
+   * @param options options declared to affect table state; Spark-parsed state such as time travel
+   *                is provided through {@code context} instead
    * @return the table's metadata
    * @throws NoSuchTableException If the table doesn't exist
    *

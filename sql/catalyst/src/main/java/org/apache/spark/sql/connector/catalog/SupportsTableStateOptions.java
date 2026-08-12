@@ -30,7 +30,9 @@ import org.apache.spark.annotation.Evolving;
  * interface to declare which raw options may cause the catalog to select a different table state,
  * such as a branch, tag, snapshot, or version. Spark then reuses one table instance only for
  * references whose table-state options match, while preserving every reference's complete option
- * map for scan planning.
+ * map for scan planning. Only the declared table-state options are forwarded to
+ * {@link TableCatalog#loadTable(Identifier, TableContext,
+ * org.apache.spark.sql.util.CaseInsensitiveStringMap)}.
  * <p>
  * Catalogs that do not implement this interface are assumed to have no state-affecting options, so
  * all references to the same identifier continue to share a single table instance regardless of

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.catalog
 
 import org.mockito.ArgumentMatchers.{any, eq => mockEq}
-import org.mockito.Mockito.{mock, verify, when}
+import org.mockito.Mockito.{mock, verify, when, withSettings}
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, TimeTravelSpec}
@@ -120,6 +120,39 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(a != c)
     assert(a.toString.contains("timeTravel"))
     assert(a.toString.contains("writePrivileges"))
+  }
+
+  test("getTable forwards only declared table-state options") {
+    val catalogBase = mock(
+      classOf[TableCatalog],
+      withSettings().extraInterfaces(classOf[SupportsTableStateOptions]))
+    val catalog = catalogBase.asInstanceOf[TableCatalog with SupportsTableStateOptions]
+    when(catalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("snapshot"))
+    val ident = mock(classOf[Identifier])
+    val options = new CaseInsensitiveStringMap(
+      java.util.Map.of("snapshot", "s1", "split-size", "5"))
+
+    CatalogV2Util.getTable(catalog, ident, options = options)
+
+    val expected = new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "s1"))
+    verify(catalog).loadTable(
+      mockEq(ident),
+      any[TableContext],
+      mockEq(expected))
+  }
+
+  test("getTable forwards no options to catalogs without table-state support") {
+    val catalog = mock(classOf[TableCatalog])
+    val ident = mock(classOf[Identifier])
+    val options = new CaseInsensitiveStringMap(
+      java.util.Map.of("snapshot", "s1", "split-size", "5"))
+
+    CatalogV2Util.getTable(catalog, ident, options = options)
+
+    verify(catalog).loadTable(
+      mockEq(ident),
+      any[TableContext],
+      mockEq(CaseInsensitiveStringMap.empty()))
   }
 
   test("extractTableStateOptions projects declared keys case-insensitively") {
