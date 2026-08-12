@@ -51,6 +51,13 @@ on:
         required: false
         type: string
         default: ''
+      build_timeout_minutes:
+        description: >-
+          Timeout for each `build` matrix job. Raise it for a caller whose configuration makes the
+          Scala test modules slower, e.g. a non-default codegen compiler.
+        required: false
+        type: number
+        default: 150
     secrets:
       codecov_token:
         description: The upload token of codecov.
@@ -261,7 +268,7 @@ jobs:
     needs: [precondition, precompile]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: ${{ inputs.build_timeout_minutes }}
     strategy:
       fail-fast: false
       max-parallel: 20

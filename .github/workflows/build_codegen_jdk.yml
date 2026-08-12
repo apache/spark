@@ -44,6 +44,9 @@ jobs:
       java: 17
       branch: master
       hadoop: hadoop3
+      # The Scala test modules run 1.2x to 1.9x longer on javac than on Janino, and
+      # `sql - other tests` does not finish inside the 150 minute default.
+      build_timeout_minutes: 300
       envs: >-
         {
           "PYSPARK_IMAGE_TO_TEST": "python-312",
