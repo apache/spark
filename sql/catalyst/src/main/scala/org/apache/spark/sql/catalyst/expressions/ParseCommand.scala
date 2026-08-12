@@ -25,7 +25,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Parses a SQL statement string and returns a compact JSON description of the
- * unresolved statement (classification, references, select list, parameters),
+ * unresolved statement (identifier/code, references, select list, parameters),
  * or a STANDARD-format error object when the statement does not parse.
  *
  * Designed for batch evaluation over DataFrames of SQL text; never throws on
@@ -34,10 +34,10 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """_FUNC_(sqlStmt) - Parses `sqlStmt` and returns a JSON string describing the
-    statement (parse success, Table 39 statement classification, table and function
+    statement (parse success, Table 39 statement identifier/code, table and function
     references, select-list columns, and parameter markers). On syntax error returns
-    JSON with `parse_success` false and a nested STANDARD error object instead of
-    throwing.""",
+    JSON with `parse_success` false, source location, and a nested STANDARD error object
+    instead of throwing.""",
   arguments = """
     Arguments:
       * sqlStmt - A SQL statement string to parse.

@@ -27,15 +27,17 @@ import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelpe
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.exceptions.SqlScriptingException
 
 /**
  * Parses a SQL statement string and returns a compact JSON description of the
  * unresolved plan (parse-only; no catalog resolution).
  *
- * On success the JSON includes statement classification (ISO/IEC 9075-2:2023
- * Table 39), table/function references, select-list items, and parameter
- * markers. On parse failure it returns `parse_success: false` with a nested
- * STANDARD-format error object and does not throw.
+ * On success the JSON includes the statement identifier/code (ISO/IEC
+ * 9075-2:2023 Table 39), table/function references, select-list items, and
+ * parameter markers. On parse failure it returns `parse_success: false` with
+ * source location and a nested STANDARD-format error object, and does not throw.
  */
 object ParseCommandResult {
 
@@ -73,11 +75,6 @@ object ParseCommandResult {
     fields += "parse_success" -> JBool(true)
     fields += "statement_identifier" -> JString(classification.statementIdentifier)
     fields += "statement_code" -> JInt(classification.statementCode)
-    fields += "statement_type" -> JString(classification.statementType)
-    fields += "statement_class" -> JString(classification.statementClass)
-    if (classification.asSubquery) {
-      fields += "as_subquery" -> JBool(true)
-    }
     fields += "table_references" -> JArray(
       collectTableReferences(plan).map(partsToJArray).toList)
     fields += "function_references" -> JArray(
@@ -89,15 +86,40 @@ object ParseCommandResult {
 
   private def errorJson(e: SparkThrowable with Throwable): String = {
     val errorObj = parseJson(
-      SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD))
+      SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
+    val origin = e match {
+      case p: ParseException => Some(p.start)
+      case s: SqlScriptingException => Some(s.origin)
+      case _ => None
+    }
+    val locationFields = origin.toSeq.flatMap(originFields)
     compact(render(JObject(
       "parse_success" -> JBool(false),
-      "error" -> errorObj
+      "error" -> JObject(errorObj.obj ++ locationFields)
     )))
   }
 
+  private def originFields(origin: Origin): Seq[JField] = Seq(
+    origin.line.map(line => "line" -> JInt(line)),
+    origin.startPosition.map(position => "position" -> JInt(position))).flatten
+
   private def partsToJArray(parts: Seq[String]): JArray =
     JArray(parts.map(JString).toList)
+
+  /**
+   * Walk expressions in all product fields, including wrappers such as column
+   * definitions that [[LogicalPlan.expressions]] does not descend into.
+   */
+  private def foreachExpressionDeep(plan: LogicalPlan)(f: Expression => Unit): Unit = {
+    def visit(value: Any): Unit = value match {
+      case e: Expression => f(e)
+      case _: LogicalPlan =>
+      case values: Iterable[_] => values.foreach(visit)
+      case value: Product => value.productIterator.foreach(visit)
+      case _ =>
+    }
+    plan.productIterator.foreach(visit)
+  }
 
   /**
    * Deep plan walk covering tree slots that standard `collect` /
@@ -162,7 +184,7 @@ object ParseCommandResult {
       case _ =>
     }
     foreachPlanDeep(plan) { p =>
-      p.expressions.foreach(collectInExpression)
+      foreachExpressionDeep(p)(collectInExpression)
       p match {
         case u: UnresolvedTableValuedFunction => add(u.name)
         case _ =>
@@ -228,7 +250,7 @@ object ParseCommandResult {
       case _ =>
     }
     foreachPlanDeep(plan) { p =>
-      p.expressions.foreach(visitExpr)
+      foreachExpressionDeep(p)(visitExpr)
     }
     JObject(
       "named" -> JArray(named.toList.map(JString)),

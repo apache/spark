@@ -24,20 +24,13 @@ import org.apache.spark.sql.catalyst.plans.logical._
  * Classification of a parsed SQL statement using ISO/IEC 9075-2:2023 Table 39,
  * "SQL-statement codes" (clause 23.1 &lt;get diagnostics statement&gt;).
  *
- * @param statementType BNF production name without angle brackets
  * @param statementIdentifier Table 39 Identifier column (or Spark product name)
  * @param statementCode Table 39 Code column; Spark-only statements use negative
  *                      implementation-defined codes (Table 39 IE005 / IV190)
- * @param statementClass Clause 4.41.2 function class, or
- *                       "implementation-defined statement" for Spark extensions
- * @param asSubquery True when &lt;table definition&gt; contains an &lt;as subquery clause&gt;
  */
 case class SqlStatementClassification(
-    statementType: String,
     statementIdentifier: String,
-    statementCode: Int,
-    statementClass: String,
-    asSubquery: Boolean = false)
+    statementCode: Int)
 
 /**
  * Maps unresolved [[LogicalPlan]]s to Table 39 statement codes.
@@ -49,46 +42,29 @@ case class SqlStatementClassification(
 object SqlStatementCodes {
 
   // Standard Table 39 entries used by Spark SQL (ISO/IEC 9075-2:2023).
-  val Select: SqlStatementClassification = SqlStatementClassification(
-    "direct select statement: multiple rows", "SELECT", 21, "SQL-data statement")
-  val Insert: SqlStatementClassification = SqlStatementClassification(
-    "insert statement", "INSERT", 50, "SQL-data change statement")
-  val DeleteWhere: SqlStatementClassification = SqlStatementClassification(
-    "delete statement: searched", "DELETE WHERE", 19, "SQL-data change statement")
-  val UpdateWhere: SqlStatementClassification = SqlStatementClassification(
-    "update statement: searched", "UPDATE WHERE", 82, "SQL-data change statement")
-  val Merge: SqlStatementClassification = SqlStatementClassification(
-    "merge statement", "MERGE", 128, "SQL-data change statement")
-  val CreateTable: SqlStatementClassification = SqlStatementClassification(
-    "table definition", "CREATE TABLE", 77, "SQL-schema statement")
-  val CreateView: SqlStatementClassification = SqlStatementClassification(
-    "view definition", "CREATE VIEW", 84, "SQL-schema statement")
-  val DropTable: SqlStatementClassification = SqlStatementClassification(
-    "drop table statement", "DROP TABLE", 32, "SQL-schema statement")
-  val DropView: SqlStatementClassification = SqlStatementClassification(
-    "drop view statement", "DROP VIEW", 36, "SQL-schema statement")
-  val AlterTable: SqlStatementClassification = SqlStatementClassification(
-    "alter table statement", "ALTER TABLE", 4, "SQL-schema statement")
-  val CreateSchema: SqlStatementClassification = SqlStatementClassification(
-    "schema definition", "CREATE SCHEMA", 64, "SQL-schema statement")
-  val DropSchema: SqlStatementClassification = SqlStatementClassification(
-    "drop schema statement", "DROP SCHEMA", 31, "SQL-schema statement")
-  val SetSchema: SqlStatementClassification = SqlStatementClassification(
-    "set schema statement", "SET SCHEMA", 74, "SQL-session statement")
-  val TruncateTable: SqlStatementClassification = SqlStatementClassification(
-    "truncate table statement", "TRUNCATE TABLE", 139, "SQL-data change statement")
-  val CreateRoutine: SqlStatementClassification = SqlStatementClassification(
-    "schema routine", "CREATE ROUTINE", 14, "SQL-schema statement")
-  val DropRoutine: SqlStatementClassification = SqlStatementClassification(
-    "drop routine statement", "DROP ROUTINE", 30, "SQL-schema statement")
-  val ExecuteImmediate: SqlStatementClassification = SqlStatementClassification(
-    "execute immediate statement", "EXECUTE IMMEDIATE", 43, "SQL-dynamic statement")
-  val Call: SqlStatementClassification = SqlStatementClassification(
-    "call statement", "CALL", 7, "SQL-control statement")
+  val Select: SqlStatementClassification = SqlStatementClassification("SELECT", 21)
+  val Insert: SqlStatementClassification = SqlStatementClassification("INSERT", 50)
+  val DeleteWhere: SqlStatementClassification = SqlStatementClassification("DELETE WHERE", 19)
+  val UpdateWhere: SqlStatementClassification = SqlStatementClassification("UPDATE WHERE", 82)
+  val Merge: SqlStatementClassification = SqlStatementClassification("MERGE", 128)
+  val CreateTable: SqlStatementClassification = SqlStatementClassification("CREATE TABLE", 77)
+  val CreateView: SqlStatementClassification = SqlStatementClassification("CREATE VIEW", 84)
+  val DropTable: SqlStatementClassification = SqlStatementClassification("DROP TABLE", 32)
+  val DropView: SqlStatementClassification = SqlStatementClassification("DROP VIEW", 36)
+  val AlterTable: SqlStatementClassification = SqlStatementClassification("ALTER TABLE", 4)
+  val CreateSchema: SqlStatementClassification = SqlStatementClassification("CREATE SCHEMA", 64)
+  val DropSchema: SqlStatementClassification = SqlStatementClassification("DROP SCHEMA", 31)
+  val SetSchema: SqlStatementClassification = SqlStatementClassification("SET SCHEMA", 74)
+  val TruncateTable: SqlStatementClassification =
+    SqlStatementClassification("TRUNCATE TABLE", 139)
+  val CreateRoutine: SqlStatementClassification = SqlStatementClassification("CREATE ROUTINE", 14)
+  val DropRoutine: SqlStatementClassification = SqlStatementClassification("DROP ROUTINE", 30)
+  val ExecuteImmediate: SqlStatementClassification =
+    SqlStatementClassification("EXECUTE IMMEDIATE", 43)
+  val Call: SqlStatementClassification = SqlStatementClassification("CALL", 7)
 
   // Table 39 "Unrecognized statements": empty identifier, code 0.
-  val Unrecognized: SqlStatementClassification = SqlStatementClassification(
-    "", "", 0, "implementation-defined statement")
+  val Unrecognized: SqlStatementClassification = SqlStatementClassification("", 0)
 
   // Spark product-specific identifiers with append-only negative codes
   // (Table 39 implementation-defined / IE005 row: negative Code values).
@@ -118,11 +94,7 @@ object SqlStatementCodes {
 
   private def spark(identifier: String, code: Int): SqlStatementClassification = {
     assert(code < 0, s"Spark statement codes must be negative, got $code")
-    SqlStatementClassification(
-      statementType = identifier.toLowerCase(java.util.Locale.ROOT),
-      statementIdentifier = identifier,
-      statementCode = code,
-      statementClass = "implementation-defined statement")
+    SqlStatementClassification(statementIdentifier = identifier, statementCode = code)
   }
 
   /** Classify an unresolved logical plan. */
@@ -133,8 +105,7 @@ object SqlStatementCodes {
     case _: DeleteFromTable | _: DeleteFromTableWithFilters => DeleteWhere
     case _: UpdateTable => UpdateWhere
     case _: MergeIntoTable => Merge
-    case _: CreateTableAsSelect | _: ReplaceTableAsSelect =>
-      CreateTable.copy(asSubquery = true)
+    case _: CreateTableAsSelect | _: ReplaceTableAsSelect => CreateTable
     case _: CreateTable | _: CreateTableLike | _: ReplaceTable => CreateTable
     case _: CreateView => CreateView
     case _: DropTable => DropTable

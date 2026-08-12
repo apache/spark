@@ -31,10 +31,129 @@ SELECT parse_command('WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte'
 -- nested subqueries
 SELECT parse_command('SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)');
 
+-- functions in projection, window, join, TVF, predicates, subquery, grouping, and ordering
+SELECT parse_command(
+'SELECT coalesce(t.a, 0), sum(abs(t.b)) OVER (
+   PARTITION BY lower(t.c) ORDER BY length(t.d))
+ FROM left_t t
+ JOIN right_t r ON hash(t.id) = hash(r.id)
+ JOIN LATERAL range(cast(t.n AS BIGINT)) rng
+ WHERE startswith(t.c, ''x'')
+   AND EXISTS (SELECT max(s.v) FROM scalar_t s WHERE s.id = t.id)
+ GROUP BY coalesce(t.a, 0), t.b, t.c, t.d
+ HAVING count_if(t.b > 0) > 0
+ ORDER BY greatest(t.a, 1)');
+
+-- functions and tables throughout a multiline MERGE
+SELECT parse_command(
+'MERGE INTO target t
+ USING (
+   SELECT id, normalize_name(name) AS name
+   FROM source
+   WHERE is_valid(id)
+ ) s
+ ON hash(t.id) = hash(s.id)
+ WHEN MATCHED AND should_update(t.name, s.name) THEN
+   UPDATE SET name = coalesce(s.name, upper(t.name))
+ WHEN NOT MATCHED THEN
+   INSERT (id, name) VALUES (s.id, lower(s.name))');
+
+-- functions embedded in DDL column defaults
+SELECT parse_command(
+'CREATE TABLE defaults (
+   created DATE DEFAULT current_date(),
+   normalized STRING DEFAULT upper(''x'')
+ )');
+
 -- syntax error: never throws; STANDARD error nested under parse_success=false
 SELECT get_json_object(parse_command('SELEC FROM t'), '$.parse_success');
 SELECT get_json_object(parse_command('SELEC FROM t'), '$.error.errorClass');
 SELECT get_json_object(parse_command('SELEC FROM t'), '$.error.sqlState');
+
+-- source location from a multiline parse-time validation error
+SELECT
+  get_json_object(parse_command(
+'SELECT *
+ FROM t
+ ORDER BY a
+ CLUSTER BY b'), '$.error.errorClass') AS error_class,
+  get_json_object(parse_command(
+'SELECT *
+ FROM t
+ ORDER BY a
+ CLUSTER BY b'), '$.error.line') AS line,
+  get_json_object(parse_command(
+'SELECT *
+ FROM t
+ ORDER BY a
+ CLUSTER BY b'), '$.error.position') AS position,
+  get_json_object(parse_command(
+'SELECT *
+ FROM t
+ ORDER BY a
+ CLUSTER BY b'), '$.error.queryContext[0].startIndex') AS start_index;
+
+-- parse-only validation errors beyond PARSE_SYNTAX_ERROR
+SELECT get_json_object(parse_command(''), '$.error.errorClass');
+SELECT get_json_object(parse_command('USE bad-name'), '$.error.errorClass');
+SELECT get_json_object(
+  parse_command('WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c'),
+  '$.error.errorClass');
+SELECT get_json_object(
+  parse_command('MERGE INTO target USING source ON target.id = source.id'),
+  '$.error.errorClass');
+SELECT get_json_object(
+  parse_command('DROP FUNCTION catalog.schema.func'),
+  '$.error.errorClass');
+SELECT get_json_object(
+  parse_command('SELECT 1 AS IDENTIFIER(''alias.field'')'),
+  '$.error.errorClass');
+SELECT get_json_object(
+  parse_command('SELECT DATE ''not-a-date'''),
+  '$.error.errorClass');
+
+-- location for an error inside a multiline script
+--QUERY-DELIMITER-START
+SELECT
+  get_json_object(parse_command(
+'BEGIN
+   SELECT 1;
+   SELEC 2;
+ END'), '$.error.errorClass') AS error_class,
+  get_json_object(parse_command(
+'BEGIN
+   SELECT 1;
+   SELEC 2;
+ END'), '$.error.line') AS line,
+  get_json_object(parse_command(
+'BEGIN
+   SELECT 1;
+   SELEC 2;
+ END'), '$.error.position') AS position;
+--QUERY-DELIMITER-END
+
+-- location for a SQL scripting semantic validation error
+--QUERY-DELIMITER-START
+SELECT
+  get_json_object(parse_command(
+'BEGIN
+   lbl_begin: BEGIN
+     SELECT 1;
+   END lbl_end;
+ END'), '$.error.errorClass') AS error_class,
+  get_json_object(parse_command(
+'BEGIN
+   lbl_begin: BEGIN
+     SELECT 1;
+   END lbl_end;
+ END'), '$.error.line') AS line,
+  get_json_object(parse_command(
+'BEGIN
+   lbl_begin: BEGIN
+     SELECT 1;
+   END lbl_end;
+ END'), '$.error.position') AS position;
+--QUERY-DELIMITER-END
 
 -- batch over a column of SQL text
 SELECT sql_text, parse_command(sql_text) FROM VALUES
@@ -59,6 +178,74 @@ SELECT parse_command('BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SEL
 
 --QUERY-DELIMITER-START
 SELECT parse_command('BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END');
+--QUERY-DELIMITER-END
+
+-- Complex, genuinely multiline script. Extract collections to keep the
+-- expected output focused on complete tree walking.
+--QUERY-DELIMITER-START
+SELECT
+  get_json_object(parse_command(
+'BEGIN
+   DECLARE EXIT HANDLER FOR SQLEXCEPTION
+   BEGIN
+     INSERT INTO error_log
+     SELECT format_string(''%s'', message) FROM error_source;
+   END;
+
+   WITH prepared AS (
+     SELECT id, normalize_name(name) AS name
+     FROM input_names
+     WHERE is_valid(id)
+   )
+   INSERT INTO output_names
+   SELECT id, upper(name) FROM prepared;
+
+   IF EXISTS (SELECT 1 FROM control_flags WHERE enabled()) THEN
+     UPDATE update_target
+     SET value = coalesce((SELECT max(value) FROM update_source), 0)
+     WHERE should_update(id);
+   ELSE
+     DELETE FROM delete_target
+     WHERE id IN (SELECT id FROM delete_source WHERE expired(ts));
+   END IF;
+
+   FOR row AS
+     SELECT id FROM loop_source WHERE ready(id)
+   DO
+     SELECT audit(row.id), count(*) FROM loop_body;
+   END FOR;
+ END'), '$.table_references') AS table_references,
+  get_json_object(parse_command(
+'BEGIN
+   DECLARE EXIT HANDLER FOR SQLEXCEPTION
+   BEGIN
+     INSERT INTO error_log
+     SELECT format_string(''%s'', message) FROM error_source;
+   END;
+
+   WITH prepared AS (
+     SELECT id, normalize_name(name) AS name
+     FROM input_names
+     WHERE is_valid(id)
+   )
+   INSERT INTO output_names
+   SELECT id, upper(name) FROM prepared;
+
+   IF EXISTS (SELECT 1 FROM control_flags WHERE enabled()) THEN
+     UPDATE update_target
+     SET value = coalesce((SELECT max(value) FROM update_source), 0)
+     WHERE should_update(id);
+   ELSE
+     DELETE FROM delete_target
+     WHERE id IN (SELECT id FROM delete_source WHERE expired(ts));
+   END IF;
+
+   FOR row AS
+     SELECT id FROM loop_source WHERE ready(id)
+   DO
+     SELECT audit(row.id), count(*) FROM loop_body;
+   END FOR;
+ END'), '$.function_references') AS function_references;
 --QUERY-DELIMITER-END
 
 -- extract key fields from a script for readable assertions

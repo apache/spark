@@ -36,9 +36,8 @@ class ParseCommandResultSuite extends SparkFunSuite {
     assert(j \ "parse_success" === JBool(true))
     assert(j \ "statement_identifier" === JString("SELECT"))
     assert(j \ "statement_code" === JInt(21))
-    assert(j \ "statement_type" ===
-      JString("direct select statement: multiple rows"))
-    assert(j \ "statement_class" === JString("SQL-data statement"))
+    assert(j \ "statement_type" === JNothing)
+    assert(j \ "statement_class" === JNothing)
   }
 
   test("CREATE TABLE and CTAS share CREATE TABLE code 77") {
@@ -50,7 +49,7 @@ class ParseCommandResultSuite extends SparkFunSuite {
     val ctas = obj("CREATE TABLE t AS SELECT 1 AS a")
     assert(ctas \ "statement_identifier" === JString("CREATE TABLE"))
     assert(ctas \ "statement_code" === JInt(77))
-    assert(ctas \ "as_subquery" === JBool(true))
+    assert(ctas \ "as_subquery" === JNothing)
   }
 
   test("DML statement identifiers and codes") {
@@ -113,13 +112,70 @@ class ParseCommandResultSuite extends SparkFunSuite {
     assert(j \ "error" \ "sqlState" === JString("42601"))
   }
 
+  test("parse errors expose line and position") {
+    val sql =
+      """SELECT *
+        |FROM t
+        |ORDER BY a
+        |CLUSTER BY b""".stripMargin
+    val error = obj(sql) \ "error"
+    assert(error \ "errorClass" ===
+      JString("UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES"))
+    assert(error \ "line" === JInt(3))
+    assert(error \ "position" === JInt(0))
+    val context = (error \ "queryContext").asInstanceOf[JArray].arr.head
+    assert(context \ "startIndex" === JInt(17))
+  }
+
+  test("multiline script errors expose the script line") {
+    val sql =
+      """BEGIN
+        |  SELECT 1;
+        |  SELEC 2;
+        |END""".stripMargin
+    val error = obj(sql) \ "error"
+    assert(error \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
+    assert(error \ "line" === JInt(3))
+    assert(error \ "position" === JInt(8))
+  }
+
+  test("SQL scripting validation errors expose their origin") {
+    val sql =
+      """BEGIN
+        |  lbl_begin: BEGIN
+        |    SELECT 1;
+        |  END lbl_end;
+        |END""".stripMargin
+    val error = obj(sql) \ "error"
+    assert(error \ "errorClass" === JString("LABELS_MISMATCH"))
+    assert(error \ "line" === JInt(2))
+    assert(error \ "position" === JInt(2))
+  }
+
+  test("parse-only validation returns error classes beyond syntax errors") {
+    val cases = Seq(
+      "" -> "PARSE_EMPTY_STATEMENT",
+      "USE bad-name" -> "INVALID_IDENTIFIER",
+      "WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c" ->
+        "DUPLICATED_CTE_NAMES",
+      "MERGE INTO target USING source ON target.id = source.id" ->
+        "MERGE_WITHOUT_WHEN",
+      "DROP FUNCTION catalog.schema.func" ->
+        "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      "SELECT 1 AS IDENTIFIER('alias.field')" ->
+        "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      "SELECT DATE 'not-a-date'" -> "INVALID_TYPED_LITERAL")
+    cases.foreach { case (sql, errorClass) =>
+      assert(obj(sql) \ "error" \ "errorClass" === JString(errorClass), sql)
+    }
+  }
+
   test("Spark-only statements use negative implementation-defined codes") {
     val j = obj("CACHE TABLE t")
     assert(j \ "parse_success" === JBool(true))
     assert(j \ "statement_identifier" === JString("CACHE TABLE"))
     assert(j \ "statement_code" === JInt(-1))
-    assert(j \ "statement_class" ===
-      JString("implementation-defined statement"))
+    assert(j \ "statement_class" === JNothing)
   }
 
   test("Table 39 standard code pairs are pinned") {
@@ -207,7 +263,7 @@ class ParseCommandResultSuite extends SparkFunSuite {
         |WITH s AS (SELECT a FROM src)
         |SELECT a FROM s""".stripMargin
     val ctas = obj(ctasSql)
-    assert(ctas \ "as_subquery" === JBool(true))
+    assert(ctas \ "statement_identifier" === JString("CREATE TABLE"))
     assert(tableRefs(ctasSql).contains(Seq("src")))
     assert(tableRefs(ctasSql).contains(Seq("s")))
   }
@@ -228,6 +284,42 @@ class ParseCommandResultSuite extends SparkFunSuite {
       Seq("exists_src"),
       Seq("in_src")))
     assert(funcRefs(sql).contains(Seq("max")))
+  }
+
+  test("functions are collected from expression positions and table-valued functions") {
+    val sql =
+      """SELECT coalesce(t.a, 0), sum(abs(t.b)) OVER (
+        |  PARTITION BY lower(t.c) ORDER BY length(t.d))
+        |FROM left_t t
+        |JOIN right_t r ON hash(t.id) = hash(r.id)
+        |JOIN LATERAL range(cast(t.n AS BIGINT)) rng
+        |WHERE startswith(t.c, 'x')
+        |  AND EXISTS (SELECT max(s.v) FROM scalar_t s WHERE s.id = t.id)
+        |GROUP BY coalesce(t.a, 0), t.b, t.c, t.d
+        |HAVING count_if(t.b > 0) > 0
+        |ORDER BY greatest(t.a, 1)""".stripMargin
+    assert(tableRefs(sql) === Set(Seq("left_t"), Seq("right_t"), Seq("scalar_t")))
+    assert(funcRefs(sql) === Set(
+      Seq("coalesce"),
+      Seq("sum"),
+      Seq("abs"),
+      Seq("lower"),
+      Seq("length"),
+      Seq("hash"),
+      Seq("range"),
+      Seq("startswith"),
+      Seq("max"),
+      Seq("count_if"),
+      Seq("greatest")))
+  }
+
+  test("functions in wrapped DDL expressions are collected") {
+    val sql =
+      """CREATE TABLE target (
+        |  created DATE DEFAULT current_date(),
+        |  normalized STRING DEFAULT upper('x')
+        |)""".stripMargin
+    assert(funcRefs(sql) === Set(Seq("current_date"), Seq("upper")))
   }
 
   test("MERGE collects target, source, and action-expression tables") {
@@ -251,8 +343,6 @@ class ParseCommandResultSuite extends SparkFunSuite {
     assert(j \ "parse_success" === JBool(true))
     assert(j \ "statement_identifier" === JString("BEGIN END"))
     assert(j \ "statement_code" === JInt(-22))
-    assert(j \ "statement_class" ===
-      JString("implementation-defined statement"))
     // Compound scripts have no single primary select list.
     assert(j \ "select_list" === JArray(Nil))
   }
@@ -321,5 +411,36 @@ class ParseCommandResultSuite extends SparkFunSuite {
         |  SELECT a FROM c;
         |END""".stripMargin
     assert(tableRefs(sql) === Set(Seq("cte_base"), Seq("c")))
+  }
+
+  test("multiline script collects functions and tables from all control-flow branches") {
+    val sql =
+      """BEGIN
+        |  CASE upper(:kind)
+        |    WHEN lower('a') THEN
+        |      SELECT max(a) FROM case_a;
+        |    ELSE
+        |      SELECT min(b) FROM case_else;
+        |  END CASE;
+        |  REPEAT
+        |    INSERT INTO repeat_target
+        |    SELECT transform(items, x -> abs(x)) FROM repeat_source;
+        |  UNTIL EXISTS (SELECT 1 FROM repeat_done WHERE ready())
+        |  END REPEAT;
+        |END""".stripMargin
+    assert(tableRefs(sql) === Set(
+      Seq("case_a"),
+      Seq("case_else"),
+      Seq("repeat_target"),
+      Seq("repeat_source"),
+      Seq("repeat_done")))
+    assert(funcRefs(sql) === Set(
+      Seq("upper"),
+      Seq("lower"),
+      Seq("max"),
+      Seq("min"),
+      Seq("transform"),
+      Seq("abs"),
+      Seq("ready")))
   }
 }
