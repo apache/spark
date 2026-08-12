@@ -2903,8 +2903,34 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private val nextRddId = new AtomicInteger(0)
 
-  /** Register a new RDD, returning its RDD ID */
-  private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+  /**
+   * Testing helper: set the next value that [[newRddId]] will return.
+   */
+  private[spark] def setNextRddIdForTesting(value: Int): Unit = nextRddId.set(value)
+
+  /**
+   * Register a new RDD, returning its RDD ID.
+   *
+   * Fails if the 32-bit counter would wrap to a negative value. Continuing with
+   * wrapped ids can break BlockManager, UI, and other id-keyed state.
+   * [[org.apache.spark.storage.BlockId]] still parses negative RDD names as a
+   * safety net for any in-flight or pre-upgrade cached blocks.
+   */
+  private[spark] def newRddId(): Int = {
+    val id = nextRddId.getAndIncrement()
+    if (id < 0) {
+      // Stay pegged so subsequent allocations keep failing clearly.
+      nextRddId.set(Int.MinValue)
+      throw new SparkException(
+        "RDD id counter overflowed Int.MaxValue (" + Int.MaxValue +
+          "). This application has created too many RDDs; restart it.")
+    }
+    if (id == Int.MaxValue) {
+      logWarning("Allocated the last valid RDD id (Int.MaxValue). " +
+        "Further RDD creation will fail.")
+    }
+    id
+  }
 
   /**
    * Registers listeners specified in spark.extraListeners, then starts the listener bus.
