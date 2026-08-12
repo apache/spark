@@ -66,8 +66,8 @@ JSON_EXISTS ( json_expr, path [ { TRUE | FALSE | UNKNOWN | ERROR } ON ERROR ] )
 * `json_expr` is SQL `NULL` &rarr; `NULL`.
 * `json_expr` is not a single well-formed JSON value &rarr; the `ON ERROR` behavior.
 
-A structural mismatch is treated as "no match" (`false`), not an error -- for example reading a key
-that is absent or belongs to a scalar, an out-of-range array index, or `[*]` over an empty array.
+A structural mismatch is treated as "no match" (`false`), not an error -- for example reading an
+absent key, reading a key from a scalar, an out-of-range array index, or `[*]` over an empty array.
 
 ### Examples
 
