@@ -220,6 +220,17 @@ SELECT c, count(*) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
   GROUP BY c ORDER BY c;
 
+-- SPARK-56822: collect_list over nanosecond-precision TIMESTAMP_LTZ. The buffer holds the full
+-- nanos value, so the sub-microsecond remainder survives and the result element type stays
+-- TIMESTAMP_LTZ(9); values render in the session time zone (America/Los_Angeles). collect_list
+-- order is non-deterministic, so the output is stabilized with sort_array; duplicates are kept and
+-- NULLs are dropped.
+SELECT sort_array(collect_list(c)) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c);
+
 -- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
 -- whole-second BIGINT; the sub-second digits are dropped. A literal without an explicit zone is
 -- read in the session time zone (America/Los_Angeles, UTC-08:00); an explicit-zone literal fixes
