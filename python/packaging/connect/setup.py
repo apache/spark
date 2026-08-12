@@ -114,6 +114,7 @@ try:
         packages=connect_packages,
         include_package_data=True,
         license="Apache-2.0",
+        license_files=["LICENSE", "NOTICE"],
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=[

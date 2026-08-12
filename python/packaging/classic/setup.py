@@ -351,12 +351,13 @@ try:
                 "stop-history-server.sh",
             ],
             "pyspark.python.lib": ["*.zip"],
-            "pyspark.data": ["*.txt", "*.data"],
+            "pyspark.data": ["**/*.txt", "**/*.data"],
             "pyspark.licenses": ["*"],
-            "pyspark.examples.src.main.python": ["*.py", "*/*.py"],
+            "pyspark.examples.src.main.python": ["**/*.py"],
         },
         scripts=scripts,
         license="Apache-2.0",
+        license_files=["LICENSE", "NOTICE"],
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=["py4j>=0.10.9.7,<0.10.9.10"],
