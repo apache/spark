@@ -454,7 +454,7 @@ class SparkContext(config: SparkConf) extends Logging {
         _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", true)) {
       logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
         "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
-      _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_BIND_ADDRESS))
+      _conf.set(DRIVER_HOST_ADDRESS, Utils.normalizeIpIfNeeded(_conf.get(DRIVER_BIND_ADDRESS)))
     } else {
       _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
     }
