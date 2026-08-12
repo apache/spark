@@ -27,14 +27,14 @@ import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.util.SparkErrorUtils
 
 /**
- * End-to-end tests for the block-chunked segment-tree moving window frame. Covers basic
- * aggregates, frame boundaries, min-rows fallback, NULL/NaN, numeric/string/date-timestamp types,
- * RANGE, Decimal/Binary merge, UDAF fallback, and frame lifecycle.
+ * End-to-end tests for the block-chunked segment-tree moving window frame.
+ * Covers basic aggregates, frame boundaries, min-rows fallback, NULL/NaN,
+ * numeric/string/date-timestamp types, RANGE, Decimal/Binary merge, UDAF
+ * fallback, and frame lifecycle.
  */
 class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
 
   import testImplicits._
-
 
   // Force seg-tree path regardless of partition size (fallback exercised explicitly).
   private val enableSegTree: Map[String, String] = Map(
@@ -63,7 +63,10 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
 
   /** Standard fixture: 3 partitions, sizes 40/40/40, values = row index. */
   private def baseDF: DataFrame = {
-    spark.range(0, 120).selectExpr("id", "(id % 3) AS pk", "CAST(id AS INT) AS v")
+    spark.range(0, 120).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CAST(id AS INT) AS v")
   }
 
   private def winSpec(lo: Int, hi: Int) =
@@ -72,15 +75,18 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   // A1: basic aggregate equivalence
 
   test("MIN over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
-    checkEquivalence(() => baseDF.select($"id", $"pk", min($"v").over(winSpec(-3, 3)).as("agg")))
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", min($"v").over(winSpec(-3, 3)).as("agg")))
   }
 
   test("MAX over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
-    checkEquivalence(() => baseDF.select($"id", $"pk", max($"v").over(winSpec(-3, 3)).as("agg")))
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", max($"v").over(winSpec(-3, 3)).as("agg")))
   }
 
   test("SUM over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
-    checkEquivalence(() => baseDF.select($"id", $"pk", sum($"v").over(winSpec(-3, 3)).as("agg")))
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", sum($"v").over(winSpec(-3, 3)).as("agg")))
   }
 
   test("COUNT over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
@@ -89,7 +95,8 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   }
 
   test("AVG over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
-    checkEquivalence(() => baseDF.select($"id", $"pk", avg($"v").over(winSpec(-3, 3)).as("agg")))
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", avg($"v").over(winSpec(-3, 3)).as("agg")))
   }
 
   // First / Last basic equivalence (respect-nulls; the default for
@@ -101,7 +108,8 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   }
 
   test("LAST over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
-    checkEquivalence(() => baseDF.select($"id", $"pk", last($"v").over(winSpec(-3, 3)).as("agg")))
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", last($"v").over(winSpec(-3, 3)).as("agg")))
   }
 
   test("MIN + MAX + SUM share a single window frame") {
@@ -117,7 +125,8 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   // A2: frame-size boundaries
 
   test("frame size = 1 (CURRENT ROW only)") {
-    checkEquivalence(() => baseDF.select($"id", $"pk", sum($"v").over(winSpec(0, 0)).as("agg")))
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", sum($"v").over(winSpec(0, 0)).as("agg")))
   }
 
   test("frame spans full partition") {
@@ -127,42 +136,41 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
 
   test("frame extends past both partition edges") {
     checkEquivalence(() =>
-      baseDF.select(
-        $"id",
-        $"pk",
+      baseDF.select($"id", $"pk",
         sum($"v").over(winSpec(-50, 50)).as("agg"),
         min($"v").over(winSpec(-50, 50)).as("mn"),
         max($"v").over(winSpec(-50, 50)).as("mx")))
   }
 
+
   test("partition below minPartitionRows falls back to SlidingWindowFunctionFrame") {
     // 5-row partition, min threshold = 10 -> must fall back.
-    val df = spark.range(0, 5).selectExpr("id", "0 AS pk", "CAST(id AS INT) AS v")
+    val df = spark.range(0, 5).selectExpr(
+      "id", "0 AS pk", "CAST(id AS INT) AS v")
     val enabledConf = Map(
       SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
       SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "10")
 
     val baseline = withSQLConf(disableSegTree.toSeq: _*) {
       df.select($"id", sum($"v").over(winSpec(-1, 1)).as("s"))
-        .collect()
-        .sortBy(_.toString)
+        .collect().sortBy(_.toString)
     }
     val actual = withSQLConf(enabledConf.toSeq: _*) {
       df.select($"id", sum($"v").over(winSpec(-1, 1)).as("s"))
-        .collect()
-        .sortBy(_.toString)
+        .collect().sortBy(_.toString)
     }
     assert(actual.toSeq === baseline.toSeq)
 
     // Confirm the fallback flag actually flipped.
     withSQLConf(enabledConf.toSeq: _*) {
-      SegmentTreeWindowTestHelper.withSmallPartitionFrame(SQLConf.get, rows = 5) { frame =>
-        assert(
-          frame.fallbackUsed,
+      SegmentTreeWindowTestHelper.withSmallPartitionFrame(
+        SQLConf.get, rows = 5) { frame =>
+        assert(frame.fallbackUsed,
           "expected fallbackUsed=true for partition smaller than minPartitionRows")
       }
     }
   }
+
 
   test("NTH_VALUE over ROWS frame falls back cleanly (no mergeExpressions crash)") {
     // NthValue extends DeclarativeAggregate but its mergeExpressions throws
@@ -170,21 +178,17 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
     val df = baseDF
     val withSegTree = withSQLConf(enableSegTree.toSeq: _*) {
       df.selectExpr(
-        "id",
-        "pk",
+        "id", "pk",
         "nth_value(v, 3) OVER (PARTITION BY pk ORDER BY id " +
           "ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) AS n3")
-        .collect()
-        .sortBy(_.toString)
+        .collect().sortBy(_.toString)
     }
     val baseline = withSQLConf(disableSegTree.toSeq: _*) {
       df.selectExpr(
-        "id",
-        "pk",
+        "id", "pk",
         "nth_value(v, 3) OVER (PARTITION BY pk ORDER BY id " +
           "ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) AS n3")
-        .collect()
-        .sortBy(_.toString)
+        .collect().sortBy(_.toString)
     }
     assert(withSegTree.toSeq === baseline.toSeq)
   }
@@ -192,14 +196,16 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   test("ROW_NUMBER over ROWS frame falls back cleanly (no mergeExpressions crash)") {
     val df = baseDF
     val withSegTree = withSQLConf(enableSegTree.toSeq: _*) {
-      df.selectExpr("id", "pk", "row_number() OVER (PARTITION BY pk ORDER BY id) AS rn")
-        .collect()
-        .sortBy(_.toString)
+      df.selectExpr(
+        "id", "pk",
+        "row_number() OVER (PARTITION BY pk ORDER BY id) AS rn")
+        .collect().sortBy(_.toString)
     }
     val baseline = withSQLConf(disableSegTree.toSeq: _*) {
-      df.selectExpr("id", "pk", "row_number() OVER (PARTITION BY pk ORDER BY id) AS rn")
-        .collect()
-        .sortBy(_.toString)
+      df.selectExpr(
+        "id", "pk",
+        "row_number() OVER (PARTITION BY pk ORDER BY id) AS rn")
+        .collect().sortBy(_.toString)
     }
     assert(withSegTree.toSeq === baseline.toSeq)
   }
@@ -211,11 +217,10 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   // A3: NULL / special values
 
   test("all-NULL column: MIN/MAX/SUM/AVG/COUNT") {
-    val df = spark.range(0, 30).selectExpr("id", "(id % 3) AS pk", "CAST(NULL AS INT) AS v")
+    val df = spark.range(0, 30).selectExpr(
+      "id", "(id % 3) AS pk", "CAST(NULL AS INT) AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         min($"v").over(winSpec(-3, 3)).as("mn"),
         max($"v").over(winSpec(-3, 3)).as("mx"),
         sum($"v").over(winSpec(-3, 3)).as("sm"),
@@ -225,16 +230,12 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
 
   test("mixed NULL and non-NULL: NULLs must not leak into MIN/MAX") {
     // Every 3rd value is NULL. Aggregates must skip them (NULL-agnostic merge).
-    val df = spark
-      .range(0, 60)
-      .selectExpr(
-        "id",
-        "(id % 3) AS pk",
-        "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         min($"v").over(winSpec(-4, 4)).as("mn"),
         max($"v").over(winSpec(-4, 4)).as("mx"),
         sum($"v").over(winSpec(-4, 4)).as("sm"),
@@ -244,16 +245,12 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   // First / Last respect-nulls: NULL is a valid value. If the first row in the
   // frame is NULL, FIRST returns NULL. The seg-tree merge must preserve this.
   test("FIRST/LAST respect-nulls with mixed NULL frame contents") {
-    val df = spark
-      .range(0, 60)
-      .selectExpr(
-        "id",
-        "(id % 3) AS pk",
-        "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         first($"v").over(winSpec(-4, 4)).as("fv"),
         last($"v").over(winSpec(-4, 4)).as("lv")))
   }
@@ -262,16 +259,12 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   // values. A per-block partial of (null, false) for an all-NULL block must
   // be correctly skipped when merged with a later non-null block.
   test("FIRST/LAST ignore-nulls with mixed NULL frame contents") {
-    val df = spark
-      .range(0, 60)
-      .selectExpr(
-        "id",
-        "(id % 3) AS pk",
-        "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         first($"v", ignoreNulls = true).over(winSpec(-4, 4)).as("fv_ign"),
         last($"v", ignoreNulls = true).over(winSpec(-4, 4)).as("lv_ign")))
   }
@@ -280,11 +273,10 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   // Respect-nulls: returns NULL. Ignore-nulls: also returns NULL (no
   // non-null candidate ever sets valueSet).
   test("all-NULL column: FIRST/LAST in both modes") {
-    val df = spark.range(0, 30).selectExpr("id", "(id % 3) AS pk", "CAST(NULL AS INT) AS v")
+    val df = spark.range(0, 30).selectExpr(
+      "id", "(id % 3) AS pk", "CAST(NULL AS INT) AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         first($"v").over(winSpec(-3, 3)).as("fv"),
         last($"v").over(winSpec(-3, 3)).as("lv"),
         first($"v", ignoreNulls = true).over(winSpec(-3, 3)).as("fv_ign"),
@@ -300,17 +292,13 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   // via mergeExpressions). Combined with a wide frame to force tree queries
   // crossing the all-NULL stretch.
   test("FIRST/LAST ignore-nulls: stretches of consecutive NULLs cross-merge correctly") {
-    val df = spark
-      .range(0, 90)
-      .selectExpr(
-        "id",
-        "0 AS pk",
-        // First 30 rows non-null, next 30 all NULL, last 30 non-null again.
-        "CASE WHEN id BETWEEN 30 AND 59 THEN NULL ELSE CAST(id AS INT) END AS v")
+    val df = spark.range(0, 90).selectExpr(
+      "id",
+      "0 AS pk",
+      // First 30 rows non-null, next 30 all NULL, last 30 non-null again.
+      "CASE WHEN id BETWEEN 30 AND 59 THEN NULL ELSE CAST(id AS INT) END AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         first($"v", ignoreNulls = true).over(winSpec(-20, 20)).as("fv_ign"),
         last($"v", ignoreNulls = true).over(winSpec(-20, 20)).as("lv_ign")))
   }
@@ -327,18 +315,14 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   // exact path the IGNORE NULLS rationale depends on. Differential vs the
   // legacy frame in both respect-nulls and ignore-nulls modes.
   test("FIRST/LAST multi-block combine with an all-NULL middle block") {
-    val df = spark
-      .range(0, 40)
-      .selectExpr(
-        "id",
-        "0 AS pk",
-        // Blocks (size 16): [0,16) non-null, [16,32) all NULL, [32,40) non-null.
-        "CASE WHEN id BETWEEN 16 AND 31 THEN NULL ELSE CAST(id AS INT) END AS v")
+    val df = spark.range(0, 40).selectExpr(
+      "id",
+      "0 AS pk",
+      // Blocks (size 16): [0,16) non-null, [16,32) all NULL, [32,40) non-null.
+      "CASE WHEN id BETWEEN 16 AND 31 THEN NULL ELSE CAST(id AS INT) END AS v")
     withSegTreeBlock() {
       checkEquivalence(() =>
-        df.select(
-          $"id",
-          $"pk",
+        df.select($"id", $"pk",
           first($"v").over(winSpec(-20, 20)).as("fv"),
           last($"v").over(winSpec(-20, 20)).as("lv"),
           first($"v", ignoreNulls = true).over(winSpec(-20, 20)).as("fv_ign"),
@@ -349,21 +333,17 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   test("Double NaN and +/-Infinity propagate correctly through MIN/MAX/SUM") {
     // Trap: NaN > +Inf in Spark's MIN/MAX ordering; +Inf + -Inf = NaN in SUM.
     // Seg-tree uses DeclarativeAggregate.merge; behavior must match baseline.
-    val df = spark
-      .range(0, 30)
-      .selectExpr(
-        "id",
-        "(id % 2) AS pk",
-        """CASE
+    val df = spark.range(0, 30).selectExpr(
+      "id",
+      "(id % 2) AS pk",
+      """CASE
            WHEN id % 7 = 0 THEN double('NaN')
            WHEN id % 7 = 1 THEN double('Infinity')
            WHEN id % 7 = 2 THEN double('-Infinity')
            ELSE CAST(id AS DOUBLE)
          END AS v""")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         min($"v").over(winSpec(-3, 3)).as("mn"),
         max($"v").over(winSpec(-3, 3)).as("mx"),
         sum($"v").over(winSpec(-3, 3)).as("sm")))
@@ -372,19 +352,15 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   // A4: data types
 
   test("numeric types: Int / Long / Double / Decimal") {
-    val df = spark
-      .range(0, 60)
-      .selectExpr(
-        "id",
-        "(id % 3) AS pk",
-        "CAST(id AS INT)             AS vi",
-        "CAST(id * 1000000L AS LONG) AS vl",
-        "CAST(id AS DOUBLE) + 0.25   AS vd",
-        "CAST(id AS DECIMAL(20,4))   AS vdec")
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CAST(id AS INT)             AS vi",
+      "CAST(id * 1000000L AS LONG) AS vl",
+      "CAST(id AS DOUBLE) + 0.25   AS vd",
+      "CAST(id AS DECIMAL(20,4))   AS vdec")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         sum($"vi").over(winSpec(-2, 2)).as("si"),
         min($"vl").over(winSpec(-2, 2)).as("ml"),
         max($"vd").over(winSpec(-2, 2)).as("xd"),
@@ -394,50 +370,45 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
 
   test("String lexicographic MIN/MAX") {
     // Non-monotone values so MIN/MAX exercise the seg-tree merge (not edge).
-    val df = spark
-      .range(0, 40)
-      .selectExpr(
-        "id",
-        "(id % 2) AS pk",
-        "CONCAT('s', LPAD(CAST((id * 37) % 97 AS STRING), 3, '0')) AS v")
+    val df = spark.range(0, 40).selectExpr(
+      "id",
+      "(id % 2) AS pk",
+      "CONCAT('s', LPAD(CAST((id * 37) % 97 AS STRING), 3, '0')) AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         min($"v").over(winSpec(-3, 3)).as("mn"),
         max($"v").over(winSpec(-3, 3)).as("mx")))
   }
 
   test("Date / Timestamp MIN/MAX") {
-    val df = spark
-      .range(0, 40)
-      .selectExpr(
-        "id",
-        "(id % 2) AS pk",
-        "date_add(DATE'2020-01-01', CAST((id * 13) % 365 AS INT)) AS vd",
-        "CAST(TIMESTAMP'2020-01-01 00:00:00' + " +
-          "make_interval(0, 0, 0, 0, 0, 0, CAST(id AS DECIMAL(18,6))) AS TIMESTAMP) AS vt")
+    val df = spark.range(0, 40).selectExpr(
+      "id",
+      "(id % 2) AS pk",
+      "date_add(DATE'2020-01-01', CAST((id * 13) % 365 AS INT)) AS vd",
+      "CAST(TIMESTAMP'2020-01-01 00:00:00' + " +
+        "make_interval(0, 0, 0, 0, 0, 0, CAST(id AS DECIMAL(18,6))) AS TIMESTAMP) AS vt")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         min($"vd").over(winSpec(-3, 3)).as("mnd"),
         max($"vd").over(winSpec(-3, 3)).as("mxd"),
         min($"vt").over(winSpec(-3, 3)).as("mnt"),
         max($"vt").over(winSpec(-3, 3)).as("mxt")))
   }
 
+
   test("collect_list falls back cleanly (non-DeclarativeAggregate)") {
     // collect_list is TypedImperativeAggregate; eligibleForSegTree must decline.
     checkEquivalence(() =>
-      baseDF.select($"id", $"pk", collect_list($"v").over(winSpec(-2, 2)).as("lst")))
+      baseDF.select($"id", $"pk",
+        collect_list($"v").over(winSpec(-2, 2)).as("lst")))
   }
 
   test("DISTINCT window aggregate is rejected by analyzer regardless of seg-tree flag") {
     // Analyzer throws DISTINCT_WINDOW_FUNCTION_UNSUPPORTED before frame
     // construction; seg-tree flag must not alter this behavior.
     def run(): Unit = {
-      baseDF.select($"id", $"pk", count_distinct($"v").over(winSpec(-3, 3)).as("cd")).collect()
+      baseDF.select($"id", $"pk",
+        count_distinct($"v").over(winSpec(-3, 3)).as("cd")).collect()
     }
     withSQLConf(disableSegTree.toSeq: _*) {
       val e = intercept[org.apache.spark.sql.AnalysisException](run())
@@ -455,23 +426,18 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
     val df = baseDF
     val expected = withSQLConf(disableSegTree.toSeq: _*) {
       df.select($"id", $"pk", min($"v").over(winSpec(-3, 3)).as("mn"))
-        .collect()
-        .sortBy(_.toString)
-        .toSeq
+        .collect().sortBy(_.toString).toSeq
     }
     withSQLConf(
       SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false",
       SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1024") {
-      val actual = df
-        .select($"id", $"pk", min($"v").over(winSpec(-3, 3)).as("mn"))
-        .collect()
-        .sortBy(_.toString)
-        .toSeq
+      val actual = df.select($"id", $"pk", min($"v").over(winSpec(-3, 3)).as("mn"))
+        .collect().sortBy(_.toString).toSeq
       assert(actual === expected)
     }
   }
 
-  // A5: RANGE frame equivalence (single-order-expr admission).
+    // A5: RANGE frame equivalence (single-order-expr admission).
   // MIN/MAX non-invertible, guaranteeing seg-tree path is exercised.
 
   /** Run `sql` twice (flag off / on) and checkAnswer equality. */
@@ -483,8 +449,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       }
       withSQLConf(enableSegTree.toSeq: _*) {
         val actual = spark.sql(query).collect().sortBy(_.toString)
-        assert(
-          actual.toSeq === baseline.toSeq,
+        assert(actual.toSeq === baseline.toSeq,
           s"segment-tree output differs from baseline.\nExpected: ${baseline.toSeq}\n" +
             s"Actual:   ${actual.toSeq}")
       }
@@ -495,17 +460,14 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
 
   test("-- RANGE INT offset basic (non-uniform gaps, MIN/MAX)") {
     // Non-uniform gaps so admit/drop loops must consult the order-key comparator.
-    val df = spark
-      .range(0, 40)
-      .selectExpr(
-        "CAST(id AS INT) AS id",
-        "(CAST(id AS INT) % 2) AS pk",
-        "CAST(CASE CAST(id AS INT) % 7 " +
-          "WHEN 0 THEN 1 WHEN 1 THEN 3 WHEN 2 THEN 4 WHEN 3 THEN 4 " +
-          "WHEN 4 THEN 7 WHEN 5 THEN 10 ELSE 15 END + (CAST(id AS INT) / 7) * 20 AS INT) AS k",
-        "CAST((id * 31) % 97 AS INT) AS v")
-    checkRangeEquivalence(
-      df,
+    val df = spark.range(0, 40).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) % 2) AS pk",
+      "CAST(CASE CAST(id AS INT) % 7 " +
+        "WHEN 0 THEN 1 WHEN 1 THEN 3 WHEN 2 THEN 4 WHEN 3 THEN 4 " +
+        "WHEN 4 THEN 7 WHEN 5 THEN 10 ELSE 15 END + (CAST(id AS INT) / 7) * 20 AS INT) AS k",
+      "CAST((id * 31) % 97 AS INT) AS v")
+    checkRangeEquivalence(df,
       """SELECT id, pk,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k
         |    RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS mn,
@@ -516,18 +478,15 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
 
   test("-- RANGE Timestamp with INTERVAL offset (MAX)") {
     // Irregular gaps force the timestamp comparator at the 1-hour boundary.
-    val df = spark
-      .range(0, 30)
-      .selectExpr(
-        "CAST(id AS INT) AS id",
-        "(CAST(id AS INT) % 2) AS pk",
-        "CAST(TIMESTAMP'2024-01-01 10:00:00' + " +
-          "make_interval(0, 0, 0, 0, 0, 30 * CAST(id AS INT) * " +
-          "(CASE CAST(id AS INT) % 3 WHEN 0 THEN 1 WHEN 1 THEN 3 ELSE 4 END), 0) " +
-          "AS TIMESTAMP) AS ts",
-        "CAST((id * 17) % 53 AS INT) AS v")
-    checkRangeEquivalence(
-      df,
+    val df = spark.range(0, 30).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) % 2) AS pk",
+      "CAST(TIMESTAMP'2024-01-01 10:00:00' + " +
+        "make_interval(0, 0, 0, 0, 0, 30 * CAST(id AS INT) * " +
+        "(CASE CAST(id AS INT) % 3 WHEN 0 THEN 1 WHEN 1 THEN 3 ELSE 4 END), 0) " +
+        "AS TIMESTAMP) AS ts",
+      "CAST((id * 17) % 53 AS INT) AS v")
+    checkRangeEquivalence(df,
       """SELECT id, pk,
         |  MAX(v) OVER (PARTITION BY pk ORDER BY ts
         |    RANGE BETWEEN INTERVAL '1' HOUR PRECEDING
@@ -544,8 +503,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       (i, i % 2, k, (i * 13) % 41)
     }
     val df = rows.toDF("id", "pk", "k", "v")
-    checkRangeEquivalence(
-      df,
+    checkRangeEquivalence(df,
       """SELECT id, pk, k,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k
         |    RANGE BETWEEN 0 PRECEDING AND 0 FOLLOWING) AS mn,
@@ -557,15 +515,12 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   test("-- RANGE frame wider than partition (C4: admit/drop loops no-op)") {
     // Once the first batch is admitted, admit/drop must detect no change
     // and skip work.
-    val df = spark
-      .range(0, 25)
-      .selectExpr(
-        "CAST(id AS INT) AS id",
-        "(CAST(id AS INT) / 5) AS pk",
-        "CAST((id * 7) % 23 AS INT) AS k",
-        "CAST((id * 19) % 101 AS INT) AS v")
-    checkRangeEquivalence(
-      df,
+    val df = spark.range(0, 25).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) / 5) AS pk",
+      "CAST((id * 7) % 23 AS INT) AS k",
+      "CAST((id * 19) % 101 AS INT) AS v")
+    checkRangeEquivalence(df,
       """SELECT id, pk,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k
         |    RANGE BETWEEN 100 PRECEDING AND 100 FOLLOWING) AS mn,
@@ -588,8 +543,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       (i, i % 2, kOpt, (i * 11) % 37)
     }
     val df = rows.toDF("id", "pk", "k", "v")
-    checkRangeEquivalence(
-      df,
+    checkRangeEquivalence(df,
       """SELECT id, pk,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS FIRST
         |    RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS mn_nf,
@@ -602,7 +556,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
         |FROM t""".stripMargin)
   }
 
-  // Decimal overflow / BinaryType MIN/MAX across block merge; UDAF fallback.
+    // Decimal overflow / BinaryType MIN/MAX across block merge; UDAF fallback.
   // Trap: blockSize=16 is SQLConf minimum; frame > blockSize ensures the
   // seg-tree merge path is actually crossed.
 
@@ -615,17 +569,19 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
     withSQLConf(extra: _*)(body)
   }
 
+
   /**
-   * 20 rows in one partition, Decimal(38, 0) values near the type's upper bound; frame of
-   * `segTreeFramePrec` PRECEDING..CURRENT ROW makes any >=2-row window overflow Sum. Block 16 +
-   * frame 17 forces cross-block merge.
+   * 20 rows in one partition, Decimal(38, 0) values near the type's upper
+   * bound; frame of `segTreeFramePrec` PRECEDING..CURRENT ROW makes any
+   * >=2-row window overflow Sum. Block 16 + frame 17 forces cross-block merge.
    */
   private def decimalOverflowDF: DataFrame = {
     // 9e37 -- below Decimal(38,0) MAX (~9.99e37), but 2x overflows.
-    val big = "90000000000000000000000000000000000000" // 38 digits
-    spark
-      .range(0, segTreeRows.toLong)
-      .selectExpr("CAST(id AS INT) AS id", "0 AS pk", s"CAST('$big' AS DECIMAL(38, 0)) AS v")
+    val big = "90000000000000000000000000000000000000"  // 38 digits
+    spark.range(0, segTreeRows.toLong).selectExpr(
+      "CAST(id AS INT) AS id",
+      "0 AS pk",
+      s"CAST('$big' AS DECIMAL(38, 0)) AS v")
   }
 
   private val decimalOverflowSql: String =
@@ -643,16 +599,14 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
           val e = intercept[Exception] {
             spark.sql(decimalOverflowSql).collect()
           }
-          assert(
-            hasArithmeticCause(e),
+          assert(hasArithmeticCause(e),
             s"expected ArithmeticException root cause, got: ${e.getMessage}")
         }
         withSQLConf(enableSegTree.toSeq: _*) {
           val e = intercept[Exception] {
             spark.sql(decimalOverflowSql).collect()
           }
-          assert(
-            hasArithmeticCause(e),
+          assert(hasArithmeticCause(e),
             s"expected ArithmeticException root cause, got: ${e.getMessage}")
         }
       }
@@ -670,8 +624,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
           spark.sql(decimalOverflowSql).collect().sortBy(_.toString)
         }
         // At least one row must be NULL so we know overflow actually fired.
-        assert(
-          baseline.exists(_.isNullAt(2)),
+        assert(baseline.exists(_.isNullAt(2)),
           "baseline should contain NULL overflow rows; test data may be too small")
         withSQLConf(enableSegTree.toSeq: _*) {
           val actual = spark.sql(decimalOverflowSql).collect().sortBy(_.toString)
@@ -689,12 +642,10 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
     // and cross-block merge sees overflowing buffers. Rows past id=20 slide
     // clear and recover non-NULL.
     val big = "90000000000000000000000000000000000000"
-    val df = spark
-      .range(0, 24)
-      .selectExpr(
-        "CAST(id AS INT) AS id",
-        "0 AS pk",
-        s"""CASE WHEN id IN (14, 15, 16, 17)
+    val df = spark.range(0, 24).selectExpr(
+      "CAST(id AS INT) AS id",
+      "0 AS pk",
+      s"""CASE WHEN id IN (14, 15, 16, 17)
               THEN CAST('$big' AS DECIMAL(38, 0))
               ELSE CAST(id AS DECIMAL(38, 0))
          END AS v""")
@@ -710,9 +661,9 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
           spark.sql(sqlStr).collect().sortBy(_.toString)
         }
         // Sanity: overflow fired AND later rows recover non-NULL.
-        assert(baseline.exists(_.isNullAt(2)), "baseline should contain NULL overflow rows")
-        assert(
-          baseline.exists(r => r.getInt(0) >= 21 && !r.isNullAt(2)),
+        assert(baseline.exists(_.isNullAt(2)),
+          "baseline should contain NULL overflow rows")
+        assert(baseline.exists(r => r.getInt(0) >= 21 && !r.isNullAt(2)),
           "rows with id>=21 should be non-NULL (window slid past big values)")
         withSQLConf(enableSegTree.toSeq: _*) {
           val actual = spark.sql(sqlStr).collect().sortBy(_.toString)
@@ -727,6 +678,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   /** True iff the root cause of `t` is an [[ArithmeticException]] (ANSI overflow). */
   private def hasArithmeticCause(t: Throwable): Boolean =
     Option(SparkErrorUtils.getRootCause(t)).exists(_.isInstanceOf[ArithmeticException])
+
 
   /** Pattern of 20 Array[Byte] values used across a. */
   private def binaryVariedRows: Seq[(Int, Array[Byte])] = {
@@ -851,7 +803,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
     }
   }
 
-  // ScalaUDAF/ScalaAggregator both extend ImperativeAggregate and must be
+    // ScalaUDAF/ScalaAggregator both extend ImperativeAggregate and must be
   // rejected by `eligibleForSegTree`. Flag ON must not throw (segtree merge on
   // ImperativeAggregate would NPE) and must match flag OFF bit-for-bit.
 
@@ -871,8 +823,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       }
       withSQLConf(enableSegTree.toSeq: _*) {
         val actual = spark.sql(query).collect().sortBy(_.toString)
-        assert(
-          actual.toSeq === baseline.toSeq,
+        assert(actual.toSeq === baseline.toSeq,
           s"ScalaUDAF fallback result differs.\nExpected: ${baseline.toSeq}\n" +
             s"Actual:   ${actual.toSeq}")
       }
@@ -897,8 +848,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       }
       withSQLConf(enableSegTree.toSeq: _*) {
         val actual = spark.sql(query).collect().sortBy(_.toString)
-        assert(
-          actual.toSeq === baseline.toSeq,
+        assert(actual.toSeq === baseline.toSeq,
           s"typed Aggregator fallback result differs.\nExpected: ${baseline.toSeq}\n" +
             s"Actual:   ${actual.toSeq}")
       }
@@ -909,11 +859,12 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
 
   test("SPARK-56546: LAG does not eagerly construct AggregateProcessor under segtree") {
     // Pre-fix, `val processor` eagerly invoked AggregateProcessor.apply on any
-    // non-empty `functions`, throwing INTERNAL_ERROR for lag(...) when routing
-    // hit FRAME_LESS_OFFSET. Frameless lag below is the minimal repro.
+  // non-empty `functions`, throwing INTERNAL_ERROR for lag(...) when routing
+  // hit FRAME_LESS_OFFSET. Frameless lag below is the minimal repro.
     withSQLConf(enableSegTree.toSeq: _*) {
-      val df =
-        spark.range(10).select(col("id"), expr("lag(id, 1, id) OVER (ORDER BY id)").as("lag"))
+      val df = spark.range(10).select(
+        col("id"),
+        expr("lag(id, 1, id) OVER (ORDER BY id)").as("lag"))
       val expected = (0L until 10L).map(i => Row(i, if (i == 0) 0L else i - 1))
       checkAnswer(df, expected)
     }
@@ -938,7 +889,8 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       val array = factory.newArray(rows = 10)
       frame.prepare(array)
       assert(!frame.fallbackUsed, "segtree path expected")
-      assert(!frame.fallbackAllocated, "fallback must not be allocated on segtree-only partition")
+      assert(!frame.fallbackAllocated,
+        "fallback must not be allocated on segtree-only partition")
     }
   }
 
@@ -980,8 +932,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       // Partition 2: segtree -> fallback must be dropped (row-copy buffer GC-eligible).
       frame.prepare(factory.newArray(rows = 20))
       assert(!frame.fallbackUsed, "segtree path expected")
-      assert(
-        !frame.fallbackAllocated,
+      assert(!frame.fallbackAllocated,
         "retained fallback reference must be dropped on segtree-path re-entry")
     }
   }

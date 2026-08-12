@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types._
 
 /**
@@ -30,15 +31,16 @@ import org.apache.spark.sql.types._
  * [[SlidingWindowFunctionFrame]] or O(N log W) of [[SegmentTreeWindowFunctionFrame]].
  *
  * This frame is only instantiated when `isMinMaxOnly` is true (all window functions are Min or
- * Max), enforced upstream in [[WindowEvaluatorFactoryBase]].
+ * Max and no FILTER clause is used), enforced upstream in [[WindowEvaluatorFactoryBase]].
  */
 private[window] final class SlidingWindowMinMaxFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering,
-    ubound: Option[BoundOrdering],
+    ubound: BoundOrdering,
     functions: Array[Expression],
-    inputSchema: Seq[Attribute])
+    inputSchema: Seq[Attribute],
+    numMonotonicDequeFrames: Option[SQLMetric] = None)
     extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
@@ -94,6 +96,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
   }
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    numMonotonicDequeFrames.foreach(_ += 1)
     input = rows
     lowerIterator = input.generateIterator()
     lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
@@ -101,26 +104,9 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     while (di < deques.length) { deques(di).clear(); di += 1 }
     lowerBound = 0
 
-    if (ubound.isEmpty) {
-      // Shrinking frame (BETWEEN <lower> AND UNBOUNDED FOLLOWING): admit the entire partition
-      // up front. Note: on monotone input the deque may retain O(N) elements per aggregate,
-      // which is acceptable because the partition itself is already O(N).
-      val iter = input.generateIterator()
-      var idx = 0
-      while (iter.hasNext) {
-        val row = iter.next()
-        var dj = 0
-        while (dj < deques.length) { deques(dj).admit(row, idx); dj += 1 }
-        idx += 1
-      }
-      upperBound = input.length
-      nextRow = null
-      inputIterator = null
-    } else {
-      inputIterator = input.generateIterator()
-      nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-      upperBound = 0
-    }
+    inputIterator = input.generateIterator()
+    nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+    upperBound = 0
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
@@ -136,20 +122,17 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
 
     // Add all rows to the buffer for which the input row value is equal to or less than
     // the output row upper bound.
-    if (ubound.isDefined) {
-      val ub = ubound.get
-      while (nextRow != null && ub.compare(nextRow, upperBound, current, index) <= 0) {
-        if (lbound.compare(nextRow, lowerBound, current, index) < 0) {
-          lowerBound += 1
-          lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
-        } else {
-          var di = 0
-          while (di < deques.length) { deques(di).admit(nextRow, upperBound); di += 1 }
-          bufferUpdated = true
-        }
-        nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-        upperBound += 1
+    while (nextRow != null && ubound.compare(nextRow, upperBound, current, index) <= 0) {
+      if (lbound.compare(nextRow, lowerBound, current, index) < 0) {
+        lowerBound += 1
+        lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
+      } else {
+        var di = 0
+        while (di < deques.length) { deques(di).admit(nextRow, upperBound); di += 1 }
+        bufferUpdated = true
       }
+      nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+      upperBound += 1
     }
 
     if (bufferUpdated) {
@@ -187,14 +170,6 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     private var head = 0
     private var tail = 0
     private var size = 0
-
-    private val isPrimitive = dataType match {
-      case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
-          DateType | TimestampType | TimestampNTZType | _: YearMonthIntervalType |
-          _: DayTimeIntervalType =>
-        true
-      case _ => false
-    }
 
     def clear(): Unit = {
       var i = 0
@@ -259,12 +234,13 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
       size += 1
     }
 
-    // For primitive types the value is already by-value safe. For reference types we use
-    // InternalRow.copyValue which handles the deep copy in a single allocation.
+    // ExtractWindowExpressions hoists window aggregate arguments into the Project below,
+    // so `boundChild` is a BoundReference over an UnsafeRow. Thus getBinary/getDecimal
+    // allocate a fresh object per call, and we only need InternalRow.copyValue for the
+    // remaining reference types (String, Struct, Array, Map).
     private def evaluateAndCopy(row: InternalRow): Any = {
       val value = boundChild.eval(row)
-      if (value == null || isPrimitive) value
-      else InternalRow.copyValue(value)
+      if (value == null) null else InternalRow.copyValue(value)
     }
 
     def admit(row: InternalRow, index: Int): Unit = {

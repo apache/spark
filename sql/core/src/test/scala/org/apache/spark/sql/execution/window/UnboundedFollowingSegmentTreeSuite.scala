@@ -24,18 +24,19 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * End-to-end correctness tests for the segment-tree shrinking-frame path (`... ROWS/RANGE BETWEEN
- * <lower> AND UNBOUNDED FOLLOWING`).
+ * End-to-end correctness tests for the segment-tree shrinking-frame path
+ * (`... ROWS/RANGE BETWEEN <lower> AND UNBOUNDED FOLLOWING`).
  *
- * Mirrors the structure of [[SegmentTreeWindowFunctionSuite]]: every test runs the same SQL with
- * `spark.sql.window.segmentTree.enabled` off and on and asserts row-set equality. The "off" path
- * runs through [[UnboundedFollowingWindowFunctionFrame]] (the O(N^2) baseline); the "on" path
- * runs through the new shrinking branch in [[SegmentTreeWindowFunctionFrame]] (`ubound = None`).
+ * Mirrors the structure of [[SegmentTreeWindowFunctionSuite]]: every test
+ * runs the same SQL with `spark.sql.window.segmentTree.enabled` off and on
+ * and asserts row-set equality. The "off" path runs through
+ * [[UnboundedFollowingWindowFunctionFrame]] (the O(N^2) baseline); the "on"
+ * path runs through the new shrinking branch in
+ * [[SegmentTreeWindowFunctionFrame]] (`ubound = None`).
  */
 class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
 
   import testImplicits._
-
 
   private val enableSegTree: Map[String, String] = Map(
     SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
@@ -66,8 +67,7 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
       }
       withSQLConf(enableSegTree.toSeq: _*) {
         val actual = spark.sql(query).collect().sortBy(_.toString)
-        assert(
-          actual.toSeq === baseline.toSeq,
+        assert(actual.toSeq === baseline.toSeq,
           s"shrinking-frame segtree output differs from baseline.\n" +
             s"Expected: ${baseline.toSeq}\nActual:   ${actual.toSeq}")
       }
@@ -78,13 +78,14 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
 
   /** 3 partitions, 40 rows each; values = row index. */
   private def baseDF: DataFrame =
-    spark.range(0, 120).selectExpr("id", "(id % 3) AS pk", "CAST(id AS INT) AS v")
+    spark.range(0, 120).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CAST(id AS INT) AS v")
 
   /** Shrinking ROWS frame: [lo, end-of-partition). */
   private def shrinkingRowsFrame(lo: Int) =
-    Window
-      .partitionBy($"pk")
-      .orderBy($"id")
+    Window.partitionBy($"pk").orderBy($"id")
       .rowsBetween(lo, Window.unboundedFollowing)
 
   // ============================================================
@@ -145,11 +146,10 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
     // Both-unbounded routes to UnboundedWindowFunctionFrame (different case
     // in the dispatcher) and is one-shot O(1). This test just verifies the
     // segtree flag doesn't break it.
-    val frame = Window
-      .partitionBy($"pk")
-      .orderBy($"id")
+    val frame = Window.partitionBy($"pk").orderBy($"id")
       .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
-    checkEquivalence(() => baseDF.select($"id", $"pk", sum($"v").over(frame).as("agg")))
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", sum($"v").over(frame).as("agg")))
   }
 
   test("ROWS BETWEEN 5 FOLLOWING AND UNBOUNDED FOLLOWING (lower bound is positive)") {
@@ -164,8 +164,7 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
   test("MIN + MAX + SUM share a single shrinking frame") {
     checkEquivalence(() =>
       baseDF.select(
-        $"id",
-        $"pk",
+        $"id", $"pk",
         min($"v").over(shrinkingRowsFrame(0)).as("mn"),
         max($"v").over(shrinkingRowsFrame(0)).as("mx"),
         sum($"v").over(shrinkingRowsFrame(0)).as("s")))
@@ -182,11 +181,8 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
   }
 
   test("empty result table (no rows)") {
-    val df = spark.emptyDataFrame
-      .selectExpr(
-        "CAST(NULL AS BIGINT) AS id",
-        "CAST(NULL AS BIGINT) AS pk",
-        "CAST(NULL AS INT) AS v")
+    val df = spark.emptyDataFrame.selectExpr("CAST(NULL AS BIGINT) AS id",
+      "CAST(NULL AS BIGINT) AS pk", "CAST(NULL AS INT) AS v")
       .where("id IS NOT NULL")
     checkEquivalence(() =>
       df.select($"id", $"pk", sum($"v").over(shrinkingRowsFrame(0)).as("agg")))
@@ -199,16 +195,13 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
     val df = baseDF
     val baseline = withSQLConf(disableSegTree.toSeq: _*) {
       df.select($"id", $"pk", sum($"v").over(shrinkingRowsFrame(0)).as("s"))
-        .collect()
-        .toSeq
+        .collect().toSeq
     }
     withSQLConf(
       SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
       SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1024") {
-      val actual = df
-        .select($"id", $"pk", sum($"v").over(shrinkingRowsFrame(0)).as("s"))
-        .collect()
-        .toSeq
+      val actual = df.select($"id", $"pk", sum($"v").over(shrinkingRowsFrame(0)).as("s"))
+        .collect().toSeq
       QueryTest.sameRows(baseline, actual, isSorted = false).foreach { err =>
         fail(s"forced-fallback path diverges from baseline.\n$err")
       }
@@ -219,13 +212,11 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
     // Analogous to the ROWS fallback test above, but exercises the RANGE shrinking path.
     // With minRows=1024 and partitions of 20 rows each, the segtree path forces fallback
     // to the legacy UnboundedFollowingWindowFunctionFrame for RANGE frames as well.
-    val df = spark
-      .range(0, 40)
-      .selectExpr(
-        "CAST(id AS INT) AS id",
-        "(CAST(id AS INT) % 2) AS pk",
-        "CAST(id AS INT) AS k",
-        "CAST((id * 13) % 41 AS INT) AS v")
+    val df = spark.range(0, 40).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) % 2) AS pk",
+      "CAST(id AS INT) AS k",
+      "CAST((id * 13) % 41 AS INT) AS v")
     df.createOrReplaceTempView("t_fallback_range")
     try {
       val query =
@@ -240,8 +231,7 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1024") {
         val actual = spark.sql(query).collect().sortBy(_.toString).toSeq
-        assert(
-          actual === baseline,
+        assert(actual === baseline,
           s"RANGE forced-fallback path diverges from baseline.\n" +
             s"Expected: $baseline\nActual:   $actual")
       }
@@ -255,11 +245,10 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
   // ============================================================
 
   test("all-NULL column: SUM/MIN/MAX/AVG/COUNT") {
-    val df = spark.range(0, 30).selectExpr("id", "(id % 3) AS pk", "CAST(NULL AS INT) AS v")
+    val df = spark.range(0, 30).selectExpr("id", "(id % 3) AS pk",
+      "CAST(NULL AS INT) AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         sum($"v").over(shrinkingRowsFrame(0)).as("s"),
         min($"v").over(shrinkingRowsFrame(0)).as("mn"),
         max($"v").over(shrinkingRowsFrame(0)).as("mx"),
@@ -272,41 +261,32 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
   // lower-edge partial block of the segtree query crosses a NULL/non-NULL
   // boundary.
   test("FIRST/LAST over shrinking frame: respect-nulls with mixed NULLs") {
-    val df = spark
-      .range(0, 60)
-      .selectExpr(
-        "id",
-        "(id % 3) AS pk",
-        "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         first($"v").over(shrinkingRowsFrame(0)).as("fv"),
         last($"v").over(shrinkingRowsFrame(0)).as("lv")))
   }
 
   test("FIRST/LAST over shrinking frame: ignore-nulls with mixed NULLs") {
-    val df = spark
-      .range(0, 60)
-      .selectExpr(
-        "id",
-        "(id % 3) AS pk",
-        "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         first($"v", ignoreNulls = true).over(shrinkingRowsFrame(0)).as("fv_ign"),
         last($"v", ignoreNulls = true).over(shrinkingRowsFrame(0)).as("lv_ign")))
   }
 
   test("all-NULL column: FIRST/LAST shrinking frame in both modes") {
-    val df = spark.range(0, 30).selectExpr("id", "(id % 3) AS pk", "CAST(NULL AS INT) AS v")
+    val df = spark.range(0, 30).selectExpr("id", "(id % 3) AS pk",
+      "CAST(NULL AS INT) AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         first($"v").over(shrinkingRowsFrame(0)).as("fv"),
         last($"v").over(shrinkingRowsFrame(0)).as("lv"),
         first($"v", ignoreNulls = true).over(shrinkingRowsFrame(0)).as("fv_ign"),
@@ -314,16 +294,12 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
   }
 
   test("mixed NULL and non-NULL: NULLs must not leak into MIN/MAX") {
-    val df = (0 until 60)
-      .map { i =>
-        val v: Option[Int] = if (i % 4 == 0) None else Some(i)
-        (i.toLong, (i % 3).toLong, v)
-      }
-      .toDF("id", "pk", "v")
+    val df = (0 until 60).map { i =>
+      val v: Option[Int] = if (i % 4 == 0) None else Some(i)
+      (i.toLong, (i % 3).toLong, v)
+    }.toDF("id", "pk", "v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         min($"v").over(shrinkingRowsFrame(0)).as("mn"),
         max($"v").over(shrinkingRowsFrame(0)).as("mx"),
         sum($"v").over(shrinkingRowsFrame(0)).as("s"),
@@ -332,18 +308,12 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
 
   test("Double NaN and +/-Infinity propagate correctly through MIN/MAX/SUM") {
     val df = Seq(
-      (0L, 0L, 1.0d),
-      (1L, 0L, Double.NaN),
-      (2L, 0L, 3.0d),
-      (3L, 0L, Double.PositiveInfinity),
-      (4L, 0L, 5.0d),
-      (5L, 0L, Double.NegativeInfinity),
-      (6L, 0L, 7.0d),
-      (7L, 0L, 9.0d)).toDF("id", "pk", "v")
+      (0L, 0L, 1.0d), (1L, 0L, Double.NaN), (2L, 0L, 3.0d),
+      (3L, 0L, Double.PositiveInfinity), (4L, 0L, 5.0d),
+      (5L, 0L, Double.NegativeInfinity), (6L, 0L, 7.0d), (7L, 0L, 9.0d)
+    ).toDF("id", "pk", "v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         min($"v").over(shrinkingRowsFrame(0)).as("mn"),
         max($"v").over(shrinkingRowsFrame(0)).as("mx"),
         sum($"v").over(shrinkingRowsFrame(0)).as("s")))
@@ -354,19 +324,15 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
   // ============================================================
 
   test("numeric types: Int / Long / Double / Decimal") {
-    val df = spark
-      .range(0, 60)
-      .selectExpr(
-        "id",
-        "(id % 3) AS pk",
-        "CAST(id AS INT) AS vi",
-        "id * 1000000000L AS vl",
-        "CAST(id AS DOUBLE) * 1.5 AS vd",
-        "CAST(id AS DECIMAL(20, 5)) AS vdec")
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CAST(id AS INT) AS vi",
+      "id * 1000000000L AS vl",
+      "CAST(id AS DOUBLE) * 1.5 AS vd",
+      "CAST(id AS DECIMAL(20, 5)) AS vdec")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         sum($"vi").over(shrinkingRowsFrame(0)).as("si"),
         sum($"vl").over(shrinkingRowsFrame(0)).as("sl"),
         sum($"vd").over(shrinkingRowsFrame(0)).as("sd"),
@@ -374,32 +340,24 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
   }
 
   test("String lexicographic MIN/MAX") {
-    val df = spark
-      .range(0, 30)
-      .selectExpr(
-        "id",
-        "(id % 3) AS pk",
-        "CONCAT('s', LPAD(CAST((id * 7) % 31 AS STRING), 3, '0')) AS v")
+    val df = spark.range(0, 30).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CONCAT('s', LPAD(CAST((id * 7) % 31 AS STRING), 3, '0')) AS v")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         min($"v").over(shrinkingRowsFrame(0)).as("mn"),
         max($"v").over(shrinkingRowsFrame(0)).as("mx")))
   }
 
   test("Date / Timestamp MIN/MAX") {
-    val df = spark
-      .range(0, 24)
-      .selectExpr(
-        "id",
-        "(id % 3) AS pk",
-        "DATE_ADD(DATE'2024-01-01', CAST(id AS INT)) AS d",
-        "TIMESTAMPADD(HOUR, CAST(id AS INT), TIMESTAMP'2024-01-01 00:00:00') AS ts")
+    val df = spark.range(0, 24).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "DATE_ADD(DATE'2024-01-01', CAST(id AS INT)) AS d",
+      "TIMESTAMPADD(HOUR, CAST(id AS INT), TIMESTAMP'2024-01-01 00:00:00') AS ts")
     checkEquivalence(() =>
-      df.select(
-        $"id",
-        $"pk",
+      df.select($"id", $"pk",
         min($"d").over(shrinkingRowsFrame(0)).as("dmn"),
         max($"ts").over(shrinkingRowsFrame(0)).as("tsmx")))
   }
@@ -412,14 +370,14 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
     // collect_list is ImperativeAggregate; segtree path must not engage.
     // The result should still be correct via the legacy frame.
     checkEquivalence(() =>
-      baseDF.select($"id", $"pk", collect_list($"v").over(shrinkingRowsFrame(0)).as("lst")))
+      baseDF.select($"id", $"pk",
+        collect_list($"v").over(shrinkingRowsFrame(0)).as("lst")))
   }
 
   test("DISTINCT shrinking aggregate is rejected by analyzer regardless of seg-tree flag") {
     def run(): Unit = {
-      baseDF
-        .select($"id", $"pk", count_distinct($"v").over(shrinkingRowsFrame(0)).as("cd"))
-        .collect()
+      baseDF.select($"id", $"pk",
+        count_distinct($"v").over(shrinkingRowsFrame(0)).as("cd")).collect()
     }
     withSQLConf(disableSegTree.toSeq: _*) {
       val e = intercept[org.apache.spark.sql.AnalysisException](run())
@@ -436,17 +394,14 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
   // ============================================================
 
   test("RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING with non-uniform gaps") {
-    val df = spark
-      .range(0, 40)
-      .selectExpr(
-        "CAST(id AS INT) AS id",
-        "(CAST(id AS INT) % 2) AS pk",
-        "CAST(CASE CAST(id AS INT) % 7 " +
-          "WHEN 0 THEN 1 WHEN 1 THEN 3 WHEN 2 THEN 4 WHEN 3 THEN 4 " +
-          "WHEN 4 THEN 7 WHEN 5 THEN 10 ELSE 15 END + (CAST(id AS INT) / 7) * 20 AS INT) AS k",
-        "CAST((id * 31) % 97 AS INT) AS v")
-    checkSqlEquivalence(
-      df,
+    val df = spark.range(0, 40).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) % 2) AS pk",
+      "CAST(CASE CAST(id AS INT) % 7 " +
+        "WHEN 0 THEN 1 WHEN 1 THEN 3 WHEN 2 THEN 4 WHEN 3 THEN 4 " +
+        "WHEN 4 THEN 7 WHEN 5 THEN 10 ELSE 15 END + (CAST(id AS INT) / 7) * 20 AS INT) AS k",
+      "CAST((id * 31) % 97 AS INT) AS v")
+    checkSqlEquivalence(df,
       """SELECT id, pk,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k
         |    RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS mn,
@@ -456,15 +411,12 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
   }
 
   test("RANGE BETWEEN 2 PRECEDING AND UNBOUNDED FOLLOWING") {
-    val df = spark
-      .range(0, 40)
-      .selectExpr(
-        "CAST(id AS INT) AS id",
-        "(CAST(id AS INT) % 2) AS pk",
-        "CAST((id * 7) % 31 AS INT) AS k",
-        "CAST((id * 11) % 53 AS INT) AS v")
-    checkSqlEquivalence(
-      df,
+    val df = spark.range(0, 40).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) % 2) AS pk",
+      "CAST((id * 7) % 31 AS INT) AS k",
+      "CAST((id * 11) % 53 AS INT) AS v")
+    checkSqlEquivalence(df,
       """SELECT id, pk, k,
         |  SUM(v) OVER (PARTITION BY pk ORDER BY k
         |    RANGE BETWEEN 2 PRECEDING AND UNBOUNDED FOLLOWING) AS s
@@ -479,8 +431,7 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
       (i, i % 2, k, (i * 13) % 41)
     }
     val df = rows.toDF("id", "pk", "k", "v")
-    checkSqlEquivalence(
-      df,
+    checkSqlEquivalence(df,
       """SELECT id, pk, k,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k
         |    RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS mn,
@@ -500,8 +451,7 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
       (i, i % 2, kOpt, (i * 11) % 37)
     }
     val df = rows.toDF("id", "pk", "k", "v")
-    checkSqlEquivalence(
-      df,
+    checkSqlEquivalence(df,
       """SELECT id, pk,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS FIRST
         |    RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS mn_nf,
@@ -511,18 +461,15 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
   }
 
   test("RANGE Timestamp with INTERVAL offset (MAX) and shrinking upper") {
-    val df = spark
-      .range(0, 30)
-      .selectExpr(
-        "CAST(id AS INT) AS id",
-        "(CAST(id AS INT) % 2) AS pk",
-        "CAST(TIMESTAMP'2024-01-01 10:00:00' + " +
-          "make_interval(0, 0, 0, 0, 0, 30 * CAST(id AS INT) * " +
-          "(CASE CAST(id AS INT) % 3 WHEN 0 THEN 1 WHEN 1 THEN 3 ELSE 4 END), 0) " +
-          "AS TIMESTAMP) AS ts",
-        "CAST((id * 17) % 53 AS INT) AS v")
-    checkSqlEquivalence(
-      df,
+    val df = spark.range(0, 30).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) % 2) AS pk",
+      "CAST(TIMESTAMP'2024-01-01 10:00:00' + " +
+        "make_interval(0, 0, 0, 0, 0, 30 * CAST(id AS INT) * " +
+        "(CASE CAST(id AS INT) % 3 WHEN 0 THEN 1 WHEN 1 THEN 3 ELSE 4 END), 0) " +
+        "AS TIMESTAMP) AS ts",
+      "CAST((id * 17) % 53 AS INT) AS v")
+    checkSqlEquivalence(df,
       """SELECT id, pk,
         |  MAX(v) OVER (PARTITION BY pk ORDER BY ts
         |    RANGE BETWEEN INTERVAL '1' HOUR PRECEDING AND UNBOUNDED FOLLOWING) AS mx
@@ -537,18 +484,13 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
     val df = baseDF
     val expected = withSQLConf(disableSegTree.toSeq: _*) {
       df.select($"id", $"pk", min($"v").over(shrinkingRowsFrame(0)).as("mn"))
-        .collect()
-        .sortBy(_.toString)
-        .toSeq
+        .collect().sortBy(_.toString).toSeq
     }
     withSQLConf(
       SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false",
       SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1024") {
-      val actual = df
-        .select($"id", $"pk", min($"v").over(shrinkingRowsFrame(0)).as("mn"))
-        .collect()
-        .sortBy(_.toString)
-        .toSeq
+      val actual = df.select($"id", $"pk", min($"v").over(shrinkingRowsFrame(0)).as("mn"))
+        .collect().sortBy(_.toString).toSeq
       assert(actual === expected)
     }
   }
