@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.util.Collections
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Aborted, CatalogV2Util, Committed, Identifier, InMemoryBaseTable, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SharedTablesInMemoryRowLevelOperationTableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Aborted, CatalogV2Util, Committed, Identifier, InMemoryBaseTable, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SharedTablesInMemoryRowLevelOperationTableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.types.StructType
@@ -123,6 +123,47 @@ class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
 
       // Transaction must be scoped to the streaming session; main session catalog is untouched.
       assert(catalog.observedTransactions.isEmpty)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(1), Row(2), Row(3), Row(4), Row(5), Row(6)))
+    }
+  }
+
+  test("transactional streaming target reload preserves options and write privileges") {
+    createSimpleTable("value INT")
+    val loadOption = "target-load-option"
+    val loadValue = "load-value"
+    val writeOption = "target-write-option"
+    val writeValue = "write-value"
+
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val query = inputData.toDF()
+        .writeStream
+        .option(loadOption, loadValue)
+        .option(writeOption, writeValue)
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .toTable(tableNameAsString)
+
+      inputData.addData(1, 2, 3)
+      query.processAllAvailable()
+      inputData.addData(4, 5, 6)
+      query.processAllAvailable()
+      query.stop()
+
+      val transactions = streamCatalog(query).observedTransactions
+      assert(transactions.size === 2)
+      transactions.foreach { txn =>
+        val targetLoads = txn.catalog.loadTableCalls.filter {
+          case (_, options) => options.get(loadOption) == loadValue
+        }
+        assert(targetLoads.nonEmpty, "expected the target to be reloaded in each transaction")
+        targetLoads.foreach { case (context, options) =>
+          assert(context.writePrivileges() === java.util.Set.of(TableWritePrivilege.INSERT))
+          assert(options.get(writeOption) === writeValue)
+        }
+      }
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),

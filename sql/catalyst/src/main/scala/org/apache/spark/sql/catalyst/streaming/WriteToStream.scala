@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.streaming
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -37,6 +37,8 @@ case class WriteToStream(
     catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
     catalogTable: Option[CatalogTable]) extends UnaryNode {
 
+  def writePrivileges: Set[TableWritePrivilege] = WriteToStream.writePrivileges(outputMode)
+
   override def isStreaming: Boolean = true
 
   override def output: Seq[Attribute] = Nil
@@ -47,3 +49,13 @@ case class WriteToStream(
     copy(inputQuery = newChild)
 }
 
+object WriteToStream {
+  private[sql] def writePrivileges(outputMode: OutputMode): Set[TableWritePrivilege] = {
+    outputMode match {
+      case InternalOutputModes.Complete =>
+        Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
+      case InternalOutputModes.Append | InternalOutputModes.Update =>
+        Set(TableWritePrivilege.INSERT)
+    }
+  }
+}

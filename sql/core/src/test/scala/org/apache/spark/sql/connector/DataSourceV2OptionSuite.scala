@@ -26,12 +26,15 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, StagedTable, StagingTableCatalog, Table, TableInfo, TableWritePrivilege, TimeTravel}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, StagedTable, StagingTableCatalog, Table, TableCapability, TableInfo, TableWritePrivilege, TimeTravel}
 import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.execution.{CommandResultExec, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2._
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.sources.MicroBatchWrite
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class LoadCountingInMemoryCatalog extends InMemoryCatalog {
@@ -134,6 +137,24 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     val writeOptions = captured.flatMap(qe => collectInMemoryWriteOptions(qe.executedPlan))
     assert(writeOptions.nonEmpty, "expected a V2 in-memory batch write")
     writeOptions.foreach(assertTargetOptions)
+  }
+
+  private def inMemoryStreamingWriteOptions(
+      query: StreamingQuery): CaseInsensitiveStringMap = {
+    val execution = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
+    assert(execution.lastExecution != null, "expected an executed micro-batch")
+    execution.lastExecution.executedPlan.collectFirst {
+      case write: WriteToDataSourceV2Exec =>
+        write.batchWrite match {
+          case microBatchWrite: MicroBatchWrite =>
+            microBatchWrite.writeSupport match {
+              case append: InMemoryBaseTable#StreamingAppend => append.info.options
+              case other =>
+                fail(s"expected an in-memory V2 StreamingWrite, got ${other.getClass.getName}")
+            }
+          case other => fail(s"expected a MicroBatchWrite, got ${other.getClass.getName}")
+        }
+    }.getOrElse(fail("expected a V2 streaming write in the executed plan"))
   }
 
   test("SPARK-36680: Supports Dynamic Table Options for SQL Select") {
@@ -742,6 +763,93 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       val opts = inMemoryCatalog.lastLoadTableOptions
       assert(opts.isDefined)
       assert(opts.get.get("customOption") === "customValue")
+    }
+  }
+
+  Seq(
+    "append" -> Set(TableWritePrivilege.INSERT),
+    "update" -> Set(TableWritePrivilege.INSERT),
+    "complete" -> Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
+  ).foreach { case (mode, expectedPrivileges) =>
+    test(s"SPARK-58389: DataStreamWriter.toTable $mode target load forwards options and " +
+        "write privileges") {
+      val table = s"streaming_${mode}_table"
+      val t1 = s"$catalogAndNamespace$table"
+      val ident = Identifier.of(Array("ns1", "ns2"), table)
+      withTable(t1) {
+        val tableSchema = if (mode == "complete") "count BIGINT" else "value INT"
+        sql(s"CREATE TABLE $t1 ($tableSchema)")
+        val target = inMemoryCatalog.loadTable(ident)
+        assert(target.isInstanceOf[InMemoryBaseTable])
+        assert(target.capabilities().contains(TableCapability.STREAMING_WRITE))
+
+        val inputData = MemoryStream[Int]
+        val output = if (mode == "complete") {
+          inputData.toDF().groupBy().count()
+        } else {
+          inputData.toDF()
+        }
+
+        withTempDir { checkpointDir =>
+          inMemoryCatalog.resetLoadTableCalls()
+          val query = output.writeStream
+            .option(loadOption, loadOptionValue)
+            .option(writeOption, writeOptionValue)
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .outputMode(mode)
+            .toTable(t1)
+          try {
+            val targetLoads = inMemoryCatalog.loadTableCalls.filter {
+              case (_, options) => options.get(loadOption) == loadOptionValue
+            }
+            assert(targetLoads.nonEmpty, "expected the streaming target to be loaded")
+            targetLoads.foreach { case (context, options) =>
+              assert(context.writePrivileges() === expectedPrivileges.asJava)
+              assertTargetOptions(options)
+            }
+          } finally {
+            query.stop()
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58389: catalog-backed V2 StreamingWrite receives target options") {
+    val table = "streaming_write_table"
+    val t1 = s"$catalogAndNamespace$table"
+    val ident = Identifier.of(Array("ns1", "ns2"), table)
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (value INT)")
+      val target = inMemoryCatalog.loadTable(ident)
+      assert(target.isInstanceOf[InMemoryBaseTable])
+      assert(target.capabilities().contains(TableCapability.STREAMING_WRITE))
+
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[Int]
+        val query = inputData.toDF().writeStream
+          .option(loadOption, loadOptionValue)
+          .option(writeOption, writeOptionValue)
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .toTable(t1)
+        try {
+          inputData.addData(1, 2, 3)
+          query.processAllAvailable()
+
+          val execution = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
+          val relationOptions = execution.lastExecution.optimizedPlan.collectFirst {
+            case WriteToDataSourceV2(Some(relation), _, _, _) =>
+              assert(relation.table.isInstanceOf[InMemoryBaseTable])
+              relation.options
+          }.getOrElse(fail("expected a catalog-backed V2 target relation"))
+          assertTargetOptions(relationOptions)
+          assertTargetOptions(inMemoryStreamingWriteOptions(query))
+        } finally {
+          query.stop()
+        }
+      }
+
+      checkAnswer(spark.table(t1), Seq(Row(1), Row(2), Row(3)))
     }
   }
 
