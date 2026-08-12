@@ -138,14 +138,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
   }
 
-  // Records the forwarded context/options so tests can verify they reached the catalog, then
+  // Records the forwarded context/state options so tests can verify they reached the catalog, then
   // defers to the default dispatch in TableCatalog (rather than reimplementing it here).
   override def loadTable(
       ident: Identifier,
       context: TableContext,
-      options: CaseInsensitiveStringMap): Table = {
-    _loadTableCalls += ((context, options))
-    super.loadTable(ident, context, options)
+      stateOptions: CaseInsensitiveStringMap): Table = {
+    _loadTableCalls += ((context, stateOptions))
+    super.loadTable(ident, context, stateOptions)
   }
 
   override def invalidateTable(ident: Identifier): Unit = {

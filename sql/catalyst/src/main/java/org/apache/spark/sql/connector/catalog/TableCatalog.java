@@ -220,7 +220,7 @@ public interface TableCatalog extends CatalogPlugin {
    * Load table metadata by {@link Identifier identifier} from the catalog, forwarding the
    * user-specified options that may affect table state.
    * <p>
-   * The default implementation ignores {@code options} and delegates to the existing
+   * The default implementation ignores {@code stateOptions} and delegates to the existing
    * {@code loadTable} overloads based on {@code context}. Catalogs that want to receive the user
    * options while reading a table must override {@link #tableStateOptionKeys()} and this method.
    * Spark passes only the options declared by {@link #tableStateOptionKeys()}. Spark retains the
@@ -233,8 +233,8 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param ident a table identifier
    * @param context the parsed load parameters (time travel, write privileges)
-   * @param options options declared to affect table state; Spark-parsed state such as time travel
-   *                is provided through {@code context} instead
+   * @param stateOptions options declared to affect table state; Spark-parsed state such as time
+   *                     travel is provided through {@code context} instead
    * @return the table's metadata
    * @throws NoSuchTableException If the table doesn't exist
    *
@@ -243,7 +243,7 @@ public interface TableCatalog extends CatalogPlugin {
   default Table loadTable(
       Identifier ident,
       TableContext context,
-      CaseInsensitiveStringMap options) throws NoSuchTableException {
+      CaseInsensitiveStringMap stateOptions) throws NoSuchTableException {
     if (context.timeTravel().isPresent()) {
       TimeTravel timeTravel = context.timeTravel().get();
       if (timeTravel instanceof TimeTravel.AsOfVersion v) {
