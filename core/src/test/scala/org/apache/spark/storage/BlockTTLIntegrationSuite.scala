@@ -58,8 +58,8 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
   }
 
   private def lookupMapOutputTrackerMaster(sc: SparkContext): MapOutputTrackerMaster = {
-    val bme = lookupBlockManagerMasterEndpoint(sc)
-    bme.getMapOutputTrackerMaster()
+    // On the driver the tracker is always a MapOutputTrackerMaster.
+    sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
   }
 
   test("Test that cache blocks are recorded.") {
@@ -69,7 +69,6 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
       .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
       .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
     sc = new SparkContext(conf)
-    sc.setLogLevel("DEBUG")
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
     assert(managerMasterEndpoint.rddAccessTime.isEmpty)
@@ -89,7 +88,6 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
       .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
       .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
     sc = new SparkContext(conf)
-    sc.setLogLevel("DEBUG")
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
     val mapOutputTracker = lookupMapOutputTrackerMaster(sc)
@@ -122,7 +120,6 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
       .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
       .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
     sc = new SparkContext(conf)
-    sc.setLogLevel("DEBUG")
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
     val mapOutputTracker = lookupMapOutputTrackerMaster(sc)
@@ -155,7 +152,6 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
       .setAppName("test-blockmanager-decommissioner")
       .setMaster("local-cluster[2, 1, 1024]")
     sc = new SparkContext(conf)
-    sc.setLogLevel("DEBUG")
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
     assert(managerMasterEndpoint.rddAccessTime.isEmpty)

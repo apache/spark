@@ -885,43 +885,38 @@ private[spark] class MapOutputTrackerMaster(
           case Some(ttl) =>
             while (true) {
               val maxAge = System.currentTimeMillis() - ttl
-              // Find the elements to be removed & update oldest remaining time (if any)
+              // Find the elements to be removed & track the oldest remaining time (if any).
+              // asScala over a ConcurrentHashMap is weakly consistent, so a concurrent put during
+              // iteration is safe (never throws); toList snapshots the (id, atime) pairs we saw.
               var oldest = System.currentTimeMillis()
-              // Make a copy here to reduce the chance of CME
-              try {
-                val toBeRemoved = shuffleAccessTime.asScala.toList.flatMap {
-                  case (shuffleId, atime) =>
-                    if (atime < maxAge) {
-                      Some(shuffleId)
-                    } else {
-                      if (atime < oldest) {
-                        oldest = atime
-                      }
-                      None
+              val toBeRemoved = shuffleAccessTime.asScala.toList.flatMap {
+                case (shuffleId, atime) =>
+                  if (atime < maxAge) {
+                    Some((shuffleId, atime))
+                  } else {
+                    if (atime < oldest) {
+                      oldest = atime
                     }
-                }.toList
-                toBeRemoved.map { shuffleId =>
-                  try {
-                    // Remove the shuffle access time regardless of
-                    // if we cleanup the shuffle successfully or not
-                    // since we could have a shuffle that's already
-                    // been cleaned up elsewhere.
-                    shuffleAccessTime.remove(shuffleId)
-                    unregisterAllMapAndMergeOutput(shuffleId)
-                  } catch {
-                    case NonFatal(e) =>
-                      logDebug(
-                        log"Error removing shuffle ${MDC(SHUFFLE_ID, shuffleId)}", e)
+                    None
                   }
-                }
-                // Wait until the next possible element to be removed
-                val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 100)
-                Thread.sleep(delay)
-              } catch {
-                case _: java.util.ConcurrentModificationException =>
-                  // Just retry, blocks were stored while we were iterating
-                  Thread.sleep(100)
               }
+              toBeRemoved.foreach { case (shuffleId, atime) =>
+                try {
+                  // Only remove if the atime has not changed since our snapshot: a concurrent
+                  // access (updateShuffleAtime) in that window means the shuffle is back in use and
+                  // must not be reaped. remove(key, value) is a no-op when the value differs.
+                  if (shuffleAccessTime.remove(shuffleId, atime)) {
+                    unregisterAllMapAndMergeOutput(shuffleId)
+                  }
+                } catch {
+                  case NonFatal(e) =>
+                    logDebug(
+                      log"Error removing shuffle ${MDC(SHUFFLE_ID, shuffleId)}", e)
+                }
+              }
+              // Wait until the next possible element to be removed
+              val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 100)
+              Thread.sleep(delay)
             }
           case None =>
             logDebug("Tried to start TTL cleaner when not configured.")
@@ -1119,6 +1114,10 @@ private[spark] class MapOutputTrackerMaster(
 
   /** Unregister shuffle data */
   override def unregisterShuffle(shuffleId: Int): Unit = {
+    // Drop any TTL tracking so the cleaner doesn't later wake up and try to unregister a shuffle
+    // that has already been GC-cleaned (which would throw ShuffleStatusNotFoundException). This
+    // mirrors removeRdd dropping rddAccessTime. A no-op when TTL tracking is disabled (map empty).
+    shuffleAccessTime.remove(shuffleId)
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
       shuffleStatus.invalidateSerializedMergeOutputStatusCache()
