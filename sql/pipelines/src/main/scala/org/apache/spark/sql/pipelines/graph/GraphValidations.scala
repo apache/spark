@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.pipelines.graph.DataflowGraph.mapUnique
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 
@@ -254,21 +253,26 @@ trait GraphValidations extends Logging {
   }
 
   protected def validateUserSpecifiedSchemas(sessionCaseSensitive: Boolean): Unit = {
-    val resolver = if (sessionCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
     // Look up tables by their destination identifier, not by the flow's own identifier. The two
     // coincide only for an implicit/default flow (whose identifier equals its destination
     // table's); for a named flow (e.g. `CREATE FLOW <name> AS AUTO CDC INTO <target>`) they
     // differ, and keying on the flow identifier would silently skip validation.
     flowsTo.keys.flatMap(table.get).foreach { t: TableElement =>
+      val flows = flowsTo(t.identifier).map(f => resolvedFlow(f.identifier))
       // The output inferred schema of a table is the declared schema merged with the
       // schema of all incoming flows. This must be equivalent to the declared schema.
       val inferredSchema = SchemaInferenceUtils
         .inferSchemaFromFlows(
           tableIdentifier = t.identifier,
-          flowsTo(t.identifier).map(f => resolvedFlow(f.identifier)),
+          flows,
           userSpecifiedSchema = t.specifiedSchema,
           sessionCaseSensitive = sessionCaseSensitive
         )
+      // Match reserved columns with the flow's effective case sensitivity, not just the session:
+      // a case-sensitivity conf set on the flow overrides the session, the same way the rest of
+      // AUTO CDC derives its resolver.
+      val resolver = SchemaInferenceUtils.resolverFor(
+        SchemaInferenceUtils.effectiveCaseSensitivity(t.identifier, flows, sessionCaseSensitive))
 
       t.specifiedSchema.foreach { ss =>
         // Check the specified schema matches the inferred schema once the engine-owned reserved
