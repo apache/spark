@@ -1,0 +1,122 @@
+author:	HyukjinKwon
+association:	member
+edited:	false
+status:	none
+--
+Can you PR title complete?
+--
+author:	pavan51
+association:	none
+edited:	false
+status:	none
+--
+> Can you PR title complete?
+
+Updated the title of the PR with complete info
+--
+author:	Ma77Ball
+association:	contributor
+edited:	false
+status:	approved
+--
+After a static review, the PR LGTM! I left two suggestions. cc @HyukjinKwon
+--
+author:	pavan51
+association:	none
+edited:	false
+status:	none
+--
+Hi @HyukjinKwon 
+
+All suggestions from  @Ma77Ball 's review have been fully addressed (the feature is now disabled by default for safety, code duplication was refactored, and primitive interval optimization was added). 
+
+The new correctness tests are passing locally and CI is green.Could you please take a look when you have a moment? Thanks! 
+--
+author:	pavan51
+association:	none
+edited:	false
+status:	none
+--
+Hi @peter-toth @Yicong-Huang @HyukjinKwon, 
+
+Could any of you please review this PR when you get a chance. 
+
+@Ma77Ball has reviewed and approved the changes, so it is ready for your final reviews!
+--
+author:	pavan51
+association:	none
+edited:	false
+status:	none
+--
+Hi @cloud-fan @yaooqinn 
+
+Could you please take a look at this PR when you have a moment? It brings performance optimizations to Min and Max Window operations using monotonic deques and all CI checks are green.
+
+
+--
+author:	peter-toth
+association:	contributor
+edited:	false
+status:	commented
+--
+Thanks for the PR, @pavan51!
+
+This adds a third sliding-frame implementation for `MIN`/`MAX`: one monotonic deque per aggregate holding `(value, index)` candidates, so each output row costs amortized O(1) instead of the naive frame's O(W) rescan or the segment tree's O(log W) query, with `WindowEvaluatorFactoryBase` routing to it whenever a frame's functions are all `Min`/`Max` without `FILTER`, behind a new default-off `spark.sql.window.monotonicDeque.enabled`. The algorithm itself holds up — I walked the candidate invariant through both the row- and range-bound skip paths (the skip branch can only fire while `lowerBound == upperBound`, so the deque is empty when it does), and null exclusion matches `least`/`greatest`. The findings below are mostly downstream of the default being flipped to `false` late in review: the description still documents `true`, and the committed benchmark file was produced under the old default, so two of its rows measure the deque while labelled naive/segtree. Separately, the deque picks a different one of several equal-comparing values than both existing paths, the shrinking-frame path buffers the whole partition unspillably, and nothing asserts the new path is taken at all.
+
+@Ma77Ball's four threads are all addressed at this head (default flipped, differential suite added, `isMinMaxOnly` hoisted, interval types added to the primitive list) — finding 7 below argues that last list can go away entirely rather than grow.
+
+### Blocking
+- **1.** *Description does not match the code:* it states `spark.sql.window.monotonicDeque.enabled` defaults to `true` in both "Key improvements" and "user-facing change", but the code ships `createWithDefault(false)` after @Ma77Ball's suggestion — and with `false` the "No user-facing behavior changes" line is right, while with `true` finding 3 makes it wrong. The quoted numbers are also stale against the committed results file (MIN W=1001 says "3,450 ms / 148 ms / 23.3X", the file says 3311/108/30.7X; Section G Increasing says "3,461 vs 675 (5.1X)", the file says 3315/536/6.2X), and they contradict the summary bullet in the same description ("~30X - 37X").
+- **2.** *Benchmark results were generated with the old default, so Section F is mislabelled (`sql/core/benchmarks/WindowBenchmark-results.txt:136`):* `MAX naive (String)` drops 59,293 ms → 422 ms and `MAX segtree default (String)` 2,796 ms → 401 ms. 1M rows x W=1001 `UTF8String` comparisons cannot run in 422 ms on any hardware, and the two cases landing within 5% of each other after previously differing 21x means both ran the same path. `runSpillGuard` never pins the new conf, so under the old default both routed to the deque. The file also moved from the standard runner (Linux/EPYC) to a local M1, which makes every untouched section incomparable to the base. [inline: `sql/core/benchmarks/WindowBenchmark-results.txt:136`]
+- **3.** *Deque returns a different one of several equal-comparing values than both existing paths (`SlidingWindowMinMaxFunctionFrame.scala:252`):* `Least.eval` keeps the accumulated value on a tie, and `Min.mergeExpressions` keeps the left block, so naive and segment-tree both return the **first**; `admit` pops on `>= 0`/`<= 0`, so the deque returns the **last**. Equal is not identical under `getInterpretedOrdering` — collated strings (`UTF8_LCASE`: `Bob`/`bob`) and `-0.0`/`0.0` both tie, and `NormalizeFloatingNumbers` deliberately skips `windowExpressions`. Strict comparisons fix it at no cost. [inline: `sql/core/src/main/scala/org/apache/spark/sql/execution/window/SlidingWindowMinMaxFunctionFrame.scala:252`]
+- **4.** *Shrinking-frame path buffers the whole partition, unspillable and unaccounted (`SlidingWindowMinMaxFunctionFrame.scala:86`):* when `ubound.isEmpty`, `prepare` admits every row, and a min-deque over a non-decreasing column retains all of them — so O(1) → O(N) against the naive frame this actually displaces (`segmentTree.enabled` is default-off too), with no `MemoryConsumer`, no spill path, and no `peakExecutionMemory` visibility. SPARK-56546 shipped all four of those guards in its first commit. The description's "minimal memory footprint" and the config doc's unqualified "O(N) complexity" both need correcting. [inline: `sql/core/src/main/scala/org/apache/spark/sql/execution/window/SlidingWindowMinMaxFunctionFrame.scala:86`]
+- **5.** *Nothing asserts the deque path is taken, and both routing gates are untested (`MonotonicDequeWindowFunctionSuite.scala:50`):* if `isMinMaxOnly` ever evaluates false, all three configs collapse to the same path and every test still passes. `WindowSegmentTreeAllowlistSuite` is the in-module precedent — it asserts routing off `numSegmentTreeFrames`. [inline: `sql/core/src/test/scala/org/apache/spark/sql/execution/window/MonotonicDequeWindowFunctionSuite.scala:50`]
+
+### Non-blocking
+- **6.** *The copy path that `evaluateAndCopy` exists for is never exercised (`MonotonicDequeWindowFunctionSuite.scala:115`):* only the spilled iterator recycles its `UnsafeRow`; every partition here is 100/50/20 rows, far under the 4096 in-memory threshold. I traced the read-before-advance contract that `SegmentTreeWindowFunctionFrame:95` documents and it does hold here, so this is coverage and documentation rather than a live bug. [inline: `sql/core/src/test/scala/org/apache/spark/sql/execution/window/MonotonicDequeWindowFunctionSuite.scala:115`]
+- **7.** *`evaluateAndCopy` reimplements `InternalRow.copyValue` (`SlidingWindowMinMaxFunctionFrame.scala:235`):* the whole method body reduces to `InternalRow.copyValue(boundChild.eval(row))`, which makes the `isPrimitive` allowlist and the per-deque `tempRow` unnecessary. Also, "skips heap allocation/copying entirely for primitive types" isn't accurate — `values` is `Array[Any]`, so every primitive is boxed on admit. [inline: `sql/core/src/main/scala/org/apache/spark/sql/execution/window/SlidingWindowMinMaxFunctionFrame.scala:235`]
+- **8.** *`AggregateProcessor.evaluate(source, target)`'s contract doc is now stale (`SlidingWindowMinMaxFunctionFrame.scala:142`):* it names `eligibleForSegTree`/`WindowSegmentTree.EligibleAggregates` as the enforcing gate and warns the contract "is invisible at the call site". This adds a second caller gated by `isMinMaxOnly` instead. The contract does hold; the reasoning should be written down. [inline: `sql/core/src/main/scala/org/apache/spark/sql/execution/window/SlidingWindowMinMaxFunctionFrame.scala:142`]
+- **9.** *Section A lost its `blockSize=256` cell and gained four rows that never use the deque (`WindowBenchmark.scala:184`):* the deque case replaced the bs=256 case instead of being added, so that coverage is gone while the class doc still promises it; and since `runSectionA` also drives SUM/COUNT/AVG/STDDEV_SAMP, the file now publishes four `monotonic deque (new)` rows that are just a second naive run. [inline: `sql/core/src/test/scala/org/apache/spark/sql/execution/benchmark/WindowBenchmark.scala:184`]
+- **10.** *No data below W=11, where the deque is least likely to win (`WindowBenchmark.scala:416`):* `isMinMaxOnly` has no width gate, and per-row work is interpreted `eval` + boxing + `Ordering[Any]` against the naive path's codegen'd projection. At W=11 MAX is already down to 1.2X; `ROWS BETWEEN 1 PRECEDING AND CURRENT ROW` is unmeasured. [inline: `sql/core/src/test/scala/org/apache/spark/sql/execution/benchmark/WindowBenchmark.scala:416`]
+
+### Minor
+- **11.** *Section H reuses `runSectionA`'s case names, so `allCaseNames` gets duplicates and the Memory/Spill trailer merges Section A's and H's numbers under one label; G/H also hardcode `2000000L`/`50000` where every other section uses named constants, and smoke mode dropped Section B.* [inline: `sql/core/src/test/scala/org/apache/spark/sql/execution/benchmark/WindowBenchmark.scala:400`]
+- **12.** *`MinMaxDeque.bufferIndex` is never read.* [inline: `sql/core/src/main/scala/org/apache/spark/sql/execution/window/SlidingWindowMinMaxFunctionFrame.scala:155`]
+- **13.** *The three `withSQLConf` overrides are no-ops under the shipped default, and they shadow the helper so a test in those suites can no longer enable the deque.* [inline: `sql/core/src/test/scala/org/apache/spark/sql/execution/window/SegmentTreeWindowFunctionSuite.scala:39`]
+
+<!-- ai-code-review -->
+
+--
+author:	cloud-fan
+association:	contributor
+edited:	false
+status:	commented
+--
+**3 blocking, 9 non-blocking, 0 nits.**
+The monotonic deque is the right direction for bounded sliding MIN/MAX, but this PR should initially exclude shrinking frames and close the correctness, routing, spill-coverage, and benchmark gaps before merge.
+
+### Already raised in existing discussion (12)
+- The shrinking-frame path admits the entire partition into unspillable, unaccounted per-aggregate arrays. For monotone input this changes the legacy frame's O(1) frame state to O(N), so large partitions can OOM without task-memory pressure or fallback. Route only bounded moving frames until this path has a partition-size fallback and task-memory accounting. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525152)
+- The committed spill-guard benchmark rows were generated through the deque while labelled naive and segment-tree, and the file replaces standard-runner results with incomparable local M1 results. Pin the deque config in every legacy case and regenerate on the standard runner. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525148)
+- Popping equal candidates makes the deque retain the last equal-comparing value, while existing MIN/MAX paths retain the first. Use strict comparisons and add collated-string and signed-zero differential cases. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525149)
+- The differential suite never asserts that the deque route actually executed, so all three configurations can silently exercise the same fallback. Add a routing metric/assertion plus mixed-aggregate and FILTER negative cases. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525162)
+- The reference-type test stays below the spill threshold, so it does not exercise the recycled UnsafeRow condition that requires copying deque values. Lower the test thresholds and document the read-before-advance invariant. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525166)
+- evaluateAndCopy allocates a temporary row and row copy merely to reach InternalRow.copyValue. Call InternalRow.copyValue on the evaluated value directly. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525176)
+- AggregateProcessor.evaluate now has a second source-row producer, but its contract documentation names only segment-tree eligibility. Document why Min/Max output types reproduce the aggregate-buffer layout. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525182)
+- The new deque benchmark cell replaces blockSize=256 coverage and is also emitted for aggregates that cannot use the deque. Keep the existing cell and add the deque case only for MIN/MAX. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525188)
+- The benchmark does not measure W=1 or W=2, although routing has no width gate and MAX is only 1.2x faster at W=11. Add narrow-frame data before considering default-on rollout. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525192)
+- Section H reuses Section A case names, causing metrics-map collisions; the new sections also hardcode repeated dimensions and smoke mode drops Section B. Give H unique names, use constants, and retain Section B smoke coverage. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525194)
+- MinMaxDeque.bufferIndex is unused; remove it and the zipWithIndex feeding it. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525200)
+- The segment-tree suites append a default-false deque config, making the overrides no-ops while preventing callers from enabling the deque. Remove them or prepend the default so explicit callers win. -- [existing discussion](https://github.com/apache/spark/pull/57346#discussion_r3702525209)
+
+## Verification
+The amortized O(N) algorithm is a good fit for bounded moving MIN/MAX frames, where deque state is bounded by the window. I traced both factory branches and found that shrinking frames admit the complete partition into untracked, unspillable heap, while non-strict candidate eviction changes existing tie semantics. I recommend merging the bounded path after fixing tie handling and adding routing, spill, and narrow-window benchmark coverage; shrinking-frame support should follow only with task-memory accounting and fallback.
+
+## PR description suggestions
+- Correct the configuration default and benchmark numbers to match the current code and committed results.
+- Document that shrinking frames can require O(N) unspillable heap per aggregate rather than claiming an unqualified minimal memory footprint.
+
+<!-- ai-auto-review-authorized head=9e9580962b145296ee154edf2590cff59cd20572 -->
+
+<!-- ai-code-review -->
+--

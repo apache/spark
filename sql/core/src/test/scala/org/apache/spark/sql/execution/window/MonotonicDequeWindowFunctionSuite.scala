@@ -23,6 +23,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
+
 /**
  * Correctness tests verifying the monotonic deque-based sliding window frame optimization. Runs
  * differential testing to ensure equivalence between:
@@ -34,8 +35,11 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
 
   import testImplicits._
 
+  // Disable AQE so executedPlan.collect can descend into WindowExec without being
+  // blocked by AdaptiveSparkPlanExec (a LeafExecNode). This matches SegmentTreeWindowMetricsSuite.
   private val enableDeque: Map[String, String] = Map(
-    SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true")
+    SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true",
+    SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false")
 
   private val disableDequeSegTree: Map[String, String] = Map(
     SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
@@ -58,12 +62,14 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
       val df = build()
       val res = df.collect().toSeq
 
-      // Verify routing actually hit (or didn't hit) the deque
+      // Verify routing actually hit (or didn't hit) the deque.
+      // Use the registered metric key "numMonotonicDequeFrames" (not the display name).
       val windowNodes = df.queryExecution.executedPlan.collect {
-        case w: org.apache.spark.sql.execution.window.WindowExec => w
+        case w: WindowExec => w
       }
       assert(windowNodes.nonEmpty, "No WindowExec found in the query plan")
-      val dequeCount = windowNodes.flatMap(_.metrics.get("monotonicDequeFrames").map(_.value)).sum
+      val dequeCount =
+        windowNodes.flatMap(_.metrics.get("numMonotonicDequeFrames").map(_.value)).sum
 
       if (expectDeque) {
         assert(dequeCount > 0, "Monotonic deque was enabled but no frames were routed to it")
@@ -124,12 +130,15 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
         |FROM RANGE(0, 20)""".stripMargin)
     // Deque shouldn't be used since FILTER is not supported. We can't use checkEquivalence
     // because checkEquivalence builds DF inside, so we'll just check metrics.
-    withSQLConf(enableDeque.toSeq: _*) {
+    withSQLConf(
+      SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val res = df.collect()
       val windowNodes = df.queryExecution.executedPlan.collect {
-        case w: org.apache.spark.sql.execution.window.WindowExec => w
+        case w: WindowExec => w
       }
-      val dequeCount = windowNodes.flatMap(_.metrics.get("monotonicDequeFrames").map(_.value)).sum
+      val dequeCount =
+        windowNodes.flatMap(_.metrics.get("numMonotonicDequeFrames").map(_.value)).sum
       assert(dequeCount == 0, "Monotonic deque was used for FILTER clause")
     }
   }
@@ -266,6 +275,67 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
       SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "16") {
       val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-2, 2)
       checkEquivalence(() => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)))
+    }
+  }
+
+  // Finding 18: lowerBound-advances-without-admitting branch (both bounds on FOLLOWING side).
+  test("SPARK-58201: both-FOLLOWING rows frame exercises lowerBound-advances branch") {
+    val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(2, 4)
+    checkEquivalence(() =>
+      baseDF.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
+  }
+
+  // Finding 18: wide ascending data forces MinMaxDeque.expand() (ring-buffer grow path).
+  test("SPARK-58201: wide window on ascending data forces ring-buffer expand") {
+    val df = spark.range(0, 300).selectExpr("id", "1 AS pk", "CAST(id AS INT) AS v")
+    val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-70, 0)
+    checkEquivalence(() => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)))
+  }
+
+  // Finding 18: both-PRECEDING frame -- first rows have an empty window.
+  test("SPARK-58201: both-PRECEDING rows frame (empty window for first rows)") {
+    val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-4, -2)
+    checkEquivalence(() =>
+      baseDF.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
+  }
+
+  // Finding 18: wide random data, exercises normal sliding path at scale.
+  test("SPARK-58201: wide random rows frame") {
+    val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-60, 40)
+    checkEquivalence(() =>
+      baseDF.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
+  }
+
+  // Finding 18: range frame on tied order key.
+  test("SPARK-58201: range frame on tied order key") {
+    val df = baseDF.selectExpr("id", "pk", "CAST(id / 3 AS INT) AS ord", "v_int")
+    val winSpec = Window.partitionBy($"pk").orderBy($"ord").rangeBetween(1, 3)
+    checkEquivalence(() =>
+      df.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
+  }
+
+  // Finding 7 + 18: DECIMAL and BINARY types -- UnsafeRow.getDecimal/getBinary allocate fresh
+  // objects per call (after ExtractWindowExpressions hoists args into the Project below), so
+  // the deque never holds a stale reference regardless of the isPrimitive branch.
+  test("SPARK-58201: MIN/MAX on DECIMAL and BINARY types with spill") {
+    val df = spark
+      .range(0, 60)
+      .selectExpr(
+        "id",
+        "(id % 3) AS pk",
+        "CAST(id AS DECIMAL(38, 10)) AS v_dec",
+        "CAST(id AS BINARY) AS v_bin")
+    withSQLConf(
+      SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "8",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "16") {
+      val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-2, 2)
+      checkEquivalence(() =>
+        df.select(
+          $"id",
+          min($"v_dec").over(winSpec),
+          max($"v_dec").over(winSpec),
+          min($"v_bin").over(winSpec),
+          max($"v_bin").over(winSpec)))
     }
   }
 }
