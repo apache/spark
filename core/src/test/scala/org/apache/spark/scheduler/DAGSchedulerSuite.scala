@@ -2334,6 +2334,34 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(scheduler.waitingStages.isEmpty)
   }
 
+  test("SPARK-58616: cancelAllJobs surfaces the supplied reason in the job failure") {
+    val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
+    assert(scheduler.runningStages.size === 1)
+    runEvent(AllJobsCancelled(Some("because the user requested cancellation")))
+    checkError(
+      exception = failure.asInstanceOf[SparkException],
+      condition = "SPARK_JOB_CANCELLED",
+      sqlState = "XXKDA",
+      parameters = scala.collection.immutable.Map(
+        "jobId" -> jobId.toString,
+        "reason" -> "because the user requested cancellation"))
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58616: cancelAllJobs falls back to the default reason when none is supplied") {
+    val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
+    assert(scheduler.runningStages.size === 1)
+    runEvent(AllJobsCancelled())
+    checkError(
+      exception = failure.asInstanceOf[SparkException],
+      condition = "SPARK_JOB_CANCELLED",
+      sqlState = "XXKDA",
+      parameters = scala.collection.immutable.Map(
+        "jobId" -> jobId.toString,
+        "reason" -> "as part of cancellation of all jobs"))
+    assertDataStructuresEmpty()
+  }
+
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
     val acc = new LongAccumulator {
       override def add(v: java.lang.Long): Unit = throw new DAGSchedulerSuiteDummyException
@@ -8065,6 +8093,22 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       s"expected a PIPELINED_SHUFFLE_UNSUPPORTED error, got: $msg")
     assert(msg.contains(reasonSubstring),
       s"expected reason to mention '$reasonSubstring', got: $msg")
+  }
+
+  test("submitMapStage on an RDD with 0 partitions reports an internal error") {
+    val shuffleMapRdd = new MyRDD(sc, 0, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    // `ShuffleExchangeExec` guards this case, so reaching it means an internal invariant broke.
+    checkError(
+      exception = intercept[SparkException] {
+        scheduler.submitMapStage(shuffleDep, (_: MapOutputStatistics) => (), CallSite("", ""),
+          new Properties())
+      },
+      condition = "INTERNAL_ERROR",
+      sqlState = Some("XX000"),
+      parameters = scala.collection.immutable.Map(
+        "message" -> "Can't run submitMapStage on RDD with 0 partitions."))
+    assertDataStructuresEmpty()
   }
 
 }

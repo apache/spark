@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
@@ -449,6 +449,33 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             .checkInputDataTypes()
             .isFailure)
     }
+  }
+
+  test("SPARK-48973: Mask with supplementary characters") {
+    def cp(codePoint: Int): String = new String(Character.toChars(codePoint))
+    val smile = cp(0x1F642)
+    val boldA = cp(0x1D400)
+    val boldSmallA = cp(0x1D41A)
+    val boldZero = cp(0x1D7CE)
+
+    checkEvaluation(
+      new Mask(Literal(smile), Literal('Y'), Literal('y'), Literal('n'), Literal('*')), "*")
+    checkEvaluation(new Mask(Literal("ABC"), Literal(smile)), smile * 3)
+    checkEvaluation(new Mask(Literal(s"A$boldA 1$boldZero")), "XX nn")
+    // Supplementary upper-case, lower-case and digit characters are each classified and
+    // replaced like their BMP counterparts.
+    checkEvaluation(new Mask(Literal(s"$boldA$boldSmallA$boldZero")), "Xxn")
+    // A supplementary replacement applied to a supplementary input.
+    checkEvaluation(new Mask(Literal(boldSmallA), Literal('Y'), Literal(smile)), smile)
+
+    // A supplementary character must round-trip intact through the retain path, both when it
+    // falls into the otherChar category and when its own category is set to retain.
+    checkEvaluation(new Mask(Literal(smile)), smile)
+    checkEvaluation(new Mask(Literal(s"a${smile}1")), s"x${smile}n")
+    checkEvaluation(new Mask(Literal(boldA), Literal(null, StringType)), boldA)
+    checkEvaluation(
+      new Mask(Literal(boldZero), Literal('Y'), Literal('y'), Literal(null, StringType)),
+      boldZero)
   }
 
   test("SPARK-42384: Mask with null input") {
@@ -2310,5 +2337,26 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val formatNumberCopy = formatNumber.freshCopyIfContainsStatefulExpression()
     assert(formatNumberCopy ne formatNumber,
       "freshCopyIfContainsStatefulExpression should return a new instance for FormatNumber")
+  }
+
+  test("Normalize") {
+    // scalastyle:off nonascii
+    checkEvaluation(new Normalize(Literal("A\u030A")), "\u00C5")
+    checkEvaluation(Normalize(Literal("A\u030A"), Literal("NFC")), "\u00C5")
+    checkEvaluation(Normalize(Literal("\u00C5"), Literal("NFD")), "A\u030A")
+    checkEvaluation(Normalize(Literal("\uFB01"), Literal("NFKC")), "fi")
+    // scalastyle:on nonascii
+    checkEvaluation(Normalize(Literal.create(null, StringType), Literal("NFC")), null)
+    checkEvaluation(Normalize(Literal("abc"), Literal.create(null, StringType)), null)
+  }
+
+  test("Normalize invalid form") {
+    checkErrorInExpression[SparkRuntimeException](
+      Normalize(Literal("abc"), Literal("NFE")),
+      "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+      Map(
+        "parameter" -> "`form`",
+        "functionName" -> "`normalize`",
+        "form" -> "'NFE'"))
   }
 }

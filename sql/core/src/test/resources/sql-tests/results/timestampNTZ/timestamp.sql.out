@@ -1035,7 +1035,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"2011-11-11 11:11:10\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' - 2011-11-11 11:11:10)\""
   },
   "queryContext" : [ {
@@ -1061,7 +1061,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"2011-11-11 11:11:11\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(2011-11-11 11:11:11 - TIMESTAMP_NTZ '2011-11-11 11:11:10')\""
   },
   "queryContext" : [ {
@@ -1111,7 +1111,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"str\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(str - TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
   },
   "queryContext" : [ {
@@ -1137,7 +1137,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"str\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' - str)\""
   },
   "queryContext" : [ {

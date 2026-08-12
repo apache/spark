@@ -143,7 +143,7 @@ object AutoCdcAuxiliaryTable {
   ): AuxiliaryTableSpec = {
     val scd1AuxiliaryTableIdentifier = identifier(targetTable.identifier)
 
-    val resolver = inputAutoCdcFlow.df.sparkSession.sessionState.conf.resolver
+    val resolver = inputAutoCdcFlow.effectiveResolver
     val autoCdcKeyColumnNames = inputAutoCdcFlow.changeArgs.keys.map(_.name)
 
     // The auxiliary table should derive its schema from the exact same key/CDC metadata column
@@ -217,7 +217,7 @@ object AutoCdcAuxiliaryTable {
   ): AuxiliaryTableSpec = {
     val scd2AuxiliaryTableIdentifier = identifier(targetTable.identifier)
 
-    val resolver = inputAutoCdcFlow.df.sparkSession.sessionState.conf.resolver
+    val resolver = inputAutoCdcFlow.effectiveResolver
     val autoCdcKeyColumnNames = inputAutoCdcFlow.changeArgs.keys.map(_.name)
 
     // Resolve the key fields from the (evolved) target schema, exactly as SCD1 does, so the
@@ -283,7 +283,7 @@ object AutoCdcAuxiliaryTable {
    *
    * @param targetTableSchema the AutoCDC target's evolved schema to resolve against
    * @param fieldName the column name to resolve
-   * @param resolver the session resolver used for case-sensitivity-aware field lookups
+   * @param resolver the effective resolver used for case-sensitivity-aware field lookups
    * @param targetTableIdentifier the AutoCDC target's identifier, named in the error message
    * @param autoCdcFlowIdentifier the AutoCDC flow writing to the target, named in the error message
    * @return the matching field
@@ -415,7 +415,7 @@ object AutoCdcAuxiliaryTable {
    * @param expectedScdType the SCD type of the incoming AutoCDC flow, which determines which inner
    *                        `_cdc_metadata` field carries the recorded sequencing type.
    * @param expectedSequencingType the resolved sequencing type of the incoming AutoCDC flow.
-   * @param resolver the session resolver, used to match the reserved column and inner field names
+   * @param resolver the effective resolver, used to match the reserved column and inner field names
    *                 the same case-aware way as every other schema lookup in this file.
    */
   private[graph] def validateNoTargetSequencingTypeDrift(

@@ -1628,9 +1628,14 @@ private[spark] class DAGScheduler(
 
   /**
    * Cancel all jobs that are running or waiting in the queue.
+   *
+   * @param reason reason for cancellation. It is surfaced in the error of every cancelled job, so
+   *               that a job aborted as collateral of a context-wide cancellation can be told
+   *               apart from one that failed on its own.
    */
-  def cancelAllJobs(): Unit = {
-    eventProcessLoop.post(AllJobsCancelled)
+  def cancelAllJobs(reason: Option[String] = None): Unit = {
+    logInfo(log"Asked to cancel all jobs${MDC(REASON, reason.map(" " + _).getOrElse(""))}")
+    eventProcessLoop.post(AllJobsCancelled(reason))
   }
 
   /**
@@ -1641,10 +1646,12 @@ private[spark] class DAGScheduler(
     eventProcessLoop.post(CleanupQueryJobs(executionId))
   }
 
-  private[scheduler] def doCancelAllJobs(): Unit = {
-    // Cancel all running jobs.
-    runningStages.map(_.firstJobId).foreach(handleJobCancellation(_,
-      Option("as part of cancellation of all jobs")))
+  private[scheduler] def doCancelAllJobs(reason: Option[String] = None): Unit = {
+    // Cancel all running jobs. A job caught here was healthy and is being aborted as collateral of
+    // a context-wide cancellation, not because it failed on its own, so attribute the reason when
+    // the caller supplied one.
+    val updatedReason = reason.getOrElse(DAGScheduler.DEFAULT_CANCEL_ALL_JOBS_REASON)
+    runningStages.map(_.firstJobId).foreach(handleJobCancellation(_, Option(updatedReason)))
     activeJobs.clear() // These should already be empty by this point,
     jobIdToActiveJob.clear() // but just in case we lost track of some jobs...
   }
@@ -4675,8 +4682,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case JobTagCancelled(tag, reason, cancelledJobs) =>
       dagScheduler.handleJobTagCancelled(tag, reason, cancelledJobs)
 
-    case AllJobsCancelled =>
-      dagScheduler.doCancelAllJobs()
+    case AllJobsCancelled(reason) =>
+      dagScheduler.doCancelAllJobs(reason)
 
     case CleanupQueryJobs(executionId) =>
       dagScheduler.doCleanupQueryJobs(executionId)
@@ -4735,7 +4742,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   override def onError(e: Throwable): Unit = {
     logError("DAGSchedulerEventProcessLoop failed; shutting down SparkContext", e)
     try {
-      dagScheduler.doCancelAllJobs()
+      dagScheduler.doCancelAllJobs(
+        Option("because the DAGScheduler event loop failed and the SparkContext is shutting down"))
     } catch {
       case t: Throwable => logError("DAGScheduler failed to cancel all jobs.", t)
     }
@@ -4753,6 +4761,10 @@ private[spark] object DAGScheduler {
   // this is a simplistic way to avoid resubmitting tasks in the non-fetchable map stage one by one
   // as more failure events come in
   val RESUBMIT_TIMEOUT = 200
+
+  // Fallback reason used when a context-wide cancellation does not supply a more specific one.
+  // Kept as the historical wording so existing log and error consumers are unaffected.
+  val DEFAULT_CANCEL_ALL_JOBS_REASON = "as part of cancellation of all jobs"
 }
 
 /**

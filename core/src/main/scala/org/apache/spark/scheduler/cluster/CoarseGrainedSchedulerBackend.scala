@@ -26,8 +26,9 @@ import scala.concurrent.Future
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
+import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState, VersionedCredentials}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.UserCredentialManager
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.{config, Logging}
@@ -132,6 +133,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
 
+  // UserCredentialManager for OIDC credential propagation (if enabled).
+  private var userCredentialManager: Option[UserCredentialManager] = None
+
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
@@ -219,6 +223,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case UpdateDelegationTokens(newDelegationTokens) =>
         updateDelegationTokens(newDelegationTokens)
+
+      case UpdateUserCredentials(version, newCredentials) =>
+        updateUserCredentials(version, newCredentials)
 
       case RemoveExecutor(executorId, reason) =>
         // We will remove the executor's state and cannot restore it. However, the connection
@@ -358,6 +365,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           Option(delegationTokens.get()),
+          Option(SparkEnv.get.userCredentials.get()).map(vc => (vc.version, vc.bytes)),
           rp,
           currentLogLevel)
         context.reply(reply)
@@ -618,6 +626,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   override def start(): Unit = {
     setupTokenManager()
+    setupUserCredentialManager()
     if (conf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED) && delegationTokenManager.isEmpty) {
       logWarning("spark.security.directCredentialProviders.enabled is set but " +
         "this cluster manager does not support credential distribution. " +
@@ -648,6 +657,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     cleanupService.foreach(_.shutdownNow())
     stopExecutors()
     stopTokenManager()
+    stopUserCredentialManager()
     try {
       if (driverEndpoint != null) {
         driverEndpoint.askSync[Boolean](StopDriver)
@@ -1046,6 +1056,45 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   protected def currentDelegationTokens: Array[Byte] = delegationTokens.get()
+
+  /**
+   * Update user credentials and broadcast to all registered executors.
+   * Called from the DriverEndpoint receive loop (thread-safe access to executorDataMap).
+   */
+  private def updateUserCredentials(version: Long, credentials: Array[Byte]): Unit = {
+    VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, version, credentials)
+    executorDataMap.values.foreach { ed =>
+      ed.executorEndpoint.send(UpdateUserCredentials(version, credentials))
+    }
+  }
+
+  /**
+   * Start the UserCredentialManager if OIDC credential propagation is enabled.
+   * Called from start(), independently of Kerberos/HadoopDelegationTokenManager.
+   */
+  private def setupUserCredentialManager(): Unit = {
+    userCredentialManager = UserCredentialManager.create(conf, { (version, credentials) =>
+      // Send to DriverEndpoint to ensure thread-safe access to executorDataMap.
+      // This mirrors HadoopDelegationTokenManager's pattern of sending
+      // UpdateDelegationTokens via schedulerRef.
+      driverEndpoint.send(UpdateUserCredentials(version, credentials))
+    })
+    userCredentialManager.foreach { manager =>
+      val (version, initialCredentials) = manager.start()
+      // Store initial credentials synchronously so they are available for SparkAppConfig
+      // (late-registering executors) and TaskDescription (task dispatch) immediately.
+      // Note: the onCredentialsUpdate callback above also triggers an async
+      // UpdateUserCredentials message that will redundantly call updateIfNewer.
+      // The synchronous set here ensures no null window before the async message
+      // is processed by DriverEndpoint.
+      VersionedCredentials.updateIfNewer(
+        SparkEnv.get.userCredentials, version, initialCredentials)
+    }
+  }
+
+  private def stopUserCredentialManager(): Unit = {
+    userCredentialManager.foreach(_.stop())
+  }
 
   /**
    * Checks whether the executor is excluded due to failure(s). This is called when the executor
