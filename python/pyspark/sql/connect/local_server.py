@@ -88,7 +88,7 @@ def _is_local_connect_server(pid: int) -> Optional[bool]:
             text=True,
             timeout=5,
         )
-    e1xcept (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError):
         return None
     return result.returncode == 0 and _SERVER_CLASS in result.stdout
 
