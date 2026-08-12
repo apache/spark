@@ -25,32 +25,21 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, PersistedView, Resolver}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{
-  CatalogV2Util,
-  Identifier,
-  SupportsRowLevelOperations,
-  Table => V2Table,
-  TableCatalog,
-  TableChange,
-  TableInfo
-}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsRowLevelOperations, Table => V2Table, TableCatalog, TableChange, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, Transform}
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
-import org.apache.spark.sql.pipelines.util.{
-  PipelinesCatalogUtils,
-  SchemaInferenceUtils,
-  SchemaMergingUtils
-}
+import org.apache.spark.sql.pipelines.util.{PipelinesCatalogUtils, SchemaInferenceUtils, SchemaMergingUtils}
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
 import org.apache.spark.sql.types.StructType
 
 /**
  * `DatasetManager` is responsible for materializing tables in the catalog based on the given
- * graph. For each table in the graph, it will create a table if none exists (or if this is a
- * full refresh), or merge the schema of an existing table to match the new flows writing to it.
+ * graph. For each table in the graph, it will create a table if none exists (or if this is a full
+ * refresh), or merge the schema of an existing table to match the new flows writing to it.
  */
 object DatasetManager extends Logging {
 
@@ -58,31 +47,32 @@ object DatasetManager extends Logging {
    * Wraps table materialization exceptions.
    *
    * The target use case of this exception is merely as a means to capture attribution -
-   * 1. Indicate that the exception is associated with table materialization.
-   * 2. Indicate which table materialization failed for.
+   *   1. Indicate that the exception is associated with table materialization.
+   *   2. Indicate which table materialization failed for.
    *
-   * @param tableName The name of the table that failed to materialize.
-   * @param cause The underlying exception that caused the materialization to fail.
+   * @param tableName
+   *   The name of the table that failed to materialize.
+   * @param cause
+   *   The underlying exception that caused the materialization to fail.
    */
-  case class TableMaterializationException(
-      tableName: String,
-      cause: Throwable
-  ) extends Exception(cause)
+  case class TableMaterializationException(tableName: String, cause: Throwable)
+      extends Exception(cause)
       with NoStackTrace
 
   /**
-   * Materializes the tables in the given graph. This method will create or update the tables
-   * in the catalog based on the given graph and context.
+   * Materializes the tables in the given graph. This method will create or update the tables in
+   * the catalog based on the given graph and context.
    *
-   * @param resolvedDataflowGraph The resolved [[DataflowGraph]] with resolved [[Flow]] sorted
-   *                              in topological order.
-   * @param context The context for the pipeline update.
-   * @return The graph with materialized tables.
+   * @param resolvedDataflowGraph
+   *   The resolved [[DataflowGraph]] with resolved [[Flow]] sorted in topological order.
+   * @param context
+   *   The context for the pipeline update.
+   * @return
+   *   The graph with materialized tables.
    */
   def materializeDatasets(
       resolvedDataflowGraph: DataflowGraph,
-      context: PipelineUpdateContext
-  ): DataflowGraph = {
+      context: PipelineUpdateContext): DataflowGraph = {
     val (_, refreshTableIdentsSet, fullRefreshTableIdentsSet) = {
       constructFullRefreshSet(resolvedDataflowGraph.tables, context)
     }
@@ -92,9 +82,9 @@ object DatasetManager extends Logging {
       graph.tables
         .filter(t => fullRefreshTableIdentsSet.contains(t.identifier))
         .map(table => TableRefreshType(table, isFullRefresh = true)) ++
-      graph.tables
-        .filter(t => refreshTableIdentsSet.contains(t.identifier))
-        .map(table => TableRefreshType(table, isFullRefresh = false))
+        graph.tables
+          .filter(t => refreshTableIdentsSet.contains(t.identifier))
+          .map(table => TableRefreshType(table, isFullRefresh = false))
     }
 
     val tablesToMaterialize = {
@@ -106,38 +96,37 @@ object DatasetManager extends Logging {
 
     // materialized [[DataflowGraph]] where each table has been materialized and each table
     // has metadata (e.g., normalized table storage path) populated
-    val materializedGraph: DataflowGraph = try {
-      DataflowGraphTransformer
-        .withDataflowGraphTransformer(resolvedDataflowGraph) { transformer =>
-          transformer.transformTables { table =>
-            if (tablesToMaterialize.keySet.contains(table.identifier)) {
-              try {
-                val isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh
-                // Load the existing auxiliary table (if any) once here and thread the snapshot into
-                // both materializeTable (which uses it for AutoCDC config-drift validation) and
-                // materializeAuxiliaryTable (which uses it to decide evolve-vs-create). Nothing
-                // between them mutates the auxiliary table, so a single load is safe and avoids a
-                // redundant catalog round trip.
-                val auxiliaryTableSpecOpt = auxiliaryTableSpecs.get(table.identifier)
-                val existingAuxiliaryTable = auxiliaryTableSpecOpt.flatMap { spec =>
-                  val (auxCatalog, auxId) =
-                    PipelinesCatalogUtils.resolveTableCatalog(context.spark, spec.identifier)
-                  loadTableIfExists(auxCatalog, auxId)
-                }
-                val (tableWithMaterializationMetadata, catalogTableEntity) = materializeTable(
-                  resolvedDataflowGraph = resolvedDataflowGraph,
-                  table = table,
-                  inferredSchemas = inferredSchemas,
-                  isFullRefresh = isFullRefresh,
-                  auxiliaryTableSpecOpt = auxiliaryTableSpecOpt,
-                  existingAuxiliaryTable = existingAuxiliaryTable,
-                  context = context
-                )
-                // Auxiliary tables' lifecycle should follow the table that it is complementary to.
-                // If this table has any auxiliary tables, validate the target can host them and
-                // materialize/full-refresh them accordingly.
-                auxiliaryTableSpecOpt.foreach {
-                  auxiliaryTableSpec =>
+    val materializedGraph: DataflowGraph =
+      try {
+        DataflowGraphTransformer
+          .withDataflowGraphTransformer(resolvedDataflowGraph) { transformer =>
+            transformer.transformTables { table =>
+              if (tablesToMaterialize.keySet.contains(table.identifier)) {
+                try {
+                  val isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh
+                  // Load the existing auxiliary table (if any) once here and thread the snapshot
+                  // into both materializeTable (which uses it for AutoCDC config-drift validation)
+                  // and materializeAuxiliaryTable (which uses it to decide evolve-vs-create).
+                  // Nothing between them mutates the auxiliary table, so a single load is safe and
+                  // avoids a redundant catalog round trip.
+                  val auxiliaryTableSpecOpt = auxiliaryTableSpecs.get(table.identifier)
+                  val existingAuxiliaryTable = auxiliaryTableSpecOpt.flatMap { spec =>
+                    val (auxCatalog, auxId) =
+                      PipelinesCatalogUtils.resolveTableCatalog(context.spark, spec.identifier)
+                    loadTableIfExists(auxCatalog, auxId)
+                  }
+                  val (tableWithMaterializationMetadata, catalogTableEntity) = materializeTable(
+                    resolvedDataflowGraph = resolvedDataflowGraph,
+                    table = table,
+                    inferredSchemas = inferredSchemas,
+                    isFullRefresh = isFullRefresh,
+                    auxiliaryTableSpecOpt = auxiliaryTableSpecOpt,
+                    existingAuxiliaryTable = existingAuxiliaryTable,
+                    context = context)
+                  // Auxiliary tables' lifecycle should follow the table that it is complementary
+                  // to. If this table has any auxiliary tables, validate the target can host them
+                  // and materialize/full-refresh them accordingly.
+                  auxiliaryTableSpecOpt.foreach { auxiliaryTableSpec =>
                     // If this table is an AutoCDC target table, as identified by being
                     // accompanied by an AutoCDC auxiliary table, additionally validate that the
                     // target table supports row level mutations. This is a relevant validation for
@@ -147,8 +136,7 @@ object DatasetManager extends Logging {
                       case _: AutoCdcAuxiliaryTableSpec =>
                         requireAutoCdcTargetSupportsRowLevelOps(
                           targetTable = table,
-                          targetTableCatalogEntity = catalogTableEntity
-                        )
+                          targetTableCatalogEntity = catalogTableEntity)
                     }
 
                     materializeAuxiliaryTable(
@@ -158,28 +146,28 @@ object DatasetManager extends Logging {
                       // The auxiliary schema is derived from its target's, so it evolves under the
                       // target's effective case sensitivity.
                       caseSensitive = effectiveCaseSensitivityFor(
-                        resolvedDataflowGraph, table.identifier, context),
-                      context = context
-                    )
+                        resolvedDataflowGraph,
+                        table.identifier,
+                        context),
+                      context = context)
+                  }
+                  tableWithMaterializationMetadata
+                } catch {
+                  case NonFatal(e) =>
+                    throw TableMaterializationException(
+                      table.displayName,
+                      cause = e.addOrigin(table.origin))
                 }
-                tableWithMaterializationMetadata
-              } catch {
-                case NonFatal(e) =>
-                  throw TableMaterializationException(
-                    table.displayName,
-                    cause = e.addOrigin(table.origin)
-                  )
+              } else {
+                table
               }
-            } else {
-              table
             }
-          }
 
-        }
-        .getDataflowGraph
-    } catch {
-      case e: SparkException if e.getCause != null => throw e.getCause
-    }
+          }
+          .getDataflowGraph
+      } catch {
+        case e: SparkException if e.getCause != null => throw e.getCause
+      }
     materializeViews(materializedGraph, context)
     materializedGraph
   }
@@ -187,8 +175,8 @@ object DatasetManager extends Logging {
   /**
    * Publish or refresh all the [[PersistedView]]s in the specified [[DataflowGraph]]
    *
-   * @param virtualizedConnectedGraphWithTables virtualizedConnectedGraph that has table information
-   *                                            from the graph.
+   * @param virtualizedConnectedGraphWithTables
+   *   virtualizedConnectedGraph that has table information from the graph.
    */
   private def materializeViews(
       virtualizedConnectedGraphWithTables: DataflowGraph,
@@ -245,11 +233,7 @@ object DatasetManager extends Logging {
             viewsToPublish -= v
           } catch {
             case NonFatal(ex) =>
-              context.flowProgressEventLogger.recordFailed(
-                flowToView,
-                ex,
-                logAsWarn = false
-              )
+              context.flowProgressEventLogger.recordFailed(flowToView, ex, logAsWarn = false)
               failedViews += v.identifier
               viewsToPublish -= v
           }
@@ -269,8 +253,7 @@ object DatasetManager extends Logging {
       plan = flow.df.logicalPlan,
       allowExisting = true,
       replace = true,
-      isAnalyzed = true
-    )
+      isAnalyzed = true)
 
     val queryContext = flow.queryContext
 
@@ -292,17 +275,25 @@ object DatasetManager extends Logging {
   /**
    * Materializes a table in the catalog. This method will create or update the table in the
    * catalog based on the given table and context.
-   * @param resolvedDataflowGraph The resolved [[DataflowGraph]] used for table metadata.
-   * @param table The table to be materialized.
-   * @param inferredSchemas The schemas inferred from the resolved graph, keyed by table.
-   * @param isFullRefresh Whether this table should be full refreshed or not.
-   * @param auxiliaryTableSpecOpt The spec for the auxiliary table (if this table has one)
-   * @param existingAuxiliaryTable The already-loaded auxiliary table for this target (if it has one
-   *                               and it exists), used for AutoCDC config-drift validation. Loaded
-   *                               once by the caller and shared with [[materializeAuxiliaryTable]].
-   * @param context The context for the pipeline update.
-   * @return The materialized graph [[Table]] (with additional metadata set) paired with the loaded
-   *         DSv2 handle of the just created/evolved table.
+   * @param resolvedDataflowGraph
+   *   The resolved [[DataflowGraph]] used for table metadata.
+   * @param table
+   *   The table to be materialized.
+   * @param inferredSchemas
+   *   The schemas inferred from the resolved graph, keyed by table.
+   * @param isFullRefresh
+   *   Whether this table should be full refreshed or not.
+   * @param auxiliaryTableSpecOpt
+   *   The spec for the auxiliary table (if this table has one)
+   * @param existingAuxiliaryTable
+   *   The already-loaded auxiliary table for this target (if it has one and it exists), used for
+   *   AutoCDC config-drift validation. Loaded once by the caller and shared with
+   *   [[materializeAuxiliaryTable]].
+   * @param context
+   *   The context for the pipeline update.
+   * @return
+   *   The materialized graph [[Table]] (with additional metadata set) paired with the loaded DSv2
+   *   handle of the just created/evolved table.
    */
   private def materializeTable(
       resolvedDataflowGraph: DataflowGraph,
@@ -317,21 +308,27 @@ object DatasetManager extends Logging {
     val (catalog, identifier) =
       PipelinesCatalogUtils.resolveTableCatalog(context.spark, table.identifier)
 
-    val outputSchema = table.specifiedSchema.getOrElse(
-      inferredSchemas(table.identifier).asNullable
-    )
+    val outputSchema =
+      table.specifiedSchema.getOrElse(inferredSchemas(table.identifier).asNullable)
     val mergedProperties = resolveTableProperties(table, identifier)
-    val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
-    val clustering = table.clusterCols.map(cols =>
-      ClusterByTransform(cols.map(col => Expressions.column(col)))
-    ).toSeq
+
+    // GitHub issue 57908: Support partition transforms
+    val partitioning = table.partitionCols.toSeq.flatten match {
+      case Seq() =>
+        Seq.empty
+      case partitionCols =>
+        CatalystSqlParser.parsePartitioning(partitionCols.mkString("(", ",", ")"))
+    }
+
+    val clustering = table.clusterCols
+      .map(cols => ClusterByTransform(cols.map(col => Expressions.column(col))))
+      .toSeq
 
     // Validate that partition and cluster columns don't coexist
     if (partitioning.nonEmpty && clustering.nonEmpty) {
       throw new AnalysisException(
         errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
-        messageParameters = Map.empty
-      )
+        messageParameters = Map.empty)
     }
 
     val allTransforms = partitioning ++ clustering
@@ -346,9 +343,7 @@ object DatasetManager extends Logging {
           errorClass = "CANNOT_UPDATE_PARTITION_COLUMNS",
           messageParameters = Map(
             "existingPartitionColumns" -> existingTransforms.mkString(", "),
-            "requestedPartitionColumns" -> allTransforms.mkString(", ")
-          )
-        )
+            "requestedPartitionColumns" -> allTransforms.mkString(", ")))
       }
     }
 
@@ -364,10 +359,10 @@ object DatasetManager extends Logging {
     }
 
     val autoCdcAuxTableSpecOpt = auxiliaryTableSpecOpt.collect {
-        case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
-      }
-    val effectiveCaseSensitive = effectiveCaseSensitivityFor(
-      resolvedDataflowGraph, table.identifier, context)
+      case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
+    }
+    val effectiveCaseSensitive =
+      effectiveCaseSensitivityFor(resolvedDataflowGraph, table.identifier, context)
     val effectiveResolver = SchemaInferenceUtils.resolverFor(effectiveCaseSensitive)
 
     // For an incrementally-updated AutoCDC target, validate that the AutoCDC configuration recorded
@@ -397,13 +392,11 @@ object DatasetManager extends Logging {
         if (isTableIncrementallyUpdated) {
           autoCdcAuxTableSpecOpt.foreach { autoCdcSpec =>
             AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
-              existingTargetSchema =
-                CatalogV2Util.v2ColumnsToStructType(existingTable.columns()),
+              existingTargetSchema = CatalogV2Util.v2ColumnsToStructType(existingTable.columns()),
               targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
               expectedScdType = autoCdcSpec.expectedScdType,
               expectedSequencingType = autoCdcSpec.expectedSequencingType,
-              resolver = effectiveResolver
-            )
+              resolver = effectiveResolver)
           }
         }
         evolveTable(
@@ -413,24 +406,20 @@ object DatasetManager extends Logging {
           desiredSchema = outputSchema,
           properties = mergedProperties,
           mergeWithExistingSchema = isTableIncrementallyUpdated,
-          caseSensitive = effectiveCaseSensitive
-        )
+          caseSensitive = effectiveCaseSensitive)
       case None =>
         createTable(
           catalog = catalog,
           tableIdentifier = identifier,
           schema = outputSchema,
           properties = mergedProperties,
-          transforms = allTransforms
-        )
+          transforms = allTransforms)
     }
 
     val catalogTableEntity = catalog.loadTable(identifier)
     val tableWithMaterializationMetadata =
-      table.copy(
-        normalizedPath =
-          Option(catalogTableEntity.properties().get(TableCatalog.PROP_LOCATION))
-      )
+      table.copy(normalizedPath =
+        Option(catalogTableEntity.properties().get(TableCatalog.PROP_LOCATION)))
 
     (tableWithMaterializationMetadata, catalogTableEntity)
   }
@@ -442,9 +431,11 @@ object DatasetManager extends Logging {
    * [[materializeTable]], so it performs no additional catalog I/O. Only AutoCDC auxiliary specs
    * carry a MERGE-backed target; other auxiliary tables have no such requirement.
    *
-   * @param targetTable              the target table graph entity, source of the identifier and
-   *                                 declared format used in the error message.
-   * @param targetTableCatalogEntity the target table's loaded DSv2 handle.
+   * @param targetTable
+   *   the target table graph entity, source of the identifier and declared format used in the
+   *   error message.
+   * @param targetTableCatalogEntity
+   *   the target table's loaded DSv2 handle.
    */
   private def requireAutoCdcTargetSupportsRowLevelOps(
       targetTable: Table,
@@ -457,23 +448,25 @@ object DatasetManager extends Logging {
           // Prefer the flow-declared format, falling back to the connector's provider property.
           "format" -> targetTable.format
             .orElse(Option(targetTableCatalogEntity.properties.get(TableCatalog.PROP_PROVIDER)))
-            .getOrElse("<unknown>")
-        )
-      )
+            .getOrElse("<unknown>")))
     }
   }
 
   /**
    * Materialize the auxiliary table according to the provided spec.
    *
-   * @param auxiliaryTableSpec the spec describing the auxiliary table to create/evolve.
-   * @param isFullRefresh whether the owning table is being fully refreshed.
-   * @param existingAuxiliaryTable the already-loaded auxiliary table (if it exists), loaded once by
-   *                               the caller and shared with the config-drift validation in
-   *                               [[materializeTable]] rather than re-loaded here.
-   * @param caseSensitive the effective case sensitivity of the flows writing to the auxiliary
-   *                      table's TARGET, whose schema the auxiliary schema is derived from.
-   * @param context the context for the pipeline update.
+   * @param auxiliaryTableSpec
+   *   the spec describing the auxiliary table to create/evolve.
+   * @param isFullRefresh
+   *   whether the owning table is being fully refreshed.
+   * @param existingAuxiliaryTable
+   *   the already-loaded auxiliary table (if it exists), loaded once by the caller and shared
+   *   with the config-drift validation in [[materializeTable]] rather than re-loaded here.
+   * @param caseSensitive
+   *   the effective case sensitivity of the flows writing to the auxiliary table's TARGET, whose
+   *   schema the auxiliary schema is derived from.
+   * @param context
+   *   the context for the pipeline update.
    */
   private def materializeAuxiliaryTable(
       auxiliaryTableSpec: AuxiliaryTableSpec,
@@ -487,8 +480,7 @@ object DatasetManager extends Logging {
 
     logInfo(
       log"Materializing auxiliary table " +
-      log"${MDC(LogKeys.TABLE_NAME, auxiliaryTableSpec.identifier)}."
-    )
+        log"${MDC(LogKeys.TABLE_NAME, auxiliaryTableSpec.identifier)}.")
 
     if (isFullRefresh) {
       // Intentionally DROP and not TRUNCATE on full refresh. The auxiliary table is an internal
@@ -501,8 +493,7 @@ object DatasetManager extends Logging {
       // via the create path below).
       logInfo(
         log"Dropping and recreating auxiliary table " +
-        log"${MDC(LogKeys.TABLE_NAME, auxiliaryTableSpec.identifier)} as part of full refresh."
-      )
+          log"${MDC(LogKeys.TABLE_NAME, auxiliaryTableSpec.identifier)} as part of full refresh.")
 
       // [[dropTable]] is a no-op if the table does not exist.
       catalog.dropTable(auxiliaryTableIdentifier)
@@ -512,8 +503,7 @@ object DatasetManager extends Logging {
         tableIdentifier = auxiliaryTableIdentifier,
         schema = auxiliaryTableSpec.schema,
         properties = auxiliaryTableSpec.properties,
-        transforms = Seq.empty
-      )
+        transforms = Seq.empty)
     } else {
       // Uses the auxiliary-table snapshot loaded by the caller (see materializeDatasets), rather
       // than re-loading it here.
@@ -531,37 +521,38 @@ object DatasetManager extends Logging {
             desiredSchema = auxiliaryTableSpec.schema,
             properties = auxiliaryTableSpec.properties,
             mergeWithExistingSchema = true,
-            caseSensitive = caseSensitive
-          )
+            caseSensitive = caseSensitive)
         case None =>
           createTable(
             catalog = catalog,
             tableIdentifier = auxiliaryTableIdentifier,
             schema = auxiliaryTableSpec.schema,
             properties = auxiliaryTableSpec.properties,
-            transforms = Seq.empty
-          )
+            transforms = Seq.empty)
       }
     }
   }
 
   /**
    * Validate that an incrementally-updated AutoCDC flow's configuration has not drifted from what
-   * its auxiliary table recorded. Called from [[materializeTable]] before the target and auxiliary
-   * tables are created/evolved this run, so a rejected run leaves both untouched.
+   * its auxiliary table recorded. Called from [[materializeTable]] before the target and
+   * auxiliary tables are created/evolved this run, so a rejected run leaves both untouched.
    *
    * Covers the checks that read the recorded configuration off the existing auxiliary table: key
    * columns, SCD type, and track-history columns. Runs whenever the auxiliary table exists,
    * independent of the target's existence (see the call site). If the auxiliary table does not
    * exist yet (first AutoCDC run), all three are skipped -- there is no recorded configuration to
    * drift from. The sequencing-type check is separate ([[AutoCdcAuxiliaryTable]]
-   * `.validateNoTargetSequencingTypeDrift`) because it reads the target schema, not the aux table.
+   * `.validateNoTargetSequencingTypeDrift`) because it reads the target schema, not the aux
+   * table.
    *
-   * @param autoCdcSpec the auxiliary-table spec carrying this run's expected AutoCDC configuration.
-   * @param existingAuxiliaryTableOpt the already-loaded auxiliary table (if it exists), shared with
-   *                                  the caller and [[materializeAuxiliaryTable]] to avoid a
-   *                                  redundant load.
-   * @param resolver the effective resolver of the flows writing to the AutoCDC target.
+   * @param autoCdcSpec
+   *   the auxiliary-table spec carrying this run's expected AutoCDC configuration.
+   * @param existingAuxiliaryTableOpt
+   *   the already-loaded auxiliary table (if it exists), shared with the caller and
+   *   [[materializeAuxiliaryTable]] to avoid a redundant load.
+   * @param resolver
+   *   the effective resolver of the flows writing to the AutoCDC target.
    */
   private def validateNoAutoCdcAuxConfigDrift(
       autoCdcSpec: AutoCdcAuxiliaryTableSpec,
@@ -572,27 +563,24 @@ object DatasetManager extends Logging {
         existingAuxiliaryTable = existingAuxiliaryTable,
         targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
         expectedKeyFields = autoCdcSpec.expectedKeyFields,
-        resolver = resolver
-      )
+        resolver = resolver)
       AutoCdcAuxiliaryTable.validateNoScdTypeDrift(
         existingAuxiliaryTable = existingAuxiliaryTable,
         targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
-        expectedScdType = autoCdcSpec.expectedScdType
-      )
+        expectedScdType = autoCdcSpec.expectedScdType)
       AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift(
         existingAuxiliaryTable = existingAuxiliaryTable,
         targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
         expectedTrackHistoryColumnNames = autoCdcSpec.expectedTrackHistoryColumnNames,
-        resolver = resolver
-      )
+        resolver = resolver)
     }
   }
 
   /**
    * The effective `spark.sql.caseSensitive` for schema evolution of `tableIdentifier`, read from
    * the flows writing to it rather than from the session, so evolution stays consistent with the
-   * flows whose schemas it is evolving (a pipeline-level `SET` never reaches the session). Fails if
-   * those flows disagree; see [[SchemaInferenceUtils.effectiveCaseSensitivity]].
+   * flows whose schemas it is evolving (a pipeline-level `SET` never reaches the session). Fails
+   * if those flows disagree; see [[SchemaInferenceUtils.effectiveCaseSensitivity]].
    */
   private def effectiveCaseSensitivityFor(
       resolvedDataflowGraph: DataflowGraph,
@@ -601,8 +589,7 @@ object DatasetManager extends Logging {
     SchemaInferenceUtils.effectiveCaseSensitivity(
       tableIdentifier = tableIdentifier,
       flows = resolvedDataflowGraph.flowsTo.getOrElse(tableIdentifier, Seq.empty),
-      sessionCaseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
-    )
+      sessionCaseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis)
   }
 
   /**
@@ -610,7 +597,8 @@ object DatasetManager extends Logging {
    * `loadTable` guarded by a `NoSuchTableException` catch, rather than a `tableExists` +
    * `loadTable` pair: one catalog round trip instead of two, and no window where the table can
    * disappear between the existence check and the load. A missing *namespace* is not treated as
-   * "table absent" -- it surfaces as its own `NoSuchDatabaseException` rather than being swallowed.
+   * "table absent" -- it surfaces as its own `NoSuchDatabaseException` rather than being
+   * swallowed.
    */
   private def loadTableIfExists(
       catalog: TableCatalog,
@@ -624,9 +612,12 @@ object DatasetManager extends Logging {
    * transforms. Used both for graph datasets and for internal auxiliary tables when no table yet
    * exists at the identifier.
    *
-   * @param schema     the schema to create the table with.
-   * @param properties the table properties to create the table with.
-   * @param transforms the partition/cluster transforms to create the table with.
+   * @param schema
+   *   the schema to create the table with.
+   * @param properties
+   *   the table properties to create the table with.
+   * @param transforms
+   *   the partition/cluster transforms to create the table with.
    */
   private def createTable(
       catalog: TableCatalog,
@@ -640,37 +631,35 @@ object DatasetManager extends Logging {
         .withProperties(properties.asJava)
         .withColumns(CatalogV2Util.structTypeToV2Columns(schema))
         .withPartitions(transforms.toArray)
-        .build()
-    )
+        .build())
   }
 
   /**
-   * Evolves the already-existing `existingTable` at `identifier` in place by diffing its schema and
-   * properties, skipping the catalog `alterTable` entirely when nothing actually changes.
+   * Evolves the already-existing `existingTable` at `identifier` in place by diffing its schema
+   * and properties, skipping the catalog `alterTable` entirely when nothing actually changes.
    * Partitioning/clustering cannot change in place, so no transforms are accepted here. Used both
    * for graph datasets and for internal auxiliary tables.
    *
-   * @param existingTable           the currently materialized table.
-   * @param desiredSchema           the schema the table should have as computed in the current
-   *                                execution (for graph datasets, the user-specified or inferred
-   *                                schema; for auxiliary tables, the derived schema). This is the
-   *                                "incoming" side and may differ from `existingTable`'s recorded
-   *                                schema due to schema evolution across runs.
-   * @param properties              the declared table properties to (re)set on the table. Note
-   *                                that properties absent here are NOT removed from the table (see
-   *                                the TODO in the body).
-   * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
-   *                                desired schemas (additive evolution) rather than the desired
-   *                                schema as-is.
-   * @param caseSensitive           whether the additive schema merge treats field names differing
-   *                                only in case as distinct columns. Callers should pass the
-   *                                effective `spark.sql.caseSensitive` used to resolve the schema
-   *                                being evolved. When `false`, an incoming column differing from
-   *                                an existing one only in case is folded onto it rather than
-   *                                added as a duplicate. Only affects the merge (i.e.
-   *                                `mergeWithExistingSchema = true`); the subsequent diff always
-   *                                keys columns on their exact names, so a case-only rename on a
-   *                                non-merging path stays an explicit drop-then-add.
+   * @param existingTable
+   *   the currently materialized table.
+   * @param desiredSchema
+   *   the schema the table should have as computed in the current execution (for graph datasets,
+   *   the user-specified or inferred schema; for auxiliary tables, the derived schema). This is
+   *   the "incoming" side and may differ from `existingTable`'s recorded schema due to schema
+   *   evolution across runs.
+   * @param properties
+   *   the declared table properties to (re)set on the table. Note that properties absent here are
+   *   NOT removed from the table (see the TODO in the body).
+   * @param mergeWithExistingSchema
+   *   whether the effective schema is the merge of the existing and desired schemas (additive
+   *   evolution) rather than the desired schema as-is.
+   * @param caseSensitive
+   *   whether the additive schema merge treats field names differing only in case as distinct
+   *   columns. Callers should pass the effective `spark.sql.caseSensitive` used to resolve the
+   *   schema being evolved. When `false`, an incoming column differing from an existing one only
+   *   in case is folded onto it rather than added as a duplicate. Only affects the merge (i.e.
+   *   `mergeWithExistingSchema = true`); the subsequent diff always keys columns on their exact
+   *   names, so a case-only rename on a non-merging path stays an explicit drop-then-add.
    */
   private def evolveTable(
       catalog: TableCatalog,
@@ -714,31 +703,30 @@ object DatasetManager extends Logging {
   }
 
   /**
-   * Some fields on the [[Table]] object are represented as reserved table properties by the catalog
-   * APIs. This method creates a table properties map that merges the user-provided table properties
-   * with these reserved properties.
+   * Some fields on the [[Table]] object are represented as reserved table properties by the
+   * catalog APIs. This method creates a table properties map that merges the user-provided table
+   * properties with these reserved properties.
    */
-  private def resolveTableProperties(table: Table, identifier: Identifier): Map[String, String] = {
+  private def resolveTableProperties(
+      table: Table,
+      identifier: Identifier): Map[String, String] = {
     val validatedAndCanonicalizedProps =
       PipelinesTableProperties.validateAndCanonicalize(
         table.properties,
-        warnFunction = s => logWarning(s)
-      )
+        warnFunction = s => logWarning(s))
 
     val specialProps = Seq(
       (table.comment, "comment", TableCatalog.PROP_COMMENT),
-      (table.format, "format", TableCatalog.PROP_PROVIDER)
-    ).map {
-        case (value, name, reservedPropKey) =>
-          validatedAndCanonicalizedProps.get(reservedPropKey).foreach { pc =>
-            if (value.isDefined && value.get != pc) {
-              throw new IllegalArgumentException(
-                s"For dataset $identifier, $name '${value.get}' does not match value '$pc' for " +
-                s"reserved table property '$reservedPropKey''"
-              )
-            }
+      (table.format, "format", TableCatalog.PROP_PROVIDER))
+      .map { case (value, name, reservedPropKey) =>
+        validatedAndCanonicalizedProps.get(reservedPropKey).foreach { pc =>
+          if (value.isDefined && value.get != pc) {
+            throw new IllegalArgumentException(
+              s"For dataset $identifier, $name '${value.get}' does not match value '$pc' for " +
+                s"reserved table property '$reservedPropKey''")
           }
-          reservedPropKey -> value
+        }
+        reservedPropKey -> value
       }
       .collect { case (key, Some(value)) => key -> value }
 
@@ -747,25 +735,26 @@ object DatasetManager extends Logging {
 
   /**
    * A case class that represents the type of refresh for a table.
-   * @param table The table to be refreshed.
-   * @param isFullRefresh Whether this table should be fully refreshed or not.
+   * @param table
+   *   The table to be refreshed.
+   * @param isFullRefresh
+   *   Whether this table should be fully refreshed or not.
    */
   private case class TableRefreshType(table: Table, isFullRefresh: Boolean)
 
   /**
-   * Constructs the set of tables that should be fully refreshed and the set of tables that
-   * should be refreshed.
+   * Constructs the set of tables that should be fully refreshed and the set of tables that should
+   * be refreshed.
    */
-  private def constructFullRefreshSet(
-      graphTables: Seq[Table],
-      context: PipelineUpdateContext
-  ): (Seq[Table], Seq[TableIdentifier], Seq[TableIdentifier]) = {
+  private def constructFullRefreshSet(graphTables: Seq[Table], context: PipelineUpdateContext)
+      : (Seq[Table], Seq[TableIdentifier], Seq[TableIdentifier]) = {
     val (fullRefreshTablesSet, refreshTablesSet) = {
       val specifiedFullRefreshTables = context.fullRefreshTables.filter(graphTables)
       val specifiedRefreshTables = context.refreshTables.filter(graphTables)
 
-      val (fullRefreshAllowed, fullRefreshNotAllowed) = specifiedFullRefreshTables.partition { t =>
-        PipelinesTableProperties.resetAllowed.fromMap(t.properties)
+      val (fullRefreshAllowed, fullRefreshNotAllowed) = specifiedFullRefreshTables.partition {
+        t =>
+          PipelinesTableProperties.resetAllowed.fromMap(t.properties)
       }
 
       val refreshTables = (specifiedRefreshTables ++ fullRefreshNotAllowed).filterNot { t =>
@@ -775,10 +764,9 @@ object DatasetManager extends Logging {
       if (fullRefreshNotAllowed.nonEmpty) {
         logInfo(
           log"Skipping full refresh on some tables because " +
-          log"${MDC(LogKeys.PROPERTY_NAME, PipelinesTableProperties.resetAllowed.key)} " +
-          log"was set to false. Tables: " +
-          log"${MDC(LogKeys.TABLE_NAME, fullRefreshNotAllowed.map(_.identifier))}"
-        )
+            log"${MDC(LogKeys.PROPERTY_NAME, PipelinesTableProperties.resetAllowed.key)} " +
+            log"was set to false. Tables: " +
+            log"${MDC(LogKeys.TABLE_NAME, fullRefreshNotAllowed.map(_.identifier))}")
       }
 
       (fullRefreshAllowed, refreshTables)

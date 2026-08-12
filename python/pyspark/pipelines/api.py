@@ -153,7 +153,8 @@ def table(
         confs set for the pipeline or on the cluster.
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
-    :param partition_cols: A list containing the column names of the partition columns.
+    :param partition_cols: A list containing partitioning expressions. Entries can be column names \
+        for identity partitioning or partition transforms like ``months(ts)`` or ``bucket(16, id)``.
     :param cluster_by: A list containing the column names of the cluster columns.
     :param schema: Explicit Spark SQL schema to materialize this table with. Supports either a \
         Pyspark StructType or a SQL DDL string, such as "a INT, b STRING".
@@ -257,7 +258,8 @@ def materialized_view(
         confs set for the pipeline or on the cluster.
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
-    :param partition_cols: A list containing the column names of the partition columns.
+    :param partition_cols: A list containing partitioning expressions. Entries can be column names \
+        for identity partitioning or partition transforms like ``months(ts)`` or ``bucket(16, id)``.
     :param cluster_by: A list containing the column names of the cluster columns.
     :param schema: Explicit Spark SQL schema to materialize this table with. Supports either a \
         Pyspark StructType or a SQL DDL string, such as "a INT, b STRING".
@@ -435,7 +437,8 @@ def create_streaming_table(
     :param comment: Description of the table.
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
-    :param partition_cols: A list containing the column names of the partition columns.
+    :param partition_cols: A list containing partitioning expressions. Entries can be column names \
+        for identity partitioning or partition transforms like ``months(ts)`` or ``bucket(16, id)``.
     :param cluster_by: A list containing the column names of the cluster columns.
     :param schema: Explicit Spark SQL schema to materialize this table with. Supports either a \
         Pyspark StructType or a SQL DDL string, such as "a INT, b STRING".
