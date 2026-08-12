@@ -324,7 +324,7 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
         "id",
         "(id % 3) AS pk",
         "CAST(id AS DECIMAL(38, 10)) AS v_dec",
-        "CAST(id AS BINARY) AS v_bin")
+        "CAST(CAST(id AS STRING) AS BINARY) AS v_bin")
     withSQLConf(
       SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "8",
       SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "16") {
