@@ -23,6 +23,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -50,13 +51,14 @@ def _listening_socket():
         listener.close()
 
 
-def _closed_port() -> int:
-    """A port with nothing listening on it."""
+@contextlib.contextmanager
+def _non_listening_socket():
+    """Reserve a port without listening on it, so connection attempts are rejected."""
     import socket
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("localhost", 0))
-        return sock.getsockname()[1]
+        yield sock.getsockname()[1]
 
 
 def _spawn_sleeper() -> "subprocess.Popen":
@@ -365,6 +367,59 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"}),
         )
 
+    def test_fingerprint_resolves_server_python_from_path(self) -> None:
+        # Relative worker commands are resolved through PATH by the server. Include that
+        # resolution so equal command strings cannot identify different Python environments.
+        executable_name = "pool-test-python"
+        executable_dirs = [os.path.join(self._tmpdir, name) for name in ("env-a", "env-b")]
+        for directory in executable_dirs:
+            os.makedirs(directory)
+            executable = os.path.join(directory, executable_name)
+            with open(executable, "w") as executable_file:
+                executable_file.write("#!/bin/sh\n")
+            os.chmod(executable, 0o700)
+        os.environ["PYSPARK_PYTHON"] = executable_name
+        with mock.patch.dict(os.environ, {"PATH": executable_dirs[0]}):
+            first_environment = pool_fingerprint("local[*]", {})
+        with mock.patch.dict(os.environ, {"PATH": executable_dirs[1]}):
+            self.assertNotEqual(first_environment, pool_fingerprint("local[*]", {}))
+
+    def test_fingerprint_includes_python_and_spark_paths(self) -> None:
+        with mock.patch.dict(os.environ, {"PYTHONPATH": "/python/a", "SPARK_HOME": "/spark/a"}):
+            first_environment = pool_fingerprint("local[*]", {})
+        with mock.patch.dict(os.environ, {"PYTHONPATH": "/python/b", "SPARK_HOME": "/spark/a"}):
+            self.assertNotEqual(first_environment, pool_fingerprint("local[*]", {}))
+        with mock.patch.dict(os.environ, {"PYTHONPATH": "/python/a", "SPARK_HOME": "/spark/b"}):
+            self.assertNotEqual(first_environment, pool_fingerprint("local[*]", {}))
+
+    def test_pool_member_validation(self) -> None:
+        valid = self._server_data(12345, 123, created=1)
+        member = PoolMember.from_data(valid)
+        self.assertIsNotNone(member)
+        self.assertEqual(member.url, "sc://localhost:12345")
+
+        invalid_records = {
+            "missing fields": {"fingerprint": "fp"},
+            "empty token": self._server_data(12345, 123, token=""),
+            "non-string host": self._server_data(12345, 123, host=None),
+            "boolean port": self._server_data(True, 123),
+            "string port": self._server_data("12345", 123),
+            "fractional port": self._server_data(12345.5, 123),
+            "zero port": self._server_data(0, 123),
+            "out-of-range port": self._server_data(65536, 123),
+            "boolean pid": self._server_data(12345, True),
+            "string pid": self._server_data(12345, "123"),
+            "fractional pid": self._server_data(12345, 123.5),
+            "zero pid": self._server_data(12345, 0),
+            "string created": self._server_data(12345, 123, created="1"),
+            "boolean created": self._server_data(12345, 123, created=True),
+            "negative created": self._server_data(12345, 123, created=-1),
+            "non-finite created": self._server_data(12345, 123, created=float("nan")),
+        }
+        for name, data in invalid_records.items():
+            with self.subTest(name=name):
+                self.assertIsNone(PoolMember.from_data(data))
+
     def test_claim_matches_fingerprint_and_renames(self) -> None:
         with _listening_socket() as port:
             sleeper = self._sleeper()
@@ -402,12 +457,58 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         # Prefer the oldest ready member for deterministic FIFO claiming.
         self.assertEqual(member.token, "t-bbbb")
 
-    def test_claim_skips_unreachable_member(self) -> None:
-        self._write_state(
-            self._directory.server_path("ccc"), self._server_data(_closed_port(), os.getpid())
+    def test_concurrent_claimers_claim_one_member_once(self) -> None:
+        child = (
+            "import sys\n"
+            "from pyspark.sql.connect.local_server_pool import PoolDirectory, ServerPool\n"
+            "directory = PoolDirectory(sys.argv[1])\n"
+            "with directory:\n"
+            "    member = ServerPool(directory).claim('fp')\n"
+            "print(member.token if member is not None else 'NONE')\n"
         )
-        with self._directory:
-            self.assertIsNone(self._pool.claim("fp"))
+        claimers = []
+        results = []
+        with _listening_socket() as port:
+            sleeper = self._sleeper()
+            uid = "cafe"
+            self._write_state(
+                self._directory.server_path(uid),
+                self._server_data(port, sleeper.pid, token="claimed-once"),
+            )
+            try:
+                with self._directory:
+                    for _ in range(2):
+                        claimers.append(
+                            subprocess.Popen(
+                                [sys.executable, "-c", child, self._directory.path],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                            )
+                        )
+                for proc in claimers:
+                    stdout, stderr = proc.communicate(timeout=20)
+                    self.assertEqual(proc.returncode, 0, stderr)
+                    results.append(stdout.strip())
+            finally:
+                for proc in claimers:
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.communicate(timeout=10)
+
+        self.assertEqual(sorted(results), ["NONE", "claimed-once"])
+        states = self._states(uid)
+        self.assertEqual(set(states), {"claimed"})
+        claiming_pid = PoolDirectory.claiming_pid(states["claimed"])
+        self.assertIn(claiming_pid, [proc.pid for proc in claimers])
+
+    def test_claim_skips_unreachable_member(self) -> None:
+        with _non_listening_socket() as port:
+            self._write_state(
+                self._directory.server_path("ccc"), self._server_data(port, os.getpid())
+            )
+            with self._directory:
+                self.assertIsNone(self._pool.claim("fp"))
 
     def test_claim_skips_malformed_and_incompatible_members(self) -> None:
         with _listening_socket() as port:

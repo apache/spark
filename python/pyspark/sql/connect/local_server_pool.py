@@ -40,18 +40,23 @@ def pool_fingerprint(master: str, seed_conf: Dict[str, Any]) -> str:
     pre-booted JVM is never handed to a run it would not have produced.
 
     Besides the master and the seeded confs, this covers the working directory (unset
-    warehouse and Derby metastore locations resolve relative to it), the client Python
-    executable, and the Python executable the Connect server selects for Python UDFs.
+    warehouse and Derby metastore locations resolve relative to it), the PySpark installation,
+    and the Python executable and path environment used for Python UDFs.
     """
     server_python = os.environ.get(
         "PYSPARK_PYTHON", os.environ.get("PYSPARK_DRIVER_PYTHON", "python3")
     )
+    resolved_server_python = shutil.which(server_python) or server_python
+    spark_home = os.environ.get("SPARK_HOME")
     identity = [
         master,
         sorted((str(k), str(v)) for k, v in seed_conf.items()),
         os.getcwd(),
         sys.executable,
-        server_python,
+        resolved_server_python,
+        os.path.realpath(__file__),
+        os.path.realpath(spark_home) if spark_home else "",
+        os.environ.get("PYTHONPATH", ""),
     ]
     return hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()[:16]
 
@@ -91,15 +96,22 @@ class PoolMember:
     def __init__(self, data: Dict[str, Any]):
         normalized = dict(data)
         for key in ("host", "token", "spark_version", "fingerprint"):
-            if not isinstance(normalized[key], str):
-                raise PySparkValueError(f"{key} must be a string")
-        normalized["port"] = int(normalized["port"])
-        normalized["pid"] = int(normalized["pid"])
-        normalized["created"] = float(normalized["created"])
-        if not 0 <= normalized["port"] <= 65535:
+            if not isinstance(normalized[key], str) or not normalized[key]:
+                raise PySparkValueError(f"{key} must be a nonempty string")
+        for key in ("port", "pid"):
+            value = normalized[key]
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise PySparkValueError(f"{key} must be an integer")
+        created = normalized["created"]
+        if isinstance(created, bool) or not isinstance(created, (int, float)):
+            raise PySparkValueError("created must be a number")
+        normalized["created"] = float(created)
+        if not 1 <= normalized["port"] <= 65535:
             raise PySparkValueError("port is out of range")
-        if not math.isfinite(normalized["created"]):
-            raise PySparkValueError("created must be finite")
+        if normalized["pid"] <= 0:
+            raise PySparkValueError("pid must be positive")
+        if not math.isfinite(normalized["created"]) or normalized["created"] < 0:
+            raise PySparkValueError("created must be finite and nonnegative")
         self.data = normalized
         # Set when this process claims the member; the path of its claimed-<pid>-<uid>.json.
         self.claim_path: Optional[str] = None
@@ -359,7 +371,8 @@ class ServerPool:
     def claim(self, fingerprint: str) -> Optional[PoolMember]:
         """Claim the oldest usable member with this fingerprint, or ``None``. The rename to
         ``claimed-<pid>-<uid>.json`` marks the member as owned by this process; the reaping
-        rules use that pid to retire members whose client died without releasing them."""
+        rules use that pid to retire members whose client died without releasing them. The
+        caller must hold the directory lock so selection and rename form one transition."""
         candidates = []
         for uid, path in self._directory.paths_of_kind("server"):
             data = self._directory.read_json(path)
