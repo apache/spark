@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.catalog.{
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, Transform}
 import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.pipelines.autocdc.AutoCdcReservedNames
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.{
   PipelinesCatalogUtils,
@@ -329,8 +330,8 @@ object DatasetManager extends Logging {
         val resolver = SchemaInferenceUtils.resolverFor(
           effectiveCaseSensitivityFor(resolvedDataflowGraph, table.identifier, context))
         StructType(
-          AutoCdcMergeFlow.stripReservedFields(ss, resolver).fields ++
-            AutoCdcMergeFlow.reservedFields(inferredSchemas(table.identifier), resolver))
+          AutoCdcReservedNames.stripReservedFields(ss, resolver).fields ++
+            AutoCdcReservedNames.reservedFields(inferredSchemas(table.identifier), resolver))
       case None =>
         inferredSchemas(table.identifier).asNullable
     }

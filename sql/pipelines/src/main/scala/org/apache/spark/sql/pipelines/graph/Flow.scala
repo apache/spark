@@ -494,22 +494,3 @@ class AutoCdcMergeFlow(
   }
 
 }
-
-object AutoCdcMergeFlow {
-
-  // A field is engine-owned when its name carries the reserved AUTO CDC prefix. Matching goes
-  // through the session `resolver` so a user-declared column is still recognized as reserved under
-  // case-insensitive analysis, and the length guard keeps `substring` safe for shorter names.
-  private def isReservedFieldName(name: String, resolver: Resolver): Boolean = {
-    val prefix = AutoCdcReservedNames.prefix
-    name.length >= prefix.length && resolver(name.substring(0, prefix.length), prefix)
-  }
-
-  /** The engine-owned reserved AUTO CDC column(s) present in `schema`, if any. */
-  private[pipelines] def reservedFields(schema: StructType, resolver: Resolver): Seq[StructField] =
-    schema.fields.toSeq.filter(f => isReservedFieldName(f.name, resolver))
-
-  /** `schema` with the engine-owned reserved AUTO CDC column(s) removed. */
-  private[pipelines] def stripReservedFields(schema: StructType, resolver: Resolver): StructType =
-    StructType(schema.fields.filterNot(f => isReservedFieldName(f.name, resolver)))
-}
