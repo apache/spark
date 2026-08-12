@@ -643,20 +643,325 @@ class UDFInHigherOrderFunctionTestsMixin:
                 df.select(agg).collect()
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
-    def test_pandas_udf_in_lambda_still_fails(self):
-        # A vectorized (pandas) UDF in a lambda is not supported.
+    def test_scalar_pandas_udf_in_lambda(self):
+        # A vectorized scalar pandas UDF is lifted and applied over the flattened elements, so it
+        # still receives a pandas Series (its native contract) once per batch, not per element.
         import pandas as pd
         from pyspark.sql.functions import pandas_udf
 
-        df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,), ([10, None],)], "values array<int>"
+        )
 
         @pandas_udf(IntegerType())
         def plus_one_pandas(s: pd.Series) -> pd.Series:
             return s + 1
 
-        with self.assertRaises(AnalysisException) as ctx:
-            df.select(sf.transform("values", lambda x: plus_one_pandas(x))).collect()
-        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: plus_one_pandas(x)).alias("r")),
+            [([2, 3, 4],), ([],), (None,), ([11, None],)],
+        )
+        # Arithmetic composition around the UDF result is ordinary JVM work.
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: plus_one_pandas(x) * 2).alias("r")),
+            [([4, 6, 8],), ([],), (None,), ([22, None],)],
+        )
+
+    def test_scalar_arrow_udf_in_lambda(self):
+        # A vectorized scalar Arrow UDF is lifted the same way; it takes and returns a pyarrow
+        # Array over the flattened elements.
+        import pyarrow as pa
+        from pyspark.sql.functions import arrow_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,), ([10, None],)], "values array<int>"
+        )
+
+        @arrow_udf(IntegerType())
+        def plus_one_arrow(a: pa.Array) -> pa.Array:
+            return pa.compute.add(a, 1)
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: plus_one_arrow(x)).alias("r")),
+            [([2, 3, 4],), ([],), (None,), ([11, None],)],
+        )
+        assertDataFrameEqual(
+            df.select(sf.filter("values", lambda x: plus_one_arrow(x) > 2).alias("r")),
+            [([2, 3],), ([],), (None,), ([10],)],
+        )
+
+    def test_scalar_pandas_iter_udf_in_lambda(self):
+        # A scalar iterator pandas UDF keeps its iterator contract: it consumes and produces an
+        # iterator of Series. The worker feeds it the flattened elements and re-groups the streamed
+        # results back into arrays positionally, so output batch boundaries need not match input.
+        from typing import Iterator
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,), ([10, 20],), ([5],)], "values array<int>"
+        )
+
+        @pandas_udf(IntegerType())
+        def plus_one_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                yield s + 1
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: plus_one_iter(x)).alias("r")),
+            [([2, 3, 4],), ([],), (None,), ([11, 21],), ([6],)],
+        )
+
+    def test_scalar_arrow_iter_udf_in_lambda(self):
+        # A scalar iterator Arrow UDF, lifted the same way as the pandas iterator variant.
+        from typing import Iterator
+        import pyarrow as pa
+        from pyspark.sql.functions import arrow_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,), ([10, 20],), ([5],)], "values array<int>"
+        )
+
+        @arrow_udf(IntegerType())
+        def plus_one_arrow_iter(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for a in it:
+                yield pa.compute.add(a, 1)
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: plus_one_arrow_iter(x)).alias("r")),
+            [([2, 3, 4],), ([],), (None,), ([11, 21],), ([6],)],
+        )
+
+    def test_scalar_pandas_iter_udf_multiple_arguments_differ_in_type(self):
+        # A two-argument iterator UDF whose arguments have different element types: the array
+        # element (int) and an outer column (string) that the rewrite repeats into an aligned
+        # array. Each argument must be flattened with its own element type, not the first's.
+        from typing import Iterator, Tuple
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3], "a"), ([], "b"), (None, "c"), ([10], "d")],
+            "values array<int>, tag string",
+        )
+
+        @pandas_udf(StringType())
+        def tag_each(it: Iterator[Tuple[pd.Series, pd.Series]]) -> Iterator[pd.Series]:
+            for x, t in it:
+                yield t + x.astype("string")
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: tag_each(x, sf.col("tag"))).alias("r")),
+            [(["a1", "a2", "a3"],), ([],), (None,), (["d10"],)],
+        )
+
+    def test_scalar_pandas_iter_udf_timestamp_return_type(self):
+        # A timestamp-returning pandas iterator UDF with a non-UTC session timezone: the result
+        # chunks are typed with the session timezone, so the streamed buffer must take its type
+        # from the first chunk rather than assuming UTC, or pa.concat_arrays would fail. Assert both
+        # against the equivalent non-iterator pandas UDF (isolates the concat fix) and against a
+        # native Spark expression computing the same instants (so a timezone bug common to both UDF
+        # paths would still be caught, while going through identical driver-collection semantics).
+        from typing import Iterator
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.types import TimestampType
+
+        with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
+            df = self.spark.createDataFrame([([1, 2],), (None,), ([3],)], "values array<int>")
+
+            def compute(x):
+                return pd.to_datetime(x, unit="D", origin="2020-01-01")
+
+            @pandas_udf(TimestampType())
+            def to_ts(s: pd.Series) -> pd.Series:
+                return compute(s)
+
+            @pandas_udf(TimestampType())
+            def to_ts_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+                for s in it:
+                    yield compute(s)
+
+            iter_df = df.select(sf.transform("values", lambda x: to_ts_iter(x)).alias("r"))
+            # Native equivalent: pandas interprets the tz-naive origin in the session timezone, so
+            # `timestamp_add(DAY, x, TIMESTAMP '2020-01-01 00:00:00')` (also session-local) matches.
+            native_df = df.select(
+                sf.transform(
+                    "values",
+                    lambda x: sf.timestamp_add("DAY", x, sf.lit("2020-01-01").cast("timestamp")),
+                ).alias("r")
+            )
+            # Consistent with the non-iterator pandas UDF, and with the native instants.
+            assertDataFrameEqual(
+                iter_df,
+                df.select(sf.transform("values", lambda x: to_ts(x)).alias("r")),
+            )
+            assertDataFrameEqual(iter_df, native_df)
+
+    def test_scalar_iter_udf_over_all_empty_and_null_partition(self):
+        # SPARK-58695: when a whole partition holds only empty/null arrays, the flattened inputs are
+        # all zero-length and a skip-empty iterator UDF yields no chunks. Those rows still need one
+        # (empty / null) output row each, or the positional JVM join drops them silently. Cover both
+        # the pandas and Arrow iterator flavors.
+        from typing import Iterator
+        import pandas as pd
+        import pyarrow as pa
+        from pyspark.sql.functions import pandas_udf, arrow_udf
+
+        # Single partition so the whole batch is empty/null arrays.
+        df = self.spark.createDataFrame(
+            [([],), (None,), ([],), (None,)], "values array<int>"
+        ).coalesce(1)
+
+        @pandas_udf(IntegerType())
+        def skip_empty_pandas(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                if len(s) == 0:
+                    continue
+                yield s + 1
+
+        @arrow_udf(IntegerType())
+        def skip_empty_arrow(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for a in it:
+                if len(a) == 0:
+                    continue
+                yield pa.compute.add(a, 1)
+
+        for f in (skip_empty_pandas, skip_empty_arrow):
+            assertDataFrameEqual(
+                df.select(sf.transform("values", lambda x: f(x)).alias("r")),
+                [([],), (None,), ([],), (None,)],
+            )
+
+    def test_scalar_pandas_iter_udf_timestamp_after_empty_batch(self):
+        # A zero-length result chunk (from an input batch holding only empty/null arrays) must not
+        # pin the output stream's timestamp type to the UTC-typed default: the rows it emits and
+        # the rows emitted from a later real chunk (typed with the session timezone) would then
+        # disagree, and the Arrow stream writer would reject the second output batch. Assert against
+        # the equivalent non-iterator pandas UDF (identical driver-collection semantics), so the
+        # check proves the schema fix without depending on absolute timezone offsets.
+        from typing import Iterator
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.types import TimestampType
+
+        with self.sql_conf(
+            {
+                "spark.sql.session.timeZone": "America/Los_Angeles",
+                # One row per Arrow batch so the empty-array row forms its own (first) batch.
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "1",
+            }
+        ):
+            df = self.spark.createDataFrame([([],), ([1],)], "values array<int>").coalesce(1)
+
+            def compute(x):
+                return pd.to_datetime(x, unit="D", origin="2020-01-01")
+
+            @pandas_udf(TimestampType())
+            def to_ts(s: pd.Series) -> pd.Series:
+                return compute(s)
+
+            @pandas_udf(TimestampType())
+            def to_ts_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+                for s in it:
+                    yield compute(s)
+
+            # Without the fix this raises ArrowInvalid ("different schema") writing the second
+            # output batch; with it the iterator result matches the non-iterator pandas UDF.
+            assertDataFrameEqual(
+                df.select(sf.transform("values", lambda x: to_ts_iter(x)).alias("r")),
+                df.select(sf.transform("values", lambda x: to_ts(x)).alias("r")),
+            )
+
+    def test_scalar_pandas_udf_struct_element_return_type(self):
+        # A vectorized pandas UDF returning a struct element (a pandas.DataFrame per batch) inside a
+        # lambda. Covers the struct-DataFrame result path of the element-wise pandas branch.
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.types import StructType, StructField
+
+        df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
+        ret = StructType([StructField("v", IntegerType()), StructField("neg", IntegerType())])
+
+        @pandas_udf(ret)
+        def to_struct(s: pd.Series) -> pd.DataFrame:
+            return pd.DataFrame({"v": s, "neg": -s})
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: to_struct(x)).alias("r")),
+            [
+                ([(1, -1), (2, -2), (3, -3)],),
+                ([],),
+                (None,),
+            ],
+        )
+
+    def test_chained_vectorized_udfs_in_lambda(self):
+        # Nested calls f(g(x)) inside a lambda: g is lifted first, then f consumes g's array result.
+        # Cover both the non-iterator and iterator vectorized flavors.
+        from typing import Iterator
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,), ([10],)], "values array<int>"
+        )
+
+        @pandas_udf(IntegerType())
+        def plus_one(s: pd.Series) -> pd.Series:
+            return s + 1
+
+        @pandas_udf(IntegerType())
+        def times_two(s: pd.Series) -> pd.Series:
+            return s * 2
+
+        @pandas_udf(IntegerType())
+        def plus_one_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                yield s + 1
+
+        @pandas_udf(IntegerType())
+        def times_two_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                yield s * 2
+
+        # (x + 1) * 2, verified against the equivalent native expression.
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: times_two(plus_one(x))).alias("r")),
+            df.select(sf.transform("values", lambda x: (x + 1) * 2).alias("r")),
+        )
+        assertDataFrameEqual(
+            df.select(
+                sf.transform("values", lambda x: times_two_iter(plus_one_iter(x))).alias("r")
+            ),
+            df.select(sf.transform("values", lambda x: (x + 1) * 2).alias("r")),
+        )
+
+    def test_scalar_iter_udf_struct_element_return_type(self):
+        # A scalar iterator pandas UDF returning a struct element (a pandas.DataFrame per batch)
+        # inside a lambda. Covers the struct-DataFrame result path of the iterator element-wise
+        # branch (Iterator[pd.DataFrame] contract).
+        from typing import Iterator
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.types import StructType, StructField
+
+        df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
+        ret = StructType([StructField("v", IntegerType()), StructField("neg", IntegerType())])
+
+        @pandas_udf(ret)
+        def to_struct_iter(it: Iterator[pd.Series]) -> Iterator[pd.DataFrame]:
+            for s in it:
+                yield pd.DataFrame({"v": s, "neg": -s})
+
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: to_struct_iter(x)).alias("r")),
+            [
+                ([(1, -1), (2, -2), (3, -3)],),
+                ([],),
+                (None,),
+            ],
+        )
 
     def test_non_arrow_udf_is_also_supported(self):
         # A UDF created with useArrow=False is still rewritable; the generated array wrapper

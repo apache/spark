@@ -28,7 +28,6 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Used to write log files that represent batch commit points in structured streaming.
@@ -56,11 +55,6 @@ class CommitLog(
 
   import CommitLog._
 
-  // The configured commit log format version. Used as the default version when callers
-  // construct metadata through [[createMetadata]].
-  private[sql] val defaultVersion: Int = sparkSession.conf.get(
-    SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).toInt
-
   override protected[sql] def deserialize(in: InputStream): CommitMetadataBase = {
     CommitLog.readCommitMetadata(in)
   }
@@ -76,7 +70,10 @@ class CommitLog(
 
   /**
    * Factory for creating a [[CommitMetadataBase]] for the requested wire format version.
-   * Defaults to the version configured via [[SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION]].
+   *
+   * [[commitLogFormatVersion]] is a required parameter rather than a field read from the session
+   * config, so that a caller always supplies the version it resolved for this query run. Reading
+   * the config here would ignore the format an existing checkpoint was created with.
    *
    * For [[VERSION_3]], [[sinkMetadataMap]] must be non-empty and contain exactly one active
    * sink; [[CommitMetadataV3]] enforces this invariant.
@@ -85,7 +82,7 @@ class CommitLog(
       nextBatchWatermarkMs: Long = 0,
       stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None,
       sinkMetadataMap: Map[String, SinkMetadataInfo] = Map.empty,
-      commitLogFormatVersion: Int = defaultVersion): CommitMetadataBase = {
+      commitLogFormatVersion: Int): CommitMetadataBase = {
     commitLogFormatVersion match {
       case VERSION_3 =>
         CommitMetadataV3(nextBatchWatermarkMs, stateUniqueIds, sinkMetadataMap)

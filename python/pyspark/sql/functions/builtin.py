@@ -16025,6 +16025,46 @@ def try_validate_utf8(str: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def normalize(str: "ColumnOrName", form: Optional["ColumnOrName"] = None) -> Column:
+    """
+    Returns the Unicode normalization of ``str`` using the given normalization ``form``, as
+    defined by Unicode Standard Annex #15. Normalization is backed by Spark's bundled ICU4J
+    library rather than the JVM's own Unicode data, so results are stable across JVM vendors
+    and versions.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or column name
+        the input string to normalize.
+    form : :class:`~pyspark.sql.Column` or column name, optional
+        the normalization form, one of 'NFC', 'NFD', 'NFKC', 'NFKD' (case-insensitive).
+        If omitted, 'NFC' is used.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the normalized string.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("\ufb01",)], ["s"])
+    >>> df.select(sf.normalize(df.s, sf.lit("NFKC"))).show()
+    +------------------+
+    |normalize(s, NFKC)|
+    +------------------+
+    |                fi|
+    +------------------+
+    """
+    if form is None:
+        return _invoke_function_over_columns("normalize", str)
+    else:
+        return _invoke_function_over_columns("normalize", str, form)
+
+
+@_try_remote_functions
 def format_number(col: "ColumnOrName", d: int) -> Column:
     """
     Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
@@ -22778,6 +22818,75 @@ def to_variant_object(
 
 
 @_try_remote_functions
+def variant_from_arrays(keys: "ColumnOrName", values: "ColumnOrName") -> Column:
+    """
+    Creates a variant object from the given arrays of keys and values. The keys must be non-null
+    strings and the two arrays must have the same length.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    keys : :class:`~pyspark.sql.Column` or column name
+        an array of string keys.
+    values : :class:`~pyspark.sql.Column` or column name
+        an array of values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_from_entries`
+    :meth:`pyspark.sql.functions.to_variant_object`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT array('a', 'b') AS keys, array(1, 2) AS values")
+    >>> df.select(sf.variant_from_arrays("keys", "values").cast("string").alias("r")).collect()
+    [Row(r='{"a":1,"b":2}')]
+    """
+    return _invoke_function_over_columns("variant_from_arrays", keys, values)
+
+
+@_try_remote_functions
+def variant_from_entries(entries: "ColumnOrName") -> Column:
+    """
+    Creates a variant object from an array of key/value struct entries. The keys must be non-null
+    strings.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    entries : :class:`~pyspark.sql.Column` or column name
+        an array of key/value structs, where the first field is a string key and the second field
+        is the value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_from_arrays`
+    :meth:`pyspark.sql.functions.to_variant_object`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT array(struct('a', 1), struct('b', 2)) AS entries")
+    >>> df.select(sf.variant_from_entries("entries").cast("string").alias("r")).collect()
+    [Row(r='{"a":1,"b":2}')]
+    """
+    return _invoke_function_over_columns("variant_from_entries", entries)
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:
@@ -23311,6 +23420,52 @@ def try_variant_array_append(
         _to_java_column(v),
         _to_java_column(path_col),
         _to_java_column(value),
+    )
+
+
+@_try_remote_functions
+def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
+    """
+    Recursively removes object fields and array elements whose value is a variant null, unless
+    `include_arrays` is False, in which case null array elements are kept. Returns NULL if any
+    argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    include_arrays : bool, optional
+        whether null elements are also removed from arrays (default True).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with variant null fields/elements removed
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_strip_nulls
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a" : 1, "b" : null, "c" : [1, null], "d" : { "e" : null, "f" : 4 } }'''
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_strip_nulls(v)).alias("r")).collect()
+    [Row(r='{"a":1,"c":[1],"d":{"f":4}}')]
+    >>> df.select(to_json(variant_strip_nulls(v, False)).alias("r")).collect()
+    [Row(r='{"a":1,"c":[1,null],"d":{"f":4}}')]
+    >>> df.select(variant_strip_nulls(lit(None)).alias("r")).collect()
+    [Row(r=None)]
+    >>> df2 = spark.createDataFrame([{'json': '{"a": null}'}, {'json': 'null'}])
+    >>> v2 = parse_json(df2.json)
+    >>> df2.select(to_json(variant_strip_nulls(v2)).alias("r")).collect()
+    [Row(r='{}'), Row(r='null')]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "variant_strip_nulls", _to_java_column(v), _enum_to_value(include_arrays)
     )
 
 

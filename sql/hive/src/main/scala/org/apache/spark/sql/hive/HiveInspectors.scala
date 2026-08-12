@@ -1071,6 +1071,7 @@ private[hive] trait HiveInspectors {
     case _: CurrentTime => false
     case _: CurrentTimestampLike => false
     case _: LocalTimestamp => false
+    case _: LocalTimestampNanos => false
     case _ => e.children.forall(canEarlyEval)
   }
 

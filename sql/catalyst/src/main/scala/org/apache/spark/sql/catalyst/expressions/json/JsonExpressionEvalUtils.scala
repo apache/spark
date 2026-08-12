@@ -374,6 +374,25 @@ object JsonPathResult {
 }
 
 /**
+ * The result of a single-value [[JsonTableEvaluator.lookup]] for `JSON_VALUE`. Unlike
+ * [[JsonPathResult]] -- whose `Found` carries verbatim JSON text for `JSON_TABLE` to unquote later
+ * -- a `Scalar` here already holds the value's cast-ready text (a string's unquoted/unescaped
+ * content, a number's or boolean's source text), and an object/array match is reported as
+ * `NonScalar` without being serialized at all, since `JSON_VALUE` routes non-scalars to ON ERROR.
+ */
+sealed trait JsonValueLookup
+object JsonValueLookup {
+  /** The path did not match (routes to ON EMPTY). */
+  case object Missing extends JsonValueLookup
+  /** The path matched a JSON `null` literal (yields SQL NULL). */
+  case object NullValue extends JsonValueLookup
+  /** The path matched an object or array, i.e. not a scalar (routes to ON ERROR). */
+  case object NonScalar extends JsonValueLookup
+  /** The path matched a scalar; `text` is its cast-ready value (strings already unquoted). */
+  case class Scalar(text: UTF8String) extends JsonValueLookup
+}
+
+/**
  * A prefix trie over the (wildcard-free) column paths of a single `JSON_TABLE` invocation, built
  * once via [[JsonTableEvaluator.buildPathTrie]] and reused for every row. It lets
  * [[JsonTableEvaluator.navigateAll]] resolve all columns in a single traversal of a row item
@@ -481,6 +500,88 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
     } finally {
       if (!transferred) parser.close()
     }
+  }
+
+  /**
+   * Resolves `containerPath` against a single JSON value for `JSON_VALUE`, preserving the missing /
+   * JSON-null / found distinction that [[evaluate]] collapses. Returns:
+   *
+   *   - `None` if the input is not a single well-formed JSON value (malformed / trailing garbage /
+   *     empty);
+   *   - `Some(Missing)` if the path matches nothing;
+   *   - `Some(NullValue)` if the path matches an explicit JSON `null`;
+   *   - `Some(NonScalar)` if the path matches an object or array;
+   *   - `Some(Scalar(text))` if the path matches a scalar, where `text` is its cast-ready value --
+   *     a string's unquoted/unescaped content, a number's or boolean's source text (see
+   *     [[scalarAt]]).
+   *
+   * A `null` input is the caller's responsibility. `explodeRoot` is ignored: this is a single-value
+   * lookup, so construct the evaluator with `explodeRoot = false`.
+   *
+   * A single parser both navigates the path and validates well-formedness: after the matched value
+   * is captured (or the path is found missing), [[drainToRootEnd]] consumes the rest of the root
+   * value and rejects any trailing content, so a valid prefix followed by garbage (or a second
+   * root value) is rejected exactly as a fully malformed document is. This avoids the extra
+   * O(document size) validation pass a separate `isSingleWellFormedValue` scan would add per row.
+   */
+  final def lookup(json: UTF8String): Option[JsonValueLookup] = {
+    Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+      try {
+        if (parser.nextToken() == null) {
+          None // empty or whitespace-only
+        } else {
+          val result = positionAt(parser, containerPath) match {
+            case PositionResult.Missing => JsonValueLookup.Missing
+            case PositionResult.NullValue => JsonValueLookup.NullValue
+            case PositionResult.AtValue => scalarAt(parser)
+          }
+          // Reject a valid prefix trailed by extra content, keeping malformed-input semantics
+          // identical to the array row source (which validates the whole document up front).
+          if (drainToRootEnd(parser)) Some(result) else None
+        }
+      } catch {
+        case _: JsonProcessingException => None
+      }
+    }
+  }
+
+  /**
+   * Classifies the value the parser is positioned at (the `AtValue` case of [[positionAt]]) for a
+   * `JSON_VALUE` [[lookup]], avoiding the serialize-then-reparse round trip that
+   * [[serializeCurrentValue]] followed by [[unquotedString]] would incur:
+   *
+   *   - an object or array is consumed with `skipChildren` -- so [[drainToRootEnd]] can still walk
+   *     back out and validate the document -- and reported as `NonScalar`, never serialized, since
+   *     `JSON_VALUE` routes non-scalars to ON ERROR and so never needs the value;
+   *   - a scalar's cast-ready text is read straight from the parser via `getText`, which returns a
+   *     string's unquoted, unescaped content and a number's or boolean's verbatim source characters
+   *     (so a high-precision fraction reaches a DECIMAL/STRING cast intact, as with
+   *     `copyCurrentStructureExact`).
+   *
+   * A JSON `null` never reaches here -- [[positionAt]] reports it as `NullValue`.
+   */
+  private def scalarAt(parser: JsonParser): JsonValueLookup = parser.currentToken match {
+    case JsonToken.START_OBJECT | JsonToken.START_ARRAY =>
+      parser.skipChildren()
+      JsonValueLookup.NonScalar
+    case _ =>
+      JsonValueLookup.Scalar(UTF8String.fromString(parser.getText))
+  }
+
+  /**
+   * Finishes consuming the root JSON value the `parser` is partway through and verifies nothing
+   * follows it, returning false if the input is truncated or has trailing content. Callers navigate
+   * to (and serialize) a matched value with the same parser, which can leave it positioned inside
+   * the enclosing containers; this walks back out to the root and confirms the document held
+   * exactly one well-formed value.
+   */
+  private def drainToRootEnd(parser: JsonParser): Boolean = {
+    // Walk out of any still-open containers, consuming the remainder of the root value.
+    while (!parser.getParsingContext.inRoot) {
+      if (parser.nextToken() == null) return false // truncated mid-value
+    }
+    // At the root now: exactly one value was present iff nothing remains.
+    parser.nextToken() == null
   }
 
   /**

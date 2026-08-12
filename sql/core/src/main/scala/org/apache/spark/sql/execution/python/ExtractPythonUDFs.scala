@@ -241,7 +241,12 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
 
     def canChainWithParallelUDFs(evalType: Int): Boolean = {
       if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF ||
-        evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF) {
+        evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF ||
+        // The lifted iterator flavors carry the same one-UDF-per-operator constraint as their base
+        // iterator types: the worker feeds a single iterator UDF, so they must not be
+        // parallel-fused with siblings (e.g. `transform(arr, x -> f(x) + g(x))` for iterator UDFs).
+        evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF ||
+        evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF) {
         false
       } else {
         evalType == firstVisitedScalarUDFEvalType.get
@@ -350,6 +355,10 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
                  | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                  | PythonEvalType.SQL_ARROW_BATCHED_UDF
                  | PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
+                 | PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF
+                 | PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF
+                 | PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF
+                 | PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)

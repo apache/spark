@@ -4170,6 +4170,37 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Resolve a `jsonValueBehavior` clause (`NULL` / `ERROR` / `DEFAULT <expr>`) into a
+   * [[JsonValueBehavior]] and, for the `DEFAULT` case, its expression.
+   */
+  private def buildJsonValueBehavior(
+      ctx: JsonValueBehaviorContext): (JsonValueBehavior, Option[Expression]) = ctx match {
+    case _: JsonValueBehaviorNullContext => (JsonValueBehavior.Null, None)
+    case _: JsonValueBehaviorErrorContext => (JsonValueBehavior.Error, None)
+    case d: JsonValueBehaviorDefaultContext =>
+      (JsonValueBehavior.Default, Some(expression(d.defaultExpr)))
+  }
+
+  /**
+   * Create a [[JsonValue]] expression for the SQL:2016 `JSON_VALUE` scalar function. The `ON EMPTY`
+   * / `ON ERROR` clauses default to `NULL` when absent, per the standard.
+   */
+  override def visitJsonValue(ctx: JsonValueContext): Expression = withOrigin(ctx) {
+    val jsonExpr = expression(ctx.jsonExpr)
+    val path = string(visitStringLit(ctx.path))
+    // Default RETURNING type is STRING. Normalize CHAR/VARCHAR to STRING for the cast, as the value
+    // is produced by a `Cast` to the declared type (a raw CHAR/VARCHAR target has no encoder).
+    val returning = Option(ctx.returning)
+      .map(dt => CharVarcharUtils.replaceCharVarcharWithStringForCast(typedVisit[DataType](dt)))
+      .getOrElse(StringType)
+    val (onEmpty, emptyDefault) = Option(ctx.emptyBehavior)
+      .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
+    val (onError, errorDefault) = Option(ctx.errorBehavior)
+      .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
+    JsonValue(jsonExpr, path, returning, onEmpty, onError, emptyDefault, errorDefault)
+  }
+
+  /**
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
