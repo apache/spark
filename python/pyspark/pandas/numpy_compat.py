@@ -18,6 +18,7 @@ from typing import Any, Callable, no_type_check
 
 import numpy as np
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, BooleanType
@@ -203,6 +204,29 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
     )
 
 
+# NumPy 2.3.0 changed how fmax/fmin break a signed-zero tie: for equal operands
+# (for example +0.0 and -0.0) it returns the first operand, while older versions
+# returned the second. Track the installed NumPy so the result keeps the matching
+# sign of zero.
+_tie_returns_first_operand = LooseVersion(np.__version__) >= LooseVersion("2.3.0")
+
+
+def _fmax_func(c1: Column, c2: Column) -> Column:
+    tie = c1 if _tie_returns_first_operand else c2
+    return (
+        F.when(F.isnan(c1.cast("double")), c2)
+        .when(F.isnan(c2.cast("double")), c1)
+        .when(c1 == c2, tie)
+        .otherwise(F.greatest(c1, c2))
+        .cast("double")
+    )
+
+
+def _fmin_func(c1: Column, c2: Column) -> Column:
+    tie = c1 if _tie_returns_first_operand else c2
+    return F.when(c1 == c2, tie).otherwise(F.least(c1, c2)).cast("double")
+
+
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
@@ -215,12 +239,8 @@ binary_np_spark_mappings = {
     # np.floor_divide dispatches to the pandas-on-Spark floordiv dunder operation
     # before this registry is consulted, so this mapping is not used for that case.
     "floor_divide": _floor_divide_func,
-    "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
-    .when(F.isnan(c2.cast("double")), c1)
-    .when(c1 == c2, c1)
-    .otherwise(F.greatest(c1, c2))
-    .cast("double"),
-    "fmin": lambda c1, c2: F.when(c1 == c2, c1).otherwise(F.least(c1, c2)).cast("double"),
+    "fmax": _fmax_func,
+    "fmin": _fmin_func,
     "fmod": _fmod_func,
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "heaviside": lambda c1, c2: F.when(
