@@ -129,8 +129,9 @@ class TungstenAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   // Creates a new aggregation buffer and initializes buffer values.
-  // This function should be only called at most two times (when we create the hash map,
-  // and when we create the re-used buffer for sort-based aggregation).
+  // This function should be called at most three times: when we create the hash map, when we
+  // create the re-used buffer for sort-based aggregation, and when we create the buffer for
+  // pass-through rows.
   private def createNewAggregationBuffer(): UnsafeRow = {
     val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
     val buffer: UnsafeRow = UnsafeProjection.create(bufferSchema.map(_.dataType))
