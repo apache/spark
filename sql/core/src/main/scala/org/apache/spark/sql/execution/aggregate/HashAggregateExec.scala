@@ -1273,18 +1273,22 @@ case class HashAggregateExec(
     // its whole batch is appended before the deferred drain runs, flipping the merge order for a
     // group that straddles the freeze point. Such children report `needCopyResult`, so every row
     // is a copy, the aliasing hazard is gone, and the drain runs here right after the trigger,
-    // between fan-out rows. Fused with the Final (no exchange), the output is consumed directly
-    // by the Final's `doConsume` and never buffered, so there is no aliasing hazard either; the
-    // drain runs here too, because nothing else would yield the build loop (with no append there
-    // is no `shouldStop()`), and the maps would otherwise come out only after all the remaining
-    // streamed rows, flipping the merge order.
+    // draining the whole frozen map before the fan-out batch continues. Fused with the Final (no
+    // exchange), the output is consumed directly by the Final's `doConsume` and never buffered, so
+    // there is no aliasing hazard either; the drain runs here too, because nothing else would
+    // yield the build loop (with no append there is no `shouldStop()`), and the maps would
+    // otherwise come out only after all the remaining streamed rows, flipping the merge order.
     val emitPassThroughRow = if (adaptivePartialAggEnabled) {
       val numBypassingRows = metricTerm(ctx, "numBypassingRows")
       val drainFused = if (isWholeStageRoot && !needCopyResult) {
         ""
       } else {
+        // `outputMap` returns on `shouldStop()`, already true here because the bypassed row was
+        // just appended, so drain in a loop to emit the whole frozen map before the fan-out batch
+        // continues. Fused, nothing is buffered and `shouldStop()` stays false, so the loop runs
+        // once.
         s"""
-           |if (!$adaptiveMapOutputDoneTerm) {
+           |while (!$adaptiveMapOutputDoneTerm) {
            |  $adaptiveOutputMapFuncName();
            |}
          """.stripMargin

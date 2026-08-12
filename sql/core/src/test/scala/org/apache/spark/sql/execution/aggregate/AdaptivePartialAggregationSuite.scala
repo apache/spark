@@ -720,13 +720,79 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // a different order than a non-bypassed run, and the generated path disagreed with the
     // interpreted one. The fan-out child reports `needCopyResult`, so the drained maps can run
     // right after the trigger row, restoring the merge order.
+    //
+    // The colliding key must not be the first one the map drains: key 0 is emitted before any
+    // bypassed row can overtake it, so `lit(0L)` cannot expose the interleaving. Key 6 is inserted
+    // early (by id 3) but drained after keys 0-5, so a bypassed row colliding with it lands ahead
+    // of its map buffer unless the drain finishes before the fan-out batch continues.
     checkAdaptiveMatchesReference { parts =>
       spark.range(0, 20, 1, parts)
         .select($"id", explode(array(
           $"id" * 2,
-          when($"id" === 4, lit(0L)).otherwise($"id" * 2 + 1))) as "k")
+          when($"id" === 4, lit(6L)).otherwise($"id" * 2 + 1))) as "k")
         .select($"k", ($"id" * 100 + $"k") as "v")
         .groupBy($"k").agg(first($"v") as "f", last($"v") as "l")
+    }
+  }
+
+  test("a wide fan-out drains the whole frozen map before streaming the batch") {
+    // A pass-through row must not carry one map row with it: in the split shape the frozen map
+    // interleaves with the trigger row's fan-out batch, so a colliding key in that batch is safe
+    // only if the drain already finished. This batch is four rows wide and collides twice, so any
+    // drain that stops short of the full map breaks the merge order for at least one collision.
+    checkAdaptiveMatchesReference { parts =>
+      spark.range(0, 20, 1, parts)
+        .select($"id", explode(array(
+          $"id" * 4,
+          when($"id" === 2, lit(3L)).otherwise($"id" * 4 + 1),
+          $"id" * 4 + 2,
+          when($"id" === 2, lit(7L)).otherwise($"id" * 4 + 3))) as "k")
+        .select($"k", ($"id" * 100 + $"k") as "v")
+        .groupBy($"k").agg(first($"v") as "f", last($"v") as "l")
+    }
+  }
+
+  test("a frozen map larger than the fan-out batch preserves the merge order") {
+    // The interleave window is as wide as the trigger row's fan-out batch, so a small map can
+    // finish draining within it; this query grows the map well past the batch width, so a drain
+    // that stops short of the whole map leaves the colliding key's buffer behind it.
+    //
+    // The generated and interpreted paths must agree on the merge order, or `wholeStage` becomes
+    // observable, so each cell compares them directly. There is no feature-off comparison: in the
+    // forced-fallback cells the colliding key's rows straddle the `Final`'s own spill, whose
+    // sort-based re-merge inverts `first`/`last` on both paths alike.
+    for {
+      splits <- Seq(1, 2)
+      twoLevelMap <- Seq(true, false)
+      forceSpill <- Seq(true, false)
+    } {
+      val query = () => {
+        spark.range(0, 100, 1, splits)
+          .select($"id", explode(array(
+            $"id" * 2,
+            when($"id" === 16, lit(5L)).otherwise($"id" * 2 + 1))) as "k")
+          .select($"k", ($"id" * 100 + $"k") as "v")
+          .groupBy($"k").agg(first($"v") as "f", last($"v") as "l")
+      }
+      val spillConf = if (forceSpill) {
+        Seq("spark.sql.TungstenAggregate.testFallbackStartsAt" -> forceSpillFallback)
+      } else {
+        Nil
+      }
+      def run(wholeStage: Boolean): DataFrame = withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "32") ++
+          spillConf ++ fixedPlanConfs): _*) {
+        query()
+      }
+      val generated = run(wholeStage = true)
+      val interpreted = run(wholeStage = false)
+      withClue(s"splits=$splits twoLevelMap=$twoLevelMap forceSpill=$forceSpill: ") {
+        checkAnswer(generated, interpreted)
+      }
     }
   }
 
