@@ -320,18 +320,17 @@ object DatasetManager extends Logging {
     val outputSchema = table.specifiedSchema match {
       case Some(ss) =>
         // The user schema describes the logical table; the engine owns the reserved AUTO CDC
-        // metadata column(s). Append any that the incoming flows produce but the user omitted,
-        // so the created table matches what the AUTO CDC MERGE writes at runtime. Matching goes
-        // through the flow's effective resolver (the same one the rest of AUTO CDC uses, which
-        // honors a case-sensitivity conf set on the flow, not just the session) so a reserved
-        // column the user declared in a different case is treated as present rather than
-        // re-appended as a duplicate.
+        // metadata column(s). Drop whatever reserved column(s) the user declared and append the
+        // engine-owned shape from the inferred schema, so the created table always has exactly the
+        // reserved column(s) the AUTO CDC MERGE writes, even if the user declared one with a
+        // different type or nullability. Matching goes through the flow's effective resolver (the
+        // same one the rest of AUTO CDC uses, which honors a case-sensitivity conf set on the flow,
+        // not just the session).
         val resolver = SchemaInferenceUtils.resolverFor(
           effectiveCaseSensitivityFor(resolvedDataflowGraph, table.identifier, context))
-        val omittedReservedFields = AutoCdcMergeFlow
-          .reservedFields(inferredSchemas(table.identifier), resolver)
-          .filterNot(f => ss.fieldNames.exists(resolver(_, f.name)))
-        StructType(ss.fields ++ omittedReservedFields)
+        StructType(
+          AutoCdcMergeFlow.stripReservedFields(ss, resolver).fields ++
+            AutoCdcMergeFlow.reservedFields(inferredSchemas(table.identifier), resolver))
       case None =>
         inferredSchemas(table.identifier).asNullable
     }
