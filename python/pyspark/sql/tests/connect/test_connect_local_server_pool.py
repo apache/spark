@@ -352,9 +352,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         # precedence so clients never claim a server using a different fallback interpreter.
         os.environ.pop("PYSPARK_PYTHON")
         os.environ["PYSPARK_DRIVER_PYTHON"] = "python3"
-        self.assertEqual(
-            base, pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"})
-        )
+        self.assertEqual(base, pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"}))
         os.environ["PYSPARK_DRIVER_PYTHON"] = "/driver/python"
         self.assertNotEqual(
             base, pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"})
@@ -434,9 +432,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 "a4": non_finite_created,
                 "a5": out_of_range_port,
                 "a6": bad_host,
-                "a7": self._server_data(
-                    port, sleeper.pid, spark_version="not-this-version"
-                ),
+                "a7": self._server_data(port, sleeper.pid, spark_version="not-this-version"),
                 "a8": self._server_data(port, 2**31 - 1),
                 "a9": self._server_data(port, 2**100),
             }
