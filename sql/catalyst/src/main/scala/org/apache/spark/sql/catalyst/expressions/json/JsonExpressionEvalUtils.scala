@@ -393,6 +393,26 @@ object JsonValueLookup {
 }
 
 /**
+ * The result of a single-value [[JsonTableEvaluator.queryLookup]] for `JSON_QUERY`. Unlike
+ * [[JsonValueLookup]] -- which reports an object/array match as `NonScalar` without serializing it,
+ * since `JSON_VALUE` never returns a non-scalar -- `Found` here always carries the matched value's
+ * verbatim JSON text (`JSON_QUERY` returns objects, arrays, and scalars alike). `structural`
+ * distinguishes an object/array match from a scalar match, which the caller needs for the array
+ * wrapper (`WITH CONDITIONAL`) and quotes (`OMIT QUOTES`) behaviors. A JSON `null` literal is a
+ * scalar match whose text is `null`, not a distinct case.
+ */
+sealed trait JsonQueryLookup
+object JsonQueryLookup {
+  /** The path did not match (routes to ON EMPTY). */
+  case object Missing extends JsonQueryLookup
+  /**
+   * The path matched a value; `raw` is its verbatim JSON text (a string is still quoted), and
+   * `structural` is true iff the value is an object or array.
+   */
+  case class Found(raw: UTF8String, structural: Boolean) extends JsonQueryLookup
+}
+
+/**
  * A prefix trie over the (wildcard-free) column paths of a single `JSON_TABLE` invocation, built
  * once via [[JsonTableEvaluator.buildPathTrie]] and reused for every row. It lets
  * [[JsonTableEvaluator.navigateAll]] resolve all columns in a single traversal of a row item
@@ -542,6 +562,48 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
           }
           // Reject a valid prefix trailed by extra content, keeping malformed-input semantics
           // identical to the array row source (which validates the whole document up front).
+          if (drainToRootEnd(parser)) Some(result) else None
+        }
+      } catch {
+        case _: JsonProcessingException => None
+      }
+    }
+  }
+
+  /**
+   * Resolves `containerPath` against a single JSON value for `JSON_QUERY`, serializing the matched
+   * value as verbatim JSON text. Returns:
+   *
+   *   - `None` if the input is not a single well-formed JSON value (malformed / trailing garbage /
+   *     empty), which the caller maps to ON ERROR;
+   *   - `Some(Missing)` if the path matches nothing (ON EMPTY);
+   *   - `Some(Found(raw, structural))` if the path matches, where `raw` is the value's verbatim
+   *     JSON text and `structural` is true for an object or array (as opposed to a scalar,
+   *     including a JSON `null`, whose text is `null`).
+   *
+   * A `null` input is the caller's responsibility. Like [[lookup]] this navigates and validates
+   * with a single parser: after the matched value is serialized (which consumes it),
+   * [[drainToRootEnd]]
+   * walks out of the enclosing containers and rejects any trailing content, so a valid prefix
+   * followed by garbage is rejected exactly as a fully malformed document is.
+   */
+  final def queryLookup(json: UTF8String): Option[JsonQueryLookup] = {
+    Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+      try {
+        if (parser.nextToken() == null) {
+          None // empty or whitespace-only
+        } else {
+          val result = positionAt(parser, containerPath) match {
+            case PositionResult.Missing => JsonQueryLookup.Missing
+            // A JSON `null` literal is a scalar value for JSON_QUERY: serialize it to the text
+            // `null` rather than reporting it specially. The parser is positioned on the token.
+            case PositionResult.NullValue =>
+              JsonQueryLookup.Found(serializeCurrentValue(parser), structural = false)
+            case PositionResult.AtValue =>
+              val structural = parser.currentToken == JsonToken.START_OBJECT ||
+                parser.currentToken == JsonToken.START_ARRAY
+              JsonQueryLookup.Found(serializeCurrentValue(parser), structural)
+          }
           if (drainToRootEnd(parser)) Some(result) else None
         }
       } catch {
