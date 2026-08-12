@@ -210,6 +210,8 @@ class UserDefinedFunction:
             eval_type=self.evalType,
             func=self.func,
             python_ver="%d.%d" % sys.version_info[:2],
+            # Set for incremental Python aggregators (see pyspark.sql.pandas.aggregator).
+            buffer_type=getattr(self, "bufferSchema", None),
         )
         return CommonInlineUserDefinedFunction(
             function_name=self._name,

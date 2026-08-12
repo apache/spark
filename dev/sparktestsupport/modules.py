@@ -1254,6 +1254,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_grouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map_misc",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_python_aggregator",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_python_udf",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_scalar",

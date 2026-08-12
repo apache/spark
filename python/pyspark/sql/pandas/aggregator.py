@@ -141,7 +141,12 @@ def arrow_udaf(agg: "Aggregator") -> Any:
     function
         A callable that, applied to input columns, produces an aggregate :class:`Column`.
     """
-    from pyspark.sql.udf import UserDefinedFunction
+    from pyspark.sql.utils import is_remote
+
+    if is_remote():
+        from pyspark.sql.connect.udf import UserDefinedFunction
+    else:
+        from pyspark.sql.udf import UserDefinedFunction
 
     if not isinstance(agg, Aggregator):
         raise PySparkTypeError(

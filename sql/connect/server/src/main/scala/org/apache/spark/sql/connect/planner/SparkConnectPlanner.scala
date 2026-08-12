@@ -2201,6 +2201,7 @@ class SparkConnectPlanner(
     createUserDefinedPythonFunction(fun)
       .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
       case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case agg: PythonAggregate => agg.toAggregateExpression()
       case other => other
     }
   }
@@ -2214,7 +2215,9 @@ class SparkConnectPlanner(
       func = function,
       dataType = transformDataType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
-      udfDeterministic = fun.getDeterministic)
+      udfDeterministic = fun.getDeterministic,
+      // Set only for incremental Python aggregators (see PythonAggregate).
+      bufferType = if (udf.hasBufferType) transformDataType(udf.getBufferType) else null)
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
