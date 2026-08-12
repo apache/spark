@@ -371,6 +371,43 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
+  test("Value state TTL uses the current processing-time function") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      var currentTimestampMs = 1000L
+      val handle = new StatefulProcessorHandleImpl(
+        store,
+        UUID.randomUUID(),
+        stringEncoder,
+        TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(currentTimestampMs),
+        currentTimestampMs = Some(() => currentTimestampMs))
+      val state = handle.getValueState[String](
+        "testState", Encoders.STRING, TTLConfig(Duration.ofMillis(100)))
+        .asInstanceOf[ValueStateImplWithTTL[String]]
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      try {
+        state.update("v1")
+        assert(state.getTTLValue().contains(("v1", 1100L)))
+
+        currentTimestampMs = 1099L
+        assert(state.get() === "v1")
+        currentTimestampMs = 1100L
+        assert(state.get() === null)
+
+        state.update("v2")
+        assert(state.getTTLValue().contains(("v2", 1200L)))
+        currentTimestampMs = 1199L
+        assert(state.get() === "v2")
+        currentTimestampMs = 1200L
+        assert(state.get() === null)
+      } finally {
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+      }
+    }
+  }
+
   // Guards against the UnsafeRow byte-order bug where a scan boundary row with a
   // null element-key struct encodes larger than a real entry (null-bitmap bit = 1),
   // making seek() silently skip boundary entries. Uses a primitive Long grouping
@@ -411,7 +448,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         Seq(firstBatchTs + 1, firstBatchTs + 1, firstBatchTs + 1))
 
       // The eviction iterator (bounded range scan) should find all three entries.
-      val evicted = state2.ttlEvictionIterator().toList
+      val evicted = state2.ttlEvictionIterator(nextBatchTs).toList
       assert(evicted.size === 3,
         s"Expected 3 evictable TTL entries at expiration = prevBatch + 1, got ${evicted.size}")
     }

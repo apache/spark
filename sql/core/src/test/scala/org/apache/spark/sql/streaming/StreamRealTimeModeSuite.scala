@@ -24,16 +24,20 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException, TaskContext}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
+import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
-import org.apache.spark.sql.execution.streaming.state.{FailureInjectionCheckpointFileManager, FailureInjectionFileSystem}
+import org.apache.spark.sql.execution.streaming.state.{FailureInjectionCheckpointFileManager,
+  FailureInjectionFileSystem, OperatorStateMetadataReader, OperatorStateMetadataV2,
+  RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{broadcast, concat, lit, udf}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -468,6 +472,138 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
     )
   }
 
+  test("transformWithState writes batch 0 metadata only after the RTM offset WAL") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[FailureInjectionCheckpointFileManager].getName,
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      withTempDir { checkpointDir =>
+        val injectionState = FailureInjectionFileSystem.registerTempPath(checkpointDir.getPath)
+        try {
+          val inputData = LowLatencyMemoryStream[String](1)
+          val result = inputData.toDS()
+            .groupByKey(value => value)
+            .transformWithState(
+              new RunningCountStatefulProcessor,
+              TimeMode.ProcessingTime(),
+              OutputMode.Update())
+          val metadataFile = new java.io.File(
+            checkpointDir, "state/0/_metadata/v2/0")
+          val stateSchemaDir = new java.io.File(
+            checkpointDir, "state/0/_stateSchema/default")
+
+          injectionState.failureCreateAtomicRegex = Seq(".*/offsets/0")
+          testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+            AddData(inputData, "a"),
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            CheckAnswerWithTimeout(60000, ("a", "1")),
+            Execute { _ =>
+              assert(Option(stateSchemaDir.listFiles()).exists(_.nonEmpty))
+              assert(!metadataFile.exists())
+            },
+            advanceRealTimeClock,
+            ExpectFailure[IOException]()
+          )
+          assert(!metadataFile.exists())
+
+          injectionState.failureCreateAtomicRegex = Seq.empty
+          testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            CheckAnswerWithTimeout(60000, ("a", "1")),
+            advanceRealTimeClock,
+            WaitUntilBatchProcessed(0),
+            StopStream
+          )
+          assert(metadataFile.exists())
+        } finally {
+          FailureInjectionFileSystem.removePathFromTempToInjectionState(checkpointDir.getPath)
+        }
+      }
+    }
+  }
+
+  test("transformWithState replaces uncommitted batch metadata after commit-log failure") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[FailureInjectionCheckpointFileManager].getName,
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      withTempDir { checkpointDir =>
+        val injectionState = FailureInjectionFileSystem.registerTempPath(checkpointDir.getPath)
+        try {
+          val inputData = LowLatencyMemoryStream[String](1)
+          val statePath = new Path(checkpointDir.getAbsolutePath, "state/0")
+
+          def query(
+              processor: RunningCountStatefulProcessor): Dataset[(String, String)] = {
+            inputData.toDS()
+              .groupByKey(value => value)
+              .transformWithState(
+                processor,
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+          }
+
+          def operatorMetadata(batchId: Long): OperatorStateMetadataV2 = {
+            OperatorStateMetadataReader.createReader(
+              statePath,
+              spark.sessionState.newHadoopConf(),
+              version = 2,
+              batchId = batchId).read().get
+              .asInstanceOf[OperatorStateMetadataV2]
+          }
+
+          testStream(
+            query(new RunningCountStatefulProcessor),
+            OutputMode.Update,
+            Map.empty,
+            new ContinuousMemorySink())(
+            AddData(inputData, "seed"),
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            CheckAnswerWithTimeout(60000, ("seed", "1")),
+            advanceRealTimeClock,
+            WaitUntilBatchProcessed(0),
+            StopStream
+          )
+
+          injectionState.createAtomicDelayCloseRegex = Seq(".*/commits/1")
+          testStream(
+            query(new RunningCountStatefulProcessorWithExtraState("failedAttemptState")),
+            OutputMode.Update,
+            Map.empty,
+            new ContinuousMemorySink())(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, "a"),
+            CheckAnswerWithTimeout(60000, ("a", "1")),
+            advanceRealTimeClock,
+            ExpectFailure[IOException]()
+          )
+          val failedAttemptMetadata = operatorMetadata(1)
+          assert(failedAttemptMetadata.operatorPropertiesJson.contains("failedAttemptState"))
+
+          injectionState.createAtomicDelayCloseRegex = Seq.empty
+          testStream(
+            query(new RunningCountStatefulProcessorWithExtraState("committedAttemptState")),
+            OutputMode.Update,
+            Map.empty,
+            new ContinuousMemorySink())(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            CheckAnswerWithTimeout(60000, ("a", "1")),
+            advanceRealTimeClock,
+            WaitUntilBatchProcessed(1),
+            StopStream
+          )
+          val committedMetadata = operatorMetadata(1)
+          assert(committedMetadata.operatorPropertiesJson.contains("committedAttemptState"))
+          assert(!committedMetadata.operatorPropertiesJson.contains("failedAttemptState"))
+        } finally {
+          FailureInjectionFileSystem.removePathFromTempToInjectionState(checkpointDir.getPath)
+        }
+      }
+    }
+  }
+
   // ========================================================================================
   // Pipelined (streaming) shuffle: a stateful/repartition Real-Time Mode query whose shuffle is a
   // PipelinedShuffleDependency, so the producer (source scan) and consumer stages are co-scheduled
@@ -805,4 +941,14 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
 /** Driver-side switch a UDF reads on executors to fail a task on demand (fault-tolerance tests). */
 object StreamRealTimeModeSuite {
   @volatile var failTasks: Boolean = false
+}
+
+class RunningCountStatefulProcessorWithExtraState(extraStateName: String)
+  extends RunningCountStatefulProcessor {
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    super.init(outputMode, timeMode)
+    getHandle.getValueState[Long](
+      extraStateName, Encoders.scalaLong, TTLConfig.NONE)
+  }
 }

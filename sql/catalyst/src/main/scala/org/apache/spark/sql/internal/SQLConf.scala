@@ -3627,13 +3627,12 @@ object SQLConf {
   val STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1 =
     buildConf("spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled")
       .internal()
-      .doc("Whether to allow a Real-Time Mode query to start on a checkpoint whose commit log " +
-        "is at version 1. Real-Time Mode re-executes a failed batch, and with checkpoint format " +
+      .doc("Whether to allow a Real-Time Mode query to start with state store checkpoint format " +
+        "version 1. Real-Time Mode re-executes a failed batch, and with checkpoint format " +
         "version 1 the re-execution can reuse the state file names of the partially-written " +
         "failed batch, so starting on a version 1 checkpoint exposes the query to data loss on " +
-        "failure. Format version 2 avoids this with per-batch state store checkpoint ids, which " +
-        "only a commit log at version 2 or above can persist. Escape hatch only; prefer a fresh " +
-        "checkpoint location.")
+        "failure. Format version 2 avoids this with per-batch state store checkpoint ids. " +
+        "Escape hatch only; prefer a fresh checkpoint location.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -4055,6 +4054,16 @@ object SQLConf {
     .version("4.1.0")
     .booleanConf
     .createWithDefault(true)
+
+  val STREAMING_TRANSFORM_WITH_STATE_REAL_TIME_MODE_TTL_EVICTION_INTERVAL_MS = buildConf(
+    "spark.sql.streaming.realTimeMode.transformWithState.ttlEvictionIntervalMs")
+    .internal()
+    .doc("The threshold in milliseconds to perform eviction of TTL when using the JVM " +
+      "transformWithState operator with real-time mode.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .longConf
+    .createWithDefault(1 * 1000)
 
   val STREAMING_ASYNC_PROGRESS_TRACKING_REAL_TIME_MODE_ENABLED_BY_DEFAULT = buildConf(
     "spark.sql.streaming.realTimeMode.asyncProgressTrackingByDefault.enabled")
