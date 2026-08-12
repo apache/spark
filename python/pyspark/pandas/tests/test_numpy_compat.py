@@ -330,6 +330,56 @@ class NumPyCompatTestsMixin:
             )
             self.assert_eq(result, np.floor_divide(pdf.x1, pdf.x2), almost=True)
 
+    def test_np_logaddexp(self):
+        for pdf in (
+            pd.DataFrame(
+                {
+                    "x1": [-64, -2, -1, 0, 1, 2, 64],
+                    "x2": [2, 3, -2, -3, -3, 0, 2],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": [
+                        -np.inf,
+                        -np.inf,
+                        -2.0,
+                        -2.0,
+                        -0.0,
+                        0.0,
+                        2.0,
+                        np.inf,
+                        np.inf,
+                        np.nan,
+                        -1000.0,
+                        -np.inf,
+                        -0.0,
+                    ],
+                    "x2": [
+                        -np.inf,
+                        3.0,
+                        -np.inf,
+                        2.0,
+                        0.0,
+                        -0.0,
+                        np.inf,
+                        2.0,
+                        np.inf,
+                        2.0,
+                        1000.0,
+                        -0.0,
+                        -np.inf,
+                    ],
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            for np_func in (np.logaddexp, np.logaddexp2):
+                result = np_func(psdf.x1, psdf.x2)
+                expected = np_func(pdf.x1, pdf.x2)
+                self.assert_eq(result, expected, almost=True)
+                self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+
     def test_np_fmax_fmin(self):
         for pdf in (
             pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),
