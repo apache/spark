@@ -4685,7 +4685,8 @@ object SQLConf {
       .doc("Maximum number of distinct keys kept in the in-memory hash map. A new key after " +
         "this threshold makes a window DISTINCT aggregate fall back to external sorting")
       .version("4.4.0")
-      .fallbackConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
+      .intConf
+      .createWithDefault(Int.MaxValue)
 
   val WINDOW_GROUP_LIMIT_THRESHOLD =
     buildConf("spark.sql.optimizer.windowGroupLimitThreshold")

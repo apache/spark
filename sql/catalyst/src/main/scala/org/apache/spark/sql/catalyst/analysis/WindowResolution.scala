@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   AggregateWindowFunction,
   CurrentRow,
   FrameLessOffsetWindowFunction,
-  PythonUDAF,
   RangeFrame,
   RankLike,
   RowFrame,
@@ -160,11 +159,6 @@ object WindowResolution {
         agg.failAnalysis(
           errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
           messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction))
-        )
-      case AggregateExpression(_: PythonUDAF, _, true, _, _) =>
-        windowExpression.failAnalysis(
-          errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
-          messageParameters = Map("windowExpr" -> toSQLExpr(windowExpression))
         )
       case AggregateExpression(function, _, true, _, _)
           if WindowExpression.isSupportedDistinctAggregate(
