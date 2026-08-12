@@ -261,9 +261,7 @@ class NearestByJoinTestsMixin:
 
         dist_udf = udf(lambda a, b: float(abs(a - b)), DoubleType())
 
-        users = self.spark.createDataFrame(
-            [(1, 10.0), (2, 20.0), (3, 30.0)], ["user_id", "score"]
-        )
+        users = self.spark.createDataFrame([(1, 10.0), (2, 20.0), (3, 30.0)], ["user_id", "score"])
         products = self.spark.createDataFrame(
             [("A", 11.0), ("B", 22.0), ("C", 5.0)], ["product", "pscore"]
         )
@@ -300,9 +298,7 @@ class NearestByJoinTestsMixin:
 
         dist_udf = udf(lambda a, b: float(abs(a - b)), DoubleType())
 
-        users = self.spark.createDataFrame(
-            [(1, 10.0), (2, 20.0), (3, 30.0)], ["user_id", "score"]
-        )
+        users = self.spark.createDataFrame([(1, 10.0), (2, 20.0), (3, 30.0)], ["user_id", "score"])
         products = self.spark.createDataFrame(
             [("A", 11.0), ("B", 22.0), ("C", 5.0)], ["product", "pscore"]
         )
