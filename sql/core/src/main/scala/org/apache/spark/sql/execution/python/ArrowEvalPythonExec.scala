@@ -216,7 +216,10 @@ class ArrowEvalPythonEvaluatorFactory(
       pythonRunnerConf,
       pythonMetrics,
       jobArtifactUUID,
-      sessionUUID) with BatchedPythonArrowInput
+      sessionUUID,
+      // Parallel to `funcs` (both come from `udfs` in order); tells the worker how many `array`
+      // levels each element-wise UDF flattens/re-nests (see `PythonUDF.elementwiseNestingDepth`).
+      udfs.map(_.elementwiseNestingDepth)) with BatchedPythonArrowInput
     val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.flatMap { batch =>
