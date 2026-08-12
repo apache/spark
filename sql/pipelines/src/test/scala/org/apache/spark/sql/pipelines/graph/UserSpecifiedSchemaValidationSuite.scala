@@ -21,7 +21,12 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ScdType, UnqualifiedColumnName}
+import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
+  ChangeArgs,
+  ScdType,
+  UnqualifiedColumnName
+}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -80,7 +85,10 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
   }
 
   /** Registers an AUTO CDC flow into `target`; `flowName == "target"` yields an implicit flow. */
-  private def autoCdcGraph(flowName: String, declaredSchema: Option[StructType]): DataflowGraph = {
+  private def autoCdcGraph(
+      flowName: String,
+      declaredSchema: Option[StructType],
+      scdType: ScdType = ScdType.Type1): DataflowGraph = {
     val ctx = new TestGraphRegistrationContext(spark)
     ctx.registerTable("target", specifiedSchema = declaredSchema)
     ctx.registerFlow(AutoCdcFlow(
@@ -96,13 +104,15 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
         sequencing = functions.col("version"),
         columnSelection = None,
         deleteCondition = None,
-        storedAsScdType = ScdType.Type1)))
+        storedAsScdType = scdType)))
     ctx.resolveToDataflowGraph()
   }
 
   /** The full inferred AUTO CDC output schema (data columns plus the reserved metadata column). */
-  private def autoCdcInferredSchema(flowName: String): StructType =
-    autoCdcGraph(flowName, declaredSchema = None)
+  private def autoCdcInferredSchema(
+      flowName: String,
+      scdType: ScdType = ScdType.Type1): StructType =
+    autoCdcGraph(flowName, declaredSchema = None, scdType)
       .inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)(targetIdentifier)
 
   private def validateGraph(graph: DataflowGraph): DataflowGraph =
@@ -216,5 +226,17 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
       flowName = "auto_cdc_flow",
       declaredSchema = Some(autoCdcInferredSchema("auto_cdc_flow"))).validate(
         spark.sessionState.conf.caseSensitiveAnalysis)
+  }
+
+  test("data-only user-specified schema is accepted for an SCD2 AUTO CDC flow") {
+    // An SCD2 flow's inferred schema is the data columns plus the SCD2 interval bounds
+    // __START_AT / __END_AT plus the reserved metadata column. The interval bounds are part of the
+    // SCD2 contract and stay user-visible; only the prefixed metadata column is engine-reserved,
+    // so a declared schema that omits just that column is accepted.
+    val declaredWithoutReserved = StructType(
+      autoCdcInferredSchema("target", ScdType.Type2)
+        .filterNot(_.name.startsWith(AutoCdcReservedNames.prefix)))
+    autoCdcGraph("target", Some(declaredWithoutReserved), ScdType.Type2)
+      .validate(spark.sessionState.conf.caseSensitiveAnalysis)
   }
 }
