@@ -182,15 +182,28 @@ class StreamRealTimeModeCoexistenceSuite extends StreamRealTimeModeSuiteBase {
         }
         inputB.addData(("p", 1), ("q", 1))
 
+        // Wait for query B to actually process its input, so that its pipelined group has been
+        // admitted and scheduled -- `isActive` alone only proves the query was started.
+        eventually(timeout(60.seconds)) {
+          assert(handleB.exception.isEmpty,
+            s"second RTM query failed: ${handleB.exception.map(_.getMessage).getOrElse("")}")
+          assert(handleB.recentProgress.map(_.sources.map(_.numInputRows).sum).sum > 0,
+            "second RTM query has not processed any input yet")
+        }
+        val execB = handleB.asInstanceOf[StreamingQueryWrapper].streamingQuery
+
         testStream(queryA, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
           AddData(inputA, ("x", 1), ("y", 1), ("x", 2)),
           StartStream(),
           CheckAnswerWithTimeout(60000, "x", "y"),
           Execute { q =>
+            // Query A's group is pipelined and running now; assert query B is still running its own
+            // pipelined group at the same time, establishing the two concurrent groups.
             assertAllExchangesPipelined(q)
             assert(handleB.isActive, "the second RTM query must still be running")
             assert(handleB.exception.isEmpty,
               s"second RTM query failed: ${handleB.exception.map(_.getMessage).getOrElse("")}")
+            assertAllExchangesPipelined(execB)
           },
           StopStream
         )
