@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.concurrent.duration._
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
 import org.apache.spark.sql.{ForeachWriter, Row}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution,
@@ -163,6 +165,38 @@ class StreamRealTimeModeCoexistenceSuite extends StreamRealTimeModeSuiteBase {
       val queryA = inputA.toDF().select($"_1".as("key")).dropDuplicates("key").select($"key")
       val queryB = inputB.toDF().select($"_1".as("key")).dropDuplicates("key").select($"key")
 
+      // Track, from the driver, whether a stage of query A and a stage of query B were ever RUNNING
+      // at the same time. Each query's long-running RTM stages are attributed to its query id (via
+      // the job property StreamExecution tags), and `sawBothRunning` is set whenever both queries
+      // have at least one stage running simultaneously -- which only happens if the two pipelined
+      // groups are genuinely co-scheduled rather than one running after the other.
+      val idA = new AtomicReference[String](null)
+      val idB = new AtomicReference[String](null)
+      val stagesA = ConcurrentHashMap.newKeySet[Int]()
+      val stagesB = ConcurrentHashMap.newKeySet[Int]()
+      val runningA = ConcurrentHashMap.newKeySet[Int]()
+      val runningB = ConcurrentHashMap.newKeySet[Int]()
+      val sawBothRunning = new AtomicBoolean(false)
+      val listener = new SparkListener {
+        override def onJobStart(e: SparkListenerJobStart): Unit = {
+          val qid = e.properties.getProperty(StreamExecution.QUERY_ID_KEY)
+          if (qid != null && qid == idA.get()) e.stageIds.foreach(stagesA.add(_))
+          else if (qid != null && qid == idB.get()) e.stageIds.foreach(stagesB.add(_))
+        }
+        override def onStageSubmitted(e: SparkListenerStageSubmitted): Unit = {
+          val sid = e.stageInfo.stageId
+          if (stagesA.contains(sid)) runningA.add(sid)
+          else if (stagesB.contains(sid)) runningB.add(sid)
+          if (!runningA.isEmpty && !runningB.isEmpty) sawBothRunning.set(true)
+        }
+        override def onStageCompleted(e: SparkListenerStageCompleted): Unit = {
+          val sid = e.stageInfo.stageId
+          runningA.remove(sid)
+          runningB.remove(sid)
+        }
+      }
+      spark.sparkContext.addSparkListener(listener)
+
       // ForeachWriter is one of the sinks RTM allows (see RealTimeModeAllowlist.allowedSinks);
       // ForeachBatch is not, so it cannot be used to drive a second RTM query here.
       val handleB = queryB.writeStream
@@ -177,13 +211,13 @@ class StreamRealTimeModeCoexistenceSuite extends StreamRealTimeModeSuiteBase {
         .start()
 
       try {
+        idB.set(handleB.id.toString)
         eventually(timeout(60.seconds)) {
           assert(handleB.isActive, "second RTM query failed to start")
         }
+        // Keep query B continuously fed so its pipelined group stays actively scheduled while query
+        // A runs, rather than going idle between batches.
         inputB.addData(("p", 1), ("q", 1))
-
-        // Wait for query B to actually process its input, so that its pipelined group has been
-        // admitted and scheduled -- `isActive` alone only proves the query was started.
         eventually(timeout(60.seconds)) {
           assert(handleB.exception.isEmpty,
             s"second RTM query failed: ${handleB.exception.map(_.getMessage).getOrElse("")}")
@@ -195,19 +229,28 @@ class StreamRealTimeModeCoexistenceSuite extends StreamRealTimeModeSuiteBase {
         testStream(queryA, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
           AddData(inputA, ("x", 1), ("y", 1), ("x", 2)),
           StartStream(),
+          Execute(q => idA.set(q.id.toString)),
           CheckAnswerWithTimeout(60000, "x", "y"),
           Execute { q =>
-            // Query A's group is pipelined and running now; assert query B is still running its own
-            // pipelined group at the same time, establishing the two concurrent groups.
+            // Both queries' pipelined groups must be running at the same time. Keep feeding B so it
+            // keeps scheduling stages, and wait until the listener has observed A and B stages
+            // running simultaneously.
+            eventually(timeout(60.seconds)) {
+              assert(handleB.isActive, "the second RTM query must still be running")
+              assert(handleB.exception.isEmpty,
+                s"second RTM query failed: ${handleB.exception.map(_.getMessage).getOrElse("")}")
+              inputB.addData(("p", 1), ("q", 1))
+              assert(sawBothRunning.get(),
+                "expected a stage of query A and a stage of query B to run concurrently")
+            }
+            // Both groups are pipelined shuffles (not materialized).
             assertAllExchangesPipelined(q)
-            assert(handleB.isActive, "the second RTM query must still be running")
-            assert(handleB.exception.isEmpty,
-              s"second RTM query failed: ${handleB.exception.map(_.getMessage).getOrElse("")}")
             assertAllExchangesPipelined(execB)
           },
           StopStream
         )
       } finally {
+        spark.sparkContext.removeSparkListener(listener)
         handleB.stop()
       }
     }

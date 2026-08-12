@@ -230,7 +230,10 @@ class KafkaRealTimeModeAggregationSuite extends KafkaRealTimeModeBaseSuite {
         for (i <- 0 until 3) {
           var sum = 0
           for (k <- (1 to numRows)) {
-            val data = ((i * 10).toLong, 5)
+            // Feed varying values (the row index k) so the assertion below actually exercises the
+            // average rather than passing for any single-value aggregate: a constant input would
+            // make avg == first == last == that value.
+            val data = ((i * 10).toLong, k)
             read.addData(0, Seq(data))
 
             val windowDurationMs = tumblingWindowDuration * 1000
@@ -238,9 +241,12 @@ class KafkaRealTimeModeAggregationSuite extends KafkaRealTimeModeBaseSuite {
             val startTime = getDateTimeString(((i + 1) * windowDurationMs) - windowDurationMs)
             val endTime = getDateTimeString((i + 1) * windowDurationMs)
 
+            // Update mode emits the running average after each record: sum(1..k) / k. Cast to INT
+            // to match the query's avg(value) cast.
             sum += k
+            val runningAvg = sum / k
             expectedResults += new GenericRowWithSchema(
-              Array(s"{$startTime, $endTime}-${5}"),
+              Array(s"{$startTime, $endTime}-$runningAvg"),
               schema = new StructType().add(StructField("value", StringType))
             )
           }

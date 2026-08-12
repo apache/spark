@@ -102,10 +102,10 @@ abstract class KafkaRealTimeModeBaseSuite
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", outputTopic)
-      .option("checkpointLocation", checkpointDir.getName)
+      .option("checkpointLocation", checkpointDir.getAbsolutePath)
       .queryName(queryName)
-      // doesn't matter the batch duration set here since we are going
-      // to manually control batch durations via manual clock
+      // The batch duration set here doesn't matter because we manually control batch durations
+      // via the manual clock.
       .trigger(RealTimeTrigger(defaultTriggerBatchDurationMs))
       .start()
   }
