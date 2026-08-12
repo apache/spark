@@ -62,15 +62,19 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         // For dense vector, we've to allocate new memory for new output vector.
         // However, for sparse vector, the `index` array will not be changed,
         // so we can re-use it to save memory.
-        val normalized = vector match {
+        vector match {
           case DenseVector(vs) =>
-            Vectors.dense(vs.clone())
+            val values = vs.clone()
+            val normalized = Vectors.dense(values)
+            BLAS.scal(1.0 / norm, normalized)
+            normalized
           case SparseVector(size, ids, vs) =>
-            Vectors.sparse(size, ids, vs.clone())
+            val values = vs.clone()
+            val normalized = Vectors.sparse(size, ids, values)
+            BLAS.scal(1.0 / norm, normalized)
+            normalized
           case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
         }
-        BLAS.scal(1.0 / norm, normalized)
-        normalized
       } else {
         // Since the norm is zero, return the input vector object itself.
         // Note that it's safe since we always assume that the data in RDD
