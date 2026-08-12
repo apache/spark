@@ -54,7 +54,7 @@ or system properties:
 ./sbin/start-thriftserver.sh \
   --hiveconf hive.server2.thrift.port=<listening-port> \
   --hiveconf hive.server2.thrift.bind.host=<listening-host> \
-  --master <master-uri>
+  --master <master-uri> \
   ...
 ```
 
