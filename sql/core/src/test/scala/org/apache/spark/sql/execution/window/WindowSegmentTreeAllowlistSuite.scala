@@ -21,6 +21,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -128,39 +129,35 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
 
   // Negative: non-allowlisted aggregates fall through
 
-  test("collect_list falls through (unbounded buffer)") {
-    withSQLConf(enableSegTree.toSeq: _*) {
-      val df = baseDF.withColumn("agg", collect_list($"v").over(winSpec))
+  private def checkFallbackEquivalence(buildDf: () => DataFrame): Unit = {
+    val segTreeResult = withSQLConf(enableSegTree.toSeq: _*) {
+      val df = buildDf()
       val (seg, _) = segTreeCounters(df)
-      assert(seg == 0, s"collect_list should not use segment tree (got $seg frames)")
+      assert(seg == 0, s"Should not use segment tree (got $seg frames)")
+      df.collect().toSeq
     }
+    val naiveResult = withSQLConf(SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false") {
+      buildDf().collect().toSeq
+    }
+    QueryTest.sameRows(naiveResult, segTreeResult, isSorted = false).foreach { err =>
+      fail(s"Output differs from baseline.\n$err")
+    }
+  }
+
+  test("collect_list falls through (unbounded buffer)") {
+    checkFallbackEquivalence(() => baseDF.withColumn("agg", collect_list($"v").over(winSpec)))
   }
 
   test("collect_set falls through (unbounded buffer)") {
-    withSQLConf(enableSegTree.toSeq: _*) {
-      val df = baseDF.withColumn("agg", collect_set($"v").over(winSpec))
-      val (seg, _) = segTreeCounters(df)
-      assert(seg == 0, s"collect_set should not use segment tree (got $seg frames)")
-    }
+    checkFallbackEquivalence(() => baseDF.withColumn("agg", collect_set($"v").over(winSpec)))
   }
 
   test("approx_count_distinct (HyperLogLog++) falls through (fail-closed)") {
-    withSQLConf(enableSegTree.toSeq: _*) {
-      val df = baseDF.withColumn("agg", approx_count_distinct($"v").over(winSpec))
-      val (seg, _) = segTreeCounters(df)
-      assert(
-        seg == 0,
-        s"approx_count_distinct is intentionally not on the allowlist (got $seg frames)")
-    }
+    checkFallbackEquivalence(() => baseDF.withColumn("agg", approx_count_distinct($"v").over(winSpec)))
   }
 
   test("percentile_approx falls through (sketch buffer not auditable)") {
-    withSQLConf(enableSegTree.toSeq: _*) {
-      val df =
-        baseDF.withColumn("agg", percentile_approx($"vd", lit(0.5), lit(100)).over(winSpec))
-      val (seg, _) = segTreeCounters(df)
-      assert(seg == 0, s"percentile_approx should not use segment tree (got $seg frames)")
-    }
+    checkFallbackEquivalence(() => baseDF.withColumn("agg", percentile_approx($"vd", lit(0.5), lit(100)).over(winSpec)))
   }
 
   // Gate: aggregates carrying a FILTER (WHERE ...) clause fall through.
@@ -171,19 +168,17 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
   // (e.g., pushing the predicate into the aggregate function), this test
   // fails and forces an explicit eligibility review.
   test("FILTER (WHERE ...) disables segment-tree path") {
-    withSQLConf(enableSegTree.toSeq: _*) {
-      withTempView("t") {
-        baseDF.createOrReplaceTempView("t")
-        val df = spark.sql("""SELECT id, pk, v,
+    baseDF.createOrReplaceTempView("t")
+    try {
+      checkFallbackEquivalence(() => {
+        spark.sql("""SELECT id, pk, v,
             |  sum(v) FILTER (WHERE v % 2 = 0)
             |    OVER (PARTITION BY pk ORDER BY id ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING)
             |    AS filtered_sum
             |FROM t""".stripMargin)
-        val (seg, _) = segTreeCounters(df)
-        assert(
-          seg == 0,
-          s"filtered aggregate must not take segment-tree path (got $seg segtree frames)")
-      }
+      })
+    } finally {
+      spark.catalog.dropTempView("t")
     }
   }
 
