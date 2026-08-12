@@ -28,7 +28,7 @@ from unittest import mock
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
-    from pyspark.sql.connect import local_server_pool
+    from pyspark.sql.connect.local_server import _pid_alive
     from pyspark.sql.connect.local_server_pool import (
         PoolDirectory,
         PoolMember,
@@ -314,7 +314,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             # Wait for the child to exit but leave it waitable, which keeps it as a zombie
             # until the finally block reaps it.
             os.waitid(os.P_PID, proc.pid, os.WEXITED | os.WNOWAIT)
-            self.assertFalse(local_server_pool._pid_alive(proc.pid))
+            self.assertFalse(_pid_alive(proc.pid))
         finally:
             proc.wait(timeout=10)
 
@@ -343,8 +343,9 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertNotEqual(
             base, pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"})
         )
-        # Match SparkConnectPlanner's PYSPARK_PYTHON -> PYSPARK_DRIVER_PYTHON -> python3
-        # precedence so clients never claim a server using a different fallback interpreter.
+        # Match SparkConnectPlanner.pythonExec's PYSPARK_PYTHON -> PYSPARK_DRIVER_PYTHON ->
+        # python3 precedence for Connect UDFs, so clients never claim a server that resolved a
+        # different fallback interpreter.
         os.environ.pop("PYSPARK_PYTHON")
         os.environ["PYSPARK_DRIVER_PYTHON"] = "python3"
         self.assertEqual(base, pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"}))
@@ -352,10 +353,13 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertNotEqual(
             base, pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"})
         )
+        # PYSPARK_DRIVER_PYTHON also feeds PythonUtils.defaultPythonExec (Python data sources),
+        # which prefers it over PYSPARK_PYTHON. So even with PYSPARK_PYTHON fixed, changing
+        # PYSPARK_DRIVER_PYTHON changes the server a run would boot and must change the identity.
         os.environ["PYSPARK_PYTHON"] = "/worker/python"
         worker_python = pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"})
         os.environ["PYSPARK_DRIVER_PYTHON"] = "/other/driver/python"
-        self.assertEqual(
+        self.assertNotEqual(
             worker_python,
             pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"}),
         )
@@ -385,6 +389,38 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"PYTHONPATH": "/python/a", "SPARK_HOME": "/spark/b"}):
             self.assertNotEqual(first_environment, pool_fingerprint("local[*]", {}))
 
+    def test_fingerprint_conf_order_independent_and_string_keyed(self) -> None:
+        # sorted() over seed_conf makes the identity independent of dict insertion order, so a
+        # run that builds the same confs in a different order still matches.
+        self.assertEqual(
+            pool_fingerprint("local[*]", {"a": "1", "b": "2"}),
+            pool_fingerprint("local[*]", {"b": "2", "a": "1"}),
+        )
+        # Confs serialize to a properties file, so values are compared as strings: 1 and "1"
+        # are the same seed and share an identity.
+        self.assertEqual(
+            pool_fingerprint("local[*]", {"k": 1}), pool_fingerprint("local[*]", {"k": "1"})
+        )
+
+    def test_fingerprint_includes_python_executable(self) -> None:
+        # sys.executable is the client interpreter the server inherits; a packaging change that
+        # moves it must not silently reuse a server booted under the old one.
+        base = pool_fingerprint("local[*]", {})
+        with mock.patch.object(sys, "executable", "/other/python"):
+            self.assertNotEqual(base, pool_fingerprint("local[*]", {}))
+
+    def test_fingerprint_includes_jvm_env(self) -> None:
+        # Environment that shapes the launched JVM must change the identity. SPARK_CONF_DIR is
+        # the common CI case: it selects the spark-defaults.conf / spark-env.sh the server reads.
+        with mock.patch.dict(os.environ, {"SPARK_CONF_DIR": "/conf/a"}):
+            with_conf_a = pool_fingerprint("local[*]", {})
+        with mock.patch.dict(os.environ, {"SPARK_CONF_DIR": "/conf/b"}):
+            self.assertNotEqual(with_conf_a, pool_fingerprint("local[*]", {}))
+        with mock.patch.dict(os.environ, {"JAVA_HOME": "/jdk/a"}):
+            with_java_a = pool_fingerprint("local[*]", {})
+        with mock.patch.dict(os.environ, {"JAVA_HOME": "/jdk/b"}):
+            self.assertNotEqual(with_java_a, pool_fingerprint("local[*]", {}))
+
     def test_pool_member_validation(self) -> None:
         valid = self._server_data(12345, 123, created=1)
         member = PoolMember.from_data(valid)
@@ -411,7 +447,14 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             "string created": self._server_data(12345, 123, created="1"),
             "boolean created": self._server_data(12345, 123, created=True),
             "negative created": self._server_data(12345, 123, created=-1),
-            "non-finite created": self._server_data(12345, 123, created=float("nan")),
+            "nan created": self._server_data(12345, 123, created=float("nan")),
+            "infinite created": self._server_data(12345, 123, created=float("inf")),
+            # A finite float, but far past any real clock: rejected so it cannot look
+            # perpetually fresh to age-based reaping.
+            "far-future created": self._server_data(12345, 123, created=2**100),
+            # Too large to convert to float at all -- the OverflowError guard in from_data keeps
+            # a corrupt state file (this round-trips through json) from crashing the caller.
+            "overflow created": self._server_data(12345, 123, created=10**400),
         }
         for name, data in invalid_records.items():
             with self.subTest(name=name):
@@ -451,8 +494,31 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 )
             with self._directory:
                 member = self._pool.claim("fp")
-        # Prefer the oldest ready member for deterministic FIFO claiming.
+        # Prefer the oldest ready member. Ordering is by wall-clock created, so this is
+        # approximate FIFO rather than a guarantee (see ServerPool.claim).
         self.assertEqual(member.token, "t-bbbb")
+
+    def test_claim_requires_the_lock(self) -> None:
+        # claim reaches the directory only through the locked accessors, so it inherits their
+        # assertion; pin the caller obligation directly so a future reordering that touches the
+        # directory before the first locked accessor is still caught.
+        with self.assertRaisesRegex(AssertionError, "context manager"):
+            self._pool.claim("fp")
+
+    def test_claim_ignores_already_claimed_member(self) -> None:
+        # The kind filter is the exclusion invariant: a member already renamed to claimed-* is
+        # no longer of kind "server", so claim never hands it out a second time. A live, usable
+        # record under a claimed-* name must still be invisible to a new claimer.
+        with _listening_socket() as port:
+            server_process = self._live_process()
+            uid = "feed"
+            self._write_state(
+                self._directory.claimed_path(os.getpid() + 1, uid),
+                self._server_data(port, server_process.pid),
+            )
+            with self._directory:
+                self.assertIsNone(self._pool.claim("fp"))
+        self.assertEqual(set(self._states(uid)), {"claimed"})
 
     def test_concurrent_claimers_claim_one_member_once(self) -> None:
         child = (
@@ -493,6 +559,10 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                         proc.kill()
                         proc.communicate(timeout=10)
 
+        # Pins "claimed at most once": one child claims the member and the other sees none. It
+        # does not guarantee the two ever contend on the lock -- if the first child finishes
+        # before the second reaches flock(), the second simply finds no "server" entry -- so
+        # read this as a regression test for the exclusion invariant, not for lock contention.
         self.assertEqual(sorted(results), ["NONE", "claimed-once"])
         states = self._states(uid)
         self.assertEqual(set(states), {"claimed"})

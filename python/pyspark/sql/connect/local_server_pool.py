@@ -27,72 +27,80 @@ import json
 import math
 import os
 import shutil
-import socket
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 from pyspark.errors import PySparkValueError
 
-_LINUX_ZOMBIE_STATE = "Z"
+
+# Environment variables that shape the JVM the launcher boots through
+# sbin/start-connect-server.sh -> spark-daemon.sh -> load-spark-env.sh / spark-submit.
+# SPARK_CONF_DIR selects the spark-env.sh and spark-defaults.conf that seed the server; the
+# rest feed the classpath, heap, and JVM options. This is a curated set, not an exhaustive
+# one: the launcher inherits the whole environment, so it names the inputs that most commonly
+# differ between runs rather than every variable a server could read.
+_JVM_ENV_VARS = (
+    "SPARK_CONF_DIR",
+    "JAVA_HOME",
+    "SPARK_DIST_CLASSPATH",
+    "SPARK_DAEMON_MEMORY",
+    "SPARK_DRIVER_MEMORY",
+    "SPARK_SUBMIT_OPTS",
+    "SPARK_DAEMON_JAVA_OPTS",
+)
 
 
 def pool_fingerprint(master: str, seed_conf: Dict[str, Any]) -> str:
-    """The identity of a pool member: everything that shapes the server a run would have
-    booted for itself. A run only claims members whose fingerprint equals its own, so a
-    pre-booted JVM is never handed to a run it would not have produced.
+    """The identity of a pool member: a curated set of inputs that shape the server a run would
+    have booted for itself. A run only claims members whose fingerprint equals its own, so a
+    pre-booted JVM is never handed to a run it would not have produced. The set is curated
+    rather than complete because the launcher inherits the full environment (see
+    ``_JVM_ENV_VARS``) -- it covers the inputs that most commonly differ between runs.
 
-    Besides the master and the seeded confs, this covers the working directory (unset
-    warehouse and Derby metastore locations resolve relative to it), the PySpark installation,
-    and the Python executable and path environment used for Python UDFs.
+    Besides the master and the seeded confs, this covers the working directory (unset warehouse
+    and Derby metastore locations resolve relative to it), the PySpark installation, the Python
+    interpreters the server would run UDFs and Python data sources with, and the environment
+    variables that shape the launched JVM.
     """
-    server_python = os.environ.get(
-        "PYSPARK_PYTHON", os.environ.get("PYSPARK_DRIVER_PYTHON", "python3")
+
+    def resolved(command: str) -> str:
+        # Relative commands resolve through PATH server-side; fold that in so equal command
+        # strings cannot stand for different interpreters on different PATHs.
+        return shutil.which(command) or command
+
+    # Two server code paths resolve the Python interpreter with opposite precedence, so a run
+    # changing only one of these variables would still have booted a different server. Include
+    # both resolutions: SparkConnectPlanner.pythonExec (Connect Python UDFs) prefers
+    # PYSPARK_PYTHON, while PythonUtils.defaultPythonExec (Python data sources) prefers
+    # PYSPARK_DRIVER_PYTHON. Both fall back to python3 and treat an empty value as set, matching
+    # the Scala sys.env.getOrElse chains.
+    udf_python = resolved(
+        os.environ.get("PYSPARK_PYTHON", os.environ.get("PYSPARK_DRIVER_PYTHON", "python3"))
     )
-    resolved_server_python = shutil.which(server_python) or server_python
+    data_source_python = resolved(
+        os.environ.get("PYSPARK_DRIVER_PYTHON", os.environ.get("PYSPARK_PYTHON", "python3"))
+    )
     spark_home = os.environ.get("SPARK_HOME")
     identity = [
         master,
         sorted((str(k), str(v)) for k, v in seed_conf.items()),
         os.getcwd(),
         sys.executable,
-        resolved_server_python,
+        udf_python,
+        data_source_python,
         os.path.realpath(__file__),
         os.path.realpath(spark_home) if spark_home else "",
         os.environ.get("PYTHONPATH", ""),
+        [os.environ.get(var, "") for var in _JVM_ENV_VARS],
     ]
     return hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()
 
 
-def _pid_alive(pid: int) -> bool:
-    """Whether ``pid`` is running. A process we cannot signal counts as alive. Linux zombies
-    count as terminated: they remain signalable until their parent reaps them, but cannot own
-    or serve a pool member. POSIX only, like everything in this module.
-    """
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except OverflowError:
-        return False
-    except OSError:
-        pass
-    if sys.platform.startswith("linux"):
-        try:
-            with open(f"/proc/{pid}/status", encoding="utf-8") as status_file:
-                for line in status_file:
-                    key, separator, value = line.partition(":")
-                    if separator and key == "State":
-                        state, _, _ = value.strip().partition(" ")
-                        if state == _LINUX_ZOMBIE_STATE:
-                            return False
-                        break
-        except FileNotFoundError:
-            return False
-        except OSError:
-            pass
-    return True
+# The end of year 9999 UTC, as a Unix timestamp. ``created`` is a wall-clock ``time.time()``
+# reading, so no real clock reaches this for millennia; rejecting values beyond it keeps a
+# corrupt far-future timestamp from looking perpetually fresh to age-based reaping in the
+# layers above, which measure a member's age as ``time.time() - created``.
+_MAX_CREATED = 253402300799
 
 
 class PoolMember:
@@ -115,8 +123,8 @@ class PoolMember:
             raise PySparkValueError("port is out of range")
         if record["pid"] <= 0:
             raise PySparkValueError("pid must be positive")
-        if not math.isfinite(created) or created < 0:
-            raise PySparkValueError("created must be finite and nonnegative")
+        if not math.isfinite(created) or not 0 <= created <= _MAX_CREATED:
+            raise PySparkValueError(f"created must be a finite timestamp in [0, {_MAX_CREATED}]")
         self.host: str = record["host"]
         self.port: int = record["port"]
         self.token: str = record["token"]
@@ -140,17 +148,15 @@ class PoolMember:
         return f"sc://{self.host}:{self.port}"
 
     def is_usable(self) -> bool:
-        """Whether this member has a matching Spark version, live process, and open port."""
+        """Whether this member has a matching Spark version, live process, and open port. Uses
+        the same liveness and reachability probes as the reuse path (see ``local_server``), so
+        the pool and reuse discovery agree on when a recorded server is still good."""
         from pyspark.version import __version__
+        from pyspark.sql.connect.local_server import _pid_alive, _port_open
 
         if self.spark_version != __version__ or not _pid_alive(self.pid):
             return False
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.5)
-                return sock.connect_ex((self.host, self.port)) == 0
-        except (OSError, UnicodeError):
-            return False
+        return _port_open(self.host, self.port)
 
 
 class PoolDirectory:
@@ -367,7 +373,19 @@ class ServerPool:
         """Claim the oldest usable member with this fingerprint, or ``None``. The rename to
         ``claimed-<pid>-<uid>.json`` marks the member as owned by this process; the reaping
         rules use that pid to retire members whose client died without releasing them. The
-        caller must hold the directory lock so selection and rename form one transition."""
+        caller must hold the directory lock so selection and rename form one transition.
+
+        Ordering is by ``created``, a wall-clock ``time.time()`` reading. It is comparable
+        across the independent processes that publish members, which ``time.monotonic()`` is
+        not, at the cost that a backward clock step (NTP, suspend/resume) can perturb the order.
+        Ties break by the stable ``sorted()`` over the sorted directory listing, so the order is
+        well defined but only approximately FIFO, not guaranteed.
+
+        ``is_usable`` runs under the held lock and does blocking network I/O -- up to a 0.5s
+        connect for each candidate that is live but not accepting connections. The candidate
+        count is bounded by ``spark.local.connect.pool.size``, which is user-tunable, so a large
+        pool widens the window the lock is held; the reaping rules keep stale members from
+        accumulating without bound."""
         candidates = []
         for uid, path in self._directory.paths_of_kind("server"):
             data = self._directory.read_json(path)

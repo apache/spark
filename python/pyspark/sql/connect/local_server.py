@@ -62,17 +62,51 @@ _SERVER_CLASS = "org.apache.spark.sql.connect.service.SparkConnectServer"
 # A fixed SPARK_IDENT_STRING keeps the spark-daemon.sh pid and log file names stable
 # regardless of $USER.
 _SPARK_IDENT = "local-connect"
+_LINUX_ZOMBIE_STATE = "Z"
 
 
 def _pid_alive(pid: int) -> bool:
-    """Whether ``pid`` exists (POSIX only). A process we cannot signal counts as alive."""
+    """Whether ``pid`` is running. A process we cannot signal counts as alive. Linux zombies
+    count as terminated: they remain signalable until their parent reaps them, but cannot own
+    or serve a managed server. POSIX only, like the reuse and pool paths that call it.
+    """
+    if pid <= 0:
+        return False
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
+    except OverflowError:
+        return False
     except OSError:
         pass
+    if sys.platform.startswith("linux"):
+        try:
+            with open(f"/proc/{pid}/status", encoding="utf-8") as status_file:
+                for line in status_file:
+                    key, separator, value = line.partition(":")
+                    if separator and key == "State":
+                        state, _, _ = value.strip().partition(" ")
+                        if state == _LINUX_ZOMBIE_STATE:
+                            return False
+                        break
+        except FileNotFoundError:
+            return False
+        except OSError:
+            pass
     return True
+
+
+def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
+    """Whether a TCP connection to ``host``:``port`` succeeds within ``timeout`` seconds. A
+    socket error or a host that fails to resolve counts as closed.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            return sock.connect_ex((host, port)) == 0
+    except (OSError, UnicodeError):
+        return False
 
 
 def _is_local_connect_server(pid: int) -> Optional[bool]:
@@ -223,9 +257,7 @@ class LocalConnectServer:
     def is_listening(self) -> bool:
         if self.host is None or self.port is None:
             return False
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(0.5)
-            return sock.connect_ex((self.host, self.port)) == 0
+        return _port_open(self.host, self.port)
 
     def is_reusable(self) -> bool:
         from pyspark.version import __version__
