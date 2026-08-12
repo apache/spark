@@ -90,7 +90,6 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
     when(driverPodOperations2.get).thenReturn(driverPod2)
     when(driverPodOperations2.delete()).thenReturn(Arrays.asList(new StatusDetails))
     doReturn(null).when(missingPodOperations).get
-    when(missingPodOperations.delete()).thenReturn(java.util.Collections.emptyList[StatusDetails])
   }
 
   test("List app status") {
@@ -131,7 +130,7 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
     verify(deletable, times(1)).delete()
   }
 
-  test("Kill app that does not exist") {
+  test("SPARK-58725: Kill app that does not exist") {
     implicit val kubeClient: KubernetesClient = kubernetesClient
     val killApp = new KillApplication
     killApp.printStream = err
