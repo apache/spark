@@ -131,6 +131,33 @@ class ArrowPythonAggregatorTestsMixin:
         for k in exp:
             self.assertAlmostEqual(got[k], exp[k], places=6)
 
+    def test_multiple_incremental_aggregators(self):
+        # Two aggregators with different buffer schemas over the same input in one agg call.
+        df = self._data()
+        result = (
+            df.groupBy("k")
+            .agg(
+                udaf(Mean())(sf.col("v")).alias("m"),
+                udaf(SumSquares())(sf.col("v")).alias("s"),
+            )
+            .orderBy("k")
+            .collect()
+        )
+        expected = (
+            df.groupBy("k")
+            .agg(
+                sf.avg("v").alias("m"),
+                sf.sum(sf.col("v") * sf.col("v")).alias("s"),
+            )
+            .orderBy("k")
+            .collect()
+        )
+        got_m = {r["k"]: r["m"] for r in result}
+        got_s = {r["k"]: r["s"] for r in result}
+        for r in expected:
+            self.assertAlmostEqual(got_m[r["k"]], r["m"], places=6)
+            self.assertAlmostEqual(got_s[r["k"]], r["s"], places=6)
+
     def test_result_independent_of_partition_count(self):
         # Partial buffers must merge to the same result regardless of how keys are split.
         base = self.spark.range(0, 60).select(

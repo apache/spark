@@ -809,12 +809,16 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           planLater(child)))
 
       case PhysicalAggregation(_, aggExpressions, _, _) =>
-        val groupAggPandasUDFNames = aggExpressions
+        // Reached when Python aggregate UDFs cannot be planned by the two cases above -- e.g. a
+        // grouped-agg pandas/arrow UDF or an incremental Python aggregator is mixed with other
+        // (SQL or differently-typed Python) aggregate functions in the same Aggregate.
+        val pythonUDFNames = aggExpressions
           .map(_.aggregateFunction)
-          .filter(_.isInstanceOf[PythonUDAF])
-          .map(_.asInstanceOf[PythonUDAF].name)
-        // If cannot match the two cases above, then it's an error
-        throw QueryCompilationErrors.invalidPandasUDFPlacementError(groupAggPandasUDFNames.distinct)
+          .collect {
+            case p: PythonUDAF => p.name
+            case p: PythonAggregate => p.name
+          }
+        throw QueryCompilationErrors.invalidPandasUDFPlacementError(pythonUDFNames.distinct)
 
       case _ => Nil
     }
