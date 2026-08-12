@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger, StreamingErrors}
-import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeqBase, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadataBase, OffsetSeqBase, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, ThreadUtils}
@@ -261,7 +261,7 @@ class AsyncProgressTrackingMicroBatchExecution(
         || isFirstBatch) {
         isFirstBatch = false
         commitLog
-          .addAsync(execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))
+          .addAsync(execCtx.batchId, createAsyncCommitMetadata(execCtx))
           .thenAccept((batchId: Long) => {
             logInfo(log"Committed async commit log to disk for batch ${MDC(BATCH_ID, batchId)}.")
           })
@@ -273,7 +273,7 @@ class AsyncProgressTrackingMicroBatchExecution(
           })
       } else {
         if (!commitLog.addInMemory(
-          execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))) {
+          execCtx.batchId, createAsyncCommitMetadata(execCtx))) {
           throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
         }
         logInfo(
@@ -283,6 +283,21 @@ class AsyncProgressTrackingMicroBatchExecution(
     }
     signalProcessAllAvailableIfRealTimeMode(execCtx)
     committedOffsets ++= execCtx.endOffsets
+  }
+
+  /**
+   * Builds the commit log entry for an async batch at the version resolved for this run, so that a
+   * Real-Time Mode query writes the commit log format its state store checkpoint format implies
+   * (v2 for the RTM default) rather than always VERSION_1. Async progress tracking does not support
+   * stateful queries, so there are no state store checkpoint ids to persist.
+   */
+  private def createAsyncCommitMetadata(
+      execCtx: MicroBatchExecutionContext): CommitMetadataBase = {
+    commitLog.createMetadata(
+      nextBatchWatermarkMs = watermarkTracker.currentWatermark,
+      stateUniqueIds = None,
+      commitLogFormatVersion = execCtx.commitLogFormatVersionOpt.getOrElse(
+        sparkSessionForStream.sessionState.conf.streamingCommitLogFormatVersion))
   }
 
   /**

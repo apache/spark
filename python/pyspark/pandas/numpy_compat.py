@@ -76,11 +76,27 @@ unary_np_spark_mappings = {
         )
         .otherwise(F.lit(1.0) / c),
     ).otherwise(
-        pandas_udf(np.reciprocal, DoubleType())(c)  # type: ignore[call-overload]
+        # Integer input: numpy does integer division (truncated toward zero),
+        # so casting the float quotient to long reproduces 1 -> 1, -1 -> -1,
+        # and every other magnitude -> 0. Dividing by 0 overflows to the int64
+        # minimum, matching numpy's behavior on integer arrays.
+        F.when(c == 0, F.lit(float(np.iinfo(np.int64).min))).otherwise(
+            (F.lit(1) / c).cast("long").cast("double")
+        )
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
-    "signbit": lambda c: F.when(c < 0, True).otherwise(False),
+    "signbit": lambda c: F.when(
+        # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-double
+        # null and must propagate. A NaN from a default (numpy-backed) dtype arrives
+        # as a double null and must map to False (np.signbit(nan) is False); it falls
+        # through to otherwise(False) below. A nullable Float64 <NA> is also a double
+        # null, indistinguishable from a NaN after from_pandas, so it cannot propagate.
+        c.isNull() & ~F.typeof(c).isin("float", "double"),
+        F.lit(None).cast("boolean"),
+    )
+    .when((c < 0) | (c.cast("string") == "-0.0"), True)
+    .otherwise(False),
     "sin": F.sin,
     "sinh": F.sinh,
     "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),  # type: ignore[call-overload]
@@ -118,6 +134,55 @@ def _fmod_func(c1: Column, c2: Column) -> Column:
     )
 
 
+def _floor_divide_func(c1: Column, c2: Column) -> Column:
+    c1_double = c1.cast("double")
+    c2_double = c2.cast("double")
+
+    return F.when(
+        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(
+            c1_double.isin(float("-inf"), float("inf")),
+            F.when(
+                c2_double == 0,
+                F.when(
+                    (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
+                    F.lit(float("-inf")),
+                ).otherwise(F.lit(float("inf"))),
+            ).otherwise(F.lit(float("nan"))),
+        )
+        .when(
+            c2_double.isin(float("-inf"), float("inf")),
+            F.when(c1_double == 0, c1_double / c2_double)
+            .when((c1_double < 0) != (c2_double < 0), F.lit(-1.0))
+            .otherwise(F.lit(0.0)),
+        )
+        .when(
+            c2_double == 0,
+            F.when(c1_double == 0, F.lit(float("nan")))
+            .when(
+                (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
+                F.lit(float("-inf")),
+            )
+            .otherwise(F.lit(float("inf"))),
+        )
+        .when(c1_double == 0, c1_double / c2_double)
+        .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0))),
+    ).otherwise(
+        # np.floor_divide on pandas Series returns IEEE values for an integral zero divisor.
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(
+            c2_double == 0,
+            F.when(c1_double == 0, F.lit(float("nan")))
+            .when(c1_double < 0, F.lit(float("-inf")))
+            .otherwise(F.lit(float("inf"))),
+        )
+        .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0)))
+    )
+
+
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
@@ -127,14 +192,15 @@ binary_np_spark_mappings = {
         lambda s1, s2: np.copysign(s1, s2), DoubleType()
     ),
     "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
-    "floor_divide": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.floor_divide(s1, s2), DoubleType()
-    ),
+    # np.floor_divide dispatches to the pandas-on-Spark floordiv dunder operation
+    # before this registry is consulted, so this mapping is not used for that case.
+    "floor_divide": _floor_divide_func,
     "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
     .when(F.isnan(c2.cast("double")), c1)
+    .when(c1 == c2, c1)
     .otherwise(F.greatest(c1, c2))
     .cast("double"),
-    "fmin": lambda c1, c2: F.least(c1, c2).cast("double"),
+    "fmin": lambda c1, c2: F.when(c1 == c2, c1).otherwise(F.least(c1, c2)).cast("double"),
     "fmod": _fmod_func,
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "heaviside": lambda c1, c2: F.when(

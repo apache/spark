@@ -103,14 +103,14 @@ object DataWritingCommand {
   }
   /**
    * When execute CTAS operators, and the location is not empty, throw [[AnalysisException]].
-   * For CTAS, the SaveMode is always [[ErrorIfExists]]
    *
    * @param tablePath Table location.
    * @param saveMode  Save mode of the table.
    * @param hadoopConf Configuration.
    */
   def assertEmptyRootPath(tablePath: URI, saveMode: SaveMode, hadoopConf: Configuration): Unit = {
-    if (saveMode == SaveMode.ErrorIfExists && !SQLConf.get.allowNonEmptyLocationInCTAS) {
+    if ((saveMode == SaveMode.ErrorIfExists || saveMode == SaveMode.Ignore) &&
+        !SQLConf.get.allowNonEmptyLocationInCTAS) {
       val filePath = new org.apache.hadoop.fs.Path(tablePath)
       val fs = filePath.getFileSystem(hadoopConf)
       if (fs.exists(filePath) &&
