@@ -1903,6 +1903,20 @@ def _elementwise_flatten_deep(col, depth):
     return cur, shape_levels, is_large_levels
 
 
+def _elementwise_flatten_leaf(col, depth):
+    """Flatten ``depth`` list levels off ``col`` to its leaf ``pa.Array``, without capturing shape.
+
+    A lifted UDF re-nests its result by the *first* argument's per-level shapes only, so the other
+    arguments need just their leaves. This skips the ``pc.list_value_length(...).to_pylist()`` and
+    ``is_large`` bookkeeping ``_elementwise_flatten_deep`` does for the first argument. See
+    ``ExtractPythonUDFFromLambda``.
+    """
+    cur = col
+    for _ in range(depth):
+        cur = cur.flatten()
+    return cur
+
+
 def _elementwise_renest_deep(flat_values, shape_levels, is_large_levels):
     """Re-nest a flat leaf Array back through ``len(shape_levels)`` list levels, innermost first.
 
@@ -3226,8 +3240,14 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 # one array argument, so `offsets` is non-empty.
                 output_arrays = []
                 for info in udf_infos:
-                    (wrapped_func, offsets, depth, arg_converters,
-                     arrow_element_type, result_conv) = info
+                    (
+                        wrapped_func,
+                        offsets,
+                        depth,
+                        arg_converters,
+                        arrow_element_type,
+                        result_conv,
+                    ) = info
                     # Flatten each argument `depth` list levels to its leaves; the first argument's
                     # per-level shapes drive the re-nest.
                     leaf0, shape_levels, is_large_levels = _elementwise_flatten_deep(
@@ -3238,7 +3258,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         leaf = (
                             leaf0
                             if i == 0
-                            else _elementwise_flatten_deep(input_batch.column(o), depth)[0]
+                            else _elementwise_flatten_leaf(input_batch.column(o), depth)
                         )
                         values = ArrowTableToRowsConversion._to_pylist(leaf)
                         if conv is not None:
@@ -3312,8 +3332,14 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 _elementwise_leaf_type(input_fields[o].dataType, depth) for o in args_kwargs_offsets
             ]
             udf_infos.append(
-                (wrapped_func, args_kwargs_offsets, udf_return_type, arrow_element_type, depth,
-                 arg_leaf_types)
+                (
+                    wrapped_func,
+                    args_kwargs_offsets,
+                    udf_return_type,
+                    arrow_element_type,
+                    depth,
+                    arg_leaf_types,
+                )
             )
         col_names = [f"_{i}" for i in range(len(udfs))]
 
@@ -3324,7 +3350,12 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             for input_batch in data:
                 output_arrays = []
                 for (
-                    wrapped_func, offsets, return_type, arrow_element_type, depth, arg_leaf_types
+                    wrapped_func,
+                    offsets,
+                    return_type,
+                    arrow_element_type,
+                    depth,
+                    arg_leaf_types,
                 ) in udf_infos:
                     # Flatten each argument `depth` list levels to its leaves and adapt to the
                     # vectorized fn's input. Different UDFs in one operator may iterate differently
@@ -3336,8 +3367,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     total_elements = len(leaf0)
                     flat_columns = [
                         _elementwise_flatten_column(
-                            leaf0 if i == 0
-                            else _elementwise_flatten_deep(input_batch.column(o), depth)[0],
+                            leaf0
+                            if i == 0
+                            else _elementwise_flatten_leaf(input_batch.column(o), depth),
                             t,
                             is_pandas,
                             runner_conf,
@@ -3447,8 +3479,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 num_input_elements += len(leaf0)
                 flat_cols = [
                     _elementwise_flatten_column(
-                        leaf0 if i == 0
-                        else _elementwise_flatten_deep(batch.column(o), depth)[0],
+                        leaf0 if i == 0 else _elementwise_flatten_leaf(batch.column(o), depth),
                         arg_leaf_types[i],
                         is_pandas,
                         runner_conf,

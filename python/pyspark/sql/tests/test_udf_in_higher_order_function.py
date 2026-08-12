@@ -438,9 +438,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # transform inside transform.
         assertDataFrameEqual(
             df.select(
-                sf.transform(
-                    "values", lambda row: sf.transform(row, lambda x: plus_one(x))
-                ).alias("r")
+                sf.transform("values", lambda row: sf.transform(row, lambda x: plus_one(x))).alias(
+                    "r"
+                )
             ),
             df.select(
                 sf.transform("values", lambda row: sf.transform(row, lambda x: x + 1)).alias("r")
@@ -541,9 +541,7 @@ class UDFInHigherOrderFunctionTestsMixin:
         for f in (plus_one_pandas, plus_one_arrow, plus_one_pandas_iter, plus_one_arrow_iter):
             assertDataFrameEqual(
                 df.select(
-                    sf.transform(
-                        "values", lambda row: sf.transform(row, lambda x: f(x))
-                    ).alias("r")
+                    sf.transform("values", lambda row: sf.transform(row, lambda x: f(x))).alias("r")
                 ),
                 native,
             )
