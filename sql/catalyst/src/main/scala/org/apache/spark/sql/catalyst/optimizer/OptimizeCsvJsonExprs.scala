@@ -418,11 +418,11 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       // `JsonToStructs` does not support parsing json with duplicated field names.
       val duplicateFields = c.names.map(_.toString).distinct.length != c.names.length
 
-      // Dropping a field stops the parser from converting it, so a malformed value in that field
-      // no longer records the row and the corrupt record column comes back null. Selecting as
-      // many fields as the schema has drops nothing: with `sameFieldName` and no duplicates the
-      // selected names are distinct names of the schema, so the counts match only when every
-      // field is selected.
+      // Dropping a field stops the parser from converting it, so the parser never records the
+      // row when a dropped field contains a malformed value, and the corrupt record column comes
+      // back null. Selecting as many fields as the schema has drops nothing: with `sameFieldName`
+      // and no duplicates the selected names are distinct names of the schema, so the counts
+      // match only when every field is selected.
       val fields = c.valExprs.map(_.asInstanceOf[GetStructField])
       val prunesCorruptRecord = fields.exists(selectsCorruptRecord) &&
         fields.length != fields.head.childSchema.length
@@ -460,8 +460,8 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
         // an invalid input.
         // To be more conservative, it does not optimize when any option is set for now.
         // Pruning to the corrupt record column alone is excluded as well: it leaves the
-        // parser nothing to convert, so a malformed value in a dropped field never records
-        // the row and the column comes back null.
+        // parser nothing to convert, so the parser never records the row when a dropped
+        // field contains a malformed value, and the column comes back null.
       val prunedSchema = StructType(Array(schema(ordinal)))
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0)
 
