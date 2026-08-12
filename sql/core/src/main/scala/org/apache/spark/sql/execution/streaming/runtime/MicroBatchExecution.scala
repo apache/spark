@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2, SinkMetadataInfo}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitLogType, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2, SinkMetadataInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
@@ -82,6 +82,7 @@ class MicroBatchExecution(
       -1,
       sparkSession,
       offsetLogFormatVersionOpt = None,
+      commitLogFormatVersionOpt = None,
       previousContext = None)
 
   override def getLatestExecutionContext(): StreamExecutionContext = latestExecutionContext
@@ -371,31 +372,6 @@ class MicroBatchExecution(
             messageParameters = Map("className" -> s.getClass.getName)
           )
       }
-
-      // `repartition(n)` uses RoundRobinPartitioning, and by default (SPARK-23207) Spark inserts a
-      // local sort before a round-robin shuffle so the row-to-partition assignment is deterministic
-      // -- otherwise a retried task could emit rows in a different order and lose data. That sort
-      // is fully blocking: it drains its whole input before emitting a row. A Real-Time Mode task
-      // reads an unbounded stream, so the input never ends, the producer never emits, and the query
-      // makes no progress at all. Note this sort is not a SortExec node (it lives inside
-      // ShuffleExchangeExec's RDD), so the Real-Time Mode operator allowlist cannot catch it.
-      //
-      // Determinism is not needed here: Real-Time Mode does not retry tasks (TaskSetManager caps a
-      // pipelined task set at one attempt, and its group is aborted as a unit rather than
-      // recomputed), so the hazard the sort guards against does not arise.
-      //
-      // This overrides an explicit `true` as well. Honouring it would reintroduce the hang above,
-      // and a query that never produces a row is worse than silently ignoring a config that only
-      // guards against a retry that cannot happen here. Log at warning level when overriding an
-      // explicit setting so the operator can see their config is not the one in force.
-      if (sparkSessionForStream.conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key) &&
-        sparkSessionForStream.conf.get(SQLConf.SORT_BEFORE_REPARTITION)) {
-        logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, SQLConf.SORT_BEFORE_REPARTITION.key)}=true " +
-          log"for this Real-Time Mode query: the local sort it inserts before a round-robin " +
-          log"repartition never completes on an unbounded stream. It is not needed because a " +
-          log"Real-Time Mode task is not retried.")
-      }
-      sparkSessionForStream.conf.set(SQLConf.SORT_BEFORE_REPARTITION.key, "false")
     }
 
     // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
@@ -579,9 +555,47 @@ class MicroBatchExecution(
     CheckpointVersionManager.setFormatVersion(
       sparkSessionForStream, OffsetLogType, offsetLogFormatVersion)
 
+    // Resolve the commit log format version the same way: an existing checkpoint keeps the version
+    // it was created with, and only a fresh one takes the version from the session config. Persist
+    // the implied state store checkpoint format so it agrees with what is actually being written.
+    val commitLogFormatVersion = CheckpointVersionManager.resolveCommitLogVersion(
+      sparkSessionForStream, latestCommittedBatch)
+    CheckpointVersionManager.setFormatVersion(
+      sparkSessionForStream,
+      CommitLogType,
+      commitLogFormatVersion,
+      latestCommittedBatch.map(_._2))
+
+    // Real-Time Mode requires commit log v2. Real-Time Mode writes the offset log at batch end
+    // (markMicroBatchStart is a no-op for it), so a mid-batch failure can leave durable state at a
+    // version that was never logged; the re-execution then rewrites that same state version. With
+    // checkpoint format v1 the rewritten files reuse the same names as the orphaned ones, so a load
+    // can pick up a stale file (see the checksum hazard documented on
+    // StateStoreConf.skipChecksumOnFileMissingChecksum). Format v2 avoids this because each batch
+    // run generates unique state store checkpoint ids, and only a commit log at v2 or above can
+    // persist them. Resolution above keeps an existing checkpoint at the version it was created
+    // with, so a v1 checkpoint stays v1. Reject any Real-Time Mode query whose resolved commit log
+    // version is below v2, with an escape hatch. This is unconditional, matching the Databricks
+    // runtime -- a fresh checkpoint reaches v1 here only when the user explicitly pinned it, which
+    // is exactly the case worth rejecting.
+    if (trigger.isInstanceOf[RealTimeTrigger] && commitLogFormatVersion < CommitLog.VERSION_2) {
+      if (!sparkSessionForStream.sessionState.conf
+          .getConf(SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1)) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "STREAMING_REAL_TIME_MODE.CHECKPOINT_FORMAT_V1_NOT_SUPPORTED",
+          messageParameters = Map(
+            "config" -> SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1.key))
+      }
+      logWarning(log"Starting a Real-Time Mode query on a commit log at version " +
+        log"${MDC(LogKeys.FILE_VERSION, commitLogFormatVersion)} because " +
+        log"${MDC(LogKeys.CONFIG, SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1
+          .key)} is set. A failed batch may lose data on rerun.")
+    }
+
     val execCtx = new MicroBatchExecutionContext(id, runId, name, triggerClock, sources, sink,
       progressReporter, -1, sparkSession,
       offsetLogFormatVersionOpt = Some(offsetLogFormatVersion),
+      commitLogFormatVersionOpt = Some(commitLogFormatVersion),
       previousContext = None)
 
     execCtx.offsetSeqMetadata = offsetLogFormatVersion match {
@@ -1524,7 +1538,9 @@ class MicroBatchExecution(
       } else {
         commitLog.createMetadata(
           nextBatchWatermarkMs = watermarkTracker.currentWatermark,
-          stateUniqueIds = stateStoreCkptId)
+          stateUniqueIds = stateStoreCkptId,
+          commitLogFormatVersion = execCtx.commitLogFormatVersionOpt.getOrElse(
+            sparkSessionForStream.sessionState.conf.streamingCommitLogFormatVersion))
       }
       if (!commitLog.add(execCtx.batchId, metadata)) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
