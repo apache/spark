@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.window
 
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -153,11 +153,13 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
   }
 
   test("approx_count_distinct (HyperLogLog++) falls through (fail-closed)") {
-    checkFallbackEquivalence(() => baseDF.withColumn("agg", approx_count_distinct($"v").over(winSpec)))
+    checkFallbackEquivalence(() =>
+      baseDF.withColumn("agg", approx_count_distinct($"v").over(winSpec)))
   }
 
   test("percentile_approx falls through (sketch buffer not auditable)") {
-    checkFallbackEquivalence(() => baseDF.withColumn("agg", percentile_approx($"vd", lit(0.5), lit(100)).over(winSpec)))
+    checkFallbackEquivalence(() =>
+      baseDF.withColumn("agg", percentile_approx($"vd", lit(0.5), lit(100)).over(winSpec)))
   }
 
   // Gate: aggregates carrying a FILTER (WHERE ...) clause fall through.
