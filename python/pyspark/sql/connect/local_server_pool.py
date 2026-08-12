@@ -33,6 +33,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pyspark.errors import PySparkValueError
 
+_LINUX_ZOMBIE_STATE = "Z"
+
 
 def pool_fingerprint(master: str, seed_conf: Dict[str, Any]) -> str:
     """The identity of a pool member: everything that shapes the server a run would have
@@ -58,7 +60,7 @@ def pool_fingerprint(master: str, seed_conf: Dict[str, Any]) -> str:
         os.path.realpath(spark_home) if spark_home else "",
         os.environ.get("PYTHONPATH", ""),
     ]
-    return hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()
 
 
 def _pid_alive(pid: int) -> bool:
@@ -78,15 +80,18 @@ def _pid_alive(pid: int) -> bool:
         pass
     if sys.platform.startswith("linux"):
         try:
-            with open(f"/proc/{pid}/stat", encoding="utf-8") as stat_file:
-                fields = stat_file.read().rpartition(")")[2].split()
+            with open(f"/proc/{pid}/status", encoding="utf-8") as status_file:
+                for line in status_file:
+                    key, separator, value = line.partition(":")
+                    if separator and key == "State":
+                        state, _, _ = value.strip().partition(" ")
+                        if state == _LINUX_ZOMBIE_STATE:
+                            return False
+                        break
         except FileNotFoundError:
             return False
         except OSError:
             pass
-        else:
-            if fields and fields[0] == "Z":
-                return False
     return True
 
 

@@ -61,11 +61,11 @@ def _non_listening_socket():
         yield sock.getsockname()[1]
 
 
-def _spawn_sleeper() -> "subprocess.Popen":
-    """A long sleeper standing in for a pool server or attendant process."""
+def _spawn_live_process() -> "subprocess.Popen":
+    """A child blocked on its parent pipe, standing in for a live pool server."""
     return subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(300)"],
-        stdin=subprocess.DEVNULL,
+        [sys.executable, "-c", "import sys; sys.stdin.buffer.read()"],
+        stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -113,8 +113,8 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 os.environ[k] = v
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
-    def _sleeper(self) -> "subprocess.Popen":
-        proc = _spawn_sleeper()
+    def _live_process(self) -> "subprocess.Popen":
+        proc = _spawn_live_process()
         self._procs.append(proc)
         return proc
 
@@ -305,22 +305,15 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                     pass
 
     @unittest.skipUnless(
-        sys.platform.startswith("linux") and os.path.isdir("/proc"),
-        "requires Linux process state",
+        sys.platform.startswith("linux") and os.path.isdir("/proc") and hasattr(os, "waitid"),
+        "requires Linux process state and waitid",
     )
     def test_pid_alive_treats_zombie_as_dead(self) -> None:
         proc = subprocess.Popen([sys.executable, "-c", "pass"])
         try:
-            state = ""
-            deadline = time.time() + 5
-            while time.time() < deadline:
-                with open(f"/proc/{proc.pid}/stat", encoding="utf-8") as stat_file:
-                    fields = stat_file.read().rpartition(")")[2].split()
-                state = fields[0] if fields else ""
-                if state == "Z":
-                    break
-                time.sleep(0.01)
-            self.assertEqual(state, "Z", "the child did not enter zombie state")
+            # Wait for the child to exit but leave it waitable, which keeps it as a zombie
+            # until the finally block reaps it.
+            os.waitid(os.P_PID, proc.pid, os.WEXITED | os.WNOWAIT)
             self.assertFalse(local_server_pool._pid_alive(proc.pid))
         finally:
             proc.wait(timeout=10)
@@ -426,14 +419,14 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
     def test_claim_matches_fingerprint_and_renames(self) -> None:
         with _listening_socket() as port:
-            sleeper = self._sleeper()
+            server_process = self._live_process()
             self._write_state(
                 self._directory.server_path("aaa"),
-                self._server_data(port, sleeper.pid, fingerprint="other-fp"),
+                self._server_data(port, server_process.pid, fingerprint="other-fp"),
             )
             self._write_state(
                 self._directory.server_path("bbb"),
-                self._server_data(port, sleeper.pid, fingerprint="my-fp", token="t-bbb"),
+                self._server_data(port, server_process.pid, fingerprint="my-fp", token="t-bbb"),
             )
             with self._directory:
                 member = self._pool.claim("my-fp")
@@ -450,11 +443,11 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
     def test_claim_prefers_the_oldest_member(self) -> None:
         with _listening_socket() as port:
-            sleeper = self._sleeper()
+            server_process = self._live_process()
             for uid, created in (("aaaa", time.time()), ("bbbb", time.time() - 100)):
                 self._write_state(
                     self._directory.server_path(uid),
-                    self._server_data(port, sleeper.pid, token="t-" + uid, created=created),
+                    self._server_data(port, server_process.pid, token="t-" + uid, created=created),
                 )
             with self._directory:
                 member = self._pool.claim("fp")
@@ -473,11 +466,11 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         claimers = []
         results = []
         with _listening_socket() as port:
-            sleeper = self._sleeper()
+            server_process = self._live_process()
             uid = "cafe"
             self._write_state(
                 self._directory.server_path(uid),
-                self._server_data(port, sleeper.pid, token="claimed-once"),
+                self._server_data(port, server_process.pid, token="claimed-once"),
             )
             try:
                 with self._directory:
@@ -516,18 +509,18 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
     def test_claim_skips_malformed_and_incompatible_members(self) -> None:
         with _listening_socket() as port:
-            sleeper = self._sleeper()
-            bad_pid = self._server_data(port, sleeper.pid)
+            server_process = self._live_process()
+            bad_pid = self._server_data(port, server_process.pid)
             bad_pid["pid"] = "not-a-pid"
-            bad_port = self._server_data(port, sleeper.pid)
+            bad_port = self._server_data(port, server_process.pid)
             bad_port["port"] = "not-a-port"
-            bad_created = self._server_data(port, sleeper.pid)
+            bad_created = self._server_data(port, server_process.pid)
             bad_created["created"] = "not-a-time"
-            non_finite_created = self._server_data(port, sleeper.pid)
+            non_finite_created = self._server_data(port, server_process.pid)
             non_finite_created["created"] = float("nan")
-            out_of_range_port = self._server_data(port, sleeper.pid)
+            out_of_range_port = self._server_data(port, server_process.pid)
             out_of_range_port["port"] = 65536
-            bad_host = self._server_data(port, sleeper.pid)
+            bad_host = self._server_data(port, server_process.pid)
             bad_host["host"] = None
             records = {
                 "a0": {"fingerprint": "fp"},
@@ -537,7 +530,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 "a4": non_finite_created,
                 "a5": out_of_range_port,
                 "a6": bad_host,
-                "a7": self._server_data(port, sleeper.pid, spark_version="not-this-version"),
+                "a7": self._server_data(port, server_process.pid, spark_version="not-this-version"),
                 "a8": self._server_data(port, 2**31 - 1),
                 "a9": self._server_data(port, 2**100),
             }
@@ -545,7 +538,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 self._write_state(self._directory.server_path(uid), data)
             self._write_state(
                 self._directory.server_path("b0"),
-                self._server_data(port, sleeper.pid, token="valid-token"),
+                self._server_data(port, server_process.pid, token="valid-token"),
             )
 
             with self._directory:
