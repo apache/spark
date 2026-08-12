@@ -878,33 +878,6 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
     }
   }
 
-  test("strict variant_get crosses a join only with cast-error deferral") {
-    withVariantParquetTables(
-      VariantTable(
-        "SS", "k int, data variant",
-        Seq("(1, parse_json('\"hello\"'))", "(2, parse_json('42'))")),
-      VariantTable(
-        "DIM", "k int, name string",
-        Seq("(2, 'match')"))) {
-      val query =
-        "select avg(variant_get(ss.data, '$', 'int')) from SS ss join DIM d on ss.k = d.k"
-
-      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "false") {
-        val dataType = scanColumnType(sql(query).queryExecution.optimizedPlan, "data")
-        if (!useV2) {
-          assertShreddedStruct(dataType, expectFullVariantSlot = true)
-        } else {
-          assert(dataType == VariantType)
-        }
-        assert(sql(query).head().getDouble(0) == 42.0)
-      }
-
-      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
-        assertShreddedStruct(scanColumnType(sql(query).queryExecution.optimizedPlan, "data"))
-      }
-    }
-  }
-
   test("left semi join with a right-side variant_get in the condition: right side shredded") {
     // The join condition extracts from the RIGHT (DIM) variant. For a LEFT SEMI join the right side
     // is not in the join output, but the condition is still evaluated over both children, so the

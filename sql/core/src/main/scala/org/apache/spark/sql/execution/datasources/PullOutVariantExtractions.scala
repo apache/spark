@@ -105,20 +105,10 @@ import org.apache.spark.sql.types.VariantType
  * [[SQLConf.PUSH_VARIANT_INTO_SCAN]] is also enabled) and only fires when a hoistable extraction is
  * present, so non-variant plans are untouched.
  *
- * Cast-error surface: relocating a strict extraction (`variant_get(..., failOnError = true)` or a
- * strict `Cast`) below a `Join` means it is evaluated at the scan on rows the join later eliminates
- * -- so a cast failure can surface for a row the un-hoisted plan would never have cast (here the
- * eliminating rows come from the *other* joined table). This is the same pre-existing trade-off as
- * [[PushVariantIntoScan]] pushing casts below a `Filter`, not a new error class: in both, the
- * strict cast runs before the operator that would have discarded the failing row. This rule only
- * relocates the extraction into a `Project`; [[PushVariantIntoScan]] still does the scan-level
- * materialization and, when [[SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR]] is set (default
- * false), wraps the cast with a per-row cast-error companion slot so the error is only raised when
- * the original expression consumes the failing row. That deferral is provenance-agnostic -- it acts
- * on the relocated extraction regardless of how it reached the `Project` -- so enabling the flag
- * suppresses the join-eliminated-row error exactly as it does the filter-eliminated-row case. With
- * the flag off (the default), the strict cast raises immediately on any failing scanned row, as
- * documented for below-`Filter` pushdown.
+ * Cast-error surface: relocating a throwable extraction below a `Join` means it is evaluated at the
+ * scan on rows the join later eliminates. Such extractions cross a join only when
+ * [[SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR]] is enabled. Expressions not classified as
+ * throwable retain the existing behavior, including strict `VariantGet` and `Cast` expressions.
  */
 object PullOutVariantExtractions extends Rule[LogicalPlan] {
 
@@ -178,11 +168,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
   }
 
   private def isJoinHoistable(e: Expression): Boolean = {
-    val hasStrictVariantGet = e.exists {
-      case g: VariantGet => g.failOnError
-      case _ => false
-    }
-    isHoistable(e) && (!hasStrictVariantGet ||
+    isHoistable(e) && (!e.throwable ||
       SQLConf.get.getConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR))
   }
 
