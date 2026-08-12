@@ -18,12 +18,12 @@
 """Implementation of a progress bar that is displayed while a query is running."""
 
 import abc
-from dataclasses import dataclass
-import time
 import sys
+import time
 import typing
+from dataclasses import dataclass
 from types import TracebackType
-from typing import Iterable, Any
+from typing import Any, Iterable
 
 from pyspark.sql.connect.proto import ExecutePlanResponse
 

@@ -20,32 +20,33 @@ import unittest
 
 from pyspark import serializers
 from pyspark.serializers import (
+    AutoBatchedSerializer,
+    AutoSerializer,
+    BatchedSerializer,
+    CartesianDeserializer,
     CloudPickleSerializer,
     CompressedSerializer,
-    AutoBatchedSerializer,
-    BatchedSerializer,
-    AutoSerializer,
+    CPickleSerializer,
+    FlattenedValuesSerializer,
+    MarshalSerializer,
     NoOpSerializer,
     PairDeserializer,
-    FlattenedValuesSerializer,
-    CartesianDeserializer,
-    CPickleSerializer,
     UTF8Deserializer,
-    MarshalSerializer,
 )
 from pyspark.testing.utils import (
-    PySparkTestCase,
-    read_int,
-    write_int,
     ByteArrayOutput,
+    PySparkTestCase,
     have_numpy,
     have_scipy,
+    read_int,
+    write_int,
 )
 
 
 class SerializationTestCase(unittest.TestCase):
     def test_namedtuple(self):
         from collections import namedtuple
+
         from pyspark.cloudpickle import dumps, loads
 
         P = namedtuple("P", "x y")

@@ -14,44 +14,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 import difflib
+import unittest
 from itertools import zip_longest
 
-from pyspark.errors import QueryContextType
+import pyspark.sql.functions as F
 from pyspark.errors import (
     AnalysisException,
+    IllegalArgumentException,
     ParseException,
     PySparkAssertionError,
-    PySparkValueError,
-    IllegalArgumentException,
-    SparkUpgradeException,
     PySparkTypeError,
+    PySparkValueError,
+    QueryContextType,
+    SparkUpgradeException,
 )
+from pyspark.sql import Row
+from pyspark.sql.functions import from_unixtime, to_date, unix_timestamp
+from pyspark.sql.types import (
+    ArrayType,
+    BooleanType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    MapType,
+    StringType,
+    StructField,
+    StructType,
+)
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
+    _context_diff,
     assertDataFrameEqual,
     assertSchemaEqual,
-    _context_diff,
     have_numpy,
     have_pandas,
     have_pyarrow,
-)
-from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.sql import Row
-import pyspark.sql.functions as F
-from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
-from pyspark.sql.types import (
-    DecimalType,
-    StringType,
-    ArrayType,
-    LongType,
-    StructType,
-    MapType,
-    FloatType,
-    DoubleType,
-    StructField,
-    IntegerType,
-    BooleanType,
 )
 
 
@@ -757,8 +757,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_equal_exact_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         df1 = pd.DataFrame(
             data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 9)]), columns=["a", "b", "c"]
@@ -775,8 +775,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_approx_equal_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         # test that asserts close enough equality for pandas df
         df1 = pd.DataFrame(
@@ -794,8 +794,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_approx_equal_fail_exact_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         # test that asserts close enough equality for pandas df
         df1 = pd.DataFrame(
@@ -838,8 +838,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_unequal_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         df1 = pd.DataFrame(
             data=np.array([(1, 2, 3), (4, 5, 6), (6, 5, 4)]), columns=["a", "b", "c"]
@@ -881,9 +881,10 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_type_error_pandas_df(self):
-        import pyspark.pandas as ps
-        import pandas as pd
         import numpy as np
+        import pandas as pd
+
+        import pyspark.pandas as ps
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
         df2 = pd.DataFrame(
@@ -949,8 +950,9 @@ class UtilsTestsMixin:
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_error_pandas_pyspark_df(self):
-        import pyspark.pandas as ps
         import pandas as pd
+
+        import pyspark.pandas as ps
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
         df2 = self.spark.createDataFrame([(10,), (11,), (13,)], ["Numbers"])

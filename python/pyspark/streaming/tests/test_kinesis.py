@@ -18,11 +18,11 @@ import time
 import unittest
 
 from pyspark import StorageLevel
-from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream, MetricsLevel
+from pyspark.streaming.kinesis import InitialPositionInStream, KinesisUtils, MetricsLevel
 from pyspark.testing.streamingutils import (
-    should_test_kinesis,
-    kinesis_requirement_message,
     PySparkStreamingTestCase,
+    kinesis_requirement_message,
+    should_test_kinesis,
 )
 
 

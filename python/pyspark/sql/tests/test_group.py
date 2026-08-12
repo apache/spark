@@ -16,9 +16,10 @@
 #
 import unittest
 
+from pyspark.errors import AnalysisException
 from pyspark.sql import Row
 from pyspark.sql import functions as sf
-from pyspark.errors import AnalysisException
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,
@@ -26,7 +27,6 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing import assertDataFrameEqual
 
 
 class GroupTestsMixin:

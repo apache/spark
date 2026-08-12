@@ -16,8 +16,10 @@
 #
 
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.clustering import PowerIterationClustering, PowerIterationClusteringModel
+
 # $example off$
 
 if __name__ == "__main__":

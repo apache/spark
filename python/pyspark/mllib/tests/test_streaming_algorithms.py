@@ -18,12 +18,12 @@
 import os
 import unittest
 
-from numpy import array, random, exp, dot, all, mean, abs
+from numpy import abs, all, array, dot, exp, mean, random
 from numpy import sum as array_sum
 
 from pyspark import SparkContext
-from pyspark.mllib.clustering import StreamingKMeans, StreamingKMeansModel
 from pyspark.mllib.classification import StreamingLogisticRegressionWithSGD
+from pyspark.mllib.clustering import StreamingKMeans, StreamingKMeansModel
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint, StreamingLinearRegressionWithSGD
 from pyspark.mllib.util import LinearDataGenerator

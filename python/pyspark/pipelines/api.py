@@ -17,18 +17,18 @@
 from typing import Callable, Dict, List, Literal, Optional, Union, overload
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.pipelines.graph_element_registry import get_active_graph_element_registry
-from pyspark.pipelines.type_error_utils import validate_optional_list_of_str_arg
 from pyspark.pipelines.flow import AutoCdcFlow, Flow, QueryFunction
+from pyspark.pipelines.graph_element_registry import get_active_graph_element_registry
+from pyspark.pipelines.output import (
+    MaterializedView,
+    Sink,
+    StreamingTable,
+    TemporaryView,
+)
 from pyspark.pipelines.source_code_location import (
     get_caller_source_code_location,
 )
-from pyspark.pipelines.output import (
-    MaterializedView,
-    StreamingTable,
-    TemporaryView,
-    Sink,
-)
+from pyspark.pipelines.type_error_utils import validate_optional_list_of_str_arg
 from pyspark.sql import Column
 from pyspark.sql.types import StructType
 

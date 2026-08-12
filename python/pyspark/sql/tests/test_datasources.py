@@ -15,15 +15,15 @@
 # limitations under the License.
 #
 
+import os
 import shutil
 import tempfile
 import uuid
-import os
 
-from pyspark.sql import Row
-from pyspark.sql.datasource import InputPartition, DataSource
-from pyspark.sql.types import IntegerType, StructField, StructType, LongType, StringType
 from pyspark.errors import PySparkNotImplementedError
+from pyspark.sql import Row
+from pyspark.sql.datasource import DataSource, InputPartition
+from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

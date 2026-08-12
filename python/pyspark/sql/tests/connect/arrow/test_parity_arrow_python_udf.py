@@ -17,8 +17,8 @@
 
 import unittest
 
-from pyspark.sql.tests.connect.test_parity_udf import UDFParityTests
 from pyspark.sql.tests.arrow.test_arrow_python_udf import ArrowPythonUDFTestsMixin
+from pyspark.sql.tests.connect.test_parity_udf import UDFParityTests
 
 
 class ArrowPythonUDFParityTests(UDFParityTests, ArrowPythonUDFTestsMixin):

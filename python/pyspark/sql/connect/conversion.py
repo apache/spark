@@ -48,9 +48,9 @@ def proto_to_storage_level(storage_level: pb2.StorageLevel) -> StorageLevel:
 def proto_to_remote_cached_dataframe(relation: pb2.CachedRemoteRelation) -> "DataFrame":
     assert relation is not None and isinstance(relation, pb2.CachedRemoteRelation)
 
+    import pyspark.sql.connect.plan as plan
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.session import SparkSession
-    import pyspark.sql.connect.plan as plan
 
     session = SparkSession.active()
     return DataFrame(

@@ -17,12 +17,12 @@
 import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, Optional, TypeVar, cast, Iterable, TYPE_CHECKING, List
+from pickle import PicklingError
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, TypeVar, cast
 
 from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.errors.utils import ErrorClassesReader
 from pyspark.logger import PySparkLogger
-from pickle import PicklingError
 
 if TYPE_CHECKING:
     from pyspark.sql.types import Row

@@ -15,23 +15,22 @@
 # limitations under the License.
 #
 
-import os
-import sys
-import decimal
-import time
-import math
-import datetime
-import calendar
-import json
-import re
 import base64
-from array import array
+import calendar
 import ctypes
+import datetime
+import decimal
+import json
+import math
+import os
+import re
+import sys
+import time
+from array import array
 from collections.abc import Iterable
 from functools import reduce
 from typing import (
-    cast,
-    overload,
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
@@ -39,39 +38,42 @@ from typing import (
     Iterator,
     List,
     Optional,
-    Union,
     Tuple,
     Type,
     TypeVar,
-    TYPE_CHECKING,
+    Union,
+    cast,
+    overload,
 )
 
-from pyspark.util import is_remote_only, JVM_INT_MAX
-from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.utils import (
-    get_active_spark_context,
-    escape_meta_characters,
-    IllegalArgumentException,
-    StringConcat,
-)
-from pyspark.sql.variant_utils import VariantUtils
 from pyspark.errors import (
+    PySparkAttributeError,
+    PySparkIndexError,
+    PySparkKeyError,
     PySparkNotImplementedError,
+    PySparkRuntimeError,
     PySparkTypeError,
     PySparkValueError,
-    PySparkIndexError,
-    PySparkRuntimeError,
-    PySparkAttributeError,
-    PySparkKeyError,
+)
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.geo_utils import (
+    CartesianSpatialReferenceSystemMapper as _CartesianSRSMapper,
 )
 from pyspark.sql.geo_utils import (
     GeographicSpatialReferenceSystemMapper as _GeographicSRSMapper,
-    CartesianSpatialReferenceSystemMapper as _CartesianSRSMapper,
 )
+from pyspark.sql.utils import (
+    IllegalArgumentException,
+    StringConcat,
+    escape_meta_characters,
+    get_active_spark_context,
+)
+from pyspark.sql.variant_utils import VariantUtils
+from pyspark.util import JVM_INT_MAX, is_remote_only
 
 if TYPE_CHECKING:
     import numpy as np
-    from py4j.java_gateway import GatewayClient, JavaGateway, JavaClass
+    from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -3849,6 +3851,7 @@ if not is_remote_only():
 
 def _test() -> None:
     import doctest
+
     from pyspark.sql import SparkSession
 
     globs = globals()

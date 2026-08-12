@@ -15,14 +15,15 @@
 # limitations under the License.
 #
 import inspect
+import logging
 import os
 import time
-import logging
-from typing import Iterator, Tuple
 import unittest
+from typing import Iterator, Tuple
 
 from pyspark.errors import PythonException
-from pyspark.sql import Row, functions as sf
+from pyspark.sql import Row
+from pyspark.sql import functions as sf
 from pyspark.sql.functions import array, col, explode, lit, mean, stddev
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import ReusedSQLTestCase
