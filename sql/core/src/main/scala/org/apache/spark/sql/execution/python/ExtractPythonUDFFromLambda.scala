@@ -59,18 +59,16 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  * `filter`, `exists`, `forall`, `zip_with`, `array_sort`, and the four map functions (desugared to
  * `map_keys`/`map_values` arrays and rebuilt with `map_from_arrays`). `array_sort` precomputes a
  * per-element key, or, when one call takes both elements, the UDF over the cross product of pairs.
- * `aggregate` / `reduce` is handled for a UDF over the iterated element (see `rewriteAggregate`).
+ * `aggregate` / `reduce` is handled for a UDF over the iterated element or in `finish` (see
+ * `rewriteAggregate`).
  * A UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`, is handled too: the
  * whole nest is rewritten root-first (see `apply` / `rewriteNest`), lifting the UDF out one lambda
  * level at a time so it ends up applied to the fully flattened leaves.
  *
  * `CheckAnalysis` still rejects what this rule does not handle:
- *  - a UDF in `aggregate` / `reduce` that reads the *accumulator*, or a UDF in its `finish` lambda:
- *    the fold is sequential in the accumulator, so such a UDF sees earlier steps' outputs, not
- *    array elements. A UDF over just the element is liftable (`rewriteAggregate`).
- *  - a UDF in a nested lambda that *captures an enclosing lambda's variable*,
- *    `transform(m, row -> transform(row, x -> f(x, size(row))))` (see
- *    [[PythonUDF.canRewritePythonUDFInLambda]]).
+ *  - a UDF in `aggregate` / `reduce` that reads the *accumulator*: the fold is sequential in the
+ *    accumulator, so such a UDF sees earlier steps' outputs, not array elements. (A UDF over the
+ *    element, or in `finish`, is liftable - see `rewriteAggregate`.)
  */
 object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
@@ -320,43 +318,71 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   }
 
   /**
-   * Rewrites `aggregate(arr, zero, (acc, x) -> body, finish)` whose `merge` lambda holds a UDF over
-   * the iterated element `x` (never the accumulator - `liftableAggregate` guarantees it). The UDF
-   * is precomputed over the whole array with the same carrier machinery as `transform`, and the
-   * merge reads the result positionally beside the element:
+   * Rewrites `aggregate(arr, zero, (acc, x) -> body, finish)`. Two independent UDF sites are
+   * handled (both may be present):
    *
-   * {{{
-   *   -- before
-   *   aggregate(vals, 0, (acc, x) -> acc + plus_one(x))
-   *   -- after (the PythonUDF is outside every lambda)
-   *   aggregate(arrays_zip(vals AS c0, plus_one_over_array(vals) AS u0), 0, (acc, s) -> acc + s.u0)
-   * }}}
+   *  - a UDF in `merge` over the iterated element `x` (never the accumulator -
+   *    `liftableAggregate` guarantees it) is precomputed over the whole array with the same carrier
+   *    machinery as `transform`, and the merge reads the result positionally beside the element:
+   *    {{{
+   *      aggregate(vals, 0, (acc, x) -> acc + plus_one(x))
+   *      ==> aggregate(arrays_zip(vals AS c0, plus_one_over_array(vals) AS u0), 0,
+   *                    (acc, s) -> acc + s.u0)
+   *    }}}
    *
-   * Only the iterated `argument` is wrapped in the carrier; `zero`, the accumulator parameter and
-   * `finish` are carried through untouched, so the fold stays sequential in the accumulator.
+   *  - a UDF in `finish` runs once on the scalar fold result, so it is not an array iteration; the
+   *    finish body is pulled *out* of the aggregate and applied to the raw accumulator, where the
+   *    UDF is an ordinary scalar UDF that `ExtractPythonUDFs` extracts:
+   *    {{{
+   *      aggregate(vals, 0, merge, acc -> f(acc))
+   *      ==> if (vals is null) null else f(aggregate(vals, 0, merge, acc -> acc))
+   *    }}}
+   *    The `if` preserves `aggregate`'s null-array semantics: a null array yields null *without*
+   *    applying `finish`, so the pulled-out body must not run then.
+   *
+   * `zero` and the accumulator parameter are always carried through untouched, so the fold stays
+   * sequential in the accumulator.
    */
   private def rewriteAggregate(agg: ArrayAggregate): Expression = {
     val ArrayAggregate(argument, zero, merge, finish) = agg
-    val LambdaFunction(_, Seq(accVar: NamedLambdaVariable, elementVar: NamedLambdaVariable), _) =
-      merge
-    val built = buildCarrier(Seq(argument), merge, Seq(elementVar), None)
-    val newMerge = LambdaFunction(built.body, Seq(accVar, built.boundVar))
-    ArrayAggregate(built.carrier, zero, newMerge, finish)
+    val LambdaFunction(
+      mergeBody, Seq(accVar: NamedLambdaVariable, elementVar: NamedLambdaVariable), _) = merge
+
+    // Lift the merge lambda's element-reading UDFs onto the whole array, if any.
+    val (foldArgument, foldMerge) =
+      if (hasDirectRewritableUDF(mergeBody)) {
+        val built = buildCarrier(Seq(argument), merge, Seq(elementVar), None)
+        (built.carrier, LambdaFunction(built.body, Seq(accVar, built.boundVar)))
+      } else {
+        (argument, merge)
+      }
+
+    val LambdaFunction(finishBody, Seq(finishAccVar: NamedLambdaVariable), _) = finish
+    if (finish.exists(_.isInstanceOf[PythonUDF])) {
+      // Fold with an identity finish (a fresh variable, so substituting `finishAccVar` below does
+      // not reach into it), then apply the finish body outside, guarded for the null array.
+      val idVar = NamedLambdaVariable("acc", finishAccVar.dataType, finishAccVar.nullable)
+      val fold = ArrayAggregate(foldArgument, zero, foldMerge, LambdaFunction(idVar, Seq(idVar)))
+      val applied = finishBody.transform {
+        case v: NamedLambdaVariable if v.exprId == finishAccVar.exprId => fold
+      }
+      If(IsNull(argument), Literal(null, agg.dataType), applied)
+    } else {
+      ArrayAggregate(foldArgument, zero, foldMerge, finish)
+    }
   }
 
   /**
-   * True if `aggregate` / `reduce` has a liftable UDF over its iterated element. Mirrors
-   * `PythonUDF.isRewritableShape`'s aggregate branch (analysis accepts exactly what the rule
-   * rewrites): the `merge` lambda `(acc, x) -> body` must hold a rewritable UDF that reads only the
-   * element `x`, never the accumulator `acc`, and `finish` must hold no UDF. Like `liftableHof`, it
-   * does not re-check free lambda variables - `apply` only enters `rewriteNest` on a validated nest
-   * root, so an inner aggregate iterating an enclosing variable is expected here.
+   * True if `aggregate` / `reduce` has a liftable UDF. Mirrors `PythonUDF.isRewritableShape`'s
+   * aggregate branch (analysis accepts exactly what the rule rewrites): a UDF must be in `merge`
+   * (over the element, never the accumulator `acc`) or in `finish`. Like `liftableHof`, it does not
+   * re-check free lambda variables - `apply` only enters `rewriteNest` on a validated nest root, so
+   * an inner aggregate iterating an enclosing variable is expected here.
    */
   private def liftableAggregate(agg: ArrayAggregate): Boolean = agg.merge match {
     case LambdaFunction(mergeBody, Seq(accVar: NamedLambdaVariable, _: NamedLambdaVariable), _) =>
-      hasDirectRewritableUDF(mergeBody) &&
-        !udfReadsVariable(mergeBody, accVar.exprId) &&
-        !agg.finish.exists(_.isInstanceOf[PythonUDF])
+      (hasDirectRewritableUDF(mergeBody) || agg.finish.exists(_.isInstanceOf[PythonUDF])) &&
+        !udfReadsVariable(mergeBody, accVar.exprId)
     case _ => false
   }
 
@@ -471,9 +497,15 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     val udfFieldByKey = scala.collection.mutable.LinkedHashMap.empty[Expression, Int]
     liftableUDFs.foreach { udf =>
       // `overArray` turns each argument into an `array<T>` aligned with the iterated array, so the
-      // worker flattens every one exactly once (no per-argument shape to track).
-      val arrayArgs = udf.children.map { child =>
-        overArray(child, alignedArguments.head, arrayOfVar, lambdaExprIds, arrayResults)
+      // worker flattens every one exactly once (no per-argument shape to track). A keyword argument
+      // keeps its `NamedArgumentExpression` wrapper as a direct child of the lifted UDF - only its
+      // value is lifted - so the runner still derives the kwargs mapping from the direct children.
+      val arrayArgs = udf.children.map {
+        case NamedArgumentExpression(key, value) =>
+          NamedArgumentExpression(
+            key, overArray(value, alignedArguments.head, arrayOfVar, lambdaExprIds, arrayResults))
+        case child =>
+          overArray(child, alignedArguments.head, arrayOfVar, lambdaExprIds, arrayResults)
       }
       // Each lift wraps the arguments in exactly one more `array` level. Lifting a base UDF gives
       // depth 1; re-lifting an already-lifted element-wise UDF (a UDF from a *nested* lambda,

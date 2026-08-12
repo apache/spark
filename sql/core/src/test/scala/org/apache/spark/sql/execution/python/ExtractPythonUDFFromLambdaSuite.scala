@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, Literal, NamedArgumentExpression,
-  PythonUDF}
-import org.apache.spark.sql.catalyst.plans.logical.ArrowEvalPython
+import org.apache.spark.sql.catalyst.expressions.{If, LambdaFunction, Literal,
+  NamedArgumentExpression, PythonUDF}
+import org.apache.spark.sql.catalyst.plans.logical.{ArrowEvalPython, BatchEvalPython}
 import org.apache.spark.sql.functions.{array_sort, col, forall, lit, map_filter, map_zip_with,
   transform, transform_keys, transform_values, when, zip_with}
 import org.apache.spark.sql.internal.SQLConf
@@ -106,23 +106,30 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(lifted.head.evalType == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF)
   }
 
-  test("aggregate: a UDF reading the accumulator or in finish is rejected") {
-    // The fold is sequential in the accumulator, so a UDF over `acc` sees earlier steps' outputs,
-    // and a UDF in `finish` runs once on the scalar accumulator - neither can be precomputed.
-    val cases = Seq(
-      "merge on accumulator" ->
-        org.apache.spark.sql.functions.aggregate(
-          col("values"), lit(false), (acc, x) => pythonUDF(acc) || x.cast("boolean")),
-      "finish" ->
-        org.apache.spark.sql.functions.aggregate(
-          col("values"), lit(0), (acc, x) => acc + x, acc => pythonUDF(acc)))
-    cases.foreach { case (name, expr) =>
-      val e = intercept[AnalysisException] {
-        arrayDF.select(expr.as("r")).collect()
-      }
-      assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
-        s"expected aggregate with a UDF in $name to be rejected")
+  test("aggregate: a UDF in finish is pulled out of the fold, not left inside the lambda") {
+    // `finish` runs once on the scalar fold result, so its body is pulled out and the UDF becomes
+    // an ordinary scalar UDF over the aggregate result (extracted into `BatchEvalPython` here, as
+    // the dummy UDF is a plain Python UDF - not the element-wise lift), guarded for the null array.
+    val df = arrayDF.select(
+      org.apache.spark.sql.functions.aggregate(
+        col("values"), lit(0), (acc, x) => acc + x, acc => pythonUDF(acc).cast("int")).as("r"))
+    assert(udfsInsideLambda(df).isEmpty)
+    assert(df.queryExecution.optimizedPlan.collect {
+      case e: BatchEvalPython => e
+    }.nonEmpty)
+    // Null-array guard is present so finish is not applied to a null array's (null) result.
+    assert(df.queryExecution.optimizedPlan.expressions.exists(_.find(_.isInstanceOf[If]).isDefined))
+  }
+
+  test("aggregate: a UDF reading the accumulator in merge is rejected") {
+    // The fold is sequential in the accumulator, so a UDF over `acc` sees earlier steps' outputs
+    // and cannot be precomputed.
+    val expr = org.apache.spark.sql.functions.aggregate(
+      col("values"), lit(false), (acc, x) => pythonUDF(acc) || x.cast("boolean"))
+    val e = intercept[AnalysisException] {
+      arrayDF.select(expr.as("r")).collect()
     }
+    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
   }
 
   test("several UDFs and nested UDFs in one lambda are all lifted") {
@@ -193,18 +200,19 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
       ArrayType(ArrayType(pythonUDF.dataType, containsNull = true), containsNull = true))
   }
 
-  test("a UDF in a nested lambda that captures an enclosing lambda variable is rejected") {
-    // `transform(m, row -> transform(row, x -> f(x, size(row))))`: the UDF reads the *enclosing*
-    // lambda's variable `row`, so the lift would make the captured value a nested-lambda argument
-    // whose canonicalization leaks the variable, breaking `ExtractPythonUDFs`. It must fail
-    // analysis rather than be miscompiled. (A UDF over only the inner element is lifted, above.)
+  test("a UDF in a nested lambda that captures an enclosing lambda variable is lifted") {
+    // `transform(m, row -> transform(row, x -> f(x, size(row))))`: the UDF reads the inner element
+    // and the *enclosing* variable `row`. The captured value is repeated into an aligned array, so
+    // the UDF still lifts to a depth-2 element-wise UDF over the real column and nothing is left in
+    // a lambda. Relies on the fixed `HigherOrderFunction.canonicalized`, which no longer leaks the
+    // captured variable into the lifted UDF's references.
     val df = Seq(Seq(Seq(1, 2), Seq(3))).toDF("values")
-    val e = intercept[AnalysisException] {
-      df.select(transform(col("values"), row =>
+      .select(transform(col("values"), row =>
         transform(row, x => pythonUDF2(x, org.apache.spark.sql.functions.size(row)))).as("r"))
-        .collect()
-    }
-    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
+    assert(udfsInsideLambda(df).isEmpty)
+    val lifted = liftedUDFs(df)
+    assert(lifted.size == 1)
+    assert(lifted.head.elementwiseNestingDepth == 2)
   }
 
   test("a UDF on the outer element of a nested array is lifted") {
@@ -324,11 +332,11 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
   }
 
-  test("the rewritable predicate excludes zero-argument, named-argument and UDT UDFs") {
-    // These shapes cannot be preserved by the lift (a zero-arg call has no array to carry the
-    // iterated shape and would crash the worker; a `NamedArgumentExpression` child would be buried
-    // inside the generated transform, losing kwargs; a UDT would hit the Arrow path with no
-    // fallback), so the shared predicate must reject them, keeping the previous analysis error.
+  test("the rewritable predicate: eval types, zero-argument / iterator-kwarg / UDT UDFs") {
+    // A zero-arg call has no array to carry the iterated shape and would crash the worker; an
+    // iterator UDF takes no kwargs; a UDT would hit the Arrow path with no fallback - so the shared
+    // predicate rejects those, keeping the previous analysis error. A named argument on a
+    // non-iterator flavor is accepted (the lift keeps the NamedArgumentExpression).
     val plain = PythonUDF("f", null, IntegerType, Seq(Literal(1)),
       PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
     assert(PythonUDF.isElementwiseRewritableUDF(plain))
@@ -365,8 +373,16 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     val zeroArg = plain.copy(children = Seq.empty)
     assert(!PythonUDF.isElementwiseRewritableUDF(zeroArg))
 
+    // A named argument is rewritable on the non-iterator flavors (the lift keeps the
+    // NamedArgumentExpression as a direct child), but not on an iterator UDF (no kwargs there).
     val named = plain.copy(children = Seq(NamedArgumentExpression("k", Literal(1))))
-    assert(!PythonUDF.isElementwiseRewritableUDF(named))
+    assert(PythonUDF.isElementwiseRewritableUDF(named))
+    assert(PythonUDF.isElementwiseRewritableUDF(
+      named.copy(evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF)))
+    assert(!PythonUDF.isElementwiseRewritableUDF(
+      named.copy(evalType = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF)))
+    assert(!PythonUDF.isElementwiseRewritableUDF(
+      named.copy(evalType = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF)))
 
     val udtReturn = plain.copy(dataType = new ExamplePointUDT)
     assert(!PythonUDF.isElementwiseRewritableUDF(udtReturn))

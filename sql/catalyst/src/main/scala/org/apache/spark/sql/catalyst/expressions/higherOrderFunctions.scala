@@ -244,8 +244,16 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   override lazy val canonicalized: Expression = {
     var currExprId = -1
+    // Number the lambda variables of this higher-order function, but only those not already
+    // canonicalized. A canonical `NamedLambdaVariable` carries `value = null` (see the rename
+    // below); an original one carries an `AtomicReference`. When this HOF is nested inside another,
+    // the enclosing HOF's `canonicalized` renames every variable in the whole subtree first, then
+    // canonicalizes the children - which re-enters this method on the nested HOF. Re-numbering the
+    // already-renamed variables here would give a reference to an *enclosing* lambda's variable a
+    // different id than its binding, leaking it into `references`; skipping them keeps a variable
+    // and its references in agreement across nesting levels.
     val argumentMap = functions.flatMap(_.collect {
-      case l: NamedLambdaVariable =>
+      case l: NamedLambdaVariable if l.value != null =>
         currExprId += 1
         l.exprId -> currExprId
     }).toMap

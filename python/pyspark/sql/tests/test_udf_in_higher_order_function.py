@@ -457,21 +457,28 @@ class UDFInHigherOrderFunctionTestsMixin:
             ),
         )
 
-    def test_udf_inside_nested_lambda_capturing_outer_variable_fails(self):
-        # A UDF in a nested lambda that captures the *enclosing* lambda's variable (`sf.size(row)`,
-        # where `row` is the outer element) is not rewritten: the lift would make the captured value
-        # a nested-lambda argument of the lifted UDF, which higher-order-function canonicalization
-        # mishandles. This shape keeps failing analysis rather than being miscompiled. A UDF over
-        # only the inner element (see test_udf_inside_nested_lambda) is unaffected.
-        df = self.spark.createDataFrame([([[1, 2], [3, 4]],)], "values array<array<int>>")
+    def test_udf_inside_nested_lambda_capturing_outer_variable(self):
+        # The inner UDF reads both the inner element and the *enclosing* lambda's variable
+        # (`sf.size(row)`, where `row` is the outer element), so its argument depends on two nesting
+        # levels; the lift aligns both onto the leaves. Compared against the equivalent native
+        # expression, over null outer rows, null inner arrays, and empty inner arrays.
+        df = self.spark.createDataFrame(
+            [([[1, 2], [3, 4]],), (None,), ([[]],), ([None, [5]],)],
+            "values array<array<int>>",
+        )
         add = udf(lambda a, b: a + b, IntegerType())
-        with self.assertRaises(AnalysisException) as ctx:
+        assertDataFrameEqual(
             df.select(
                 sf.transform(
                     "values", lambda row: sf.transform(row, lambda x: add(x, sf.size(row)))
-                )
-            ).collect()
-        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+                ).alias("r")
+            ),
+            df.select(
+                sf.transform(
+                    "values", lambda row: sf.transform(row, lambda x: x + sf.size(row))
+                ).alias("r")
+            ),
+        )
 
     def test_udf_inside_three_level_nested_lambda(self):
         # Three levels of nesting: `f` is lifted to a depth-3 element-wise UDF, so the worker
@@ -600,15 +607,17 @@ class UDFInHigherOrderFunctionTestsMixin:
                 [([2, 3, 4],)],
             )
 
-    def test_kwargs_call_still_fails(self):
-        # A UDF called with a keyword argument carries a NamedArgumentExpression, which the lift
-        # cannot preserve, so it must keep failing analysis rather than being rewritten.
-        df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
+    def test_kwargs_call(self):
+        # A UDF called with a keyword argument is lifted too: the NamedArgumentExpression stays a
+        # direct child of the lifted UDF (only its value becomes an aligned array), so the runner
+        # still derives the kwargs mapping. add(x, y=10) = x + 10.
+        df = self.spark.createDataFrame([([1, 2],), (None,)], "values array<int>")
         add = udf(lambda x, y: x + y, IntegerType())
 
-        with self.assertRaises(AnalysisException) as ctx:
-            df.select(sf.transform("values", lambda x: add(x, y=sf.lit(1)))).collect()
-        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: add(x, y=sf.lit(10))).alias("r")),
+            [([11, 12],), (None,)],
+        )
 
     def test_zero_argument_udf_still_fails(self):
         # A zero-argument UDF has no argument to carry the iterated array's shape, so the rewrite
@@ -791,11 +800,51 @@ class UDFInHigherOrderFunctionTestsMixin:
             df.select(sf.aggregate("values", sf.lit(0), lambda acc, x: acc + (x + 1)).alias("r")),
         )
 
+    def test_udf_in_aggregate_finish(self):
+        # A UDF in the `finish` lambda runs once on the scalar fold result, so its body is pulled
+        # out of the aggregate and the UDF becomes an ordinary scalar UDF. Null-array semantics are
+        # preserved: a null array yields null without applying finish. Also covers a UDF in *both*
+        # the element-reading merge and finish. The accumulator is nullable (and the pulled-out UDF
+        # runs on the null fold result for a null array, whose output is then discarded), so the
+        # finish UDF must handle None - as any finish UDF over a nullable accumulator should.
+        df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+        double_it = udf(lambda acc: acc * 2 if acc is not None else None, IntegerType())
+
+        # finish only: double_it(sum(values)).
+        assertDataFrameEqual(
+            df.select(
+                sf.aggregate(
+                    "values", sf.lit(0), lambda acc, x: acc + x, lambda acc: double_it(acc)
+                ).alias("r")
+            ),
+            df.select(
+                sf.aggregate(
+                    "values", sf.lit(0), lambda acc, x: acc + x, lambda acc: acc * 2
+                ).alias("r")
+            ),
+        )
+        # element UDF in merge + UDF in finish together.
+        assertDataFrameEqual(
+            df.select(
+                sf.aggregate(
+                    "values",
+                    sf.lit(0),
+                    lambda acc, x: acc + plus_one(x),
+                    lambda acc: double_it(acc),
+                ).alias("r")
+            ),
+            df.select(
+                sf.aggregate(
+                    "values", sf.lit(0), lambda acc, x: acc + (x + 1), lambda acc: acc * 2
+                ).alias("r")
+            ),
+        )
+
     def test_udf_in_aggregate_reading_accumulator_still_fails(self):
-        # The fold is sequential in the accumulator: a UDF that reads `acc` sees outputs of earlier
-        # steps rather than array elements (folding [1,2,3] with `plus_one(acc) + x` calls it on 0,
-        # 1, ...), so it cannot be precomputed. A UDF in `finish` runs once on the scalar
-        # accumulator, with no array to lift onto. Both must keep failing analysis.
+        # The fold is sequential in the accumulator: a UDF that reads `acc` in `merge` sees outputs
+        # of earlier steps rather than array elements (folding [1,2,3] with `plus_one(acc) + x`
+        # calls it on 0, 1, ...), so it cannot be precomputed and must keep failing analysis.
         df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
         plus_one = udf(lambda x: x + 1, IntegerType())
         double_it = udf(lambda acc: acc * 2, IntegerType())
@@ -805,8 +854,6 @@ class UDFInHigherOrderFunctionTestsMixin:
             sf.aggregate("values", sf.lit(0), lambda acc, x: plus_one(acc) + x),
             # A UDF reading both the accumulator and the element in `merge`.
             sf.aggregate("values", sf.lit(0), lambda acc, x: double_it(acc + x)),
-            # A UDF in `finish`.
-            sf.aggregate("values", sf.lit(0), lambda acc, x: acc + x, lambda acc: double_it(acc)),
             # `reduce` (alias) with a UDF on the accumulator.
             sf.reduce("values", sf.lit(0), lambda acc, x: plus_one(acc) + x),
         ]
