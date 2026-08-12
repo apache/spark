@@ -85,8 +85,11 @@ To test, use beeline to connect to the JDBC/ODBC server in http mode with:
 
     beeline> !connect jdbc:hive2://<host>:<port>/<database>;transportMode=http;httpPath=<http_endpoint>
 
-If you closed a session and do CTAS, you must set `fs.%s.impl.disable.cache` to true in `hive-site.xml`.
-See more details in [[SPARK-21067]](https://issues.apache.org/jira/browse/SPARK-21067).
+If you closed a session and do CTAS, you must set `fs.<scheme>.impl.disable.cache` to `true` in `hive-site.xml`. `<scheme>` is the Hadoop filesystem you are using, like `hdfs`, `s3a`, etc. For example:
+
+    fs.hdfs.impl.disable.cache=true
+
+See more details in [SPARK-21067](https://issues.apache.org/jira/browse/SPARK-21067).
 
 To stop the Thrift JDBC/ODBC server, run:
 
@@ -98,4 +101,4 @@ To use the Spark SQL command line interface (CLI) from the shell:
 
     ./bin/spark-sql
 
-For details, please refer to [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html)
+For details, please refer to [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html).
