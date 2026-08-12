@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.{If, LambdaFunction, Literal,
-  NamedArgumentExpression, PythonUDF}
-import org.apache.spark.sql.catalyst.plans.logical.{ArrowEvalPython, BatchEvalPython}
+import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, Literal, NamedArgumentExpression,
+  PythonUDF}
+import org.apache.spark.sql.catalyst.plans.logical.ArrowEvalPython
 import org.apache.spark.sql.functions.{array_sort, col, forall, lit, map_filter, map_zip_with,
   transform, transform_keys, transform_values, when, zip_with}
 import org.apache.spark.sql.internal.SQLConf
@@ -94,42 +94,23 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("aggregate: a UDF over the element in merge is lifted, not left inside the fold") {
-    // A UDF reading only the iterated element is element-independent of the fold, so it is
-    // precomputed over the whole array and the merge reads it positionally.
-    val df = arrayDF.select(
-      org.apache.spark.sql.functions.aggregate(
-        col("values"), lit(0), (acc, x) => acc + pythonUDF(x).cast("int")).as("r"))
-    assert(udfsInsideLambda(df).isEmpty)
-    val lifted = liftedUDFs(df)
-    assert(lifted.size == 1)
-    assert(lifted.head.evalType == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF)
-  }
-
-  test("aggregate: a UDF in finish is pulled out of the fold, not left inside the lambda") {
-    // `finish` runs once on the scalar fold result, so its body is pulled out and the UDF becomes
-    // an ordinary scalar UDF over the aggregate result (extracted into `BatchEvalPython` here, as
-    // the dummy UDF is a plain Python UDF - not the element-wise lift), guarded for the null array.
-    val df = arrayDF.select(
-      org.apache.spark.sql.functions.aggregate(
-        col("values"), lit(0), (acc, x) => acc + x, acc => pythonUDF(acc).cast("int")).as("r"))
-    assert(udfsInsideLambda(df).isEmpty)
-    assert(df.queryExecution.optimizedPlan.collect {
-      case e: BatchEvalPython => e
-    }.nonEmpty)
-    // Null-array guard is present so finish is not applied to a null array's (null) result.
-    assert(df.queryExecution.optimizedPlan.expressions.exists(_.find(_.isInstanceOf[If]).isDefined))
-  }
-
-  test("aggregate: a UDF reading the accumulator in merge is rejected") {
-    // The fold is sequential in the accumulator, so a UDF over `acc` sees earlier steps' outputs
-    // and cannot be precomputed.
-    val expr = org.apache.spark.sql.functions.aggregate(
-      col("values"), lit(false), (acc, x) => pythonUDF(acc) || x.cast("boolean"))
-    val e = intercept[AnalysisException] {
-      arrayDF.select(expr.as("r")).collect()
+  test("aggregate: a UDF anywhere in the fold is rejected") {
+    // The fold is sequential, so no array can precompute the values the UDF sees. A UDF in `merge`
+    // or in `finish` therefore has no rewrite and analysis must fail.
+    val cases = Seq(
+      "merge" ->
+        org.apache.spark.sql.functions.aggregate(
+          col("values"), lit(false), (acc, x) => acc || pythonUDF(x)),
+      "finish" ->
+        org.apache.spark.sql.functions.aggregate(
+          col("values"), lit(0), (acc, x) => acc + x, acc => pythonUDF(acc)))
+    cases.foreach { case (name, expr) =>
+      val e = intercept[AnalysisException] {
+        arrayDF.select(expr.as("r")).collect()
+      }
+      assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+        s"expected aggregate with a UDF in $name to be rejected")
     }
-    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
   }
 
   test("several UDFs and nested UDFs in one lambda are all lifted") {

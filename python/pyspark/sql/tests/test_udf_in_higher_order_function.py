@@ -741,121 +741,20 @@ class UDFInHigherOrderFunctionTestsMixin:
                 df.select(sf.transform("values", lambda x: plus_one(x))).collect()
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
-    def test_udf_in_aggregate_over_element(self):
-        # A UDF in `aggregate` / `reduce`'s `merge` lambda that reads only the iterated *element*
-        # (not the accumulator) is element-independent of the fold, so it is precomputed over the
-        # whole array and read positionally, exactly like `transform`. Compared against the
-        # equivalent native fold.
-        df = self.spark.createDataFrame(
-            [([1, 2, 3],), ([],), (None,), ([10],)], "values array<int>"
-        )
-        plus_one = udf(lambda x: x + 1, IntegerType())
-
-        # Sum of (x + 1) over the array.
-        assertDataFrameEqual(
-            df.select(
-                sf.aggregate("values", sf.lit(0), lambda acc, x: acc + plus_one(x)).alias("r")
-            ),
-            df.select(sf.aggregate("values", sf.lit(0), lambda acc, x: acc + (x + 1)).alias("r")),
-        )
-        # `reduce` is an alias of `aggregate`.
-        assertDataFrameEqual(
-            df.select(
-                sf.reduce("values", sf.lit(0), lambda acc, x: acc + plus_one(x)).alias("r")
-            ),
-            df.select(sf.aggregate("values", sf.lit(0), lambda acc, x: acc + (x + 1)).alias("r")),
-        )
-        # A UDF-free `finish` function is carried through unchanged.
-        assertDataFrameEqual(
-            df.select(
-                sf.aggregate(
-                    "values", sf.lit(0), lambda acc, x: acc + plus_one(x), lambda acc: acc * 10
-                ).alias("r")
-            ),
-            df.select(
-                sf.aggregate(
-                    "values", sf.lit(0), lambda acc, x: acc + (x + 1), lambda acc: acc * 10
-                ).alias("r")
-            ),
-        )
-
-    def test_vectorized_udf_in_aggregate_over_element(self):
-        # The element-only `aggregate` lift also works for a vectorized scalar UDF, which still
-        # receives its native batch over the flattened elements.
-        import pandas as pd
-        from pyspark.sql.functions import pandas_udf
-
-        df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
-
-        @pandas_udf(IntegerType())
-        def plus_one_pandas(s: pd.Series) -> pd.Series:
-            return s + 1
-
-        assertDataFrameEqual(
-            df.select(
-                sf.aggregate(
-                    "values", sf.lit(0), lambda acc, x: acc + plus_one_pandas(x)
-                ).alias("r")
-            ),
-            df.select(sf.aggregate("values", sf.lit(0), lambda acc, x: acc + (x + 1)).alias("r")),
-        )
-
-    def test_udf_in_aggregate_finish(self):
-        # A UDF in the `finish` lambda runs once on the scalar fold result, so its body is pulled
-        # out of the aggregate and the UDF becomes an ordinary scalar UDF. Null-array semantics are
-        # preserved: a null array yields null without applying finish. Also covers a UDF in *both*
-        # the element-reading merge and finish. The accumulator is nullable (and the pulled-out UDF
-        # runs on the null fold result for a null array, whose output is then discarded), so the
-        # finish UDF must handle None - as any finish UDF over a nullable accumulator should.
-        df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
-        plus_one = udf(lambda x: x + 1, IntegerType())
-        double_it = udf(lambda acc: acc * 2 if acc is not None else None, IntegerType())
-
-        # finish only: double_it(sum(values)).
-        assertDataFrameEqual(
-            df.select(
-                sf.aggregate(
-                    "values", sf.lit(0), lambda acc, x: acc + x, lambda acc: double_it(acc)
-                ).alias("r")
-            ),
-            df.select(
-                sf.aggregate(
-                    "values", sf.lit(0), lambda acc, x: acc + x, lambda acc: acc * 2
-                ).alias("r")
-            ),
-        )
-        # element UDF in merge + UDF in finish together.
-        assertDataFrameEqual(
-            df.select(
-                sf.aggregate(
-                    "values",
-                    sf.lit(0),
-                    lambda acc, x: acc + plus_one(x),
-                    lambda acc: double_it(acc),
-                ).alias("r")
-            ),
-            df.select(
-                sf.aggregate(
-                    "values", sf.lit(0), lambda acc, x: acc + (x + 1), lambda acc: acc * 2
-                ).alias("r")
-            ),
-        )
-
-    def test_udf_in_aggregate_reading_accumulator_still_fails(self):
-        # The fold is sequential in the accumulator: a UDF that reads `acc` in `merge` sees outputs
-        # of earlier steps rather than array elements (folding [1,2,3] with `plus_one(acc) + x`
-        # calls it on 0, 1, ...), so it cannot be precomputed and must keep failing analysis.
+    def test_udf_in_aggregate_fails(self):
+        # `aggregate` / `reduce` is a sequential fold: the values a UDF sees are outputs of earlier
+        # steps, not elements of a collection, so it cannot be applied once to the whole array. A
+        # UDF anywhere in `aggregate` / `reduce` - `merge` or `finish` - must fail analysis.
         df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
         plus_one = udf(lambda x: x + 1, IntegerType())
         double_it = udf(lambda acc: acc * 2, IntegerType())
 
         aggregates = [
-            # A UDF reading the accumulator in `merge`.
+            sf.aggregate("values", sf.lit(0), lambda acc, x: acc + plus_one(x)),
             sf.aggregate("values", sf.lit(0), lambda acc, x: plus_one(acc) + x),
-            # A UDF reading both the accumulator and the element in `merge`.
-            sf.aggregate("values", sf.lit(0), lambda acc, x: double_it(acc + x)),
-            # `reduce` (alias) with a UDF on the accumulator.
-            sf.reduce("values", sf.lit(0), lambda acc, x: plus_one(acc) + x),
+            sf.aggregate("values", sf.lit(0), lambda acc, x: acc + x, lambda acc: double_it(acc)),
+            # `reduce` is an alias of `aggregate`, so it is rejected the same way.
+            sf.reduce("values", sf.lit(0), lambda acc, x: acc + plus_one(x)),
         ]
         for agg in aggregates:
             with self.assertRaises(AnalysisException) as ctx:

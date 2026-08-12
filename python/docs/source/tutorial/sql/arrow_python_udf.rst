@@ -485,13 +485,12 @@ element inside the lambda; it is applied once, outside the lambda, and the lambd
 precomputed result. So the UDF runs over *every* element, even ones a lambda would otherwise skip
 (the elements after ``exists`` matches, or the untaken branch of a ``when``) -- if it can fail on
 some input, handle that inside the function. This covers ``transform``, ``filter``, ``exists``,
-``forall``, ``zip_with``, ``array_sort`` and the map functions; *nested* lambdas
+``forall``, ``zip_with``, ``array_sort`` and the map functions, as well as *nested* lambdas
 (``transform(matrix, lambda row: transform(row, lambda x: udf(x)))``, including ones that capture
-the enclosing variable); and ``aggregate`` / ``reduce`` when the UDF reads the iterated *element*
-(``aggregate(values, lit(0), lambda acc, x: acc + udf(x))``) or sits in the finish function. Only a
-UDF that reads the *accumulator* is rejected, because the fold is sequential and cannot be
-precomputed. Toggle with ``spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled``
-(default ``true``; set ``false`` to reject at analysis).
+the enclosing variable). A UDF inside ``aggregate`` / ``reduce`` is not supported, because the fold
+is sequential and cannot be applied once to the whole array. Toggle with
+``spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled`` (default ``true``; set ``false`` to
+reject at analysis).
 
 The Arrow data type of the returned ``pyarrow.Array`` should match the declared ``returnType``.
 When there is a mismatch, Spark will attempt to convert the returned data to the expected type

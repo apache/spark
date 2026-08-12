@@ -158,9 +158,9 @@ object PythonUDF {
    * `transform(arr, x -> transform(udf(x), y -> y))`, lifts onto `arr` the same way.
    *
    * These shapes still cannot be rewritten and are rejected:
-   *   - a UDF in `aggregate` / `reduce` that reads the *accumulator*: the fold is sequential in the
-   *     accumulator, so such a UDF sees earlier steps' outputs, not array elements. (A UDF over the
-   *     *element*, or one in `finish`, is liftable - see [[isRewritableShape]].)
+   *   - a UDF in `aggregate` / `reduce`: the fold is sequential, so the UDF sees earlier steps'
+   *     outputs, not array elements, and cannot be applied once to the whole array (see
+   *     [[isRewritableShape]]).
    *   - a *nondeterministic iterated argument*, `filter(shuffle(arr), x -> f(x))` (at the root or
    *     any nested level): the rewrite references that argument several times (the carrier's `c0`,
    *     each lifted UDF's argument, the `map_keys`/`map_values` desugar, the pairwise `array_sort`
@@ -199,62 +199,28 @@ object PythonUDF {
   }
 
   /**
-   * The structural assumption the rewrite makes. Two shapes qualify:
+   * The structural assumption the rewrite makes: one lambda with plain-variable parameters, over at
+   * least one array- or map-valued argument (`transform`, `filter`, the map family, ...).
+   * `aggregate` / `reduce` fail this - they have two lambdas (`merge`, `finish`) - so a UDF in a
+   * fold is rejected: the fold is sequential, so the UDF sees earlier steps' outputs, not array
+   * elements. Checking the shape rather than listing classes means a new function of a familiar
+   * shape needs no change here.
    *
-   *  - a single-lambda function with plain-variable parameters, over at least one array- or
-   *    map-valued argument (`transform`, `filter`, the map family, ...). Checking the shape rather
-   *    than listing classes means a new function of a familiar shape needs no change here. The
-   *    function must also carry one of the result-type marker traits the rewrite dispatches on
-   *    ([[ResultTypeFromArgument]] or [[ResultTypeFromFunction]]). Every built-in single-lambda HOF
-   *    is marked today, but requiring it here keeps "analysis accepts exactly what the rule
-   *    rewrites" structural: a future HOF missing both traits is rejected at analysis rather than
-   *    slipping through and leaving the UDF inside the lambda at runtime.
-   *
-   *  - `aggregate` / `reduce` ([[ArrayAggregate]]) for a UDF over the iterated *element* or in the
-   *    `finish` lambda, but not one that reads the accumulator (see [[isRewritableAggregate]]). The
-   *    fold is sequential in the accumulator, so a UDF over the accumulator sees earlier steps'
-   *    outputs and cannot be precomputed; a UDF over the element lifts like `transform`'s, and a
-   *    UDF in `finish` is pulled out of the fold as an ordinary scalar UDF.
+   * The function must also carry one of the result-type marker traits the rewrite dispatches on
+   * ([[ResultTypeFromArgument]] or [[ResultTypeFromFunction]]). Every built-in single-lambda HOF is
+   * marked today, but requiring it here keeps "analysis accepts exactly what the rule rewrites"
+   * structural: a future HOF missing both traits is rejected at analysis rather than slipping
+   * through and leaving the UDF inside the lambda at runtime.
    */
-  private def isRewritableShape(hof: HigherOrderFunction): Boolean = hof match {
-    case agg: ArrayAggregate => isRewritableAggregate(agg)
-    case _ =>
-      hof.functions.length == 1 &&
-        hof.functions.head.isInstanceOf[LambdaFunction] &&
-        hof.functions.head.asInstanceOf[LambdaFunction].arguments
-          .forall(_.isInstanceOf[NamedLambdaVariable]) &&
-        (hof.isInstanceOf[ResultTypeFromArgument] || hof.isInstanceOf[ResultTypeFromFunction]) &&
-        hof.arguments.exists { a =>
-          a.dataType.isInstanceOf[ArrayType] || a.dataType.isInstanceOf[MapType]
-        }
-  }
-
-  /**
-   * Whether an `aggregate` / `reduce` can have its lambda UDFs lifted. Its `merge` lambda is
-   * `(acc, x) -> body`; a UDF reading the element `x` (and outer columns / constants) is liftable,
-   * precomputed over the whole array and read positionally like `transform`'s. A UDF that reads the
-   * accumulator `acc` is genuinely sequential and stays rejected. A UDF in `finish` is fine: it
-   * runs once on the scalar fold result, so its body is pulled out of the aggregate and it becomes
-   * an ordinary scalar UDF (see `ExtractPythonUDFFromLambda.rewriteAggregate`). (A UDF in `zero` is
-   * an ordinary scalar UDF outside every lambda and is handled by `ExtractPythonUDFs`, so it never
-   * reaches this predicate.)
-   */
-  private def isRewritableAggregate(agg: ArrayAggregate): Boolean =
-    (agg.merge, agg.finish) match {
-      case (LambdaFunction(_, Seq(accVar: NamedLambdaVariable, _: NamedLambdaVariable), _),
-            LambdaFunction(_, Seq(_: NamedLambdaVariable), _)) =>
-        !udfReadsVariable(agg.merge, accVar.exprId)
-      case _ => false
-    }
-
-  /** Whether any Python UDF within `e` reads the lambda variable with id `varId`. */
-  private def udfReadsVariable(e: Expression, varId: ExprId): Boolean = e.exists {
-    case udf: PythonUDF => udf.exists {
-      case v: NamedLambdaVariable => v.exprId == varId
-      case _ => false
-    }
-    case _ => false
-  }
+  private def isRewritableShape(hof: HigherOrderFunction): Boolean =
+    hof.functions.length == 1 &&
+      hof.functions.head.isInstanceOf[LambdaFunction] &&
+      hof.functions.head.asInstanceOf[LambdaFunction].arguments
+        .forall(_.isInstanceOf[NamedLambdaVariable]) &&
+      (hof.isInstanceOf[ResultTypeFromArgument] || hof.isInstanceOf[ResultTypeFromFunction]) &&
+      hof.arguments.exists { a =>
+        a.dataType.isInstanceOf[ArrayType] || a.dataType.isInstanceOf[MapType]
+      }
 
   /**
    * Whether `e` references a [[NamedLambdaVariable]] that it does not itself bind, i.e. one bound
