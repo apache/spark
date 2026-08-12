@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -58,13 +59,18 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  * `filter`, `exists`, `forall`, `zip_with`, `array_sort`, and the four map functions (desugared to
  * `map_keys`/`map_values` arrays and rebuilt with `map_from_arrays`). `array_sort` precomputes a
  * per-element key, or, when one call takes both elements, the UDF over the cross product of pairs.
+ * `aggregate` / `reduce` is handled for a UDF over the iterated element (see `rewriteAggregate`).
+ * A UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`, is handled too: the
+ * whole nest is rewritten root-first (see `apply` / `rewriteNest`), lifting the UDF out one lambda
+ * level at a time so it ends up applied to the fully flattened leaves.
  *
  * `CheckAnalysis` still rejects what this rule does not handle:
- *  - a UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`: the inner array
- *    `i` is not a real column. (A UDF in a nested *argument*, `transform(arr, x ->
- *    transform(udf(x), y -> y))`, is fine - `udf(x)` lifts onto `arr`.)
- *  - a UDF in `aggregate` / `reduce`: the fold is sequential, so the UDF sees earlier steps'
- *    outputs, not array elements.
+ *  - a UDF in `aggregate` / `reduce` that reads the *accumulator*, or a UDF in its `finish` lambda:
+ *    the fold is sequential in the accumulator, so such a UDF sees earlier steps' outputs, not
+ *    array elements. A UDF over just the element is liftable (`rewriteAggregate`).
+ *  - a UDF in a nested lambda that *captures an enclosing lambda's variable*,
+ *    `transform(m, row -> transform(row, x -> f(x, size(row))))` (see
+ *    [[PythonUDF.canRewritePythonUDFInLambda]]).
  */
 object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
@@ -72,19 +78,36 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     if (!conf.pythonUDFInHigherOrderFunctionEnabled) {
       plan
     } else {
-      // A single bottom-up pass lifts every liftable UDF: `transformExpressionsUpWithPruning`
-      // visits the innermost higher-order function first, and each rewrite lifts all of that
-      // lambda's UDFs at once. A UDF inside a *nested* function's lambda is not liftable at all
-      // (its argument is the outer lambda's variable, which is not a real column) and is rejected
-      // by `CheckAnalysis`, so no repeated fixed-point pass is needed.
+      // Rewrite each expression tree top-down. The first (outermost) higher-order function that is
+      // a liftable *nest root* - it iterates real columns and its whole, possibly nested, nest is
+      // rewritable - has its entire nest rewritten in one action by `rewriteNest`. Handling the
+      // nest atomically means a UDF in a nested lambda is never momentarily left as a free-variable
+      // `PythonUDF` that downstream could not evaluate (SPARK-48706): the rule either rewrites a
+      // nest completely or leaves it untouched for `CheckAnalysis` to reject. The gate mirrors
+      // `CheckAnalysis` exactly, so analysis accepts precisely what this rewrites.
       plan.transformUpWithPruning(
         _.containsAllPatterns(PYTHON_UDF, HIGH_ORDER_FUNCTION)) {
         case p =>
-          p.transformExpressionsUpWithPruning(
-            _.containsAllPatterns(PYTHON_UDF, HIGH_ORDER_FUNCTION))(rewrite)
+          p.transformExpressionsDownWithPruning(
+            _.containsAllPatterns(PYTHON_UDF, HIGH_ORDER_FUNCTION)) {
+            case hof: HigherOrderFunction
+                if hof.functions.exists(_.exists(_.isInstanceOf[PythonUDF])) &&
+                  PythonUDF.canRewritePythonUDFInLambda(hof) =>
+              rewriteNest(hof)
+          }
       }
     }
   }
+
+  /**
+   * Rewrites a whole nest of higher-order functions rooted at `root`, already validated liftable by
+   * [[PythonUDF.canRewritePythonUDFInLambda]]. `transformUp` visits the innermost function first,
+   * so each inner lambda's UDFs are lifted onto that lambda's (enclosing-variable) argument -
+   * becoming element-wise UDFs in an argument position - and then the enclosing function re-lifts
+   * them onto its own array one level deeper (see `buildCarrier` / `overArray`). A single bottom-up
+   * pass therefore lifts every UDF out of every lambda in the nest, innermost first.
+   */
+  private def rewriteNest(root: HigherOrderFunction): Expression = root.transformUp(rewriteOne)
 
   /**
    * Whether one UDF call in an `array_sort` comparator takes both elements, e.g.
@@ -106,14 +129,25 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   }
 
   /**
-   * Rewrites one higher-order function whose lambda holds a rewritable Python UDF. The generic path
-   * reads arguments, lambdas and parameter roles off the [[HigherOrderFunction]] API and rebuilds
-   * with `withNewChildren` (children are `arguments` then `functions`), naming a concrete class
-   * only where a shape cannot be inferred otherwise (`ArraySort`'s comparator, and the result-type
-   * traits telling `ArrayFilter` from `ArrayTransform`). A pairwise `array_sort` comparator, whose
-   * single call takes both elements, needs its own path.
+   * Rewrites one higher-order function whose own lambda holds a rewritable Python UDF. The generic
+   * path reads arguments, lambdas and parameter roles off the [[HigherOrderFunction]] API and
+   * rebuilds with `withNewChildren` (children are `arguments` then `functions`), naming a concrete
+   * class only where a shape cannot be inferred otherwise (`ArraySort`'s comparator, and the
+   * result-type traits telling `ArrayFilter` from `ArrayTransform`). A pairwise `array_sort`
+   * comparator, whose single call takes both elements, needs its own path.
+   *
+   * Applied by `rewriteNest` to every function in a validated nest, innermost first. Unlike the
+   * nest-root gate in `apply`, the predicates here (`liftableHof`, `liftableAggregate`) do not
+   * re-check free lambda variables: within an already-validated nest an inner function iterating an
+   * enclosing variable is expected, and `rewriteNest` guarantees the enclosing function re-lifts
+   * whatever an inner step leaves in an argument position.
    */
-  private val rewrite: PartialFunction[Expression, Expression] = {
+  private val rewriteOne: PartialFunction[Expression, Expression] = {
+    // `aggregate` / `reduce` is a fold, not a mapping, so it has its own path. Only a UDF over the
+    // iterated element (not the accumulator) is liftable; see `liftableAggregate`.
+    case agg: ArrayAggregate if liftableAggregate(agg) =>
+      rewriteAggregate(agg)
+
     case sort @ ArraySort(_, function, _)
         if liftableHof(sort) && comparatorTakesBothElements(function) =>
       rewritePairwiseComparator(sort)
@@ -286,19 +320,68 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   }
 
   /**
-   * True if `hof`'s single lambda holds a UDF belonging to *this* lambda (not a nested function's
-   * lambda). A UDF in a nested lambda is rejected by `CheckAnalysis`, so it is never matched here.
+   * Rewrites `aggregate(arr, zero, (acc, x) -> body, finish)` whose `merge` lambda holds a UDF over
+   * the iterated element `x` (never the accumulator - `liftableAggregate` guarantees it). The UDF
+   * is precomputed over the whole array with the same carrier machinery as `transform`, and the
+   * merge reads the result positionally beside the element:
+   *
+   * {{{
+   *   -- before
+   *   aggregate(vals, 0, (acc, x) -> acc + plus_one(x))
+   *   -- after (the PythonUDF is outside every lambda)
+   *   aggregate(arrays_zip(vals AS c0, plus_one_over_array(vals) AS u0), 0, (acc, s) -> acc + s.u0)
+   * }}}
+   *
+   * Only the iterated `argument` is wrapped in the carrier; `zero`, the accumulator parameter and
+   * `finish` are carried through untouched, so the fold stays sequential in the accumulator.
+   */
+  private def rewriteAggregate(agg: ArrayAggregate): Expression = {
+    val ArrayAggregate(argument, zero, merge, finish) = agg
+    val LambdaFunction(_, Seq(accVar: NamedLambdaVariable, elementVar: NamedLambdaVariable), _) =
+      merge
+    val built = buildCarrier(Seq(argument), merge, Seq(elementVar), None)
+    val newMerge = LambdaFunction(built.body, Seq(accVar, built.boundVar))
+    ArrayAggregate(built.carrier, zero, newMerge, finish)
+  }
+
+  /**
+   * True if `aggregate` / `reduce` has a liftable UDF over its iterated element. Mirrors
+   * `PythonUDF.isRewritableShape`'s aggregate branch (analysis accepts exactly what the rule
+   * rewrites): the `merge` lambda `(acc, x) -> body` must hold a rewritable UDF that reads only the
+   * element `x`, never the accumulator `acc`, and `finish` must hold no UDF. Like `liftableHof`, it
+   * does not re-check free lambda variables - `apply` only enters `rewriteNest` on a validated nest
+   * root, so an inner aggregate iterating an enclosing variable is expected here.
+   */
+  private def liftableAggregate(agg: ArrayAggregate): Boolean = agg.merge match {
+    case LambdaFunction(mergeBody, Seq(accVar: NamedLambdaVariable, _: NamedLambdaVariable), _) =>
+      hasDirectRewritableUDF(mergeBody) &&
+        !udfReadsVariable(mergeBody, accVar.exprId) &&
+        !agg.finish.exists(_.isInstanceOf[PythonUDF])
+    case _ => false
+  }
+
+  /** Whether any Python UDF within `e` reads the lambda variable with id `varId`. */
+  private def udfReadsVariable(e: Expression, varId: ExprId): Boolean = e.exists {
+    case udf: PythonUDF => udf.exists {
+      case v: NamedLambdaVariable => v.exprId == varId
+      case _ => false
+    }
+    case _ => false
+  }
+
+  /**
+   * True if `hof`'s single lambda holds a UDF to lift at *this* level - either directly in the body
+   * or in a nested function's argument (which `hasDirectRewritableUDF` reaches, but a nested
+   * function's own lambda is not this level's concern; `rewriteNest` handles that level itself).
+   *
+   * Does not re-check free lambda variables: `apply` enters `rewriteNest` only on a validated nest
+   * root, so within the nest an inner function iterating an enclosing variable is expected, and the
+   * enclosing function is guaranteed to re-lift whatever this level leaves in an argument position.
    */
   private def liftableHof(hof: HigherOrderFunction): Boolean =
     hof.functions.length == 1 && (hof.functions.head match {
       case LambdaFunction(body, args, _) =>
-        hasDirectRewritableUDF(body) && args.forall(_.isInstanceOf[NamedLambdaVariable]) &&
-          // Defense in depth: `CheckAnalysis` already rejects a `hof` nested in an enclosing
-          // lambda (its argument is a free lambda variable, not a real column), but re-check here
-          // so the rule stays correct even for a plan that did not go through analysis - otherwise
-          // it could mis-rewrite `transform(arr, i -> transform(i, x -> f(x)))` and resurrect
-          // SPARK-48706 (a raw `PythonUDF` left inside a generated lambda).
-          !PythonUDF.hasFreeLambdaVariable(hof)
+        hasDirectRewritableUDF(body) && args.forall(_.isInstanceOf[NamedLambdaVariable])
       case _ => false
     })
 
@@ -392,19 +475,27 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       val arrayArgs = udf.children.map { child =>
         overArray(child, alignedArguments.head, arrayOfVar, lambdaExprIds, arrayResults)
       }
+      // Each lift wraps the arguments in exactly one more `array` level. Lifting a base UDF gives
+      // depth 1; re-lifting an already-lifted element-wise UDF (a UDF from a *nested* lambda,
+      // lifted once onto the inner variable and now again onto the enclosing array) adds one more
+      // level, so the worker flattens `depth` levels down to the scalar element and re-nests them.
+      val newDepth =
+        if (PythonEvalType.isElementwiseUDF(udf.evalType)) udf.elementwiseNestingDepth + 1 else 1
       val lifted = PythonUDF(
         udf.name,
         udf.func,
         // The wrapper returns one element per input element, i.e. one array level on top of the
-        // user function's scalar return. Elements may be null (the UDF can return null), hence
+        // UDF's previous return type. Elements may be null (the UDF can return null), hence
         // containsNull = true.
         ArrayType(udf.dataType, containsNull = true),
         arrayArgs,
         // Each rewritable flavor lifts to its own element-wise eval type so the worker keeps that
         // flavor's batching contract (pickle row-at-a-time, pandas Series, Arrow Array, or an
-        // iterator of batches). See `PythonUDF.liftedElementwiseEvalType`.
+        // iterator of batches); an already-lifted type maps to itself. See
+        // `PythonUDF.liftedElementwiseEvalType`.
         PythonUDF.liftedElementwiseEvalType(udf.evalType),
-        udf.udfDeterministic)
+        udf.udfDeterministic,
+        elementwiseNestingDepth = newDepth)
       val signature: Expression = if (udf.udfDeterministic) lifted.canonicalized else lifted
       val ordinal = ordinalBySignature.getOrElseUpdate(signature, {
         val o = distinctLifted.length

@@ -97,15 +97,21 @@ object PythonUDF {
          PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF |
          PythonEvalType.SQL_SCALAR_ARROW_UDF |
          PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF => true
-    case _ => false
+    // The already-lifted element-wise types are rewritable again: a UDF inside a nested lambda is
+    // lifted once onto the inner lambda's variable (producing an element-wise UDF over that
+    // variable) and then re-lifted onto the enclosing array, incrementing its nesting depth. Users
+    // cannot create these eval types directly, so they only appear mid-rewrite - `CheckAnalysis`,
+    // which runs before this rule, never sees them.
+    case _ => PythonEvalType.isElementwiseUDF(evalType)
   }
 
   /**
    * The eval type a rewritable UDF runs under once lifted out of the lambda. Each maps to the
    * element-wise flavor that preserves its worker contract: the row-at-a-time types share the one
    * pickle-based element-wise path, while each vectorized scalar type keeps its own pandas- vs.
-   * Arrow-shaped batching and iterator behavior. `evalType` must satisfy
-   * [[isElementwiseRewritableEvalType]].
+   * Arrow-shaped batching and iterator behavior. An already-lifted element-wise type maps to itself
+   * (re-lifting for a nested lambda keeps the flavor and only bumps the nesting depth). `evalType`
+   * must satisfy [[isElementwiseRewritableEvalType]].
    */
   def liftedElementwiseEvalType(evalType: Int): Int = evalType match {
     case PythonEvalType.SQL_BATCHED_UDF | PythonEvalType.SQL_ARROW_BATCHED_UDF =>
@@ -118,60 +124,153 @@ object PythonUDF {
       PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF
     case PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF =>
       PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF
+    case elementwise if PythonEvalType.isElementwiseUDF(elementwise) => elementwise
     case other =>
       throw internalError(s"Not a rewritable elementwise UDF eval type: $other")
   }
 
   /**
    * Whether every Python UDF in `hof`'s lambdas can be lifted out by `ExtractPythonUDFFromLambda`.
-   * Used by `CheckAnalysis` to decide whether to reject the plan. These shapes cannot be rewritten:
-   *   - a UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`: the inner array
-   *     `i` is not a real column. (A UDF in a nested *argument*, `transform(arr, x ->
-   *     transform(udf(x), y -> y))`, is fine - `udf(x)` lifts onto `arr`.)
-   *   - a UDF in `aggregate` / `reduce`: the fold is sequential, so it sees earlier steps' outputs;
-   *   - a *nondeterministic iterated argument*, `filter(shuffle(arr), x -> f(x))`: the rewrite
-   *     references that argument several times (the carrier's `c0`, each lifted UDF's argument, the
-   *     `map_keys`/`map_values` desugar, the pairwise `array_sort` path), and nondeterministic
-   *     expressions are not subexpression-eliminated, so the copies would evaluate independently
-   *     and disagree - keeping the results misaligned. (This is distinct from a nondeterministic
-   *     UDF *call*, which `ExtractPythonUDFFromLambda.liftKey` keeps distinct but well-defined.)
+   * Used by `CheckAnalysis` to decide whether to reject the plan; `hof` must be a *nest root* - one
+   * that iterates real columns, not a free lambda variable - because `CheckAnalysis` fires only at
+   * nest roots (see its guard) and this predicate validates the whole nest below the root.
+   *
+   * Both the row-at-a-time and the vectorized scalar eval types are liftable, in a single lambda or
+   * nested lambdas: an inner lambda's UDF is lifted onto its (enclosing-variable) argument and then
+   * re-lifted outward one array level at a time, so `transform(arr, i -> transform(i, x -> f(x)))`
+   * works (`f` lifts to a depth-2 element-wise UDF over `arr`). A UDF in a nested *argument*,
+   * `transform(arr, x -> transform(udf(x), y -> y))`, lifts onto `arr` the same way.
+   *
+   * These shapes still cannot be rewritten and are rejected:
+   *   - a UDF in `aggregate` / `reduce` that reads the *accumulator*, or one in `finish`: the fold
+   *     is sequential in the accumulator, so such a UDF sees earlier steps' outputs, not array
+   *     elements. (A UDF reading only the *element* is liftable - see [[isRewritableShape]].)
+   *   - a *nondeterministic iterated argument*, `filter(shuffle(arr), x -> f(x))` (at the root or
+   *     any nested level): the rewrite references that argument several times (the carrier's `c0`,
+   *     each lifted UDF's argument, the `map_keys`/`map_values` desugar, the pairwise `array_sort`
+   *     path), and nondeterministic expressions are not subexpression-eliminated, so the copies
+   *     would evaluate independently and disagree - keeping the results misaligned. (This is
+   *     distinct from a nondeterministic UDF *call*, which `ExtractPythonUDFFromLambda.liftKey`
+   *     keeps distinct but well-defined.)
+   *   - a HOF (at any level) whose shape the rewrite does not model (see [[isRewritableShape]]).
+   *   - a UDF in a nested lambda that *captures an enclosing lambda's variable*, e.g.
+   *     `transform(m, row -> transform(row, x -> f(x, size(row))))` (see
+   *     [[noUDFCapturesEnclosingLambdaVariable]]).
    */
   def canRewritePythonUDFInLambda(hof: HigherOrderFunction): Boolean = {
-    // Only row-at-a-time eval types are supported; a vectorized UDF is not rewritable regardless
-    // of the enclosing function.
+    // Every Python UDF anywhere in the lambdas must be a rewritable flavor. `collect` is recursive,
+    // so this also covers UDFs in nested lambdas.
     val allUDFsRewritable = hof.functions.forall { f =>
       f.collect { case udf: PythonUDF => udf }.forall(isElementwiseRewritableUDF)
     }
     // Reading a free lambda variable means `hof` is itself nested in an enclosing lambda, so the
-    // array it iterates is not a real column (the nested case above).
+    // array it iterates is not a real column. Such an inner HOF is validated as part of its
+    // enclosing root's nest by `everyHofInNestRewritable`, never on its own.
     val iteratesRealColumns = !hasFreeLambdaVariable(hof)
-    // The rewrite duplicates the iterated argument expression, so a nondeterministic one would be
-    // evaluated more than once with diverging results.
-    val deterministicArguments = hof.arguments.forall(_.deterministic)
-    allUDFsRewritable && iteratesRealColumns && deterministicArguments && isRewritableShape(hof)
+    iteratesRealColumns && allUDFsRewritable && everyHofInNestRewritable(hof) &&
+      noUDFCapturesEnclosingLambdaVariable(hof)
   }
 
   /**
-   * The structural assumption the rewrite makes: one lambda with plain-variable parameters, over at
-   * least one array- or map-valued argument. `aggregate` / `reduce` fail this - they have two
-   * lambdas (`merge`, `finish`) - so a UDF in a fold is rejected. Checking the shape rather than
-   * listing classes means a new function of a familiar shape needs no change here.
-   *
-   * The function must also carry one of the result-type marker traits the rewrite dispatches on
-   * ([[ResultTypeFromArgument]] or [[ResultTypeFromFunction]]). Every built-in single-lambda HOF is
-   * marked today, but requiring it here keeps "analysis accepts exactly what the rule rewrites"
-   * structural: a future HOF missing both traits is rejected at analysis rather than slipping
-   * through and leaving the UDF inside the lambda at runtime.
+   * Whether every Python UDF in `hof` reads only the variables of the *immediate* lambda that
+   * contains it, never one bound by an *enclosing* lambda. A UDF that captures an enclosing
+   * lambda's variable - e.g. `transform(m, row -> transform(row, x -> f(x, size(row))))`, where
+   * `f` reads the outer `row` - stays rejected: lifting it would make the captured value a
+   * nested-lambda argument of the lifted UDF, and canonicalizing such a nested lambda leaks the
+   * captured variable into the UDF's `references` (a bug in [[HigherOrderFunction]]'s
+   * `canonicalized`, which renumbers free lambda-variable references), so `ExtractPythonUDFs` then
+   * fails to pull the UDF out of the lambda. A UDF over just its immediate lambda's variables -
+   * `f(x)`, or a UDF in a nested function's *argument* - is unaffected.
    */
-  private def isRewritableShape(hof: HigherOrderFunction): Boolean =
-    hof.functions.length == 1 &&
-      hof.functions.head.isInstanceOf[LambdaFunction] &&
-      hof.functions.head.asInstanceOf[LambdaFunction].arguments
-        .forall(_.isInstanceOf[NamedLambdaVariable]) &&
-      (hof.isInstanceOf[ResultTypeFromArgument] || hof.isInstanceOf[ResultTypeFromFunction]) &&
-      hof.arguments.exists { a =>
-        a.dataType.isInstanceOf[ArrayType] || a.dataType.isInstanceOf[MapType]
+  private def noUDFCapturesEnclosingLambdaVariable(hof: HigherOrderFunction): Boolean = {
+    def check(expr: Expression, immediate: Set[ExprId], enclosing: Set[ExprId]): Boolean =
+      expr match {
+        case LambdaFunction(body, args, _) =>
+          val bound = args.collect { case v: NamedLambdaVariable => v.exprId }.toSet
+          // Descending into a lambda: the previously-immediate variables become enclosing.
+          check(body, bound, enclosing ++ immediate)
+        case udf: PythonUDF =>
+          val capturesEnclosing = udf.exists {
+            case v: NamedLambdaVariable => enclosing.contains(v.exprId)
+            case _ => false
+          }
+          !capturesEnclosing && udf.children.forall(check(_, immediate, enclosing))
+        case other => other.children.forall(check(_, immediate, enclosing))
       }
+    check(hof, Set.empty, Set.empty)
+  }
+
+  /**
+   * Whether `hof` and every higher-order function nested within its lambda bodies is a rewritable
+   * shape (see [[isRewritableShape]]) with deterministic arguments. This is the recursive core that
+   * supports UDFs in *nested* lambdas: every HOF on the path from the root down to a UDF must be
+   * rewritable, because the rule lifts the UDF out one lambda level at a time. A nested HOF's
+   * iterated argument is legitimately an enclosing lambda variable, which is why the free-variable
+   * check in [[canRewritePythonUDFInLambda]] applies only at the root, not here.
+   */
+  private def everyHofInNestRewritable(hof: HigherOrderFunction): Boolean = {
+    val nestedHofs = hof.functions.flatMap(_.collect { case h: HigherOrderFunction => h })
+    (hof +: nestedHofs).forall { h =>
+      isRewritableShape(h) && h.arguments.forall(_.deterministic)
+    }
+  }
+
+  /**
+   * The structural assumption the rewrite makes. Two shapes qualify:
+   *
+   *  - a single-lambda function with plain-variable parameters, over at least one array- or
+   *    map-valued argument (`transform`, `filter`, the map family, ...). Checking the shape rather
+   *    than listing classes means a new function of a familiar shape needs no change here. The
+   *    function must also carry one of the result-type marker traits the rewrite dispatches on
+   *    ([[ResultTypeFromArgument]] or [[ResultTypeFromFunction]]). Every built-in single-lambda HOF
+   *    is marked today, but requiring it here keeps "analysis accepts exactly what the rule
+   *    rewrites" structural: a future HOF missing both traits is rejected at analysis rather than
+   *    slipping through and leaving the UDF inside the lambda at runtime.
+   *
+   *  - `aggregate` / `reduce` ([[ArrayAggregate]]), but only for a UDF that reads the iterated
+   *    *element*, never the accumulator (see [[isRewritableAggregate]]). The fold is sequential in
+   *    the accumulator, so a UDF over the accumulator sees earlier steps' outputs and cannot be
+   *    precomputed; a UDF over just the element is independent of the fold and lifts like
+   *    `transform`'s.
+   */
+  private def isRewritableShape(hof: HigherOrderFunction): Boolean = hof match {
+    case agg: ArrayAggregate => isRewritableAggregate(agg)
+    case _ =>
+      hof.functions.length == 1 &&
+        hof.functions.head.isInstanceOf[LambdaFunction] &&
+        hof.functions.head.asInstanceOf[LambdaFunction].arguments
+          .forall(_.isInstanceOf[NamedLambdaVariable]) &&
+        (hof.isInstanceOf[ResultTypeFromArgument] || hof.isInstanceOf[ResultTypeFromFunction]) &&
+        hof.arguments.exists { a =>
+          a.dataType.isInstanceOf[ArrayType] || a.dataType.isInstanceOf[MapType]
+        }
+  }
+
+  /**
+   * Whether an `aggregate` / `reduce` can have its lambda UDFs lifted. Its `merge` lambda is
+   * `(acc, x) -> body`; only a UDF reading the element `x` (and outer columns / constants) is
+   * liftable, precomputed over the whole array and read positionally like `transform`'s. A UDF that
+   * reads the accumulator `acc` is genuinely sequential and stays rejected. A UDF in `finish` is
+   * also rejected: `finish` runs once on the scalar accumulator, so there is no array to lift onto.
+   * (A UDF in `zero` is an ordinary scalar UDF outside every lambda and is handled by
+   * `ExtractPythonUDFs`, so it never reaches this predicate.)
+   */
+  private def isRewritableAggregate(agg: ArrayAggregate): Boolean =
+    (agg.merge, agg.finish) match {
+      case (LambdaFunction(_, Seq(accVar: NamedLambdaVariable, _: NamedLambdaVariable), _),
+            finish: LambdaFunction) =>
+        !udfReadsVariable(agg.merge, accVar.exprId) && !finish.exists(_.isInstanceOf[PythonUDF])
+      case _ => false
+    }
+
+  /** Whether any Python UDF within `e` reads the lambda variable with id `varId`. */
+  private def udfReadsVariable(e: Expression, varId: ExprId): Boolean = e.exists {
+    case udf: PythonUDF => udf.exists {
+      case v: NamedLambdaVariable => v.exprId == varId
+      case _ => false
+    }
+    case _ => false
+  }
 
   /**
    * Whether `e` references a [[NamedLambdaVariable]] that it does not itself bind, i.e. one bound
@@ -280,7 +379,14 @@ case class PythonUDF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    resultId: ExprId = NamedExpression.newExprId)
+    resultId: ExprId = NamedExpression.newExprId,
+    // For an element-wise UDF lifted out of a higher-order function's lambda (see
+    // `ExtractPythonUDFFromLambda`), the number of `array` levels the Python worker flattens off
+    // each argument before invoking the function, and re-nests onto the result: 1 for a UDF in a
+    // single lambda, and one more for each enclosing lambda when the UDF is lifted out of a nested
+    // lambda (e.g. `transform(arr, i -> transform(i, x -> f(x)))` lifts `f` to depth 2). Ignored
+    // for every non-element-wise eval type, where it stays at its default of 1.
+    elementwiseNestingDepth: Int = 1)
   extends Expression with PythonFuncExpression with Unevaluable {
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(

@@ -495,6 +495,16 @@ This works for a plain Python UDF as well as for a vectorized scalar UDF - a sca
 UDF still receives its native batch (a ``pandas.Series`` / ``pyarrow.Array``, or an iterator of
 them) over the flattened array elements, and one output value is produced per input element.
 
+The UDF may also sit inside a *nested* lambda, such as
+``transform(matrix, lambda row: transform(row, lambda x: udf(x)))``: it is applied once to the
+fully flattened leaf elements and the nested structure is rebuilt around the result. (A UDF in a
+nested lambda that also captures the *enclosing* lambda's variable, e.g.
+``transform(matrix, lambda row: transform(row, lambda x: udf(x, size(row))))``, is not yet
+supported and is rejected at analysis.) And it may sit inside ``aggregate`` / ``reduce`` when it
+reads only the iterated *element*, e.g. ``aggregate(values, lit(0), lambda acc, x: acc + udf(x))``;
+a UDF that reads the accumulator, or one in the ``aggregate`` finish function, is still rejected,
+because the fold is sequential and such a UDF cannot be precomputed over the whole array.
+
 The Arrow data type of the returned ``pyarrow.Array`` should match the declared ``returnType``.
 When there is a mismatch, Spark will attempt to convert the returned data to the expected type
 using Arrow's safe casting, which raises an error on overflow or precision loss.
