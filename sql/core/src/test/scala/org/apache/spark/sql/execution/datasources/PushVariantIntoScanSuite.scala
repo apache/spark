@@ -21,6 +21,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant._
+import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
@@ -776,6 +777,34 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
     }
   }
 
+  test("left outer join: projected right-side attributes use widened nullability") {
+    val leftKey = AttributeReference("leftKey", IntegerType, nullable = false)()
+    val rightKey = AttributeReference("rightKey", IntegerType, nullable = false)()
+    val rightVariant = AttributeReference("rightVariant", VariantType, nullable = false)()
+    val join = Join(
+      LocalRelation(leftKey),
+      LocalRelation(rightKey, rightVariant),
+      LeftOuter,
+      Some(EqualTo(leftKey, rightKey)),
+      JoinHint.NONE)
+    val extraction = VariantGet(
+      rightVariant,
+      path = Literal("$.label"),
+      targetType = StringType,
+      failOnError = false,
+      timeZoneId = Some(localTimeZone))
+    val plan = Project(Seq(rightKey, Alias(extraction, "label")()), join)
+
+    PullOutVariantExtractions(plan) match {
+      case Project(projectList, rewrittenJoin: Join) =>
+        val projectedRightKey = projectList.head.asInstanceOf[Attribute]
+        val childRightKey = rewrittenJoin.output.find(_.exprId == rightKey.exprId).get
+        assert(projectedRightKey.nullable)
+        assert(projectedRightKey.nullable == childRightKey.nullable)
+      case other => fail(s"Expected a Project over Join, but got:\n$other")
+    }
+  }
+
   test("full outer join: extractions on both (nullable) sides are pushed and value-preserving") {
     // In a FULL OUTER join both sides are nullable: unmatched rows are null-padded on the opposite
     // side. Extractions on each side push onto that side, computed before null-padding; the join
@@ -845,6 +874,33 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
         assert(rows.length == 1, s"Expected 1 row, got ${rows.length}")
         val avgVal = rows(0).getDouble(0)
         assert(avgVal == 42.0, s"Expected avg=42.0 (only k=2 row survives), got $avgVal")
+      }
+    }
+  }
+
+  test("strict variant_get crosses a join only with cast-error deferral") {
+    withVariantParquetTables(
+      VariantTable(
+        "SS", "k int, data variant",
+        Seq("(1, parse_json('\"hello\"'))", "(2, parse_json('42'))")),
+      VariantTable(
+        "DIM", "k int, name string",
+        Seq("(2, 'match')"))) {
+      val query =
+        "select avg(variant_get(ss.data, '$', 'int')) from SS ss join DIM d on ss.k = d.k"
+
+      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "false") {
+        val dataType = scanColumnType(sql(query).queryExecution.optimizedPlan, "data")
+        if (!useV2) {
+          assertShreddedStruct(dataType, expectFullVariantSlot = true)
+        } else {
+          assert(dataType == VariantType)
+        }
+        assert(sql(query).head().getDouble(0) == 42.0)
+      }
+
+      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
+        assertShreddedStruct(scanColumnType(sql(query).queryExecution.optimizedPlan, "data"))
       }
     }
   }

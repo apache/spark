@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Cast, Expression,
-  NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeSet, Cast,
+  Expression, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.plans.LeftExistence
@@ -177,11 +177,20 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
     case _ => false
   }
 
+  private def isJoinHoistable(e: Expression): Boolean = {
+    val hasStrictVariantGet = e.exists {
+      case g: VariantGet => g.failOnError
+      case _ => false
+    }
+    isHoistable(e) && (!hasStrictVariantGet ||
+      SQLConf.get.getConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR))
+  }
+
   /**
    * Collects hoisted extractions as aliases, de-duplicated by canonical form so a repeated
    * extraction maps to a single output slot.
    */
-  private class ExtractionHoister {
+  private class ExtractionHoister(hoistable: Expression => Boolean = isHoistable) {
     private val extracted = mutable.LinkedHashMap.empty[Expression, Alias]
 
     def aliases: Seq[NamedExpression] = extracted.values.toSeq
@@ -194,8 +203,12 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
 
     /** Replaces every hoistable extraction in `e` with a reference to its (new) alias. */
     def hoist(e: Expression): Expression = e.transformDown {
-      case ex if isHoistable(ex) => aliasFor(ex)
+      case ex if hoistable(ex) => aliasFor(ex)
     }
+  }
+
+  private def extractionHoister(crossesJoin: Boolean): ExtractionHoister = {
+    if (crossesJoin) new ExtractionHoister(isJoinHoistable) else new ExtractionHoister
   }
 
   // Recursively pushes hoisted extraction aliases down through a join tree until each lands in a
@@ -299,7 +312,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
       rightHoister: ExtractionHoister): Seq[NamedExpression] = {
     projectList.map { e =>
       e.transformDown {
-        case ex if isHoistable(ex) =>
+        case ex if isJoinHoistable(ex) =>
           if (ex.references.subsetOf(leftOutput)) {
             leftHoister.aliasFor(ex)
           } else if (ex.references.subsetOf(rightOutput)) {
@@ -312,7 +325,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
   }
 
   private def rewriteAggregate(agg: Aggregate): LogicalPlan = {
-    val hoister = new ExtractionHoister
+    val hoister = extractionHoister(agg.child.containsPattern(JOIN))
     // Only hoist extractions that sit inside an aggregate function's arguments (or filter). A
     // top-level extraction in `aggregateExpressions` is a grouping-key reference (grouping keys are
     // already pulled out by `PullOutGroupingExpressions`); hoisting it would leave the `Aggregate`
@@ -388,7 +401,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
 
   private def rewriteSortUnderProject(
       project: Project, projectList: Seq[NamedExpression], sort: Sort): LogicalPlan = {
-    val hoister = new ExtractionHoister
+    val hoister = extractionHoister(sort.child.containsPattern(JOIN))
     val newOrder = sort.order.map(hoister.hoist(_).asInstanceOf[SortOrder])
     if (hoister.isEmpty) {
       project
@@ -419,7 +432,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
   // yielding a multi-slot shredded struct with a full-variant slot -- the same shape as a
   // Sort-under-Project whose `v` is also selected. See the class doc.
   private def rewriteBareSort(sort: Sort): LogicalPlan = {
-    val hoister = new ExtractionHoister
+    val hoister = extractionHoister(sort.child.containsPattern(JOIN))
     val newOrder = sort.order.map(hoister.hoist(_).asInstanceOf[SortOrder])
     if (hoister.isEmpty) {
       sort
@@ -442,8 +455,8 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
       project: Project, projectList: Seq[NamedExpression], join: Join): LogicalPlan = {
     val leftOutput = join.left.outputSet
     val rightOutput = join.right.outputSet
-    val leftHoister = new ExtractionHoister
-    val rightHoister = new ExtractionHoister
+    val leftHoister = extractionHoister(crossesJoin = true)
+    val rightHoister = extractionHoister(crossesJoin = true)
 
     // A single variant extraction references exactly one attribute, hence one join side; route it
     // to that side's hoister. Anything not cleanly on one side is left in place. We hoist from both
@@ -451,7 +464,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
     // join (its extractions -- e.g. aggregate arguments hoisted here by `rewriteAggregate`, or a
     // user's `SELECT variant_get(...)`), so the pushdown sees them below the join.
     val newCondition = join.condition.map(_.transformDown {
-      case ex if isHoistable(ex) =>
+      case ex if isJoinHoistable(ex) =>
         if (ex.references.subsetOf(leftOutput)) {
           leftHoister.aliasFor(ex)
         } else if (ex.references.subsetOf(rightOutput)) {
@@ -481,7 +494,13 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
         left = pushSideAliases(join.left, leftHoister.aliases, needed),
         right = pushSideAliases(join.right, rightHoister.aliases, needed),
         condition = newCondition)
-      project.copy(projectList = newProjectList, child = newJoin)
+      // Outer joins widen attributes on their nullable side. Remap references in the parent
+      // Project to the copied Join's actual output so their nullability matches the child.
+      val newJoinOutput = AttributeMap(newJoin.output.map(attr => attr -> attr))
+      val remappedProjectList = newProjectList.map(_.transformDown {
+        case attr: Attribute => newJoinOutput.getOrElse(attr, attr)
+      }.asInstanceOf[NamedExpression])
+      project.copy(projectList = remappedProjectList, child = newJoin)
     }
   }
 }
