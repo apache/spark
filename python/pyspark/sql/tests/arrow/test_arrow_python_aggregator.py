@@ -31,7 +31,7 @@ from pyspark.testing.sqlutils import (
 
 
 if have_pyarrow:
-    from pyspark.sql.pandas.aggregator import Aggregator, arrow_udaf
+    from pyspark.sql.pandas.aggregator import Aggregator, udaf
 
     class Mean(Aggregator):
         @property
@@ -94,7 +94,7 @@ class ArrowPythonAggregatorTestsMixin:
     def test_incremental_aggregator_matches_builtin_mean(self):
         df = self._data()
         result = (
-            df.groupBy("k").agg(arrow_udaf(Mean())(sf.col("v")).alias("m")).orderBy("k").collect()
+            df.groupBy("k").agg(udaf(Mean())(sf.col("v")).alias("m")).orderBy("k").collect()
         )
         expected = df.groupBy("k").agg(sf.avg("v").alias("m")).orderBy("k").collect()
         got = {r["k"]: r["m"] for r in result}
@@ -103,7 +103,7 @@ class ArrowPythonAggregatorTestsMixin:
 
     def test_incremental_aggregator_no_group(self):
         df = self._data()
-        result = df.agg(arrow_udaf(Mean())(sf.col("v")).alias("m")).collect()
+        result = df.agg(udaf(Mean())(sf.col("v")).alias("m")).collect()
         expected = df.agg(sf.avg("v").alias("m")).collect()
         self.assertAlmostEqual(result[0]["m"], expected[0]["m"], places=6)
 
@@ -111,7 +111,7 @@ class ArrowPythonAggregatorTestsMixin:
         df = self._data()
         result = (
             df.groupBy("k")
-            .agg(arrow_udaf(SumSquares())(sf.col("v")).alias("s"))
+            .agg(udaf(SumSquares())(sf.col("v")).alias("s"))
             .orderBy("k")
             .collect()
         )
@@ -133,7 +133,7 @@ class ArrowPythonAggregatorTestsMixin:
             rows = (
                 base.repartition(n, sf.col("v"))
                 .groupBy("k")
-                .agg(arrow_udaf(Mean())(sf.col("v")).alias("m"))
+                .agg(udaf(Mean())(sf.col("v")).alias("m"))
                 .orderBy("k")
                 .collect()
             )

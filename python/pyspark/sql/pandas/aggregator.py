@@ -25,7 +25,7 @@ from pyspark.errors import PySparkTypeError
 from pyspark.sql.types import DataType, StructType
 from pyspark.util import PythonEvalType
 
-__all__ = ["Aggregator", "arrow_udaf"]
+__all__ = ["Aggregator", "udaf"]
 
 
 class Aggregator(ABC):
@@ -50,7 +50,7 @@ class Aggregator(ABC):
     --------
     A mean aggregator::
 
-        from pyspark.sql.pandas.aggregator import Aggregator, arrow_udaf
+        from pyspark.sql.pandas.aggregator import Aggregator, udaf
         from pyspark.sql.types import StructType, StructField, DoubleType, LongType
 
         class Mean(Aggregator):
@@ -78,7 +78,7 @@ class Aggregator(ABC):
             def finish(self, buffer):
                 return buffer[0] / buffer[1] if buffer[1] else None
 
-        mean = arrow_udaf(Mean())
+        mean = udaf(Mean())
         df.groupBy("k").agg(mean(df.v)).show()
     """
 
@@ -121,13 +121,17 @@ class Aggregator(ABC):
     # a function -- the worker calls :meth:`zero`/:meth:`reduce`/:meth:`merge`/:meth:`finish`.
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError(
-            "An Aggregator is not directly callable; wrap it with arrow_udaf(...)."
+            "An Aggregator is not directly callable; wrap it with udaf(...)."
         )
 
 
-def arrow_udaf(agg: "Aggregator") -> Any:
+def udaf(agg: "Aggregator") -> Any:
     """
-    Turn an :class:`Aggregator` instance into a callable usable in ``groupBy().agg(...)``.
+    Turn an :class:`Aggregator` instance into a callable usable in ``groupBy().agg(...)``, the
+    Python counterpart of Scala's ``functions.udaf``.
+
+    The aggregator is executed with true incremental (partial) aggregation and transfers its
+    intermediate buffer as Arrow; PyArrow is therefore required.
 
     .. versionadded:: 4.2.0
 
@@ -140,8 +144,16 @@ def arrow_udaf(agg: "Aggregator") -> Any:
     -------
     function
         A callable that, applied to input columns, produces an aggregate :class:`Column`.
+
+    Raises
+    ------
+    :class:`PySparkImportError`
+        If a supported version of PyArrow is not installed.
     """
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
     from pyspark.sql.utils import is_remote
+
+    require_minimum_pyarrow_version()
 
     if is_remote():
         from pyspark.sql.connect.udf import UserDefinedFunction
