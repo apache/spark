@@ -25,20 +25,16 @@ from matplotlib.figure import Figure
 from pandas.core.dtypes.inference import is_list_like
 from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
 from pandas.plotting._core import PlotAccessor
-from pandas.plotting._matplotlib import AreaPlot as PandasAreaPlot  # type: ignore[import-not-found]
-from pandas.plotting._matplotlib import BarhPlot as PandasBarhPlot  # type: ignore[import-not-found]
-from pandas.plotting._matplotlib import BarPlot as PandasBarPlot  # type: ignore[import-not-found]
-from pandas.plotting._matplotlib import BoxPlot as PandasBoxPlot  # type: ignore[import-not-found]
-from pandas.plotting._matplotlib import HistPlot as PandasHistPlot  # type: ignore[import-not-found]
-from pandas.plotting._matplotlib import KdePlot as PandasKdePlot  # type: ignore[import-not-found]
-from pandas.plotting._matplotlib import LinePlot as PandasLinePlot  # type: ignore[import-not-found]
-from pandas.plotting._matplotlib import PiePlot as PandasPiePlot  # type: ignore[import-not-found]
-from pandas.plotting._matplotlib import (
-    ScatterPlot as PandasScatterPlot,  # type: ignore[import-not-found]
-)
-from pandas.plotting._matplotlib.core import (
-    MPLPlot as PandasMPLPlot,  # type: ignore[import-not-found]
-)
+from pandas.plotting._matplotlib import AreaPlot as PandasAreaPlot
+from pandas.plotting._matplotlib import BarhPlot as PandasBarhPlot
+from pandas.plotting._matplotlib import BarPlot as PandasBarPlot
+from pandas.plotting._matplotlib import BoxPlot as PandasBoxPlot
+from pandas.plotting._matplotlib import HistPlot as PandasHistPlot
+from pandas.plotting._matplotlib import KdePlot as PandasKdePlot
+from pandas.plotting._matplotlib import LinePlot as PandasLinePlot
+from pandas.plotting._matplotlib import PiePlot as PandasPiePlot
+from pandas.plotting._matplotlib import ScatterPlot as PandasScatterPlot
+from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot
 
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas.plot import (
