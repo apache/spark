@@ -122,11 +122,12 @@ class BlockManagerMasterEndpoint(
     ExecutionContext.fromExecutorService(askThreadPool)
 
 
+  // Created here so onStop can shut it down, but the cleaner is not started until onStart: it
+  // routes removals through self.ask(RemoveRdd(...)), and self is only valid once the endpoint is
+  // registered (i.e. from onStart onward).
   private[spark] val cleanerThreadpool: Option[ThreadPoolExecutor] = {
     if (conf.get(config.SPARK_TTL_BLOCK_CLEANER).isDefined) {
-      val pool = ThreadUtils.newDaemonFixedThreadPool(1, "rdd-ttl-cleaner")
-      pool.execute(new TTLCleaner)
-      Some(pool)
+      Some(ThreadUtils.newDaemonFixedThreadPool(1, "rdd-ttl-cleaner"))
     } else {
       None
     }
@@ -289,7 +290,7 @@ class BlockManagerMasterEndpoint(
       context.reply(updateRDDBlockVisibility(taskId, visible))
   }
 
-  private def updateBlockAtime(blockId: BlockId) = {
+  private def updateBlockAtime(blockId: BlockId): Unit = {
     // First handle "regular" blocks
     if (!blockId.isShuffle) {
       // Only update access times if we have the cleaner enabled.
@@ -299,11 +300,18 @@ class BlockManagerMasterEndpoint(
         // so we don't bother checking the return value here.
         // For now we only do RDD blocks, because I'm not convinced it's safe to TTL
         // clean Broadcast blocks, but maybe we can revisit that.
-        blockId.asRDDId.map { r => rddAccessTime.put(r.rddId, System.currentTimeMillis()) }
+        // Only record an access for a block we actually track: a lookup of an absent/evicted
+        // block must not create a phantom rddAccessTime entry that the cleaner would later try to
+        // reap (broadcasting a RemoveRdd for an RDD that has nothing to remove).
+        blockId.asRDDId.foreach { r =>
+          if (blockLocations.containsKey(blockId)) {
+            rddAccessTime.put(r.rddId, System.currentTimeMillis())
+          }
+        }
       }
     } else if (conf.get(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
       // We track shuffles in the mapoutput tracker.
-      blockId.asShuffleId.map(s => mapOutputTracker.updateShuffleAtime(s.shuffleId))
+      blockId.asShuffleId.foreach(s => mapOutputTracker.updateShuffleAtime(s.shuffleId))
     }
   }
 
@@ -311,49 +319,47 @@ class BlockManagerMasterEndpoint(
   private class TTLCleaner extends Runnable {
     override def run(): Unit = {
       try {
-        // Poll the shuffle access times if we're configured for it.
+        // Poll the RDD access times if we're configured for it.
         conf.get(config.SPARK_TTL_BLOCK_CLEANER) match {
           case Some(ttl) =>
             while (true) {
               val maxAge = System.currentTimeMillis() - ttl
-              // Find the elements to be removed & update oldest remaining time (if any)
+              // Find the elements to be removed & track the oldest remaining time (if any).
+              // asScala over a ConcurrentHashMap is weakly consistent, so a concurrent put during
+              // iteration is safe (never throws); toList snapshots the (id, atime) pairs we saw.
               var oldest = System.currentTimeMillis()
-              // Make a copy here to reduce the chance of CME
-              try {
-                val toBeRemoved = rddAccessTime.asScala.toList.flatMap { case (rddId, atime) =>
-                  if (atime < maxAge) {
-                    Some(rddId)
-                  } else {
-                    if (atime < oldest) {
-                      oldest = atime
-                    }
-                    None
+              val toBeRemoved = rddAccessTime.asScala.toList.flatMap { case (rddId, atime) =>
+                if (atime < maxAge) {
+                  Some((rddId, atime))
+                } else {
+                  if (atime < oldest) {
+                    oldest = atime
                   }
-                }.toList
-                toBeRemoved.map { rddId =>
-                  try {
-                    // Always remove the RDD from our tracking list first incase an error occurs.
-                    rddAccessTime.remove(rddId)
-                    // Route the removal through our own message loop rather than calling
-                    // removeRdd directly: this endpoint is an IsolatedThreadSafeRpcEndpoint whose
-                    // non-concurrent maps (blockLocations, blockChecksums, sealedChecksums, ...)
-                    // are only safe because a single dispatcher thread touches them. Doing the
-                    // mutation here on the cleaner thread would race that dispatcher thread; asking
-                    // ourselves keeps removeRdd on the dispatcher thread where it belongs.
-                    self.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
-                  } catch {
-                    case NonFatal(e) =>
-                      logDebug(log"Error removing rdd ${MDC(RDD_ID, rddId)} with TTL cleaner", e)
-                  }
+                  None
                 }
-                // Wait until the next possible element to be removed
-                val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 100)
-                Thread.sleep(delay)
-              } catch {
-                case _: java.util.ConcurrentModificationException =>
-                  // Just retry, blocks were stored while we were iterating
-                  Thread.sleep(10)
               }
+              toBeRemoved.foreach { case (rddId, atime) =>
+                try {
+                  // Only act if the atime has not changed since our snapshot: a concurrent access
+                  // in that window means the RDD is back in use and must not be reaped.
+                  // remove(key, value) is a no-op (returns false) when the value differs.
+                  if (rddAccessTime.remove(rddId, atime)) {
+                    // Route the removal through our own message loop rather than calling removeRdd
+                    // directly: this endpoint is an IsolatedThreadSafeRpcEndpoint whose
+                    // non-concurrent maps (blockLocations, blockChecksums, sealedChecksums, ...) are
+                    // only safe because a single dispatcher thread touches them. Doing the mutation
+                    // here on the cleaner thread would race that dispatcher thread; asking ourselves
+                    // keeps removeRdd on the dispatcher thread where it belongs.
+                    self.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
+                  }
+                } catch {
+                  case NonFatal(e) =>
+                    logDebug(log"Error removing rdd ${MDC(RDD_ID, rddId)} with TTL cleaner", e)
+                }
+              }
+              // Wait until the next possible element to be removed
+              val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 100)
+              Thread.sleep(delay)
             }
           case None =>
             logDebug("Tried to start TTL cleaner when not configured.")
@@ -542,9 +548,6 @@ class BlockManagerMasterEndpoint(
 
     Future.sequence(removeRddFromExecutorsFutures ++ removeRddBlockViaExtShuffleServiceFutures)
   }
-
-  // For testing.
-  private[spark] def getMapOutputTrackerMaster(): MapOutputTrackerMaster = mapOutputTracker
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
     // Start with removing shuffle blocks without an associated executor (e.g. ESS only).
@@ -1247,9 +1250,15 @@ class BlockManagerMasterEndpoint(
     }
   }
 
+  override def onStart(): Unit = {
+    // Start the TTL cleaner only now that the endpoint is registered: the cleaner routes removals
+    // through self.ask(RemoveRdd(...)), and self is only valid from onStart onward.
+    cleanerThreadpool.foreach(_.execute(new TTLCleaner))
+  }
+
   override def onStop(): Unit = {
     askThreadPool.shutdownNow()
-    cleanerThreadpool.map(_.shutdownNow())
+    cleanerThreadpool.foreach(_.shutdownNow())
   }
 }
 
