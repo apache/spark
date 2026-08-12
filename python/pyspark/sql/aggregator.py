@@ -21,7 +21,7 @@ Incremental user-defined aggregators for PySpark, the Python analog of Scala's
 from abc import ABC, abstractmethod
 from typing import Any, Tuple
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 from pyspark.sql.types import DataType, StructType
 from pyspark.util import PythonEvalType
 
@@ -120,8 +120,9 @@ class Aggregator(ABC):
     # lets it satisfy ``UserDefinedFunction``'s ``callable`` check. It is never actually invoked as
     # a function -- the worker calls :meth:`zero`/:meth:`reduce`/:meth:`merge`/:meth:`finish`.
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError(
-            "An Aggregator is not directly callable; wrap it with udaf(...)."
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "calling an Aggregator directly; wrap it with udaf(...)"},
         )
 
 

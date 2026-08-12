@@ -23,8 +23,8 @@ from pyspark.sql.types import (
     StructField,
     StructType,
 )
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
