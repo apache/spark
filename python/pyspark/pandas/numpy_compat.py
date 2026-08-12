@@ -86,7 +86,17 @@ unary_np_spark_mappings = {
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
-    "signbit": lambda c: F.when(c < 0, True).otherwise(False),
+    "signbit": lambda c: F.when(
+        # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-double
+        # null and must propagate. A NaN from a default (numpy-backed) dtype arrives
+        # as a double null and must map to False (np.signbit(nan) is False); it falls
+        # through to otherwise(False) below. A nullable Float64 <NA> is also a double
+        # null, indistinguishable from a NaN after from_pandas, so it cannot propagate.
+        c.isNull() & ~F.typeof(c).isin("float", "double"),
+        F.lit(None).cast("boolean"),
+    )
+    .when((c < 0) | (c.cast("string") == "-0.0"), True)
+    .otherwise(False),
     "sin": F.sin,
     "sinh": F.sinh,
     "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),  # type: ignore[call-overload]
