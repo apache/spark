@@ -669,6 +669,17 @@ Sort [c#x ASC NULLS FIRST], true
 
 
 -- !query
+SELECT sort_array(collect_set(c)) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
+-- !query analysis
+Aggregate [sort_array(collect_set(c#x, 0, 0, true), true) AS sort_array(collect_set(c), true)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
 SELECT unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
 Project [unix_timestamp(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss)#xL]
