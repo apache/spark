@@ -78,9 +78,9 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       currL1 = Array.ofDim[Double](n)
       currWeightSum = Array.ofDim[Double](n)
       nnz = Array.ofDim[Long](n)
-      // NaN marks dimensions where no non-NaN nonzero value has been observed.
-      currMax = Array.fill[Double](n)(Double.NaN)
-      currMin = Array.fill[Double](n)(Double.NaN)
+      // Use the mathematical identities for max and min as initial values.
+      currMax = Array.fill[Double](n)(Double.NegativeInfinity)
+      currMin = Array.fill[Double](n)(Double.PositiveInfinity)
     }
 
     require(n == instance.size, s"Dimensions mismatch when adding new sample." +
@@ -95,13 +95,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val localCurrMax = currMax
     val localCurrMin = currMin
     instance.foreachNonZero { (index, value) =>
-      if (!value.isNaN) {
-        if (localCurrMax(index).isNaN || localCurrMax(index) < value) {
-          localCurrMax(index) = value
-        }
-        if (localCurrMin(index).isNaN || localCurrMin(index) > value) {
-          localCurrMin(index) = value
-        }
+      if (localCurrMax(index) < value) {
+        localCurrMax(index) = value
+      }
+      if (localCurrMin(index) > value) {
+        localCurrMin(index) = value
       }
 
       val prevMean = localCurrMean(index)
@@ -153,12 +151,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
           // merge l1 together
           currL1(i) += other.currL1(i)
           // merge max and min
-          if (currMax(i).isNaN || other.currMax(i) > currMax(i)) {
-            currMax(i) = other.currMax(i)
-          }
-          if (currMin(i).isNaN || other.currMin(i) < currMin(i)) {
-            currMin(i) = other.currMin(i)
-          }
+          currMax(i) = math.max(currMax(i), other.currMax(i))
+          currMin(i) = math.min(currMin(i), other.currMin(i))
         }
         currWeightSum(i) = totalNnz
         nnz(i) = totalCnnz
@@ -258,7 +252,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
     var i = 0
     while (i < n) {
-      if (nnz(i) < totalCnt && (currMax(i).isNaN || currMax(i) < 0.0)) currMax(i) = 0.0
+      if ((nnz(i) < totalCnt) && (currMax(i) < 0.0)) currMax(i) = 0.0
       i += 1
     }
     Vectors.dense(currMax)
@@ -274,7 +268,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
     var i = 0
     while (i < n) {
-      if (nnz(i) < totalCnt && (currMin(i).isNaN || currMin(i) > 0.0)) currMin(i) = 0.0
+      if ((nnz(i) < totalCnt) && (currMin(i) > 0.0)) currMin(i) = 0.0
       i += 1
     }
     Vectors.dense(currMin)

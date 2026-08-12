@@ -271,19 +271,22 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
   }
 
-  test("min/max with NaN values (SPARK-20711)") {
+  test("min/max with NaN and infinite values (SPARK-20711)") {
     val summarizer = new MultivariateOnlineSummarizer()
       .add(Vectors.dense(
-        Double.NaN, Double.NaN, Double.NaN, 0.0, Double.MinValue, Double.MaxValue))
+        Double.NaN, Double.NaN, Double.NaN, 0.0, Double.MinValue, Double.MaxValue,
+        Double.NegativeInfinity, Double.PositiveInfinity))
       .add(Vectors.dense(
-        Double.NaN, -1.0, 0.0, 0.0, Double.MinValue, Double.MaxValue))
+        Double.NaN, -1.0, 0.0, 0.0, Double.MinValue, Double.MaxValue,
+        Double.NegativeInfinity, Double.PositiveInfinity))
       .add(Vectors.dense(
-        Double.NaN, 2.0, Double.NaN, 0.0, Double.MinValue, Double.MaxValue))
+        Double.NaN, 2.0, Double.NaN, 0.0, Double.MinValue, Double.MaxValue,
+        Double.NegativeInfinity, Double.PositiveInfinity))
 
     val min = summarizer.min
     val max = summarizer.max
-    assert(min(0).isNaN)
-    assert(max(0).isNaN)
+    assert(min(0) === Double.PositiveInfinity)
+    assert(max(0) === Double.NegativeInfinity)
     assert(min(1) === -1.0)
     assert(max(1) === 2.0)
     assert(min(2) === 0.0)
@@ -294,26 +297,36 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(max(4) === Double.MinValue)
     assert(min(5) === Double.MaxValue)
     assert(max(5) === Double.MaxValue)
+    assert(min(6) === Double.NegativeInfinity)
+    assert(max(6) === Double.NegativeInfinity)
+    assert(min(7) === Double.PositiveInfinity)
+    assert(max(7) === Double.PositiveInfinity)
 
     def create(values: Double*): MultivariateOnlineSummarizer = {
       new MultivariateOnlineSummarizer().add(Vectors.dense(values.toArray))
     }
 
     val mergedSummarizers = Seq(
-      create(Double.NaN, Double.NaN, Double.NaN)
-        .merge(create(Double.NaN, 2.0, 0.0)),
-      create(Double.NaN, 2.0, 0.0)
-        .merge(create(Double.NaN, Double.NaN, Double.NaN)))
+      create(Double.NaN, Double.NaN, Double.NaN,
+        Double.NegativeInfinity, Double.PositiveInfinity)
+        .merge(create(Double.NaN, 2.0, 0.0, -1.0, 1.0)),
+      create(Double.NaN, 2.0, 0.0, -1.0, 1.0)
+        .merge(create(Double.NaN, Double.NaN, Double.NaN,
+          Double.NegativeInfinity, Double.PositiveInfinity)))
 
     mergedSummarizers.foreach { merged =>
       val mergedMin = merged.min
       val mergedMax = merged.max
-      assert(mergedMin(0).isNaN)
-      assert(mergedMax(0).isNaN)
+      assert(mergedMin(0) === Double.PositiveInfinity)
+      assert(mergedMax(0) === Double.NegativeInfinity)
       assert(mergedMin(1) === 2.0)
       assert(mergedMax(1) === 2.0)
       assert(mergedMin(2) === 0.0)
       assert(mergedMax(2) === 0.0)
+      assert(mergedMin(3) === Double.NegativeInfinity)
+      assert(mergedMax(3) === -1.0)
+      assert(mergedMin(4) === 1.0)
+      assert(mergedMax(4) === Double.PositiveInfinity)
     }
   }
 

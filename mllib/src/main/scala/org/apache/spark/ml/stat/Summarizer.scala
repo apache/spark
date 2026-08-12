@@ -512,12 +512,12 @@ private[spark] class SummarizerBuffer(
         currWeightSum = Array.ofDim[Double](n)
       }
       if (requestedCompMetrics.contains(ComputeNNZ)) { nnz = Array.ofDim[Long](n) }
-      // NaN marks dimensions where no non-NaN nonzero value has been observed.
+      // Use the mathematical identities for max and min as initial values.
       if (requestedCompMetrics.contains(ComputeMax)) {
-        currMax = Array.fill[Double](n)(Double.NaN)
+        currMax = Array.fill[Double](n)(Double.NegativeInfinity)
       }
       if (requestedCompMetrics.contains(ComputeMin)) {
-        currMin = Array.fill[Double](n)(Double.NaN)
+        currMin = Array.fill[Double](n)(Double.PositiveInfinity)
       }
     }
 
@@ -534,15 +534,11 @@ private[spark] class SummarizerBuffer(
       val localCurrMax = currMax
       val localCurrMin = currMin
       nonZeroIterator.foreach { case (index, value) =>
-        if ((localCurrMax != null || localCurrMin != null) && !value.isNaN) {
-          if (localCurrMax != null &&
-              (localCurrMax(index).isNaN || localCurrMax(index) < value)) {
-            localCurrMax(index) = value
-          }
-          if (localCurrMin != null &&
-              (localCurrMin(index).isNaN || localCurrMin(index) > value)) {
-            localCurrMin(index) = value
-          }
+        if (localCurrMax != null && localCurrMax(index) < value) {
+          localCurrMax(index) = value
+        }
+        if (localCurrMin != null && localCurrMin(index) > value) {
+          localCurrMin(index) = value
         }
 
         if (localCurrWeightSum != null) {
@@ -627,12 +623,8 @@ private[spark] class SummarizerBuffer(
         // merge l1 together
         if (currL1 != null) { currL1(i) += other.currL1(i) }
         // merge max and min
-        if (currMax != null && (currMax(i).isNaN || other.currMax(i) > currMax(i))) {
-          currMax(i) = other.currMax(i)
-        }
-        if (currMin != null && (currMin(i).isNaN || other.currMin(i) < currMin(i))) {
-          currMin(i) = other.currMin(i)
-        }
+        if (currMax != null) { currMax(i) = math.max(currMax(i), other.currMax(i)) }
+        if (currMin != null) { currMin(i) = math.min(currMin(i), other.currMin(i)) }
         if (nnz != null) { nnz(i) += other.nnz(i) }
         i += 1
       }
@@ -756,7 +748,7 @@ private[spark] class SummarizerBuffer(
 
     var i = 0
     while (i < n) {
-      if (nnz(i) < totalCnt && (currMax(i).isNaN || currMax(i) < 0.0)) currMax(i) = 0.0
+      if ((nnz(i) < totalCnt) && (currMax(i) < 0.0)) currMax(i) = 0.0
       i += 1
     }
     Vectors.dense(currMax)
@@ -771,7 +763,7 @@ private[spark] class SummarizerBuffer(
 
     var i = 0
     while (i < n) {
-      if (nnz(i) < totalCnt && (currMin(i).isNaN || currMin(i) > 0.0)) currMin(i) = 0.0
+      if ((nnz(i) < totalCnt) && (currMin(i) > 0.0)) currMin(i) = 0.0
       i += 1
     }
     Vectors.dense(currMin)
