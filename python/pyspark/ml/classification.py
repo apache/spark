@@ -39,9 +39,8 @@ from typing import (
 )
 
 from pyspark import inheritable_thread_target, keyword_only, since
-from pyspark.ml import Estimator, Model, PredictionModel, Predictor
 from pyspark.ml import functions as MF
-from pyspark.ml.base import _PredictorParams
+from pyspark.ml.base import Estimator, Model, PredictionModel, Predictor, _PredictorParams
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.param.shared import (
