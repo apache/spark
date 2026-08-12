@@ -70,13 +70,29 @@ class _PyArrowTableToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
     its own.
     """
 
+    @staticmethod
+    def _repr_dataframe(df) -> str:
+        """
+        Format a pandas DataFrame result as a golden-file cell: per-column tolist()
+        for a stable, Python-native representation, mirroring goldenutils'
+        ``repr_pandas_series_value`` for the Series case.
+
+        This deliberately does NOT go through ``repr_value``/``repr_pandas_value``
+        (which use ``to_json``): Table.to_pandas() can yield dates far outside the
+        nanosecond range (e.g. date_as_object=False on a year-9999 date), which
+        ``DataFrame.to_json`` cannot serialize (OverflowError). tolist() is safe.
+        """
+        body = str({name: col.tolist() for name, col in df.items()}).replace("\n", " ")
+        schema = ", ".join(f"{t} {d.name}" for t, d in df.dtypes.items())
+        return f"{body}@Dataframe[{schema}]"
+
     def _to_pandas_cell(self, table, **to_pandas_kwargs) -> str:
         """
         Convert ``table`` via ``to_pandas(**to_pandas_kwargs)`` and format the result
         as a golden-file cell, returning ``ERR@<ExceptionClass>`` if it raises.
         """
         try:
-            return self.repr_value(table.to_pandas(**to_pandas_kwargs), max_len=0)
+            return self._repr_dataframe(table.to_pandas(**to_pandas_kwargs))
         except Exception as e:
             return f"ERR@{type(e).__name__}"
 

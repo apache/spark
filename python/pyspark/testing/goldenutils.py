@@ -366,16 +366,19 @@ class GoldenFileTestMixin:
         """
         Format a pandas DataFrame for golden file.
 
-        Uses per-column tolist() for a stable, Python-native representation (as
-        ``repr_pandas_series_value`` does), which also avoids ``to_json`` overflowing
-        on out-of-range datetimes (e.g. dates far outside the nanosecond range).
+        Parameters
+        ----------
+        value : pd.DataFrame
+            The pandas DataFrame to represent.
+        max_len : int, default 32
+            Maximum length for the value string portion.  0 means no limit.
 
         Returns
         -------
         str
-            "{col: [values], ...}@Dataframe[name dtype, ...]"
+            "value@Dataframe[schema]"
         """
-        v_str = str({name: col.tolist() for name, col in value.items()}).replace("\n", " ")
+        v_str = value.to_json().replace("\n", " ")
         if max_len > 0:
             v_str = v_str[:max_len]
         simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
