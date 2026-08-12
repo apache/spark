@@ -16,16 +16,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib.util
+import ctypes
 import glob
+import importlib.util
 import os
 import sys
-import ctypes
+from dataclasses import dataclass
+from pathlib import Path
+from shutil import copyfile, copytree, rmtree
+
 from setuptools import setup
 from setuptools.command.install import install
-from shutil import copyfile, copytree, rmtree
-from pathlib import Path
-from dataclasses import dataclass
 
 if (
     # When we package, the parent directory 'classic' dir

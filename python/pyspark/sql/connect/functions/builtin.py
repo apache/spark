@@ -15,66 +15,71 @@
 # limitations under the License.
 #
 import decimal
-import inspect
-import warnings
 import functools
-from typing import (
-    Any,
-    Mapping,
-    TYPE_CHECKING,
-    Union,
-    Sequence,
-    List,
-    overload,
-    Optional,
-    Tuple,
-    Type,
-    Callable,
-    ValuesView,
-    cast,
-)
+import inspect
 import random as py_random
 import sys
+import warnings
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    ValuesView,
+    cast,
+    overload,
+)
 
 import numpy as np
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
 from pyspark.sql import Column
+from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.connect.expressions import (
-    CaseWhen,
-    SortOrder,
-    Expression,
-    LiteralExpression,
-    ColumnReference,
-    UnresolvedFunction,
-    UnresolvedStar,
-    SQLExpression,
-    LambdaFunction,
-    UnresolvedNamedLambdaVariable,
     CallFunction,
+    CaseWhen,
+    ColumnReference,
+    Expression,
+    LambdaFunction,
+    LiteralExpression,
+    SortOrder,
+    SQLExpression,
+    UnresolvedFunction,
+    UnresolvedNamedLambdaVariable,
+    UnresolvedStar,
 )
 from pyspark.sql.connect.udf import _create_py_udf
-from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
-from pyspark.sql.connect.udtf import _create_py_udtf, _create_pyarrow_udtf
-from pyspark.sql import functions as pysparkfuncs
+from pyspark.sql.connect.udtf import (  # noqa: F401
+    AnalyzeArgument,
+    AnalyzeResult,
+    _create_py_udtf,
+    _create_pyarrow_udtf,
+)
 from pyspark.sql.types import (
-    _from_numpy_type,
-    DataType,
-    StructType,
     ArrayType,
+    DataType,
     MapType,
     StringType,
+    StructType,
+    _from_numpy_type,
+)
+from pyspark.sql.types import (
     UserDefinedType as _UserDefinedType,
 )
 
 if TYPE_CHECKING:
     from pyspark.sql.types import UserDefinedType
-from pyspark.sql.utils import enum_to_value as _enum_to_value
-
 # The implementations of pandas_udf, arrow_udf and udaf are embedded in pyspark.sql.functions
 # (they select the classic vs Connect UserDefinedFunction internally), so reuse them here.
 from pyspark.sql.functions import arrow_udf, pandas_udf, udaf  # noqa: F401
+from pyspark.sql.utils import enum_to_value as _enum_to_value
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -82,8 +87,8 @@ if TYPE_CHECKING:
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
-    from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
+    from pyspark.sql.dataframe import DataFrame
 
 
 def _to_col(col: "ColumnOrName") -> Column:
@@ -5924,11 +5929,12 @@ vector_sum.__doc__ = pysparkfuncs.vector_sum.__doc__
 
 
 def _test() -> None:
-    import sys
-    import os
     import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+    import os
+    import sys
+
     import pyspark.sql.connect.functions.builtin
+    from pyspark.sql import SparkSession as PySparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.connect.functions.builtin.__dict__.copy()

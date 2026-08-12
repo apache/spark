@@ -59,7 +59,7 @@ import sys
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
-from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
+from pyspark.streaming.kinesis import InitialPositionInStream, KinesisUtils
 
 if __name__ == "__main__":
     if len(sys.argv) != 5:

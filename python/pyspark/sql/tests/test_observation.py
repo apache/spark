@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from pyspark.sql import Row, Observation, functions as F
-from pyspark.sql.types import StructType, LongType
 from pyspark.errors import (
     AnalysisException,
     PySparkAssertionError,
@@ -24,6 +22,9 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
 )
+from pyspark.sql import Observation, Row
+from pyspark.sql import functions as F
+from pyspark.sql.types import LongType, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import assertDataFrameEqual, eventually
 

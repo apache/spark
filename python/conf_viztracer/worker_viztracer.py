@@ -20,7 +20,6 @@ import sys
 
 from viztracer.main import main
 
-
 if __name__ == "__main__":
 
     if os.getenv("SPARK_VIZTRACER_OUTPUT_DIR") is not None:

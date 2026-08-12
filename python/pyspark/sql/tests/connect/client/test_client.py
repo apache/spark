@@ -18,30 +18,31 @@
 import unittest
 import uuid
 from collections.abc import Generator
-from typing import Optional, Any, Union
+from typing import Any, Optional, Union
 
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 from pyspark.testing.utils import eventually
 
 if should_test_connect:
-    import grpc
     import google.protobuf.any_pb2 as any_pb2
     import google.protobuf.wrappers_pb2 as wrappers_pb2
-    from google.rpc import status_pb2
-    from google.rpc.error_details_pb2 import ErrorInfo
+    import grpc
     import pandas as pd
     import pyarrow as pa
-    from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
-    from pyspark.sql.connect.client.core import RpcDeadlines
-    from pyspark.sql.connect.client.retries import (
-        Retrying,
-        DefaultPolicy,
-    )
-    from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+    from google.rpc import status_pb2
+    from google.rpc.error_details_pb2 import ErrorInfo
+
+    import pyspark.sql.connect.proto as proto
     from pyspark.errors import PySparkRuntimeError
     from pyspark.errors.exceptions.connect import SparkConnectGrpcException
-    import pyspark.sql.connect.proto as proto
+    from pyspark.sql.connect.client import DefaultChannelBuilder, SparkConnectClient
+    from pyspark.sql.connect.client.core import RpcDeadlines
+    from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
+    from pyspark.sql.connect.client.retries import (
+        DefaultPolicy,
+        Retrying,
+    )
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
     class TestPolicy(DefaultPolicy):
         def __init__(self):
@@ -979,6 +980,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         """
         from types import SimpleNamespace
         from unittest.mock import MagicMock
+
         from pyspark.sql.connect.plan import CachedRemoteRelation
 
         def make_relation(deadlines):

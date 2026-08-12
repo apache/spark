@@ -20,10 +20,11 @@ An example for UnivariateFeatureSelector.
 Run with:
   bin/spark-submit examples/src/main/python/ml/univariate_feature_selector_example.py
 """
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import UnivariateFeatureSelector
 from pyspark.ml.linalg import Vectors
+from pyspark.sql import SparkSession
+
 # $example off$
 
 if __name__ == "__main__":

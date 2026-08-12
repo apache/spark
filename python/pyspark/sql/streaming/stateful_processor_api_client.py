@@ -14,23 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from datetime import datetime
-from enum import Enum
 import json
 import os
 import socket
-from typing import IO, Any, Dict, List, Union, Optional, Tuple, Iterator, cast
-
-from pyspark.serializers import write_int, read_int, UTF8Deserializer
-from pyspark.sql.pandas.serializers import ArrowStreamSerializer
-from pyspark.sql.types import (
-    StructType,
-    Row,
-)
-from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
-from pyspark.serializers import PickleSerializer
-from pyspark.errors import PySparkRuntimeError
 import uuid
+from datetime import datetime
+from enum import Enum
+from typing import IO, Any, Dict, Iterator, List, Optional, Tuple, Union, cast
+
+from pyspark.errors import PySparkRuntimeError
+from pyspark.serializers import PickleSerializer, UTF8Deserializer, read_int, write_int
+from pyspark.sql.pandas.serializers import ArrowStreamSerializer
+from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
+from pyspark.sql.types import (
+    Row,
+    StructType,
+)
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
@@ -547,8 +546,8 @@ class StatefulProcessorApiClient:
         return self.pickleSer.loads(value)
 
     def _send_arrow_state(self, schema: StructType, state: List[Tuple]) -> None:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         column_names = [field.name for field in schema.fields]
         pandas_df = convert_pandas_using_numpy_type(

@@ -53,17 +53,17 @@ which contains two batches of two objects:
 >>> sc.stop()
 """
 
-import sys
-import os
-from itertools import chain, product
-import marshal
-import struct
-import types
-import collections
-import zlib
-import itertools
-import pickle
 import codecs
+import collections
+import itertools
+import marshal
+import os
+import pickle
+import struct
+import sys
+import types
+import zlib
+from itertools import chain, product
 
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 

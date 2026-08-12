@@ -24,17 +24,17 @@ from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union
 
 from pyspark import StorageLevel
-from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame
-from pyspark.sql.types import DataType, StructType
 from pyspark.pandas._typing import IndexOpsLike
 from pyspark.pandas.internal import InternalField
+from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import DataFrame as PySparkDataFrame
+from pyspark.sql.types import DataType, StructType
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import OptionalPrimitiveType
-    from pyspark._typing import PrimitiveType
-
     import pyspark.pandas as ps
+    from pyspark._typing import PrimitiveType
     from pyspark.pandas.frame import CachedDataFrame
+    from pyspark.sql._typing import OptionalPrimitiveType
 
 
 class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
@@ -187,8 +187,8 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
         Name: a, dtype: int64
         """
         from pyspark.pandas.frame import DataFrame
-        from pyspark.pandas.series import Series, first_series
         from pyspark.pandas.internal import HIDDEN_COLUMNS
+        from pyspark.pandas.series import Series, first_series
 
         output = func(self._data.spark.column)
         if not isinstance(output, PySparkColumn):
@@ -1228,16 +1228,18 @@ class CachedSparkFrameMethods(SparkFrameMethods):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import shutil
     import sys
     import tempfile
     import uuid
+
     import numpy
     import pandas
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.spark.accessors
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

@@ -18,25 +18,25 @@
 import unittest
 import warnings
 
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 
 if should_test_connect:
-    import grpc
     import google.protobuf.any_pb2 as any_pb2
     import google.protobuf.duration_pb2 as duration_pb2
-    from google.rpc import status_pb2
-    from google.rpc import error_details_pb2
+    import grpc
+    from google.rpc import error_details_pb2, status_pb2
+
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.client.core import RpcDeadlines
     from pyspark.sql.connect.client.retries import (
-        Retrying,
+        DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
         DefaultPolicy,
         RetryException,
-        DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+        Retrying,
     )
     from pyspark.sql.tests.connect.client.test_client import (
-        TestPolicy,
         TestException,
+        TestPolicy,
     )
 
     class SleepTimeTracker:

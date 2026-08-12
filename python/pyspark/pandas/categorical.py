@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union, cast
 
 import pandas as pd
 from pandas.api.types import (
@@ -23,8 +23,8 @@ from pandas.api.types import (
     is_list_like,
 )
 
-from pyspark.pandas.internal import InternalField
 from pyspark.pandas.data_type_ops.categorical_ops import _to_cat
+from pyspark.pandas.internal import InternalField
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructField
 
@@ -769,11 +769,12 @@ class CategoricalAccessor:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.categorical
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import logging
 import os
 import time
 import unittest
-import logging
 
+from pyspark.sql import Row
 from pyspark.sql.utils import PythonException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.sql import Row
 from pyspark.testing.utils import (
     assertDataFrameEqual,
     have_pandas,
@@ -196,7 +196,7 @@ class MapInArrowTestsMixin:
             df.mapInArrow(func0, "id long", False).collect()
 
         def func1(iterator):
-            from pyspark import TaskContext, BarrierTaskContext
+            from pyspark import BarrierTaskContext, TaskContext
 
             tc = TaskContext.get()
             assert tc is not None
@@ -207,7 +207,7 @@ class MapInArrowTestsMixin:
         df.mapInArrow(func1, "id long", False).collect()
 
         def func2(iterator):
-            from pyspark import TaskContext, BarrierTaskContext
+            from pyspark import BarrierTaskContext, TaskContext
 
             tc = TaskContext.get()
             assert tc is not None

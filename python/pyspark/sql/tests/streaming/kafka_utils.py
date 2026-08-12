@@ -43,7 +43,7 @@ Example usage:
 
 import logging
 import time
-from typing import List, Tuple, Callable, Any
+from typing import Any, Callable, List, Tuple
 
 from pyspark.sql import SparkSession
 

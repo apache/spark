@@ -30,6 +30,7 @@ for a scalar column, a one-level ``array`` column, and a two-level
 
 def _build(convert, is_string, leaf, other_val, other_frac, n_rows):
     import random
+
     from pyspark.sql.types import ArrayType, BinaryType, StringType, StructField, StructType
 
     leaf_type = StringType() if is_string else BinaryType()
@@ -78,6 +79,7 @@ class LocalDataToArrowStringBenchmark:
     def setup(self, n_rows, leaf, other, other_frac):
         import datetime
         import decimal
+
         from pyspark.sql.conversion import LocalDataToArrowConversion
 
         self.convert = LocalDataToArrowConversion.convert

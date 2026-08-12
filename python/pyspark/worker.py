@@ -19,28 +19,28 @@
 Worker that receives input from Piped RDD.
 """
 
-import os
-import sys
 import dataclasses
-import time
 import inspect
 import itertools
 import json
+import os
+import sys
+import time
 import warnings
 from collections.abc import Iterator
 from typing import (
+    TYPE_CHECKING,
     Any,
+    BinaryIO,
     Callable,
     Iterable,
     Optional,
     Tuple,
     Type,
     TypeVar,
-    TYPE_CHECKING,
     Union,
     get_args,
     get_origin,
-    BinaryIO,
 )
 
 T = TypeVar("T")
@@ -51,35 +51,40 @@ if TYPE_CHECKING:
 
     from pyspark.sql.pandas._typing import GroupedBatch
 
+from pyspark import _NoValue, shuffle
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
     _accumulatorRegistry,
     _deserialize_accumulator,
 )
-from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
-from pyspark.taskcontext import BarrierTaskContext, TaskContext
-from pyspark.util import PythonEvalType
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.logger.worker_io import capture_outputs
+from pyspark.messages import (
+    SparkMessageReceiver,
+    SparkSocketMessageReceiver,
+)
 from pyspark.serializers import (
+    BatchedSerializer,
+    CPickleSerializer,
+    SpecialLengths,
     write_int,
     write_long,
-    SpecialLengths,
-    CPickleSerializer,
-    BatchedSerializer,
 )
 from pyspark.sql.conversion import (
-    LocalDataToArrowConversion,
-    ArrowTableToRowsConversion,
     ArrowBatchTransformer,
+    ArrowTableToRowsConversion,
+    LocalDataToArrowConversion,
     PandasToArrowConversion,
 )
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
-    ArrowStreamSerializer,
-    ArrowStreamGroupSerializer,
     ArrowStreamCoGroupSerializer,
+    ArrowStreamGroupSerializer,
+    ArrowStreamSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -94,30 +99,25 @@ from pyspark.sql.types import (
     _create_row,
     _parse_datatype_json_string,
 )
+from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.util import (
+    PythonEvalType,
     fail_on_stopiteration,
     handle_worker_exception,
-    with_faulthandler,
     start_faulthandler_periodic_traceback,
+    with_faulthandler,
 )
-from pyspark import _NoValue, shuffle
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.worker_message import WorkerInitInfo
 from pyspark.worker_util import (
+    Conf,
     check_python_version,
     get_sock_file_to_executor,
-    read_command,
     pickleSer,
+    read_command,
     send_accumulator_updates,
     setup_broadcasts,
     setup_memory_limits,
     setup_spark_files,
-    Conf,
-)
-from pyspark.logger.worker_io import capture_outputs
-from pyspark.messages import (
-    SparkMessageReceiver,
-    SparkSocketMessageReceiver,
 )
 
 
@@ -591,13 +591,12 @@ def wrap_perf_profiler(f, eval_type, result_id):
 
 
 def wrap_memory_profiler(f, eval_type, result_id):
+    import pyspark.memory_profiler_ext
     from pyspark.sql.profiler import (
         ProfileResultsParam,
         ProfileResultsParamV2,
         WorkerMemoryProfiler,
     )
-
-    import pyspark.memory_profiler_ext
 
     if not pyspark.memory_profiler_ext.has_memory_profiler:
         return f
@@ -2493,8 +2492,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         col_names = ["_%d" % i for i in range(len(udfs))]
         output_schema = StructType(
@@ -2537,8 +2536,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One GROUPED_AGG_PANDAS_ITER UDF expected here."
         udf_func, args_offsets, _, return_type = udfs[0]
@@ -2746,8 +2745,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         window_bound_types_str = runner_conf.get("window_bound_types")
         window_bound_types = [t.strip().lower() for t in window_bound_types_str.split(",")]
@@ -2959,8 +2958,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One GROUPED_MAP_PANDAS UDF expected here."
         grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
@@ -3030,8 +3029,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One GROUPED_MAP_PANDAS_ITER UDF expected here."
         grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
@@ -3159,8 +3158,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return cogrouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
         map_udf, _, _, return_type = udfs[0]
@@ -3228,8 +3227,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One COGROUPED_MAP_PANDAS UDF expected here."
         cogrouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
@@ -4050,8 +4049,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One TRANSFORM_WITH_STATE_PANDAS UDF expected here."
         udf, arg_offsets, return_type = udfs[0]
@@ -4191,8 +4190,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return transform_with_state_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert num_udfs == 1, "One TRANSFORM_WITH_STATE_PANDAS_INIT_STATE UDF expected here."
         udf, arg_offsets, return_type = udfs[0]
@@ -4402,8 +4401,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
+
         from pyspark.sql.streaming.state import GroupState
 
         assert num_udfs == 1, "One GROUPED_MAP_PANDAS_UDF_WITH_STATE UDF expected here."

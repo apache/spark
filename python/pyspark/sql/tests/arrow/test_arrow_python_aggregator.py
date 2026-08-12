@@ -19,7 +19,6 @@ from decimal import Decimal
 
 from pyspark.errors import AnalysisException, PySparkValueError
 from pyspark.sql import functions as sf
-from pyspark.sql.window import Window
 from pyspark.sql.types import (
     DecimalType,
     DoubleType,
@@ -27,13 +26,13 @@ from pyspark.sql.types import (
     StructField,
     StructType,
 )
-from pyspark.util import PythonEvalType
+from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
-
+from pyspark.util import PythonEvalType
 
 if have_pyarrow:
     from pyspark.sql.aggregator import Aggregator
@@ -353,7 +352,7 @@ class ArrowPythonAggregatorTestsMixin:
         # An incremental aggregator and a grouped-agg pandas UDF over the same window are both
         # Python window functions but use different eval types, so they cannot share one operator.
         # This must raise a clear analysis error rather than an internal assertion.
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        from pyspark.sql.functions import PandasUDFType, pandas_udf
 
         @pandas_udf("double", PandasUDFType.GROUPED_AGG)
         def pandas_mean(v):
@@ -463,7 +462,7 @@ class ArrowPythonAggregatorTestsMixin:
         # Mixing a grouped-agg pandas UDAF with an incremental aggregator in one Aggregate is
         # unsupported. It falls through to the dedicated placement error, which must name BOTH
         # offending functions rather than dropping the co-offending pandas UDAF.
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        from pyspark.sql.functions import PandasUDFType, pandas_udf
 
         @pandas_udf("double", PandasUDFType.GROUPED_AGG)
         def pandas_mean(v):

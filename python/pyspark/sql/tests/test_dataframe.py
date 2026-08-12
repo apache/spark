@@ -16,48 +16,48 @@
 #
 
 import glob
+import io
 import os
 import pydoc
 import shutil
 import tempfile
-import warnings
 import unittest
-import io
+import warnings
 from contextlib import redirect_stdout
 
-from pyspark.sql import Row, functions, DataFrame
-from pyspark.sql.functions import (
-    col,
-    lit,
-    count,
-    struct,
-    date_format,
-    to_date,
-    array,
-    explode,
-)
-from pyspark.sql.types import (
-    StringType,
-    IntegerType,
-    LongType,
-    StructType,
-    StructField,
-)
-from pyspark.storagelevel import StorageLevel
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
     PySparkValueError,
 )
+from pyspark.sql import DataFrame, Row, functions
+from pyspark.sql.functions import (
+    array,
+    col,
+    count,
+    date_format,
+    explode,
+    lit,
+    struct,
+    to_date,
+)
+from pyspark.sql.types import (
+    IntegerType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+)
+from pyspark.storagelevel import StorageLevel
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
     SPARK_HOME,
+    ReusedSQLTestCase,
 )
 from pyspark.testing.utils import (
-    have_pyarrow,
     have_pandas,
+    have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )

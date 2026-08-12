@@ -19,38 +19,30 @@
 A base class of DataFrame/Column to behave like pandas DataFrame/Series.
 """
 
+import warnings
 from abc import ABCMeta, abstractmethod
 from functools import reduce
 from typing import (
+    IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
-    IO,
     List,
-    Optional,
     NoReturn,
+    Optional,
     Tuple,
     Union,
-    TYPE_CHECKING,
     cast,
 )
-import warnings
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like
 
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.loose_version import LooseVersion
-from pyspark.sql import Column, functions as F
-from pyspark.sql.internal import InternalFunction as SF
-from pyspark.sql.types import (
-    BooleanType,
-    DoubleType,
-    LongType,
-    NumericType,
-)
-from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import (
     Axis,
     DataFrameOrSeries,
@@ -60,28 +52,37 @@ from pyspark.pandas._typing import (
     Name,
     Scalar,
 )
-from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
+from pyspark.pandas.indexing import AtIndexer, LocIndexer, iAtIndexer, iLocIndexer
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.typedef import spark_type_to_pandas_dtype
 from pyspark.pandas.utils import (
+    SPARK_CONF_ARROW_ENABLED,
     is_name_like_tuple,
     is_name_like_value,
+    log_advice,
     name_like_string,
     scol_for,
     sql_conf,
     validate_arguments_and_invoke_function,
     validate_axis,
     validate_mode,
-    SPARK_CONF_ARROW_ENABLED,
-    log_advice,
+)
+from pyspark.sql import Column
+from pyspark.sql import functions as F
+from pyspark.sql.internal import InternalFunction as SF
+from pyspark.sql.types import (
+    BooleanType,
+    DoubleType,
+    LongType,
+    NumericType,
 )
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame
-    from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.groupby import GroupBy
+    from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.series import Series
-    from pyspark.pandas.window import Rolling, Expanding, ExponentialMoving
+    from pyspark.pandas.window import Expanding, ExponentialMoving, Rolling
 
 
 bool_type = bool
@@ -3659,13 +3660,14 @@ class Frame(object, metaclass=ABCMeta):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import shutil
     import sys
     import tempfile
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.generic
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

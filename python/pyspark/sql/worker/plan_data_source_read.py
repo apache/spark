@@ -16,9 +16,10 @@
 #
 
 import functools
+from itertools import chain, islice
+from typing import IO, Iterable, Iterator, List, Tuple, Union
+
 import pyarrow as pa
-from itertools import islice, chain
-from typing import IO, List, Iterator, Iterable, Tuple, Union
 
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
 from pyspark.logger.worker_io import capture_outputs
@@ -38,15 +39,15 @@ from pyspark.sql.datasource import (
 from pyspark.sql.datasource_internal import _streamReader
 from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.types import (
-    _parse_datatype_json_string,
     BinaryType,
     StructType,
+    _parse_datatype_json_string,
 )
 from pyspark.sql.worker.utils import check_pushdown_not_disabled, worker_run
 from pyspark.worker_util import (
     get_sock_file_to_executor,
-    read_command,
     pickleSer,
+    read_command,
     utf8_deserializer,
 )
 

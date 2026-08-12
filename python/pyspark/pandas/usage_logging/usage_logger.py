@@ -19,8 +19,8 @@
 The reference implementation of usage logger using the Python standard logging library.
 """
 
-from inspect import Signature
 import logging
+from inspect import Signature
 from typing import Any, Optional
 
 

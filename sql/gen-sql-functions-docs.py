@@ -22,9 +22,7 @@ from collections import namedtuple
 
 # To avoid adding a new direct dependency, we import markdown from within mkdocs.
 from mkdocs.structure.pages import markdown
-
 from pyspark.java_gateway import launch_gateway
-
 
 ExpressionInfo = namedtuple("ExpressionInfo", "name usage examples group")
 

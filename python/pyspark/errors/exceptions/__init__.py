@@ -19,6 +19,7 @@
 def _write_self() -> None:
     import json
     from pathlib import Path
+
     from pyspark.errors import error_classes
 
     ERRORS_DIR = Path(__file__).parents[1]

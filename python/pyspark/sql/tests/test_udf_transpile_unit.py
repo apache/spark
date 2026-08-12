@@ -38,7 +38,6 @@ from pyspark.sql.udf import UserDefinedFunction
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.util import is_remote_only
 
-
 # Both flags must be on for the transpiler to attempt a rewrite (at UDF
 # construction time and again in the optimizer); ANSI is required because
 # transpilation targets ANSI semantics.
@@ -491,6 +490,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # ``(a < b) and (b < c)``. The transpiler refuses chained Compare
         # nodes (``len(ops) != 1``) and must fall back to interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def chained(x):
@@ -555,6 +555,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # must refuse, fall back to interpreted Python, and still produce
         # the correct result.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def or_zero(x):
@@ -611,6 +612,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # non-boolean columns or silently produces wrong answers.  The
         # transpiler must refuse and fall back to interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def truthy_int(x):
@@ -667,6 +669,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # query would fail analysis instead of falling back. The transpiler must
         # refuse and run the UDF as interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def mixed_ternary(x):
@@ -733,6 +736,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # child of the TranspiledPythonUDF -- breaking a working UDF. The
         # category gate must refuse so it runs as interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def eq_true(x):
@@ -755,6 +759,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # Spark's string-number coercion silently returned True where Python's
         # cross-type == is False. (Reported by Codex review on PR #34.)
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def nested_ternary_eq(x):
@@ -831,6 +836,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # boolean-producing operand is now "bool" (not the numeric catch-all),
         # so this refuses and runs as interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def bool_plus_one(x):
@@ -852,6 +858,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # numeric one previously slipped past the guard and failed analysis
         # (CASE WHEN [BOOLEAN, INT]) instead of falling back.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def mixed(x):
@@ -890,6 +897,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # interpreted path ran the wrapper -- a silent wrong result.
         import functools
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def base(x):
@@ -914,6 +922,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # `null AND false` is false. A literal None operand must force a
         # fallback rather than silently diverge.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def none_and(x):
@@ -937,6 +946,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # fall back at construction instead. Interpreted execution still works
         # (the pickled-UDF converter nulls the type-mismatched results).
         import warnings as _warnings
+
         from pyspark.sql.types import ArrayType, TimestampType
 
         plus_one = lambda x: x + 1  # noqa: E731
@@ -966,6 +976,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # `def f(s: str): return s` declared LongType() would return 123 for
         # '123' (or raise CAST_INVALID_INPUT) where interpreted returns NULL.
         import warnings as _warnings
+
         from pyspark.sql.types import DecimalType
 
         def bytes_to_long(x: bytes):
@@ -1073,6 +1084,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # absorbed by a transpiled constant (zero-param case) nor raise a
         # misleading "internal error" AnalysisException (too-few-args case).
         import warnings as _warnings
+
         from pyspark.errors import PythonException
         from pyspark.sql.types import StructField, StructType
 
@@ -1134,6 +1146,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # `x is y`, `x is True`) must NOT transpile -- Python's `is` is an
         # object-identity test with no SQL equivalent outside of None.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         long_schema = StructType([StructField("a", LongType(), nullable=True)])
@@ -1249,6 +1262,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # Spark's `~0L` is -1 (truthy). The transpiler must refuse and fall
         # back to interpreted Python.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def not_x(x):
@@ -1285,6 +1299,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # (truthiness semantics) while Spark's `&`/`|` are bitwise. The
         # transpiler must refuse and fall back.
         import warnings as _warnings
+
         from pyspark.sql.types import StructField, StructType
 
         def x_and_y(x, y):

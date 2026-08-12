@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 import os
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkAssertionError
+from pyspark.errors import PySparkAssertionError, PySparkTypeError, PySparkValueError
 from pyspark.serializers import CPickleSerializer
 from pyspark.sql import Row
 from pyspark.sql.column import Column
@@ -160,9 +160,10 @@ class Observation:
 def _test() -> None:
     import doctest
     import sys
+
+    import pyspark.sql.observation
     from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
-    import pyspark.sql.observation
 
     globs = pyspark.sql.observation.__dict__.copy()
     sc = SparkContext("local[4]", "PythonTest")

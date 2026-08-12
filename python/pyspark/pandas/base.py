@@ -21,15 +21,36 @@ Base and utility classes for pandas-on-Spark objects.
 
 import warnings
 from abc import ABCMeta, abstractmethod
-from functools import wraps, partial
+from functools import partial, wraps
 from itertools import chain
-from typing import Any, Callable, ClassVar, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like, CategoricalDtype
+from pandas.api.types import CategoricalDtype, is_list_like
 
-from pyspark.sql import functions as F, Column, Window
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
+from pyspark.pandas.config import get_option, option_context
+from pyspark.pandas.frame import DataFrame
+from pyspark.pandas.internal import (
+    NATURAL_ORDER_COLUMN_NAME,
+    SPARK_DEFAULT_INDEX_NAME,
+    InternalField,
+    InternalFrame,
+)
+from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
+from pyspark.pandas.typedef.typehints import handle_dtype_as_extension_dtype
+from pyspark.pandas.utils import (
+    ERROR_MESSAGE_CANNOT_COMBINE,
+    ansi_mode_context,
+    combine_frames,
+    same_anchor,
+    scol_for,
+    validate_axis,
+)
+from pyspark.sql import Column, Window
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
@@ -45,32 +66,11 @@ from pyspark.sql.types import (
     TimeType,
     VarcharType,
 )
-from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
-from pyspark.pandas.config import get_option, option_context
-from pyspark.pandas.internal import (
-    InternalField,
-    InternalFrame,
-    NATURAL_ORDER_COLUMN_NAME,
-    SPARK_DEFAULT_INDEX_NAME,
-)
-from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
-from pyspark.pandas.typedef.typehints import handle_dtype_as_extension_dtype
-from pyspark.pandas.utils import (
-    ansi_mode_context,
-    combine_frames,
-    same_anchor,
-    scol_for,
-    validate_axis,
-    ERROR_MESSAGE_CANNOT_COMBINE,
-)
-from pyspark.pandas.frame import DataFrame
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName
-
     from pyspark.pandas.data_type_ops.base import DataTypeOps
     from pyspark.pandas.series import Series
+    from pyspark.sql._typing import ColumnOrName
 
 
 def should_alignment_for_column_op(self: SeriesOrIndex, other: SeriesOrIndex) -> bool:
@@ -1455,8 +1455,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         3    1
         Name: count, dtype: int64
         """
-        from pyspark.pandas.series import first_series
         from pyspark.pandas.indexes.multi import MultiIndex
+        from pyspark.pandas.series import first_series
 
         if bins is not None:
             raise NotImplementedError("value_counts currently does not support bins")
@@ -1793,11 +1793,12 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.base
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

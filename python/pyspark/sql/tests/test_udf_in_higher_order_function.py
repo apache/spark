@@ -508,9 +508,11 @@ class UDFInHigherOrderFunctionTestsMixin:
         # two array levels to the leaves, runs the native-batch function once, and re-nests two
         # levels. Includes null outer rows, null inner arrays, and empty inner arrays.
         from typing import Iterator
+
         import pandas as pd
         import pyarrow as pa
-        from pyspark.sql.functions import pandas_udf, arrow_udf
+
+        from pyspark.sql.functions import arrow_udf, pandas_udf
 
         df = self.spark.createDataFrame(
             [([[1, 2], [3]],), ([[], [4, 5]],), (None,), ([None, [6]],)],
@@ -643,6 +645,7 @@ class UDFInHigherOrderFunctionTestsMixin:
         # return type. Each must round-trip through the element-wise wrapper correctly.
         import datetime
         from decimal import Decimal
+
         from pyspark.sql.types import (
             DecimalType,
             StructField,
@@ -763,6 +766,7 @@ class UDFInHigherOrderFunctionTestsMixin:
         # A vectorized scalar pandas UDF is lifted and applied over the flattened elements, so it
         # still receives a pandas Series (its native contract) once per batch, not per element.
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
 
         df = self.spark.createDataFrame(
@@ -787,6 +791,7 @@ class UDFInHigherOrderFunctionTestsMixin:
         # A vectorized scalar Arrow UDF is lifted the same way; it takes and returns a pyarrow
         # Array over the flattened elements.
         import pyarrow as pa
+
         from pyspark.sql.functions import arrow_udf
 
         df = self.spark.createDataFrame(
@@ -811,7 +816,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # iterator of Series. The worker feeds it the flattened elements and re-groups the streamed
         # results back into arrays positionally, so output batch boundaries need not match input.
         from typing import Iterator
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
 
         df = self.spark.createDataFrame(
@@ -831,7 +838,9 @@ class UDFInHigherOrderFunctionTestsMixin:
     def test_scalar_arrow_iter_udf_in_lambda(self):
         # A scalar iterator Arrow UDF, lifted the same way as the pandas iterator variant.
         from typing import Iterator
+
         import pyarrow as pa
+
         from pyspark.sql.functions import arrow_udf
 
         df = self.spark.createDataFrame(
@@ -853,7 +862,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # element (int) and an outer column (string) that the rewrite repeats into an aligned
         # array. Each argument must be flattened with its own element type, not the first's.
         from typing import Iterator, Tuple
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
 
         df = self.spark.createDataFrame(
@@ -879,7 +890,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # native Spark expression computing the same instants (so a timezone bug common to both UDF
         # paths would still be caught, while going through identical driver-collection semantics).
         from typing import Iterator
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
         from pyspark.sql.types import TimestampType
 
@@ -920,9 +933,11 @@ class UDFInHigherOrderFunctionTestsMixin:
         # (empty / null) output row each, or the positional JVM join drops them silently. Cover both
         # the pandas and Arrow iterator flavors.
         from typing import Iterator
+
         import pandas as pd
         import pyarrow as pa
-        from pyspark.sql.functions import pandas_udf, arrow_udf
+
+        from pyspark.sql.functions import arrow_udf, pandas_udf
 
         # Single partition so the whole batch is empty/null arrays.
         df = self.spark.createDataFrame(
@@ -957,7 +972,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # the equivalent non-iterator pandas UDF (identical driver-collection semantics), so the
         # check proves the schema fix without depending on absolute timezone offsets.
         from typing import Iterator
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
         from pyspark.sql.types import TimestampType
 
@@ -993,8 +1010,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # A vectorized pandas UDF returning a struct element (a pandas.DataFrame per batch) inside a
         # lambda. Covers the struct-DataFrame result path of the element-wise pandas branch.
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
-        from pyspark.sql.types import StructType, StructField
+        from pyspark.sql.types import StructField, StructType
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
         ret = StructType([StructField("v", IntegerType()), StructField("neg", IntegerType())])
@@ -1016,7 +1034,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # Nested calls f(g(x)) inside a lambda: g is lifted first, then f consumes g's array result.
         # Cover both the non-iterator and iterator vectorized flavors.
         from typing import Iterator
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
 
         df = self.spark.createDataFrame(
@@ -1058,9 +1078,11 @@ class UDFInHigherOrderFunctionTestsMixin:
         # inside a lambda. Covers the struct-DataFrame result path of the iterator element-wise
         # branch (Iterator[pd.DataFrame] contract).
         from typing import Iterator
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
-        from pyspark.sql.types import StructType, StructField
+        from pyspark.sql.types import StructField, StructType
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
         ret = StructType([StructField("v", IntegerType()), StructField("neg", IntegerType())])

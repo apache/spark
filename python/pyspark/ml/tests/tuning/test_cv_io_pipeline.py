@@ -17,10 +17,11 @@
 
 import tempfile
 
-from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression, OneVsRest
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.feature import HashingTF, Tokenizer
+from pyspark.ml.tests.tuning.test_tuning import ValidatorTestUtilsMixin
 from pyspark.ml.tuning import (
     CrossValidator,
     CrossValidatorModel,
@@ -30,7 +31,6 @@ from pyspark.testing.mlutils import (
     DummyLogisticRegression,
     SparkSessionTestCase,
 )
-from pyspark.ml.tests.tuning.test_tuning import ValidatorTestUtilsMixin
 
 
 class CrossValidatorIOPipelineTests(SparkSessionTestCase, ValidatorTestUtilsMixin):

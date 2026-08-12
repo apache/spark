@@ -15,46 +15,47 @@
 # limitations under the License.
 #
 
-import os
+import datetime
 import gc
-import unittest
+import io
+import os
 import shutil
 import tempfile
-import io
+import unittest
 from contextlib import redirect_stdout
-import datetime
 
-from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    LongType,
-    StringType,
-    IntegerType,
-    MapType,
     ArrayType,
     CharType,
-    VarcharType,
+    IntegerType,
+    LongType,
+    MapType,
     Row,
+    StringType,
+    StructField,
+    StructType,
+    VarcharType,
 )
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.utils import eventually
 from pyspark.testing.connectutils import (
-    should_test_connect,
-    connect_requirement_message,
     ReusedMixedTestCase,
+    connect_requirement_message,
+    should_test_connect,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.utils import eventually
+from pyspark.util import is_remote_only
 
 if should_test_connect:
-    from pyspark.sql.connect.proto import ExecutePlanResponse, Expression as ProtoExpression
-    from pyspark.sql.connect.column import Column
-    from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
+    from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
+    from pyspark.sql.connect.column import Column
+    from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
+    from pyspark.sql.connect.proto import ExecutePlanResponse
+    from pyspark.sql.connect.proto import Expression as ProtoExpression
+    from pyspark.sql.dataframe import DataFrame
 
 
 @unittest.skipIf(
@@ -156,8 +157,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf.collect(), cdf2.collect())
 
     def test_window_spec_serialization(self):
-        from pyspark.sql.connect.window import Window
         from pyspark.serializers import CPickleSerializer
+        from pyspark.sql.connect.window import Window
 
         pickle_ser = CPickleSerializer()
         w = Window.partitionBy("some_string").orderBy("value")

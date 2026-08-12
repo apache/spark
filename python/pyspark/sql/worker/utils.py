@@ -17,36 +17,36 @@
 
 import os
 import sys
-from typing import Any, Callable, IO, Optional
+from typing import IO, Any, Callable, Optional
 
 from pyspark.accumulators import (
+    SpecialAccumulatorIds,
     _accumulatorRegistry,
     _deserialize_accumulator,
-    SpecialAccumulatorIds,
+)
+from pyspark.serializers import (
+    SpecialLengths,
+    read_int,
+    write_int,
 )
 from pyspark.sql.profiler import (
     ProfileResultsParam,
     ProfileResultsParamV2,
-    WorkerPerfProfiler,
     WorkerMemoryProfiler,
-)
-from pyspark.serializers import (
-    read_int,
-    write_int,
-    SpecialLengths,
+    WorkerPerfProfiler,
 )
 from pyspark.util import (
-    start_faulthandler_periodic_traceback,
     handle_worker_exception,
+    start_faulthandler_periodic_traceback,
     with_faulthandler,
 )
 from pyspark.worker_util import (
+    Conf,
     check_python_version,
     send_accumulator_updates,
+    setup_broadcasts,
     setup_memory_limits,
     setup_spark_files,
-    setup_broadcasts,
-    Conf,
 )
 
 
