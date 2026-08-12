@@ -67,6 +67,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def invalidUDFParameterPlaceholder(placeholder: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_UDF_PARAMETER_PLACEHOLDER",
+      messageParameters = Map("placeholder" -> placeholder)
+    )
+  }
+
+  def invalidUDFParameterPlaceholderIndex(index: Int, numParams: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_UDF_PARAMETER_PLACEHOLDER_INDEX",
+      messageParameters = Map(
+        "index" -> index.toString,
+        "numParams" -> numParams.toString)
+    )
+  }
+
   def positionalAndNamedArgumentDoubleReference(
       routineName: String, parameterName: String): Throwable = {
     val errorClass =
@@ -682,6 +698,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(tableName, "INSERT INTO ... REPLACE ON/USING")
   }
 
+  def unsupportedInsertReplaceWhere(tableName: String): Throwable = {
+    unsupportedTableOperationError(tableName, "INSERT INTO ... REPLACE WHERE")
+  }
+
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "VIEW_WRITE_NOT_ALLOWED",
@@ -1220,6 +1240,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(table.name(), "batch scan")
   }
 
+  def unsupportedBatchWriteError(table: Table): Throwable = {
+    unsupportedTableOperationError(table.name(), "batch write")
+  }
+
   def unsupportedStreamingScanError(table: Table): Throwable = {
     unsupportedTableOperationError(table.name(), "either micro-batch or continuous scan")
   }
@@ -1345,8 +1369,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotCreateDatabaseWithSameNameAsPreservedDatabaseError(database: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1066",
-      messageParameters = Map("database" -> database))
+      errorClass = "RESERVED_DATABASE_NAME",
+      messageParameters = Map("database" -> toSQLId(database)))
   }
 
   def cannotDropDefaultDatabaseError(nameParts: Seq[String]): Throwable = {
@@ -1363,7 +1387,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def createExternalTableWithoutLocationError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1069",
+      errorClass = "CREATE_EXTERNAL_TABLE_WITHOUT_LOCATION",
       messageParameters = Map.empty)
   }
 
@@ -1966,19 +1990,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def orcNotUsedWithHiveEnabledError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1138",
+      errorClass = "ORC_DATA_SOURCE_REQUIRES_HIVE_SUPPORT",
       messageParameters = Map.empty)
   }
 
   def failedToFindAvroDataSourceError(provider: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1139",
+      errorClass = "AVRO_DATA_SOURCE_NOT_ENABLED",
       messageParameters = Map("provider" -> provider))
   }
 
   def failedToFindKafkaDataSourceError(provider: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1140",
+      errorClass = "KAFKA_DATA_SOURCE_NOT_ENABLED",
       messageParameters = Map("provider" -> provider))
   }
 
@@ -1992,7 +2016,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1141",
+      errorClass = "MULTIPLE_DATA_SOURCES",
       messageParameters = Map(
         "provider" -> provider,
         "sourceNames" -> sourceNames.mkString(", ")))
@@ -4813,6 +4837,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "singlePassOutput" -> singlePassOutput.toString
       )
     )
+  }
+
+  def missingAttributesError(
+      operator: LogicalPlan,
+      missingInput: Iterable[Attribute],
+      input: Iterable[Attribute],
+      attributesWithSameName: Iterable[Attribute]): Throwable = {
+    val missingAttributes = missingInput.map(toSQLExpr).mkString(", ")
+    val inputAttributes = input.map(toSQLExpr).mkString(", ")
+    val operatorString = operator.simpleString(SQLConf.get.maxToStringFields)
+    if (attributesWithSameName.nonEmpty) {
+      new AnalysisException(
+        errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+        messageParameters = Map(
+          "missingAttributes" -> missingAttributes,
+          "input" -> inputAttributes,
+          "operator" -> operatorString,
+          "operation" -> attributesWithSameName.map(toSQLExpr).mkString(", ")
+        ),
+        origin = operator.origin
+      )
+    } else {
+      new AnalysisException(
+        errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+        messageParameters = Map(
+          "missingAttributes" -> missingAttributes,
+          "input" -> inputAttributes,
+          "operator" -> operatorString
+        ),
+        origin = operator.origin
+      )
+    }
   }
 
   def resolutionValidationError(cause: Throwable, plan: LogicalPlan): Throwable = {

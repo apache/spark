@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.datasources.{MarkSingleTaskExecution, PruneFileSourcePartitions, PushVariantIntoScan, SchemaPruning, V1Writes}
+import org.apache.spark.sql.execution.datasources.{MarkSingleTaskExecution, PruneFileSourcePartitions, PullOutVariantExtractions, PushVariantIntoScan, SchemaPruning, V1Writes}
 import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
+import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
 
 class SparkOptimizer(
@@ -37,6 +38,10 @@ class SparkOptimizer(
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
     // TODO: move SchemaPruning into catalyst
     Seq(
+      // Hoist variant extractions out of operators that variant-into-scan pushdown cannot see
+      // through (aggregate function arguments, etc.) into a Project above the scan, so the
+      // extractions below become visible to V2ScanRelationPushDown and PushVariantIntoScan.
+      PullOutVariantExtractions,
       SchemaPruning,
       GroupBasedRowLevelOperationScanPlanning,
       V1Writes,
@@ -67,6 +72,7 @@ class SparkOptimizer(
       InjectRuntimeFilter),
     Batch("MergeSubplans", Once,
       MergeSubplans,
+      CombineApproximatePercentiles,
       RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates),
@@ -84,6 +90,8 @@ class SparkOptimizer(
       ExtractPythonUDFFromAggregate,
       // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
       ExtractGroupingPythonUDFFromAggregate,
+      // `ExtractPythonUDFs` first lifts Python UDFs out of higher-order function lambdas
+      // (via `ExtractPythonUDFFromLambda`) and then extracts them as ordinary top-level UDFs.
       ExtractPythonUDFs,
       ExtractPythonUDTFs,
       // The eval-python node may be between Project/Filter and the scan node, which breaks
@@ -110,6 +118,8 @@ class SparkOptimizer(
       ExtractPythonUDFFromJoinCondition.ruleName,
       ExtractPythonUDFFromAggregate.ruleName,
       ExtractGroupingPythonUDFFromAggregate.ruleName,
+      // Non-excludable: a plan with a Python UDF in a higher-order function lambda only works
+      // because `ExtractPythonUDFs` lifts it out (via `ExtractPythonUDFFromLambda`).
       ExtractPythonUDFs.ruleName,
       GroupBasedRowLevelOperationScanPlanning.ruleName,
       V2ScanRelationPushDown.ruleName,

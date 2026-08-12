@@ -43,7 +43,7 @@ class AutoCdcScd1FullRefreshSuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Run #1: populate target + auxiliary table.
@@ -101,7 +101,7 @@ class AutoCdcScd1FullRefreshSuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Run #1: delete at seq=10 sets a high watermark in the auxiliary table.
@@ -162,11 +162,11 @@ class AutoCdcScd1FullRefreshSuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.t_a " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.t_b " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // streamA is replaced across runs because t_a is full-refreshed in run #2 (its streaming

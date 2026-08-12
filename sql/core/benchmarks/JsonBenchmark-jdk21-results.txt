@@ -3,128 +3,128 @@ Benchmark for performance of JSON parsing
 ================================================================================================
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 JSON schema inferring:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                        2505           2612          96          2.0         501.0       1.0X
-UTF-8 is set                                       5362           5380          16          0.9        1072.3       0.5X
+No encoding                                        1835           1857          22          2.7         366.9       1.0X
+UTF-8 is set                                       3997           4002           8          1.3         799.4       0.5X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 count a short column:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                        1952           1958           5          2.6         390.4       1.0X
-UTF-8 is set                                       4416           4420           5          1.1         883.3       0.4X
+No encoding                                        1544           1550           8          3.2         308.9       1.0X
+UTF-8 is set                                       3868           3896          26          1.3         773.6       0.4X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 count a wide column:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                        4546           4551           5          0.2        4545.6       1.0X
-UTF-8 is set                                       4369           4375          10          0.2        4369.2       1.0X
+No encoding                                        3723           3749          34          0.3        3723.3       1.0X
+UTF-8 is set                                       3630           3655          24          0.3        3630.4       1.0X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 select wide row:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-No encoding                                       10036          10149         153          0.0      200713.2       1.0X
-UTF-8 is set                                      10794          10832          34          0.0      215870.3       0.9X
+No encoding                                        7611           7634          20          0.0      152224.9       1.0X
+UTF-8 is set                                       8052           8074          27          0.0      161045.5       0.9X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 Select a subset of 10 columns:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Select 10 columns                                  1664           1665           1          0.6        1663.8       1.0X
-Select 1 column                                    1123           1125           3          0.9        1123.1       1.5X
+Select 10 columns                                  1348           1362          13          0.7        1347.7       1.0X
+Select 1 column                                    1097           1103           6          0.9        1096.8       1.2X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 creation of JSON parser per line:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Short column without encoding                       583            586           3          1.7         583.3       1.0X
-Short column with UTF-8                            1118           1124           7          0.9        1118.2       0.5X
-Wide column without encoding                       5316           5335          18          0.2        5316.3       0.1X
-Wide column with UTF-8                             8905           8913           7          0.1        8904.8       0.1X
+Short column without encoding                       542            547           9          1.8         541.7       1.0X
+Short column with UTF-8                            1010           1012           3          1.0        1009.5       0.5X
+Wide column without encoding                       4096           4120          23          0.2        4095.5       0.1X
+Wide column with UTF-8                             5713           5736          24          0.2        5712.6       0.1X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 JSON functions:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Text read                                            68             70           2         14.6          68.3       1.0X
-from_json                                          1085           1089           5          0.9        1084.6       0.1X
-json_tuple                                         1060           1061           1          0.9        1059.6       0.1X
-get_json_object wholestage off                     1070           1071           2          0.9        1070.1       0.1X
-get_json_object wholestage on                       990            994           4          1.0         989.6       0.1X
+Text read                                            46             51           7         21.6          46.4       1.0X
+from_json                                           919            927          13          1.1         919.1       0.1X
+json_tuple                                          702            704           2          1.4         702.5       0.1X
+get_json_object wholestage off                      731            736          10          1.4         730.6       0.1X
+get_json_object wholestage on                       643            649          10          1.6         642.9       0.1X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 Dataset of json strings:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Text read                                           240            241           1         20.8          48.1       1.0X
-schema inferring                                   1831           1836           4          2.7         366.2       0.1X
-parsing                                            2510           2518          11          2.0         502.1       0.1X
+Text read                                           201            202           1         24.9          40.2       1.0X
+schema inferring                                   1202           1204           2          4.2         240.4       0.2X
+parsing                                            2183           2192           8          2.3         436.7       0.1X
 
 Preparing data for benchmarking ...
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 Json files in the per-line mode:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Text read                                           618            623           5          8.1         123.5       1.0X
-Schema inferring                                   2382           2384           2          2.1         476.5       0.3X
-Parsing without charset                            2665           2670           5          1.9         533.0       0.2X
-Parsing with UTF-8                                 5166           5180          12          1.0        1033.2       0.1X
+Text read                                           481            483           2         10.4          96.3       1.0X
+Schema inferring                                   1680           1684           4          3.0         335.9       0.3X
+Parsing without charset                            2418           2425           7          2.1         483.6       0.2X
+Parsing with UTF-8                                 4684           4710          37          1.1         936.8       0.1X
 
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 Write dates and timestamps:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Create a dataset of timestamps                      105            108           3          9.5         105.5       1.0X
-to_json(timestamp)                                  555            557           2          1.8         555.1       0.2X
-write timestamps to files                           618            626          12          1.6         617.8       0.2X
-Create a dataset of dates                           112            117           4          8.9         112.2       0.9X
-to_json(date)                                       420            420           0          2.4         420.3       0.3X
-write dates to files                                401            403           2          2.5         401.4       0.3X
+Create a dataset of timestamps                       91             95           4         11.0          91.3       1.0X
+to_json(timestamp)                                  402            403           1          2.5         402.5       0.2X
+write timestamps to files                           427            428           1          2.3         427.2       0.2X
+Create a dataset of dates                            96             98           2         10.4          95.8       1.0X
+to_json(date)                                       276            277           2          3.6         275.8       0.3X
+write dates to files                                291            293           3          3.4         290.7       0.3X
 
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 Read dates and timestamps:                                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------------------------
-read timestamp text from files                                                   149            153           7          6.7         148.5       1.0X
-read timestamps from files                                                      1052           1059           7          1.0        1051.7       0.1X
-infer timestamps from files                                                     1976           1980           4          0.5        1976.4       0.1X
-read date text from files                                                        154            157           3          6.5         153.5       1.0X
-read date from files                                                             647            655           6          1.5         647.4       0.2X
-timestamp strings                                                                146            147           0          6.8         146.5       1.0X
-parse timestamps from Dataset[String]                                           1226           1228           2          0.8        1226.2       0.1X
-infer timestamps from Dataset[String]                                           2150           2159          12          0.5        2149.5       0.1X
-date strings                                                                     198            200           2          5.0         198.3       0.7X
-parse dates from Dataset[String]                                                 920            923           3          1.1         920.4       0.2X
-from_json(timestamp)                                                            1749           1751           4          0.6        1748.6       0.1X
-from_json(date)                                                                 1464           1468           4          0.7        1464.3       0.1X
-infer error timestamps from Dataset[String] with default format                 1358           1362           3          0.7        1358.0       0.1X
-infer error timestamps from Dataset[String] with user-provided format           1357           1360           3          0.7        1356.8       0.1X
-infer error timestamps from Dataset[String] with legacy format                  1384           1389           5          0.7        1383.5       0.1X
+read timestamp text from files                                                   132            134           2          7.6         132.4       1.0X
+read timestamps from files                                                       901            905           3          1.1         900.9       0.1X
+infer timestamps from files                                                     1621           1637          17          0.6        1620.8       0.1X
+read date text from files                                                        121            122           1          8.2         121.5       1.1X
+read date from files                                                             587            597           8          1.7         587.4       0.2X
+timestamp strings                                                                115            118           4          8.7         114.7       1.2X
+parse timestamps from Dataset[String]                                           1055           1060           5          0.9        1055.3       0.1X
+infer timestamps from Dataset[String]                                           1770           1771           2          0.6        1769.6       0.1X
+date strings                                                                     154            155           1          6.5         153.7       0.9X
+parse dates from Dataset[String]                                                 828            840          17          1.2         827.7       0.2X
+from_json(timestamp)                                                            1473           1476           5          0.7        1472.7       0.1X
+from_json(date)                                                                 1235           1255          26          0.8        1235.1       0.1X
+infer error timestamps from Dataset[String] with default format                 1067           1073           5          0.9        1066.8       0.1X
+infer error timestamps from Dataset[String] with user-provided format           1089           1091           2          0.9        1088.7       0.1X
+infer error timestamps from Dataset[String] with legacy format                  1097           1099           2          0.9        1097.1       0.1X
 
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 Filters pushdown:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-w/o filters                                        6285           6289           4          0.0       62852.4       1.0X
-pushdown disabled                                  6190           6193           5          0.0       61896.8       1.0X
-w/ filters                                          599            602           6          0.2        5989.5      10.5X
+w/o filters                                        3953           3968          15          0.0       39532.7       1.0X
+pushdown disabled                                  3897           3920          22          0.0       38965.1       1.0X
+w/ filters                                          522            529           7          0.2        5223.6       7.6X
 
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
 Partial JSON results:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-parse invalid JSON                                 2393           2422          43          0.0      239282.1       1.0X
+parse invalid JSON                                 1801           1808           9          0.0      180098.5       1.0X
 
 

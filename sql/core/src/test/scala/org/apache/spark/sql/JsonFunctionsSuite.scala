@@ -1815,6 +1815,31 @@ class JsonFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58373: bad json input with json pruning optimization: named_struct") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        // `c` is a type mismatch rather than a structural malformation, so it only fails
+        // when the parser is actually asked for it. A structurally broken record would
+        // fail at tokenization regardless of the requested schema and hide the pruning.
+        // The two from_json calls are written inline: an aliased subquery reference would
+        // not be inlined by CollapseProject, so the named_struct would not see them.
+        val fromJson = "from_json(value, 'a int, b int, c int', map('mode', 'FAILFAST'))"
+        val df = Seq("""{"a": 1, "b": 2, "c": "bad"}""").toDS()
+          .selectExpr(s"named_struct('a', $fromJson.a, 'b', $fromJson.b)")
+
+        checkError(
+          exception = intercept[SparkException] {
+            df.collect()
+          },
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map(
+            "badRecord" -> "[1,2,null]",
+            "failFastMode" -> "FAILFAST")
+        )
+      }
+    }
+  }
+
   test("SPARK-47670: separately projected from_json fields preserve malformed-input semantics") {
     withSQLConf(
         SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "true",
@@ -1949,6 +1974,15 @@ class JsonFunctionsSuite extends SharedSparkSession {
 
     checkAnswer(df.selectExpr("json_object_keys(a)"), expected)
     checkAnswer(df.select(json_object_keys($"a")), expected)
+  }
+
+  test("json_typeof function") {
+    val df = Seq(null, "{}", "[1, 2, 3]", "\"str\"", "123", "true", "null", "", "bad")
+      .toDF("a")
+    val expected = Seq(Row(null), Row("object"), Row("array"), Row("string"),
+      Row("number"), Row("boolean"), Row("null"), Row(null), Row(null))
+    checkAnswer(df.selectExpr("json_typeof(a)"), expected)
+    checkAnswer(df.select(json_typeof($"a")), expected)
   }
 
   test("function get_json_object - Codegen Support") {

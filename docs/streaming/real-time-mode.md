@@ -30,10 +30,14 @@ It is intended for operational workloads
 that must react to data the moment it arrives, such as fraud detection, real-time alerting, and live
 personalization.
 
-In this release, Real-time Mode in Apache Spark supports **stateless queries** only -- projections,
-filters and other map-like operations, unions, and stream-static joins. Stateful operations such as
-streaming aggregations, deduplication, stream-stream joins, and `transformWithState` are not yet
-supported, but support for them is planned starting in Spark 4.3. See
+Real-time Mode in Apache Spark supports **stateless queries** -- projections, filters and other
+map-like operations, unions, and stream-static joins -- and, starting in Spark 4.3.0, a first set of
+**stateful queries**: streaming **deduplication** (`dropDuplicates`) and streaming **aggregations**
+(`groupBy(...).agg(...)`). These
+stateful operations require a shuffle, which Real-time Mode runs as a *pipelined shuffle* so that
+records still stream through without waiting for a batch boundary; see
+[How Stateful Queries Work](#how-stateful-queries-work). Other stateful operations -- stream-stream
+joins, `flatMapGroupsWithState`, and `transformWithState` -- are not yet supported. See
 [Supported Queries](#supported-queries) for the full list.
 
 The most important thing to know: **the duration you pass to the trigger (default 5 minutes) is a
@@ -62,6 +66,47 @@ the time needed to process and ship one record (often a few milliseconds).
 Since records never wait for a batch boundary, the batch duration mainly controls how often the
 query checkpoints progress -- as the next section explains.
 
+## How Stateful Queries Work
+
+Stateless operations are per-record: each long-running task reads a partition, transforms records,
+and ships them without ever needing data from another partition. Stateful operations are different.
+A streaming aggregation or `dropDuplicates` groups records **by key**, so every record for a given
+key must reach the same task, no matter which partition it arrived on. In the micro-batch engine
+that regrouping is done by a **shuffle**: the batch's producer stage writes shuffle files, and only
+once those files are fully materialized does the consumer stage read them back, grouped by key.
+
+That "materialize, then read" boundary is exactly what Real-time Mode avoids for latency, and a
+long-running Real-time task never finishes its batch, so an ordinary shuffle would deadlock -- the
+consumer would wait forever for a producer that never completes. Real-time Mode therefore runs the
+shuffle differently, using two cooperating pieces:
+
+- **Pipelined shuffle** changes *scheduling*. Normally the scheduler runs the consumer stage only
+  after the producer stage has completed. For a Real-time stateful query the producer (the source
+  scan) and the consumer (the stateful operator) are marked as a single **pipelined group** and
+  scheduled to run **at the same time**, for the whole batch. Neither stage waits for the other to
+  finish; they run concurrently as long-running tasks, just like the stateless case.
+
+- **Streaming shuffle** changes *data transport*. Because the two stages run concurrently, shuffle
+  data cannot be written to files and read back after the fact. Instead the producer's output is
+  streamed directly to the consumer tasks over the network, record by record, so a record is
+  regrouped by key and handed to the stateful operator as soon as it is produced -- there is no
+  intermediate file and no wait for the batch to end.
+
+Together these let a stateful Real-time query keep the same continuous, per-record flow as a
+stateless one: a record is read, routed to the task that owns its key through the streaming shuffle,
+merged into state, and emitted -- all without a batch boundary. The regrouped state itself is kept
+in Spark's usual state store and checkpointed each batch, so the exactly-once and recovery
+guarantees are the same as the micro-batch engine (see [Fault Tolerance](#fault-tolerance)).
+
+This mechanism is enabled automatically in Real-time Mode; there is nothing to configure. It applies
+to every shuffle on the streaming path -- the shuffle a stateful operator needs, and also a bare
+`repartition` (a hash or round-robin shuffle with no stateful operator), which runs as a pipelined
+shuffle in the same way. The one exception is a shuffle that would require a separate preparatory
+job: range partitioning (`repartitionByRange`, or an `ORDER BY` that plans to a range shuffle) needs
+a sampling job to compute range bounds, and that job cannot complete while the source keeps
+producing, so such a query fails to start with
+`STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST`.
+
 ## Batch Duration Is a Checkpoint Interval
 
 In Real-time Mode, the batch duration is a **checkpoint interval, not a latency interval.** With the
@@ -85,6 +130,12 @@ Choosing the batch duration is a trade-off:
 The duration is set on the Real-time trigger, as shown under
 [Enabling Real-time Mode](#enabling-real-time-mode).
 
+Progress is committed using **asynchronous progress tracking**: the offset and commit logs are
+written off the record-processing path so that checkpointing does not stall processing. This is
+enabled automatically for Real-time Mode queries and every batch is checkpointed (the async
+progress tracking checkpoint interval is fixed at 0 in Real-time Mode). It can be turned off with
+the `asyncProgressTrackingEnabled` writer option, in which case progress is committed synchronously.
+
 ## Comparison with Other Modes
 
 The table below summarizes how Real-time Mode relates to the default micro-batch engine and to the
@@ -94,8 +145,8 @@ experimental [Continuous Processing](./performance-tips.html#continuous-processi
 
 | Mode | Latency | Processing Guarantees | Supported operations | When to use |
 |---|---|---|---|---|
-| Micro-batch (default) | ~100 ms | Exactly-once | All streaming operations, including stateful | Stateful or higher-throughput workloads, or queries Real-time Mode does not yet support |
-| Real-time Mode | millisecond-scale | Exactly-once | Stateless today (map-like operations, unions, and stream-static joins); designed to support all query shapes, including stateful | Low-latency workloads |
+| Micro-batch (default) | ~100 ms | Exactly-once | All streaming operations, including all stateful ones | Stateful or higher-throughput workloads, or queries Real-time Mode does not yet support |
+| Real-time Mode | millisecond-scale | Exactly-once | Stateless operations (map-like operations, unions, and stream-static joins) plus stateful deduplication and aggregation; more stateful operations planned | Low-latency workloads |
 | Continuous Processing (experimental) | ~1 ms | At-least-once | Map-like only (projections and selections); no stateful operations | Legacy; use Real-time Mode instead |
 
 The **Processing Guarantees** column refers to processing semantics, defined under
@@ -112,8 +163,9 @@ substantially:
   apply to it. These constraints have limited its adoption.
 - **Real-time Mode** is designed to support all query shapes, including stateful operations, while
   reusing Spark's mature components such as state management, the Catalyst optimizer, and the
-  existing SQL operators. It provides exactly-once processing semantics. It currently supports
-  stateless queries, with stateful support planned starting in Spark 4.3.
+  existing SQL operators. It provides exactly-once processing semantics. It supports stateless
+  queries and, starting in Spark 4.3.0, stateful deduplication and aggregation; support for the
+  remaining stateful operations is ongoing.
 
 For new low-latency workloads, prefer Real-time Mode over Continuous Processing.
 
@@ -222,11 +274,12 @@ the query starts:
 
 ## Supported Queries
 
-Real-time Mode supports stateless, map-like queries only.
+Real-time Mode supports stateless, map-like queries and a first set of stateful queries
+(deduplication and aggregation).
 
-The following operations, sources, and sinks are supported as of Spark 4.1.0:
+The following operations, sources, and sinks are supported:
 
-- *Operations*: stateless, map-like operations are supported:
+- *Stateless operations* (supported since Spark 4.1.0):
   + Projections: `select`, `selectExpr`, `withColumn`, `drop`, and the typed `map` / `flatMap` Dataset operations.
   + Selections: `where` / `filter`.
   + Expressions that compile to a projection -- including functions such as `from_json` / `to_json`
@@ -237,11 +290,22 @@ The following operations, sources, and sinks are supported as of Spark 4.1.0:
     `STREAMING_REAL_TIME_MODE.IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED`; create a separate DataFrame
     for each source instead.
   + Stream-static joins, where a streaming DataFrame is joined with a static DataFrame. The static
-    side must be broadcast (use the `broadcast(...)` hint), because Real-time Mode does not support
-    shuffles.
-  + `withWatermark` (event-time watermark declaration) is allowed, although it has no effect because
-    stateful operators are not supported. This lets queries that already declare a watermark run in
-    Real-time Mode without modification.
+    side must be broadcast (use the `broadcast(...)` hint), because a stream-static join must not
+    introduce a shuffle.
+
+- *Stateful operations* (supported since Spark 4.3.0): these regroup records by key through a
+  pipelined shuffle (see [How Stateful Queries Work](#how-stateful-queries-work)) and keep their
+  state in the state store, checkpointed each batch.
+  + **Deduplication**: `dropDuplicates`. (`dropDuplicatesWithinWatermark` is not yet supported in
+    Real-time Mode.)
+  + **Streaming aggregation**: `groupBy(...).agg(...)` (and the SQL `GROUP BY` equivalent), including
+    windowed aggregations with `window(...)`. Distinct aggregates such as `count(distinct ...)` are
+    not supported (see [Not supported](#not-supported)).
+  + `withWatermark` (event-time watermark declaration) is supported and now takes effect: it lets a
+    windowed aggregation drop late input and evict the state for windows that have closed, bounding
+    how much state a long-running query accumulates. (Real-time Mode always runs in `update` output
+    mode -- see [Requirements](#requirements) -- so a windowed aggregation emits each window's
+    running result as it changes, and the watermark governs when that window's state is evicted.)
 
 - *Sources*: the source must support Real-time Mode. In Apache Spark, the **Kafka** source supports
   Real-time Mode. An unsupported source fails with
@@ -264,12 +328,23 @@ starts; anything outside the allowlist fails with
 
 ### Not supported
 
-Stateful operations of any kind are not supported in this release. This includes streaming
-aggregations, `dropDuplicates` / `dropDuplicatesWithinWatermark`, stream-stream joins, `repartition`
-and other operations that introduce a shuffle, and stateful operators such as
-`flatMapGroupsWithState` and `transformWithState`. Support for stateful operations is planned
-starting in Spark 4.3. Asynchronous progress tracking is also not supported; enabling it fails with
-`STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED`.
+The following are not yet supported in Real-time Mode. Unless noted otherwise, a query that uses one
+fails to start with `STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST`:
+
+- Stateful operations other than deduplication and aggregation: **stream-stream joins**,
+  `flatMapGroupsWithState`, `transformWithState`, session-window aggregation, and
+  `dropDuplicatesWithinWatermark`.
+- **Range partitioning**: `repartitionByRange`, or an `ORDER BY` / sort that plans to a range
+  shuffle, because computing range bounds needs a separate sampling job that cannot complete while
+  the source keeps producing. (A plain `repartition` -- hash or round-robin -- is supported; it runs
+  as a pipelined shuffle. See [How Stateful Queries Work](#how-stateful-queries-work).)
+
+**Distinct aggregates** such as `count(distinct ...)` are not supported either, but this is a
+general Structured Streaming restriction rather than a Real-time Mode one: any streaming distinct
+aggregate is rejected during analysis (with a message suggesting `approx_count_distinct()`),
+regardless of the trigger.
+
+Support for more stateful operations is ongoing.
 
 ## Fault Tolerance
 
@@ -386,6 +461,175 @@ spark
 
 </div>
 
+### Deduplication
+
+Drop duplicate records by key. This is a stateful operation: Real-time Mode regroups records by the
+deduplication key through a pipelined shuffle and keeps the set of seen keys in the state store (see
+[How Stateful Queries Work](#how-stateful-queries-work)). No code changes are needed beyond running
+under a Real-time trigger.
+
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "input-topic") \
+  .load() \
+  .selectExpr("CAST(key AS STRING) AS id", "CAST(value AS STRING) AS value") \
+  .dropDuplicates("id") \
+  .writeStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("topic", "output-topic") \
+  .option("checkpointLocation", "/path/to/checkpoint") \
+  .outputMode("update") \
+  .trigger(realTime="5 minutes") \
+  .start()
+{% endhighlight %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+import org.apache.spark.sql.streaming.Trigger
+
+spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "input-topic")
+  .load()
+  .selectExpr("CAST(key AS STRING) AS id", "CAST(value AS STRING) AS value")
+  .dropDuplicates("id")
+  .writeStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "output-topic")
+  .option("checkpointLocation", "/path/to/checkpoint")
+  .outputMode("update")
+  .trigger(Trigger.RealTime("5 minutes"))
+  .start()
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+import org.apache.spark.sql.streaming.Trigger;
+
+spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "input-topic")
+  .load()
+  .selectExpr("CAST(key AS STRING) AS id", "CAST(value AS STRING) AS value")
+  .dropDuplicates("id")
+  .writeStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "output-topic")
+  .option("checkpointLocation", "/path/to/checkpoint")
+  .outputMode("update")
+  .trigger(Trigger.RealTime("5 minutes"))
+  .start();
+{% endhighlight %}
+</div>
+
+</div>
+
+This keeps every distinct key it has seen in the state store. `dropDuplicatesWithinWatermark`, which
+bounds how long keys are retained, is not yet supported in Real-time Mode.
+
+### Streaming aggregation
+
+Maintain a running aggregate per key. Real-time Mode regroups input by the grouping key through a
+pipelined shuffle, merges each record into the running aggregate in the state store, and emits the
+updated result. Because the output mode is `update`, each key is emitted as it changes rather than
+only at the end of the batch.
+
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+from pyspark.sql.functions import count
+
+spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "input-topic") \
+  .load() \
+  .selectExpr("CAST(key AS STRING) AS id") \
+  .groupBy("id") \
+  .agg(count("*").alias("cnt")) \
+  .selectExpr("CAST(id AS STRING) AS key", "CAST(cnt AS STRING) AS value") \
+  .writeStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("topic", "output-topic") \
+  .option("checkpointLocation", "/path/to/checkpoint") \
+  .outputMode("update") \
+  .trigger(realTime="5 minutes") \
+  .start()
+{% endhighlight %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.streaming.Trigger
+
+spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "input-topic")
+  .load()
+  .selectExpr("CAST(key AS STRING) AS id")
+  .groupBy("id")
+  .agg(count("*").as("cnt"))
+  .selectExpr("CAST(id AS STRING) AS key", "CAST(cnt AS STRING) AS value")
+  .writeStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "output-topic")
+  .option("checkpointLocation", "/path/to/checkpoint")
+  .outputMode("update")
+  .trigger(Trigger.RealTime("5 minutes"))
+  .start()
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+import static org.apache.spark.sql.functions.count;
+import org.apache.spark.sql.streaming.Trigger;
+
+spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "input-topic")
+  .load()
+  .selectExpr("CAST(key AS STRING) AS id")
+  .groupBy("id")
+  .agg(count("*").as("cnt"))
+  .selectExpr("CAST(id AS STRING) AS key", "CAST(cnt AS STRING) AS value")
+  .writeStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "output-topic")
+  .option("checkpointLocation", "/path/to/checkpoint")
+  .outputMode("update")
+  .trigger(Trigger.RealTime("5 minutes"))
+  .start();
+{% endhighlight %}
+</div>
+
+</div>
+
 ### Writing to the console for development
 
 The console sink prints output to the driver's standard output and is handy while developing a
@@ -466,6 +710,44 @@ spark
 |---|---|---|
 | `spark.sql.streaming.realTimeMode.minBatchDuration` | `5000` (ms, 5 seconds) | The minimum batch duration, in milliseconds, allowed for a Real-time trigger. See the batch-duration requirement under [Requirements](#requirements). |
 | `spark.sql.streaming.realTimeMode.allowlistCheck` | `true` | Whether to verify that all operators and sinks used by a Real-time query are in the supported allowlist. Disabling this check (not recommended) lets unsupported operators and sinks run at your own risk. |
+| `spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled` | `false` | Whether to allow a stateful Real-time query to start on a checkpoint written with the version 1 commit log format (for example, one created by a micro-batch query, or with `spark.sql.streaming.stateStore.checkpointFormatVersion=1`). This is unsafe -- format v1 does not persist the per-batch state store checkpoint ids Real-time Mode relies on for correct recovery, so a failure could lose state. Prefer a fresh checkpoint location. See [State store defaults](#state-store-defaults). |
+
+### State store defaults
+
+A stateful Real-time query needs a low-latency, recovery-correct state store configuration. Because
+that configuration is not the right default for the engine as a whole, Real-time Mode applies it
+automatically at query start, only for Real-time queries. These are **soft defaults**: each is set
+only when you have not set the config yourself, so an explicit value is preserved -- with the
+exception of a few explicit values that are incompatible with Real-time Mode and are rejected at
+query start rather than kept (see [Incompatible configurations](#incompatible-configurations)).
+
+| Configuration | Real-time default | Meaning |
+|---|---|---|
+| `spark.sql.streaming.stateStore.providerClass` | `RocksDBStateStoreProvider` | Real-time Mode defaults to the RocksDB state store, which checkpoint format v2 (below) requires. |
+| `spark.sql.streaming.stateStore.checkpointFormatVersion` | `2` | Format v2 gives each batch its own state store checkpoint ids, which is what lets a failed batch be rerun correctly from committed offsets. Real-time Mode requires v2 for stateful queries (see below). |
+| `spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled` | `true` | Writes a changelog instead of a full snapshot at each commit, shortening the state-commit step that sits on the critical path between Real-time batches. Applied only when the state store is RocksDB. |
+| `spark.sql.execution.sortBeforeRepartition` | `false` | The local sort inserted before a round-robin repartition never drains an unbounded stream and would hang a Real-time query, so Real-time Mode defaults it off. Determinism from the sort is not needed because Real-time Mode does not retry tasks. Like the others this is a soft default -- but an explicit `true` is incompatible, so rather than being kept it is rejected at query start (see [Incompatible configurations](#incompatible-configurations)). |
+
+A stateful Real-time query requires a checkpoint written with commit log format v2 (the state store
+format above). Starting a stateful Real-time query on a version 1 checkpoint -- for example, when
+switching an existing micro-batch query to Real-time Mode, or when
+`spark.sql.streaming.stateStore.checkpointFormatVersion` is pinned to `1` -- fails to start with
+`STREAMING_REAL_TIME_MODE.CHECKPOINT_FORMAT_V1_NOT_SUPPORTED`. Use a fresh checkpoint location, or,
+accepting the risk of state loss on failure, set
+`spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled=true`.
+
+### Incompatible configurations
+
+The defaults above are applied only when you have not set the config. If you instead set one of the
+following to a value that Real-time Mode cannot run with, the query fails to start with
+`STREAMING_REAL_TIME_MODE.SQL_CONFIGURATION_NOT_SUPPORTED` rather than having your value silently
+overridden:
+
+- `spark.sql.streaming.stateStore.checkpointFormatVersion` set below `2` (unless
+  `spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled=true`).
+- `spark.sql.streaming.stateStore.providerClass` set to a provider other than
+  `RocksDBStateStoreProvider`.
+- `spark.sql.execution.sortBeforeRepartition` set to `true`.
 
 ## Best Practices
 
@@ -476,6 +758,13 @@ spark
   topic with 10 partitions requires at least 10 cores for the query to make progress. Real-time Mode
   uses a fixed 1:1 mapping between Kafka topic partitions and reader tasks; the `minPartitions`
   option is not supported in Real-time Mode.
+- Stateful queries need cores for **both** stages at once. A stateful Real-time query runs its
+  producer stage (the source scan) and its consumer stage (the stateful operator) concurrently as a
+  pipelined group (see [How Stateful Queries Work](#how-stateful-queries-work)), and both hold their
+  tasks for the whole batch. Size the cluster for the sum: the source's reader tasks plus the
+  stateful operator's tasks (`spark.sql.shuffle.partitions` post-shuffle tasks by default). For
+  example, a 10-partition Kafka source feeding an aggregation with 5 shuffle partitions needs at
+  least 15 cores to make progress.
 - Run a single Real-time query per cluster. Because Real-time Mode holds its task slots for the
   entire batch duration, any other queries sharing the cluster compete for the same slots, which can
   starve the Real-time query of resources and increase its latency.

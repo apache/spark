@@ -233,12 +233,21 @@ case class GroupPartitionsExec(
     }
   }
 
+  /**
+   * The ordering used by the k-way merge in [[SortedMergeCoalescedRDD]]. The generated comparator
+   * ([[GenerateOrdering]]) only needs each [[SortOrder]]'s sort key (child, direction, null
+   * ordering), so `sameOrderExpressions` -- planner-only metadata that would otherwise be
+   * serialized with the RDD in every task -- is dropped.
+   */
+  private[v2] def kWayMergeOrdering: Seq[SortOrder] =
+    child.outputOrdering.map(_.copy(sameOrderExpressions = Seq.empty))
+
   override protected def doExecute(): RDD[InternalRow] = {
     if (groupedPartitions.isEmpty) {
       sparkContext.emptyRDD
     } else if (hasCoalescing && enableSortedMerge && canUseSortedMerge) {
       val partitionCoalescer = new GroupedPartitionCoalescer(groupedPartitions.map(_._2))
-      val rowOrdering = new LazyCodeGenOrdering(child.outputOrdering, child.output)
+      val rowOrdering = new LazyCodeGenOrdering(kWayMergeOrdering, child.output)
       new SortedMergeCoalescedRDD[InternalRow](
         child.execute(),
         groupedPartitions.size,

@@ -461,6 +461,21 @@ class PandasToArrowConversionTests(unittest.TestCase):
         result = PandasToArrowConversion.convert([cat_series], schema)
         self.assertEqual(result.column(0).to_pylist(), ["a", "b", "a", "c"])
 
+    def test_convert_chunked_array_backed(self):
+        """Test a chunked arrow-backed series is converted to a single Array."""
+        import pandas as pd
+        import pyarrow as pa
+
+        # pa.Array.from_pandas returns a ChunkedArray here, which
+        # pa.RecordBatch.from_arrays rejects.
+        chunked = pa.chunked_array([pa.array(["a", "b"]), pa.array(["c", "d", "e"])])
+        series = pd.Series(chunked, dtype="string[pyarrow]")
+        schema = StructType([StructField("s", StringType())])
+
+        result = PandasToArrowConversion.convert([series], schema, arrow_cast=True)
+        self.assertIsInstance(result.column(0), pa.Array)
+        self.assertEqual(result.column(0).to_pylist(), ["a", "b", "c", "d", "e"])
+
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ConversionTests(unittest.TestCase):

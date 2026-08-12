@@ -186,4 +186,18 @@ class SparkConnectResultSetSuite extends ConnectFunSuite with RemoteSparkSession
       assert(!rs.next())
     }
   }
+
+  test("next throws SQLException when the query fails during result streaming") {
+    // The server sends the schema response before any arrow batch, so executeQuery
+    // returns successfully and the runtime error surfaces while iterating rows.
+    withStatement { stmt =>
+      val rs = stmt.executeQuery("SELECT 10 / (5 - id) FROM range(10)")
+      val e = intercept[SQLException] {
+        while (rs.next()) {}
+      }
+      // DIVIDE_BY_ZERO under ANSI mode
+      assert(e.getSQLState === "22012")
+      assert(e.getCause != null)
+    }
+  }
 }

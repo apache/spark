@@ -90,6 +90,18 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(new TargetEncoder)
   }
 
+  test("model estimated size") {
+    val df = spark.createDataFrame(sc.parallelize(data_binary), schema)
+    val model = new TargetEncoder()
+      .setLabelCol("label")
+      .setInputCols(Array("input1", "input2", "input3"))
+      .setOutputCols(Array("output1", "output2", "output3"))
+      .fit(df)
+    val maxSize = 1024 * 6
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("TargetEncoder - binary target") {
 
     val df = spark.createDataFrame(sc.parallelize(data_binary), schema)

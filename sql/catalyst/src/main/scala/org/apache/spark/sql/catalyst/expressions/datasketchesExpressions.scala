@@ -29,6 +29,11 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, Da
   usage = """
     _FUNC_(expr) - Returns the estimated number of unique values given the binary representation
     of a Datasketches HllSketch. """,
+  arguments = """
+    Arguments:
+      * expr - A binary expression holding the serialized representation of a Datasketches
+          HllSketch.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(hll_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
@@ -70,6 +75,15 @@ case class HllSketchEstimate(child: Expression)
     Datasketches HllSketch objects, using a Datasketches Union object. Set
     allowDifferentLgConfigK to true to allow unions of sketches with different
     lgConfigK values (defaults to false). """,
+  arguments = """
+    Arguments:
+      * first - A binary expression holding the serialized representation of a Datasketches
+          HllSketch.
+      * second - A binary expression holding the serialized representation of a Datasketches
+          HllSketch.
+      * allowDifferentLgConfigK - A boolean. Set to true to allow unions of sketches with
+          different lgConfigK values. Defaults to false.
+  """,
   examples = """
     Examples:
       > SELECT hll_sketch_estimate(_FUNC_(hll_sketch_agg(col1), hll_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2);
