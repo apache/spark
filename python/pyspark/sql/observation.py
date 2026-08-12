@@ -19,9 +19,9 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from pyspark.errors import PySparkAssertionError, PySparkTypeError, PySparkValueError
 from pyspark.serializers import CPickleSerializer
-from pyspark.sql import Row
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.types import Row
 from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
