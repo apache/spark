@@ -38,7 +38,8 @@ class DistinctWindowFunctionFrameSuite extends QueryTest with SharedSparkSession
 
   private final class TestDistinctWindowFunctionFrame(
       inputAttribute: Attribute,
-      spillSize: SQLMetric)
+      spillSize: SQLMetric,
+      spillSizeThreshold: Long = Long.MaxValue)
     extends DistinctWindowFunctionFrame(
       target = new GenericInternalRow(1),
       processor = null,
@@ -48,9 +49,14 @@ class DistinctWindowFunctionFrameSuite extends QueryTest with SharedSparkSession
       spillSize = spillSize,
       hashFallbackThreshold = Int.MaxValue,
       spillThreshold = Int.MaxValue,
-      spillSizeThreshold = Long.MaxValue) {
+      spillSizeThreshold = spillSizeThreshold) {
 
     def deduplicate(rows: Seq[(UnsafeRow, UnsafeRow)]): Seq[(Int, Int)] = {
+      deduplicateAndGetSpillSize(rows)._1
+    }
+
+    def deduplicateAndGetSpillSize(
+        rows: Seq[(UnsafeRow, UnsafeRow)]): (Seq[(Int, Int)], Long) = {
       val builder = new FirstVisibleRowsBuilder
       try {
         rows.foreach { case (key, position) => builder.add(key, position) }
@@ -58,7 +64,7 @@ class DistinctWindowFunctionFrameSuite extends QueryTest with SharedSparkSession
         builder.foreachDistinctRow { (key, position) =>
           result.append((key.getInt(0), position.getInt(1)))
         }
-        result.toSeq
+        result.toSeq -> builder.getSpillSize
       } finally {
         builder.close()
       }
@@ -130,25 +136,26 @@ class DistinctWindowFunctionFrameSuite extends QueryTest with SharedSparkSession
         inputAttribute,
         SQLMetrics.createSizeMetric(sparkContext, "spill size"))
       try {
-        val keyProjection = UnsafeProjection.create(Array[DataType](IntegerType))
-        val positionProjection =
-          UnsafeProjection.create(Array[DataType](IntegerType, IntegerType))
-        def key(value: Int): UnsafeRow =
-          keyProjection(new GenericInternalRow(Array[Any](value))).copy()
-        def position(firstVisibleIndex: Int, inputIndex: Int): UnsafeRow =
-          positionProjection(
-            new GenericInternalRow(Array[Any](firstVisibleIndex, inputIndex))).copy()
-        val rows = Seq(
-          key(1) -> position(0, 0),
-          key(1) -> position(1, 1),
-          key(2) -> position(2, 2))
-
         memoryManager.markConsequentOOM(numFailures)
-        body(frame, rows)
+        body(frame, distinctRows())
       } finally {
         frame.close()
       }
     }
+  }
+
+  private def distinctRows(): Seq[(UnsafeRow, UnsafeRow)] = {
+    val keyProjection = UnsafeProjection.create(Array[DataType](IntegerType))
+    val positionProjection = UnsafeProjection.create(Array[DataType](IntegerType, IntegerType))
+    def key(value: Int): UnsafeRow =
+      keyProjection(new GenericInternalRow(Array[Any](value))).copy()
+    def position(firstVisibleIndex: Int, inputIndex: Int): UnsafeRow =
+      positionProjection(
+        new GenericInternalRow(Array[Any](firstVisibleIndex, inputIndex))).copy()
+    Seq(
+      key(1) -> position(0, 0),
+      key(1) -> position(1, 1),
+      key(2) -> position(2, 2))
   }
 
   test("fall back to the sorter when BytesToBytesMap construction runs out of memory") {
@@ -161,6 +168,23 @@ class DistinctWindowFunctionFrameSuite extends QueryTest with SharedSparkSession
     withAllocationFailures(2) { (frame, rows) =>
       intercept[SparkOutOfMemoryError] {
         frame.deduplicate(rows)
+      }
+    }
+  }
+
+  test("spill the distinct-key sorter after size-based fallback") {
+    withTaskMemoryManager { (_, _) =>
+      val inputAttribute = AttributeReference("key", IntegerType, nullable = false)()
+      val frame = new TestDistinctWindowFunctionFrame(
+        inputAttribute,
+        SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+        spillSizeThreshold = 1L)
+      try {
+        val (result, spillSize) = frame.deduplicateAndGetSpillSize(distinctRows())
+        assert(result === Seq(1 -> 0, 2 -> 2))
+        assert(spillSize > 0L)
+      } finally {
+        frame.close()
       }
     }
   }
