@@ -517,15 +517,35 @@ class UserDefinedFunction:
         assert sc._jvm is not None
         transpiled = self.transpiled if include_transpiled else []
         input_categories = self._transpiled_input_categories if include_transpiled else []
-        judf = getattr(sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction")(
-            self._name,
-            wrapped_func,
-            jdt,
-            self.evalType,
-            self.deterministic,
-            map(_to_java_column_opt, transpiled),
-            input_categories,
-        )
+        # Incremental Python aggregators additionally carry the intermediate buffer schema, which
+        # the JVM needs at planning time to build the two-stage aggregation (see PythonAggregate).
+        buffer_schema = getattr(self, "bufferSchema", None)
+        if buffer_schema is not None:
+            jbuf = spark._jsparkSession.parseDataType(buffer_schema.json())
+            judf = getattr(
+                sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction"
+            )(
+                self._name,
+                wrapped_func,
+                jdt,
+                self.evalType,
+                self.deterministic,
+                map(_to_java_column_opt, transpiled),
+                input_categories,
+                jbuf,
+            )
+        else:
+            judf = getattr(
+                sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction"
+            )(
+                self._name,
+                wrapped_func,
+                jdt,
+                self.evalType,
+                self.deterministic,
+                map(_to_java_column_opt, transpiled),
+                input_categories,
+            )
         return judf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> Column:

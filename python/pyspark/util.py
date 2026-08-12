@@ -699,6 +699,13 @@ class PythonEvalType:
     SQL_WINDOW_AGG_ARROW_UDF: "ArrowWindowAggUDFType" = 253
     SQL_GROUPED_AGG_ARROW_ITER_UDF: "ArrowGroupedAggIterUDFType" = 254
 
+    # Incremental (partial + final) Arrow aggregator. See ``pyspark.sql.pandas.aggregator``.
+    # PARTIAL folds input rows into a per-group buffer via ``Aggregator.reduce`` on the map side;
+    # FINAL merges partial buffers via ``Aggregator.merge`` and produces output via
+    # ``Aggregator.finish`` after the shuffle.
+    SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF: "ArrowGroupedAggIncrementalPartialUDFType" = 255
+    SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF: "ArrowGroupedAggIncrementalFinalUDFType" = 256
+
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
     SQL_ARROW_UDTF: "SQLArrowUDTFType" = 302

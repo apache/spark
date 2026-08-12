@@ -28,7 +28,7 @@ import net.razorvine.pickle.Pickler
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, TableArg}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonAggregate, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
@@ -56,7 +56,25 @@ case class UserDefinedPythonFunction(
     // categories match the bound argument types; when none match, the call
     // falls back to the plain Python UDF. `builder` requires the two lists to
     // be parallel and skips transpilation otherwise.
-    transpiledInputTypes: JList[JList[String]] = Nil.asJava) {
+    transpiledInputTypes: JList[JList[String]] = Nil.asJava,
+    // Schema of the intermediate aggregation buffer, set only for the incremental Python
+    // aggregator eval types (see [[PythonAggregate]]); `null` otherwise. Nullable rather than
+    // `Option` so it can be passed positionally from Python over Py4J.
+    bufferType: DataType = null) {
+
+  // Preserves the constructor arity used by non-aggregator Python callers (which pass no
+  // `bufferType`), so their positional Py4J `new UserDefinedPythonFunction(...)` still resolves.
+  def this(
+      name: String,
+      func: PythonFunction,
+      dataType: DataType,
+      pythonEvalType: Int,
+      udfDeterministic: Boolean,
+      transpiled: JList[Column],
+      transpiledInputTypes: JList[JList[String]]) = {
+    this(name, func, dataType, pythonEvalType, udfDeterministic,
+      transpiled, transpiledInputTypes, null)
+  }
 
   def builder(e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
@@ -66,7 +84,8 @@ case class UserDefinedPythonFunction(
         || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
         || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF) {
       /*
        * Check if the named arguments:
        * - don't have duplicated names
@@ -87,6 +106,14 @@ case class UserDefinedPythonFunction(
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
       PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType)
+    } else if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF) {
+      // The incremental Python aggregator. `bufferType` (the intermediate buffer schema) must have
+      // been supplied when the UDF was created. The single expression carries the aggregator for
+      // both the PARTIAL and FINAL stages; the physical operator picks the per-stage eval type.
+      require(bufferType != null,
+        "An incremental Python aggregator requires a buffer schema.")
+      PythonAggregate(
+        name, func, dataType, e, udfDeterministic, bufferType.asInstanceOf[StructType])
     } else {
       PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
     }
@@ -172,6 +199,7 @@ case class UserDefinedPythonFunction(
       case TranspiledPythonUDF(name, udaf: PythonUDAF, transpiled, inputCategories) =>
         TranspiledPythonUDF(name, udaf.toAggregateExpression(), transpiled, inputCategories)
       case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case agg: PythonAggregate => agg.toAggregateExpression()
       case _ => expr
     })
   }

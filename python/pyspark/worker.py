@@ -626,6 +626,15 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     # The last returnType will be the return type of UDF. Eval types are grouped below by the
     # shape of the value they return.
 
+    # Incremental Python aggregators: the pickled "function" is the Aggregator object itself, whose
+    # zero/reduce/merge/finish methods the worker calls directly. Return it unwrapped (not through
+    # fail_on_stopiteration, which would treat it as a plain callable).
+    if eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+    ):
+        return chained_func, args_offsets, kwargs_offsets, return_type
+
     # Scalar, aggregation and window UDFs: (func, args_offsets, kwargs_offsets, return_type).
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
@@ -1946,6 +1955,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
     ):
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         if eval_type in (
@@ -1953,6 +1964,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
@@ -2194,6 +2207,96 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 for _ in batch_iter:
                     pass
                 batch = pa.RecordBatch.from_arrays([pa.array([result])], ["_0"])
+                yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
+
+        # profiling is not supported for UDF
+        return grouped_func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF:
+        import pyarrow as pa
+
+        # Map-side PARTIAL stage: fold each group's input rows into a per-group buffer via the
+        # aggregator's `reduce`, and emit one intermediate-buffer struct column per aggregator.
+        # `udf_func` is the Aggregator object itself (see read_single_udf).
+        return_schema = to_arrow_schema(
+            StructType(
+                [StructField("_%d" % i, agg.bufferSchema) for i, (agg, _, _, _) in enumerate(udfs)]
+            ),
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+        col_names = ["_%d" % i for i in range(len(udfs))]
+
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
+            for group in data:
+                batch_list = list(group)
+                if not batch_list:
+                    continue
+                if hasattr(pa, "concat_batches"):
+                    concatenated = pa.concat_batches(batch_list)
+                else:
+                    concatenated = pa.RecordBatch.from_struct_array(
+                        pa.concat_arrays([b.to_struct_array() for b in batch_list])
+                    )
+                num_rows = concatenated.num_rows
+                result_arrays = []
+                for i, (agg, args_offsets, _, _) in enumerate(udfs):
+                    cols = [concatenated.column(o).to_pylist() for o in args_offsets]
+                    buffer = agg.zero()
+                    for r in range(num_rows):
+                        buffer = agg.reduce(buffer, tuple(c[r] for c in cols))
+                    field_names = [f.name for f in agg.bufferSchema.fields]
+                    struct_value = {name: buffer[j] for j, name in enumerate(field_names)}
+                    result_arrays.append(
+                        pa.array([struct_value], type=return_schema.field(i).type)
+                    )
+                batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
+                yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
+
+        # profiling is not supported for UDF
+        return grouped_func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF:
+        import pyarrow as pa
+
+        # Post-shuffle FINAL stage: merge each group's partial buffers via the aggregator's `merge`
+        # and produce the output via `finish`. Each aggregator's single input column is its
+        # intermediate-buffer struct column.
+        col_names = ["_%d" % i for i in range(len(udfs))]
+        return_schema = to_arrow_schema(
+            StructType([StructField(name, rt) for name, (_, _, _, rt) in zip(col_names, udfs)]),
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
+            for group in data:
+                batch_list = list(group)
+                if not batch_list:
+                    continue
+                if hasattr(pa, "concat_batches"):
+                    concatenated = pa.concat_batches(batch_list)
+                else:
+                    concatenated = pa.RecordBatch.from_struct_array(
+                        pa.concat_arrays([b.to_struct_array() for b in batch_list])
+                    )
+                results = []
+                for agg, args_offsets, _, _ in udfs:
+                    field_names = [f.name for f in agg.bufferSchema.fields]
+                    buffer_rows = concatenated.column(args_offsets[0]).to_pylist()
+                    merged = None
+                    for row in buffer_rows:
+                        partial = tuple(row[name] for name in field_names)
+                        merged = partial if merged is None else agg.merge(merged, partial)
+                    if merged is None:
+                        merged = agg.zero()
+                    results.append(agg.finish(merged))
+                result_arrays = [pa.array([r]) for r in results]
+                batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
         # profiling is not supported for UDF
