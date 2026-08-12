@@ -367,7 +367,7 @@ class XmlFunctionsSuite extends SharedSparkSession {
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       foreachNanosPrecision { p =>
         // The pattern must carry `p` fractional digits to emit the full declared precision; the
-        // stored value has exactly `p` significant digits, so the rendered fraction is the first
+        // stored value is truncated to precision `p`, so the rendered fraction is the first
         // `p` digits of 123456789.
         val fracPat = "S" * p
         val frac = "123456789".take(p)
