@@ -141,6 +141,19 @@ class ArrowPythonAggregatorTestsMixin:
         self.assertEqual(results[0], results[1])
         self.assertEqual(results[1], results[2])
 
+    def test_sql_registration(self):
+        # Register the aggregator and invoke it from SQL text.
+        df = self._data()
+        df.createOrReplaceTempView("agg_input")
+        self.spark.udf.register("my_mean", udaf(Mean()))
+        result = self.spark.sql(
+            "SELECT k, my_mean(v) AS m FROM agg_input GROUP BY k ORDER BY k"
+        ).collect()
+        expected = df.groupBy("k").agg(sf.avg("v").alias("m")).orderBy("k").collect()
+        got = {r["k"]: r["m"] for r in result}
+        exp = {r["k"]: r["m"] for r in expected}
+        self.assertEqual(got, exp)
+
 
 class ArrowPythonAggregatorTests(ArrowPythonAggregatorTestsMixin, ReusedSQLTestCase):
     pass

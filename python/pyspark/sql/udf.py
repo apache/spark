@@ -859,6 +859,7 @@ class UDFRegistration:
                 PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+                PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
             ]:
                 raise PySparkTypeError(
                     errorClass="INVALID_UDF_EVAL_TYPE",
@@ -867,7 +868,8 @@ class UDFRegistration:
                         "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
                         "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
                         "SQL_GROUPED_AGG_PANDAS_UDF, SQL_GROUPED_AGG_ARROW_UDF, "
-                        "SQL_GROUPED_AGG_PANDAS_ITER_UDF or SQL_GROUPED_AGG_ARROW_ITER_UDF"
+                        "SQL_GROUPED_AGG_PANDAS_ITER_UDF, SQL_GROUPED_AGG_ARROW_ITER_UDF "
+                        "or SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF"
                     },
                 )
             source_udf = _create_udf(
@@ -878,6 +880,10 @@ class UDFRegistration:
                 deterministic=f.deterministic,
             )
             register_udf = source_udf._unwrapped  # type: ignore[attr-defined]
+            # Preserve the incremental aggregator's buffer schema, which _create_udf drops.
+            buffer_schema = getattr(f, "bufferSchema", None)
+            if buffer_schema is not None:
+                register_udf.bufferSchema = buffer_schema
             return_udf = register_udf
         else:
             if returnType is None:

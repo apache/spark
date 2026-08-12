@@ -187,6 +187,9 @@ def udaf(agg: "Aggregator") -> Any:
         deterministic=True,
     )
     # Threaded to the JVM in UserDefinedFunction._create_judf so PythonAggregate can plan the
-    # two-stage aggregation.
+    # two-stage aggregation. Set on both the UDF and its wrapper so it survives
+    # ``spark.udf.register`` (which reconstructs the UDF from the wrapper).
     udf_obj.bufferSchema = agg.bufferSchema  # type: ignore[attr-defined]
-    return udf_obj._wrapped()
+    wrapped = udf_obj._wrapped()
+    wrapped.bufferSchema = agg.bufferSchema  # type: ignore[attr-defined]
+    return wrapped
