@@ -489,7 +489,7 @@ abstract class DataFrameStatFunctions {
    * @param seed
    *   random seed
    * @return
-   *   a `CountMinSketch` over column `colName`
+   *   a `CountMinSketch` over column `col`
    * @since 2.0.0
    */
   def countMinSketch(col: Column, depth: Int, width: Int, seed: Int): CountMinSketch = {
@@ -510,7 +510,7 @@ abstract class DataFrameStatFunctions {
    * @param seed
    *   random seed
    * @return
-   *   a `CountMinSketch` over column `colName`
+   *   a `CountMinSketch` over column `col`
    * @since 2.0.0
    */
   def countMinSketch(col: Column, eps: Double, confidence: Double, seed: Int): CountMinSketch =
@@ -529,6 +529,8 @@ abstract class DataFrameStatFunctions {
    *   expected number of items which will be put into the filter.
    * @param fpp
    *   expected false positive probability of the filter.
+   * @return
+   *   a `BloomFilter` over column `colName`
    * @since 2.0.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, fpp: Double): BloomFilter = {
@@ -544,6 +546,8 @@ abstract class DataFrameStatFunctions {
    *   expected number of items which will be put into the filter.
    * @param fpp
    *   expected false positive probability of the filter.
+   * @return
+   *   a `BloomFilter` over column `col`
    * @since 2.0.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
@@ -560,6 +564,8 @@ abstract class DataFrameStatFunctions {
    *   expected number of items which will be put into the filter.
    * @param numBits
    *   expected number of bits of the filter.
+   * @return
+   *   a `BloomFilter` over column `colName`
    * @since 2.0.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, numBits: Long): BloomFilter = {
@@ -575,6 +581,8 @@ abstract class DataFrameStatFunctions {
    *   expected number of items which will be put into the filter.
    * @param numBits
    *   expected number of bits of the filter.
+   * @return
+   *   a `BloomFilter` over column `col`
    * @since 2.0.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = withOrigin {

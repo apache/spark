@@ -459,6 +459,14 @@ Security options for the Spark History Server are covered more detail in the
     <td>4.1.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.eventLog.onDemandLoadEnabled</td>
+    <td>true</td>
+    <td>
+      Whether to look up single event log locations on demand manner before listing files.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+  <tr>
     <td>spark.history.store.hybridStore.enabled</td>
     <td>false</td>
     <td>
@@ -722,8 +730,10 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     </td>
   </tr>
   <tr>
-    <td><code>/applications/[app-id]/connect/sessions/[session-id]</code></td>
-    <td>Details for the given Spark Connect session.</td>
+    <td><code>/applications/[app-id]/connect/sessions/[session-id]?userId=[user-id]</code></td>
+    <td>Details for the given Spark Connect session. A session is identified by the composite
+    <code>(userId, sessionId)</code>, so <code>userId</code> is required and must be passed as an
+    unpadded base64url-encoded string.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/connect/operations</code></td>

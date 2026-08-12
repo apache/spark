@@ -39,7 +39,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * @since 4.3.0
  */
 @DeveloperApi
-public interface CredentialProvider {
+public interface CredentialProvider extends AutoCloseable {
 
   /**
    * Initializes this provider with configuration properties.
@@ -50,13 +50,13 @@ public interface CredentialProvider {
    * they need (e.g., endpoint URLs, role ARNs) from the provided map.
    * <p>
    * The configuration map passed to this method is scoped to keys starting with
-   * {@code spark.security.credentials.} only. Keys from other subsystems are not included,
+   * {@code spark.security.oidc.} only. Keys from other subsystems are not included,
    * preventing accidental leakage of unrelated secrets to third-party providers.
    * <p>
    * If init() throws, it may be retried on the next resolution attempt. Implementations
    * should be safe to call again after a prior failure.
    *
-   * @param conf Spark configuration properties scoped to {@code spark.security.credentials.*}
+   * @param conf Spark configuration properties scoped to {@code spark.security.oidc.*}
    *     keys (must not be null)
    * @since 4.3.0
    */
@@ -101,4 +101,26 @@ public interface CredentialProvider {
   default Duration suggestedTtl() {
     return Duration.ofMinutes(15);
   }
+
+  /**
+   * Releases any resources held by this provider (e.g., HTTP clients, connection pools).
+   * <p>
+   * Called by the credential management layer during shutdown. The default implementation
+   * is a no-op; providers that allocate long-lived resources in {@link #init(Map)} should
+   * override this method to clean them up.
+   * <p>
+   * {@code close()} may be invoked while another thread is still executing
+   * {@link #resolve(UserContext, URI)}: shutdown interrupts the renewal thread but does
+   * not wait for in-flight calls to complete. Implementations must tolerate a concurrent
+   * or subsequent {@code resolve()} failing after resources have been released, and
+   * {@code close()} itself must not block indefinitely.
+   * <p>
+   * Implementations that do not throw checked exceptions may narrow the {@code throws}
+   * clause in their override (e.g., declare {@code close()} with no {@code throws} or
+   * with a more specific exception type).
+   *
+   * @since 4.3.0
+   */
+  @Override
+  default void close() throws Exception {}
 }

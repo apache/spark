@@ -34,8 +34,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Tests covering AutoCDC's interaction with non-key schema evolution across pipeline runs. The
  * suite documents the supported additive cases (new top-level columns, new nested fields in
- * array-of-struct, broadening / narrowing column selection) and the cases that fail loudly
- * today (subtractive nested evolution, type-incompatible changes, case-only renames).
+ * array-of-struct, broadening / narrowing column selection, and -- under case-insensitive
+ * resolution -- a source column differing from an existing one only in case) and the cases that
+ * fail loudly today (subtractive nested evolution, type-incompatible changes).
  *
  * These behaviors are largely inherited from the lower layers (`SchemaMergingUtils` for
  * schema merge, the v2 writer's column-resolution layer for nested-field handling) rather
@@ -55,7 +56,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // a NULL email; run #2 emits an upsert with a non-NULL email.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, String, Option[String], Long)]
@@ -94,7 +95,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // is strictly wider. Users must full-refresh the target to change column types.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, age INT, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, age INT, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Int, Long)]
@@ -138,7 +139,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // even when the new type is strictly narrower.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, payload BIGINT, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, payload BIGINT, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long, Long)]
@@ -180,7 +181,7 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Single MemoryStream of (id, name, email, version) shared across runs so the streaming
@@ -228,7 +229,7 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Shared (id, name, version) stream so the streaming checkpoint resumes cleanly across
@@ -284,7 +285,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // [[ColumnSelection]] knob rather than the source DF's own schema.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, String, String, Long)]
@@ -330,7 +331,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // schema level (SDP's `SchemaMergingUtils.mergeSchemas` is a union, never a subtraction).
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, String, String, Long)]
@@ -378,7 +379,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // tightening [[ChangeArgs.columnSelection]].
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Same `MemoryStream[(Int, String, Option[String], Long)]` shape across runs; runs
@@ -430,7 +431,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(key INT NOT NULL, version BIGINT NOT NULL, " +
-      s"value STRUCT<a:INT,b:STRUCT<c:INT,d:INT>>, $cdcMetadataDdl)"
+      s"value STRUCT<a:INT,b:STRUCT<c:INT,d:INT>>, $scd1MetadataDdl)"
     )
 
     // Stream is (key, version, a, b_c, b_d). Each run reshapes into different `value`
@@ -485,7 +486,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(key INT NOT NULL, version BIGINT NOT NULL, " +
-      s"vals ARRAY<STRUCT<a:INT,b:STRUCT<c:INT>>>, $cdcMetadataDdl)"
+      s"vals ARRAY<STRUCT<a:INT,b:STRUCT<c:INT>>>, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, Long, Int, Int, Int)]
@@ -543,7 +544,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(key INT NOT NULL, version BIGINT NOT NULL, " +
-      s"vals ARRAY<STRUCT<a:INT,b:STRUCT<c:INT,d:INT>>>, $cdcMetadataDdl)"
+      s"vals ARRAY<STRUCT<a:INT,b:STRUCT<c:INT,d:INT>>>, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, Long, Int, Int, Int)]
@@ -585,28 +586,27 @@ class AutoCdcScd1SchemaEvolutionSuite
     )
   }
 
-  test("a source DF column whose name differs from the target only by case fails with " +
-    "AMBIGUOUS_REFERENCE under case-insensitive resolution") {
+  test("a source DF column whose name differs from the target only by case is folded onto the " +
+    "existing column under case-insensitive resolution") {
     val session = spark
     import session.implicits._
 
-    // `DatasetManager`'s schema-merge compares the existing target schema and the flow's
-    // output schema *case-sensitively*: `SchemaMergingUtils.mergeSchemas` calls
-    // `StructType.merge` without forwarding the session-level case-sensitivity. When the
-    // target has `value` and the source DF emits `Value`, the merged schema ends up with
-    // both as separate columns. Reference resolution downstream is case-insensitive
-    // (Spark's default), so the MERGE plan trips on the duplicate and reports
-    // AMBIGUOUS_REFERENCE.
+    // Under case-insensitive resolution (Spark's default), a target `value` and a source `Value`
+    // are the same column. Schema evolution honors that by threading case-sensitivity into
+    // `SchemaMergingUtils.mergeSchemas`: the merge maps `Value` onto the existing `value`, so
+    // `diffSchemas` has no case-only difference left to process. No second column is added, and
+    // the write succeeds. (Before SPARK-58517 the merge ran case-sensitively regardless of the
+    // session and added a duplicate `Value` column, after which the case-insensitive MERGE plan
+    // tripped on the ambiguous reference.)
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       spark.sql(
         s"CREATE TABLE $catalog.$namespace.target " +
-        s"(key INT NOT NULL, version BIGINT NOT NULL, value STRING, $cdcMetadataDdl)"
+        s"(key INT NOT NULL, version BIGINT NOT NULL, value STRING, $scd1MetadataDdl)"
       )
 
       val stream = MemoryStream[(Int, Long, String)]
       stream.addData((1, 1L, "alice"))
-      // Source DF emits `Value` (capital), differing only in case from the target's
-      // `value` column.
+      // Source DF emits `Value` (capital), differing only in case from the target's `value` column.
       val df = stream.toDF().toDF("key", "version", "Value")
       val ctx = singleAutoCdcFlowPipeline(
         flowName = "auto_cdc_flow",
@@ -615,24 +615,18 @@ class AutoCdcScd1SchemaEvolutionSuite
         keys = Seq("key"),
         sequencing = functions.col("version"))
 
-      val ex = intercept[RuntimeException] { runPipeline(ctx) }
-      // The exact `name` and `referenceNames` parameters depend on internal merge-plan
-      // synthesis; the condition match is the meaningful invariant for this test.
-      checkErrorInPipelineFailure(
-        failure = ex,
-        condition = "AMBIGUOUS_REFERENCE",
-        parameters = Map(
-          "name" -> ".*",
-          "referenceNames" -> ".*"
-        ),
-        matchPVals = true,
-        queryContext = Array(
-          ExpectedContext(
-            fragment = s"`$catalog`.`$namespace`.`target`.`Value`",
-            start = 0,
-            stop = 27
-          )
-        )
+      runPipeline(ctx)
+
+      // The target schema is unchanged (still a single `value` column, original case), and the
+      // row lands with the emitted value folded into it.
+      assert(
+        spark.table(s"$catalog.$namespace.target").schema.fieldNames.toSeq ===
+          Seq("key", "version", "value", AutoCdcReservedNames.cdcMetadataColName),
+        "the target should keep its single `value` column, not gain a `Value` column"
+      )
+      checkAnswer(
+        spark.table(s"$catalog.$namespace.target"),
+        Seq(Row(1, 1L, "alice", cdcMeta(None, Some(1L))))
       )
     }
   }
@@ -648,7 +642,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // resolve `extra` to NULL.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, extra INT, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, extra INT, $scd1MetadataDdl)"
     )
     insertPreloadedRow(
       s"$catalog.$namespace.target",
@@ -684,7 +678,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // the target to change a column's type.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(key INT NOT NULL, version BIGINT NOT NULL, value TIMESTAMP, $cdcMetadataDdl)"
+      s"(key INT NOT NULL, version BIGINT NOT NULL, value TIMESTAMP, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long, Timestamp)]

@@ -5209,6 +5209,65 @@ class DataSourceV2SQLSuiteV1Filter
     checkWriteOperations("read_only_cat")
   }
 
+  test("SPARK-58370: read-only catalog, write whose query reads the target table") {
+    def assertPrivilegeError(f: => Unit, privileges: String): Unit = {
+      val e = intercept[RuntimeException](f)
+      assert(e.getMessage == s"cannot write with $privileges")
+    }
+
+    def checkWritesReadingTheTarget(catalog: String): Unit = {
+      withSQLConf(s"spark.sql.catalog.$catalog" -> classOf[ReadOnlyCatalog].getName) {
+        val tbl = s"$catalog.default.t"
+        withTable(tbl) {
+          sql(s"CREATE TABLE $tbl (i INT)")
+
+          // The write target is resolved after its query, so it used to find the query's
+          // relation in the per-query relation cache and skip `loadTable(ident, writePrivileges)`.
+          assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT * FROM $tbl"), "INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT OVERWRITE $tbl SELECT * FROM $tbl"), "DELETE,INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT OVERWRITE $tbl SELECT * FROM $tbl WHERE 1 = 0"), "DELETE,INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT INTO $tbl REPLACE WHERE i = 0 SELECT * FROM $tbl"), "DELETE,INSERT")
+          // The reference to the target can be anywhere in the query.
+          assertPrivilegeError(
+            sql(s"INSERT INTO $tbl SELECT i FROM (SELECT i FROM $tbl) x"), "INSERT")
+          assertPrivilegeError(
+            sql(s"WITH c AS (SELECT i FROM $tbl) INSERT INTO $tbl SELECT i FROM c"), "INSERT")
+
+          // `DataFrameWriterV2` passes the unanalyzed query plan, so its target is resolved in the
+          // same analyzer run as the query's reference to the same table.
+          assertPrivilegeError(sql(s"SELECT * FROM $tbl").writeTo(tbl).append(), "INSERT")
+          assertPrivilegeError(
+            sql(s"SELECT * FROM $tbl").writeTo(tbl).overwritePartitions(), "DELETE,INSERT")
+          assertPrivilegeError(sql(s"SELECT * FROM $tbl").write.insertInto(tbl), "INSERT")
+
+          // Row-level operations resolve the target before the source / subquery, so these were
+          // already checked; they are here to keep both orders covered.
+          assertPrivilegeError(
+            sql(s"UPDATE $tbl SET i = 0 WHERE i IN (SELECT i FROM $tbl)"), "UPDATE")
+          assertPrivilegeError(
+            sql(s"DELETE FROM $tbl WHERE i IN (SELECT i FROM $tbl)"), "DELETE")
+          assertPrivilegeError(
+            sql(
+              s"""
+                 |MERGE INTO $tbl USING (SELECT i FROM $tbl) AS source
+                 |ON source.i = $tbl.i
+                 |WHEN MATCHED THEN UPDATE SET *
+                 |""".stripMargin),
+            "UPDATE")
+        }
+      }
+    }
+
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    checkWritesReadingTheTarget(SESSION_CATALOG_NAME)
+    checkWritesReadingTheTarget("read_only_self_ref_cat")
+  }
+
   test("StagingTableCatalog without atomic support") {
     withSQLConf("spark.sql.catalog.fakeStagedCat" -> classOf[FakeStagedTableCatalog].getName) {
       withTable("fakeStagedCat.t") {
@@ -5417,6 +5476,47 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
       val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
       assert(numPartitions == 1,
         s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
+    }
+  }
+
+  test("SPARK-58207: non-deterministic scalar subquery filters are not pushed into " +
+    "runtimeFilters") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    val dim = s"${catalogAndNamespace}dim"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
+      for (i <- 0 until 10) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      // `part = (subquery) OR rand() < 0.5` references only the partition column and holds a
+      // scalar subquery, so it is a candidate for runtime pushdown, but it is non-deterministic.
+      // Routing it would push it to the source for pruning while the FilterExec above the scan
+      // re-evaluates it, and a partition the source dropped on its own evaluation could not be
+      // recovered.
+      val df = sql(
+        s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim) OR rand() < 0.5")
+      df.collect()
+
+      val batchScan = collect(df.queryExecution.executedPlan) {
+        case b: BatchScanExec => b
+      }.head
+      assert(batchScan.runtimeFilters.isEmpty,
+        s"Expected no runtime filters for a non-deterministic filter, " +
+          s"got ${batchScan.runtimeFilters}")
+
+      // No pruning at the source, and the filter is still evaluated by Spark after the scan.
+      val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
+      assert(numPartitions == 10,
+        s"Expected all 10 partitions to be retained, got $numPartitions")
+      val postScanConditions = collect(df.queryExecution.executedPlan) {
+        case f: FilterExec => f.condition
+      }
+      assert(postScanConditions.exists(!_.deterministic),
+        s"Expected the non-deterministic filter above the scan, got $postScanConditions")
     }
   }
 }

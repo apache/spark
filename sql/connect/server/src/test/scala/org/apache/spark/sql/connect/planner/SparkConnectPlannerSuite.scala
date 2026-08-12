@@ -656,6 +656,18 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(array(2).toString == InternalRow(3, "kafka", 3, "kafka").toString)
   }
 
+  test("SPARK-58341: transform SQL with 5 or more positional arguments binds in order") {
+    val sql = proto.SQL
+      .newBuilder()
+      .setQuery("SELECT ?, ?, ?, ?, ?, ?")
+    (1 to 6).foreach { v =>
+      sql.addPosArguments(proto.Expression.newBuilder().setLiteral(toLiteralProto(v)))
+    }
+
+    val df = Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setSql(sql).build()))
+    assert(df.collect() === Array(Row(1, 2, 3, 4, 5, 6)))
+  }
+
   test("transform UnresolvedStar with target field") {
     val rows = (0 until 10).map { i =>
       InternalRow(InternalRow(InternalRow(i, i + 1)))

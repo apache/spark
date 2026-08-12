@@ -1158,8 +1158,9 @@ private[spark] class BlockManager(
         // For a sealed block whose local copy does not match the sealed checksum, skip the local
         // copy and fall through to a remote (authoritative) location: it is a stale replica the
         // seal is evicting, but that eviction is async and may not have landed. This self-check
-        // makes correctness independent of the eviction landing. Only `verifySealed` blocks are
-        // checked; an unsealed block, or one checksummed only for observation, is served as-is.
+        // makes correctness independent of the eviction landing. Only `verifySealedChecksum`
+        // blocks are checked; an unsealed block, or one checksummed only for observation, is
+        // served as-is.
         // This is only used with localCheckpoint, whose lineage is cut once sealed, so a lost block
         // is never recomputed: there is no later, differently-checksummed re-materialization to
         // reconcile here - a skipped local copy means the block is genuinely gone, not superseded.

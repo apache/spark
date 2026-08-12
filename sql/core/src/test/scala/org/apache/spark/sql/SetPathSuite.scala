@@ -19,10 +19,11 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+import org.apache.spark.sql.catalyst.analysis.resolver.ExplicitlyUnsupportedResolverFeature
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.types.LongType
 
 /**
  * Tests for SET PATH command and session path management.
@@ -991,10 +992,11 @@ class SetPathSuite extends SharedSparkSession {
     // Setup (`CREATE TEMPORARY FUNCTION`, `SET PATH`) and execution (Dataset collect via
     // checkAnswer, which inserts a `DeserializeToObject` node the single-pass analyzer
     // does not yet support) are run under the fixed-point analyzer; only the actual
-    // count(*) analysis is run under the single-pass analyzer, and we assert against the
-    // analyzed plan's output schema. The builtin count returns BIGINT (rewrite applied);
-    // the temp count(INT) returns INT (rewrite suppressed and the star expansion routes
-    // through the temp), so the schema's first-field dataType tells us which branch fired.
+    // count(*) analysis is run under the single-pass analyzer. When the shortcut fires the
+    // analyzed output is the BIGINT builtin count; when it is suppressed the star expands
+    // and resolves through the temp SQL `count`, which the single-pass analyzer does not
+    // support and reports as an `ExplicitlyUnsupportedResolverFeature`. Which of the two
+    // outcomes occurs tells us whether the rewrite was applied.
     withPathEnabled {
       sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x + 100")
       try {
@@ -1011,12 +1013,15 @@ class SetPathSuite extends SharedSparkSession {
 
         sql("SET PATH = system.session, system.builtin")
 
-        // PATH session-first: the gate reports true, the rewrite is suppressed, the star
-        // expands against `a`, and the temp count(INT) wins; analyzed output is INT.
+        // PATH session-first: the gate reports true, the rewrite is suppressed, and the
+        // star expands against `a` and resolves through the temp SQL `count`. The
+        // single-pass analyzer does not support SQL functions, so it signals the fallback
+        // via `ExplicitlyUnsupportedResolverFeature` -- reaching this branch confirms the
+        // rewrite was suppressed (otherwise the builtin count would have resolved cleanly).
         withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-          val tpe = spark.sql(countStarSql).queryExecution.analyzed.schema.head.dataType
-          assert(tpe == IntegerType,
-            s"Expected INT (temp count; rewrite suppressed); got: $tpe")
+          intercept[ExplicitlyUnsupportedResolverFeature] {
+            spark.sql(countStarSql).queryExecution.analyzed
+          }
         }
       } finally {
         sql("SET PATH = DEFAULT_PATH")

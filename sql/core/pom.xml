@@ -143,21 +143,9 @@
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>
-      <artifactId>parquet-encoding</artifactId>
-      <scope>test</scope>
-      <classifier>tests</classifier>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.parquet</groupId>
-      <artifactId>parquet-common</artifactId>
-      <scope>test</scope>
-      <classifier>tests</classifier>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-column</artifactId>
       <scope>test</scope>
-      <classifier>tests</classifier>
+      <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>

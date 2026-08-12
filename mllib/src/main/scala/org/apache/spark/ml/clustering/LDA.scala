@@ -157,7 +157,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
 
   /** Supported values for Param [[optimizer]]. */
   @Since("1.6.0")
-  final val supportedOptimizers: Array[String] = Array("online", "em")
+  final val supportedOptimizers: Array[String] = LDA.supportedOptimizers
 
   /**
    * Optimizer or inference algorithm used to estimate the LDA model.
@@ -180,7 +180,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   final val optimizer = new Param[String](this, "optimizer", "Optimizer or inference" +
     " algorithm used to estimate the LDA model. Supported: " + supportedOptimizers.mkString(", "),
-    (value: String) => supportedOptimizers.contains(value.toLowerCase(Locale.ROOT)))
+    (value: String) => LDA.supportedOptimizers.contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.6.0")
@@ -355,7 +355,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
       }
     }
     SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
-    SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(topicDistributionCol), SQLDataTypes.VectorType)
   }
 
   private[clustering] def getOldOptimizer: OldLDAOptimizer =
@@ -640,6 +640,21 @@ class LocalLDAModel private[ml] (
   override def toString: String = {
     s"LocalLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
   }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (oldLocalModel != null) {
+      // topicsMatrix: Matrix
+      if (oldLocalModel.topicsMatrix != null) {
+        size += oldLocalModel.topicsMatrix.asML.getSizeInBytes
+      }
+      // docConcentration: Vector
+      if (oldLocalModel.docConcentration != null) {
+        size += oldLocalModel.docConcentration.asML.getSizeInBytes
+      }
+    }
+    size
+  }
 }
 
 @Since("1.6.0")
@@ -827,12 +842,15 @@ class DistributedLDAModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    this.oldDistributedModel.toInternals.map {
+    var size = estimateMatadataSize
+    // oldDistributedModel: metadata, global topic totals, graph vertices, and graph edges.
+    oldDistributedModel.toInternals.foreach {
       case df: org.apache.spark.sql.classic.DataFrame =>
-        df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _)
+        size += df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _)
       case o => throw new UnsupportedOperationException(
         s"Unsupported dataframe type: ${o.getClass.getName}")
-    }.sum
+    }
+    size
   }
 }
 
@@ -1055,6 +1073,8 @@ class LDA @Since("1.6.0") (
 
 @Since("2.0.0")
 object LDA extends MLReadable[LDA] {
+
+  private[clustering] val supportedOptimizers: Array[String] = Array("online", "em")
 
   /** Get dataset for spark.mllib LDA */
   private[clustering] def getOldDataset(

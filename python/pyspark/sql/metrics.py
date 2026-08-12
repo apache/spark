@@ -297,10 +297,14 @@ class ExecutionInfo:
     data frame. This value is only set in the data frame if it was executed."""
 
     def __init__(
-        self, metrics: Optional[list[PlanMetrics]], obs: Optional[Sequence[ObservedMetrics]]
+        self,
+        metrics: Optional[list[PlanMetrics]],
+        obs: Optional[Sequence[ObservedMetrics]],
+        operation_id: Optional[str] = None,
     ):
         self._metrics = CollectedMetrics(metrics) if metrics else None
         self._observations = obs if obs else []
+        self._operation_id = operation_id
 
     @property
     def metrics(self) -> Optional[CollectedMetrics]:
@@ -309,3 +313,11 @@ class ExecutionInfo:
     @property
     def flows(self) -> List[Tuple[str, Dict[str, Any]]]:
         return [(f.name, f.pairs) for f in self._observations]
+
+    @property
+    def operation_id(self) -> Optional[str]:
+        """The Spark Connect ExecutePlan operation ID, when available.
+
+        .. versionadded:: 4.3.0
+        """
+        return self._operation_id

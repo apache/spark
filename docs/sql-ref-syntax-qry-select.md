@@ -93,7 +93,9 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      * [Pivot relation](sql-ref-syntax-qry-select-pivot.html)
      * [Unpivot relation](sql-ref-syntax-qry-select-unpivot.html)
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
+     * [JSON_TABLE](sql-ref-syntax-qry-select-json-table.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
+     * [UNNEST relation](sql-ref-syntax-qry-select-unnest.html)
      * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )
      * [File](sql-ref-syntax-qry-select-file.html)
      
@@ -211,6 +213,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [Set Operators](sql-ref-syntax-qry-select-setops.html)
 * [TABLESAMPLE](sql-ref-syntax-qry-select-sampling.html)
 * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
+* [JSON_VALUE](sql-ref-syntax-qry-select-json-value.html)
 * [Window Function](sql-ref-syntax-qry-select-window.html)
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)

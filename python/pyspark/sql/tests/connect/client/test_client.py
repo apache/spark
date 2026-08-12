@@ -479,6 +479,43 @@ class SparkConnectClientTestCase(unittest.TestCase):
             session.client.close()
             session.stop()
 
+    def test_session_hook_preserves_operation_id(self):
+        execute_plan_req = None
+
+        class TestHook(RemoteSparkSession.Hook):
+            def __init__(self, _session):
+                pass
+
+            def on_execute_plan(self, req):
+                replacement = proto.ExecutePlanRequest()
+                replacement.CopyFrom(req)
+                replacement.ClearField("operation_id")
+                return replacement
+
+        class TestService(MockService):
+            def ExecutePlan(self, req, metadata, timeout=None):
+                nonlocal execute_plan_req
+                execute_plan_req = req
+                return super().ExecutePlan(req, metadata, timeout)
+
+        session = (
+            RemoteSparkSession.builder.remote("sc://foo")._registerHook(TestHook).getOrCreate()
+        )
+        try:
+            mock = TestService(session.client._session_id)
+            session.client._stub = mock
+            session.client.disable_reattachable_execute()
+
+            df = session.range(1)
+            df.collect()
+            self.assertIsNotNone(df.executionInfo)
+            self.assertIsNotNone(execute_plan_req)
+            assert execute_plan_req is not None
+            self.assertEqual(execute_plan_req.operation_id, df.executionInfo.operation_id)
+            uuid.UUID(execute_plan_req.operation_id)
+        finally:
+            session.stop()
+
     def test_new_session_preserves_custom_channel_builder(self):
         class CustomChannelBuilder(DefaultChannelBuilder):
             pass
@@ -508,6 +545,14 @@ class SparkConnectClientTestCase(unittest.TestCase):
         )
         for resp in client._stub.ExecutePlan(req, metadata=None):
             assert resp.operation_id == "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
+
+    def test_execute_plan_request_generates_operation_id(self):
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        try:
+            req = client._execute_plan_request_with_metadata()
+            uuid.UUID(req.operation_id)
+        finally:
+            client.close()
 
     def test_on_exit_calls_release_and_close_when_enabled(self):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)

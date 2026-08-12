@@ -165,16 +165,21 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       keys: Seq[UnqualifiedColumnName] = Seq(UnqualifiedColumnName("id")),
       sequencing: Column = F.col("seq"),
       storedAsScdType: ScdType = ScdType.Type1,
-      columnSelection: Option[ColumnSelection] = None): AutoCdcMergeFlow = {
+      columnSelection: Option[ColumnSelection] = None,
+      trackHistorySelection: Option[ColumnSelection] = None): AutoCdcMergeFlow = {
     val flow = newAutoCdcFlow(
       changeArgs = ChangeArgs(
         keys = keys,
         sequencing = sequencing,
         storedAsScdType = storedAsScdType,
-        columnSelection = columnSelection
+        columnSelection = columnSelection,
+        trackHistorySelection = trackHistorySelection
       )
     )
-    new AutoCdcMergeFlow(flow, successfulFuncResult(sourceDf))
+    new AutoCdcMergeFlow(
+      flow,
+      successfulFuncResult(sourceDf),
+      spark.sessionState.conf.caseSensitiveAnalysis)
   }
 
   /** A stable 3-column source streaming dataframe used across most schema tests. */
@@ -288,21 +293,180 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     assert(first eq second, "schema should be cached as a val and return the same instance")
   }
 
-  test("AutoCdcMergeFlow rejects SCD2 at construction with AUTOCDC_SCD2_NOT_SUPPORTED") {
-    // Constructing the flow forces the resolved schema, which is unsupported for SCD2 today.
-    // Failing eagerly (rather than deferring to the first downstream `schema` read) is the
-    // intended UX -- pipeline graph analysis should not be able to register an SCD2 AutoCDC
-    // flow at all.
+  test(
+    "AutoCdcMergeFlow.schema appends the SCD2 framework columns when no columnSelection is set"
+  ) {
+    // SCD2 appends __START_AT / __END_AT (typed as the sequencing type, nullable) followed by the
+    // SCD2 _cdc_metadata struct (non-null), in this exact order -- matching the canonical target
+    // schema that Scd2BatchProcessor.preprocessMicrobatch projects and the merges persist.
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2
+    )
+
+    val expected = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("name", StringType)
+      .add("seq", LongType)
+      .add(Scd2BatchProcessor.startAtColName, LongType, nullable = true)
+      .add(Scd2BatchProcessor.endAtColName, LongType, nullable = true)
+      .add(
+        StructField(
+          AutoCdcReservedNames.cdcMetadataColName,
+          Scd2BatchProcessor.cdcMetadataColSchema(LongType),
+          nullable = false
+        )
+      )
+    assert(resolvedFlow.schema == expected)
+  }
+
+  test("AutoCdcMergeFlow.schema applies an IncludeColumns selection before the SCD2 " +
+    "framework columns") {
+    // An IncludeColumns selection narrows only the user-data portion; the framework columns are
+    // always appended and cannot be selected away.
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2,
+      columnSelection = Some(
+        ColumnSelection.IncludeColumns(
+          Seq(UnqualifiedColumnName("id"), UnqualifiedColumnName("seq"))
+        )
+      )
+    )
+
+    assert(
+      resolvedFlow.schema.fieldNames.toSeq ==
+      Seq(
+        "id",
+        "seq",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName,
+        AutoCdcReservedNames.cdcMetadataColName
+      )
+    )
+  }
+
+  test("AutoCdcMergeFlow.schema appends the SCD2 framework columns even when a selection " +
+    "excludes a user column") {
+    // The framework columns are appended after the user selection is applied to the source
+    // schema, so no ExcludeColumns selection over the user data can strip them: they always
+    // appear in the output.
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2,
+      columnSelection = Some(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
+      )
+    )
+
+    // The excluded user column is gone, but every framework column is still present.
+    assert(!resolvedFlow.schema.fieldNames.contains("name"))
+    Seq(
+      Scd2BatchProcessor.startAtColName,
+      Scd2BatchProcessor.endAtColName,
+      AutoCdcReservedNames.cdcMetadataColName
+    ).foreach { frameworkCol =>
+      assert(
+        resolvedFlow.schema.fieldNames.contains(frameworkCol),
+        s"expected framework column $frameworkCol in ${resolvedFlow.schema.fieldNames.toSeq}"
+      )
+    }
+  }
+
+  test("AutoCdcMergeFlow rejects a source column named after a non-prefixed framework column " +
+    "even when a selection would exclude it") {
+    // Behavior change introduced by this PR (SPARK-57251): __START_AT / __END_AT do not carry the
+    // reserved AutoCDC prefix, so before this change a source could legitimately contain columns
+    // with those names and exclude them via the column selection. The new
+    // requireReservedFrameworkColumnsAbsentInSourceColumns guard runs against the RAW source
+    // schema (before column selection is applied), so such a source is now rejected outright at
+    // flow construction -- an ExcludeColumns selection cannot rescue it. Allowing an explicit
+    // opt-out (validating post-selection instead) is tracked separately by SPARK-58325.
+    val sourceDf = sourceDfWithExtraColumns(
+      Scd2BatchProcessor.startAtColName -> StringType,
+      Scd2BatchProcessor.endAtColName -> StringType)
+
     checkError(
       exception = intercept[AnalysisException] {
         newAutoCdcMergeFlow(
-          sourceDf = threeColumnSourceDf(),
-          storedAsScdType = ScdType.Type2
+          sourceDf = sourceDf,
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(
+            ColumnSelection.ExcludeColumns(
+              Seq(
+                UnqualifiedColumnName(Scd2BatchProcessor.startAtColName),
+                UnqualifiedColumnName(Scd2BatchProcessor.endAtColName))
+            )
+          )
         )
       },
-      condition = "AUTOCDC_SCD2_NOT_SUPPORTED",
-      sqlState = "0A000",
-      parameters = Map.empty
+      condition = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
+      sqlState = "42710",
+      parameters = Map(
+        "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+        "columnName" -> Scd2BatchProcessor.startAtColName,
+        "schemaName" -> "changeDataFeed",
+        "scdType" -> ScdType.Type2.label,
+        "reservedColumnNames" ->
+          Seq(Scd2BatchProcessor.endAtColName, Scd2BatchProcessor.startAtColName).mkString(", ")
+      )
+    )
+  }
+
+  test("AutoCdcMergeFlow.schema's SCD2 framework columns use the resolved sequencing type") {
+    // A non-Long sequencing expression must flow through to __START_AT / __END_AT and the
+    // metadata struct's record-start-at field.
+    val session = spark
+    import session.implicits._
+    val sourceDf = MemoryStream[(Int, String, Int)].toDS().toDF("id", "name", "seq")
+
+    val resolvedFlow = newAutoCdcMergeFlow(sourceDf, storedAsScdType = ScdType.Type2)
+
+    assert(resolvedFlow.schema(Scd2BatchProcessor.startAtColName).dataType == IntegerType)
+    assert(resolvedFlow.schema(Scd2BatchProcessor.endAtColName).dataType == IntegerType)
+    assert(
+      resolvedFlow.schema(AutoCdcReservedNames.cdcMetadataColName).dataType ==
+      Scd2BatchProcessor.cdcMetadataColSchema(IntegerType)
+    )
+  }
+
+  test("AutoCdcMergeFlow.schema supports a multi-column (struct) sequencing expression") {
+    // A multi-column sequence is expressed as a struct over the ordering columns; its resolved
+    // type is the corresponding StructType, which must flow into __START_AT / __END_AT and the
+    // metadata struct's record-start-at field unchanged, including each field's own nullability.
+    val session = spark
+    import session.implicits._
+    // seq1 is a non-null Int; seq2 is a nullable Long (Option[Long]), so the struct carries
+    // mixed per-field nullability.
+    val sourceDf =
+      MemoryStream[(Int, String, Int, Option[Long])].toDS().toDF("id", "name", "seq1", "seq2")
+
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = sourceDf,
+      sequencing = F.struct(F.col("seq1"), F.col("seq2")),
+      storedAsScdType = ScdType.Type2
+    )
+
+    // Top-level nullability and inner-field nullability are independent. The __START_AT /
+    // __END_AT columns must themselves stay nullable -- an open/unset interval bound is
+    // represented as NULL, which reconciliation relies on -- regardless of the sequencing
+    // struct's field nullability. A struct column is free to be NULL at the top level
+    // regardless of its fields' nullability.
+    val startAtField = resolvedFlow.schema(Scd2BatchProcessor.startAtColName)
+    val endAtField = resolvedFlow.schema(Scd2BatchProcessor.endAtColName)
+    assert(startAtField.nullable, "__START_AT must be nullable")
+    assert(endAtField.nullable, "__END_AT must be nullable")
+
+    // The struct data type flows through unchanged, preserving each field's own nullability:
+    // seq1 stays non-null, seq2 stays nullable.
+    val expectedSeqType = new StructType()
+      .add("seq1", IntegerType, nullable = false)
+      .add("seq2", LongType, nullable = true)
+    assert(startAtField.dataType == expectedSeqType)
+    assert(endAtField.dataType == expectedSeqType)
+    assert(
+      resolvedFlow.schema(AutoCdcReservedNames.cdcMetadataColName).dataType ==
+      Scd2BatchProcessor.cdcMetadataColSchema(expectedSeqType)
     )
   }
 
@@ -346,6 +510,28 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     assert(
       loadedDf.schema.fieldNames.toSeq ==
       Seq("id", "seq", AutoCdcReservedNames.cdcMetadataColName)
+    )
+  }
+
+  test("AutoCdcMergeFlow.load() schema matches AutoCdcMergeFlow.schema for SCD2") {
+    // The empty-df load path must reproduce the SCD2 augmented schema exactly, including the
+    // trailing framework columns.
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2
+    )
+    val loadedDf = resolvedFlow.load(asStreaming = true)
+    assert(loadedDf.schema == resolvedFlow.schema)
+    assert(
+      loadedDf.schema.fieldNames.toSeq ==
+      Seq(
+        "id",
+        "name",
+        "seq",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName,
+        AutoCdcReservedNames.cdcMetadataColName
+      )
     )
   }
 
@@ -500,6 +686,109 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   // ===========================================================================================
+  // AutoCdcMergeFlow reserved framework-column (non-prefixed) validation tests
+  //
+  // SCD2 persists framework columns __START_AT / __END_AT that do NOT carry the reserved
+  // AutoCDC prefix, so they are not caught by the prefix guard above. These tests lock in that a
+  // source column colliding with such a name is rejected at construction for SCD2, is allowed
+  // for SCD1 (which reserves no non-prefixed names), and that the check respects case-sensitivity.
+  // ===========================================================================================
+
+  /** The SCD2 reserved framework column names that are not covered by the reserved prefix. */
+  private val nonPrefixedScd2ReservedNames: Seq[String] =
+    Scd2BatchProcessor.reservedFrameworkColNames
+      .filterNot(_.startsWith(AutoCdcReservedNames.prefix))
+      .toSeq
+      .sorted
+
+  test("non-prefixed reserved names exist and are covered by this suite") {
+    // Guards against a future refactor renaming/removing __START_AT / __END_AT without updating
+    // the flow-construction validation: if this set ever empties, the tests below silently
+    // stop exercising anything.
+    assert(
+      nonPrefixedScd2ReservedNames == Seq("__END_AT", "__START_AT"),
+      s"Unexpected non-prefixed SCD2 reserved names: $nonPrefixedScd2ReservedNames"
+    )
+  }
+
+  test(
+    "an SCD2 flow with a source column colliding with a reserved framework column is rejected " +
+    "at construction"
+  ) {
+    nonPrefixedScd2ReservedNames.foreach { reservedName =>
+      val sourceDf = sourceDfWithExtraColumns(reservedName -> StringType)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          newAutoCdcMergeFlow(sourceDf, storedAsScdType = ScdType.Type2)
+        },
+        condition = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
+        sqlState = "42710",
+        parameters = Map(
+          "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+          "columnName" -> reservedName,
+          "schemaName" -> "changeDataFeed",
+          "scdType" -> ScdType.Type2.label,
+          "reservedColumnNames" -> nonPrefixedScd2ReservedNames.mkString(", ")
+        )
+      )
+    }
+  }
+
+  test(
+    "an SCD1 flow with a source column matching an SCD2-only reserved name is allowed"
+  ) {
+    // SCD1 targets carry no non-prefixed framework columns, so __START_AT / __END_AT are ordinary
+    // user columns there. Construction succeeds and the column survives into the flow schema.
+    nonPrefixedScd2ReservedNames.foreach { reservedName =>
+      val sourceDf = sourceDfWithExtraColumns(reservedName -> StringType)
+      val resolvedFlow = newAutoCdcMergeFlow(sourceDf, storedAsScdType = ScdType.Type1)
+      assert(resolvedFlow.schema.fieldNames.contains(reservedName))
+    }
+  }
+
+  test(
+    "an uppercase reserved framework-column name is rejected for SCD2 when caseSensitive=false"
+  ) {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val conflictingName = Scd2BatchProcessor.startAtColName.toLowerCase(Locale.ROOT)
+      val sourceDf = sourceDfWithExtraColumns(conflictingName -> StringType)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          newAutoCdcMergeFlow(sourceDf, storedAsScdType = ScdType.Type2)
+        },
+        condition = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
+        sqlState = "42710",
+        parameters = Map(
+          "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+          "columnName" -> conflictingName,
+          "schemaName" -> "changeDataFeed",
+          "scdType" -> ScdType.Type2.label,
+          "reservedColumnNames" -> nonPrefixedScd2ReservedNames.mkString(", ")
+        )
+      )
+    }
+  }
+
+  test(
+    "a differently-cased reserved framework-column name does not trip the reserved check for " +
+    "SCD2 when caseSensitive=true"
+  ) {
+    // Under case-sensitive analysis, a lowercase variant is a distinct identifier and does not
+    // collide with the reserved (uppercase) framework name, consistent with the prefix guard.
+    // The reserved-name check therefore does NOT fire and the flow constructs successfully,
+    // keeping the lowercase column as an ordinary user column in the schema.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val nonConflictingName = Scd2BatchProcessor.startAtColName.toLowerCase(Locale.ROOT)
+      val sourceDf = sourceDfWithExtraColumns(nonConflictingName -> StringType)
+
+      val resolvedFlow = newAutoCdcMergeFlow(sourceDf, storedAsScdType = ScdType.Type2)
+      assert(resolvedFlow.schema.fieldNames.contains(nonConflictingName))
+    }
+  }
+
+  // ===========================================================================================
   // AutoCdcMergeFlow keys-presence validation tests (requireKeysPresentInSelectedSchema)
   // ===========================================================================================
 
@@ -564,5 +853,152 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         "keyColumnName" -> "id"
       )
     )
+  }
+
+  // ===========================================================================================
+  // AutoCdcMergeFlow track-history validation tests
+  //
+  // SCD2 `TRACK HISTORY ON (...)` populates trackHistorySelection. These tests lock in that an
+  // unresolvable or ineligible (key / dropped-by-column-selection) tracking column is rejected at
+  // flow construction rather than deferring to the first microbatch's reconciliation, mirroring
+  // the keys-presence validator above. A resolvable selection passes the check and the flow
+  // constructs successfully.
+  // ===========================================================================================
+
+  test(
+    "an SCD2 flow tracking a non-existent column is rejected at construction"
+  ) {
+    // Eligible tracking columns from the 3-column source (id, name, seq), less the key `id`, are
+    // {name, seq}. `missing` is absent, so resolution against trackHistorySelection fails.
+    checkError(
+      exception = intercept[AnalysisException] {
+        newAutoCdcMergeFlow(
+          sourceDf = threeColumnSourceDf(),
+          storedAsScdType = ScdType.Type2,
+          trackHistorySelection = Some(
+            ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("missing")))
+          )
+        )
+      },
+      condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+      parameters = Map(
+        "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+        "schemaName" -> "trackHistorySelection",
+        "missingColumns" -> "missing",
+        "availableColumns" -> "name, seq"
+      )
+    )
+  }
+
+  test(
+    "an SCD2 flow tracking a key column is rejected at construction (ineligible)"
+  ) {
+    // A key is never an eligible history-tracking column, so it is absent from the eligible
+    // schema {name, seq} and resolution fails -- surfacing the misconfiguration eagerly.
+    checkError(
+      exception = intercept[AnalysisException] {
+        newAutoCdcMergeFlow(
+          sourceDf = threeColumnSourceDf(),
+          storedAsScdType = ScdType.Type2,
+          trackHistorySelection = Some(
+            ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("id")))
+          )
+        )
+      },
+      condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+      parameters = Map(
+        "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+        "schemaName" -> "trackHistorySelection",
+        "missingColumns" -> "id",
+        "availableColumns" -> "name, seq"
+      )
+    )
+  }
+
+  test(
+    "an SCD2 flow tracking a column dropped by columnSelection is rejected"
+  ) {
+    // `name` exists in the source but is excluded from the selected schema, so it is not an
+    // eligible tracking column. Eligible columns are then just {seq}.
+    checkError(
+      exception = intercept[AnalysisException] {
+        newAutoCdcMergeFlow(
+          sourceDf = threeColumnSourceDf(),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(
+            ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
+          ),
+          trackHistorySelection = Some(
+            ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))
+          )
+        )
+      },
+      condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+      parameters = Map(
+        "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+        "schemaName" -> "trackHistorySelection",
+        "missingColumns" -> "name",
+        "availableColumns" -> "seq"
+      )
+    )
+  }
+
+  test(
+    "an SCD2 flow with a resolvable track-history selection passes the check"
+  ) {
+    // `name` is an eligible tracking column, so the construction-time check passes and the flow
+    // constructs successfully, resolving its SCD2 schema (no AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA).
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2,
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))
+      )
+    )
+    assert(resolvedFlow.schema.fieldNames.contains(AutoCdcReservedNames.cdcMetadataColName))
+  }
+
+  test(
+    "track-history validation respects case-insensitive analysis"
+  ) {
+    // With caseSensitive=false, `NAME` resolves to the eligible `name`, so the check passes and
+    // the flow constructs successfully.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val resolvedFlow = newAutoCdcMergeFlow(
+        sourceDf = threeColumnSourceDf(),
+        storedAsScdType = ScdType.Type2,
+        trackHistorySelection = Some(
+          ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("NAME")))
+        )
+      )
+      assert(resolvedFlow.schema.fieldNames.contains(AutoCdcReservedNames.cdcMetadataColName))
+    }
+  }
+
+  test(
+    "track-history validation respects case-sensitive analysis"
+  ) {
+    // With caseSensitive=true, `NAME` is a distinct identifier from the eligible `name` and does
+    // not resolve, so the construction-time check rejects it.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          newAutoCdcMergeFlow(
+            sourceDf = threeColumnSourceDf(),
+            storedAsScdType = ScdType.Type2,
+            trackHistorySelection = Some(
+              ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("NAME")))
+            )
+          )
+        },
+        condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+        parameters = Map(
+          "caseSensitivity" -> CaseSensitivityLabels.CaseSensitive,
+          "schemaName" -> "trackHistorySelection",
+          "missingColumns" -> "NAME",
+          "availableColumns" -> "name, seq"
+        )
+      )
+    }
   }
 }

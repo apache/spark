@@ -31,7 +31,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2TableReference}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, CurrentTimestampNanos, FileSourceMetadataAttribute, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2, SinkMetadataInfo}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitLogType, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2, SinkMetadataInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
@@ -82,6 +82,7 @@ class MicroBatchExecution(
       -1,
       sparkSession,
       offsetLogFormatVersionOpt = None,
+      commitLogFormatVersionOpt = None,
       previousContext = None)
 
   override def getLatestExecutionContext(): StreamExecutionContext = latestExecutionContext
@@ -554,9 +555,47 @@ class MicroBatchExecution(
     CheckpointVersionManager.setFormatVersion(
       sparkSessionForStream, OffsetLogType, offsetLogFormatVersion)
 
+    // Resolve the commit log format version the same way: an existing checkpoint keeps the version
+    // it was created with, and only a fresh one takes the version from the session config. Persist
+    // the implied state store checkpoint format so it agrees with what is actually being written.
+    val commitLogFormatVersion = CheckpointVersionManager.resolveCommitLogVersion(
+      sparkSessionForStream, latestCommittedBatch)
+    CheckpointVersionManager.setFormatVersion(
+      sparkSessionForStream,
+      CommitLogType,
+      commitLogFormatVersion,
+      latestCommittedBatch.map(_._2))
+
+    // Real-Time Mode requires commit log v2. Real-Time Mode writes the offset log at batch end
+    // (markMicroBatchStart is a no-op for it), so a mid-batch failure can leave durable state at a
+    // version that was never logged; the re-execution then rewrites that same state version. With
+    // checkpoint format v1 the rewritten files reuse the same names as the orphaned ones, so a load
+    // can pick up a stale file (see the checksum hazard documented on
+    // StateStoreConf.skipChecksumOnFileMissingChecksum). Format v2 avoids this because each batch
+    // run generates unique state store checkpoint ids, and only a commit log at v2 or above can
+    // persist them. Resolution above keeps an existing checkpoint at the version it was created
+    // with, so a v1 checkpoint stays v1. Reject any Real-Time Mode query whose resolved commit log
+    // version is below v2, with an escape hatch. This is unconditional, matching the Databricks
+    // runtime -- a fresh checkpoint reaches v1 here only when the user explicitly pinned it, which
+    // is exactly the case worth rejecting.
+    if (trigger.isInstanceOf[RealTimeTrigger] && commitLogFormatVersion < CommitLog.VERSION_2) {
+      if (!sparkSessionForStream.sessionState.conf
+          .getConf(SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1)) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "STREAMING_REAL_TIME_MODE.CHECKPOINT_FORMAT_V1_NOT_SUPPORTED",
+          messageParameters = Map(
+            "config" -> SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1.key))
+      }
+      logWarning(log"Starting a Real-Time Mode query on a commit log at version " +
+        log"${MDC(LogKeys.FILE_VERSION, commitLogFormatVersion)} because " +
+        log"${MDC(LogKeys.CONFIG, SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1
+          .key)} is set. A failed batch may lose data on rerun.")
+    }
+
     val execCtx = new MicroBatchExecutionContext(id, runId, name, triggerClock, sources, sink,
       progressReporter, -1, sparkSession,
       offsetLogFormatVersionOpt = Some(offsetLogFormatVersion),
+      commitLogFormatVersionOpt = Some(commitLogFormatVersion),
       previousContext = None)
 
     execCtx.offsetSeqMetadata = offsetLogFormatVersion match {
@@ -1190,7 +1229,17 @@ class MicroBatchExecution(
         // dummy string to prevent UnresolvedException and to prevent to be used in the future.
         CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
           ct.dataType, Some("Dummy TimeZoneId"))
+      case ct: CurrentTimestampNanos =>
+        // Like CurrentTimestamp, the nanosecond current_timestamp(p) is not
+        // TimeZoneAwareExpression, so supply the dummy time zone. The batch timestamp is
+        // millisecond resolution, so the folded TIMESTAMP_LTZ(p) literal has zero
+        // nanos-within-micro.
+        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
+          ct.dataType, Some("Dummy TimeZoneId"))
       case lt: LocalTimestamp =>
+        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
+          lt.dataType, lt.timeZoneId)
+      case lt: LocalTimestampNanos =>
         CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
           lt.dataType, lt.timeZoneId)
       case cd: CurrentDate =>
@@ -1489,7 +1538,9 @@ class MicroBatchExecution(
       } else {
         commitLog.createMetadata(
           nextBatchWatermarkMs = watermarkTracker.currentWatermark,
-          stateUniqueIds = stateStoreCkptId)
+          stateUniqueIds = stateStoreCkptId,
+          commitLogFormatVersion = execCtx.commitLogFormatVersionOpt.getOrElse(
+            sparkSessionForStream.sessionState.conf.streamingCommitLogFormatVersion))
       }
       if (!commitLog.add(execCtx.batchId, metadata)) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)

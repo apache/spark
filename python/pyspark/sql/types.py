@@ -2428,37 +2428,30 @@ def _parse_datatype_json_value(  # type: ignore[return]
                 collation_name = collationsMap[fieldPath]
                 return StringType(collation_name)
             return _all_mappable_types[json_value]()
-        elif _FIXED_DECIMAL.match(json_value):
-            m = _FIXED_DECIMAL.match(json_value)
-            return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
-        elif _TIME.match(json_value):
-            m = _TIME.match(json_value)
-            return TimeType(int(m.group(1)))  # type: ignore[union-attr]
-        elif _INTERVAL_DAYTIME.match(json_value):
-            m = _INTERVAL_DAYTIME.match(json_value)
+        elif m := _FIXED_DECIMAL.match(json_value):
+            return DecimalType(int(m.group(1)), int(m.group(2)))
+        elif m := _TIME.match(json_value):
+            return TimeType(int(m.group(1)))
+        elif m := _INTERVAL_DAYTIME.match(json_value):
             inverted_fields = DayTimeIntervalType._inverted_fields
-            first_field = inverted_fields.get(m.group(1))  # type: ignore[union-attr]
-            second_field = inverted_fields.get(m.group(3))  # type: ignore[union-attr]
+            first_field = inverted_fields.get(m.group(1))
+            second_field = inverted_fields.get(m.group(3))
             if first_field is not None and second_field is None:
                 return DayTimeIntervalType(first_field)
             return DayTimeIntervalType(first_field, second_field)
-        elif _INTERVAL_YEARMONTH.match(json_value):
-            m = _INTERVAL_YEARMONTH.match(json_value)
+        elif m := _INTERVAL_YEARMONTH.match(json_value):
             inverted_fields = YearMonthIntervalType._inverted_fields
-            first_field = inverted_fields.get(m.group(1))  # type: ignore[union-attr]
-            second_field = inverted_fields.get(m.group(3))  # type: ignore[union-attr]
+            first_field = inverted_fields.get(m.group(1))
+            second_field = inverted_fields.get(m.group(3))
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
-        elif _STRING_WITH_COLLATION.match(json_value):
-            m = _STRING_WITH_COLLATION.match(json_value)
-            return StringType(m.group(1))  # type: ignore[union-attr]
-        elif _LENGTH_CHAR.match(json_value):
-            m = _LENGTH_CHAR.match(json_value)
-            return CharType(int(m.group(1)))  # type: ignore[union-attr]
-        elif _LENGTH_VARCHAR.match(json_value):
-            m = _LENGTH_VARCHAR.match(json_value)
-            return VarcharType(int(m.group(1)))  # type: ignore[union-attr]
+        elif m := _STRING_WITH_COLLATION.match(json_value):
+            return StringType(m.group(1))
+        elif m := _LENGTH_CHAR.match(json_value):
+            return CharType(int(m.group(1)))
+        elif m := _LENGTH_VARCHAR.match(json_value):
+            return VarcharType(int(m.group(1)))
         elif _GEOMETRY.match(json_value):
             return GeometryType._from_crs(GeometryType.DEFAULT_CRS)
         elif _GEOMETRY_CRS.match(json_value):

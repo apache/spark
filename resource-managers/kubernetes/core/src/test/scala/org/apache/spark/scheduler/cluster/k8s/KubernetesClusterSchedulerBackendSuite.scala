@@ -31,14 +31,14 @@ import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito.{atLeastOnce, mock, never, spy, verify, when}
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor, StopDriver}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor, StopDriver, StopExecutors}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
 
@@ -304,6 +304,20 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
     // Verify the last operation of `schedulerBackendUnderTest.stop`.
     verify(kubernetesClient).close()
+  }
+
+  test("stopExecutors() reports a failed StopExecutors RPC as SCHEDULER_BACKEND_SHUTDOWN_FAILED") {
+    val rpcFailure = new RuntimeException("StopExecutors timed out")
+    when(driverEndpointRef.askSync[Boolean](StopExecutors)).thenThrow(rpcFailure)
+    val e = intercept[SparkException] {
+      schedulerBackendUnderTest.stopExecutors()
+    }
+    checkError(
+      exception = e,
+      condition = "SCHEDULER_BACKEND_SHUTDOWN_FAILED.EXECUTORS",
+      sqlState = Some("58030"),
+      parameters = Map.empty[String, String])
+    assert(e.getCause === rpcFailure)
   }
 
   test("SPARK-34469: Ignore RegisterExecutor when SparkContext is stopped") {

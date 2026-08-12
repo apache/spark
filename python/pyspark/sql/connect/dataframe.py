@@ -107,6 +107,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.plot import PySparkPlotAccessor
 
 
 class DataFrame(ParentDataFrame):
@@ -2435,7 +2436,7 @@ class DataFrame(ParentDataFrame):
         return self._execution_info
 
     @property
-    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+    def plot(self) -> "PySparkPlotAccessor":
         from pyspark.sql.plot import PySparkPlotAccessor
 
         return PySparkPlotAccessor(self)

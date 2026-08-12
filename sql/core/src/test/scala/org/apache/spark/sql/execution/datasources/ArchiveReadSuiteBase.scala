@@ -20,12 +20,14 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 import java.nio.file.Files
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.functions.{col, struct}
+import org.apache.spark.sql.functions.{col, input_file_name, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -99,6 +101,23 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   /** Writes bytes that are not a readable archive at `dest` (of [[corruptArchiveExtension]]). */
   protected def writeCorruptArchive(dest: File): Unit
 
+  /** Bytes that are not a valid data file of [[format]], used to plant a corrupt archive entry. */
+  protected def corruptEntryBytes: Array[Byte] =
+    s"This is not a valid $format file".getBytes("UTF-8")
+
+  /**
+   * Whether [[writeArchiveFailingAfterFirstEntry]] is supported, gating the mid-advance
+   * corrupt-skip regression test. From the container trait.
+   */
+  protected def supportsMidAdvanceFailure: Boolean
+
+  /**
+   * Writes an archive at `dest` whose first entry (`firstEntry`) reads cleanly but which then fails
+   * while advancing to a later entry. From the container trait.
+   */
+  protected def writeArchiveFailingAfterFirstEntry(
+      dest: File, firstEntry: (String, Array[Byte])): Unit
+
   /** An archive extension whose reader fails on corrupt bytes (used by the corrupt-file tests). */
   protected def corruptArchiveExtension: String
 
@@ -148,6 +167,34 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
    * override it to false.
    */
   protected def supportsSchemaMerge: Boolean = true
+
+  /**
+   * Whether default (non-merge) inference samples a single file rather than scanning every input.
+   * Parquet samples one part-file (SPARK-11500), so a corrupt/missing first-sampled archive fails
+   * to infer instead of falling through to a readable one. The streaming formats scan all inputs.
+   */
+  protected def inferenceSamplesOneFile: Boolean = false
+
+  /**
+   * Whether this format unpacks each archive entry to a local temp file before reading it (Parquet
+   * needs random access), as opposed to streaming entries. Gates the shared tests that exercise the
+   * localize path: per-entry corrupt handling during inference and read, and the differing-field
+   * read.
+   */
+  protected def localizesEntries: Boolean = false
+
+  /**
+   * Prefix of the per-entry temp dir a [[localizesEntries]] format unpacks each entry into (e.g.
+   * `parquet-archive`); its inference variant is `<prefix>-infer`. Gates the shared temp-dir
+   * cleanup tests.
+   */
+  protected def archiveTempDirPrefix: String = ""
+
+  /**
+   * The config key toggling this format's vectorized/columnar reader, if it has one. When set, the
+   * shared localize-path read test runs with the reader both on and off.
+   */
+  protected def vectorizedReaderConfKey: Option[String] = None
 
   /** Sample data with a nested struct column, used by the complex-type test. */
   protected def complexSampleDf: DataFrame =
@@ -212,6 +259,20 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
       val data = sampleDf((1, "Alice"), (2, "Bob"))
       writeArchive(archive, Seq(entryName(0) -> encodeFile(data)))
       checkAnswer(read(archive.getCanonicalPath).select("name"), Seq(Row("Alice"), Row("Bob")))
+    }
+  }
+
+  test("input_file_name and _metadata.file_path report the archive path, not a per-entry path") {
+    withArchiveFile() { archive =>
+      val parts = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
+      writeArchive(archive, parts.zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) })
+      val df = read(archive.getCanonicalPath)
+      Seq(input_file_name(), col("_metadata.file_path")).foreach { pathCol =>
+        val paths = df.select(pathCol).distinct().collect().map(_.getString(0))
+        assert(paths.length == 1, s"expected one archive path, got: ${paths.toList}")
+        assert(new Path(paths.head) == new Path(archive.toURI),
+          s"expected the archive path ${archive.toURI}, got: ${paths.head}")
+      }
     }
   }
 
@@ -296,9 +357,74 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     }
   }
 
+  // ----- shared archivePathFilter tests --------------------------------------
+
+  test("archivePathFilter selects inner entries by full path") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(
+        s"top.$fileExtension" -> encodeFile(sampleDf((1, "top"))),
+        s"sub/keep.$fileExtension" -> encodeFile(sampleDf((2, "keep"))),
+        s"other/skip.$fileExtension" -> encodeFile(sampleDf((3, "skip")))))
+      // `sub/*` matches the full inner path, so only the entry under `sub/` is ingested.
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("archivePathFilter" -> "sub/*")).select("id", "name"),
+        Seq(Row(2, "keep")))
+    }
+  }
+
+  test("archivePathFilter with an extension glob selects across subdirectories") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(
+        s"top.$fileExtension" -> encodeFile(sampleDf((1, "top"))),
+        s"sub/nested.$fileExtension" -> encodeFile(sampleDf((2, "nested"))),
+        "sub/skip.other" -> encodeFile(sampleDf((3, "skip")))))
+      // `*` crosses `/`, so the glob keeps both entries of this extension at any depth, while the
+      // entry with a different extension is filtered out.
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("archivePathFilter" -> s"*.$fileExtension"))
+          .select("id", "name"),
+        Seq(Row(1, "top"), Row(2, "nested")))
+    }
+  }
+
+  test("archivePathFilter matching no entry yields no rows") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(s"data.$fileExtension" -> encodeFile(sampleDf((1, "Alice")))))
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("archivePathFilter" -> "nomatch/*")), Seq.empty[Row])
+    }
+  }
+
+  test("archivePathFilter applies in addition to ignoredPathSegmentRegex") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(
+        s"keep/data.$fileExtension" -> encodeFile(sampleDf((1, "keep"))),
+        // Matches the glob, but the hidden-file filter still drops the `_`-prefixed entry.
+        s"keep/_hidden.$fileExtension" -> encodeFile(sampleDf((2, "hidden")))))
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("archivePathFilter" -> "keep/*")).select("id", "name"),
+        Seq(Row(1, "keep")))
+    }
+  }
+
   // ----- shared schema-inference tests (run when `supportsSchemaInference`) --
 
   if (supportsSchemaInference) {
+    test("archivePathFilter applies to schema inference, not just the scan") {
+      // The excluded entry carries a column the kept entry lacks. Inference must skip it, otherwise
+      // the inferred schema is a superset of what the scan returns and `extra` reads back all-null.
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq(
+          s"keep/data.$fileExtension" -> encodeFile(sampleDf((1, "keep"))),
+          s"skip/data.$fileExtension" ->
+            encodeFile(Seq((2, "skip", "x")).toDF("id", "name", "extra"))))
+        val schema = inferredSchema(
+          Seq(archive.getCanonicalPath), Map("archivePathFilter" -> "keep/*"))
+        assert(!schema.fieldNames.contains("extra"),
+          s"inference read a filtered-out entry; got $schema")
+      }
+    }
+
     test("archive infers the same schema as a directory of the same files") {
       val entries = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
         .zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) }
@@ -327,32 +453,24 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     }
 
     test("inference skips a corrupt archive among good ones (ignoreCorruptFiles)") {
+      // A format that samples one file (Parquet) only reaches the good archive when every input is
+      // scanned, i.e. under mergeSchema; otherwise the sampled corrupt archive is skipped and
+      // nothing survives (the same as a corrupt loose file).
+      val extra =
+        if (inferenceSamplesOneFile) Map("mergeSchema" -> "true") else Map.empty[String, String]
       withTempDir { dir =>
         val good = sampleDf((1, "Alice"), (2, "Bob"))
         writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
           Seq(entryName(0) -> encodeFile(good)))
         writeCorruptArchive(new File(dir, s"bad.$corruptArchiveExtension"))
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-          val schema = inferredSchema(Seq(dir.getCanonicalPath))
+          val schema = inferredSchema(Seq(dir.getCanonicalPath), extra)
           withTempDir { onlyGood =>
             Files.write(new File(onlyGood, entryName(0)).toPath, encodeFile(good))
-            assert(schema == inferredSchema(Seq(onlyGood.getCanonicalPath)),
+            assert(schema == inferredSchema(Seq(onlyGood.getCanonicalPath), extra),
               s"corrupt archive not skipped during inference; got $schema")
           }
         }
-      }
-    }
-
-    test("archive inference widens a column's type across entries like a directory") {
-      // The column is integral in the first entry and string in the second; inference over all
-      // entries widens the merged type to string, exactly as a directory read would.
-      withArchiveFile() { archive =>
-        writeArchive(archive, Seq(
-          entryName(0) -> encodeFile(Seq(1, 2).toDF("c")),
-          entryName(1) -> encodeFile(Seq("x").toDF("c"))))
-        val schema = inferredSchema(Seq(archive.getCanonicalPath))
-        assert(schema.length == 1 && schema.head.dataType == StringType,
-          s"expected the column widened to string across entries, got $schema")
       }
     }
 
@@ -371,6 +489,22 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
           Files.write(new File(looseDir, s"loose.$fileExtension").toPath, encodeFile(loose))
           assert(schema == inferredSchema(Seq(looseDir.getCanonicalPath)),
             s"mixed archive+loose inference diverged from a directory read; got $schema")
+        }
+      }
+    }
+
+    // Excludes formats that sample one file (Parquet): they can't widen types across entries.
+    if (!inferenceSamplesOneFile) {
+      test("archive inference widens a column's type across entries like a directory") {
+        // The column is integral in the first entry and string in the second; inference over all
+        // entries widens the merged type to string, exactly as a directory read would.
+        withArchiveFile() { archive =>
+          writeArchive(archive, Seq(
+            entryName(0) -> encodeFile(Seq(1, 2).toDF("c")),
+            entryName(1) -> encodeFile(Seq("x").toDF("c"))))
+          val schema = inferredSchema(Seq(archive.getCanonicalPath))
+          assert(schema.length == 1 && schema.head.dataType == StringType,
+            s"expected the column widened to string across entries, got $schema")
         }
       }
     }
@@ -406,6 +540,201 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
           assert(schema == inferredSchema(Seq(looseDir.getCanonicalPath)),
             s"differing-field inference diverged from a directory read; got $schema")
         }
+      }
+    }
+  }
+
+  // ----- shared localize-path tests (run when `localizesEntries`) ------------
+
+  if (localizesEntries) {
+    // The merge-gated block above owns this test when a format unions by name; localize-path
+    // formats (Parquet) set `supportsSchemaMerge` off, so provide it here instead.
+    if (!supportsSchemaMerge) {
+      test("archive entries with differing fields read like a directory") {
+        // One entry carries an extra field the other lacks; read under a schema covering both, the
+        // missing field reads back null -- exactly as a directory read of the same files does.
+        val withName = sampleDf((1, "Alice"), (2, "Bob"))
+        val idOnly = Seq(3).toDF("id")
+        assertArchiveMatchesDir(
+          Seq(entryName(0) -> encodeFile(withName), entryName(1) -> encodeFile(idOnly)))
+      }
+    }
+
+    Seq(true, false).foreach { ignoreCorrupt =>
+      test(s"ignoreCorruptFiles=$ignoreCorrupt: inference skips a corrupt entry's whole archive") {
+        // A corrupt entry condemns its whole archive during inference (no partial ingestion), so
+        // the `extra` column carried by the bad archive's valid sibling entry must not surface. A
+        // good archive is unaffected. Formats sampling one file need mergeSchema to fold every
+        // entry's footer.
+        val extra =
+          if (inferenceSamplesOneFile) Map("mergeSchema" -> "true") else Map.empty[String, String]
+        val sibling = Seq((3, "Carol", "x")).toDF("id", "name", "extra")
+        withTempDir { dir =>
+          writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
+            Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
+          writeArchive(new File(dir, s"bad.${archiveExtensions.head}"), Seq(
+            entryName(0) -> encodeFile(sibling),
+            entryName(1) -> corruptEntryBytes))
+          withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+            if (ignoreCorrupt) {
+              assert(inferredSchema(Seq(dir.getCanonicalPath), extra).fieldNames.toSet ==
+                Set("id", "name"),
+                "the whole corrupt archive, including its valid sibling entry, should be skipped")
+            } else {
+              intercept[Exception](inferredSchema(Seq(dir.getCanonicalPath), extra))
+            }
+          }
+        }
+      }
+
+      test(s"ignoreCorruptFiles=$ignoreCorrupt: read skips the rest of an archive at a bad entry") {
+        // The read ingests entries before the corrupt one, then skips the rest of that archive (not
+        // whole-archive atomic like inference). A separate good archive is read in full.
+        val alive = sampleDf((1, "Alice"), (2, "Bob"))
+        val beforeCorrupt = sampleDf((3, "Carol"))
+        withTempDir { dir =>
+          writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
+            Seq(entryName(0) -> encodeFile(alive)))
+          writeArchive(new File(dir, s"bad.${archiveExtensions.head}"), Seq(
+            entryName(0) -> encodeFile(beforeCorrupt),
+            entryName(1) -> corruptEntryBytes))
+          withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+            if (ignoreCorrupt) {
+              checkAnswer(read(dir.getCanonicalPath), alive.union(beforeCorrupt))
+            } else {
+              intercept[SparkException](read(dir.getCanonicalPath).collect())
+            }
+          }
+        }
+      }
+    }
+
+    // Temp dirs (of `prefix`) surviving under the executor-local dir; the read/inference variants
+    // must be removed on task completion, so `after -- before` catches a leak.
+    def archiveTempDirs(prefix: String): Set[String] = {
+      val localDir = new File(Utils.getLocalDir(spark.sparkContext.getConf))
+      Option(localDir.listFiles()).getOrElse(Array.empty)
+        .filter(_.getName.startsWith(prefix)).map(_.getName).toSet
+    }
+
+    val vectorizedCases = vectorizedReaderConfKey.map(Seq(_)).getOrElse(Seq.empty)
+      .flatMap(key => Seq(true, false).map(key -> _))
+    (if (vectorizedCases.nonEmpty) vectorizedCases else Seq("" -> false)).foreach {
+      case (confKey, vectorized) =>
+        val label = if (confKey.isEmpty) "" else s" with vectorized reader = $vectorized"
+        test(s"archive reads return the same rows$label") {
+          val conf = if (confKey.isEmpty) Map.empty[String, String]
+            else Map(confKey -> vectorized.toString)
+          withSQLConf(conf.toSeq: _*) {
+            assertArchiveMatchesDir(
+              Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
+          }
+        }
+    }
+
+    test("an abandoned read (LIMIT) over an archive returns partial rows and cleans up") {
+      withArchiveFile() { archive =>
+        val parts = (0 until 4).map(i => entryName(i) -> encodeFile(sampleDf((i, s"v$i"))))
+        writeArchive(archive, parts)
+        val before = archiveTempDirs(archiveTempDirPrefix)
+        assert(read(archive.getCanonicalPath).limit(2).collect().length == 2)
+        assert((archiveTempDirs(archiveTempDirPrefix) -- before).isEmpty,
+          "the read's temp dir was not cleaned up")
+      }
+    }
+
+    test("extensionless entries are read and inferred like a directory of part-files") {
+      val data = sampleDf((1, "Alice"), (2, "Bob"))
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq("part-00000" -> encodeFile(data)))
+        checkAnswer(read(archive.getCanonicalPath), data)
+        assert(inferredSchema(Seq(archive.getCanonicalPath)).fieldNames.toSet == Set("id", "name"),
+          "an extensionless entry should be inferred like a directory of part-files")
+      }
+    }
+
+    test("a corrupt archive cleans up its read temp dir rather than leaking it") {
+      // A corrupt archive throws before the read returns an iterator, but must not leak its dir.
+      withArchiveFile(corruptArchiveExtension) { archive =>
+        writeCorruptArchive(archive)
+        val before = archiveTempDirs(archiveTempDirPrefix)
+        intercept[SparkException](read(archive.getCanonicalPath).collect())
+        assert((archiveTempDirs(archiveTempDirPrefix) -- before).isEmpty,
+          "a corrupt archive leaked its read temp dir")
+      }
+    }
+
+    test("a corrupt archive cleans up its inference temp dir rather than leaking it") {
+      // Inference localizes entries too, on a worker without a TaskContext; a corrupt archive
+      // throws during that eager localize and must not leak the inference temp dir.
+      withArchiveFile(corruptArchiveExtension) { archive =>
+        writeCorruptArchive(archive)
+        val before = archiveTempDirs(s"$archiveTempDirPrefix-infer")
+        intercept[SparkException](inferredSchema(Seq(archive.getCanonicalPath)))
+        assert((archiveTempDirs(s"$archiveTempDirPrefix-infer") -- before).isEmpty,
+          "a corrupt archive leaked its inference temp dir")
+      }
+    }
+
+    test("archive inference unions differing fields across entries with mergeSchema=true") {
+      // mergeSchema=true folds every entry's schema; over an archive, one unpacked entry at a time.
+      // Compare field name/type pairs as a set rather than by exact StructType equality: field
+      // order across archive entries follows the parallel merge order and is not a guaranteed
+      // contract, and some formats (ORC) merge entries unordered. Only the name/type union matters.
+      val withName = sampleDf((1, "Alice"), (2, "Bob"))
+      val idExtra = Seq((3, 30)).toDF("id", "extra")
+      val entries = Seq(entryName(0) -> encodeFile(withName), entryName(1) -> encodeFile(idExtra))
+      val merge = Map("mergeSchema" -> "true")
+      def fieldTypes(s: StructType): Set[(String, DataType)] =
+        s.fields.map(f => f.name -> f.dataType).toSet
+      withArchiveFile() { archive =>
+        writeArchive(archive, entries)
+        val archiveSchema = inferredSchema(Seq(archive.getCanonicalPath), merge)
+        withTempDir { dir =>
+          entries.foreach { case (n, b) => Files.write(new File(dir, n).toPath, b) }
+          assert(archiveSchema.fieldNames.toSet == Set("id", "name", "extra"),
+            s"expected the union of entry fields, got $archiveSchema")
+          assert(fieldTypes(archiveSchema) ==
+            fieldTypes(inferredSchema(Seq(dir.getCanonicalPath), merge)),
+            s"archive mergeSchema inference diverged from a directory read; got $archiveSchema")
+        }
+      }
+    }
+  }
+
+  // ----- shared parent-archive _metadata test --------------------------------
+
+  test("_metadata exposes the parent archive file's values, identical for every row") {
+    archiveExtensions.foreach { ext =>
+      withArchiveFile(ext) { archive =>
+        // Multiple entries, each multiple rows: the archive is one non-splittable PartitionedFile,
+        // so every row must carry the same parent-archive metadata (not any inner entry's).
+        val parts = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol"), (4, "Dan")))
+        writeArchive(
+          archive, parts.zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) })
+
+        val rows = read(archive.getCanonicalPath)
+          .select("_metadata.file_path", "_metadata.file_name", "_metadata.file_size",
+            "_metadata.file_block_start", "_metadata.file_block_length",
+            "_metadata.file_modification_time")
+          .collect()
+        assert(rows.length == parts.map(_.count()).sum,
+          s"expected one row per input record, got ${rows.length}")
+
+        val fileSize = archive.length()
+        rows.foreach { r =>
+          assert(r.getString(0).endsWith(archive.getName) && !r.getString(0).contains(entryName(0)),
+            s"file_path should be the archive file, got ${r.getString(0)}")
+          assert(r.getString(1) == archive.getName, s"file_name mismatch: ${r.getString(1)}")
+          assert(r.getLong(2) == fileSize, s"file_size mismatch: ${r.getLong(2)} != $fileSize")
+          assert(r.getLong(3) == 0L, s"file_block_start should be 0, got ${r.getLong(3)}")
+          assert(r.getLong(4) == fileSize,
+            s"file_block_length should be the archive size, got ${r.getLong(4)}")
+          assert(r.getAs[java.sql.Timestamp](5).getTime == archive.lastModified(),
+            "file_modification_time should be the archive's mtime")
+        }
+        assert(rows.map(_.toSeq).distinct.length == 1,
+          "every row must carry the same parent-archive metadata")
       }
     }
   }

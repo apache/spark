@@ -935,6 +935,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def cannotReadZipEntry(entry: String, path: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "CANNOT_READ_ZIP_ENTRY",
+      messageParameters = Map("entry" -> entry, "path" -> path))
+  }
+
   def cannotCreateColumnarReaderError(): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2065",
@@ -1216,12 +1222,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotAcquireMemoryForWindowAggregateError(
       requestedBytes: Long,
-      receivedBytes: Long): SparkOutOfMemoryError = {
+      receivedBytes: Long,
+      consumerBreakdown: String): SparkOutOfMemoryError = {
     new SparkOutOfMemoryError(
       "UNABLE_TO_ACQUIRE_MEMORY",
       java.util.Map.of(
         "requestedBytes", requestedBytes.toString,
-        "receivedBytes", receivedBytes.toString))
+        "receivedBytes", receivedBytes.toString,
+        "consumerBreakdown", consumerBreakdown))
   }
 
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {
@@ -1616,6 +1624,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def jsonValueOnEmptyError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_VALUE_ON_ERROR.EMPTY",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
+  }
+
+  def jsonValueOnErrorError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_VALUE_ON_ERROR.ERROR",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
+  }
+
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2179",
@@ -1919,7 +1941,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def catalogPluginClassNotImplementedError(name: String, pluginClassName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2214",
+      errorClass = "CANNOT_LOAD_CATALOG.NOT_A_CATALOG_PLUGIN",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -1931,7 +1953,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2215",
+      errorClass = "CANNOT_LOAD_CATALOG.PLUGIN_CLASS_NOT_FOUND",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -1943,7 +1965,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2216",
+      errorClass = "CANNOT_LOAD_CATALOG.CONSTRUCTOR_NOT_FOUND",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -1955,7 +1977,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2217",
+      errorClass = "CANNOT_LOAD_CATALOG.CONSTRUCTOR_NOT_ACCESSIBLE",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -1967,7 +1989,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2218",
+      errorClass = "CANNOT_LOAD_CATALOG.ABSTRACT_CLASS",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -1979,7 +2001,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2219",
+      errorClass = "CANNOT_LOAD_CATALOG.CONSTRUCTOR_FAILURE",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -2541,6 +2563,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "parameter" -> toSQLId("key"),
         "functionName" -> toSQLId("hmac"),
         "detailMessage" -> detailMessage))
+  }
+
+  def invalidNormalizeFormError(form: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+      messageParameters = Map(
+        "parameter" -> toSQLId("form"),
+        "functionName" -> toSQLId("normalize"),
+        "form" -> toSQLValue(form, StringType)))
   }
 
   def hiveTableWithAnsiIntervalsError(
