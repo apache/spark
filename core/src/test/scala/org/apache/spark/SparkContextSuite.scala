@@ -1521,6 +1521,19 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(conf)
     assert(sc.env.memoryManager.maxOffHeapStorageMemory > 0)
   }
+
+  test("SPARK-41246: fail-fast on RDD id overflow") {
+    val conf = new SparkConf().setAppName("test").setMaster("local[1]")
+    sc = new SparkContext(conf)
+    sc.setNextRddIdForTesting(Int.MaxValue)
+    val last = sc.parallelize(Seq(1), 1)
+    assert(last.id === Int.MaxValue)
+    val err = intercept[SparkException] {
+      sc.parallelize(Seq(2), 1)
+    }
+    assert(err.getMessage.contains("Int.MaxValue"))
+    assert(err.getMessage.contains("overflowed"))
+  }
 }
 
 object SparkContextSuite {
