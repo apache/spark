@@ -3,3 +3,6 @@ docs/_build/
 pyspark.egg-info
 build/
 dist/
+# Transient copies made by dev/make-distribution.sh while building the sdists.
+/LICENSE
+/NOTICE
