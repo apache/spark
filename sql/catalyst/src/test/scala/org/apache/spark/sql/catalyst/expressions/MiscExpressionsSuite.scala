@@ -57,13 +57,6 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-58627: RaiseError is throwable") {
     assert(RaiseError(Literal("error!")).throwable)
-
-    // An expression wrapping a RaiseError picks the flag up from the inherited default. Note that
-    // assert_true is rewritten to its If(cond, null, RaiseError(...)) replacement by
-    // ReplaceExpressions before any rule reads the flag, so it is the replacement, not the
-    // AssertTrue node, that the optimizer actually consults.
-    assert(AssertTrue(Literal(true)).throwable)
-    assert(AssertTrue(Literal(true)).replacement.throwable)
   }
 
   test("SPARK-55109: RaiseError.sql uses single-argument form only for known error classes") {

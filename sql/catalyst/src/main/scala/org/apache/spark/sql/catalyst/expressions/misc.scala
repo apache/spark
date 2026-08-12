@@ -84,8 +84,6 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  // Always throws when evaluated. This has to be set explicitly: the inherited default infers
-  // the flag from the children, which here are usually non-throwing literals.
   override lazy val throwable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq(

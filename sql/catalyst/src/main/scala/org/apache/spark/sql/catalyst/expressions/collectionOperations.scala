@@ -3475,8 +3475,7 @@ case class Sequence(
 
   override def nullable: Boolean = children.exists(_.nullable)
 
-  // If step is defined, then an error will be thrown if the start and stop do not satisfy the step.
-  // Either way this must still fall back to the children, which may throw on their own.
+  // Can throw if step is defined and start and stop don't match or any of the children can throw.
   override lazy val throwable: Boolean = stepOpt.isDefined || children.exists(_.throwable)
 
   override def dataType: ArrayType = ArrayType(start.dataType, containsNull = false)

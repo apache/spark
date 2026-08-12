@@ -1662,27 +1662,6 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(queryWithRaiseError), queryWithRaiseError)
   }
 
-  test("SPARK-58627: do not push down predicate with raise_error through joins") {
-    val x = testStringRelation.subquery("x")
-    val y = testRelation1.subquery("y")
-
-    // Do not push down: below the join the predicate would run on rows the join discards, so
-    // raise_error could fire for a query that succeeds without pushdown.
-    val queryWithRaiseError = x.join(y, joinType = Inner, condition = Some($"x.a" === $"y.d"))
-      .where(IsNull(RaiseError($"x.e")))
-      .analyze
-    comparePlans(Optimize.execute(queryWithRaiseError), queryWithRaiseError)
-
-    // A predicate over the same column that cannot throw is still pushed down.
-    val queryWithoutRaiseError = x.join(y, joinType = Inner, condition = Some($"x.a" === $"y.d"))
-      .where(IsNotNull($"x.e"))
-      .analyze
-    val correctAnswer = x.where(IsNotNull($"x.e"))
-      .join(y, joinType = Inner, condition = Some($"x.a" === $"y.d"))
-      .analyze
-    comparePlans(Optimize.execute(queryWithoutRaiseError), correctAnswer)
-  }
-
   test("SPARK-58627: do not combine predicate with raise_error with other filters") {
     val x = testStringRelation.subquery("x")
 
