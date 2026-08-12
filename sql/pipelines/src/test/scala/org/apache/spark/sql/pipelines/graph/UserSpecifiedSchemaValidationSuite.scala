@@ -183,19 +183,19 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
 
   // AUTO CDC flows: the inferred schema appends a reserved metadata column to the data columns.
 
-  test("SPARK-58118: data-only user-specified schema is accepted for an implicit AUTO CDC flow") {
+  test("data-only user-specified schema is accepted for an implicit AUTO CDC flow") {
     // Schema lists only the data columns; the reserved metadata column is engine-owned and may
     // be omitted from the declared schema.
     autoCdcGraph(flowName = "target", declaredSchema = Some(dataSchema))
       .validate(spark.sessionState.conf.caseSensitiveAnalysis)
   }
 
-  test("SPARK-58118: data-only user-specified schema is accepted for a named AUTO CDC flow") {
+  test("data-only user-specified schema is accepted for a named AUTO CDC flow") {
     autoCdcGraph(flowName = "auto_cdc_flow", declaredSchema = Some(dataSchema))
       .validate(spark.sessionState.conf.caseSensitiveAnalysis)
   }
 
-  test("SPARK-58118: user-specified schema with wrong data columns is still rejected " +
+  test("user-specified schema with wrong data columns is still rejected " +
     "for an AUTO CDC flow") {
     // Omitting the reserved metadata column is allowed, but a mismatch in the data columns
     // themselves (here: a missing data column) remains incompatible.
