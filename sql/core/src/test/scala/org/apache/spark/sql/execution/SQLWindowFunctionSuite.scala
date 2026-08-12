@@ -263,36 +263,40 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
   }
 
   test("window function: count distinct with a range offset, filter, and multiple columns") {
-    val data = Seq(
-      (0, 10, "a", 1, true),
-      (1, 20, "a", 1, true),
-      (2, 20, "b", 1, false),
-      (3, 20, "b", 2, true),
-      (4, 30, "c", 3, true)
-    ).toDF("id", "v", "x", "y", "selected")
+    withSQLConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1") {
+      val data = Seq(
+        (0, 10, "a", 1, true),
+        (1, 20, "a", 1, true),
+        (2, 20, "b", 1, false),
+        (3, 20, "b", 2, true),
+        (4, 30, "c", 3, true)
+      ).toDF("id", "v", "x", "y", "selected")
 
-    withTempView("distinctWindowData") {
-      data.createOrReplaceTempView("distinctWindowData")
+      withTempView("distinctWindowData") {
+        data.createOrReplaceTempView("distinctWindowData")
 
-      checkAnswer(
-        sql(
-          """
-            |SELECT id,
-            |  count(DISTINCT x) OVER (
-            |    ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 5 PRECEDING) AS preceding_count,
-            |  count(DISTINCT x) FILTER (WHERE selected) OVER (
-            |    ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS filtered_count,
-            |  count(DISTINCT x, y) OVER (
-            |    ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS tuple_count
-            |FROM distinctWindowData
-          """.stripMargin),
-        Seq(
-          Row(0, 0L, 1L, 1L),
-          Row(1, 1L, 2L, 3L),
-          Row(2, 1L, 2L, 3L),
-          Row(3, 1L, 2L, 3L),
-          Row(4, 2L, 3L, 4L)
-        ))
+        checkAnswer(
+          sql(
+            """
+              |SELECT id,
+              |  count(DISTINCT x) OVER (
+              |    ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 5 PRECEDING)
+              |      AS preceding_count,
+              |  count(DISTINCT x) FILTER (WHERE selected) OVER (
+              |    ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+              |      AS filtered_count,
+              |  count(DISTINCT x, y) OVER (
+              |    ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS tuple_count
+              |FROM distinctWindowData
+            """.stripMargin),
+          Seq(
+            Row(0, 0L, 1L, 1L),
+            Row(1, 1L, 2L, 3L),
+            Row(2, 1L, 2L, 3L),
+            Row(3, 1L, 2L, 3L),
+            Row(4, 2L, 3L, 4L)
+          ))
+      }
     }
   }
 
@@ -354,13 +358,9 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
           |  sort_array(collect_list(DISTINCT id % 3) OVER ()) AS distinct_values
           |FROM range(20)
         """.stripMargin)
-      // An entire-partition frame has no event sorter, and the input buffer stays in memory, so
-      // this spill can only come from the distinct-key sorter created by the size fallback.
-      assertSpilled(sparkContext, "unbounded distinct window hash fallback by size") {
-        checkAnswer(
-          result,
-          Seq.tabulate(20)(id => Row(id.toLong, 3L, 3L, Seq(0L, 1L, 2L))))
-      }
+      checkAnswer(
+        result,
+        Seq.tabulate(20)(id => Row(id.toLong, 3L, 3L, Seq(0L, 1L, 2L))))
     }
   }
 

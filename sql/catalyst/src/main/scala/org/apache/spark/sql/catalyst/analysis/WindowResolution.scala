@@ -25,8 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   RangeFrame,
   RankLike,
   RowFrame,
-  RowOrdering,
-  SortOrder,
   SpecifiedWindowFrame,
   UnboundedFollowing,
   UnboundedPreceding,
@@ -169,15 +167,8 @@ object WindowResolution {
           messageParameters = Map("windowExpr" -> toSQLExpr(windowExpression))
         )
       case AggregateExpression(function, _, true, _, _)
-          if (windowExpression.windowSpec.frameSpecification match {
-            case SpecifiedWindowFrame(_, UnboundedPreceding, _) =>
-              val distinctExpressions = function.children.filterNot(_.foldable).map {
-                case sortOrder: SortOrder => sortOrder.child
-                case expression => expression
-              }
-              RowOrdering.isOrderable(distinctExpressions)
-            case _ => false
-          }) => ()
+          if WindowExpression.isSupportedDistinctAggregate(
+            function, windowExpression.windowSpec.frameSpecification) => ()
       case AggregateExpression(_, _, true, _, _) =>
         windowExpression.failAnalysis(
           errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",

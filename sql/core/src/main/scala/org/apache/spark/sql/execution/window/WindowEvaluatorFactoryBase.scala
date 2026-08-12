@@ -148,10 +148,7 @@ trait WindowEvaluatorFactoryBase {
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
     def distinctChildren(ae: AggregateExpression): Seq[Expression] = {
-      ae.aggregateFunction.children.filterNot(_.foldable).map {
-        case sortOrder: SortOrder => sortOrder.child
-        case expression => expression
-      }.distinctBy(_.canonicalized)
+      WindowExpression.distinctAggregateChildren(ae.aggregateFunction)
     }
 
     // Add a function and its function to the map for a given frame.
@@ -184,8 +181,11 @@ trait WindowEvaluatorFactoryBase {
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
             case ae @ AggregateExpression(_, _, true, _, _)
-                if frame.lower == UnboundedPreceding =>
+                if WindowExpression.isSupportedDistinctAggregate(ae.aggregateFunction, frame) =>
               collect("DISTINCT_AGGREGATE", frame, e, ae)
+            case AggregateExpression(_, _, true, _, _) =>
+              throw SparkException.internalError(
+                s"Unsupported DISTINCT window expression reached physical planning: ${e.sql}")
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: FrameLessOffsetWindowFunction =>
               collect("FRAME_LESS_OFFSET", f.fakeFrame, e, f)
@@ -255,9 +255,8 @@ trait WindowEvaluatorFactoryBase {
               distinctChildren(ae).map(_.canonicalized),
               distinctInputAttributes)
             ae.aggregateFunction.transformDown {
-              case expression: Expression
-                  if distinctColumnAttributeLookup.contains(expression.canonicalized) =>
-                distinctColumnAttributeLookup(expression.canonicalized)
+              case expression =>
+                distinctColumnAttributeLookup.getOrElse(expression.canonicalized, expression)
             }.asInstanceOf[AggregateFunction]
           }
         lazy val distinctProcessor = AggregateProcessor(
