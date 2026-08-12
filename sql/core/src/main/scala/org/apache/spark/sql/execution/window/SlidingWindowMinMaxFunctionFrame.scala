@@ -81,7 +81,8 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
   // `isMinMaxOnly` (enforced in WindowEvaluatorFactoryBase) ensures this invariant holds.
   private[this] val sourceRow = new SpecificInternalRow(functions.map(_.dataType).toIndexedSeq)
 
-  // `bufferIndex` is not stored; deques are accessed by position in the array.
+  // Each deque is addressed by its position in this array (one entry per Min/Max function),
+  // so no separate per-deque ordinal is needed.
   private[this] val deques: Array[MinMaxDeque] = functions.map { func =>
     val isMin = func.isInstanceOf[Min]
     val child = func match {
