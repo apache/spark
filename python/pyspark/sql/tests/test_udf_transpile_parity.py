@@ -197,16 +197,23 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         left = self.spark.createDataFrame([Row(a=1, a1=1)])
         right = self.spark.createDataFrame([Row(b=1, b1=1)])
         captured = 0
-        # Free variable -> closure -> not transpilable, so it stays a Python UDF.
-        # The raise itself is the proof it stayed one: a lowered native condition
-        # would be legal here and would not raise. Cover every non-inner join the
-        # skipped test_udf_not_supported_in_join_condition enumerated, not just
-        # one, so a transpile-config planner regression on any of them is caught.
-        closure_udf = udf(lambda a, b: a == b or captured > 0, BooleanType())
+
+        # Deliberately un-lowerable in a way that will STAY un-lowerable: a
+        # multi-statement ``def`` is outside the transpiler's single-expression
+        # subset by construction. A closure would read more naturally here, but
+        # closures are only un-lowerable pending SPARK-55207 ("Handle
+        # assignments, class vars, and closures via scope evaluation"), so this
+        # test would start failing -- pointing at the join planner rather than at
+        # its own fixture -- the moment that TODO is closed.
+        def not_lowerable(a, b):
+            same = a == b
+            return same or captured > 0
+
+        refused = udf(not_lowerable, BooleanType())
         for how in ("leftouter", "rightouter", "fullouter", "leftanti", "leftsemi"):
             with self.subTest(how=how):
                 with self.assertRaisesRegex(AnalysisException, "Python UDF in the ON clause"):
-                    left.join(right, closure_udf("a", "b"), how).collect()
+                    left.join(right, refused("a", "b"), how).collect()
 
 
 @unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)
