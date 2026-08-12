@@ -1585,7 +1585,7 @@ case class StreamingDeduplicateExec(
     // the timestamp before which we will never receive new records -- the event time watermark for
     // late events. Without incremental cleanup, all input has been processed by the time we evict,
     // so the eviction watermark is safe.
-    val evictionWatermark = if (doIncrementalCleanup) {
+    val incrementalAwareEvictionWatermark = if (doIncrementalCleanup) {
       eventTimeWatermarkForLateEvents
     } else {
       eventTimeWatermarkForEviction
@@ -1604,7 +1604,7 @@ case class StreamingDeduplicateExec(
       // that only differs under the non-default allowMultiple=false with 2+ event-time columns
       // outside the dedup key.)
       allowMultipleEventTimeColumns = !allowMultipleStatefulOperators,
-      evictionWatermark)
+      incrementalAwareEvictionWatermark)
 
     CompletionIterator[UnsafeRowPair, Iterator[UnsafeRowPair]](evictionIterator, {
       numRowsReadDuringEviction += evictionIterator.numRowsReadDuringEvictionSoFar
