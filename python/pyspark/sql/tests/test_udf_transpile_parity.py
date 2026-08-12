@@ -89,14 +89,22 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     # pulled out as Filter + Cross join (so a cartesian-product error is
     # expected), and a Python UDF in the ON clause of a non-inner join is
     # rejected outright. Their UDFs are inline lambdas, which SPARK-58650 now
-    # identifies and lowers, so no Python UDF survives in the plan and neither
-    # restriction applies -- that elimination is the entire point of the
-    # feature. The joins still produce the same rows (asserted natively in
-    # test_udf_and_common_filter_in_join_condition, which passes here), so this
-    # is a plan-shape divergence rather than a result change.
+    # identifies and lowers, so no Python UDF survives and neither restriction
+    # applies.
+    #
+    # Be precise about what that costs, because it is not purely a plan-shape
+    # change. With ``spark.sql.crossJoin.enabled=false``, a UDF that was the SOLE
+    # join condition used to raise "Detected implicit cartesian product"; lowered,
+    # the CASE WHEN references both sides so CheckCartesianProducts no longer
+    # flags it, yet no equi-join key is extractable, so the query still executes
+    # as an O(n*m) CartesianProduct -- the guard is defeated rather than
+    # satisfied. That is a real consequence of lowering, tracked separately; it
+    # is not something these skips can assert either way.
     @unittest.skip(
         "Transpilation lowers the inline lambda to a native join condition, so the "
-        "implicit-cartesian-product error this asserts no longer occurs (SPARK-58650)."
+        "implicit-cartesian-product error this asserts no longer occurs (SPARK-58650). "
+        "NOTE the query still runs as a CartesianProduct -- the guard stops firing "
+        "rather than the cross join going away."
     )
     def test_udf_in_join_condition(self):
         pass
@@ -104,38 +112,76 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @unittest.skip(
         "Transpilation lowers the inline lambda to a native ON condition, so the "
         "PYTHON_UDF_IN_ON_CLAUSE error this asserts no longer occurs (SPARK-58650). "
-        "Rows are asserted instead by test_transpiled_udf_join_conditions_match_native."
+        "Replaced by test_transpiled_udf_join_condition_matches_python and "
+        "test_non_lowerable_udf_still_refused_in_on_clause."
     )
     def test_udf_not_supported_in_join_condition(self):
         pass
 
-    def test_transpiled_udf_join_conditions_match_native(self):
+    def test_transpiled_udf_join_condition_matches_python(self):
         """Positive replacement for the two skips above.
 
-        Those tests asserted that a Python UDF in an ON clause was REFUSED, so
-        skipping them alone would leave the lowered path across non-inner joins
-        -- brand new, since it was previously unreachable -- entirely
-        unasserted. Compare rows against the equivalent native condition for
-        every join type the old error covered, using the same two-conjunct ON
-        shape (UDF plus a native predicate) the original exercised.
+        The contract a transpiled UDF must meet is that it agrees with the
+        INTERPRETED Python UDF -- not with the equivalent native SQL predicate.
+        The distinction is invisible on null-free keys and decisive with a NULL:
+        Python's ``None == None`` is True, so ``lambda a, b: a == b`` matches a
+        NULL pair, while SQL's ``a = b`` yields NULL and matches nothing. The
+        fixture therefore includes a NULL key.
+
+        For an INNER join the interpreted UDF is legal (cross join plus filter),
+        so it is used directly as the reference. For non-inner joins Spark
+        REFUSES a Python UDF in the ON clause, so no interpreted baseline exists
+        for the shape this change newly makes reachable -- the expected rows are
+        pinned explicitly instead, and they deliberately differ from the native
+        predicate for the NULL row.
         """
         from pyspark.sql import Row
         from pyspark.sql.functions import udf
         from pyspark.sql.types import BooleanType
         from pyspark.testing.utils import assertDataFrameEqual
 
-        left = self.spark.createDataFrame([Row(a=1, a1=1), Row(a=2, a1=2)])
-        right = self.spark.createDataFrame([Row(b=1, b1=1), Row(b=1, b1=3)])
+        left = self.spark.createDataFrame([Row(a=1, a1=1), Row(a=None, a1=5)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1), Row(b=None, b1=5)])
         eq = udf(lambda a, b: a == b, BooleanType())
-        for how in ("inner", "leftouter", "rightouter", "leftanti", "leftsemi", "fullouter"):
-            with self.subTest(how=how):
-                lowered = left.join(right, [eq("a", "b"), left.a1 == right.b1], how)
-                native = left.join(right, [left.a == right.b, left.a1 == right.b1], how)
-                # No Python UDF survives -- which is both why these join types
-                # are legal here at all, and why the rows must match native.
-                plan = lowered._jdf.queryExecution().executedPlan().toString()
-                self.assertNotIn("EvalPython", plan)
-                assertDataFrameEqual(lowered, native.collect())
+        cond = [eq("a", "b"), left.a1 == right.b1]
+
+        # INNER: compare against the interpreted UDF, the actual contract.
+        with self.subTest(how="inner", reference="interpreted"):
+            lowered = left.join(right, cond, "inner")
+            self.assertNotIn("EvalPython", lowered._jdf.queryExecution().executedPlan().toString())
+            lowered_rows = lowered.collect()
+            with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFs": False}):
+                interpreted = left.join(
+                    right,
+                    [udf(lambda a, b: a == b, BooleanType())("a", "b"), left.a1 == right.b1],
+                    "inner",
+                )
+                self.assertIn(
+                    "EvalPython", interpreted._jdf.queryExecution().executedPlan().toString()
+                )
+                assertDataFrameEqual(lowered_rows, interpreted.collect())
+            # Python semantics: the NULL pair matches, which SQL's `a = b` never
+            # would. Pinned so a future change to null handling is visible.
+            assertDataFrameEqual(
+                lowered_rows, [Row(a=1, a1=1, b=1, b1=1), Row(a=None, a1=5, b=None, b1=5)]
+            )
+
+        # Non-inner: no interpreted baseline exists (Python UDFs are refused in
+        # a non-inner ON clause), so pin the rows Python semantics produce.
+        expected = {
+            "leftouter": [Row(a=1, a1=1, b=1, b1=1), Row(a=None, a1=5, b=None, b1=5)],
+            "rightouter": [Row(a=1, a1=1, b=1, b1=1), Row(a=None, a1=5, b=None, b1=5)],
+            "fullouter": [Row(a=1, a1=1, b=1, b1=1), Row(a=None, a1=5, b=None, b1=5)],
+            "leftsemi": [Row(a=1, a1=1), Row(a=None, a1=5)],
+            "leftanti": [],
+        }
+        for how, want in expected.items():
+            with self.subTest(how=how, reference="pinned-python-semantics"):
+                lowered = left.join(right, cond, how)
+                self.assertNotIn(
+                    "EvalPython", lowered._jdf.queryExecution().executedPlan().toString()
+                )
+                assertDataFrameEqual(lowered, want)
 
     def test_non_lowerable_udf_still_refused_in_on_clause(self):
         # A UDF that does NOT lower (a closure -- the common fallback case) must

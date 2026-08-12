@@ -344,9 +344,10 @@ def neq_pair(x, y):
     return x != y
 
 
-# A lambda captured at module scope so ``inspect.getsource`` can read
-# its definition. Exercises the ``ast.Lambda`` branch in
-# ``_get_function_from_ast``.
+# A module-scope lambda. Since SPARK-58650 a lambda is located by its source
+# position in the defining file rather than through ``inspect.getsource``, so
+# module scope is no longer required for it to be found -- this stays at module
+# scope simply because that is how a user would most often write it.
 lambda_plus_four = lambda x: x + 4 if x is not None else 0  # noqa: E731
 
 

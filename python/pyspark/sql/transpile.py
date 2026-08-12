@@ -37,6 +37,7 @@ all-numeric and all-string variants.
 """
 
 import ast
+import copy
 import dis
 import functools
 import os
@@ -75,7 +76,15 @@ if TYPE_CHECKING:
 
 
 class AbstractTranspiler(object):
-    """Base class for transpilers. All experimental."""
+    """Base class for transpilers. All experimental.
+
+    ``_transpile_from_ast`` is the extension point, and its signature is NOT
+    stable: SPARK-58650 dropped the ``src`` and ``ast_info`` parameters it never
+    read. An out-of-tree subclass still implementing the older signature raises
+    ``TypeError``, which ``_transpile_func`` catches into its error list -- so a
+    stale transpiler stops firing quietly rather than failing loudly. Check the
+    signature when upgrading.
+    """
 
     varieties: dict[str, type["AbstractTranspiler"]] = {}
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.pyTranspilers
@@ -861,31 +870,31 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     return [{i: choice[i] for i in range(n)} for choice in itertools.product(*candidates)] or [{}]
 
 
-def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.AST]]:
-    """Try and get the AST from a given callable"""
+def _get_src_ast_from_func(func: Callable) -> Optional[ast.AST]:
+    """Parse the ``inspect.getsource`` fragment for ``func``, or ``None``.
+
+    Used only by the structural (``def`` / callable-class) path; a lambda is
+    located by position and does not go through here.
+    """
     # Note: consider maybe dill? (see the JYTHON PR)
     # inspect getsource does not work for functions defined in vanilla
     # repl, but does for those in files or in ipython.
     # It also fails when we give it an instance of a callable class.
     try:
         src = inspect.getsource(func)
-        src = textwrap.dedent(src).strip()
-        ast_info = ast.parse(src)
+        return ast.parse(textwrap.dedent(src).strip())
     except Exception:
         try:
             # ``_call_dunder`` rather than ``func.__call__``: the call protocol
-            # dispatches on the TYPE, so that is the body that actually runs.
-            # ``_target_code`` must agree with this choice or the fingerprint
-            # would be compared against a different callable's source.
+            # dispatches on the TYPE, so that is the body that actually runs,
+            # and ``_target_code`` keys on the same choice.
             src = inspect.getsource(_call_dunder(func))
-            src = textwrap.dedent(src).strip()
-            ast_info = ast.parse(src)
+            return ast.parse(textwrap.dedent(src).strip())
         except Exception:
             # No usable source (REPL/stdin definition, builtin, ...) --
             # return cleanly so the caller reports "cannot transpile"
             # instead of surfacing an UnboundLocalError as the reason.
-            return None, None
-    return src, ast_info
+            return None
 
 
 def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
@@ -1018,13 +1027,17 @@ def _code_signature(code: CodeType) -> tuple:
     )
 
 
-def _verifies(node: ast.Lambda, target: CodeType) -> bool:
+def _verifies(node: ast.Lambda, target: CodeType, target_signature: tuple) -> bool:
     """Whether ``node`` recompiles to the same code as ``target``.
 
+    ``target_signature`` is ``_code_signature(target)``, passed in so the caller
+    computes it once rather than per candidate.
+
     Position LOCATES a candidate; this CONFIRMS it. Without it, source that has
-    diverged from the compiled code -- an edited file re-read through
-    ``linecache``, or a relative ``co_filename`` resolved against a different
-    working directory -- would silently lower whatever now sits at that span.
+    diverged from the compiled code -- an edited file re-read from disk, or a
+    relative ``co_filename`` resolved against a different working directory --
+    would silently lower whatever now sits at that span.
+
     The comparison is the full structural signature, NOT just ``co_code``: a
     literal or global-name edit (``x + 1`` -> ``x + 2``, ``x + foo`` ->
     ``x + bar``) leaves ``co_code`` identical because the value lives in
@@ -1032,7 +1045,7 @@ def _verifies(node: ast.Lambda, target: CodeType) -> bool:
     check alone would confirm the stale node and lower the wrong body.
     """
     recompiled = _recompiled_lambda_code(node, target.co_freevars)
-    return recompiled is not None and _code_signature(recompiled) == _code_signature(target)
+    return recompiled is not None and _code_signature(recompiled) == target_signature
 
 
 # Cap on distinct source files whose parsed lambdas are cached at once.
@@ -1048,11 +1061,17 @@ def _walk_lambdas(tree: ast.AST) -> List[ast.Lambda]:
 def _parse_file_lambdas(path: str, _mtime_ns: int, _size: int) -> Tuple[ast.Lambda, ...]:
     """Parse ``path`` and return every ``ast.Lambda`` in it, LRU-cached per file.
 
-    ``_mtime_ns`` and ``_size`` are part of the cache key only: an edited file
-    has a different key and misses, so a stale parse is never served. The read
-    is fresh from disk (``tokenize.open`` respects the source's encoding cookie)
-    rather than through ``linecache``, for the same reason. Returns an empty
-    tuple on a read/parse error, which the caller treats as "no candidate".
+    ``_mtime_ns`` and ``_size`` are part of the cache key so an ordinary edit
+    misses and the file is re-parsed. They are a best-effort freshness hint, NOT
+    a guarantee: filesystem mtime granularity is coarse (~10 ms observed), so a
+    same-size edit landing within one tick keeps the key and serves the previous
+    parse. ``_verifies`` is what actually makes staleness safe -- a node that
+    does not correspond to the running code fails verification and the UDF falls
+    back -- so this key is an optimization, not the correctness boundary.
+
+    The read is fresh from disk (``tokenize.open`` respects the source's encoding
+    cookie) rather than through ``linecache``. Returns an empty tuple on a
+    read/parse error, which the caller treats as "no candidate".
     """
     try:
         with tokenize.open(path) as source:
@@ -1117,15 +1136,31 @@ def _resolve_lambda(target: CodeType, candidates: List[ast.Lambda]) -> Optional[
 
     Returns ``None`` unless exactly one candidate both contains the instructions
     and verifies, which the caller turns into a fall back to interpreted Python.
+    The returned node is a COPY: candidates come from a process-lifetime cache
+    shared by every later ``udf()`` call on that file, and the caller stitches
+    the node into a synthesized ``FunctionDef``, so handing out the cached object
+    would let any future in-place annotation leak between UDFs.
+
+    Note that when positions are unavailable at all -- CPython run with
+    ``-X no_debug_ranges`` / ``PYTHONNODEBUGRANGES=1``, or ``.pyc`` files built
+    that way -- ``spans`` is empty and every lambda falls back, silently
+    disabling lambda lowering. The empty-``spans`` guard is load-bearing for
+    more than efficiency: ``all()`` over no spans is vacuously True, so without
+    it every candidate would "contain" the instructions.
     """
     spans = _instruction_spans(target)
     if not spans:
         return None
-    located = [
-        node for node in candidates if all(_span_contains(_full_span(node), s) for s in spans)
-    ]
-    verified = [node for node in located if _verifies(node, target)]
-    return verified[0] if len(verified) == 1 else None
+    # Cheap narrowing first: a lambda's code object starts on the line its
+    # ``lambda`` keyword is on, so candidates elsewhere cannot be it. Keeps the
+    # O(candidates x spans) containment scan off whole-module candidate lists.
+    on_line = [node for node in candidates if node.lineno == target.co_firstlineno]
+    located = [node for node in on_line if all(_span_contains(_full_span(node), s) for s in spans)]
+    if not located:
+        return None
+    target_signature = _code_signature(target)
+    verified = [node for node in located if _verifies(node, target, target_signature)]
+    return copy.deepcopy(verified[0]) if len(verified) == 1 else None
 
 
 def _call_dunder(func: Optional[Callable]) -> Any:
@@ -1205,10 +1240,12 @@ def _get_function_from_ast(func: Optional[Callable]) -> ast.FunctionDef | None:
 
     * a LAMBDA (``co_name == "<lambda>"``) is located by source position among
       every lambda in its file, then confirmed by recompiling -- see
-      ``_resolve_lambda``. This covers every syntactic home a lambda can have
-      (bound to a name, in a tuple/dict/list, inside a call, on a continuation
-      line), because position does not care how the surrounding statement
-      parses;
+      ``_resolve_lambda``. Position does not care how the surrounding statement
+      parses, so this reaches a lambda bound to a name, in a tuple/dict/list,
+      inside a call, or on a continuation line. It does NOT reach a lambda whose
+      body references a name-mangled class private (``Cls.__secret`` inside a
+      class body): verification recompiles at module scope, where the mangled
+      ``co_names`` entry cannot be reproduced, so it falls back;
     * anything else -- a ``def`` function, or a callable instance whose source
       is its ``def __call__`` -- is read structurally from the ``getsource``
       fragment, whose first statement is that ``FunctionDef``.
@@ -1231,7 +1268,7 @@ def _get_function_from_ast(func: Optional[Callable]) -> ast.FunctionDef | None:
     # branches this used to carry are gone.
     if func is None:
         return None
-    _, body = _get_src_ast_from_func(func)
+    body = _get_src_ast_from_func(func)
     if body is None or not hasattr(body, "body") or not body.body:
         return None
     stmt = body.body[0]
