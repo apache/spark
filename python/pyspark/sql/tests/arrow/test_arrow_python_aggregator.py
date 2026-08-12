@@ -107,6 +107,14 @@ class ArrowPythonAggregatorTestsMixin:
         expected = df.agg(sf.avg("v").alias("m")).collect()
         self.assertAlmostEqual(result[0]["m"], expected[0]["m"], places=6)
 
+    def test_incremental_aggregator_empty_global_input(self):
+        # A global aggregation over empty input must still return one identity row: finish(zero).
+        empty = self._data().limit(0)
+        result = empty.agg(udaf(Mean())(sf.col("v")).alias("m")).collect()
+        expected = empty.agg(sf.avg("v").alias("m")).collect()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["m"], expected[0]["m"])
+
     def test_incremental_aggregator_custom_buffer(self):
         df = self._data()
         result = (

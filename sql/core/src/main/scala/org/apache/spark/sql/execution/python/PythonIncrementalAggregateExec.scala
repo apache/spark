@@ -70,6 +70,13 @@ abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with Pyt
   /** The grouping attributes as seen in the child's output. */
   protected def groupingAttributes: Seq[Attribute] = groupingExpressions.map(_.toAttribute)
 
+  /**
+   * Whether to still invoke Python on an empty partition. Only the FINAL stage of a *global*
+   * (no grouping) aggregation sets this: it must emit the identity row `finish(zero)` for empty
+   * input, matching SQL aggregate semantics. Everywhere else an empty partition yields no rows.
+   */
+  protected def emitOnEmptyPartition: Boolean = false
+
   override def output: Seq[Attribute] = outputExpressions.map(_.toAttribute)
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
@@ -123,7 +130,8 @@ abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with Pyt
     val resultExprs = outputExpressions
     val localEvalType = evalType
 
-    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
+    val emitIdentityOnEmpty = emitOnEmptyPartition
+    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty && !emitIdentityOnEmpty) iter else {
       val prunedProj = UnsafeProjection.create(allInputs.toSeq, childOutput)
 
       val groupedItr = if (groupingExprs.isEmpty) {
@@ -131,7 +139,23 @@ abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with Pyt
       } else {
         GroupedIterator(iter, groupingExprs, childOutput)
       }
-      val grouped = groupedItr.map { case (key, rows) => (key, rows.map(prunedProj)) }
+
+      // For a global aggregation with empty input, feed one all-null buffer row so the Python
+      // worker still emits `finish(zero)`. An empty group cannot be sent through
+      // GroupedPythonArrowInput (it asserts a non-empty batch per group), and the worker treats a
+      // null partial buffer as contributing nothing to `merge`.
+      lazy val nullInputRow: UnsafeRow =
+        UnsafeProjection.create(aggInputSchema.map(_.dataType).toArray)
+          .apply(new GenericInternalRow(aggInputSchema.length)).copy()
+      val grouped = groupedItr.map { case (key, rows) =>
+        val projected = rows.map(prunedProj)
+        val toSend = if (emitIdentityOnEmpty && groupingExprs.isEmpty && !projected.hasNext) {
+          Iterator(nullInputRow)
+        } else {
+          projected
+        }
+        (key, toSend)
+      }
 
       val context = TaskContext.get()
 
@@ -225,6 +249,10 @@ case class PythonIncrementalAggregateFinalExec(
     aggExpressions.map(_.resultAttribute)
 
   override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
+
+  // A global (no-grouping) aggregation must return the identity row even for empty input. This
+  // stage runs on a single partition (AllTuples), so exactly one identity row is produced.
+  override protected def emitOnEmptyPartition: Boolean = groupingExpressions.isEmpty
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (groupingExpressions.isEmpty) {

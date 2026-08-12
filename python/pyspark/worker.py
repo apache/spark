@@ -2217,6 +2217,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         # Map-side PARTIAL stage: fold each group's input rows into a per-group buffer via the
         # aggregator's `reduce`, and emit one intermediate-buffer struct column per aggregator.
+        # Batches are streamed and folded one at a time -- only the per-aggregator buffers are
+        # retained, never the whole group -- so a skewed group keeps map-side memory bounded.
         # `udf_func` is the Aggregator object itself (see read_single_udf).
         return_schema = to_arrow_schema(
             StructType(
@@ -2231,24 +2233,18 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             split_index: int, data: Iterator["GroupedBatch"]
         ) -> Iterator[pa.RecordBatch]:
             for group in data:
-                batch_list = list(group)
-                if not batch_list:
-                    continue
-                if hasattr(pa, "concat_batches"):
-                    concatenated = pa.concat_batches(batch_list)
-                else:
-                    concatenated = pa.RecordBatch.from_struct_array(
-                        pa.concat_arrays([b.to_struct_array() for b in batch_list])
-                    )
-                num_rows = concatenated.num_rows
+                buffers = [agg.zero() for agg, _, _, _ in udfs]
+                for batch in group:
+                    for i, (agg, args_offsets, _, _) in enumerate(udfs):
+                        cols = [batch.column(o).to_pylist() for o in args_offsets]
+                        buf = buffers[i]
+                        for r in range(batch.num_rows):
+                            buf = agg.reduce(buf, tuple(c[r] for c in cols))
+                        buffers[i] = buf
                 result_arrays = []
-                for i, (agg, args_offsets, _, _) in enumerate(udfs):
-                    cols = [concatenated.column(o).to_pylist() for o in args_offsets]
-                    buffer = agg.zero()
-                    for r in range(num_rows):
-                        buffer = agg.reduce(buffer, tuple(c[r] for c in cols))
+                for i, (agg, _, _, _) in enumerate(udfs):
                     field_names = [f.name for f in agg.bufferSchema.fields]
-                    struct_value = {name: buffer[j] for j, name in enumerate(field_names)}
+                    struct_value = {name: buffers[i][j] for j, name in enumerate(field_names)}
                     result_arrays.append(
                         pa.array([struct_value], type=return_schema.field(i).type)
                     )
@@ -2262,8 +2258,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         import pyarrow as pa
 
         # Post-shuffle FINAL stage: merge each group's partial buffers via the aggregator's `merge`
-        # and produce the output via `finish`. Each aggregator's single input column is its
-        # intermediate-buffer struct column.
+        # and produce the output via `finish`. Buffers are streamed and merged one batch at a time.
+        # Every group the JVM sends yields exactly one output row; null partial-buffer rows are
+        # skipped, so an empty global aggregation (a single all-null buffer row injected by the
+        # operator) still produces `finish(zero)`.
         col_names = ["_%d" % i for i in range(len(udfs))]
         return_schema = to_arrow_schema(
             StructType([StructField(name, rt) for name, (_, _, _, rt) in zip(col_names, udfs)]),
@@ -2275,26 +2273,21 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             split_index: int, data: Iterator["GroupedBatch"]
         ) -> Iterator[pa.RecordBatch]:
             for group in data:
-                batch_list = list(group)
-                if not batch_list:
-                    continue
-                if hasattr(pa, "concat_batches"):
-                    concatenated = pa.concat_batches(batch_list)
-                else:
-                    concatenated = pa.RecordBatch.from_struct_array(
-                        pa.concat_arrays([b.to_struct_array() for b in batch_list])
-                    )
+                merged: list = [None] * len(udfs)
+                for batch in group:
+                    for i, (agg, args_offsets, _, _) in enumerate(udfs):
+                        field_names = [f.name for f in agg.bufferSchema.fields]
+                        m = merged[i]
+                        for row in batch.column(args_offsets[0]).to_pylist():
+                            if row is None:
+                                continue
+                            partial = tuple(row[name] for name in field_names)
+                            m = partial if m is None else agg.merge(m, partial)
+                        merged[i] = m
                 results = []
-                for agg, args_offsets, _, _ in udfs:
-                    field_names = [f.name for f in agg.bufferSchema.fields]
-                    buffer_rows = concatenated.column(args_offsets[0]).to_pylist()
-                    merged = None
-                    for row in buffer_rows:
-                        partial = tuple(row[name] for name in field_names)
-                        merged = partial if merged is None else agg.merge(merged, partial)
-                    if merged is None:
-                        merged = agg.zero()
-                    results.append(agg.finish(merged))
+                for i, (agg, _, _, _) in enumerate(udfs):
+                    m = merged[i] if merged[i] is not None else agg.zero()
+                    results.append(agg.finish(m))
                 result_arrays = [pa.array([r]) for r in results]
                 batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
