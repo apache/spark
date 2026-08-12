@@ -136,4 +136,112 @@ class ParseCommandResultSuite extends SparkFunSuite {
     assert(SqlStatementCodes.Unrecognized.statementCode === 0)
     assert(SqlStatementCodes.CacheTable.statementCode < 0)
   }
+
+  private def tableRefs(sql: String): Set[Seq[String]] =
+    (obj(sql) \ "table_references").asInstanceOf[JArray].arr.map {
+      case JArray(parts) => parts.map(_.asInstanceOf[JString].s)
+      case other => fail(s"unexpected table_references entry: $other")
+    }.toSet
+
+  private def funcRefs(sql: String): Set[Seq[String]] =
+    (obj(sql) \ "function_references").asInstanceOf[JArray].arr.map {
+      case JArray(parts) => parts.map(_.asInstanceOf[JString].s)
+      case other => fail(s"unexpected function_references entry: $other")
+    }.toSet
+
+  test("CTE body tables are collected (UnresolvedWith innerChildren)") {
+    // CTE definitions are innerChildren, not children - easy to miss in walks.
+    val sql =
+      """WITH cte AS (SELECT a FROM hidden_base)
+        |SELECT a FROM cte""".stripMargin
+    assert(tableRefs(sql) === Set(Seq("hidden_base"), Seq("cte")))
+  }
+
+  test("multi-CTE chain and nested CTE definitions") {
+    val sql =
+      """WITH
+        |  a AS (SELECT id FROM base_a),
+        |  b AS (
+        |    WITH nested AS (SELECT id FROM base_nested)
+        |    SELECT n.id FROM nested n JOIN base_b b ON n.id = b.id
+        |  )
+        |SELECT a.id, b.id FROM a JOIN b ON a.id = b.id""".stripMargin
+    assert(tableRefs(sql) === Set(
+      Seq("base_a"),
+      Seq("base_nested"),
+      Seq("nested"),
+      Seq("base_b"),
+      Seq("a"),
+      Seq("b")))
+  }
+
+  test("CTE with expression subqueries, functions, and parameters") {
+    val sql =
+      """WITH filtered AS (
+        |  SELECT upper(x) AS u, my_schema.my_udf(y) AS v
+        |  FROM src
+        |  WHERE z IN (SELECT z FROM lookup WHERE flag = :flag)
+        |    AND EXISTS (SELECT 1 FROM probe WHERE probe.id = src.id)
+        |)
+        |SELECT u, count(v) FROM filtered WHERE u = ? GROUP BY u""".stripMargin
+    assert(tableRefs(sql) === Set(
+      Seq("src"), Seq("lookup"), Seq("probe"), Seq("filtered")))
+    assert(funcRefs(sql).contains(Seq("upper")))
+    assert(funcRefs(sql).contains(Seq("my_schema", "my_udf")))
+    assert(funcRefs(sql).contains(Seq("count")))
+    val params = obj(sql) \ "parameter_markers"
+    assert(params \ "named" === JArray(List(JString("flag"))))
+    assert(params \ "unnamed_count" === JInt(1))
+  }
+
+  test("WITH on INSERT / CTAS reaches CTE and target tables") {
+    val insertSql =
+      """INSERT INTO dest
+        |WITH s AS (SELECT a FROM src WHERE a > 0)
+        |SELECT a FROM s""".stripMargin
+    assert(tableRefs(insertSql) === Set(Seq("dest"), Seq("src"), Seq("s")))
+
+    val ctasSql =
+      """CREATE TABLE dest AS
+        |WITH s AS (SELECT a FROM src)
+        |SELECT a FROM s""".stripMargin
+    val ctas = obj(ctasSql)
+    assert(ctas \ "as_subquery" === JBool(true))
+    assert(tableRefs(ctasSql).contains(Seq("src")))
+    assert(tableRefs(ctasSql).contains(Seq("s")))
+  }
+
+  test("nested FROM / scalar / EXISTS subqueries outside CTEs") {
+    val sql =
+      """SELECT
+        |  (SELECT max(v) FROM scalar_src) AS m,
+        |  t.a
+        |FROM outer_t t
+        |JOIN (SELECT id FROM join_src) j ON t.id = j.id
+        |WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)
+        |  AND t.a IN (SELECT a FROM in_src)""".stripMargin
+    assert(tableRefs(sql) === Set(
+      Seq("scalar_src"),
+      Seq("outer_t"),
+      Seq("join_src"),
+      Seq("exists_src"),
+      Seq("in_src")))
+    assert(funcRefs(sql).contains(Seq("max")))
+  }
+
+  test("MERGE collects target, source, and action-expression tables") {
+    val sql =
+      """MERGE INTO tgt t
+        |USING (SELECT id FROM src) s
+        |ON t.id = s.id
+        |WHEN MATCHED AND t.flag IN (SELECT flag FROM flags) THEN
+        |  UPDATE SET t.v = (SELECT v FROM vals WHERE vals.id = t.id)
+        |WHEN NOT MATCHED THEN
+        |  INSERT (id) VALUES (s.id)""".stripMargin
+    val refs = tableRefs(sql)
+    assert(refs.contains(Seq("tgt")))
+    assert(refs.contains(Seq("src")))
+    assert(refs.contains(Seq("flags")))
+    assert(refs.contains(Seq("vals")))
+  }
 }

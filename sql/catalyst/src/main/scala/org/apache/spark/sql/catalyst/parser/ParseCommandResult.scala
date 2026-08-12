@@ -100,6 +100,28 @@ object ParseCommandResult {
     JArray(parts.map(JString).toList)
 
   /**
+   * Deep plan walk covering tree slots that standard `collect` /
+   * `collectWithSubqueries` miss:
+   *   - [[UnresolvedWith]] CTE definitions (`innerChildren`, not `children`)
+   *   - [[InsertIntoStatement]].table (non-child plan slot)
+   * Nested expression subqueries are still covered by `foreachWithSubqueries`.
+   */
+  private def foreachPlanDeep(plan: LogicalPlan)(f: LogicalPlan => Unit): Unit = {
+    plan.foreachWithSubqueries { p =>
+      f(p)
+      p match {
+        case w: UnresolvedWith =>
+          w.cteRelations.foreach { case (_, ctePlan, _) =>
+            foreachPlanDeep(ctePlan)(f)
+          }
+        case InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
+          foreachPlanDeep(table)(f)
+        case _ =>
+      }
+    }
+  }
+
+  /**
    * Collect multipart table/view identifiers as written in the SQL.
    * Deduplicates while preserving first-seen order.
    */
@@ -108,20 +130,12 @@ object ParseCommandResult {
     def add(parts: Seq[String]): Unit = {
       if (parts.nonEmpty) seen += parts
     }
-    def collectFrom(p: LogicalPlan): Unit = {
-      p.collectWithSubqueries {
-        case u: UnresolvedRelation => add(u.multipartIdentifier)
-        case u: UnresolvedTable => add(u.multipartIdentifier)
-        case u: UnresolvedView => add(u.multipartIdentifier)
-        case u: UnresolvedTableOrView => add(u.multipartIdentifier)
-        case u: UnresolvedIdentifier => add(u.nameParts)
-      }
-    }
-    collectFrom(plan)
-    // InsertIntoStatement.table is not a child of the plan tree.
-    plan match {
-      case InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
-        collectFrom(table)
+    foreachPlanDeep(plan) {
+      case u: UnresolvedRelation => add(u.multipartIdentifier)
+      case u: UnresolvedTable => add(u.multipartIdentifier)
+      case u: UnresolvedView => add(u.multipartIdentifier)
+      case u: UnresolvedTableOrView => add(u.multipartIdentifier)
+      case u: UnresolvedIdentifier => add(u.nameParts)
       case _ =>
     }
     seen.toSeq
@@ -137,13 +151,12 @@ object ParseCommandResult {
       case f: UnresolvedFunction => add(f.nameParts)
       case _ =>
     }
-    plan.collectWithSubqueries {
-      case p: LogicalPlan =>
-        p.expressions.foreach(collectInExpression)
-        p match {
-          case u: UnresolvedTableValuedFunction => add(u.name)
-          case _ =>
-        }
+    foreachPlanDeep(plan) { p =>
+      p.expressions.foreach(collectInExpression)
+      p match {
+        case u: UnresolvedTableValuedFunction => add(u.name)
+        case _ =>
+      }
     }
     seen.toSeq
   }
@@ -204,15 +217,8 @@ object ParseCommandResult {
       case _: PosParameter => unnamedCount += 1
       case _ =>
     }
-    plan.collectWithSubqueries {
-      case p: LogicalPlan =>
-        p.expressions.foreach(visitExpr)
-    }
-    // InsertIntoStatement.table is outside the child tree.
-    plan match {
-      case InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
-        table.expressions.foreach(visitExpr)
-      case _ =>
+    foreachPlanDeep(plan) { p =>
+      p.expressions.foreach(visitExpr)
     }
     JObject(
       "named" -> JArray(named.toList.map(JString)),
