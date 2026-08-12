@@ -175,7 +175,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     def clear(): Unit = {
       var i = 0
       while (i < size) {
-        values((head + i) % capacity) = null
+        values((head + i) & (capacity - 1)) = null
         i += 1
       }
       head = 0
@@ -190,7 +190,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
 
       var i = 0
       while (i < size) {
-        val idx = (head + i) % capacity
+        val idx = (head + i) & (capacity - 1)
         newValues(i) = values(idx)
         newIndices(i) = indices(idx)
         i += 1
@@ -206,11 +206,11 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     private def isEmpty: Boolean = size == 0
 
     private def peekLastValue(): Any = {
-      values((tail - 1 + capacity) % capacity)
+      values((tail - 1) & (capacity - 1))
     }
 
     private def pollLast(): Unit = {
-      tail = (tail - 1 + capacity) % capacity
+      tail = (tail - 1) & (capacity - 1)
       values(tail) = null
       size -= 1
     }
@@ -221,7 +221,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
 
     private def pollFirst(): Unit = {
       values(head) = null
-      head = (head + 1) % capacity
+      head = (head + 1) & (capacity - 1)
       size -= 1
     }
 
@@ -231,7 +231,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
       }
       values(tail) = value
       indices(tail) = index
-      tail = (tail + 1) % capacity
+      tail = (tail + 1) & (capacity - 1)
       size += 1
     }
 
