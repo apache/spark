@@ -2334,6 +2334,34 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(scheduler.waitingStages.isEmpty)
   }
 
+  test("SPARK-58616: cancelAllJobs surfaces the supplied reason in the job failure") {
+    val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
+    assert(scheduler.runningStages.size === 1)
+    runEvent(AllJobsCancelled(Some("because the user requested cancellation")))
+    checkError(
+      exception = failure.asInstanceOf[SparkException],
+      condition = "SPARK_JOB_CANCELLED",
+      sqlState = "XXKDA",
+      parameters = scala.collection.immutable.Map(
+        "jobId" -> jobId.toString,
+        "reason" -> "because the user requested cancellation"))
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58616: cancelAllJobs falls back to the default reason when none is supplied") {
+    val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
+    assert(scheduler.runningStages.size === 1)
+    runEvent(AllJobsCancelled())
+    checkError(
+      exception = failure.asInstanceOf[SparkException],
+      condition = "SPARK_JOB_CANCELLED",
+      sqlState = "XXKDA",
+      parameters = scala.collection.immutable.Map(
+        "jobId" -> jobId.toString,
+        "reason" -> "as part of cancellation of all jobs"))
+    assertDataStructuresEmpty()
+  }
+
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
     val acc = new LongAccumulator {
       override def add(v: java.lang.Long): Unit = throw new DAGSchedulerSuiteDummyException
