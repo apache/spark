@@ -20,6 +20,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
+from pyspark.sql import functions as F
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -262,6 +263,72 @@ class NumPyCompatTestsMixin:
             psdf = ps.from_pandas(pdf)
 
             self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2), almost=True)
+
+    def test_floor_divide_func(self):
+        from pyspark.pandas.numpy_compat import _floor_divide_func
+
+        for pdf in (
+            pd.DataFrame(
+                {
+                    "x1": [-64, -2, -1, 0, 1, 2, 64, -1, 0],
+                    "x2": [2, 3, -2, -3, -3, 0, 2, 0, 0],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": [
+                        -np.inf,
+                        -64.0,
+                        -2.0,
+                        -0.0,
+                        0.0,
+                        2.0,
+                        64.0,
+                        np.inf,
+                        np.nan,
+                        1.0,
+                        -1.0,
+                        np.inf,
+                        -np.inf,
+                        np.inf,
+                        -np.inf,
+                        1.0,
+                    ],
+                    "x2": [
+                        2.0,
+                        3.0,
+                        -2.0,
+                        -3.0,
+                        -3.0,
+                        0.0,
+                        -np.inf,
+                        np.inf,
+                        2.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        -0.0,
+                        -0.0,
+                        np.nan,
+                    ],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": pd.array([1, None, None], dtype="Int64"),
+                    "x2": pd.array([None, 2, 0], dtype="Int64"),
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            result = (
+                psdf.spark.frame()
+                .select(_floor_divide_func(F.col("x1"), F.col("x2")).alias("result"))
+                .toPandas()["result"]
+                .rename(None)
+            )
+            self.assert_eq(result, np.floor_divide(pdf.x1, pdf.x2), almost=True)
 
     def test_np_fmax_fmin(self):
         for pdf in (
