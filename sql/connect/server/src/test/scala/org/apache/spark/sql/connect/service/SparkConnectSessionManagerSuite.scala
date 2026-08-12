@@ -23,6 +23,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
@@ -41,6 +42,15 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
       SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
     }
     assert(exGetOrCreate.getCondition == "INVALID_HANDLE.FORMAT")
+  }
+
+  test("isolated Connect sessions skip the DSv2 table refresh phase") {
+    assert(!spark.sessionState.conf.getConf(SQLConf.SKIP_V2_TABLE_REFRESH))
+
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+
+    assert(sessionHolder.session.sessionState.conf.getConf(SQLConf.SKIP_V2_TABLE_REFRESH))
   }
 
   test(

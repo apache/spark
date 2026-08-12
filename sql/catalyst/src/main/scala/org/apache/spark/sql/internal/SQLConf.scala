@@ -5663,6 +5663,15 @@ object SQLConf {
     .stringConf
     .createWithDefault("avro,csv,json,kafka,orc,parquet,text")
 
+  val SKIP_V2_TABLE_REFRESH = buildConf("spark.sql.execution.skipV2TableRefresh")
+    .internal()
+    .doc("When true, skips the Data Source V2 table refresh phase between query analysis and " +
+      "execution. This is intended for execution environments where analysis always happens " +
+      "immediately before execution.")
+    .version("4.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ALLOW_EMPTY_SCHEMAS_FOR_WRITES = buildConf("spark.sql.legacy.allowEmptySchemaWrite")
     .internal()
     .doc("When this option is set to true, validation of empty or empty nested schemas that " +

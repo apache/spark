@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.util.UUID
 
 import org.apache.spark.SparkSQLException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkConnectCloneSessionSuite extends SharedSparkSession {
@@ -119,6 +120,19 @@ class SparkConnectCloneSessionSuite extends SharedSparkSession {
 
     // Both sessions should be different objects
     assert(clonedSession != sourceSession)
+  }
+
+  test("cloned Connect session restores the server-side refresh setting") {
+    val sourceKey = SessionKey("testUser", UUID.randomUUID.toString)
+    val targetSessionId = UUID.randomUUID.toString
+    val sourceSession = SparkConnectService.sessionManager
+      .getOrCreateIsolatedSession(sourceKey, None)
+
+    sourceSession.session.sessionState.conf.setConf(SQLConf.SKIP_V2_TABLE_REFRESH, false)
+    val clonedSession = SparkConnectService.sessionManager
+      .cloneSession(sourceKey, targetSessionId, None)
+
+    assert(clonedSession.session.sessionState.conf.getConf(SQLConf.SKIP_V2_TABLE_REFRESH))
   }
 
   test("cloned session copies all state (configs, temp views, UDFs, current database)") {

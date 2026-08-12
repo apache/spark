@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.CountingInMemoryTableCatalog
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -50,6 +51,45 @@ case class QueryExecutionTestRecord(
     c25: Int, c26: Int)
 
 class QueryExecutionSuite extends SharedSparkSession {
+
+  test("QueryExecution derives the refresh phase default from SQLConf") {
+    val plan = OneRowRelation()
+
+    assert(new QueryExecution(spark, plan).refreshPhaseEnabled)
+    assert(spark.sessionState.executePlan(plan).refreshPhaseEnabled)
+    assert(Dataset.ofRows(spark, plan).queryExecution.refreshPhaseEnabled)
+
+    withSQLConf(SQLConf.SKIP_V2_TABLE_REFRESH.key -> "true") {
+      assert(!new QueryExecution(spark, plan).refreshPhaseEnabled)
+      assert(!spark.sessionState.executePlan(plan).refreshPhaseEnabled)
+      assert(!Dataset.ofRows(spark, plan).queryExecution.refreshPhaseEnabled)
+
+      val cachedPlan = OneRowRelation()
+      cachedPlan.setTagValue(QueryExecution.REQUIRES_V2_TABLE_REFRESH, ())
+      assert(new QueryExecution(spark, cachedPlan).refreshPhaseEnabled)
+    }
+  }
+
+  test("skipping the refresh phase avoids a redundant DSv2 catalog load") {
+    val table = "countingcat.ns.tbl"
+    withSQLConf(
+      "spark.sql.catalog.countingcat" -> classOf[CountingInMemoryTableCatalog].getName,
+      "spark.sql.catalog.countingcat.copyOnLoad" -> "true") {
+      withTable(table) {
+        spark.sql(s"CREATE TABLE $table (id INT) USING foo")
+
+        CountingInMemoryTableCatalog.resetLoadCount()
+        spark.table(table).collect()
+        assert(CountingInMemoryTableCatalog.loadCount == 2)
+
+        CountingInMemoryTableCatalog.resetLoadCount()
+        withSQLConf(SQLConf.SKIP_V2_TABLE_REFRESH.key -> "true") {
+          spark.table(table).collect()
+        }
+        assert(CountingInMemoryTableCatalog.loadCount == 1)
+      }
+    }
+  }
   import testImplicits._
 
   override protected def sparkConf =

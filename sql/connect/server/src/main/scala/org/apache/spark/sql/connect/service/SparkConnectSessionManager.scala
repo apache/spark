@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{INTERVAL, SESSION_HOLD_INFO}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE, CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT, CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -166,7 +167,8 @@ class SparkConnectSessionManager extends Logging {
         if (session == null) {
           // Clone the underlying SparkSession using cloneSession() which preserves
           // configuration, catalog, session state, temporary views, and registered functions
-          val clonedSparkSession = sourceSessionHolder.session.cloneSession()
+          val clonedSparkSession =
+            configureConnectSession(sourceSessionHolder.session.cloneSession())
 
           val newHolder = SessionHolder(newKey.userId, newKey.sessionId, clonedSparkSession)
           newHolder.initializeSession()
@@ -356,13 +358,19 @@ class SparkConnectSessionManager extends Logging {
   }
 
   private def newIsolatedSession(): SparkSession = {
-    val session = baseSession.get
-    if (session.sparkContext.isStopped) {
+    val base = baseSession.get
+    val session = if (base.sparkContext.isStopped) {
       assert(SparkSession.getDefaultSession.nonEmpty)
       SparkSession.getDefaultSession.get.newSession()
     } else {
-      session.newSession()
+      base.newSession()
     }
+    configureConnectSession(session)
+  }
+
+  private def configureConnectSession(session: SparkSession): SparkSession = {
+    session.sessionState.conf.setConf(SQLConf.SKIP_V2_TABLE_REFRESH, true)
+    session
   }
 
   private def validateSessionCreate(key: SessionKey): Unit = {
