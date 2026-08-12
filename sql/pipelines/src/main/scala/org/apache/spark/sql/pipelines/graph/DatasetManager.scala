@@ -321,11 +321,13 @@ object DatasetManager extends Logging {
       case Some(ss) =>
         // The user schema describes the logical table; the engine owns the reserved AUTO CDC
         // metadata column(s). Append any that the incoming flows produce but the user omitted,
-        // so the created table matches what the AUTO CDC MERGE writes at runtime.
-        val specifiedNames = ss.fieldNames.toSet
+        // so the created table matches what the AUTO CDC MERGE writes at runtime. Matching goes
+        // through the session resolver so a reserved column the user declared in a different case
+        // is treated as present (not re-appended as a duplicate) under case-insensitive analysis.
+        val resolver = context.spark.sessionState.conf.resolver
         val omittedReservedFields = AutoCdcMergeFlow
-          .reservedFields(inferredSchemas(table.identifier))
-          .filterNot(f => specifiedNames.contains(f.name))
+          .reservedFields(inferredSchemas(table.identifier), resolver)
+          .filterNot(f => ss.fieldNames.exists(resolver(_, f.name)))
         StructType(ss.fields ++ omittedReservedFields)
       case None =>
         inferredSchemas(table.identifier).asNullable

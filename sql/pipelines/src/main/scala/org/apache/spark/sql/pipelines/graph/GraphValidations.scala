@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.pipelines.graph.DataflowGraph.mapUnique
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 
@@ -253,6 +254,7 @@ trait GraphValidations extends Logging {
   }
 
   protected def validateUserSpecifiedSchemas(sessionCaseSensitive: Boolean): Unit = {
+    val resolver = if (sessionCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
     // Look up tables by their destination identifier, not by the flow's own identifier. The two
     // coincide only for an implicit/default flow (whose identifier equals its destination
     // table's); for a named flow (e.g. `CREATE FLOW <name> AS AUTO CDC INTO <target>`) they
@@ -274,8 +276,8 @@ trait GraphValidations extends Logging {
         // engine appends them at materialization) or declare them; comparing both schemas with the
         // reserved columns removed accepts either while still catching a genuine mismatch in the
         // remaining columns, and stays correct if more than one reserved column is ever added.
-        if (AutoCdcMergeFlow.stripReservedFields(inferredSchema) !=
-            AutoCdcMergeFlow.stripReservedFields(ss)) {
+        if (AutoCdcMergeFlow.stripReservedFields(inferredSchema, resolver) !=
+            AutoCdcMergeFlow.stripReservedFields(ss, resolver)) {
           val datasetType = GraphElementTypeUtils
             .getDatasetTypeForMaterializedViewOrStreamingTable(
               flowsTo(t.identifier).map(f => resolvedFlow(f.identifier))
