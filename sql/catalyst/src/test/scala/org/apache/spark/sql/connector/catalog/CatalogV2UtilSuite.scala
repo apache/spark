@@ -23,7 +23,7 @@ import org.mockito.Mockito.{mock, verify, when}
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, TimeTravelSpec}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CatalogV2UtilSuite extends SparkFunSuite {
@@ -112,5 +112,26 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(a != c)
     assert(a.toString.contains("timeTravel"))
     assert(a.toString.contains("writePrivileges"))
+  }
+
+  test("viewInfoBuilderFrom preserves the dependency list") {
+    val dependencies = DependencyList.of(Array(Dependency.table(Array("cat", "ns", "events"))))
+    val existing = viewWithDependencies(Some(dependencies))
+    val rebuilt = CatalogV2Util.viewInfoBuilderFrom(existing).build()
+    assert(rebuilt.viewDependencies() === dependencies)
+  }
+
+  test("viewInfoBuilderFrom leaves an absent dependency list absent") {
+    val existing = viewWithDependencies(None)
+    val rebuilt = CatalogV2Util.viewInfoBuilderFrom(existing).build()
+    assert(rebuilt.viewDependencies() === null)
+  }
+
+  private def viewWithDependencies(dependencies: Option[DependencyList]): View = {
+    val builder = new View.Builder()
+      .withSchema(new StructType().add("i", IntegerType))
+      .withQueryText("SELECT i FROM cat.ns.events")
+    dependencies.foreach(builder.withViewDependencies)
+    builder.build()
   }
 }

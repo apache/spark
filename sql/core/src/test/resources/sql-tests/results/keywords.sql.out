@@ -130,6 +130,7 @@ DOUBLE	false
 DROP	false
 ELSE	false
 ELSEIF	false
+EMPTY	false
 END	false
 ENFORCED	false
 ERROR	false
@@ -212,6 +213,7 @@ ITERATE	false
 JOIN	false
 JSON	false
 JSON_TABLE	false
+JSON_VALUE	false
 KEY	false
 KEYS	false
 LANGUAGE	false
@@ -327,6 +329,7 @@ RESET	false
 RESPECT	false
 RESTRICT	false
 RETURN	false
+RETURNING	false
 RETURNS	false
 REVOKE	false
 RIGHT	false

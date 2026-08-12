@@ -162,7 +162,9 @@ public abstract class MemoryConsumer {
       got = page.size();
       taskMemoryManager.freePage(page, this);
     }
-    taskMemoryManager.showMemoryUsage();
-    throw SparkCoreErrors.outOfMemoryError(required, got);
+    // Log the full breakdown and attach the bounded one to the error from a single snapshot, so the
+    // executor logs and the driver/UI error message describe the same instant and cannot disagree.
+    String consumerBreakdown = taskMemoryManager.logMemoryUsageAndGetBreakdown();
+    throw SparkCoreErrors.outOfMemoryError(required, got, consumerBreakdown);
   }
 }

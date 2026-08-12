@@ -365,17 +365,15 @@ class VectorIndexerModel private[ml] (
     attrs
   }
 
-  // TODO: Check more carefully about whether this whole class will be included in a closure.
-
   /** Per-vector transform function */
-  private lazy val transformFunc: Vector => Vector = {
+  private def getTransformFunc: Vector => Vector = {
     val sortedCatFeatureIndices = categoryMaps.keys.toArray.sorted
     val localVectorMap = categoryMaps
     val localNumFeatures = numFeatures
     val localHandleInvalid = getHandleInvalid
     val f: Vector => Vector = { (v: Vector) =>
       assert(v.size == localNumFeatures, "VectorIndexerModel expected vector of length" +
-        s" $numFeatures but found length ${v.size}")
+        s" $localNumFeatures but found length ${v.size}")
       v match {
         case dv: DenseVector =>
           var hasInvalid = false
@@ -448,7 +446,7 @@ class VectorIndexerModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)
-    val transformUDF = udf { vector: Vector => transformFunc(vector) }
+    val transformUDF = udf(getTransformFunc)
     val newCol = transformUDF(dataset($(inputCol)))
     val ds = dataset.withColumn($(outputCol), newCol, newField.metadata)
     if (getHandleInvalid == VectorIndexer.SKIP_INVALID) {

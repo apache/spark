@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.streaming.{ProjectAggregationBufferExec, StatefulStreamlineAggregateExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -420,6 +421,95 @@ object AggUtils {
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = resultExpressions,
         child = saved)
+    }
+
+    finalAndCompleteAggregate :: Nil
+  }
+
+  /**
+   * Plans a "streamlined" streaming aggregation using the following progression:
+   * (Here the term "streamline" represents the loop of "read-process-output" for each input.)
+   *
+   *  - Initialize Aggregation Buffer (Passthrough aggregation)
+   *  - Shuffle
+   *  - Streamlined Stateful Aggregation
+   *    - For each input, do the following
+   *      - Read the previous value for grouping key in state store
+   *      - Merge the input and previous value (if any)
+   *      - Store the new value to the state store
+   *  - Complete (output the current result of the aggregation)
+   *
+   * The concept is to aggregate only between input and the state store, enabling an output to
+   * be available just from processing a single input. In update mode, each input will produce
+   * an output, which won't have any blocking operation in real time mode, leading to the
+   * lowest output latency.
+   */
+  def planStreamlineStreamingAggregation(
+      groupingExpressions: Seq[NamedExpression],
+      functionsWithoutDistinct: Seq[AggregateExpression],
+      resultExpressions: Seq[NamedExpression],
+      stateFormatVersion: Int,
+      child: SparkPlan): Seq[SparkPlan] = {
+    val groupingAttributes = groupingExpressions.map(_.toAttribute)
+
+    val initAggBuffer: SparkPlan = {
+      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
+      val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+
+      ProjectAggregationBufferExec(
+        numShufflePartitions = None,
+        groupingExpressions = groupingExpressions,
+        aggregateExpressions = aggregateExpressions,
+        aggregateAttributes = aggregateAttributes,
+        resultExpressions = groupingAttributes ++
+          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        isFinalAggregate = false,
+        child = child)
+    }
+
+    val aggregate: SparkPlan = {
+      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
+      val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+
+      StatefulStreamlineAggregateExec(
+        requiredChildDistributionExpressions =
+          Some(groupingAttributes),
+        groupingExpressions = groupingAttributes,
+        aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
+        aggregateAttributes = aggregateAttributes,
+        initialInputBufferOffset = groupingAttributes.length,
+        resultExpressions = groupingAttributes ++
+          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        isFinalAggregate = false,
+        numShufflePartitions = None,
+        outputMode = None,
+        stateFormatVersion = stateFormatVersion,
+        child = initAggBuffer,
+        stateInfo = None,
+        eventTimeWatermarkForLateEvents = None,
+        eventTimeWatermarkForEviction = None)
+    }
+
+    val finalAndCompleteAggregate: SparkPlan = {
+      val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
+      // The attributes of the final aggregation buffer, which is presented as input to the result
+      // projection:
+      val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
+
+      ProjectAggregationBufferExec(
+        requiredChildDistributionExpressions = Some(groupingAttributes),
+        numShufflePartitions = None,
+        // The child here is the post-shuffle output of the stateful aggregate, whose grouping
+        // columns are already resolved attributes, so group by those rather than by the original
+        // expressions. This matches planStreamingAggregation's final stage and the stateful
+        // aggregate above, both of which group by the attributes.
+        groupingExpressions = groupingAttributes,
+        aggregateExpressions = finalAggregateExpressions,
+        aggregateAttributes = finalAggregateAttributes,
+        initialInputBufferOffset = groupingAttributes.length,
+        resultExpressions = resultExpressions,
+        isFinalAggregate = true,
+        child = aggregate)
     }
 
     finalAndCompleteAggregate :: Nil

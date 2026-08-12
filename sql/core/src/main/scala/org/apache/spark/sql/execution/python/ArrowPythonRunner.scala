@@ -138,7 +138,12 @@ class ArrowPythonWithNamedArgumentRunner(
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override protected def evalConf: Map[String, String] = {
-    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
+    // An element-wise UDF receives each argument as an `array<T>` column and flattens it, so like
+    // the Arrow batched UDF it needs the input schema to convert the incoming Arrow types. This
+    // covers the row-at-a-time lift (SQL_ARROW_ELEMENTWISE_UDF) as well as the vectorized lifts
+    // (scalar pandas / Arrow, and their iterator variants), which flatten the same way.
+    if (PythonEvalType.isElementwiseUDF(evalType) ||
+        evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
       super.evalConf ++ Map(
         "input_type" -> schema.json
       )

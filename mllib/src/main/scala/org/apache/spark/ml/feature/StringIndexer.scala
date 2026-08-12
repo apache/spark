@@ -344,7 +344,7 @@ class StringIndexerModel (
   private def filterInvalidData(
       dataset: Dataset[_],
       inputColNames: Seq[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Double]]): Dataset[_] = {
+      labelsToIndexArray: Array[OpenHashMap[String, Int]]): Dataset[_] = {
     val conditions: Seq[Column] = inputColNames.indices.map { i =>
       val inputColName = inputColNames(i)
       val labelToIndex = labelsToIndexArray(i)
@@ -365,9 +365,9 @@ class StringIndexerModel (
 
   private def getIndexer(
       labels: Seq[String],
-      labelToIndex: OpenHashMap[String, Double],
+      labelToIndex: OpenHashMap[String, Int],
       keepInvalid: Boolean) = {
-    val unknownIndex = labels.length.toDouble
+    val unknownIndex = labels.length
     if (keepInvalid) {
       udf { label: String =>
         if (label == null) {
@@ -397,7 +397,7 @@ class StringIndexerModel (
 
     val (inputColNames, outputColNames) = getInOutCols()
     val labelsToIndexArray = labelsArray.map { labels =>
-      val map = new OpenHashMap[String, Double](labels.length)
+      val map = new OpenHashMap[String, Int](labels.length)
       labels.zipWithIndex.foreach { case (label, idx) =>
         map.update(label, idx)
       }
@@ -429,7 +429,7 @@ class StringIndexerModel (
 
         val indexer = getIndexer(labels.toImmutableArraySeq, labelToIndex, keepInvalid)
 
-        outputColumns(i) = indexer(dataset(inputColName).cast(StringType))
+        outputColumns(i) = indexer(dataset(inputColName).cast(StringType)).cast(DoubleType)
           .as(outputColName, metadata)
       } catch {
         case _: AnalysisException =>

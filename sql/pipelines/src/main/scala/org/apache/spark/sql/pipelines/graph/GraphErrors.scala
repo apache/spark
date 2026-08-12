@@ -109,4 +109,33 @@ object GraphErrors {
       cause = Option(cause.orNull)
     )
   }
+
+  /**
+   * Throws if the flows writing to one table disagree on a configuration whose value determines
+   * how the table's schema is derived, so that the resulting schema would otherwise depend on the
+   * order the flows happen to be evaluated in.
+   *
+   * @param tableIdentifier the destination table the conflicting flows write to
+   * @param configKey the configuration the flows disagree on
+   * @param valuesByFlow the distinct values, each with the flows that declared it
+   */
+  def conflictingFlowConfigurationError(
+      tableIdentifier: TableIdentifier,
+      configKey: String,
+      valuesByFlow: Map[String, Seq[TableIdentifier]]): AnalysisException = {
+    val rendered = valuesByFlow.toSeq
+      .sortBy(_._1)
+      .map { case (value, flows) =>
+        s"$value (${flows.map(_.unquotedString).sorted.mkString(", ")})"
+      }
+      .mkString("; ")
+    new AnalysisException(
+      errorClass = "CONFLICTING_PIPELINE_FLOW_CASE_SENSITIVITY",
+      messageParameters = Map(
+        "tableName" -> tableIdentifier.unquotedString,
+        "configKey" -> configKey,
+        "flowConfigurations" -> rendered
+      )
+    )
+  }
 }
