@@ -113,6 +113,8 @@ object SqlStatementCodes {
   val RefreshFunction: SqlStatementClassification = spark("REFRESH FUNCTION", -19)
   val CommentOnNamespace: SqlStatementClassification = spark("COMMENT ON NAMESPACE", -20)
   val CommentOnTable: SqlStatementClassification = spark("COMMENT ON TABLE", -21)
+  // SQL/PSM-style scripting (9075-4); not in Foundation Table 39.
+  val BeginEnd: SqlStatementClassification = spark("BEGIN END", -22)
 
   private def spark(identifier: String, code: Int): SqlStatementClassification = {
     assert(code < 0, s"Spark statement codes must be negative, got $code")
@@ -126,6 +128,7 @@ object SqlStatementCodes {
   /** Classify an unresolved logical plan. */
   def classify(plan: LogicalPlan): SqlStatementClassification = plan match {
     case UnresolvedWith(child, _, _) => classify(child)
+    case _: CompoundBody => BeginEnd
     case _: InsertIntoStatement => Insert
     case _: DeleteFromTable | _: DeleteFromTableWithFilters => DeleteWhere
     case _: UpdateTable => UpdateWhere

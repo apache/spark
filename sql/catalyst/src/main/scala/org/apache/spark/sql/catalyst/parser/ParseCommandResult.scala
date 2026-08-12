@@ -104,6 +104,9 @@ object ParseCommandResult {
    * `collectWithSubqueries` miss:
    *   - [[UnresolvedWith]] CTE definitions (`innerChildren`, not `children`)
    *   - [[InsertIntoStatement]].table (non-child plan slot)
+   *   - [[SingleStatement]].parsedPlan (children expose only nested children)
+   *   - [[CompoundBody]].handlers (not in `children`)
+   *   - [[SimpleCaseStatement]].elseBody (not in `children`)
    * Nested expression subqueries are still covered by `foreachWithSubqueries`.
    */
   private def foreachPlanDeep(plan: LogicalPlan)(f: LogicalPlan => Unit): Unit = {
@@ -116,6 +119,13 @@ object ParseCommandResult {
           }
         case InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
           foreachPlanDeep(table)(f)
+        case s: SingleStatement =>
+          // Root of the wrapped statement is skipped by SingleStatement.children.
+          foreachPlanDeep(s.parsedPlan)(f)
+        case c: CompoundBody =>
+          c.handlers.foreach(h => foreachPlanDeep(h)(f))
+        case s: SimpleCaseStatement =>
+          s.elseBody.foreach(b => foreachPlanDeep(b)(f))
         case _ =>
       }
     }

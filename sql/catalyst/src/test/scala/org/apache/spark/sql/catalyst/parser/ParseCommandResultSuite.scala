@@ -135,6 +135,7 @@ class ParseCommandResultSuite extends SparkFunSuite {
     assert(SqlStatementCodes.TruncateTable.statementCode === 139)
     assert(SqlStatementCodes.Unrecognized.statementCode === 0)
     assert(SqlStatementCodes.CacheTable.statementCode < 0)
+    assert(SqlStatementCodes.BeginEnd.statementCode === -22)
   }
 
   private def tableRefs(sql: String): Set[Seq[String]] =
@@ -243,5 +244,82 @@ class ParseCommandResultSuite extends SparkFunSuite {
     assert(refs.contains(Seq("src")))
     assert(refs.contains(Seq("flags")))
     assert(refs.contains(Seq("vals")))
+  }
+
+  test("BEGIN END script classification uses Spark code -22") {
+    val j = obj("BEGIN SELECT 1; END")
+    assert(j \ "parse_success" === JBool(true))
+    assert(j \ "statement_identifier" === JString("BEGIN END"))
+    assert(j \ "statement_code" === JInt(-22))
+    assert(j \ "statement_class" ===
+      JString("implementation-defined statement"))
+    // Compound scripts have no single primary select list.
+    assert(j \ "select_list" === JArray(Nil))
+  }
+
+  test("BEGIN END walks SingleStatement.parsedPlan for tables and functions") {
+    // SingleStatement.children skips the statement root (e.g. Project), so a
+    // naive collectWithSubqueries misses project-list functions.
+    val sql =
+      """BEGIN
+        |  SELECT count(a), upper(b) FROM script_t WHERE c = :p;
+        |END""".stripMargin
+    assert(tableRefs(sql) === Set(Seq("script_t")))
+    assert(funcRefs(sql).contains(Seq("count")))
+    assert(funcRefs(sql).contains(Seq("upper")))
+    assert(obj(sql) \ "parameter_markers" \ "named" ===
+      JArray(List(JString("p"))))
+  }
+
+  test("BEGIN END with IF / WHILE / FOR collects nested statement refs") {
+    val sql =
+      """BEGIN
+        |  IF (SELECT flag FROM gate) THEN
+        |    INSERT INTO dest SELECT * FROM src_if;
+        |  ELSE
+        |    DELETE FROM src_else WHERE id IN (SELECT id FROM doomed);
+        |  END IF;
+        |  WHILE (SELECT cont FROM ctrl) DO
+        |    UPDATE tgt SET v = 1 WHERE id IN (SELECT id FROM while_src);
+        |  END WHILE;
+        |  FOR x AS SELECT id FROM for_src DO
+        |    SELECT my_udf(id) FROM for_body WHERE id = x.id;
+        |  END FOR;
+        |END""".stripMargin
+    val refs = tableRefs(sql)
+    assert(refs === Set(
+      Seq("gate"),
+      Seq("dest"),
+      Seq("src_if"),
+      Seq("src_else"),
+      Seq("doomed"),
+      Seq("ctrl"),
+      Seq("tgt"),
+      Seq("while_src"),
+      Seq("for_src"),
+      Seq("for_body")))
+    assert(funcRefs(sql).contains(Seq("my_udf")))
+  }
+
+  test("BEGIN END exception handler body tables are collected") {
+    val sql =
+      """BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    INSERT INTO err_log SELECT * FROM failing_row;
+        |  END;
+        |  SELECT a FROM main_t;
+        |END""".stripMargin
+    assert(tableRefs(sql) === Set(
+      Seq("err_log"), Seq("failing_row"), Seq("main_t")))
+  }
+
+  test("BEGIN END with CTE inside script body") {
+    val sql =
+      """BEGIN
+        |  WITH c AS (SELECT a FROM cte_base)
+        |  SELECT a FROM c;
+        |END""".stripMargin
+    assert(tableRefs(sql) === Set(Seq("cte_base"), Seq("c")))
   }
 }
