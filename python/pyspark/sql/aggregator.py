@@ -44,13 +44,13 @@ class Aggregator(ABC):
     to the aggregator call. :meth:`merge` must be associative and commutative, since the framework
     may combine partial buffers in any order.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.4.0
 
     Examples
     --------
     A mean aggregator::
 
-        from pyspark.sql.pandas.aggregator import Aggregator, udaf
+        from pyspark.sql.aggregator import Aggregator, udaf
         from pyspark.sql.types import StructType, StructField, DoubleType, LongType
 
         class Mean(Aggregator):
@@ -133,7 +133,7 @@ def udaf(agg: "Aggregator") -> Any:
     The aggregator is executed with true incremental (partial) aggregation and transfers its
     intermediate buffer as Arrow; PyArrow is therefore required.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------
