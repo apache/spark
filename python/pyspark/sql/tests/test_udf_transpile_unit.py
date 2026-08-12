@@ -1362,7 +1362,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     # contains "UDF" (so the "UDF" substring is unreliable).
     # ------------------------------------------------------------------
 
-    def _vals(self, func, return_type, schema, rows, require_lowered=False):
+    def _vals(self, func, return_type, schema, rows, require_lowered=True):
         with self.sql_conf(_TRANSPILE_ON):
             u = UserDefinedFunction(func, return_type)
             self.assertTrue(u.transpiled, str(func))
@@ -1370,9 +1370,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             projected = df.select(u(*df.columns))
             # ``u.transpiled`` only says options were PRODUCED; the JVM may still
             # discard them and run interpreted Python, which would return the
-            # right value and hide a wrong lowering. Pass ``require_lowered``
-            # where the point of the test is that the lowered plan is the one
-            # that ran.
+            # right value and hide a wrong lowering. Every ``_vals`` caller has
+            # already asserted ``u.transpiled``, i.e. claims the lowered path is
+            # what is under test, so this defaults to ON. Pass
+            # ``require_lowered=False`` only where the JVM is EXPECTED to discard
+            # the options (a variant whose input categories cannot match).
             if require_lowered:
                 self.assertEqual(0, self._eval_python_count(projected), str(func))
             return [r[0] for r in projected.collect()]
@@ -1821,8 +1823,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # two lambdas joined by a semicolon parse into two statements, and the
         # first was always the one lowered. It cannot be written inline here
         # because ``ruff format`` rewrites semicolons onto separate lines, so
-        # generate a module on disk -- ``inspect.getsource`` reads it back
-        # through ``linecache`` exactly as it would any other import.
+        # generate a module on disk -- resolution reads it back from the file
+        # exactly as it would any other import.
         import importlib.util
         import os
         import tempfile
@@ -1897,10 +1899,19 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # ``co_names``), so a verify that compared only ``co_code`` would confirm
         # the stale node and lower the wrong body -- the whole reason the
         # comparison is the full signature.
+        #
+        # The parse cache is cleared after each edit so this exercises
+        # VERIFICATION rather than a cache miss. That matters both ways: the
+        # ``(path, mtime, size)`` key is only a freshness heuristic (filesystem
+        # mtime granularity is coarse, so a same-size edit within one tick keeps
+        # the key), and a stale HIT is harmless anyway -- it returns the original
+        # nodes, which match the still-running original code. Verification is the
+        # actual boundary, so pin that directly.
         import importlib.util
-        import linecache
         import os
         import tempfile
+
+        from pyspark.sql.transpile import _parse_file_lambdas
 
         # (original body, edited body, arg to run, interpreted result of ORIGINAL)
         edits = [
@@ -1920,7 +1931,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     func = module.f  # still runs the ORIGINAL body
                     with open(path, "w") as f:
                         f.write(f"BASE = 10\nOTHR = 99\nf = lambda x: {edited}\n")
-                    linecache.checkcache(path)
+                    _parse_file_lambdas.cache_clear()
                     with self.sql_conf(_TRANSPILE_ON):
                         u = UserDefinedFunction(func, LongType())
                         # Must NOT have lowered the edited body; falls back.
@@ -1945,8 +1956,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # True). The eq category gate now drops the numeric variant, so on a
         # long column the string option is pruned and the UDF falls back to
         # interpreted Python -- matching Python's cross-type == (always False).
+        # This is the one ``_vals`` site where the JVM is EXPECTED to discard the
+        # options, hence require_lowered=False.
         self.assertEqual(
-            self._vals(eq_strlit, BooleanType(), "a long", [(5,), (3,)]), [False, False]
+            self._vals(eq_strlit, BooleanType(), "a long", [(5,), (3,)], require_lowered=False),
+            [False, False],
         )
 
     def test_udf_transpile_overflow_and_modulo_zero_raise(self):

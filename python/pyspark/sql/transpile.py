@@ -37,7 +37,6 @@ all-numeric and all-string variants.
 """
 
 import ast
-import copy
 import dis
 import functools
 import os
@@ -902,58 +901,56 @@ def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
     return [arg.arg for arg in node.args.args]
 
 
-# (lineno, end_lineno, col_offset, end_col_offset). ``end_*`` are Optional in
-# typeshed even though CPython populates them for every real node/instruction on
-# the versions we support; ``_span_contains`` treats a missing bound as "cannot
-# decide -> not contained".
-_Span = Tuple[int, Optional[int], Optional[int], Optional[int]]
+def _instruction_extent(code: CodeType) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
+    """The (start, end) source bounds enclosing every instruction of ``code``.
 
+    Returned as lexicographic ``((line, col), (line, col))`` pairs. Reducing the
+    per-instruction spans to one bounding box up front makes the containment test
+    a single comparison per candidate instead of a scan over every instruction,
+    and it is equivalent: requiring a candidate to contain every span is exactly
+    requiring it to contain their min start and max end.
 
-def _full_span(node: ast.expr) -> _Span:
-    """The whole source span of an expression node, in the file's coordinates."""
-    return (node.lineno, node.end_lineno, node.col_offset, node.end_col_offset)
-
-
-def _instruction_spans(code: CodeType) -> List[_Span]:
-    """Source spans the instructions of ``code`` are attributed to.
-
-    ``Instruction.positions`` (3.11+) rather than ``code.co_positions()``:
-    the latter yields one entry per code UNIT, including inline cache slots, so
+    ``Instruction.positions`` (3.11+) rather than ``code.co_positions()``: the
+    latter yields one entry per code UNIT, including inline cache slots, so
     zipping it against the instruction stream silently misaligns.
 
-    Degenerate column-0 spans (the synthetic ``RESUME`` marker, attributed to
-    ``(line, line, 0, 0)``) are dropped: they sit before the lambda's own
-    start column, so a containment test that included them would reject every
-    real match.
+    An instruction is skipped when ANY of its four bounds is absent (a partial
+    position tells us nothing) and when it is a degenerate column-0 marker (the
+    synthetic ``RESUME``, attributed to ``(line, line, 0, 0)``, which sits before
+    the lambda's own start column and would reject every real match).
+
+    Returns ``None`` when no instruction has a usable position -- the case for a
+    whole interpreter run under ``-X no_debug_ranges`` /
+    ``PYTHONNODEBUGRANGES=1``, where lambda lowering is simply unavailable.
     """
-    spans: List[_Span] = []
+    starts = []
+    ends = []
     for instruction in dis.get_instructions(code):
         position = instruction.positions
-        if position is None or position.lineno is None:
+        if position is None:
             continue
-        if position.col_offset is None or position.end_col_offset is None:
+        lineno, end_lineno = position.lineno, position.end_lineno
+        col, end_col = position.col_offset, position.end_col_offset
+        if lineno is None or end_lineno is None or col is None or end_col is None:
             continue
-        if position.col_offset == 0 and position.end_col_offset == 0:
+        if col == 0 and end_col == 0:
             continue
-        spans.append(
-            (position.lineno, position.end_lineno, position.col_offset, position.end_col_offset)
-        )
-    return spans
+        starts.append((lineno, col))
+        ends.append((end_lineno, end_col))
+    if not starts:
+        return None
+    return (min(starts), max(ends))
 
 
-def _span_contains(outer: _Span, inner: _Span) -> bool:
-    """Whether source span ``inner`` lies within ``outer`` (line/column order)."""
-    (ol, oel, oc, oec), (il, iel, ic, iec) = outer, inner
-    if oel is None or oc is None or oec is None or iel is None or ic is None or iec is None:
-        # A missing bound means we cannot decide; treat as "not contained".
+def _node_encloses(node: ast.expr, extent: Tuple[Tuple[int, int], Tuple[int, int]]) -> bool:
+    """Whether ``node``'s source span encloses ``extent`` (lexicographic order)."""
+    if node.end_lineno is None or node.end_col_offset is None:
         return False
-    if il < ol or iel > oel:
-        return False
-    if il == ol and ic < oc:
-        return False
-    if iel == oel and iec > oec:
-        return False
-    return True
+    start, end = extent
+    return (node.lineno, node.col_offset) <= start and end <= (
+        node.end_lineno,
+        node.end_col_offset,
+    )
 
 
 def _recompiled_lambda_code(node: ast.Lambda, freevars: Tuple[str, ...]) -> Optional[CodeType]:
@@ -1121,46 +1118,38 @@ def _resolve_lambda(target: CodeType, candidates: List[ast.Lambda]) -> Optional[
 
     Two steps, LOCATE then CONFIRM:
 
-    * locate by position -- the candidates whose source span contains every
-      span ``target``'s instructions are attributed to. This is robust where an
-      exact body-span match is not: on 3.11 a conditional-expression body (the
-      transpiler's own null-guard idiom) has no instruction carrying its full
-      span, so exact matching missed it, while containment still holds. It also
-      resolves constant-folded and byte-identical twins, which sit at distinct
-      positions;
-    * confirm by recompiling -- of the located candidates, the one whose
-      bytecode matches ``target`` (see ``_verifies``). This both disambiguates
+    * locate by position -- the candidates whose source span encloses the extent
+      of ``target``'s own instructions. This is robust where an exact body-span
+      match is not: on 3.11 a conditional-expression body (the transpiler's own
+      null-guard idiom) has no instruction carrying its full span, so exact
+      matching missed it, while enclosure still holds. It also separates
+      constant-folded and byte-identical twins, which sit at distinct positions;
+    * confirm by recompiling -- of the located candidates, the one whose code
+      signature matches ``target`` (see ``_verifies``). This both disambiguates
       the two nested candidates of ``lambda x: (lambda y: ...)`` and rejects
       source that has diverged from the compiled code, so a stale file falls
       back rather than lowering whatever now occupies the span.
 
-    Returns ``None`` unless exactly one candidate both contains the instructions
-    and verifies, which the caller turns into a fall back to interpreted Python.
-    The returned node is a COPY: candidates come from a process-lifetime cache
-    shared by every later ``udf()`` call on that file, and the caller stitches
-    the node into a synthesized ``FunctionDef``, so handing out the cached object
-    would let any future in-place annotation leak between UDFs.
-
-    Note that when positions are unavailable at all -- CPython run with
-    ``-X no_debug_ranges`` / ``PYTHONNODEBUGRANGES=1``, or ``.pyc`` files built
-    that way -- ``spans`` is empty and every lambda falls back, silently
-    disabling lambda lowering. The empty-``spans`` guard is load-bearing for
-    more than efficiency: ``all()`` over no spans is vacuously True, so without
-    it every candidate would "contain" the instructions.
+    Returns ``None`` unless exactly one candidate both encloses the extent and
+    verifies, which the caller turns into a fall back to interpreted Python.
     """
-    spans = _instruction_spans(target)
-    if not spans:
+    extent = _instruction_extent(target)
+    if extent is None:
         return None
     # Cheap narrowing first: a lambda's code object starts on the line its
-    # ``lambda`` keyword is on, so candidates elsewhere cannot be it. Keeps the
-    # O(candidates x spans) containment scan off whole-module candidate lists.
-    on_line = [node for node in candidates if node.lineno == target.co_firstlineno]
-    located = [node for node in on_line if all(_span_contains(_full_span(node), s) for s in spans)]
+    # ``lambda`` keyword is on (verified across 3.11-3.13 for every shape,
+    # including multi-line bodies and multi-line defaults), so candidates
+    # elsewhere cannot be it. Keeps the enclosure test off whole-module lists.
+    located = [
+        node
+        for node in candidates
+        if node.lineno == target.co_firstlineno and _node_encloses(node, extent)
+    ]
     if not located:
         return None
     target_signature = _code_signature(target)
     verified = [node for node in located if _verifies(node, target, target_signature)]
-    return copy.deepcopy(verified[0]) if len(verified) == 1 else None
+    return verified[0] if len(verified) == 1 else None
 
 
 def _call_dunder(func: Optional[Callable]) -> Any:
@@ -1209,6 +1198,13 @@ def _lambda_to_function_def(node: ast.Lambda) -> ast.FunctionDef:
     """Wrap a lambda in a synthetic one-statement ``FunctionDef``.
 
     Lets the rest of the transpiler treat lambdas and ``def`` uniformly.
+
+    ``node`` comes from a process-lifetime cache shared by every later ``udf()``
+    call on that file, so nothing here may mutate it or its children. The
+    synthesized ``Return`` therefore gets its positions copied explicitly rather
+    than via ``ast.fix_missing_locations``, which would walk into -- and write
+    to -- the shared body subtree. The wrapper only ALIASES ``args`` and ``body``;
+    downstream lowering is read-only over them.
     """
     # ``ast.FunctionDef``'s overloads in mypy's typeshed require keyword-only
     # ``type_params`` on 3.12+, which doesn't exist at runtime on every Python
@@ -1217,18 +1213,17 @@ def _lambda_to_function_def(node: ast.Lambda) -> ast.FunctionDef:
     # constructing the node via keyword args is well-defined at runtime even
     # when the typed overloads disagree.
     fn_ctor: Any = ast.FunctionDef
+    returned = ast.Return(value=node.body)
+    ast.copy_location(returned, node.body)
     fn = fn_ctor(
         name="<lambda>",
         args=node.args,
-        body=[ast.Return(value=node.body)],
+        body=[returned],
         decorator_list=[],
     )
-    # Copy positions onto the synthesized node and its new ``Return``. Without
-    # this, ``ast.unparse``/``compile`` of the result raises AttributeError on
-    # the missing ``lineno`` -- and this node is what every lambda now flows
-    # through, so a diagnostic that prints or recompiles it would crash.
+    # Positions on the synthesized nodes so ``ast.unparse`` / ``compile`` of the
+    # result does not raise on a missing ``lineno``.
     ast.copy_location(fn, node)
-    ast.fix_missing_locations(fn)
     return fn
 
 
