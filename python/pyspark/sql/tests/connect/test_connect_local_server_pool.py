@@ -396,6 +396,10 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         valid = self._server_data(12345, 123, created=1)
         member = PoolMember.from_data(valid)
         self.assertIsNotNone(member)
+        self.assertEqual(member.host, "localhost")
+        self.assertEqual(member.port, 12345)
+        self.assertEqual(member.pid, 123)
+        self.assertEqual(member.created, 1.0)
         self.assertEqual(member.url, "sc://localhost:12345")
 
         invalid_records = {

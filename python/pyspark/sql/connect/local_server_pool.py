@@ -94,25 +94,31 @@ class PoolMember:
     """One published pool server, wrapping its ``server-<uid>.json`` record."""
 
     def __init__(self, data: Dict[str, Any]):
-        normalized = dict(data)
+        record = dict(data)
         for key in ("host", "token", "spark_version", "fingerprint"):
-            if not isinstance(normalized[key], str) or not normalized[key]:
+            if not isinstance(record[key], str) or not record[key]:
                 raise PySparkValueError(f"{key} must be a nonempty string")
         for key in ("port", "pid"):
-            value = normalized[key]
+            value = record[key]
             if isinstance(value, bool) or not isinstance(value, int):
                 raise PySparkValueError(f"{key} must be an integer")
-        created = normalized["created"]
+        created = record["created"]
         if isinstance(created, bool) or not isinstance(created, (int, float)):
             raise PySparkValueError("created must be a number")
-        normalized["created"] = float(created)
-        if not 1 <= normalized["port"] <= 65535:
+        created = float(created)
+        if not 1 <= record["port"] <= 65535:
             raise PySparkValueError("port is out of range")
-        if normalized["pid"] <= 0:
+        if record["pid"] <= 0:
             raise PySparkValueError("pid must be positive")
-        if not math.isfinite(normalized["created"]) or normalized["created"] < 0:
+        if not math.isfinite(created) or created < 0:
             raise PySparkValueError("created must be finite and nonnegative")
-        self.data = normalized
+        self.host: str = record["host"]
+        self.port: int = record["port"]
+        self.token: str = record["token"]
+        self.pid: int = record["pid"]
+        self.spark_version: str = record["spark_version"]
+        self.fingerprint: str = record["fingerprint"]
+        self.created: float = created
         # Set when this process claims the member; the path of its claimed-<pid>-<uid>.json.
         self.claim_path: Optional[str] = None
 
@@ -125,35 +131,19 @@ class PoolMember:
             return None
 
     @property
-    def pid(self) -> int:
-        return int(self.data["pid"])
-
-    @property
-    def token(self) -> str:
-        return self.data["token"]
-
-    @property
-    def created(self) -> float:
-        return float(self.data["created"])
-
-    @property
-    def fingerprint(self) -> str:
-        return self.data["fingerprint"]
-
-    @property
     def url(self) -> str:
-        return f"sc://{self.data['host']}:{self.data['port']}"
+        return f"sc://{self.host}:{self.port}"
 
     def is_usable(self) -> bool:
         """Whether this member has a matching Spark version, live process, and open port."""
         from pyspark.version import __version__
 
-        if self.data["spark_version"] != __version__ or not _pid_alive(self.pid):
+        if self.spark_version != __version__ or not _pid_alive(self.pid):
             return False
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.settimeout(0.5)
-                return sock.connect_ex((self.data["host"], self.data["port"])) == 0
+                return sock.connect_ex((self.host, self.port)) == 0
         except (OSError, UnicodeError):
             return False
 
