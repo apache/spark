@@ -244,7 +244,7 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     }
 
     // And still downsamples rather than erroring when the caller opts in.
-    assert(lgConfigKOf(unionAgg(Seq(sketchAt15, sketchAt12), allowDifferentLgConfigK = true)) <= 15)
+    assert(lgConfigKOf(unionAgg(Seq(sketchAt15, sketchAt12), allowDifferentLgConfigK = true)) == 12)
   }
 
   test("hll_union merges an empty sketch of a different lgConfigK without an error") {
