@@ -1958,6 +1958,16 @@
           "Input schema <schema> can only contain STRING as a key type for a MAP."
         ]
       },
+      "INVALID_JSON_PATH" : {
+        "message" : [
+          "<functionName> has an invalid or unsupported JSON path <path>. Only simple, wildcard-free paths are supported."
+        ]
+      },
+      "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a scalar (string, numeric, boolean, or datetime) type."
+        ]
+      },
       "INVALID_JSON_SCHEMA" : {
         "message" : [
           "Input schema <schema> must be a struct, an array, a map or a variant."
@@ -3947,9 +3957,16 @@
   },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
-      "System memory <systemMemory> must be at least <minSystemMemory>.",
-      "Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+      "Insufficient driver memory:"
     ],
+    "subClass" : {
+      "SYSTEM_MEMORY" : {
+        "message" : [
+          "System memory <systemMemory> must be at least <minSystemMemory>.",
+          "Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+        ]
+      }
+    },
     "sqlState" : "F0000"
   },
   "INVALID_EMPTY_LOCATION" : {
@@ -3995,9 +4012,22 @@
   },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
-      "Executor memory <executorMemory> must be at least <minSystemMemory>.",
-      "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+      "Insufficient executor memory:"
     ],
+    "subClass" : {
+      "CONFIG_MEMORY" : {
+        "message" : [
+          "Executor memory <executorMemory> must be at least <minSystemMemory>.",
+          "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+        ]
+      },
+      "SYSTEM_MEMORY" : {
+        "message" : [
+          "System memory <systemMemory> must be at least <minSystemMemory>.",
+          "Please increase heap size using the --executor-memory option or \"<config>\" in Spark configuration."
+        ]
+      }
+    },
     "sqlState" : "F0000"
   },
   "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA" : {
@@ -4750,6 +4780,11 @@
       "LONG" : {
         "message" : [
           "expects a long literal, but got <invalidValue>."
+        ]
+      },
+      "NORMALIZE_FORM" : {
+        "message" : [
+          "expects one of the normalization forms 'NFC', 'NFD', 'NFKC', 'NFKD', but got <form>."
         ]
       },
       "NULL" : {
@@ -5553,6 +5588,24 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ],
     "sqlState" : "42K0E"
+  },
+  "JSON_VALUE_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not extract a scalar value at path <path>."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The path matched no value. This error was requested by the ERROR ON EMPTY clause."
+        ]
+      },
+      "ERROR" : {
+        "message" : [
+          "The input is not valid JSON, the matched value is not a scalar, or it could not be cast to the RETURNING type. This error was requested by the ERROR ON ERROR clause."
+        ]
+      }
+    },
+    "sqlState" : "2203G"
   },
   "KAFKA_DATA_SOURCE_NOT_ENABLED" : {
     "message" : [
@@ -7699,6 +7752,12 @@
           "The checkpointing interval for async progress tracking must be set to 0, which means each progress update is checkpointed. Set option asyncProgressTrackingCheckpointIntervalMs to 0 in DataStreamWriter options and retry your query."
         ]
       },
+      "CHECKPOINT_FORMAT_V1_NOT_SUPPORTED" : {
+        "message" : [
+          "Real-time mode does not support state store checkpoint format v1, because a re-executed batch can reuse the state file names of a partially-written failed batch and lose data. If you encountered this while switching an existing query to real-time mode, use a fresh checkpoint location.",
+          "If you must continue with your existing checkpoint and accept that doing so exposes you to the possibility of data loss on failure, set <config> to true."
+        ]
+      },
       "IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED" : {
         "message" : [
           "Real-time mode does not support union on two or more identical streaming data sources in a single query. This includes scenarios such as referencing the same source DataFrame more than once, or using two data sources with identical configurations for some sources. For Kafka, avoid reusing the same DataFrame and create different ones. Sources provided in the query: <sources>"
@@ -7722,6 +7781,11 @@
       "SINK_NOT_SUPPORTED" : {
         "message" : [
           "The <className> sink is currently not supported. See the Real-Time Mode User Guide for a list of supported sinks."
+        ]
+      },
+      "SQL_CONFIGURATION_NOT_SUPPORTED" : {
+        "message" : [
+          "The following session configuration(s) are incompatible with Real-Time Mode: <invalidReasons>. Update or remove them and restart the query."
         ]
       }
     },
@@ -8063,7 +8127,7 @@
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
-      "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."
+      "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>.<consumerBreakdown>"
     ],
     "sqlState" : "53200"
   },
@@ -8319,6 +8383,29 @@
       "LOCAL_DIRECTORY" : {
         "message" : [
           "The local directory <path> is not supported in a non-local master mode."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_ARRAY_KEY" : {
+    "message" : [
+      "Array keys are not supported by:"
+    ],
+    "subClass" : {
+      "HASH_PARTITIONER" : {
+        "message" : [
+          "HashPartitioner."
+        ]
+      },
+      "MAP_SIDE_COMBINE" : {
+        "message" : [
+          "map-side combining."
+        ]
+      },
+      "REDUCE_BY_KEY_LOCALLY" : {
+        "message" : [
+          "reduceByKeyLocally()."
         ]
       }
     },
@@ -8707,7 +8794,8 @@
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
         "message" : [
-          "Lambda function with Python UDF <funcName> in a higher order function."
+          "Cannot evaluate the Python UDF <funcName> inside the lambda of a higher-order function.",
+          "This placement is not supported. Rewrite the query so the UDF is applied outside the lambda."
         ]
       },
       "LAMBDA_FUNCTION_WITH_SQL_UDF" : {
@@ -11408,21 +11496,6 @@
   "_LEGACY_ERROR_TEMP_3006" : {
     "message" : [
       "empty RDD"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3008" : {
-    "message" : [
-      "Cannot use map-side combining with array keys."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3009" : {
-    "message" : [
-      "HashPartitioner cannot partition array keys."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3010" : {
-    "message" : [
-      "reduceByKeyLocally() does not support array keys"
     ]
   },
   "_LEGACY_ERROR_TEMP_3011" : {

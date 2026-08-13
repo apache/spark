@@ -244,8 +244,16 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   override lazy val canonicalized: Expression = {
     var currExprId = -1
+    // Number the lambda variables of this higher-order function, but only those not already
+    // canonicalized. A canonical `NamedLambdaVariable` carries `value = null` (see the rename
+    // below); an original one carries an `AtomicReference`. When this HOF is nested inside another,
+    // the enclosing HOF's `canonicalized` renames every variable in the whole subtree first, then
+    // canonicalizes the children - which re-enters this method on the nested HOF. Re-numbering the
+    // already-renamed variables here would give a reference to an *enclosing* lambda's variable a
+    // different id than its binding, leaking it into `references`; skipping them keeps a variable
+    // and its references in agreement across nesting levels.
     val argumentMap = functions.flatMap(_.collect {
-      case l: NamedLambdaVariable =>
+      case l: NamedLambdaVariable if l.value != null =>
         currExprId += 1
         l.exprId -> currExprId
     }).toMap
@@ -394,6 +402,29 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
 }
 
 /**
+ * A higher-order function whose result type is its argument's type, because it returns a subset or
+ * reordering of the input rather than the lambda's values. Members: `filter`, `map_filter`,
+ * `array_sort` (e.g. `filter(array<int>, ...) => array<int>`). Provides the shared `dataType`.
+ *
+ * The counterpart is [[ResultTypeFromFunction]]; the split is a real property of the expression,
+ * not of any evaluation: `filter` keeps its input's type, `transform`'s type follows the lambda.
+ */
+trait ResultTypeFromArgument extends SimpleHigherOrderFunction {
+  override def dataType: DataType = argument.dataType
+}
+
+/**
+ * A higher-order function whose result type follows its lambda, not its argument. Members:
+ * `transform`, `transform_keys`, `transform_values`, `zip_with`, `map_zip_with`, `aggregate`, and
+ * the predicates `exists` / `forall` (whose boolean lambda gives a boolean result).
+ *
+ * Each member computes its own `dataType` (array of the element type, a re-keyed/re-valued map, the
+ * fold result, ...), so this is a marker with no shared implementation - the counterpart of
+ * [[ResultTypeFromArgument]].
+ */
+trait ResultTypeFromFunction extends HigherOrderFunction
+
+/**
  * Transform elements in an array using the transform function. This is similar to
  * a `map` in functional programming.
  */
@@ -418,7 +449,7 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
 case class ArrayTransform(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction {
+  extends ArrayBasedSimpleHigherOrderFunction with ResultTypeFromFunction {
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
@@ -549,7 +580,7 @@ case class ArraySort(
     argument: Expression,
     function: Expression,
     allowNullComparisonResult: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with ResultTypeFromArgument {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -563,7 +594,6 @@ case class ArraySort(
   @transient lazy val elementType: DataType =
     argument.dataType.asInstanceOf[ArrayType].elementType
 
-  override def dataType: ArrayType = argument.dataType.asInstanceOf[ArrayType]
   override def checkInputDataTypes(): TypeCheckResult = {
     checkArgumentDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
@@ -680,7 +710,7 @@ object ArraySort {
 case class MapFilter(
     argument: Expression,
     function: Expression)
-  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends MapBasedSimpleHigherOrderFunction with CodegenFallback with ResultTypeFromArgument {
 
   @transient lazy val (keyVar, valueVar) = {
     val args = function.asInstanceOf[LambdaFunction].arguments
@@ -709,8 +739,6 @@ case class MapFilter(
     })
     ArrayBasedMapData(retKeys.toArray, retValues.toArray)
   }
-
-  override def dataType: DataType = argument.dataType
 
   override def functionType: AbstractDataType = BooleanType
 
@@ -750,9 +778,7 @@ case class MapFilter(
 case class ArrayFilter(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction {
-
-  override def dataType: DataType = argument.dataType
+  extends ArrayBasedSimpleHigherOrderFunction with ResultTypeFromArgument {
 
   override def functionType: AbstractDataType = BooleanType
 
@@ -897,7 +923,7 @@ case class ArrayExists(
     argument: Expression,
     function: Expression,
     followThreeValuedLogic: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with Predicate {
+  extends ArrayBasedSimpleHigherOrderFunction with Predicate with ResultTypeFromFunction {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -1035,7 +1061,7 @@ object ArrayExists {
 case class ArrayForAll(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with Predicate {
+  extends ArrayBasedSimpleHigherOrderFunction with Predicate with ResultTypeFromFunction {
 
   override def nullable: Boolean =
       super.nullable || function.nullable
@@ -1165,7 +1191,7 @@ case class ArrayAggregate(
     zero: Expression,
     merge: Expression,
     finish: Expression)
-  extends HigherOrderFunction with QuaternaryLike[Expression] {
+  extends HigherOrderFunction with QuaternaryLike[Expression] with ResultTypeFromFunction {
 
   def this(argument: Expression, zero: Expression, merge: Expression) = {
     this(argument, zero, merge, LambdaFunction.identity)
@@ -1382,7 +1408,7 @@ case class ArrayAggregate(
 case class TransformKeys(
     argument: Expression,
     function: Expression)
-  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends MapBasedSimpleHigherOrderFunction with CodegenFallback with ResultTypeFromFunction {
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
@@ -1448,7 +1474,7 @@ case class TransformKeys(
 case class TransformValues(
     argument: Expression,
     function: Expression)
-  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends MapBasedSimpleHigherOrderFunction with CodegenFallback with ResultTypeFromFunction {
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
@@ -1514,7 +1540,8 @@ case class TransformValues(
   since = "3.0.0",
   group = "lambda_funcs")
 case class MapZipWith(left: Expression, right: Expression, function: Expression)
-  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression] {
+  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression]
+  with ResultTypeFromFunction {
 
   def functionForEval: Expression = functionsForEval.head
 
@@ -1752,7 +1779,8 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   group = "lambda_funcs")
 // scalastyle:on line.size.limit
 case class ZipWith(left: Expression, right: Expression, function: Expression)
-  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression] {
+  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression]
+  with ResultTypeFromFunction {
 
   def functionForEval: Expression = functionsForEval.head
 

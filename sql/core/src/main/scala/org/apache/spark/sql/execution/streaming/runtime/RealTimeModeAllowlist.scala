@@ -63,6 +63,13 @@ object RealTimeModeAllowlist extends Logging {
     // exchange is a supported member of a pipelined group rather than a materialization barrier.
     "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec",
     "org.apache.spark.sql.execution.joins.BroadcastHashJoinExec",
+    // Streaming aggregation. A Real-Time Mode batch does not end when its input is exhausted, so
+    // an aggregation is planned as the streamline operator, which merges each input row against
+    // state and emits immediately, wrapped by the two buffer-projection stages that initialize
+    // the aggregation buffer and produce the result columns (see
+    // AggUtils.planStreamlineStreamingAggregation).
+    "org.apache.spark.sql.execution.streaming.ProjectAggregationBufferExec",
+    "org.apache.spark.sql.execution.streaming.StatefulStreamlineAggregateExec",
     // Streaming deduplication and the state-store access operators it plans into. These run in the
     // pipelined-shuffle consumer stage, keyed by the same columns the shuffle repartitions on.
     "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreRestoreExec",
