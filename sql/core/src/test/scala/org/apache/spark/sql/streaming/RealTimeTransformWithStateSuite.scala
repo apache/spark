@@ -22,7 +22,8 @@ import java.time.Duration
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkException, TaskContext}
+import org.apache.spark.{
+  SparkConf, SparkException, SparkRuntimeException, SparkThrowable, TaskContext}
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.datasources.v2.{LowLatencyClock, RealTimeStreamScanExec}
@@ -30,10 +31,10 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{
-  EnableStateStoreRowChecksum, RocksDBStateStoreProvider}
+  EnableStateStoreRowChecksum, RocksDBConf, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.util.GlobalSingletonManualClock
+import org.apache.spark.sql.streaming.util.{GlobalSingletonManualClock, StreamManualClock}
 
 private class RealTimeEagerCountProcessor
   extends StatefulProcessor[String, (String, Int), (String, Long)] {
@@ -118,6 +119,36 @@ private class RealTimeListTTLProcessor
       listState.appendList(Array(value, value + 1, value + 2))
       (key, listState.get().size.toLong)
     }
+  }
+}
+
+private class RealTimeMapTTLAndTimerProcessor
+  extends StatefulProcessor[String, (String, Int), (String, String, Long)] {
+
+  @transient private var countState: MapState[String, Long] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    countState = getHandle.getMapState(
+      "count", Encoders.STRING, Encoders.scalaLong, TTLConfig(Duration.ofMinutes(10)))
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, Int)],
+      timerValues: TimerValues): Iterator[(String, String, Long)] = {
+    inputRows.map { case (_, timerDelayMs) =>
+      val count = Option(countState.getValue("count")).getOrElse(0L) + 1L
+      countState.updateValue("count", count)
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + timerDelayMs)
+      (key, "data", count)
+    }
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, Long)] = {
+    Iterator.single((key, "timer", expiredTimerInfo.getExpiryTimeInMs()))
   }
 }
 
@@ -354,7 +385,8 @@ private case class RealTimeEventTimeOutputRow(
     outputEventTime: Timestamp,
     count: Long)
 
-private class RealTimeEventTimeOutputProcessor
+private class RealTimeEventTimeOutputProcessor(
+    outputEventTimeOverride: Option[Timestamp] = None)
   extends StatefulProcessor[String, (Timestamp, String), RealTimeEventTimeOutputRow] {
 
   @transient private var countState: ValueState[Long] = _
@@ -370,7 +402,8 @@ private class RealTimeEventTimeOutputProcessor
     inputRows.map { case (eventTime, _) =>
       val newCount = Option(countState.get()).getOrElse(0L) + 1L
       countState.update(newCount)
-      RealTimeEventTimeOutputRow(key, eventTime, newCount)
+      RealTimeEventTimeOutputRow(
+        key, outputEventTimeOverride.getOrElse(eventTime), newCount)
     }
   }
 }
@@ -429,6 +462,19 @@ private class RealTimeEventInitialCountProcessor
       val newCount = Option(countState.get()).getOrElse(0L) + 1L
       countState.update(newCount)
       (key, newCount)
+    }
+  }
+}
+
+private class RealTimeInitialStateProcTimerWithExpiryProcessor
+  extends StatefulProcessorWithInitialStateProcTimerClass {
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    super.handleExpiredTimer(key, timerValues, expiredTimerInfo).map { case (expiredKey, _) =>
+      (expiredKey, expiredTimerInfo.getExpiryTimeInMs().toString)
     }
   }
 }
@@ -809,6 +855,51 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
     }
   }
 
+  test("runs transformWithState after a union") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val clock = new GlobalSingletonManualClock()
+      LowLatencyClock.setClock(clock)
+      val leftInput = LowLatencyMemoryStream[(String, Int)](1)
+      val rightInput = LowLatencyMemoryStream[(String, Int)](1)
+
+      val result = leftInput.toDS()
+        .union(rightInput.toDS())
+        .groupByKey(_._1)
+        .transformWithState(
+          new RealTimeEagerCountProcessor,
+          TimeMode.ProcessingTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+        StartStream(),
+        AddData(leftInput, ("a", 1)),
+        AddData(rightInput, ("a", 2), ("b", 1)),
+        CheckAnswerWithTimeout(
+          60.seconds.toMillis, ("a", 1L), ("a", 2L), ("b", 1L)),
+        advanceClock(clock),
+        WaitUntilBatchProcessed(0),
+        Execute { _ => waitForNextBatchToStart() },
+        AddData(leftInput, ("a", 3)),
+        AddData(rightInput, ("b", 2)),
+        CheckAnswerWithTimeout(
+          60.seconds.toMillis,
+          ("a", 1L),
+          ("a", 2L),
+          ("b", 1L),
+          ("a", 3L),
+          ("b", 2L)),
+        Execute { q =>
+          val operators = q.lastExecution.executedPlan.collect {
+            case transform: TransformWithStateExec => transform
+          }
+          assert(operators.size == 1, q.lastExecution.executedPlan)
+          assert(operators.head.isRealTimeMode)
+        },
+        StopStream
+      )
+    }
+  }
+
   test("runs transformWithState after real-time deduplication") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
       val (input, _) = createMemoryStream(numPartitions = 2)
@@ -1171,6 +1262,15 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
           ("a", "data", 290L),
           ("a", "timer", 390L),
           ("a", "data", 390L)),
+        advanceClock(clock),
+        WaitUntilBatchProcessed(2),
+        Execute { q =>
+          val batch2 = q.recentProgress.find(_.batchId == 2).getOrElse {
+            fail(s"batch 2 progress was not retained: ${q.recentProgress.toSeq}")
+          }
+          assert(batch2.stateOperators.length == 1)
+          assert(batch2.stateOperators.head.numRowsDroppedByWatermark == 1L)
+        },
         StopStream
       )
     }
@@ -1206,6 +1306,52 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
           ("a", "data", 0L),
           ("a", "data", 290L),
           ("a", "timer", 290L)),
+        StopStream
+      )
+    }
+  }
+
+  test("fires event-time timers in the final scan of an empty RTM batch") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val clock = new GlobalSingletonManualClock()
+      LowLatencyClock.setClock(clock)
+      val input = LowLatencyMemoryStream[(Timestamp, String)](1)
+      val result = input.toDF()
+        .select(col("_1").as("eventTime"), col("_2").as("key"))
+        .withWatermark("eventTime", "10 milliseconds")
+        .as[(Timestamp, String)]
+        .groupByKey(_._2)
+        .transformWithState(
+          new RealTimeEventTimerProcessor,
+          TimeMode.EventTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+        StartStream(),
+        AddData(input,
+          (new Timestamp(100L), "expired"),
+          (new Timestamp(300L), "watermark")),
+        CheckAnswerWithTimeout(
+          60.seconds.toMillis,
+          ("expired", "data", 0L),
+          ("watermark", "data", 0L)),
+        advanceClock(clock),
+        WaitUntilBatchProcessed(0),
+        Execute { _ => waitForNextBatchToStart() },
+        // Batch 1 has no input rows. Its final scan uses batch 0's fixed eviction watermark.
+        advanceClock(clock),
+        WaitUntilBatchProcessed(1),
+        CheckAnswerWithTimeout(
+          60.seconds.toMillis,
+          ("expired", "data", 0L),
+          ("watermark", "data", 0L),
+          ("expired", "timer", 290L)),
+        Execute { q =>
+          val batch1 = q.recentProgress.find(_.batchId == 1).getOrElse {
+            fail(s"batch 1 progress was not retained: ${q.recentProgress.toSeq}")
+          }
+          assert(batch1.numInputRows == 0L)
+        },
         StopStream
       )
     }
@@ -1296,27 +1442,79 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
     }
   }
 
-  test("processing-time timer registered from initial state uses the RTM clock") {
+  test("uses the fixed prior-batch watermark for output event-time validation") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val (input, clock) = createStringMemoryStream(numPartitions = 1)
+      val clock = new GlobalSingletonManualClock()
+      LowLatencyClock.setClock(clock)
+      val input = LowLatencyMemoryStream.singlePartition[(Timestamp, String)]
+      val result = input.toDF()
+        .select(col("_1").as("eventTime"), col("_2").as("key"))
+        .withWatermark("eventTime", "10 milliseconds")
+        .as[(Timestamp, String)]
+        .groupByKey(_._2)
+        .transformWithState[RealTimeEventTimeOutputRow](
+          new RealTimeEventTimeOutputProcessor(Some(new Timestamp(1L))),
+          "outputEventTime",
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+        StartStream(),
+        AddData(input, (new Timestamp(300L), "a")),
+        CheckAnswerWithTimeout(
+          60.seconds.toMillis,
+          RealTimeEventTimeOutputRow("a", new Timestamp(1L), 1L)),
+        advanceClock(clock),
+        WaitUntilBatchProcessed(0),
+        Execute { _ => waitForNextBatchToStart() },
+        AddData(input, (new Timestamp(400L), "a")),
+        CheckAnswerWithTimeout(
+          60.seconds.toMillis,
+          RealTimeEventTimeOutputRow("a", new Timestamp(1L), 1L),
+          RealTimeEventTimeOutputRow("a", new Timestamp(1L), 2L)),
+        advanceClock(clock),
+        WaitUntilBatchProcessed(1),
+        Execute { _ => waitForNextBatchToStart() },
+        // Batch 2's late-events watermark is fixed at 290. Its accepted input would emit an
+        // output timestamp of 1, which must be rejected against that same fixed watermark.
+        AddData(input, (new Timestamp(500L), "a")),
+        ExpectFailure[SparkRuntimeException] { error =>
+          checkError(
+            error.asInstanceOf[SparkThrowable],
+            "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED",
+            parameters = Map(
+              "currentWatermark" -> "290",
+              "emittedRowEventTime" -> "1000"))
+        }
+      )
+    }
+  }
+
+  test("processing-time timer registered from initial state uses the batch timestamp") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      GlobalSingletonManualClock.reset()
+      val (input, executorClock) = createStringMemoryStream(numPartitions = 1)
+      val driverClock = new StreamManualClock(100000L)
       val result = input.toDS()
         .groupByKey(identity)
         .transformWithState(
-          new StatefulProcessorWithInitialStateProcTimerClass,
+          new RealTimeInitialStateProcTimerWithExpiryProcessor,
           TimeMode.ProcessingTime(),
           OutputMode.Update(),
           Seq("a").toDS().groupByKey(identity))
 
       testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
-        StartStream(),
+        StartStream(triggerClock = driverClock),
         WaitUntilBatchProcessed(0),
         Execute { _ => waitForNextBatchToStart() },
-        advanceClock(clock, 5001L),
-        AddData(input, "b"),
+        // The initial-state timer is based on batch 0's driver timestamp (100000), not the
+        // executor clock (0), so advancing the executor by only the timer delay must not fire it.
+        advanceClock(executorClock, 5001L),
+        Execute { _ => input.addData(Seq("b")) },
+        CheckAnswerWithTimeout(60.seconds.toMillis, ("b", "1")),
+        advanceClock(executorClock, 100000L),
+        Execute { _ => input.addData(Seq("c")) },
         CheckAnswerWithTimeout(
-          60.seconds.toMillis,
-          ("b", "1"),
-          ("a", "-1")),
+          60.seconds.toMillis, ("b", "1"), ("c", "1"), ("a", "105000")),
         StopStream
       )
     }
@@ -1478,34 +1676,45 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
     }
   }
 
-  test("recovers transformWithState state after a checkpoint restart") {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
-      withTempDir { checkpointDir =>
-        val (input, clock) = createMemoryStream(numPartitions = 2)
-        val result = input.toDS()
-          .groupByKey(_._1)
-          .transformWithState(
-            new RealTimeEagerCountProcessor,
-            TimeMode.ProcessingTime(),
-            OutputMode.Update())
+  Seq(true, false).foreach { changelogCheckpointingEnabled =>
+    test(s"recovers transformWithState state with RocksDB changelog checkpointing " +
+        s"enabled=$changelogCheckpointingEnabled") {
+      val changelogKey =
+        s"${RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX}.changelogCheckpointing.enabled"
+      withSQLConf(
+          SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+          changelogKey -> changelogCheckpointingEnabled.toString) {
+        withTempDir { checkpointDir =>
+          val (input, clock) = createMemoryStream(numPartitions = 2)
+          val result = input.toDS()
+            .groupByKey(_._1)
+            .transformWithState(
+              new RealTimeEagerCountProcessor,
+              TimeMode.ProcessingTime(),
+              OutputMode.Update())
 
-        testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          AddData(input, ("a", 1), ("a", 2)),
-          CheckAnswerWithTimeout(60.seconds.toMillis, ("a", 1L), ("a", 2L)),
-          advanceClock(clock),
-          WaitUntilBatchProcessed(0),
-          StopStream
-        )
+          testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            AddData(input, ("a", 1), ("a", 2)),
+            CheckAnswerWithTimeout(60.seconds.toMillis, ("a", 1L), ("a", 2L)),
+            Execute { q =>
+              assert(q.sparkSessionForStream.conf.get(changelogKey) ==
+                changelogCheckpointingEnabled.toString)
+            },
+            advanceClock(clock),
+            WaitUntilBatchProcessed(0),
+            StopStream
+          )
 
-        testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          AddData(input, ("a", 3), ("b", 1)),
-          CheckAnswerWithTimeout(60.seconds.toMillis, ("a", 3L), ("b", 1L)),
-          advanceClock(clock),
-          WaitUntilBatchProcessed(1),
-          StopStream
-        )
+          testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            AddData(input, ("a", 3), ("b", 1)),
+            CheckAnswerWithTimeout(60.seconds.toMillis, ("a", 3L), ("b", 1L)),
+            advanceClock(clock),
+            WaitUntilBatchProcessed(1),
+            StopStream
+          )
+        }
       }
     }
   }
@@ -1568,6 +1777,80 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
             assert(operators.size == 1)
             assert(!operators.head.isRealTimeMode)
           },
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("keeps MapState TTL and processing-time timers across MBM to RTM to MBM restarts") {
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+        SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+      withTempDir { checkpointDir =>
+        GlobalSingletonManualClock.reset()
+        val (input, clock) = createMemoryStream(numPartitions = 1)
+        val result = input.toDS()
+          .groupByKey(_._1)
+          .transformWithState(
+            new RealTimeMapTTLAndTimerProcessor,
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+        val checkpoint = checkpointDir.getCanonicalPath
+        val timerDelayAcrossRtmBoundary = (defaultTrigger.batchDurationMs + 1000L).toInt
+
+        testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+          AddData(input, ("a", 10000)),
+          StartStream(
+            trigger = Trigger.ProcessingTime(1000),
+            triggerClock = clock,
+            checkpointLocation = checkpoint),
+          CheckAnswerWithTimeout(60.seconds.toMillis, ("a", "data", 1L)),
+          WaitUntilBatchProcessed(0),
+          StopStream,
+          StartStream(trigger = defaultTrigger, checkpointLocation = checkpoint),
+          Execute { _ => waitForNextBatchToStart() },
+          advanceClock(clock, 10001L),
+          AddData(input, ("a", timerDelayAcrossRtmBoundary)),
+          CheckAnswerWithTimeout(
+            60.seconds.toMillis,
+            ("a", "data", 1L),
+            ("a", "data", 2L),
+            ("a", "timer", 10000L)),
+          advanceClock(clock),
+          WaitUntilBatchProcessed(1),
+          StopStream,
+          advanceClock(clock, 1001L),
+          AddData(input, ("a", 10000)),
+          StartStream(
+            trigger = Trigger.ProcessingTime(1000),
+            triggerClock = clock,
+            checkpointLocation = checkpoint),
+          CheckAnswerWithTimeout(
+            60.seconds.toMillis,
+            ("a", "data", 1L),
+            ("a", "data", 2L),
+            ("a", "timer", 10000L),
+            ("a", "data", 3L),
+            ("a", "timer", 311001L)),
+          WaitUntilBatchProcessed(2),
+          StopStream,
+          advanceClock(clock, Duration.ofMinutes(10).toMillis + 1L),
+          AddData(input, ("a", 10000)),
+          StartStream(
+            trigger = Trigger.ProcessingTime(1000),
+            triggerClock = clock,
+            checkpointLocation = checkpoint),
+          CheckAnswerWithTimeout(
+            60.seconds.toMillis,
+            ("a", "data", 1L),
+            ("a", "data", 2L),
+            ("a", "timer", 10000L),
+            ("a", "data", 3L),
+            ("a", "timer", 311001L),
+            ("a", "data", 1L),
+            ("a", "timer", 321002L)),
+          WaitUntilBatchProcessed(3),
           StopStream
         )
       }

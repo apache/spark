@@ -331,8 +331,7 @@ class IncrementalExecution(
       new Path(checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString),
       hadoopConf,
       metadata.version,
-      Some(currentBatchId),
-      overwriteIfPossible = isRealTimeMode && metadata.version == 2)
+      Some(currentBatchId))
     metadataWriter.write(metadata)
   }
 

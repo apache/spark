@@ -23,17 +23,43 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkIllegalStateException}
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.datasources.v2.LowLatencyClock
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
-import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, StreamingQuery, TimeMode,
+  TimerValues, Trigger, TTLConfig, ValueState}
 import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.sql.streaming.util.GlobalSingletonManualClock
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.util.SystemClock
+
+private class KafkaRunningCountStatefulProcessor
+  extends StatefulProcessor[String, String, (String, Long)] {
+
+  @transient private var countState: ValueState[Long] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    countState = getHandle.getValueState(
+      "count", Encoders.scalaLong, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, Long)] = {
+    inputRows.map { _ =>
+      val count = Option(countState.get()).getOrElse(0L) + 1L
+      countState.update(count)
+      (key, count)
+    }
+  }
+}
 
 class KafkaRealTimeModeSuite
   extends KafkaSourceTest
@@ -162,6 +188,59 @@ class KafkaRealTimeModeSuite
       StartStream(),
       CheckAnswerWithTimeout(5000, 2, 3, 4, 5, 6, 7, 8, 9, 10),
       WaitUntilCurrentBatchProcessed)
+  }
+
+  test("transformWithState uses a pipelined shuffle and recovers RocksDB changelog state") {
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> "true") {
+      val topic = newTopic()
+      testUtils.createTopic(topic, partitions = 2)
+      testUtils.sendMessages(topic, Array("a", "a"), Some(0))
+      testUtils.sendMessages(topic, Array("b"), Some(1))
+
+      val counts = spark.readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", topic)
+        .option("startingOffsets", "earliest")
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+        .as[String]
+        .groupByKey(identity)
+        .transformWithState(
+          new KafkaRunningCountStatefulProcessor,
+          TimeMode.None(),
+          Update)
+
+      testStream(counts, Update, sink = new ContinuousMemorySink())(
+        StartStream(),
+        CheckAnswerWithTimeout(60000, ("a", 1L), ("a", 2L), ("b", 1L)),
+        Execute { q =>
+          val plan = q.lastExecution.executedPlan
+          val statefulOperators = plan.collect { case t: TransformWithStateExec => t }
+          assert(statefulOperators.size == 1, plan)
+          assert(statefulOperators.head.isRealTimeMode, plan)
+
+          val exchanges = plan.collect { case s: ShuffleExchangeExec => s }
+          assert(exchanges.nonEmpty, plan)
+          assert(exchanges.forall(_.pipelined), plan)
+        },
+        WaitUntilCurrentBatchProcessed,
+        StopStream,
+        new ExternalAction() {
+          override def runAction(): Unit = {
+            testUtils.sendMessages(topic, Array("a"), Some(0))
+            testUtils.sendMessages(topic, Array("b", "b"), Some(1))
+          }
+        },
+        StartStream(),
+        CheckAnswerWithTimeout(
+          60000,
+          ("a", 1L), ("a", 2L), ("b", 1L),
+          ("a", 3L), ("b", 2L), ("b", 3L)),
+        WaitUntilCurrentBatchProcessed)
+    }
   }
 
   // A simple unit test that reads from Kakfa source, does a simple map and writes to memory

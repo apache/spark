@@ -222,20 +222,6 @@ object OperatorStateMetadataWriter {
       hadoopConf: Configuration,
       version: Int,
       currentBatchId: Option[Long] = None): OperatorStateMetadataWriter = {
-    createWriter(
-      stateCheckpointPath,
-      hadoopConf,
-      version,
-      currentBatchId,
-      overwriteIfPossible = false)
-  }
-
-  private[sql] def createWriter(
-      stateCheckpointPath: Path,
-      hadoopConf: Configuration,
-      version: Int,
-      currentBatchId: Option[Long],
-      overwriteIfPossible: Boolean): OperatorStateMetadataWriter = {
     version match {
       case 1 =>
         new OperatorStateMetadataV1Writer(stateCheckpointPath, hadoopConf)
@@ -243,8 +229,7 @@ object OperatorStateMetadataWriter {
         if (currentBatchId.isEmpty) {
           throw new IllegalArgumentException("currentBatchId is required for version 2")
         }
-        new OperatorStateMetadataV2Writer(
-          stateCheckpointPath, hadoopConf, currentBatchId.get, overwriteIfPossible)
+        new OperatorStateMetadataV2Writer(stateCheckpointPath, hadoopConf, currentBatchId.get)
       case _ =>
           throw new IllegalArgumentException(s"Failed to create writer for operator metadata " +
           s"with version=$version")
@@ -317,15 +302,7 @@ class OperatorStateMetadataV1Reader(
 class OperatorStateMetadataV2Writer(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
-    currentBatchId: Long,
-    overwriteIfPossible: Boolean) extends OperatorStateMetadataWriter {
-
-  def this(
-      stateCheckpointPath: Path,
-      hadoopConf: Configuration,
-      currentBatchId: Long) = {
-    this(stateCheckpointPath, hadoopConf, currentBatchId, overwriteIfPossible = false)
-  }
+    currentBatchId: Long) extends OperatorStateMetadataWriter {
 
   private val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
     stateCheckpointPath, currentBatchId)
@@ -335,10 +312,10 @@ class OperatorStateMetadataV2Writer(
   override def version: Int = 2
 
   override def write(operatorMetadata: OperatorStateMetadata): Unit = {
-    if (fm.exists(metadataFilePath) && !overwriteIfPossible) return
+    if (fm.exists(metadataFilePath)) return
 
     fm.mkdirs(metadataFilePath.getParent)
-    val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible)
+    val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible = false)
     OperatorStateMetadataUtils.writeMetadata(outputStream, operatorMetadata, metadataFilePath)
   }
 }

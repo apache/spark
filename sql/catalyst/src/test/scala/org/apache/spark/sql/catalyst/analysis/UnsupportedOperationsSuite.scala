@@ -973,6 +973,23 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Update
   )
 
+  assertNotSupportedForRealTime(
+    "real-time with Scala transformWithState on both sides of union - update mode",
+    scalaTransformWithState(streamRelation)
+      .union(scalaTransformWithState(new TestStreamingRelation(attribute.newInstance()))),
+    Update,
+    "STREAMING_REAL_TIME_MODE.STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED"
+  )
+
+  assertSupportedForRealTime(
+    "real-time with batch aggregate before union - update mode",
+    streamRelation
+      .join(Aggregate(Nil, aggExprs("c"), batchRelation), joinType = Inner)
+      .select(attribute)
+      .union(new TestStreamingRelation(attribute.newInstance())),
+    Update
+  )
+
   private def scalaTransformWithState(child: LogicalPlan): TransformWithState = {
     val statefulProcessor = new StatefulProcessor[Any, Any, Any] {
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}

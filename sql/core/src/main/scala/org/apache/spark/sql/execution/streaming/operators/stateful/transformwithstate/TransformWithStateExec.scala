@@ -252,9 +252,7 @@ case class TransformWithStateExec(
         statefulProcessor
           .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
           .handleInitialState(keyObj, initState,
-            new TimerValuesImpl(
-              if (isRealTimeMode) Some(currentTimestampMsFn()) else batchTimestampMs,
-              eventTimeWatermarkForEviction))
+            new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction))
       }
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
