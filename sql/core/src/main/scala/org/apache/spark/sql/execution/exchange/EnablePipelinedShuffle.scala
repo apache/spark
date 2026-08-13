@@ -64,7 +64,11 @@ case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
     // second mechanism is an accident of rule ordering and the third is optimizer behavior,
     // so this gate does not rely on either.
     if (plan.collectWithSubqueries { case r: ReusedExchangeExec => r }.nonEmpty) {
-      logWarning("EnablePipelinedShuffle: plan has a reused exchange; leaving it regular to " +
+      // Not a warning: this is a normal, expected fallback (reuse is routine optimizer output,
+      // e.g. self-joins), the query still runs correctly as a regular shuffle, and the user has
+      // nothing to act on. Log at DEBUG as diagnostic ("why this query did not go pipelined")
+      // rather than WARN, which would fire on every reuse-bearing query and read as a fault.
+      logDebug("EnablePipelinedShuffle: plan has a reused exchange; leaving it regular to " +
         "avoid a fan-out pipelined job.")
       return plan
     }
