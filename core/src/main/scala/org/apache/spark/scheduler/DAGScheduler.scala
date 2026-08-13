@@ -2666,6 +2666,36 @@ private[spark] class DAGScheduler(
       .getOrElse(new Properties())
     addPySparkConfigsToProperties(stage, properties)
 
+    // For a pipelined PRODUCER stage, tell its tasks which reduce partitions the job actually
+    // reads (the result stage's partitions). The in-process channel writer drops records
+    // routed to partitions no consumer will drain -- otherwise a partial-read job (LIMIT /
+    // executeTake reads a subset) fills the unread partitions' bounded queues and deadlocks
+    // the writer. The result stage is created before submitStage, so its partitions are known
+    // here. Only the map-side producer needs this; a regular full-read job's result stage
+    // covers every partition, so the property (if written) lists them all and drops nothing.
+    // The live set is per-SHUFFLE-EDGE, not per-job: it is the reduce partitions the
+    // consumer of THIS shuffle reads. It equals the job's result partitions ONLY for the
+    // producer whose shuffle the result stage reads DIRECTLY (result partition i maps to
+    // that producer's reduce partition i). A middle pipelined exchange in a chain (e.g. a
+    // subquery's hash below a single-partition agg) is consumed by another map stage that
+    // reads ALL its partitions, so it must stay fully live -- setting the result's subset
+    // there would make it drop partitions the downstream stage still needs, deadlocking.
+    // So set the property only on the result-feeding producer.
+    stage match {
+      case sms: ShuffleMapStage if isPipelinedProducer(stage) =>
+        jobIdToActiveJob.get(jobId).map(_.finalStage).collect { case rs: ResultStage => rs }
+          .foreach { rs =>
+            val resultReadsThisShuffle =
+              getShuffleDependenciesAndResourceProfiles(rs.rdd)._1
+                .exists(_.shuffleId == sms.shuffleDep.shuffleId)
+            if (resultReadsThisShuffle) {
+              properties.setProperty(
+                SparkContext.SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS, rs.partitions.mkString(","))
+            }
+          }
+      case _ =>
+    }
+
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
     // serializable. If tasks are not serializable, a SparkListenerStageCompleted event

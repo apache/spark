@@ -3150,6 +3150,13 @@ object SparkContext extends Logging {
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
+  // Comma-separated live reduce-partition ids for a pipelined job (SPARK-57399): the reduce
+  // partitions this job actually reads. Attached to a pipelined PRODUCER stage's task
+  // properties so the in-process channel writer can drop records routed to partitions no
+  // consumer will drain (e.g. LIMIT/executeTake reads only a subset), which would otherwise
+  // fill their bounded queues and deadlock the writer. Absent = every partition is live.
+  private[spark] val SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS =
+    "spark.pipelined.liveReducePartitions"
   private[spark] val SPARK_JOB_TAGS = "spark.job.tags"
   private[spark] val SPARK_SCHEDULER_POOL = "spark.scheduler.pool"
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"

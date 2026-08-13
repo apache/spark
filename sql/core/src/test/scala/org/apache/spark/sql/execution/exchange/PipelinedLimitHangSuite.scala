@@ -84,12 +84,12 @@ class PipelinedLimitHangSuite extends SparkFunSuite with AdaptiveSparkPlanHelper
     }
   }
 
-  ignore("KNOWN BUG: LIMIT over a pipelined shuffle hangs the writer (AQE off)") {
+  test("LIMIT over a pipelined shuffle completes (AQE off)") {
     assert(limitOverPipelinedCompletesWithin(90, aqe = false),
       "LIMIT over a pipelined shuffle should complete, but the writer hung on a full queue")
   }
 
-  ignore("KNOWN BUG: LIMIT over a pipelined shuffle hangs the writer (AQE on)") {
+  test("LIMIT over a pipelined shuffle completes (AQE on)") {
     assert(limitOverPipelinedCompletesWithin(90, aqe = true),
       "LIMIT over a pipelined shuffle should complete, but the writer hung on a full queue")
   }

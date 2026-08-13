@@ -19,7 +19,7 @@ package org.apache.spark.shuffle.local.pipelined
 
 import java.util.Arrays
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader, ShuffleWriter}
 
@@ -51,7 +51,52 @@ private[spark] class ChannelShuffleWriter[K, V](
   private val numPartitions = partitioner.numPartitions
   private val shuffleId = handle.shuffleId
 
+  // The reduce partitions this job actually reads, from the producer stage's task property
+  // (set by the DAGScheduler from the result stage's partitions). A record routed to a
+  // partition NOT in this set has no consumer -- putting it would fill that partition's
+  // bounded queue and, because the writer interleaves all partitions on one thread, block
+  // the writer before it can feed even the read partitions or emit their end-of-stream,
+  // deadlocking the job. So such records are dropped. Absent property (None) means every
+  // partition is live (the normal full-read case: collect, count, a full-partition job) and
+  // nothing is dropped.
+  private val liveReducePartitions: Option[Set[Int]] =
+    Option(TaskContext.get())
+      .flatMap(tc =>
+        Option(tc.getLocalProperty(SparkContext.SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS)))
+      .map(_.split(",").filter(_.nonEmpty).map(_.toInt).toSet)
+
+  // A partition is worth writing only while a consumer still wants its data: it must be in
+  // the job's live set (Half 1: no-reader partitions), AND its reader must not have departed
+  // (Half 2: a live reader that stopped early, e.g. LIMIT). `wants` is re-checked as data
+  // flows because abandonment happens at runtime when the reader task completes.
+  private def wants(pid: Int): Boolean =
+    liveReducePartitions.forall(_.contains(pid)) &&
+      !ChannelShuffleRendezvous.isAbandoned(shuffleId, pid)
+
+  // Hand a batch to a partition's queue, but do NOT block forever if its reader departs:
+  // poll with a short timeout and bail out the moment the partition becomes abandoned. This
+  // is the cooperative unblock for the early-stop case -- abandon() also drains the queue to
+  // release a parked put, and this re-check ensures the writer then stops rather than
+  // re-filling. Returns false if the partition was abandoned before the batch was accepted.
+  private def putUnlessAbandoned(pid: Int, batch: AnyRef): Boolean = {
+    val q = ChannelShuffleRendezvous.queue(shuffleId, pid)
+    while (!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid)) {
+      if (q.offer(batch, 100, java.util.concurrent.TimeUnit.MILLISECONDS)) return true
+    }
+    false
+  }
+
   override def write(records: Iterator[Product2[K, V]]): Unit = {
+    // This is a fresh producer attempt. Clear any abandoned marks left on our partitions by
+    // an EARLIER job that reused this shuffleId (RangePartitioner sampling job -> main job;
+    // executeTake batches) so we do not mistake a prior reader's departure for our own
+    // partitions being dead. Only abandonment happening during THIS attempt then counts.
+    var pc = 0
+    while (pc < numPartitions) {
+      ChannelShuffleRendezvous.clearAbandoned(shuffleId, pc)
+      pc += 1
+    }
+
     // One in-progress batch per reduce partition, plus its fill count.
     val batches = Array.fill(numPartitions)(new Array[AnyRef](batchSize))
     val sizes = new Array[Int](numPartitions)
@@ -59,30 +104,40 @@ private[spark] class ChannelShuffleWriter[K, V](
     while (records.hasNext) {
       val rec = records.next()
       val pid = partitioner.getPartition(rec._1)
-      // Records must already be detached from the producer's reused row buffers by the time
-      // they reach here (the producer reuses its output UnsafeRow across iterations, and the
-      // consumer reads on another thread). The copy is done in the SQL layer's
-      // ShuffleWriteProcessor for the pipelined path -- where InternalRow.copy() is available
-      // -- rather than here, because this class lives in `core` and cannot reference SQL rows,
-      // and the UnsafeRow serializer offers no single-object copy. So batch the pair as-is.
-      batches(pid)(sizes(pid)) = (rec._1, rec._2)
-      sizes(pid) += 1
-      if (sizes(pid) == batchSize) {
-        ChannelShuffleRendezvous.queue(shuffleId, pid).put(batches(pid))
-        batches(pid) = new Array[AnyRef](batchSize)
-        sizes(pid) = 0
+      // Only accumulate for partitions a consumer still wants (see `wants`).
+      if (wants(pid)) {
+        // Records must already be detached from the producer's reused row buffers by the time
+        // they reach here (the producer reuses its output UnsafeRow across iterations, and the
+        // consumer reads on another thread). The copy is done in the SQL layer's
+        // ShuffleWriteProcessor for the pipelined path -- where InternalRow.copy() is available
+        // -- rather than here, because this class lives in `core` and cannot reference SQL rows,
+        // and the UnsafeRow serializer offers no single-object copy. So batch the pair as-is.
+        batches(pid)(sizes(pid)) = (rec._1, rec._2)
+        sizes(pid) += 1
+        if (sizes(pid) == batchSize) {
+          putUnlessAbandoned(pid, batches(pid))
+          batches(pid) = new Array[AnyRef](batchSize)
+          sizes(pid) = 0
+        }
       }
     }
 
     // Flush partial batches (trimmed so the reader can iterate array length directly), then
-    // signal end-of-stream to every reduce partition so each reader can count this map task
-    // as done. Same thread, same queue: data always precedes the marker.
+    // signal end-of-stream to every partition still wanted, so each live reader can count
+    // this map task as done. Same thread, same queue: data always precedes the marker. A
+    // partition that is dead (no reader) or abandoned (reader departed) gets neither -- its
+    // queue is left for removeShuffle to drop.
     var p = 0
     while (p < numPartitions) {
-      if (sizes(p) > 0) {
-        ChannelShuffleRendezvous.queue(shuffleId, p).put(Arrays.copyOf(batches(p), sizes(p)))
+      if (wants(p)) {
+        if (sizes(p) > 0) {
+          putUnlessAbandoned(p, Arrays.copyOf(batches(p), sizes(p)))
+        }
+        // Re-check: the reader may have departed while the trimmed batch was being put.
+        if (!ChannelShuffleRendezvous.isAbandoned(shuffleId, p)) {
+          putUnlessAbandoned(p, ChannelShuffleRendezvous.EndOfStream)
+        }
       }
-      ChannelShuffleRendezvous.queue(shuffleId, p).put(ChannelShuffleRendezvous.EndOfStream)
       p += 1
     }
   }
@@ -120,6 +175,21 @@ private[spark] class ChannelShuffleReader[K, C](
   // into a single reader task. Drain every queue in [startPartition, endPartition); each
   // carries numMaps EndOfStream markers (the writer puts one per map task on every partition
   // queue), so each queue is drained independently to completion.
+  //
+  // On task completion (normal end, early stop like LIMIT, or failure) mark every partition
+  // this reader owned as abandoned, so a writer still feeding them stops and does not wedge
+  // on their bounded queues. Registered once here; fires whether or not the iterator was
+  // drained to the end.
+  Option(TaskContext.get()).foreach { tc =>
+    tc.addTaskCompletionListener[Unit] { _ =>
+      var p = startPartition
+      while (p < endPartition) {
+        ChannelShuffleRendezvous.abandon(handle.shuffleId, p)
+        p += 1
+      }
+    }
+  }
+
   override def read(): Iterator[Product2[K, C]] =
     (startPartition until endPartition).iterator.flatMap(drainQueue)
 

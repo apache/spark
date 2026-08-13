@@ -51,6 +51,13 @@ private[spark] object ChannelShuffleRendezvous {
   private val queues =
     new ConcurrentHashMap[(Int, Int), LinkedBlockingQueue[AnyRef]]()
 
+  // (shuffleId, reducePartitionId) keys whose reader has departed (its reduce task finished)
+  // and will drain no more. A writer stops feeding an abandoned partition and drops the rest.
+  // This covers the LIVE-partition early-stop case (e.g. a LIMIT reader that pulled enough
+  // and quit): without it the writer fills the partition's bounded queue and blocks forever.
+  private val abandoned =
+    java.util.concurrent.ConcurrentHashMap.newKeySet[(Int, Int)]()
+
   /**
    * Default per-queue capacity in BATCHES (not rows): with the default 1024-row batch this
    * bounds the in-flight hand-off at ~64K rows per reduce partition.
@@ -62,6 +69,34 @@ private[spark] object ChannelShuffleRendezvous {
     queues.computeIfAbsent(
       (shuffleId, reducePartitionId),
       _ => new LinkedBlockingQueue[AnyRef](DefaultCapacity))
+
+  /** Whether this reduce partition's reader has departed (see [[abandon]]). */
+  def isAbandoned(shuffleId: Int, reducePartitionId: Int): Boolean =
+    abandoned.contains((shuffleId, reducePartitionId))
+
+  /**
+   * Clear an abandoned mark. A pipelined producer is RE-RUN for the same shuffleId within one
+   * query (a RangePartitioner sampling job then the main job; executeTake's per-batch jobs),
+   * and abandonment is a PER-JOB fact -- a mark left by a previous job's reader must not make
+   * the re-run's fresh writer think the partition is dead. So a writer clears the marks for
+   * the partitions it is about to (re)produce at the start of its attempt; only abandonment
+   * that happens DURING this attempt (its own concurrent reader departing) then applies.
+   */
+  def clearAbandoned(shuffleId: Int, reducePartitionId: Int): Unit =
+    abandoned.remove((shuffleId, reducePartitionId))
+
+  /**
+   * Mark a reduce partition abandoned: its reader task has finished and will drain no more.
+   * Called from the reader's task-completion listener. Besides recording the flag (so the
+   * writer stops feeding this partition), it DRAINS the queue to unblock a writer already
+   * parked in a full-queue `put`: clearing capacity lets that put return, after which the
+   * writer's next abandoned-check stops it cooperatively (no reliance on interrupt).
+   */
+  def abandon(shuffleId: Int, reducePartitionId: Int): Unit = {
+    abandoned.add((shuffleId, reducePartitionId))
+    val q = queues.get((shuffleId, reducePartitionId))
+    if (q != null) q.clear()
+  }
 
   /**
    * Drop all queues for a shuffle once it is unregistered, releasing their memory.
@@ -77,10 +112,20 @@ private[spark] object ChannelShuffleRendezvous {
     while (it.hasNext) {
       if (it.next()._1 == shuffleId) it.remove()
     }
+    // Clear this shuffle's abandoned marks too, so a later re-run of the same shuffleId
+    // (executeTake shares one shuffleId across its per-batch jobs; each batch's stage is
+    // removed and rebuilt) starts fresh rather than seeing the previous batch's marks.
+    val ai = abandoned.iterator()
+    while (ai.hasNext) {
+      if (ai.next()._1 == shuffleId) ai.remove()
+    }
   }
 
-  /** Visible for testing: drop every queue. */
-  private[pipelined] def clearForTesting(): Unit = queues.clear()
+  /** Visible for testing: drop every queue AND every abandoned mark. */
+  private[pipelined] def clearForTesting(): Unit = {
+    queues.clear()
+    abandoned.clear()
+  }
 
   /** Visible for testing: number of live queues. */
   private[pipelined] def numQueuesForTesting: Int = queues.size()
