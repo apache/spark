@@ -18,6 +18,7 @@
 Incremental user-defined aggregators for PySpark, the Python analog of Scala's
 ``org.apache.spark.sql.expressions.Aggregator``.
 """
+
 from abc import ABC, abstractmethod
 from typing import Any, Tuple
 
@@ -105,9 +106,7 @@ class Aggregator(ABC):
         ...
 
     @abstractmethod
-    def merge(
-        self, buffer1: Tuple[Any, ...], buffer2: Tuple[Any, ...]
-    ) -> Tuple[Any, ...]:
+    def merge(self, buffer1: Tuple[Any, ...], buffer2: Tuple[Any, ...]) -> Tuple[Any, ...]:
         """Merge two partial buffers into one. Must be associative and commutative."""
         ...
 

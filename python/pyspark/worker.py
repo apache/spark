@@ -2245,9 +2245,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 for i, (agg, _, _, _) in enumerate(udfs):
                     field_names = [f.name for f in agg.bufferSchema.fields]
                     struct_value = {name: buffers[i][j] for j, name in enumerate(field_names)}
-                    result_arrays.append(
-                        pa.array([struct_value], type=return_schema.field(i).type)
-                    )
+                    result_arrays.append(pa.array([struct_value], type=return_schema.field(i).type))
                 batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
