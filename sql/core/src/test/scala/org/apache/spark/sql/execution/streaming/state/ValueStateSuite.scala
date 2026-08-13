@@ -415,7 +415,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
   // happen to mask the bug via size-based byte differences.
   test("SPARK-56400: TTL eviction iterator - boundary at prev+1 with fixed-size element key") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
-      val store = provider.getStore(0)
+      val store = CkptIdCollectingStateStoreWrapper(provider.getStore(0))
+      assert(!store.isInstanceOf[SupportsReusableIterator])
       val longKeyEncoder = encoderFor(Encoders.scalaLong).asInstanceOf[ExpressionEncoder[Any]]
 
       // 1 ms TTL so expiration = batchTimestampMs + 1, hitting the prev+1 boundary
@@ -451,6 +452,47 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val evicted = state2.ttlEvictionIterator(nextBatchTs).toList
       assert(evicted.size === 3,
         s"Expected 3 evictable TTL entries at expiration = prevBatch + 1, got ${evicted.size}")
+    }
+  }
+
+  test("TTL eviction reusable iterator refreshes and resumes from prior threshold") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      assert(store.isInstanceOf[SupportsReusableIterator])
+      val longKeyEncoder = encoderFor(Encoders.scalaLong).asInstanceOf[ExpressionEncoder[Any]]
+      val ttlConfig = TTLConfig(Duration.ofMillis(500))
+      var currentTimeMs = 250L
+      val handle = new StatefulProcessorHandleImpl(
+        store,
+        UUID.randomUUID(),
+        longKeyEncoder,
+        TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(5000L),
+        prevBatchTimestampMs = Some(5000L),
+        currentTimestampMs = Some(() => currentTimeMs))
+      val state = handle.getValueState[Long](
+        "testState", Encoders.scalaLong, ttlConfig).asInstanceOf[ValueStateImplWithTTL[Long]]
+
+      def update(key: Long): Unit = {
+        ImplicitGroupingKeyTracker.setImplicitKey(key)
+        try {
+          state.update(key)
+        } finally {
+          ImplicitGroupingKeyTracker.removeImplicitKey()
+        }
+      }
+
+      // The first scan starts at the column-family beginning and stops on the future entry.
+      update(1L) // expires at 750
+      assert(state.clearExpiredStateForAllKeys(500L) === 0L)
+
+      // Refreshing makes this new entry visible and seeking to the prior threshold revisits the
+      // entry consumed by the first scan. Seeking to the new threshold would skip it.
+      currentTimeMs = 500L
+      update(2L) // expires at 1000
+      assert(state.clearExpiredStateForAllKeys(900L) === 1L)
+      assert(state.clearExpiredStateForAllKeys(1000L) === 1L)
+      assert(state.getTTLRows().isEmpty)
     }
   }
 

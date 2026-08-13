@@ -253,6 +253,35 @@ private class RealTimeTimerIteratorListenerProcessor
   }
 }
 
+private class RealTimeTTLIteratorListenerProcessor
+  extends StatefulProcessor[String, (String, Int), (Int, Int)] {
+
+  @transient private var valueState: ValueState[Int] = _
+  private var previousListenerCount = -1
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    valueState = getHandle.getValueState(
+      "value", Encoders.scalaInt, TTLConfig(Duration.ofHours(1)))
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, Int)],
+      timerValues: TimerValues): Iterator[(Int, Int)] = {
+    inputRows.map { case (_, value) =>
+      valueState.update(value)
+      val listenerCount = TaskCompletionListenerCount.get()
+      val addedListenerCount = if (previousListenerCount >= 0) {
+        listenerCount - previousListenerCount
+      } else {
+        0
+      }
+      previousListenerCount = listenerCount
+      (value, addedListenerCount)
+    }
+  }
+}
+
 private class RTMStatefulProcessorWithProcTimeTimerWithMultipleTimers(timerExpireTs: Long)
     extends RTMStatefulProcessorWithProcTimeTimer(timerExpireTs) {
   override def handleInputRows(
@@ -1028,6 +1057,44 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
           (1, false),
           (2, true),
           (3, false)),
+        StopStream
+      )
+    }
+  }
+
+  test("reuses one TTL iterator task listener across RTM cleanup scans") {
+    val changelogKey =
+      s"${RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX}.changelogCheckpointing.enabled"
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+        SQLConf.STREAMING_TRANSFORM_WITH_STATE_REAL_TIME_MODE_TTL_EVICTION_INTERVAL_MS.key -> "0",
+        changelogKey -> "true") {
+      val (input, clock) = createMemoryStream(numPartitions = 1)
+      val result = input.toDS()
+        .groupByKey(_._1)
+        .transformWithState(
+          new RealTimeTTLIteratorListenerProcessor,
+          TimeMode.ProcessingTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+        StartStream(),
+        AddData(input, ("a", 1)),
+        CheckAnswerWithTimeout(60.seconds.toMillis, (1, 0)),
+        new ExternalAction {
+          override def runAction(): Unit = clock.advance(1L)
+        },
+        AddData(input, ("a", 2)),
+        // The first timer and TTL scans each add one reusable iterator listener.
+        CheckAnswerWithTimeout(60.seconds.toMillis, (1, 0), (2, 2)),
+        new ExternalAction {
+          override def runAction(): Unit = clock.advance(1L)
+        },
+        AddData(input, ("a", 3)),
+        CheckAnswerWithTimeout(
+          60.seconds.toMillis, (1, 0), (2, 2), (3, 0)),
+        advanceClock(clock),
+        WaitUntilBatchProcessed(0),
         StopStream
       )
     }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TTLEncoder
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.TWSMetricsUtils
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RangeKeyScanStateEncoderSpec, RangeScanBoundaryUtils, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RangeKeyScanStateEncoderSpec, RangeScanBoundaryUtils, ReusableIterator, StateStore, SupportsReusableIterator, UnsafeRowPair}
 import org.apache.spark.sql.streaming.TTLConfig
 import org.apache.spark.sql.types._
 
@@ -170,28 +170,60 @@ trait TTLState {
     store.iterator(TTL_INDEX).map(kv => toTTLRow(kv.key))
   }
 
-  // Returns an Iterator over the keys in the TTL index that have expired. Uses a bounded
-  // range scan over [prevBatchTimestampMs+1, evictionTimestampMs+1) to skip entries that
-  // were already evicted in previous batches.
+  // fields for reusable iterator.
+  private var reusableIteratorOpt: Option[ReusableIterator[UnsafeRowPair]] = None
+  private var lastTimerDeletedExpiryTimeMs: Long = 0L
+
+  private lazy val secondaryIndexExpiryTsProjection = UnsafeProjection.create(
+    new StructType()
+      .add("expiryTimestampMs", LongType, nullable = false)
+  )
+
+  private lazy val lastTimerDeletedExpiryTimeMsRow: UnsafeRow =
+    secondaryIndexExpiryTsProjection.apply(InternalRow(lastTimerDeletedExpiryTimeMs))
+
+  // Returns an Iterator over the keys in the TTL index that have expired. When the store
+  // does not support reusable iterators, uses a bounded range scan over
+  // [prevBatchTimestampMs+1, evictionTimestampMs+1) to skip entries that were already
+  // evicted (and are now tombstones) in previous batches.
   //
   // This method does not delete the keys from the TTL index; it is the responsibility of
   // the caller to do so.
   //
   // The schema of the UnsafeRow returned by this iterator is (expirationMs, elementKey).
   private[sql] def ttlEvictionIterator(evictionTimestampMs: Long): Iterator[UnsafeRow] = {
-    val startKey = prevBatchTimestampMs.flatMap { prevTs =>
-      if (prevTs < Long.MaxValue) {
-        Some(TTL_ENCODER.encodeTTLRow(prevTs + 1, DEFAULT_ELEMENT_KEY).copy())
-      } else {
-        None
-      }
+    val ttlIterator = store match {
+      case s: SupportsReusableIterator =>
+        if (reusableIteratorOpt.isEmpty) {
+          reusableIteratorOpt = Some(s.reusableIterator(TTL_INDEX))
+        } else {
+          val reusableIter = reusableIteratorOpt.get
+
+          // Seek to the last deleted timer's expiry time
+          // Please note that we do not need to specify the grouping key here because
+          // we are only interested in seeking to the position of the last expiry time
+          lastTimerDeletedExpiryTimeMsRow.setLong(0, lastTimerDeletedExpiryTimeMs)
+          reusableIter.refreshAndSeekToPrefix(lastTimerDeletedExpiryTimeMsRow)
+        }
+
+        lastTimerDeletedExpiryTimeMs = evictionTimestampMs
+
+        reusableIteratorOpt.get
+      case _ =>
+        val startKey = prevBatchTimestampMs.flatMap { prevTs =>
+          if (prevTs < Long.MaxValue) {
+            Some(TTL_ENCODER.encodeTTLRow(prevTs + 1, DEFAULT_ELEMENT_KEY).copy())
+          } else {
+            None
+          }
+        }
+        val endKey = if (evictionTimestampMs < Long.MaxValue) {
+          Some(TTL_ENCODER.encodeTTLRow(evictionTimestampMs + 1, DEFAULT_ELEMENT_KEY).copy())
+        } else {
+          None
+        }
+        store.rangeScan(startKey, endKey, TTL_INDEX)
     }
-    val endKey = if (evictionTimestampMs < Long.MaxValue) {
-      Some(TTL_ENCODER.encodeTTLRow(evictionTimestampMs + 1, DEFAULT_ELEMENT_KEY).copy())
-    } else {
-      None
-    }
-    val ttlIterator = store.rangeScan(startKey, endKey, TTL_INDEX)
 
     // Recall that the format is (expirationMs, elementKey) -> TTL_EMPTY_VALUE_ROW, so
     // kv.value doesn't ever need to be used.
