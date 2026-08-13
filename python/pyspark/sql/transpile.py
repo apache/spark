@@ -953,29 +953,94 @@ def _node_encloses(node: ast.expr, extent: Tuple[Tuple[int, int], Tuple[int, int
     )
 
 
+def _positioned(new: ast.AST, reference: ast.AST) -> Any:
+    """Give a synthesized node ``reference``'s position and return it.
+
+    Only ever called on nodes this module just built, so it never writes to a
+    cached node or its children.
+    """
+    ast.copy_location(new, reference)
+    return new
+
+
+def _defaults_stripped(node: ast.Lambda) -> ast.Lambda:
+    """``node`` with its parameter defaults removed.
+
+    Builds fresh ``Lambda`` / ``arguments`` wrappers that ALIAS ``node``'s
+    children, so the cached node is left untouched. Stripping cannot change the
+    code object being reproduced -- a default is evaluated in the DEFINING scope
+    and stored on the function object, not in its code -- but it does remove the
+    extra nested code objects a lambda-valued default would contribute
+    (``lambda x, k=(lambda: 3)(): x + k``), which is what lets the caller expect
+    exactly one.
+    """
+    args = node.args
+    bare_args = _positioned(
+        ast.arguments(
+            posonlyargs=list(getattr(args, "posonlyargs", [])),
+            args=list(args.args),
+            vararg=args.vararg,
+            kwonlyargs=list(args.kwonlyargs),
+            kw_defaults=[None] * len(args.kw_defaults),
+            kwarg=args.kwarg,
+            defaults=[],
+        ),
+        node,
+    )
+    return _positioned(ast.Lambda(args=bare_args, body=node.body), node)
+
+
+def _nested_code(code: CodeType) -> List[CodeType]:
+    """The code objects among ``code``'s constants."""
+    return [const for const in code.co_consts if isinstance(const, CodeType)]
+
+
 def _recompiled_lambda_code(node: ast.Lambda, freevars: Tuple[str, ...]) -> Optional[CodeType]:
     """Compile ``node`` in isolation and return its code object, or ``None``.
 
-    When the target captured free variables, the lambda is wrapped in an
-    enclosing ``def`` that declares those names, so the recompiled lambda emits
-    the same ``LOAD_DEREF`` form the target does and its bytecode can match.
-    Without that wrapper a captured name compiles to a global load and a
-    genuine match would be rejected as if the source were stale.
+    The AST node is compiled DIRECTLY rather than round-tripped through
+    ``ast.unparse`` and a source compile: ``unparse`` is not contractually
+    round-trip faithful, so every fidelity gap there would surface as a spurious
+    verification failure and a silently missed lowering.
+
+    When the target captured free variables, the lambda is wrapped in a
+    synthesized ``def`` that declares those names, so the recompiled lambda emits
+    the same ``LOAD_DEREF`` form the target does and can match. Without that
+    wrapper a captured name compiles to a global load and a genuine match would
+    be rejected as if the source were stale.
     """
     try:
-        expression = ast.unparse(node)
+        lam = _defaults_stripped(node)
         if freevars:
-            params = ", ".join(freevars)
-            module = compile(
-                f"def __w({params}):\n    return ({expression})\n", "<transpiler>", "exec"
+            wrapper_args = _positioned(
+                ast.arguments(
+                    posonlyargs=[],
+                    args=[_positioned(ast.arg(arg=name), node) for name in freevars],
+                    vararg=None,
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                    kwarg=None,
+                    defaults=[],
+                ),
+                node,
             )
-            enclosing = [c for c in module.co_consts if isinstance(c, CodeType)]
+            fn_ctor: Any = ast.FunctionDef
+            wrapper = _positioned(
+                fn_ctor(
+                    name="__transpiler_scope",
+                    args=wrapper_args,
+                    body=[_positioned(ast.Return(value=lam), node)],
+                    decorator_list=[],
+                ),
+                node,
+            )
+            module = compile(ast.Module(body=[wrapper], type_ignores=[]), "<transpiler>", "exec")
+            enclosing = _nested_code(module)
             if len(enclosing) != 1:
                 return None
-            nested = [c for c in enclosing[0].co_consts if isinstance(c, CodeType)]
+            nested = _nested_code(enclosing[0])
         else:
-            compiled = compile(expression, "<transpiler>", "eval")
-            nested = [c for c in compiled.co_consts if isinstance(c, CodeType)]
+            nested = _nested_code(compile(ast.Expression(body=lam), "<transpiler>", "eval"))
     except Exception:
         return None
     return nested[0] if len(nested) == 1 else None

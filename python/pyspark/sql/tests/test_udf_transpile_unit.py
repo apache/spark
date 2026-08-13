@@ -1685,11 +1685,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # A default whose value is itself a lambda once made the target's own
         # candidate unmatchable, so a line mate with the same body but NO default
         # was resolved instead -- silently bypassing the refusal to handle
-        # defaulted parameters and mis-numbering the parameter list. Now the
-        # defaulted lambda falls back cleanly (recompiling it for verification
-        # yields two nested code objects -- its own and the default's -- so it
-        # does not verify), while the line mate, which the position path never
-        # confuses it with, resolves to its own node and lowers normally.
+        # defaulted parameters and mis-numbering the parameter list. Now it
+        # resolves to its OWN node (defaults are stripped before the
+        # verification recompile, since a default lives on the function object
+        # rather than in its code) and the defaulted-parameter refusal is what
+        # rejects it -- so it still falls back, but for the right reason. Its
+        # line mate resolves and lowers independently.
         defaulted, plain = lambda x, k=(lambda: 3)(): x + k, lambda x, k: x + k
         with self.sql_conf(_TRANSPILE_ON):
             u = UserDefinedFunction(defaulted, LongType())
