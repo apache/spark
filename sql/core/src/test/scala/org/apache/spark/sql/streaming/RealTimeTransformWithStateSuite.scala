@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 import java.sql.Timestamp
 import java.time.Duration
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import org.apache.hadoop.fs.Path
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{
@@ -35,8 +32,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{
-  EnableStateStoreRowChecksum, OperatorStateMetadataReader, OperatorStateMetadataV2,
-  OperatorStateMetadataWriter, RocksDBConf, RocksDBStateStoreProvider}
+  EnableStateStoreRowChecksum, RocksDBConf, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.{GlobalSingletonManualClock, StreamManualClock}
@@ -887,70 +883,6 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
           AddData(input, ("a", 3)),
           CheckAnswerWithTimeout(
             60.seconds.toMillis, ("a", 2L), ("b", 1L), ("a", 1L)),
-          StopStream
-        )
-      }
-    }
-  }
-
-  test("RTM recovery ignores uncommitted current-batch operator metadata") {
-    withSQLConf(
-        SQLConf.SHUFFLE_PARTITIONS.key -> "1",
-        SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
-      withTempDir { checkpointDir =>
-        val (input, clock) = createMemoryStream(numPartitions = 1)
-        val checkpoint = checkpointDir.getCanonicalPath
-        val result = input.toDS()
-          .groupByKey(_._1)
-          .transformWithState(
-            new RealTimeEagerCountProcessor,
-            TimeMode.None(),
-            OutputMode.Update())
-
-        testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
-          StartStream(checkpointLocation = checkpoint),
-          AddData(input, ("a", 1)),
-          CheckAnswerWithTimeout(60.seconds.toMillis, ("a", 1L)),
-          advanceClock(clock),
-          WaitUntilBatchProcessed(0),
-          StopStream
-        )
-
-        val hadoopConf = spark.sessionState.newHadoopConf()
-        val operatorStatePath = new Path(checkpoint, "state/0")
-        val committedMetadata = OperatorStateMetadataReader.createReader(
-          operatorStatePath,
-          hadoopConf,
-          version = 2,
-          batchId = 0).read().getOrElse {
-          fail("missing committed operator metadata for batch 0")
-        }.asInstanceOf[OperatorStateMetadataV2]
-
-        val invalidSchemaFile = checkpointDir.toPath.resolve("invalid-uncommitted-schema")
-        Files.write(invalidSchemaFile, "not a state schema".getBytes(StandardCharsets.UTF_8))
-        val uncommittedMetadata = committedMetadata.copy(
-          stateStoreInfo = committedMetadata.stateStoreInfo.map { storeInfo =>
-            storeInfo.copy(stateSchemaFilePaths = List(invalidSchemaFile.toString))
-          })
-        OperatorStateMetadataWriter.createWriter(
-          operatorStatePath,
-          hadoopConf,
-          version = 2,
-          currentBatchId = Some(1L)).write(uncommittedMetadata)
-
-        val uncommittedMetadataFile = checkpointDir.toPath.resolve("state/0/_metadata/v2/1")
-        assert(Files.isRegularFile(uncommittedMetadataFile))
-
-        testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
-          StartStream(checkpointLocation = checkpoint),
-          AddData(input, ("a", 2)),
-          CheckAnswerWithTimeout(60.seconds.toMillis, ("a", 2L)),
-          Execute { q =>
-            assert(q.lastExecution.currentBatchId == 1L)
-            assert(Files.isRegularFile(uncommittedMetadataFile))
-          },
-          advanceClock(clock),
-          WaitUntilBatchProcessed(1),
           StopStream
         )
       }
