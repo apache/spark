@@ -6497,6 +6497,87 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined shuffle: losing a materialized prefix's output mid-group aborts the whole " +
+      "group, not a lone prefix resubmit") {
+    // The materialized-prefix mixed shape does not need a slot to re-run its prefix -- but if the
+    // prefix's shuffle output is LOST while the gang is running (FetchFailed / executor loss), a
+    // base-scheduler lone-stage resubmit of the prefix would deadlock: the gang holds all slots
+    // (producers blocked on backpressure), leaving no slot for the prefix to recompute into. This
+    // is the one FetchFailed path where the failing consumer reads OUTSIDE its group (the external
+    // prefix), which the group-internal FetchFailed test does not exercise. It must still route to
+    // a whole-group abort, because isPipelinedGroupMember keys off the FAILING STAGE (the pipelined
+    // producer reading the prefix is a group member) regardless of which shuffle's fetch failed.
+    val regularRoot = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(3))
+    val prefixReader = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
+    submit(prefixReader, Array(0, 1, 2))
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 3)
+    complete(taskSets(1), Seq((Success, 1), (Success, 2), (Success, 3)))
+    results.clear()
+    val taskSetsBefore = taskSets.size
+
+    // producer(reads the materialized regular prefix) --[pipelined]--> consumer (result stage).
+    val producerRdd = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    assert(taskSets.size === taskSetsBefore + 2, "producer and consumer gang-submitted")
+    val producerTs = taskSets(taskSetsBefore)
+    val taskSetsBeforeFetchFailure = taskSets.size
+
+    // The pipelined PRODUCER task fails fetching the EXTERNAL materialized prefix (regularDep),
+    // not the pipelined shuffle. Its output for mapIndex 0 was placed on hostA by
+    // completeShuffleMapStageSuccessfully.
+    runEvent(makeCompletionEvent(
+      producerTs.tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), regularDep.shuffleId, 0L, 0, 0, "ignored"),
+      null))
+
+    // Whole-group abort: the job fails, and no lone stage (neither the pipelined producer nor the
+    // materialized prefix's map stage) is resubmitted into the slot-starved gang.
+    scheduler.resubmitFailedStages()
+    assert(failure != null,
+      "losing a materialized prefix's output under a running gang must fail the job")
+    assert(taskSets.size === taskSetsBeforeFetchFailure,
+      "no lone stage may be resubmitted after the group is aborted")
+    assert(!scheduler.runningStages.exists(_.rdd eq regularRoot),
+      "the prefix's map stage must not be resubmitted in isolation into the gang's held slots")
+    sc.listenerBus.waitUntilEmpty()
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: an all-pipelined group with no regular prefix classifies identically " +
+      "under the materialized-prefix relaxation (inert for RTM-style jobs)") {
+    // The prefix relaxation (classifyJobShuffleShape) keys purely off dependency TYPE, so it is
+    // open to any PipelinedShuffleDependency, RTM's included. But the materialized-prefix mixed
+    // shape it newly admits is produced only by AQE (prior map-stage jobs materialize the prefix).
+    // An RTM-style streaming job is all-pipelined with no regular boundary, so it never hits the
+    // relaxed path: it was accepted before the relaxation and is accepted identically after. This
+    // pins the "inert for RTM" claim -- the range the relaxation opens does not overlap the shapes
+    // RTM produces -- so the change is a strict superset RTM inherits without behavior change.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+
+    // Accepted and gang-scheduled exactly like the pre-relaxation all-pipelined path: producer and
+    // consumer submitted concurrently, no rejection, no materialized-prefix machinery engaged.
+    assert(taskSets.size === 2,
+      s"all-pipelined job must gang-submit producer + consumer, got ${taskSets.size} task sets")
+    assert(scheduler.runningStages.exists(_.rdd eq producerRdd))
+    assert(scheduler.runningStages.exists(_.rdd eq consumerRdd))
+
+    complete(taskSets.head, Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    val consumerTs = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    complete(consumerTs, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
   test("pipelined shuffle: deep chain A->B->C is submitted fully concurrently") {
     // A --pipelined--> B --pipelined--> C : all three co-scheduled (each edge is non-sequencing).
     val rddA = new MyRDD(sc, 2, Nil)
