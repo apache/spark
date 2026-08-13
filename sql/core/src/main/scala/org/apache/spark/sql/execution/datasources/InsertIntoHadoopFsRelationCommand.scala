@@ -200,7 +200,8 @@ case class InsertIntoHadoopFsRelationCommand(
         && partitionColumns.length == staticPartitions.size) {
         // Avoid empty static partition can't loaded to datasource table.
         val staticPathFragment =
-          PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
+          PartitioningUtils.getPathFragment(
+            staticPartitions, partitionColumns, conf.validatePartitionColumns)
         refreshUpdatedPartitions(Set(staticPathFragment))
       } else {
         refreshUpdatedPartitions(updatedPartitionPaths)
@@ -267,9 +268,11 @@ case class InsertIntoHadoopFsRelationCommand(
       table: CatalogTable,
       qualifiedOutputPath: Path,
       partitions: Seq[CatalogTablePartition]): Map[TablePartitionSpec, String] = {
+    val validatePartitionColumns = conf.validatePartitionColumns
     partitions.flatMap { p =>
       val defaultLocation = qualifiedOutputPath.suffix(
-        "/" + PartitioningUtils.getPathFragment(p.spec, table.partitionSchema)).toString
+        "/" + PartitioningUtils.getPathFragment(
+          p.spec, table.partitionSchema, validatePartitionColumns)).toString
       val catalogLocation = new Path(p.location).makeQualified(
         fs.getUri, fs.getWorkingDirectory).toString
       if (catalogLocation != defaultLocation) {

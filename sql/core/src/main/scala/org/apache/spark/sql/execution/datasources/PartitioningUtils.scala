@@ -357,23 +357,50 @@ object PartitioningUtils extends SQLConfHelper {
   /**
    * This is the inverse of parsePathFragment().
    */
-  def getPathFragment(spec: TablePartitionSpec, partitionSchema: StructType): String = {
+  def getPathFragment(
+      spec: TablePartitionSpec,
+      partitionSchema: StructType,
+      validatePartitionColumns: Boolean): String = {
     partitionSchema.map { field =>
       escapePathName(field.name) + "=" +
         getPartitionValueString(
-          removeLeadingZerosFromNumberTypePartition(spec(field.name), field.dataType))
+          removeLeadingZerosFromNumberTypePartition(
+            spec(field.name), field.dataType, validatePartitionColumns))
     }.mkString("/")
   }
 
-  def removeLeadingZerosFromNumberTypePartition(value: String, dataType: DataType): String =
+  def getPathFragment(spec: TablePartitionSpec, partitionSchema: StructType): String = {
+    getPathFragment(spec, partitionSchema, validatePartitionColumns = true)
+  }
+
+  def removeLeadingZerosFromNumberTypePartition(
+      value: String,
+      dataType: DataType,
+      validatePartitionColumns: Boolean): String =
     dataType match {
       case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
-        Option(castPartValueToDesiredType(dataType, value, null)).map(_.toString).orNull
+        try {
+          Option(castPartValueToDesiredType(dataType, value, null)).map(_.toString).orNull
+        } catch {
+          case _: NumberFormatException if !validatePartitionColumns =>
+            // If validation is disabled and value cannot be cast to numeric type, return as-is.
+            // This handles legacy tables with string partition values that don't match
+            // the partition column's numeric type definition.
+            // Leading zeros (e.g., "007") are still normalized to "7" since they parse.
+            value
+        }
       case _ => value
     }
 
+  def getPathFragment(
+      spec: TablePartitionSpec,
+      partitionColumns: Seq[Attribute],
+      validatePartitionColumns: Boolean): String = {
+    getPathFragment(spec, DataTypeUtils.fromAttributes(partitionColumns), validatePartitionColumns)
+  }
+
   def getPathFragment(spec: TablePartitionSpec, partitionColumns: Seq[Attribute]): String = {
-    getPathFragment(spec, DataTypeUtils.fromAttributes(partitionColumns))
+    getPathFragment(spec, partitionColumns, validatePartitionColumns = true)
   }
 
   /**

@@ -1443,6 +1443,40 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
     assert(s"p_int=${ExternalCatalogUtils.DEFAULT_PARTITION_NAME}" === path)
   }
 
+  test("SPARK-51830: insertInto with string partition values " +
+    "when validatePartitionColumns is disabled") {
+    withTempDir { base =>
+      val legacyPartitionDir = new java.io.File(base, "p_int=partition_value")
+      legacyPartitionDir.mkdirs()
+      makeParquetFile(
+        (1 to 5).map(i => ParquetData(i, s"str$i")),
+        legacyPartitionDir)
+
+      val df = spark.read.parquet(base.getCanonicalPath)
+      df.createOrReplaceTempView("legacy_table")
+
+      withTempView("legacy_table") {
+        checkAnswer(
+          sql("SELECT * FROM legacy_table"),
+          (1 to 5).map(i => Row(i, s"str$i", "partition_value")))
+
+        val newData = Seq((6, "str6")).toDF("intField", "stringField")
+        intercept[NumberFormatException] {
+          newData.write.mode("append").insertInto("legacy_table")
+        }
+
+        withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
+          newData.write.mode("append").insertInto("legacy_table")
+
+          checkAnswer(
+            sql("SELECT * FROM legacy_table ORDER BY intField"),
+            (1 to 6).map(i => Row(i, s"str$i", "partition_value")))
+        }
+      }
+    }
+  }
+
+
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
       for {
