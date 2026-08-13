@@ -4166,7 +4166,7 @@ object SQLConf {
         "reduction benefit. Disabled by default. This applies only to hash aggregation with " +
         "grouping keys.")
       .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -4177,7 +4177,7 @@ object SQLConf {
         "disables the periodic evaluation. The ratio may still be evaluated when the aggregation " +
         "map is about to spill.")
       .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
       .checkValue(_ >= 0, "The minimum row count must not be negative.")
       .createWithDefault(100000)
@@ -4191,7 +4191,7 @@ object SQLConf {
         "evaluation finds the ratio below this value, the partial aggregation is bypassed for " +
         "the rest of the input. A larger value bypasses more aggressively.")
       .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doubleConf
       .checkValue(v => v >= 1.0 && v.isFinite,
         "The minimum compaction ratio must be a finite value of at least 1.0.")

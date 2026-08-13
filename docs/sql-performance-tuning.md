@@ -194,10 +194,12 @@ When adaptive partial aggregation is enabled, hash aggregation measures the comp
 number of processed rows divided by the number of keys held in its aggregation maps) at runtime
 and, if the partial aggregation is not collapsing enough rows to be worthwhile, stops populating
 the aggregation map and passes the remaining rows through as single-row partial aggregation buffers
-for the final aggregation to merge. If the first bypassed row is a duplicate of a key already in the
-frozen map, it is emitted ahead of that key's accumulated rows, so an order-sensitive aggregate
-such as `first`/`last` can return different values. The ratio is evaluated periodically, and again
-right before the aggregation map would spill, in which case the spill is skipped entirely.
+for the final aggregation to merge. Once pass-through is active the map is frozen and its output
+always comes before the passed-through rows: rows that collide with the frozen map are held in a
+queue behind it and flushed only after it drains, so a duplicate of a key already in the map still
+merges after that key's accumulated rows, keeping an order-sensitive aggregate such as
+`first`/`last` consistent with a run that never bypasses. The ratio is evaluated periodically, and
+again right before the aggregation map would spill, in which case the spill is skipped entirely.
 
 Both evaluations use the cumulative rows and keys of the current map epoch and, once triggered,
 pass-through is not reversed for the rest of the task, so a skewed prefix biases the outcome in
@@ -227,7 +229,10 @@ evaluations start later.
     <td>
       The number of rows between periodic compaction-ratio evaluations. Setting this to
       <code>0</code> disables the periodic evaluation. The ratio may still be evaluated when the
-      aggregation map is about to spill.
+      aggregation map is about to spill. A larger value also delays the periodic evaluations, so
+      when one of them trips pass-through the frozen map tends to hold more rows; the frozen map
+      stays resident until its output is drained, so a larger value raises that transient memory
+      peak.
     </td>
     <td>4.4.0</td>
   </tr>

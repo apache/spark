@@ -201,8 +201,8 @@ class TungstenAggregationIterator(
   // A spill starts a new in-memory map epoch: the row counters restart so that epoch is judged on
   // its own rows, which lets an input whose cardinality only turns unfavorable later still be
   // passed through. Pass-through may therefore coexist with earlier spills. The output order
-  // matches the generated path: the first pass-through row is emitted before the sort-based (or
-  // map) output, and the remaining rows stream afterwards.
+  // matches the generated path: the frozen map (or sort-based) output comes first, and the
+  // pass-through rows stream afterwards.
   private def processInputs(fallbackStartsAt: (Int, Int)): Unit = {
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
@@ -243,7 +243,6 @@ class TungstenAggregationIterator(
             // `newInput` could not be inserted; stash a copy as the first pass-through row so it
             // is not lost when we drain the rest of `inputIter`.
             pendingPassThroughRow = newInput.copy()
-            passThroughTriggerPending = true
           } else {
             val sorter = hashMap.destructAndCreateExternalSorter()
             if (externalSorter == null) {
@@ -272,9 +271,6 @@ class TungstenAggregationIterator(
           if (adaptivePartialAggEnabled && processedRows == nextCheckRow) {
             if (ineffective()) {
               passThrough = true
-              // The first row consumed after the flip becomes the first pass-through row, emitted
-              // before the frozen map (or sort) output to match the generated path.
-              passThroughTriggerPending = true
             } else {
               nextCheckRow += minRows
             }
@@ -426,19 +422,13 @@ class TungstenAggregationIterator(
 
   // Indicates that partial aggregation has been bypassed and the remaining input rows should be
   // passed through as single-row partial buffers. Set in `processInputs` by either check point.
-  // It may coexist with earlier spills. The output order matches the generated path: the first
-  // pass-through row is emitted before the frozen map (or sort-based) output, and the remaining
-  // rows stream afterwards.
+  // It may coexist with earlier spills. The output order matches the generated path: the frozen
+  // map (or sort-based) output comes first, and the pass-through rows stream afterwards.
   private[this] var passThrough: Boolean = false
 
   // The row that could not be inserted at the spill check. It is stashed here (as
   // a copy) so it becomes the first pass-through row rather than being lost.
   private[this] var pendingPassThroughRow: InternalRow = null
-
-  // Whether the first pass-through row has not been emitted yet. It is emitted before the frozen
-  // map (or sort) output -- mirroring the generated path, where the first bypassed row is appended
-  // to the output buffer from inside the build loop and the maps only drain afterwards.
-  private[this] var passThroughTriggerPending: Boolean = false
 
   // A reused aggregation buffer for building single-row partial buffers during pass-through. It is
   // re-initialized from `initialAggregationBuffer` for every passed-through row.
@@ -524,21 +514,7 @@ class TungstenAggregationIterator(
 
   override final def next(): UnsafeRow = {
     if (hasNext) {
-      val res = if (passThroughTriggerPending &&
-        (pendingPassThroughRow != null || inputIter.hasNext)) {
-        // Adaptive partial aggregation bypassed partial aggregation: emit the first pass-through
-        // row before the frozen map (or sort) output, matching the generated path where the first
-        // bypassed row is appended to the output buffer from inside the build loop and the maps
-        // only drain afterwards. The remaining rows stream after the map output below. When the
-        // flip happens on the last input row there is no such row, and only the map (or sort)
-        // output remains.
-        passThroughTriggerPending = false
-        passThroughDrainStart = System.nanoTime()
-        val out = nextPassThroughOutput()
-        aggTime += NANOSECONDS.toMillis(System.nanoTime() - passThroughDrainStart)
-        passThroughDrainStart = -1L
-        out
-      } else if (sortBased && sortedInputHasNewGroup) {
+      val res = if (sortBased && sortedInputHasNewGroup) {
         // Process the current group.
         processCurrentSortedGroup()
         // Generate output row for the current group.

@@ -28,16 +28,17 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Tests for runtime adaptive partial aggregation
  * (see [[SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED]]). When a partial aggregate is not reducing
  * rows, the operator stops aggregating and streams the remaining rows through as single-row partial
- * buffers for the Final aggregate to merge. Ordinary aggregate results stay equivalent; an
- * order-sensitive aggregate such as `first`/`last` can merge its buffers in a different order, so
- * only agreement between the generated and interpreted paths is guaranteed.
+ * buffers for the Final aggregate to merge. Once pass-through is active the map is frozen, and its
+ * output always precedes the passed-through rows: a row that collides with a frozen key is held
+ * behind the map and flushed only after it drains, so every group merges its buffers in the same
+ * order as a run that never bypasses, including order-sensitive aggregates such as `first`/`last`.
  *
  * The suite has two halves:
- *   1. Correctness: ordinary aggregate results are identical to the reference (feature-off) run
- *      across the full matrix of codegen on/off, two-level map on/off, and spill/no-spill, over a
- *      range of aggregate shapes, key types, and `Expand`-bearing plans (ROLLUP / CUBE / GROUPING
- *      SETS / multi-distinct). Order-sensitive aggregates are tested separately for cross-path
- *      agreement rather than against the reference.
+ *   1. Correctness: aggregate results are identical to the reference (feature-off) run across the
+ *      full matrix of codegen on/off, two-level map on/off, and spill/no-spill, over a range of
+ *      aggregate shapes, key types, and `Expand`-bearing plans (ROLLUP / CUBE / GROUPING SETS /
+ *      multi-distinct). Order-sensitive aggregates are tested against the reference too, including
+ *      under a fan-out child that queues its whole batch behind the frozen map.
  *   2. Triggering: the `numBypassingRows` metric proves the bypass actually fires when (and only
  *      when) it should -- high-cardinality input bypasses, low-cardinality input keeps aggregating,
  *      the feature switch and eligibility rules are honored, and both check points work.
@@ -657,26 +658,31 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("both execution paths agree on an order-sensitive aggregate") {
-    // Bypassing merges a group's buffers in a different order than a run that never bypasses:
-    // the first bypassed row is emitted ahead of the frozen map, and the rows streamed after it
-    // trail the map output. That order is not a promise -- what must hold is that the generated
-    // and interpreted paths produce the *same* result, or `spark.sql.codegen.wholeStage` becomes
-    // observable. The test deliberately does not compare against a non-bypassed run.
+    // Bypassing must merge a group's buffers in the same order as a run that never bypasses: a
+    // group can straddle the freeze and hold both a map buffer and pass-through buffers, and the
+    // `Final` merges in emit order. The queue holds each passed-through row behind the frozen map
+    // and flushes it only after the map drains, so the map buffer always precedes the colliding
+    // pass-through buffers on both execution paths -- exactly the merge order of a run that never
+    // bypasses, so every enabled cell must match the feature-off reference and
+    // `spark.sql.codegen.wholeStage` must not be observable.
     //
     // The flip fires at the first periodic check: with `minRows=8` it lands on the 8th aggregated
     // row, when the map already holds 8 distinct keys (id 0 maps to -1, ids 1-7 to keys 1-7), so
     // the compaction ratio 1.0 is below `minCompaction` (1.05) and every remaining row streams;
     // id 8 is the first bypassed row. At `dupAt=8` the colliding row is that first bypassed row,
-    // so its buffer reaches the `Final` before the frozen map's and `first`/`last` invert. At
-    // `dupAt=9` the colliding row streams after the map and the group stays in input order.
-    //
-    // Both plan shapes are exercised separately. Splitting the aggregates with an `Exchange` (or
-    // not) changes how the frozen map output merges with the streamed rows -- the generated path
-    // must be told whether its output is buffered or feeds the `Final`'s `doConsume` directly.
+    // queued behind the frozen map and flushed only after the map drains, so its buffer still
+    // reaches the `Final` after the frozen map's and `first`/`last` match the merge order; at
+    // `dupAt=9` the colliding row streams directly after the map and the group stays in input
+    // order. Both plan shapes are exercised separately: splitting the aggregates with an
+    // `Exchange` (or not) changes whether streamed rows pass through
+    // `BufferedRowIterator.currentRows` or feed the `Final`'s `doConsume` directly.
     for {
       splits <- Seq(1, 2)
       derivedKey <- Seq(false, true)
       dupAt <- Seq(8, 9)
+      wholeStage <- Seq(true, false)
+      twoLevelMap <- Seq(true, false)
+      forceSpill <- Seq(true, false)
     } {
       val query = () => {
         val base = when($"id" === 0 || $"id" === dupAt, lit(-1L)).otherwise($"id")
@@ -686,45 +692,40 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           .groupBy($"k")
           .agg(first($"v") as "f", last($"v") as "l")
       }
-      val results = for {
-        wholeStage <- Seq(true, false)
-        twoLevelMap <- Seq(true, false)
-        forceSpill <- Seq(true, false)
-      } yield {
-        val spillConf = if (forceSpill) {
-          Seq("spark.sql.TungstenAggregate.testFallbackStartsAt" -> forceSpillFallback)
-        } else {
-          Nil
-        }
-        withSQLConf(
-          (Seq(
-            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
-            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
-            SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
-            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "8") ++
-            spillConf ++ fixedPlanConfs): _*) {
-          query().collect().toSeq.map(_.toString()).sorted
-        }
+      val spillConf = if (forceSpill) {
+        Seq("spark.sql.TungstenAggregate.testFallbackStartsAt" -> forceSpillFallback)
+      } else {
+        Nil
       }
-      withClue(s"splits=$splits derivedKey=$derivedKey dupAt=$dupAt: ") {
-        assert(results.distinct.length == 1,
-          s"the execution paths disagree: ${results.distinct.map(_.mkString("[", ",", "]"))}")
+      def run(enabled: Boolean): Seq[String] = withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> enabled.toString,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "8") ++
+          spillConf ++ fixedPlanConfs): _*) {
+        query().collect().toSeq.map(_.toString()).sorted
+      }
+      withClue(s"splits=$splits derivedKey=$derivedKey dupAt=$dupAt " +
+        s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap forceSpill=$forceSpill: ") {
+        assert(run(enabled = true) == run(enabled = false),
+          "adaptive partial aggregation changed an order-sensitive result")
       }
     }
   }
 
   test("fan-out below a split aggregate preserves the merge order") {
     // A `GenerateExec` expands a collection without checking `shouldStop()`, so in the
-    // exchange-split shape the whole fan-out batch of the trigger input row used to be appended
-    // before the frozen maps drained. A group whose rows straddle the freeze point then merged in
-    // a different order than a non-bypassed run, and the generated path disagreed with the
-    // interpreted one. The fan-out child reports `needCopyResult`, so the drained maps can run
-    // right after the trigger row, restoring the merge order.
+    // exchange-split shape the whole fan-out batch of the trigger input row is queued at once
+    // rather than one row at a time. Each queued row advances the frozen-map output by one row,
+    // and the queue is flushed only after the map fully drains, so a group whose rows straddle
+    // the freeze point still merges its map buffer before its pass-through buffers, matching a
+    // non-bypassed run.
     //
     // The colliding key must not be the first one the map drains: key 0 is emitted before any
     // bypassed row can overtake it, so `lit(0L)` cannot expose the interleaving. Key 6 is inserted
     // early (by id 3) but drained after keys 0-5, so a bypassed row colliding with it lands ahead
-    // of its map buffer unless the drain finishes before the fan-out batch continues.
+    // of its map buffer unless the map output still precedes the held batch.
     checkAdaptiveMatchesReference { parts =>
       spark.range(0, 20, 1, parts)
         .select($"id", explode(array(
@@ -735,11 +736,11 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("a wide fan-out drains the whole frozen map before streaming the batch") {
-    // A pass-through row must not carry one map row with it: in the split shape the frozen map
-    // interleaves with the trigger row's fan-out batch, so a colliding key in that batch is safe
-    // only if the drain already finished. This batch is four rows wide and collides twice, so any
-    // drain that stops short of the full map breaks the merge order for at least one collision.
+  test("a wide fan-out batch stays queued behind the frozen map") {
+    // A colliding key must not merge before its map buffer. This batch is four rows wide and
+    // collides twice, so the colliding pass-through rows must both wait behind the frozen map for
+    // the whole map to drain; a design that let any part of the batch escape ahead of the map
+    // breaks the merge order for at least one collision.
     checkAdaptiveMatchesReference { parts =>
       spark.range(0, 20, 1, parts)
         .select($"id", explode(array(
@@ -753,16 +754,14 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("a frozen map larger than the fan-out batch preserves the merge order") {
-    // The interleave window is as wide as the trigger row's fan-out batch, so a small map can
-    // finish draining within it; this query grows the map well past the batch width, so a drain
-    // that stops short of the whole map leaves the colliding key's buffer behind it.
-    //
-    // The generated and interpreted paths must agree on the merge order, or `wholeStage` becomes
-    // observable, so each cell compares them directly. There is no feature-off comparison: in the
-    // forced-fallback cells the colliding key's rows straddle the `Final`'s own spill, whose
-    // sort-based re-merge inverts `first`/`last` on both paths alike.
+    // The queue bounds the held rows to the batch width regardless of the map size, and the flush
+    // waits for the whole map to drain. This query grows the map well past the batch width, so a
+    // design that flushed the held rows early would leave the colliding key's map buffer behind
+    // them. Every enabled cell must match the feature-off reference, so each compares directly
+    // against a non-bypassed run, across both the generated and interpreted paths.
     for {
       splits <- Seq(1, 2)
+      wholeStage <- Seq(true, false)
       twoLevelMap <- Seq(true, false)
       forceSpill <- Seq(true, false)
     } {
@@ -779,27 +778,29 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       } else {
         Nil
       }
-      def run(wholeStage: Boolean): DataFrame = withSQLConf(
+      def run(enabled: Boolean): DataFrame = withSQLConf(
         (Seq(
-          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> enabled.toString,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
           SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "32") ++
           spillConf ++ fixedPlanConfs): _*) {
         query()
       }
-      val generated = run(wholeStage = true)
-      val interpreted = run(wholeStage = false)
-      withClue(s"splits=$splits twoLevelMap=$twoLevelMap forceSpill=$forceSpill: ") {
-        checkAnswer(generated, interpreted)
+      val reference = run(enabled = false)
+      val adaptive = run(enabled = true)
+      withClue(s"splits=$splits wholeStage=$wholeStage " +
+        s"twoLevelMap=$twoLevelMap forceSpill=$forceSpill: ") {
+        checkAnswer(adaptive, reference)
       }
     }
   }
 
   test("results unchanged below a generator that cannot yield mid-fan-out") {
-    // `GenerateExec` expands a collection without checking `shouldStop()`, so the aggregate cannot
-    // rely on the child to bound the output buffer -- each streamed row has to be able to leave
-    // the build loop on its own.
+    // `GenerateExec` expands a collection without checking `shouldStop()`, so it cannot bound the
+    // output buffer between the rows of one input row. Each passed-through row queues a copy and
+    // advances the frozen-map output by one row, so the whole fan-out batch is held behind the map
+    // and the memory is bounded by the batch width rather than by how many rows the child emits.
     checkAdaptiveMatchesReference { parts =>
       spark.range(0, 1, 1, parts)
         .select(explode(sequence(lit(1), lit(500))) as "k")
