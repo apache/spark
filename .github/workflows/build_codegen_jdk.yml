@@ -44,16 +44,20 @@ jobs:
       java: 17
       branch: master
       hadoop: hadoop3
-      # Three jobs need more time on javac. Each value below is about 20% above the
-      # slowest of three probe runs of the whole suite on this backend:
+      # Three jobs need more than their default on javac. The numbers come from three
+      # probe runs of the whole suite on this backend:
       #
       #   sql - other tests           171m on javac, 127m on Janino, default 150
       #   pyspark-sql and friends     109m on javac,  73m on Janino, default 120
       #   docker-integration-tests    116m on javac, 102m on Janino, default 120
       #
-      # The first two inputs cover a whole matrix, so the other Scala and PySpark modules
-      # get the raised cap as well. That costs nothing: none of them came near even the
-      # default, the closest being `sql - slow tests` at 124m.
+      # Each cap is the slowest run plus about 20%. The 171m is a single measurement: the
+      # two earlier probe runs cancelled that job at the 150 default, so all they say is
+      # that it costs more than 150.
+      #
+      # `build` and `pyspark` are matrices, so their other modules get the raised cap too.
+      # None of them came near even the default, the closest being `sql - slow tests` at
+      # 124m.
       build_timeout_minutes: 200
       pyspark_timeout_minutes: 130
       docker_integration_tests_timeout_minutes: 140
