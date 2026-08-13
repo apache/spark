@@ -147,7 +147,7 @@ Data source options of fixed-width files can be set via:
   <tr>
     <td><code>locale</code></td>
     <td>en-US</td>
-    <td>Sets a locale as language tag in IETF BCP 47 format, used while parsing numbers (including locale-specific decimal/grouping separators), dates, and timestamps.</td>
+    <td>Sets a locale as language tag in IETF BCP 47 format. For instance, this is used while parsing dates, timestamps, and <code>DECIMAL</code> values.</td>
     <td>read</td>
   </tr>
   <tr>

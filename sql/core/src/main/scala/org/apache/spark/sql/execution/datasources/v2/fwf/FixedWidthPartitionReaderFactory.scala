@@ -53,7 +53,11 @@ case class FixedWidthPartitionReaderFactory(
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
-    val parser = new FixedWidthParser(dataSchema, readDataSchema, options, filters)
+    val actualDataSchema = StructType(
+      dataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
+    val actualReadDataSchema = StructType(
+      readDataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
+    val parser = new FixedWidthParser(actualDataSchema, actualReadDataSchema, options, filters)
     val iter =
       FixedWidthDataSource.readFile(conf, file, colspecs, parser, options, readDataSchema)
     val fileReader = new PartitionReaderFromIterator[InternalRow](iter)

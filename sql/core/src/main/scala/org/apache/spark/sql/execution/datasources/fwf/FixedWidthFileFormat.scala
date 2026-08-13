@@ -88,9 +88,6 @@ case class FixedWidthFileFormat() extends TextBasedFileFormat with DataSourceReg
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val parsedOptions = getFwfOptions(sparkSession, options)
-    val colspecs = FixedWidthDataSource.resolveColspecsForRead(parsedOptions, dataSchema)
-    val readColspecs =
-      FixedWidthDataSource.effectiveColspecs(dataSchema, requiredSchema, colspecs)
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
@@ -99,6 +96,17 @@ case class FixedWidthFileFormat() extends TextBasedFileFormat with DataSourceReg
       throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
     }
 
+    // The corrupt-record column is virtual -- it is not a field in the file -- so drop it
+    // before resolving colspecs and constructing the parser. FailureSafeParser still sees
+    // `requiredSchema` and fills the column in. Mirrors CSVFileFormat.buildReader.
+    val actualDataSchema = StructType(
+      dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    val actualRequiredSchema = StructType(
+      requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    val colspecs = FixedWidthDataSource.resolveColspecsForRead(parsedOptions, actualDataSchema)
+    val readColspecs =
+      FixedWidthDataSource.effectiveColspecs(actualDataSchema, actualRequiredSchema, colspecs)
+
     // Don't push any filter which refers to the "virtual" column which cannot present in the
     // input. Such filters will be applied later on the upper layer.
     val actualFilters =
@@ -106,7 +114,8 @@ case class FixedWidthFileFormat() extends TextBasedFileFormat with DataSourceReg
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
-      val parser = new FixedWidthParser(dataSchema, requiredSchema, parsedOptions, actualFilters)
+      val parser = new FixedWidthParser(
+        actualDataSchema, actualRequiredSchema, parsedOptions, actualFilters)
       FixedWidthDataSource.readFile(
         conf, file, readColspecs, parser, parsedOptions, requiredSchema)
     }

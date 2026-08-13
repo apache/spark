@@ -161,6 +161,24 @@ class FixedWidthSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("columnNameOfCorruptRecord is null on good rows and captures the line on bad ones") {
+    withTempDir { dir =>
+      val path = writeFile(dir, "data.txt", Seq(header, row1, malformedRow))
+      val schemaWithCorrupt = idNameScoreSchema.add("_corrupt", StringType)
+      val df = spark.read
+        .format("fwf")
+        .option("widths", "4,10,6")
+        .option("header", "true")
+        .option("columnNameOfCorruptRecord", "_corrupt")
+        .schema(schemaWithCorrupt)
+        .load(path)
+
+      checkAnswer(df, Seq(
+        Row(1, "Alice", 95.5, null),
+        Row(9, "Zed", null, "9 Zed oops")))
+    }
+  }
+
   test("a field that fails to convert throws in FAILFAST mode") {
     withTempDir { dir =>
       val path = writeFile(dir, "data.txt", Seq(header, row1, malformedRow))
