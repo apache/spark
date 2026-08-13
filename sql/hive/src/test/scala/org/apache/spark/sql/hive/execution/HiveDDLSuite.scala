@@ -3479,4 +3479,32 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("SPARK-56822: DESCRIBE TABLE and SHOW CREATE TABLE render nanos columns with the flag on") {
+    withTable("nanos_basic_render", "nanos_basic_render_rt") {
+      // The preview flag is on by default in tests (via Utils.isTesting), so this exercises the
+      // normal happy path: create a table with nanos columns and introspect it with the flag on.
+      // SPARK-57835 covers the flag-off read-through path; this covers the basic flag-on case.
+      sql(
+        """CREATE TABLE nanos_basic_render (id INT, ntz TIMESTAMP_NTZ(9), ltz TIMESTAMP_LTZ(7))
+          |USING parquet""".stripMargin)
+
+      // DESCRIBE TABLE renders each column's type name (lowercase, with precision).
+      val describeRows = sql("DESCRIBE TABLE nanos_basic_render").collect()
+        .map(r => r.getString(0) -> r.getString(1)).toMap
+      assert(describeRows("ntz") === "timestamp_ntz(9)")
+      assert(describeRows("ltz") === "timestamp_ltz(7)")
+
+      // SHOW CREATE TABLE renders the parseable, uppercased DDL type for each column.
+      val showCreate = sql("SHOW CREATE TABLE nanos_basic_render").head().getString(0)
+      assert(showCreate.contains("TIMESTAMP_NTZ(9)"))
+      assert(showCreate.contains("TIMESTAMP_LTZ(7)"))
+
+      // Round-trip: the emitted DDL re-parses and re-creates an identical nanos schema.
+      sql(showCreate.replace("nanos_basic_render", "nanos_basic_render_rt"))
+      val rtSchema = spark.table("nanos_basic_render_rt").schema
+      assert(rtSchema("ntz").dataType === TimestampNTZNanosType(9))
+      assert(rtSchema("ltz").dataType === TimestampLTZNanosType(7))
+    }
+  }
 }
