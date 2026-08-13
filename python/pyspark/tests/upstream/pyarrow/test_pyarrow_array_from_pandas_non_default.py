@@ -167,19 +167,20 @@ class PyArrowArrayFromPandasMaskTests(
     not have_pyarrow or not have_pandas or not have_numpy,
     pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
 )
-class PyArrowArrayFromPandasTypeTests(
+class PyArrowArrayFromPandasTypeScalarTests(
     test_pyarrow_array_from_pandas_default._PyArrowFromPandasTestBase
 ):
     """
-    Tests pa.Array.from_pandas(series, type=..., safe=...) via golden file comparison.
+    Tests pa.Array.from_pandas(series, type=..., safe=...) for SCALAR target types via golden
+    file comparison.  Nested targets (list / map / struct) are covered by a separate class.
 
     Spark uses ``type=`` diagonally (source dtype and requested Arrow type share one
     schema), so this pins a focused set of rows that make type=/safe= observable rather
     than a dense source x target product: the off-diagonal cells (e.g. int -> large_binary)
     are pyarrow-construction trivia Spark never hits, and general conversion is
-    pa.Array.cast's job.  Per the cast tests, safe=True/False are two methods and two
-    goldens, not doubled columns.  ``mask`` stays None (fixed by storage backend, covered by
-    the mask tests), isolating type=/safe=.
+    pa.Array.cast's job.  safe=True/False are two methods and two goldens, not doubled
+    columns.  ``mask`` stays None (fixed by storage backend, covered by the mask tests),
+    isolating type=/safe=.
     """
 
     @staticmethod
@@ -243,8 +244,8 @@ class PyArrowArrayFromPandasTypeTests(
             overrides=overrides,
         )
 
-    def test_from_pandas_type_safe(self):
-        """Test pa.Array.from_pandas(type=..., safe=True) against golden file."""
+    def test_from_pandas_type_scalar_safe(self):
+        """Test pa.Array.from_pandas(type=<scalar>, safe=True) against golden file."""
         # pyarrow < 19 ignores the requested type on the protocol path and returns the stored
         # type (the SPARK-46776 followup), for every target.  Other sources are version-stable.
         overrides: dict[tuple[str, str], str] = {}
@@ -256,12 +257,12 @@ class PyArrowArrayFromPandasTypeTests(
                 )
         self._compare_type_matrix(
             safe=True,
-            golden_file_prefix="golden_pyarrow_array_from_pandas_type_safe",
+            golden_file_prefix="golden_pyarrow_array_from_pandas_type_scalar_safe",
             overrides=overrides,
         )
 
-    def test_from_pandas_type_unsafe(self):
-        """Test pa.Array.from_pandas(type=..., safe=False) against golden file."""
+    def test_from_pandas_type_scalar_unsafe(self):
+        """Test pa.Array.from_pandas(type=<scalar>, safe=False) against golden file."""
         # Same overrides as the safe method: the protocol drops the type request before any
         # cast, so safe=False changes none of these cells (SPARK-46776, pyarrow < 19 followup).
         overrides: dict[tuple[str, str], str] = {}
@@ -273,7 +274,7 @@ class PyArrowArrayFromPandasTypeTests(
                 )
         self._compare_type_matrix(
             safe=False,
-            golden_file_prefix="golden_pyarrow_array_from_pandas_type_unsafe",
+            golden_file_prefix="golden_pyarrow_array_from_pandas_type_scalar_unsafe",
             overrides=overrides,
         )
 
