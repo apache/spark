@@ -128,6 +128,10 @@ class V2InMemoryRelationCatalog extends InMemoryRelationCatalog {
   }
 }
 
+class StateAwareV2InMemoryRelationCatalog extends V2InMemoryRelationCatalog {
+  override def tableStateOptionKeys(): util.Set[String] = util.Set.of("snapshot")
+}
+
 class DispatchTrackingRelationCatalog extends InMemoryRelationCatalog {
   private var _loadedVersion: Option[String] = None
   private var _loadedWritePrivileges: Option[util.Set[TableWritePrivilege]] = None
@@ -248,6 +252,18 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     val writeOptions = captured.flatMap(qe => collectInMemoryWriteOptions(qe.executedPlan))
     assert(writeOptions.nonEmpty, "expected a V2 in-memory batch write")
     writeOptions.foreach(assertTargetOptions)
+  }
+
+  private def assertOnlySnapshotRelationOptions(
+      catalog: InMemoryRelationCatalog,
+      expectedSnapshot: String,
+      expectedCalls: Int): Unit = {
+    val loadOptions = catalog.loadRelationCalls
+    assert(loadOptions.size === expectedCalls,
+      s"expected $expectedCalls relation loads, got: $loadOptions")
+    assert(loadOptions.forall { options =>
+      options.size() == 1 && options.get("snapshot") == expectedSnapshot
+    }, s"expected only snapshot=$expectedSnapshot to be forwarded, got: $loadOptions")
   }
 
   test("SPARK-36680: Supports Dynamic Table Options for SQL Select") {
@@ -845,59 +861,65 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58392: options are forwarded to loadRelation - DataFrame API") {
-    registerCatalog("testrelcat", classOf[InMemoryRelationCatalog])
+  test("SPARK-58392: loadRelation receives only state options and scans keep all options") {
+    registerCatalog("testrelcat", classOf[StateAwareV2InMemoryRelationCatalog])
     val t1 = "testrelcat.ns1.ns2.table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
 
-      val relCatalog = catalog("testrelcat").asInstanceOf[InMemoryRelationCatalog]
+      val relCatalog =
+        catalog("testrelcat").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
       relCatalog.resetLoadRelationCalls()
-      spark.read.option("customOption", "customValue").table(t1)
-        .queryExecution.analyzed
+      val df = spark.read
+        .option("SnApShOt", "s1")
+        .option("split-size", "5")
+        .table(t1)
+      val relations = df.queryExecution.analyzed.collect { case r: DataSourceV2Relation => r }
 
-      val loadedOptions = relCatalog.loadRelationCalls.map(_.get("customOption"))
-      assert(loadedOptions === Seq("customValue"))
+      assertOnlySnapshotRelationOptions(relCatalog, "s1", expectedCalls = 1)
+      assert(relations.size === 1)
+      assert(relations.head.options.size() === 2)
+      assert(relations.head.options.get("snapshot") === "s1")
+      assert(relations.head.options.get("split-size") === "5")
     }
   }
 
-  test("SPARK-58392: options are forwarded for a view over a V2 table") {
-    registerCatalog("testrelcat", classOf[V2InMemoryRelationCatalog])
-    val t1 = "testrelcat.ns1.ns2.table"
+  test("SPARK-58392: loadRelation uses the table-state projection for a view") {
+    registerCatalog("testrelcat", classOf[StateAwareV2InMemoryRelationCatalog])
     val v1 = "testrelcat.ns1.ns2.view"
-    withTable(t1) {
-      withView(v1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
-        sql(s"CREATE VIEW $v1 AS SELECT * FROM $t1 WITH (`split-size` = 5)")
+    withView(v1) {
+      sql(s"CREATE VIEW $v1 AS SELECT 1 AS x")
 
-        val relCatalog = catalog("testrelcat").asInstanceOf[V2InMemoryRelationCatalog]
-        relCatalog.resetLoadRelationCalls()
-        spark.read.option("customOption", "customValue").table(v1).collect()
+      val relCatalog =
+        catalog("testrelcat").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
+      relCatalog.resetLoadRelationCalls()
+      spark.read
+        .option("snapshot", "s1")
+        .option("split-size", "5")
+        .table(v1)
+        .queryExecution
+        .analyzed
 
-        val loadCalls = relCatalog.loadRelationCalls
-        val viewOptions = loadCalls.map(_.get("customOption")).filter(_ != null)
-        val tableOptions = loadCalls.map(_.get("split-size")).filter(_ != null)
-        assert(viewOptions === Seq("customValue"))
-        assert(tableOptions === Seq("5", "5"))
-        assert(loadCalls.size === 3,
-          s"expected one view load and two V2 table loads, got: $loadCalls")
-      }
+      assertOnlySnapshotRelationOptions(relCatalog, "s1", expectedCalls = 1)
     }
   }
 
-  test("SPARK-58392: execution refresh forwards options on a plain table read") {
-    registerCatalog("loadcountingrel", classOf[V2InMemoryRelationCatalog])
-    val relCatalog = catalog("loadcountingrel").asInstanceOf[V2InMemoryRelationCatalog]
+  test("SPARK-58392: execution refresh forwards only table-state options") {
+    registerCatalog("loadcountingrel", classOf[StateAwareV2InMemoryRelationCatalog])
+    val relCatalog =
+      catalog("loadcountingrel").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
     val t1 = "loadcountingrel.ns1.ns2.table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
       relCatalog.resetLoadRelationCalls()
 
-      spark.read.option("split-size", "5").table(t1).collect()
+      spark.read
+        .option("snapshot", "s1")
+        .option("split-size", "5")
+        .table(t1)
+        .collect()
 
-      val optionAwareLoads = relCatalog.loadRelationCalls.map(_.get("split-size"))
-      assert(optionAwareLoads === Seq("5", "5"),
-        s"expected analysis and refresh to forward split-size=5, got: $optionAwareLoads")
+      assertOnlySnapshotRelationOptions(relCatalog, "s1", expectedCalls = 2)
     }
   }
 
@@ -908,8 +930,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     val ident = Identifier.of(Array("ns1", "ns2"), "table")
     val t1 = "dispatchtrackingrel.ns1.ns2.table"
     val v1 = "dispatchtrackingrel.ns1.ns2.view"
-    val options = new CaseInsensitiveStringMap(
-      util.Map.of("customOption", "customValue"))
+    val stateOptions = new CaseInsensitiveStringMap(util.Map.of("snapshot", "s1"))
 
     withTable(t1) {
       withView(v1) {
@@ -921,7 +942,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         relCatalog.loadTable(
           ident,
           new TableContext(new TimeTravel.AsOfVersion("v1"), util.Set.of()),
-          options)
+          stateOptions)
         assert(relCatalog.loadedVersion === Some("v1"))
         assert(relCatalog.loadRelationCalls.isEmpty)
 
@@ -929,15 +950,19 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         relCatalog.loadTable(
           ident,
           new TableContext(null, util.Set.of(TableWritePrivilege.INSERT)),
-          options)
+          stateOptions)
         assert(relCatalog.loadedWritePrivileges === Some(util.Set.of(TableWritePrivilege.INSERT)))
         assert(relCatalog.loadRelationCalls.isEmpty)
 
+        relCatalog.loadTable(ident, new TableContext(null, util.Set.of()), stateOptions)
+        assertOnlySnapshotRelationOptions(relCatalog, "s1", expectedCalls = 1)
+
         val viewIdent = Identifier.of(Array("ns1", "ns2"), "view")
+        relCatalog.resetLoadRelationCalls()
         intercept[NoSuchTableException] {
-          relCatalog.loadTable(viewIdent, new TableContext(null, util.Set.of()), options)
+          relCatalog.loadTable(viewIdent, new TableContext(null, util.Set.of()), stateOptions)
         }
-        assert(relCatalog.loadRelationCalls.map(_.get("customOption")) === Seq("customValue"))
+        assertOnlySnapshotRelationOptions(relCatalog, "s1", expectedCalls = 1)
       }
     }
   }
