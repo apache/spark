@@ -31,17 +31,12 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
-/**
- * Provides access to fixed-width files from pure SQL statements.
- */
 case class FixedWidthFileFormat() extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "fwf"
 
   override def toString: String = "FixedWidth"
 
-  // `skipRows` numbers rows from the start of the file, so a file read that way must be read as
-  // a single whole-file partition; see `FixedWidthDataSource.readFile`.
   override def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],
@@ -96,9 +91,6 @@ case class FixedWidthFileFormat() extends TextBasedFileFormat with DataSourceReg
       throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
     }
 
-    // The corrupt-record column is virtual -- it is not a field in the file -- so drop it
-    // before resolving colspecs and constructing the parser. FailureSafeParser still sees
-    // `requiredSchema` and fills the column in. Mirrors CSVFileFormat.buildReader.
     val actualDataSchema = StructType(
       dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     val actualRequiredSchema = StructType(

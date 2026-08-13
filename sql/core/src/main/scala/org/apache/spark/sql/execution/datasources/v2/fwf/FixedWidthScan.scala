@@ -75,9 +75,6 @@ case class FixedWidthScan(
     val actualFilters =
       pushedFilters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord))
 
-    // The corrupt-record column is virtual -- it is not a field in the file -- so drop it
-    // before resolving colspecs. The reader factory still receives the original schemas so
-    // FailureSafeParser can fill the column in. Mirrors CSVScan / CSVPartitionReaderFactory.
     val actualDataSchema = StructType(
       dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     val actualReadDataSchema = StructType(

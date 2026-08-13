@@ -28,11 +28,8 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, Pa
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 
-/** Where the field boundaries for a fixed-width file come from. */
 sealed trait FwfColSpecs
-/** Infer colspecs from a sample of the data. */
 case object InferFwfColSpecs extends FwfColSpecs
-/** Explicit half-open `(from, to)` character intervals, one per field. */
 case class ExplicitFwfColSpecs(colspecs: Seq[(Int, Int)]) extends FwfColSpecs
 
 class FixedWidthOptions(
@@ -139,13 +136,6 @@ class FixedWidthOptions(
     }
   }
 
-  /**
-   * 0-indexed row numbers to skip. An integer value skips the first N rows; a comma-separated
-   * list skips those specific row indices, anywhere in the file. Numbered before `header` is
-   * applied, so the header (if any) is the first row remaining after skipping, not necessarily
-   * row 0. Reading a file with this set disables splitting it across partitions, since a
-   * mid-file partition has no way to count rows from the start of the file.
-   */
   val skipRows: Set[Int] = parameters.get(SKIP_ROWS).map(parseSkipRows).getOrElse(Set.empty)
 
   private val colspecsParam: Option[String] = parameters.get(COLSPECS)
@@ -191,12 +181,6 @@ class FixedWidthOptions(
   val columnNameOfCorruptRecord: String =
     parameters.getOrElse(COLUMN_NAME_OF_CORRUPT_RECORD, defaultColumnNameOfCorruptRecord)
 
-  /**
-   * A [[CSVOptions]] carrying just the fields shared with CSV (`nullValue`, date/timestamp
-   * formats, time zone, locale, corrupt-record column), for `CSVInferSchema` to use so
-   * fixed-width files get the same type-inference behavior as every other file source.
-   * `CSVOptions.inferSchemaFlag` defaults to `false`, so it's forced on here.
-   */
   def toCSVOptionsShim: CSVOptions = new CSVOptions(
     parameters.toMap + ("inferSchema" -> "true"),
     columnPruning = false,

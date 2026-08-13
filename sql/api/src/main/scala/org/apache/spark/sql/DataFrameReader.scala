@@ -395,10 +395,8 @@ abstract class DataFrameReader {
    * Loads fixed-width files and returns the result as a `DataFrame`.
    *
    * This function will go through the input once to determine the input schema if no schema is
-   * specified, unless `colspecs`/`widths` are also left unspecified, in which case the column
-   * boundaries themselves are inferred from a sample of the data as well (`colspecs="infer"`,
-   * the default). To avoid going through the entire data, specify the schema explicitly using
-   * `schema`, and `colspecs` or `widths` explicitly.
+   * specified. To avoid going through the entire data, specify the schema explicitly using
+   * `schema`, and `colspecs` or `widths`.
    *
    * You can find the fixed-width-specific options for reading these files in <a
    * href="https://spark.apache.org/docs/latest/sql-data-sources-fwf.html#data-source-option">

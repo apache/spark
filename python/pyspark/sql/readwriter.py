@@ -966,13 +966,11 @@ class DataFrameReader(OptionUtils):
         encoding: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
     ) -> "DataFrame":
-        r"""Loads a fixed-width file and returns the result as a :class:`DataFrame`, the same
-        file layout read by pandas' ``read_fwf``.
+        r"""Loads a fixed-width file and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if no
-        ``schema`` is specified, unless ``colspecs``/``widths`` are also left unspecified, in
-        which case the column boundaries themselves are inferred from a sample of the data too
-        (``colspecs="infer"``, the default -- mirrors ``pandas.read_fwf``).
+        ``schema`` is specified. To avoid going through the entire data, specify the schema
+        explicitly using ``schema``, and ``colspecs`` or ``widths``.
 
         .. versionadded:: 4.4.0
 
@@ -982,17 +980,13 @@ class DataFrameReader(OptionUtils):
             string, or list of strings, for input path(s).
         colspecs : str, optional
             a comma-separated list of half-open ``from-to`` character intervals, one per field
-            (e.g. ``"0-5,5-10,10-20"``), or ``"infer"`` (the default when neither ``colspecs``
-            nor ``widths`` is given) to detect them from a sample of the data.
+            (e.g. ``"0-5,5-10,10-20"``), or ``"infer"`` to detect them from a sample of the data.
         widths : str, optional
-            a comma-separated list of contiguous field widths (e.g. ``"5,5,10"``), used instead
-            of ``colspecs`` when the fields have no gaps between them. At most one of
+            a comma-separated list of contiguous field widths (e.g. ``"5,5,10"``). At most one of
             ``colspecs`` and ``widths`` may be given.
         skiprows : int or str, optional
-            0-indexed row numbers to skip, before ``header`` is applied: either an integer number
-            of rows to skip from the start of the file, or a comma-separated string of specific
-            row numbers to skip (e.g. ``"0,2,5"``). Reading a file with ``skiprows`` set disables
-            splitting that file across multiple tasks.
+            0-indexed row numbers to skip, before ``header`` is applied: an integer (skip the
+            first N rows) or a comma-separated list of row numbers (e.g. ``"0,2,5"``).
 
         Other Parameters
         ----------------
@@ -2344,8 +2338,7 @@ class DataFrameWriter(OptionUtils):
         r"""Saves the content of the :class:`DataFrame` in fixed-width format at the specified
         path.
 
-        Requires explicit ``colspecs`` or ``widths`` -- there are no existing column boundaries
-        to infer when writing.
+        Requires explicit ``colspecs`` or ``widths``.
 
         .. versionadded:: 4.4.0
 

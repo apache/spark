@@ -52,21 +52,16 @@ LOCATION '/path/to/people/';
 
 ## Detecting column positions
 
-By default (`colspecs` unset, or explicitly `"infer"`), Spark samples the first `inferNrows`
-non-skipped lines of the data (100 by default) and infers each column's character range from
-where non-blank text consistently appears across that sample. This is convenient, but it is also
-the one part of reading a fixed-width file that genuinely depends on the data's content rather
-than a fixed dialect (unlike CSV's delimiter), so it has two consequences worth knowing about:
+By default (`colspecs` unset, or `"infer"`), Spark samples the first `inferNrows` lines
+(100 by default) and infers each column's character range from where non-blank text appears
+across that sample.
 
-* It requires Spark to infer the schema from the data; it cannot be combined with a
-  user-supplied `schema`. Pass explicit `colspecs` or `widths` if you also want to supply a
-  schema.
-* Detecting positions from only a sample means a column that's wider in some later row than in
-  every sampled row can end up truncated. Pass a larger `inferNrows`, or `colspecs`/`widths`
-  explicitly, if that's a concern for your data.
+Inferring column positions cannot be combined with a user-supplied `schema`. Pass explicit
+`colspecs` or `widths` if you also want to supply a schema. A column that is wider in a later
+row than in the sampled rows can be truncated; pass a larger `inferNrows`, or explicit
+`colspecs`/`widths`, if needed.
 
-Writing a fixed-width file always requires explicit `colspecs` or `widths` -- there are no
-existing column boundaries to infer when writing.
+Writing always requires explicit `colspecs` or `widths`.
 
 ## Data Source Option
 
@@ -99,7 +94,7 @@ Data source options of fixed-width files can be set via:
   <tr>
     <td><code>header</code></td>
     <td>false</td>
-    <td>For reading, uses the first non-skipped line as names of columns. For writing, writes the column names as the first line, padded/truncated to each column's configured width like any other row.</td>
+    <td>For reading, uses the first non-skipped line as names of columns. For writing, writes out names of columns as the first line.</td>
     <td>read/write</td>
   </tr>
   <tr>
@@ -111,7 +106,7 @@ Data source options of fixed-width files can be set via:
   <tr>
     <td><code>delimiter</code></td>
     <td></td>
-    <td>Extra character(s), beyond whitespace, treated as "blank" when detecting <code>colspecs</code> and when trimming each sliced field. Setting this replaces whitespace as the blank set entirely rather than adding to it.</td>
+    <td>Extra character(s) treated as blank when detecting <code>colspecs</code> and when trimming each sliced field. Replaces the default whitespace blank set rather than adding to it.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -155,7 +150,7 @@ Data source options of fixed-width files can be set via:
     <td>PERMISSIVE</td>
     <td>Allows a mode for dealing with corrupt records during parsing.<br>
     <ul>
-      <li><code>PERMISSIVE</code>: when it meets a corrupted record, sets malformed fields to <code>null</code> (and, if the schema has a <code>columnNameOfCorruptRecord</code> field, puts the malformed line into it) rather than dropping the whole row.</li>
+      <li><code>PERMISSIVE</code>: when it meets a corrupted record, sets malformed fields to <code>null</code>. If the schema has a <code>columnNameOfCorruptRecord</code> field, puts the malformed line into it.</li>
       <li><code>DROPMALFORMED</code>: ignores the whole corrupted record.</li>
       <li><code>FAILFAST</code>: throws an exception when it meets a corrupted record.</li>
     </ul>

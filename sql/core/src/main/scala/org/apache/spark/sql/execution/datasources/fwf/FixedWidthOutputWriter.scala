@@ -31,12 +31,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
 import org.apache.spark.sql.types._
 
-/**
- * Writes rows as fixed-width text, padded or truncated to each column's configured width and
- * concatenated with no separator. Mirrors `UnivocityGenerator`'s per-type `makeConverter` shape
- * (date/timestamp values go through `options`-configured formatters, everything else uses its
- * plain `toString`), minus the complex-type cases CSV needs and FWF does not.
- */
 class FixedWidthOutputWriter(
     val path: String,
     dataSchema: StructType,

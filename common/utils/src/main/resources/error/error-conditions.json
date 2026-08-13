@@ -4292,7 +4292,7 @@
     "subClass" : {
       "CANNOT_INFER_WITH_USER_SCHEMA" : {
         "message" : [
-          "The 'colspecs' option set to 'infer' requires Spark to infer the schema from the data, and cannot be combined with a user-supplied schema. Pass explicit 'colspecs' or 'widths' instead."
+          "Cannot infer 'colspecs' when a user-supplied schema is set. Pass explicit 'colspecs' or 'widths'."
         ]
       },
       "CONFLICTING_OPTIONS" : {
@@ -4312,7 +4312,7 @@
       },
       "REQUIRED_FOR_WRITE" : {
         "message" : [
-          "Writing fixed-width files requires explicit 'colspecs' or 'widths'; there are no existing column boundaries to infer when writing."
+          "Writing fixed-width files requires explicit 'colspecs' or 'widths'."
         ]
       },
       "WIDTH_COUNT_MISMATCH" : {

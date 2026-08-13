@@ -340,12 +340,10 @@ def fwf_dataset_example(spark: SparkSession) -> None:
     # spark is from the previous example
     sc = spark.sparkContext
 
-    # A fixed-width dataset is pointed to by path: a file where each column
-    # occupies the same fixed range of characters on every line.
+    # A fixed-width dataset is pointed to by path.
+    # The path can be either a single file or a directory of files
     path = "examples/src/main/resources/people-fwf.txt"
 
-    # By default, Spark infers both the column positions ("colspecs") and the
-    # schema from a sample of the data, the same way pandas' read_fwf does.
     df = spark.read.option("header", True).fwf(path)
     df.show()
     # +-------+---+
@@ -356,15 +354,13 @@ def fwf_dataset_example(spark: SparkSession) -> None:
     # | Justin| 19|
     # +-------+---+
 
-    # Column positions can also be given explicitly as contiguous widths...
+    # Read with explicit field widths
     df2 = spark.read.option("header", True).option("widths", "10,4").fwf(path)
 
-    # ...or as a list of "from-to" character intervals.
+    # Read with explicit from-to character intervals
     df3 = spark.read.option("header", True).option("colspecs", "0-10,10-14").fwf(path)
 
     # "output" is a folder which contains multiple fixed-width files and a _SUCCESS file.
-    # Writing requires explicit widths/colspecs -- there are no existing column
-    # boundaries to infer when writing.
     df3.write.option("widths", "10,4").fwf("output")
     # $example off:fwf_dataset$
 

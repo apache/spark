@@ -28,19 +28,6 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-/**
- * A factory used to create fixed-width readers.
- *
- * @param sqlConf SQL configuration.
- * @param broadcastedConf Broadcasted serializable Hadoop Configuration.
- * @param dataSchema Schema of the fixed-width files.
- * @param readDataSchema Required data schema in the batch scan.
- * @param partitionSchema Schema of partitions.
- * @param colspecs The resolved (never `"infer"`), already column-pruned colspecs to slice each
- *                 line with -- see `FixedWidthDataSource.effectiveColspecs`.
- * @param options Options for parsing fixed-width files.
- * @param filters Pushdown filters, already stripped of any referring to the corrupt-record column.
- */
 case class FixedWidthPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],

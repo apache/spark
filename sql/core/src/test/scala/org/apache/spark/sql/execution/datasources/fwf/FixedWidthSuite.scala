@@ -44,7 +44,6 @@ class FixedWidthSuite extends QueryTest with SharedSparkSession {
   private val row1 = fixedWidthLine(Seq("1", "Alice", "95.5"), widths)
   private val row2 = fixedWidthLine(Seq("2", "Bob", "88.0"), widths)
 
-  // Explicit schema so inference does not widen `score` to string around "oops".
   private def malformedRow: String = fixedWidthLine(Seq("9", "Zed", "oops"), widths)
   private val idNameScoreSchema = new StructType()
     .add("id", IntegerType).add("name", StringType).add("score", DoubleType)
@@ -328,7 +327,6 @@ class FixedWidthSuite extends QueryTest with SharedSparkSession {
   }
 
   test("column pruning does not drop rows") {
-    // A row is blank only if the raw line is blank, not after pruning to a subset of columns.
     withTempDir { dir =>
       val row3 = fixedWidthLine(Seq("3", "Carol", ""), widths)
       val path = writeFile(dir, "data.txt", Seq(header, row1, row2, row3))

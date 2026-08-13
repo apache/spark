@@ -35,14 +35,9 @@ import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.util.Utils
 
-/**
- * Common functions for reading fixed-width files.
- */
 object FixedWidthDataSource extends Logging {
 
-  // Carries a `colspecs="infer"` result, resolved once here from sampled file content, from
-  // `inferSchema` (which has file access) into `buildReader` (which only sees the already-resolved
-  // `dataSchema`). Explicit colspecs/widths need no such threading.
+  // Inferred colspecs are stored on each field so buildReader can recover them.
   private val COLSPEC_FROM_KEY = "org.apache.spark.sql.fwf.from"
   private val COLSPEC_TO_KEY = "org.apache.spark.sql.fwf.to"
 
@@ -68,9 +63,6 @@ object FixedWidthDataSource extends Logging {
       .map(FixedWidthUtils.sliceLine(_, colspecs, options.delimiter))
       .filterNot(FixedWidthUtils.isLineEffectivelyEmpty)
 
-    // A template row only needs the right *length*; when `header` is false `makeSafeHeader`
-    // ignores its values and synthesizes "_c0".."_cN" anyway, so falling back to a synthetic
-    // one when there's no sampled row at all still yields a correctly-sized header.
     val templateRow: Array[String] = tokenizedRows.headOption.getOrElse(
       colspecs.indices.map(i => s"_c$i").toArray)
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
@@ -96,14 +88,6 @@ object FixedWidthDataSource extends Logging {
     Some(withColspecMetadata)
   }
 
-  /**
-   * Resolves the concrete colspecs to use when actually reading data. Explicit colspecs/widths
-   * are simply re-read from the static options. A `colspecs="infer"` result can only come from
-   * this class's own `inferSchema`, which stamped the resolved boundaries into each field's
-   * metadata (see [[COLSPEC_FROM_KEY]]); there is no file access here to infer them afresh, so
-   * combining `colspecs="infer"` with a user-supplied schema (which skips `inferSchema`) is not
-   * supported.
-   */
   def resolveColspecsForRead(
       options: FixedWidthOptions,
       dataSchema: StructType): Seq[(Int, Int)] = options.colSpecs match {
@@ -134,8 +118,6 @@ object FixedWidthDataSource extends Logging {
       ).resolveRelation(checkFilesExist = false))
       .select("value").as[String](Encoders.STRING)
 
-    // Comment lines are dropped entirely, alongside `skipRows`, before header/data-row selection
-    // -- see `FixedWidthUtils.isCommentLine`.
     if (options.skipRows.isEmpty) {
       var remaining = options.inferNrows
       val candidates = df.toLocalIterator()
@@ -149,9 +131,6 @@ object FixedWidthDataSource extends Logging {
       }
       buf.toArray
     } else {
-      // Skip the configured row numbers first, then sample `inferNrows` of what's left. Enough
-      // candidate rows are pulled up front to guarantee that many survive even after the skipped
-      // and comment rows are removed.
       val candidateCount =
         math.min(Int.MaxValue.toLong, options.inferNrows.toLong + options.skipRows.max + 1).toInt
       df.take(candidateCount).zipWithIndex
@@ -161,11 +140,6 @@ object FixedWidthDataSource extends Logging {
     }
   }
 
-  /**
-   * When fewer columns are required than exist, slices only the required colspecs, saving the
-   * substring/strip work for columns nobody asked for and letting [[FixedWidthParser]] receive
-   * tokens already sized and ordered to `requiredSchema` directly.
-   */
   def effectiveColspecs(
       dataSchema: StructType,
       requiredSchema: StructType,
@@ -197,9 +171,6 @@ object FixedWidthDataSource extends Logging {
       requiredSchema,
       options.columnNameOfCorruptRecord)
 
-    // `skipRows` numbers rows from the start of the file, and the header (if any) is whichever
-    // row remains first after skipping. `lineIndex` is each line's absolute position in the file
-    // because `isSplitable` forces a whole-file partition whenever `skipRows` is non-empty.
     var lineIndex = -1
     var headerPending = file.start == 0 && options.header
     lines.flatMap { line =>

@@ -26,25 +26,25 @@ class FixedWidthOptionsSuite extends SparkFunSuite {
   private def options(parameters: (String, String)*): FixedWidthOptions =
     new FixedWidthOptions(Map(parameters: _*), "UTC")
 
-  test("neither colspecs nor widths given defaults to inference") {
+  test("default is infer") {
     assert(options().colSpecs === InferFwfColSpecs)
   }
 
-  test("colspecs=\"infer\" (case-insensitive) resolves to inference") {
+  test("colspecs infer is case-insensitive") {
     assert(options("colspecs" -> "INFER").colSpecs === InferFwfColSpecs)
   }
 
-  test("widths are converted to contiguous colspecs") {
+  test("widths to colspecs") {
     assert(options("widths" -> "5,5,10").colSpecs ===
       ExplicitFwfColSpecs(Seq((0, 5), (5, 10), (10, 20))))
   }
 
-  test("explicit colspecs are parsed as half-open intervals") {
+  test("parse colspecs") {
     assert(options("colspecs" -> "0-5,5-10,10-20").colSpecs ===
       ExplicitFwfColSpecs(Seq((0, 5), (5, 10), (10, 20))))
   }
 
-  test("giving both explicit colspecs and widths is rejected") {
+  test("conflicting colspecs and widths") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         options("colspecs" -> "0-5,5-10", "widths" -> "5,5")
@@ -53,12 +53,12 @@ class FixedWidthOptionsSuite extends SparkFunSuite {
       parameters = Map.empty)
   }
 
-  test("widths alongside colspecs=\"infer\" is allowed -- widths simply wins") {
+  test("widths wins over colspecs infer") {
     assert(options("colspecs" -> "infer", "widths" -> "5,5").colSpecs ===
       ExplicitFwfColSpecs(Seq((0, 5), (5, 10))))
   }
 
-  test("malformed widths raise a clear error") {
+  test("malformed widths") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         options("widths" -> "5,abc")
@@ -67,7 +67,7 @@ class FixedWidthOptionsSuite extends SparkFunSuite {
       parameters = Map("value" -> "5,abc"))
   }
 
-  test("malformed colspecs raise a clear error") {
+  test("malformed colspecs") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         options("colspecs" -> "0-5,notapair")
@@ -76,7 +76,7 @@ class FixedWidthOptionsSuite extends SparkFunSuite {
       parameters = Map("value" -> "0-5,notapair"))
   }
 
-  test("a non-integer inferNrows raises a clear error") {
+  test("non-integer inferNrows") {
     checkError(
       exception = intercept[SparkRuntimeException] {
         options("inferNrows" -> "abc")
@@ -85,7 +85,7 @@ class FixedWidthOptionsSuite extends SparkFunSuite {
       parameters = Map("paramName" -> "inferNrows", "value" -> "abc"))
   }
 
-  test("a non-boolean header raises a clear error") {
+  test("non-boolean header") {
     checkError(
       exception = intercept[SparkException] {
         options("header" -> "yes")
@@ -105,16 +105,16 @@ class FixedWidthOptionsSuite extends SparkFunSuite {
     assert(opts.skipRows === Set.empty)
   }
 
-  test("skipRows as a single integer skips that many rows from the start") {
+  test("skipRows as an integer") {
     assert(options("skipRows" -> "3").skipRows === Set(0, 1, 2))
     assert(options("skipRows" -> "0").skipRows === Set.empty)
   }
 
-  test("skipRows as a comma-separated list skips those specific row numbers") {
+  test("skipRows as a list") {
     assert(options("skipRows" -> "0,2,5").skipRows === Set(0, 2, 5))
   }
 
-  test("a negative skipRows integer is rejected") {
+  test("negative skipRows") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         options("skipRows" -> "-1")
@@ -123,7 +123,7 @@ class FixedWidthOptionsSuite extends SparkFunSuite {
       parameters = Map("value" -> "-1"))
   }
 
-  test("a malformed skipRows value is rejected") {
+  test("malformed skipRows") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         options("skipRows" -> "a,b")
@@ -137,7 +137,7 @@ class FixedWidthOptionsSuite extends SparkFunSuite {
     assert(options("mode" -> "FAILFAST").parseMode === FailFastMode)
   }
 
-  test("toCSVOptionsShim forwards shared fields and forces schema inference on") {
+  test("toCSVOptionsShim") {
     val shim = options("nullValue" -> "NA", "dateFormat" -> "yyyy/MM/dd").toCSVOptionsShim
     assert(shim.nullValue === "NA")
     assert(shim.dateFormatInRead.contains("yyyy/MM/dd"))

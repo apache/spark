@@ -29,15 +29,6 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-/**
- * Converts one tokenized fixed-width row (`Array[String]`, produced by
- * [[FixedWidthUtils.sliceLine]]) into an [[InternalRow]], mirroring `UnivocityParser`'s
- * `makeConverter`/`convert` shape for primitive types (no complex types).
- *
- * @param dataSchema The full schema of the fixed-width data.
- * @param requiredSchema The subset of `dataSchema` that should be produced for each row.
- * @param filters Pushdown filters to apply to converted values.
- */
 class FixedWidthParser(
     dataSchema: StructType,
     requiredSchema: StructType,
@@ -55,14 +46,9 @@ class FixedWidthParser(
 
   private type ValueConverter = String => Any
 
-  // When fewer columns are required than exist, `FixedWidthDataSource.effectiveColspecs` slices
-  // only the required colspecs from each line, so the tokens this parser receives are already
-  // sized and ordered to `requiredSchema`, not `dataSchema`.
   private val columnPruning: Boolean = requiredSchema.length < dataSchema.length
   private val parsedSchema: StructType = if (columnPruning) requiredSchema else dataSchema
 
-  // Reorders/selects tokens (indexed against `dataSchema`) into `requiredSchema`'s order; unused
-  // when `columnPruning` is enabled, since the tokens are already in `requiredSchema`'s order.
   private val tokenIndexArr = requiredSchema.map(f => dataSchema.indexOf(f)).toArray
 
   private val getToken: (Array[String], Int) => String = if (columnPruning) {
@@ -94,10 +80,6 @@ class FixedWidthParser(
   private val valueConverters: Array[ValueConverter] =
     requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
 
-  /**
-   * Creates a converter from a raw string field to a value of the desired type. Supports the
-   * same set of primitive types as CSV's `UnivocityParser.makeConverter` (no complex types).
-   */
   def makeConverter(name: String, dataType: DataType, nullable: Boolean = true): ValueConverter =
     dataType match {
       case _: ByteType => (d: String) => nullSafeDatum(d, name, nullable)(_.toByte)
@@ -149,14 +131,6 @@ class FixedWidthParser(
     }
   }
 
-  /**
-   * Converts one tokenized row into a result row, or `None` if the row is malformed and could
-   * not be converted at all, or if it was eliminated by a pushed-down filter. Throws
-   * [[BadRecordException]] on a per-field conversion failure or a field-count mismatch; the
-   * caller (typically a [[FailureSafeParser]]) applies the configured [[ParseMode]] to that
-   * exception. As soon as a pushed filter can be evaluated against the fields converted so far
-   * and fails, remaining fields are left `null` and the row is discarded at the end.
-   */
   def parse(tokens: Array[String]): Option[InternalRow] = {
     var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
       Some(LazyBadRecordCauseWrapper(

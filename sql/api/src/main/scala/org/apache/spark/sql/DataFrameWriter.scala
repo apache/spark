@@ -447,8 +447,7 @@ abstract class DataFrameWriter[T] {
    *   format("fwf").save(path)
    * }}}
    *
-   * Requires explicit `colspecs` or `widths` -- there are no existing column boundaries to infer
-   * when writing.
+   * Requires explicit `colspecs` or `widths`.
    *
    * You can find the fixed-width-specific options for writing these files in <a
    * href="https://spark.apache.org/docs/latest/sql-data-sources-fwf.html#data-source-option">
