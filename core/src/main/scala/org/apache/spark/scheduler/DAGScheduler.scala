@@ -757,6 +757,19 @@ private[spark] class DAGScheduler(
       sc.env.streamingShuffleOutputTracker match {
         case some @ Some(_) => some.map(_.asInstanceOf[StreamingShuffleOutputTrackerMaster])
         case None =>
+          // Defense-in-depth, and currently UNREACHABLE by construction. This throw guards the
+          // state "a manager declares it needs a tracker (usesStreamingShuffleOutputTracker) yet
+          // none exists." But SparkEnv.initializeStreamingShuffleOutputTracker reads the SAME flag
+          // to decide whether to CREATE the tracker: flag true => a tracker was created => this
+          // `None` arm is not taken; flag false => usesTracker is false below => no throw. So with
+          // all three current managers (RPC streaming true, channel false, and any test double) the
+          // flag is constant and the two decisions are locked consistent -- usesTracker is always
+          // false when this arm is reached. The guard is kept deliberately: it costs nothing on the
+          // hot path and would fail loud rather than register a pipelined shuffle in no tracker
+          // (stranding its consumer) IF the two sites ever diverged -- e.g. a future manager whose
+          // flag is not constant, or a wiring change that builds the tracker conditionally. If the
+          // two flag reads are ever unified (SparkEnv the sole reader, this arm trusting only
+          // tracker presence), delete this branch; see the feasibility doc's decoupling section.
           val usesTracker = SparkEnv.get.pipelinedShuffleManager.usesStreamingShuffleOutputTracker
           if (usesTracker) {
             throw new IllegalStateException(
