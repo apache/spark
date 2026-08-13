@@ -35,7 +35,3 @@ jobs:
       github.repository == 'apache/spark'
       || github.ref != 'refs/heads/master'
     uses: ./.github/workflows/build_and_test.yml
-    # Probe only, reverted with the rest of the JDK-codegen probe: this branch runs every
-    # module on the javac backend, where `sql - other tests` does not fit in the 150 default.
-    with:
-      build_timeout_minutes: 300
