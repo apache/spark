@@ -130,13 +130,14 @@ class TestCustomMetricDriverComponents(delegate: ShuffleDriverComponents)
 
   override def cleanupApplication(): Unit = delegate.cleanupApplication()
 
-  override def supportedCustomMetrics(): Array[CustomShuffleMetric] = Array(
-    new CustomShuffleMetric {
-      override def name(): String = TestCustomMetricShuffleDataIO.MetricName
-      override def description(): String = "test shuffle bytes uploaded"
-      override def metricType(): CustomShuffleMetric.MetricType =
-        CustomShuffleMetric.MetricType.SIZE
-    })
+  override def supportedCustomMetrics(): Array[CustomShuffleMetric] =
+    Array(new TestShuffleBytesUploadedMetric)
+}
+
+class TestShuffleBytesUploadedMetric extends CustomShuffleMetric {
+  override def name(): String = TestCustomMetricShuffleDataIO.MetricName
+  override def description(): String = "test shuffle bytes uploaded"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = taskMetrics.sum.toString
 }
 
 /**
@@ -159,10 +160,12 @@ class TestCollidingMetricDriverComponents(delegate: ShuffleDriverComponents)
 
   override def cleanupApplication(): Unit = delegate.cleanupApplication()
 
-  override def supportedCustomMetrics(): Array[CustomShuffleMetric] = Array(
-    new CustomShuffleMetric {
-      override def name(): String = SHUFFLE_RECORDS_WRITTEN
-      override def description(): String = "colliding shuffle records written"
-      override def metricType(): CustomShuffleMetric.MetricType = CustomShuffleMetric.MetricType.SUM
-    })
+  override def supportedCustomMetrics(): Array[CustomShuffleMetric] =
+    Array(new TestCollidingShuffleMetric)
+}
+
+class TestCollidingShuffleMetric extends CustomShuffleMetric {
+  override def name(): String = SHUFFLE_RECORDS_WRITTEN
+  override def description(): String = "colliding shuffle records written"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = taskMetrics.sum.toString
 }

@@ -21,37 +21,32 @@ import org.apache.spark.annotation.Private;
 
 /**
  * :: Private ::
- * A custom shuffle metric.
+ * A custom shuffle metric. A shuffle plugin can define supported custom metrics using this
+ * interface. Spark will collect the task metrics using {@link CustomShuffleTaskMetric} and combine
+ * the metrics at the driver side. How to combine task metrics is defined by the metric class with
+ * the same metric name.
+ *
+ * When Spark needs to aggregate task metrics, it will internally construct the instance of the
+ * custom metric class using reflection. Spark requires the class implementing this interface to
+ * have a 0-arg constructor.
  *
  * @since 4.3.0
  */
 @Private
 public interface CustomShuffleMetric {
 
-  enum MetricType {
-    /** Count rendered as a plain number. */
-    SUM,
-    /** A byte size, rendered in human-readable units. */
-    SIZE,
-    /** A duration in milliseconds. */
-    TIMING,
-    /** A duration in nanoseconds. */
-    NS_TIMING
-  }
-
   /**
-   * The name of this metric. Must match the name reported by the corresponding
-   * {@link CustomShuffleTaskMetric} so per-task values can be matched to this declaration.
+   * Returns the name of custom shuffle metric.
    */
   String name();
 
   /**
-   * A human-readable description of this metric.
+   * Returns the description of custom shuffle metric.
    */
   String description();
 
   /**
-   * Selects how the per-task values, once summed across tasks, are rendered in the UI.
+   * Given an array of task metric values, returns aggregated final metric value.
    */
-  MetricType metricType();
+  String aggregateTaskMetrics(long[] taskMetrics);
 }

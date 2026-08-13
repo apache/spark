@@ -24,6 +24,28 @@ import org.apache.spark.shuffle.api.metric.{CustomShuffleMetric, CustomShuffleTa
 
 object CustomShuffleMetrics extends Logging {
 
+  private[spark] val SHUFFLE_CUSTOM = "shuffleCustom"
+
+  /**
+   * Given a custom shuffle metric, builds and returns a metric type for a `CustomShuffleMetric`
+   * class.
+   */
+  def buildMetricTypeName(metric: CustomShuffleMetric): String = {
+    s"${SHUFFLE_CUSTOM}_${metric.getClass.getName}"
+  }
+
+  /**
+   * Given a custom shuffle metric type name, this method parses it and returns the corresponding
+   * `CustomShuffleMetric` class name.
+   */
+  def parseMetricType(metricType: String): Option[String] = {
+    if (metricType.startsWith(s"${SHUFFLE_CUSTOM}_")) {
+      Some(metricType.drop(SHUFFLE_CUSTOM.length + 1))
+    } else {
+      None
+    }
+  }
+
   /**
    * Creates collision-filtered custom shuffle metric [[SQLMetric]]s for an operator that already
    * exposes the given Spark-owned metric names. Plugin metrics whose names collide with a
@@ -51,15 +73,7 @@ object CustomShuffleMetrics extends Logging {
       sc: SparkContext,
       metrics: Array[CustomShuffleMetric]): Map[String, SQLMetric] = {
     metrics.map { metric =>
-      val label = metric.description()
-      val acc = metric.metricType() match {
-        case CustomShuffleMetric.MetricType.SUM => SQLMetrics.createMetric(sc, label)
-        case CustomShuffleMetric.MetricType.SIZE => SQLMetrics.createSizeMetric(sc, label)
-        case CustomShuffleMetric.MetricType.TIMING => SQLMetrics.createTimingMetric(sc, label)
-        case CustomShuffleMetric.MetricType.NS_TIMING =>
-          SQLMetrics.createNanoTimingMetric(sc, label)
-      }
-      metric.name() -> acc
+      metric.name() -> SQLMetrics.createShuffleCustomMetric(sc, metric)
     }.toMap
   }
 
