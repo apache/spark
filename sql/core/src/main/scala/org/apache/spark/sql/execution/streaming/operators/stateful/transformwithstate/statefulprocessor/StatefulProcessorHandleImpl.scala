@@ -195,6 +195,15 @@ class StatefulProcessorHandleImpl(
   }
 
   /**
+   * Return expired timers through a cached native iterator. RTM invokes this once per input row,
+   * so reusing the iterator avoids allocating native scan resources for every row.
+   */
+  def getExpiredTimersReusableIterator(expiryTimestampMs: Long): Iterator[(Any, Long)] = {
+    verifyTimerOperations("get_expired_timers")
+    timerState.getExpiredTimersReusable(expiryTimestampMs)
+  }
+
+  /**
    * Function to list all the registered timers for given implicit key
    * Note: calling listTimers() within the `handleInputRows` method of the StatefulProcessor
    * will return all the unprocessed registered timers, including the one being fired within the

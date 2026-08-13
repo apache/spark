@@ -300,7 +300,10 @@ case class TransformWithStateExec(
         override def next(): InternalRow = itr.next()
         private def getIterator(): Iterator[InternalRow] = {
           processTimers(
-            timeMode, Some(LowLatencyClock.getClock.getTimeMillis()), processorHandle)
+            timeMode,
+            Some(LowLatencyClock.getClock.getTimeMillis()),
+            processorHandle,
+            useReusableIterator = true)
         }
       }
 
@@ -353,18 +356,22 @@ case class TransformWithStateExec(
   private def processTimers(
       timeMode: TimeMode,
       currentProcessingTimeMs: Option[Long],
-      processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
+      processorHandle: StatefulProcessorHandleImpl,
+      useReusableIterator: Boolean = false): Iterator[InternalRow] = {
     val numExpiredTimers = longMetric("numExpiredTimers")
-    // SPARK-56566: Timers are always scanned without a lower bound (full scan up to the current
-    // batch timestamp / eviction watermark). We intentionally do not pass
-    // prevBatchTimestampMs / lateEventsWatermark as the exclusive lower bound here:
-    // registerTimer has no guard on the registered expiry, so a user-registered timer with expiry
-    // at or below the previous batch's lower bound would be silently dropped by a bounded scan.
-    // Revisit once registerTimer enforces ts > currentBatchTimestamp / watermark.
+    def getExpiredTimers(expiryTimestampMs: Long): Iterator[(Any, Long)] = {
+      if (useReusableIterator) {
+        processorHandle.getExpiredTimersReusableIterator(expiryTimestampMs)
+      } else {
+        processorHandle.getExpiredTimers(expiryTimestampMs)
+      }
+    }
+    // The final batch scan has no lower bound. RTM's reusable per-row scan resumes from its
+    // previous expiration threshold to avoid repeatedly scanning older timer entries.
     timeMode match {
       case ProcessingTime =>
         assert(currentProcessingTimeMs.isDefined)
-        processorHandle.getExpiredTimers(currentProcessingTimeMs.get)
+        getExpiredTimers(currentProcessingTimeMs.get)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             numExpiredTimers += 1
             handleTimerRows(
@@ -374,7 +381,7 @@ case class TransformWithStateExec(
       case EventTime =>
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
-        processorHandle.getExpiredTimers(watermark)
+        getExpiredTimers(watermark)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             numExpiredTimers += 1
             handleTimerRows(

@@ -18,13 +18,14 @@
 package org.apache.spark.sql.kafka010
 
 import java.util.UUID
+import java.util.regex.Pattern
 
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkIllegalStateException}
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.datasources.v2.LowLatencyClock
+import org.apache.spark.sql.execution.datasources.v2.{LowLatencyClock, RealTimeStreamScanExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
@@ -241,6 +242,44 @@ class KafkaRealTimeModeSuite
           ("a", 3L), ("b", 2L), ("b", 3L)),
         WaitUntilCurrentBatchProcessed)
     }
+  }
+
+  test("transformWithState remains in real-time mode when latestOffset returns null") {
+    val topic = newTopic()
+
+    val counts = spark.readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribePattern", "^" + Pattern.quote(topic) + "$")
+      .option("startingOffsets", "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .groupByKey(identity)
+      .transformWithState(
+        new KafkaRunningCountStatefulProcessor,
+        TimeMode.None(),
+        Update)
+
+    testStream(counts, Update, sink = new ContinuousMemorySink())(
+      StartStream(),
+      WaitUntilBatchProcessed(0),
+      Execute { q =>
+        val plan = q.lastExecution.executedPlan
+        assert(plan.collect { case _: RealTimeStreamScanExec => true }.isEmpty, plan)
+        val statefulOperators = plan.collect { case t: TransformWithStateExec => t }
+        assert(statefulOperators.size == 1, plan)
+        assert(statefulOperators.head.isRealTimeMode, plan)
+      },
+      new ExternalAction() {
+        override def runAction(): Unit = {
+          testUtils.createTopic(topic, partitions = 1)
+          testUtils.sendMessages(topic, Array("a"))
+        }
+      },
+      CheckAnswerWithTimeout(60000, ("a", 1L)),
+      StopStream)
   }
 
   // A simple unit test that reads from Kakfa source, does a simple map and writes to memory

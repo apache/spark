@@ -4060,7 +4060,7 @@ object SQLConf {
     .internal()
     .doc("The threshold in milliseconds to perform eviction of TTL when using the JVM " +
       "transformWithState operator with real-time mode.")
-    .version("4.4.0")
+    .version("4.3.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .longConf
     .createWithDefault(1 * 1000)

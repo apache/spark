@@ -431,6 +431,7 @@ class IncrementalExecution(
           prevBatchTimestampMs = prevOffsetSeqMetadata.map(_.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
+          isRealTimeMode = IncrementalExecution.this.isRealTimeMode,
           hasInitialState = hasInitialState
         )
 

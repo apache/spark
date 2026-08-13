@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.streaming
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.sql.Timestamp
 import java.time.Duration
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{
-  SparkConf, SparkException, SparkRuntimeException, SparkThrowable, TaskContext}
+  SparkConf, SparkException, SparkRuntimeException, SparkThrowable, TaskContext, TaskContextImpl}
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.datasources.v2.{LowLatencyClock, RealTimeStreamScanExec}
@@ -31,7 +35,8 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{
-  EnableStateStoreRowChecksum, RocksDBConf, RocksDBStateStoreProvider}
+  EnableStateStoreRowChecksum, OperatorStateMetadataReader, OperatorStateMetadataV2,
+  OperatorStateMetadataWriter, RocksDBConf, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.{GlobalSingletonManualClock, StreamManualClock}
@@ -217,6 +222,38 @@ private class RealTimeProcessingTimerValueProcessor
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, Long)] = {
     Iterator.single((key, "timer", timerValues.getCurrentProcessingTimeInMs()))
+  }
+}
+
+private object TaskCompletionListenerCount {
+  private lazy val listenerStackField = {
+    val field = classOf[TaskContextImpl].getDeclaredField("onCompleteCallbacks")
+    field.setAccessible(true)
+    field
+  }
+
+  def get(): Int = listenerStackField.get(TaskContext.get())
+    .asInstanceOf[java.util.Stack[_]].size()
+}
+
+private class RealTimeTimerIteratorListenerProcessor
+  extends StatefulProcessor[String, (String, Int), (Int, Boolean)] {
+
+  private var previousListenerCount = -1
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, Int)],
+      timerValues: TimerValues): Iterator[(Int, Boolean)] = {
+    inputRows.map { case (_, value) =>
+      val listenerCount = TaskCompletionListenerCount.get()
+      val listenerCountIncreased =
+        previousListenerCount >= 0 && listenerCount > previousListenerCount
+      previousListenerCount = listenerCount
+      (value, listenerCountIncreased)
+    }
   }
 }
 
@@ -483,6 +520,32 @@ private object RealTimeInitialStateFailure {
   @volatile var enabled: Boolean = false
 }
 
+private object RealTimeInitialStateBootstrapBlock {
+  @volatile private var enabled = false
+  @volatile private var taskStarted = new CountDownLatch(0)
+  @volatile private var releaseTask = new CountDownLatch(0)
+
+  def enable(): Unit = {
+    taskStarted = new CountDownLatch(1)
+    releaseTask = new CountDownLatch(1)
+    enabled = true
+  }
+
+  def awaitTaskStart(): Boolean = taskStarted.await(1, TimeUnit.MINUTES)
+
+  def awaitReleaseIfEnabled(): Unit = {
+    if (enabled) {
+      taskStarted.countDown()
+      releaseTask.await()
+    }
+  }
+
+  def disable(): Unit = {
+    enabled = false
+    releaseTask.countDown()
+  }
+}
+
 class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
   import testImplicits._
 
@@ -522,6 +585,7 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
       // scheduling independently from the later pipelined RTM batches.
       .repartition(12, $"_1")
       .map { value =>
+        RealTimeInitialStateBootstrapBlock.awaitReleaseIfEnabled()
         if (RealTimeInitialStateFailure.enabled) {
           throw new RuntimeException("injected initial-state bootstrap failure")
         }
@@ -829,6 +893,70 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
     }
   }
 
+  test("RTM recovery ignores uncommitted current-batch operator metadata") {
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+        SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+      withTempDir { checkpointDir =>
+        val (input, clock) = createMemoryStream(numPartitions = 1)
+        val checkpoint = checkpointDir.getCanonicalPath
+        val result = input.toDS()
+          .groupByKey(_._1)
+          .transformWithState(
+            new RealTimeEagerCountProcessor,
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+          StartStream(checkpointLocation = checkpoint),
+          AddData(input, ("a", 1)),
+          CheckAnswerWithTimeout(60.seconds.toMillis, ("a", 1L)),
+          advanceClock(clock),
+          WaitUntilBatchProcessed(0),
+          StopStream
+        )
+
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val operatorStatePath = new Path(checkpoint, "state/0")
+        val committedMetadata = OperatorStateMetadataReader.createReader(
+          operatorStatePath,
+          hadoopConf,
+          version = 2,
+          batchId = 0).read().getOrElse {
+          fail("missing committed operator metadata for batch 0")
+        }.asInstanceOf[OperatorStateMetadataV2]
+
+        val invalidSchemaFile = checkpointDir.toPath.resolve("invalid-uncommitted-schema")
+        Files.write(invalidSchemaFile, "not a state schema".getBytes(StandardCharsets.UTF_8))
+        val uncommittedMetadata = committedMetadata.copy(
+          stateStoreInfo = committedMetadata.stateStoreInfo.map { storeInfo =>
+            storeInfo.copy(stateSchemaFilePaths = List(invalidSchemaFile.toString))
+          })
+        OperatorStateMetadataWriter.createWriter(
+          operatorStatePath,
+          hadoopConf,
+          version = 2,
+          currentBatchId = Some(1L)).write(uncommittedMetadata)
+
+        val uncommittedMetadataFile = checkpointDir.toPath.resolve("state/0/_metadata/v2/1")
+        assert(Files.isRegularFile(uncommittedMetadataFile))
+
+        testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+          StartStream(checkpointLocation = checkpoint),
+          AddData(input, ("a", 2)),
+          CheckAnswerWithTimeout(60.seconds.toMillis, ("a", 2L)),
+          Execute { q =>
+            assert(q.lastExecution.currentBatchId == 1L)
+            assert(Files.isRegularFile(uncommittedMetadataFile))
+          },
+          advanceClock(clock),
+          WaitUntilBatchProcessed(1),
+          StopStream
+        )
+      }
+    }
+  }
+
   test("runs transformWithState across multiple state store partitions") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
       val (input, _) = createMemoryStream(numPartitions = 3)
@@ -943,6 +1071,31 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
         AddData(input, ("b", 1)),
         CheckAnswerWithTimeout(
           60.seconds.toMillis, ("a", "data"), ("b", "data"), ("a", "timer")),
+        StopStream
+      )
+    }
+  }
+
+  test("reuses one timer iterator task listener across RTM input rows") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val (input, _) = createMemoryStream(numPartitions = 1)
+      val result = input.toDS()
+        .groupByKey(_._1)
+        .transformWithState(
+          new RealTimeTimerIteratorListenerProcessor,
+          TimeMode.ProcessingTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+        StartStream(),
+        AddData(input, ("a", 1), ("a", 2), ("a", 3)),
+        // The first timer scan adds the reusable iterator's completion listener. Later scans
+        // refresh that iterator and must not add another listener.
+        CheckAnswerWithTimeout(
+          60.seconds.toMillis,
+          (1, false),
+          (2, true),
+          (3, false)),
         StopStream
       )
     }
@@ -1517,6 +1670,41 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
           60.seconds.toMillis, ("b", "1"), ("c", "1"), ("a", "105000")),
         StopStream
       )
+    }
+  }
+
+  test("initial-state bootstrap batch does not use pipelined shuffle") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      val (input, _) = createMemoryStream(numPartitions = 2)
+      val result = transformWithInitialState(input, Seq("a" -> 2L, "b" -> 5L))
+
+      RealTimeInitialStateBootstrapBlock.enable()
+      try {
+        testStream(result, OutputMode.Update(), sink = new ContinuousMemorySink())(
+          StartStream(),
+          Execute { q =>
+            try {
+              assert(RealTimeInitialStateBootstrapBlock.awaitTaskStart())
+              val execution = q.lastExecution
+              assert(execution.currentBatchId == 0L)
+              val plan = execution.executedPlan
+              val scans = plan.collect { case scan: RealTimeStreamScanExec => scan }
+              assert(scans.nonEmpty)
+              assert(scans.forall(_.batchDurationMs == 0L))
+
+              val shuffles = plan.collect { case exchange: ShuffleExchangeExec => exchange }
+              assert(shuffles.nonEmpty)
+              assert(shuffles.forall(!_.pipelined))
+            } finally {
+              RealTimeInitialStateBootstrapBlock.disable()
+            }
+          },
+          WaitUntilBatchProcessed(0),
+          StopStream
+        )
+      } finally {
+        RealTimeInitialStateBootstrapBlock.disable()
+      }
     }
   }
 
