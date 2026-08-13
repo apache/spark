@@ -645,6 +645,17 @@ class SparkContext(config: SparkConf) extends Logging {
       _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
     }
 
+    // Wire the shuffle TTL cleaner (which lives in the driver MapOutputTrackerMaster, created back
+    // in SparkEnv before ShuffleDriverComponents exist) to the normal shuffle-removal path, so
+    // reaping a stale shuffle reclaims on-disk blocks on executors/ESS rather than only forgetting
+    // the driver-side metadata.
+    _env.mapOutputTracker match {
+      case mapOutputTrackerMaster: MapOutputTrackerMaster =>
+        mapOutputTrackerMaster.shuffleFileRemover =
+          Some(shuffleId => _shuffleDriverComponents.removeShuffle(shuffleId, false))
+      case _ =>
+    }
+
     if (_conf.get(UI_REVERSE_PROXY)) {
       val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL).getOrElse("").stripSuffix("/")
       System.setProperty("spark.ui.proxyBase", proxyUrl + "/proxy/" + _applicationId)

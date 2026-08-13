@@ -808,6 +808,13 @@ private[spark] class MapOutputTrackerMaster(
   // a timestamp.
   private[spark] val shuffleAccessTime = new ConcurrentHashMap[Int, Long]
 
+  // Hook used by the shuffle TTL cleaner to reclaim a shuffle's on-disk blocks through the normal
+  // removal path (ShuffleDriverComponents.removeShuffle -> RemoveShuffle RPC to executors/ESS).
+  // Wired by SparkContext, which owns the ShuffleDriverComponents; the tracker itself is created in
+  // SparkEnv before those exist. When unset the cleaner still unregisters the driver-side status but
+  // cannot delete executor disk, so this must be wired for the shuffle TTL to actually reclaim space.
+  @volatile private[spark] var shuffleFileRemover: Option[Int => Unit] = None
+
   // The size at which we use Broadcast to send the map output statuses to the executors
   private val minSizeForBroadcast = conf.get(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST).toInt
 
@@ -906,7 +913,15 @@ private[spark] class MapOutputTrackerMaster(
                   // access (updateShuffleAtime) in that window means the shuffle is back in use and
                   // must not be reaped. remove(key, value) is a no-op when the value differs.
                   if (shuffleAccessTime.remove(shuffleId, atime)) {
-                    unregisterAllMapAndMergeOutput(shuffleId)
+                    // Route through the normal shuffle-removal path (mirrors
+                    // ContextCleaner.doCleanupShuffle): reclaim on-disk blocks on executors/ESS
+                    // first, then drop the driver-side ShuffleStatus. Removing before unregistering
+                    // matters so blocks served by the shuffle service on deallocated executors are
+                    // still found. If the remover hook isn't wired we can't reclaim executor disk,
+                    // but we still unregister the status (which also drops the shuffleAccessTime
+                    // entry -- a no-op here since we just removed it).
+                    shuffleFileRemover.foreach(_(shuffleId))
+                    unregisterShuffle(shuffleId)
                   }
                 } catch {
                   case NonFatal(e) =>
@@ -1043,6 +1058,11 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Boolean = {
+    // A map task completing output for this shuffle is an active use of it: refresh the atime so a
+    // map stage that runs longer than the TTL is not reaped mid-production. Reduce-side fetches
+    // refresh via handleStatusMessage; this covers the produce side (registerShuffle only stamps
+    // the atime once, at stage submission).
+    updateShuffleAtime(shuffleId)
     getShuffleStatusOrError(shuffleId, "registerMapOutput").addMapOutput(mapIndex, status)
   }
 

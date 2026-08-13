@@ -81,6 +81,37 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     assert(!trackedRDDBlocks.isEmpty)
   }
 
+  test("Test that re-reading a cached RDD in a new job refreshes its access time") {
+    // This pins down the assumption behind the RDD TTL: an actively-reused cached RDD is not
+    // reaped, because every job that reads it re-resolves cache locations at the driver
+    // (DAGScheduler.clearCacheLocs -> getCacheLocs -> BlockManagerMaster.getLocations ->
+    // updateBlockAtime), refreshing the atime -- independent of whether the block read itself is
+    // served locally on the executor.
+    val conf = new SparkConf()
+      .setAppName("test-blockmanager-ttls-rdd-refresh")
+      .setMaster("local-cluster[2, 1, 1024]")
+      .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
+      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
+    sc = new SparkContext(conf)
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+    val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
+    val input = sc.parallelize(1.to(100), numParts).cache()
+    input.count()
+    // The cached blocks are tracked, keyed by RDD id.
+    eventually { assert(managerMasterEndpoint.rddAccessTime.containsKey(input.id)) }
+    val firstAtime = managerMasterEndpoint.rddAccessTime.get(input.id)
+    // Re-reading the cached RDD in a new job must refresh (advance) its access time. Re-running
+    // inside eventually guards against the clock not having ticked past firstAtime yet; if the
+    // cleaner had already reaped it, count() simply re-materializes it and the atime still advances.
+    eventually {
+      input.count()
+      assert(managerMasterEndpoint.rddAccessTime.containsKey(input.id),
+        "cached RDD should stay tracked while it is being reused")
+      assert(managerMasterEndpoint.rddAccessTime.get(input.id) > firstAtime,
+        s"a new job reading the cached RDD should refresh its atime (was $firstAtime)")
+    }
+  }
+
   test("Test that shuffle blocks are tracked properly and removed after TTL") {
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-shuffle-only")
