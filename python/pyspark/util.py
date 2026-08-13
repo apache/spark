@@ -86,6 +86,8 @@ if typing.TYPE_CHECKING:
         ArrowScalarIterUDFType,
         ArrowGroupedAggUDFType,
         ArrowGroupedAggIterUDFType,
+        ArrowGroupedAggIncrementalPartialUDFType,
+        ArrowGroupedAggIncrementalFinalUDFType,
         ArrowWindowAggUDFType,
     )
     from pyspark.sql._typing import (

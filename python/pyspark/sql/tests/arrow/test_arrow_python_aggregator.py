@@ -36,9 +36,7 @@ if have_pyarrow:
     class Mean(Aggregator):
         @property
         def bufferSchema(self):
-            return StructType(
-                [StructField("sum", DoubleType()), StructField("count", LongType())]
-            )
+            return StructType([StructField("sum", DoubleType()), StructField("count", LongType())])
 
         @property
         def outputType(self):
@@ -93,9 +91,7 @@ class ArrowPythonAggregatorTestsMixin:
 
     def test_incremental_aggregator_matches_builtin_mean(self):
         df = self._data()
-        result = (
-            df.groupBy("k").agg(udaf(Mean())(sf.col("v")).alias("m")).orderBy("k").collect()
-        )
+        result = df.groupBy("k").agg(udaf(Mean())(sf.col("v")).alias("m")).orderBy("k").collect()
         expected = df.groupBy("k").agg(sf.avg("v").alias("m")).orderBy("k").collect()
         got = {r["k"]: r["m"] for r in result}
         exp = {r["k"]: r["m"] for r in expected}
@@ -118,10 +114,7 @@ class ArrowPythonAggregatorTestsMixin:
     def test_incremental_aggregator_custom_buffer(self):
         df = self._data()
         result = (
-            df.groupBy("k")
-            .agg(udaf(SumSquares())(sf.col("v")).alias("s"))
-            .orderBy("k")
-            .collect()
+            df.groupBy("k").agg(udaf(SumSquares())(sf.col("v")).alias("s")).orderBy("k").collect()
         )
         expected = (
             df.groupBy("k").agg(sf.sum(sf.col("v") * sf.col("v")).alias("s")).orderBy("k").collect()
@@ -195,12 +188,6 @@ class ArrowPythonAggregatorTests(ArrowPythonAggregatorTestsMixin, ReusedSQLTestC
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_python_aggregator import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()
