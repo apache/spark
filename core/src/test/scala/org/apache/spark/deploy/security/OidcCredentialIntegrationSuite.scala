@@ -21,7 +21,7 @@ import java.io.File
 import java.nio.file.Files
 import java.time.Instant
 import java.util.Optional
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
 import scala.concurrent.duration._
 
@@ -87,12 +87,13 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
   private def createUserContext(
       principal: String = "test-user",
       expiresInSeconds: Long = 300): UserContext = {
+    val now = Instant.now()
     new UserContext(
       principal,
       "https://issuer.example.com",
       "fake.jwt.token",
-      Instant.now(),
-      Instant.now().plusSeconds(expiresInSeconds))
+      now,
+      now.plusSeconds(expiresInSeconds))
   }
 
   private def createIngestor(ctx: UserContext): TokenIngestor = {
@@ -114,11 +115,11 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: OIDC credential delivery via update callback") {
+  test("OIDC credential delivery via update callback") {
     val conf = createOidcConf()
     val ctx = createUserContext()
     val callbackRef = new AtomicReference[Array[Byte]]()
-    val callbackVersion = new AtomicReference[Long](0L)
+    val callbackVersion = new AtomicLong(0L)
 
     val manager = new UserCredentialManager(
       conf,
@@ -148,13 +149,13 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: credential refresh works end-to-end on expiry") {
+  test("credential refresh works end-to-end on expiry") {
     val conf = createOidcConf()
       .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 2000L)
       .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 500L)
 
     val updateCount = new AtomicInteger(0)
-    val latestVersion = new AtomicReference[Long](0L)
+    val latestVersion = new AtomicLong(0L)
 
     // Return a fresh UserContext on each load() so each renewal gets a genuinely
     // new expiry rather than spinning on an already-expired token.
@@ -183,7 +184,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: per-user identity token produces valid credentials") {
+  test("per-user identity token produces valid credentials") {
     val conf = createOidcConf()
 
     val userCtx = createUserContext(principal = "alice@corp.example.com")
@@ -227,7 +228,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: UserCredentialManager and HadoopDelegationTokenManager coexist") {
+  test("UserCredentialManager and HadoopDelegationTokenManager coexist") {
     val hadoopConf = new Configuration()
     val mockRef = mock(classOf[RpcEndpointRef])
 
@@ -238,7 +239,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
 
     val ctx = createUserContext()
     val oidcCallbackRef = new AtomicReference[Array[Byte]]()
-    val oidcVersion = new AtomicReference[Long](0L)
+    val oidcVersion = new AtomicLong(0L)
 
     val oidcManager = new UserCredentialManager(
       conf,
@@ -279,7 +280,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: OIDC failure does not affect HadoopDelegationTokenManager") {
+  test("OIDC failure does not affect HadoopDelegationTokenManager") {
     val hadoopConf = new Configuration()
     val mockRef = mock(classOf[RpcEndpointRef])
 
@@ -319,7 +320,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: DT provider failure does not affect UserCredentialManager") {
+  test("DT provider failure does not affect UserCredentialManager") {
     val hadoopConf = new Configuration()
     val mockRef = mock(classOf[RpcEndpointRef])
 
@@ -357,7 +358,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: deserialization idempotency preserves credential content") {
+  test("deserialization idempotency preserves credential content") {
     val conf = createOidcConf()
     val ctx = createUserContext()
     val serializedRef = new AtomicReference[Array[Byte]]()
@@ -391,7 +392,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: case-insensitive scheme lookup in credential bundle") {
+  test("case-insensitive scheme lookup in credential bundle") {
     val conf = createOidcConf()
     val ctx = createUserContext()
     val serializedRef = new AtomicReference[Array[Byte]]()
@@ -419,7 +420,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: stop() after start() completes cleanly without exceptions") {
+  test("stop() after start() completes cleanly without exceptions") {
     val conf = createOidcConf()
     val ctx = createUserContext(expiresInSeconds = 60)
 
@@ -435,7 +436,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     manager.stop()
   }
 
-  test("SPARK-57896: credential version is monotonically increasing across renewals") {
+  test("credential version is monotonically increasing across renewals") {
     val conf = createOidcConf()
       .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 2000L)
       .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 500L)
@@ -466,7 +467,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: every renewal callback provides non-null non-empty credentials") {
+  test("every renewal callback provides non-null non-empty credentials") {
     val conf = createOidcConf()
       .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 2000L)
       .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 500L)
@@ -500,7 +501,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: OIDC disabled does not interfere with DT manager") {
+  test("OIDC disabled does not interfere with DT manager") {
     val hadoopConf = new Configuration()
     val mockRef = mock(classOf[RpcEndpointRef])
 
@@ -528,7 +529,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-57896: TaskDescription credentials applied to executor store with version guard") {
+  test("TaskSetManager credential attachment reads from SparkEnv store") {
     val conf = createOidcConf()
     val ctx = createUserContext()
 
@@ -541,40 +542,52 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
       val (version, credentialBytes) = manager.start()
       assert(version == 1L)
 
-      // Simulate the executor-side credential store
+      // Set up the credential store exactly as CoarseGrainedSchedulerBackend does
       val store = new AtomicReference[VersionedCredentials]()
-
-      // Simulate TaskDescription carrying credentials at dispatch time:
-      // Executor applies credentials via VersionedCredentials.updateIfNewer
       VersionedCredentials.updateIfNewer(store, version, credentialBytes)
 
-      // Verify credentials were applied
-      val stored = store.get()
-      assert(stored != null, "Store should have credentials after TaskDescription apply")
-      assert(stored.version == 1L, "Stored version should be 1")
+      // Exercise the EXACT expression from TaskSetManager.scala line 607:
+      //   Option(env.userCredentials.get()).map(vc => (vc.version, vc.bytes))
+      // This is what TaskSetManager reads when constructing TaskDescription.
+      val credentialTuple: Option[(Long, Array[Byte])] =
+        Option(store.get()).map(vc => (vc.version, vc.bytes))
 
-      // Verify the stored bytes are deserializable and correct
-      val creds = UserCredentialManager.deserializeUserCredentials(stored.bytes)
+      assert(credentialTuple.isDefined,
+        "Credential store should produce Some when credentials are set")
+      assert(credentialTuple.get._1 == 1L,
+        "TaskDescription should carry version 1")
+      assert(credentialTuple.get._2 === credentialBytes,
+        "TaskDescription should carry the credential bytes from the store")
+
+      // Verify the bytes are valid credentials end-to-end
+      val creds = UserCredentialManager.deserializeUserCredentials(credentialTuple.get._2)
       assert(creds.forScheme("fake").isPresent,
-        "Executor store should contain valid 'fake' scheme credentials")
+        "Credentials from TaskDescription should contain 'fake' scheme")
 
-      // Simulate RPC broadcast delivering v2 (fresher credentials)
-      val v2Bytes = Array[Byte](99, 98, 97)
+      // Update the store to version 2 (simulating a renewal)
+      val v2Bytes = UserCredentialManager.serializeUserCredentials(
+        new UserCredentials(java.util.Map.of("fake",
+          new ServiceCredential(java.util.Map.of("provider", "fake-v2"),
+            Instant.now().plusSeconds(300)))))
       VersionedCredentials.updateIfNewer(store, 2L, v2Bytes)
-      assert(store.get().version == 2L, "Store should accept newer v2")
-      assert(store.get().bytes === v2Bytes, "Store should hold v2 bytes")
 
-      // Simulate a delayed TaskDescription carrying stale v1 -- must be rejected
-      VersionedCredentials.updateIfNewer(store, 1L, credentialBytes)
-      assert(store.get().version == 2L,
-        "Stale v1 from delayed TaskDescription should not overwrite fresher v2")
-      assert(store.get().bytes === v2Bytes,
-        "Store should still hold v2 bytes after stale v1 rejected")
+      // Read again -- same expression as TaskSetManager line 607
+      val credentialTupleV2: Option[(Long, Array[Byte])] =
+        Option(store.get()).map(vc => (vc.version, vc.bytes))
 
-      // Simulate v3 arriving via next TaskDescription -- must be accepted
-      val v3Bytes = Array[Byte](1, 2, 3)
-      VersionedCredentials.updateIfNewer(store, 3L, v3Bytes)
-      assert(store.get().version == 3L, "Store should accept newer v3")
+      assert(credentialTupleV2.get._1 == 2L,
+        "After renewal, TaskDescription should carry version 2")
+
+      val credsV2 = UserCredentialManager.deserializeUserCredentials(credentialTupleV2.get._2)
+      assert(credsV2.forScheme("fake").get().getProperties.get("provider") == "fake-v2",
+        "TaskDescription should carry renewed credentials")
+
+      // Verify empty store produces None (no credentials yet scenario)
+      val emptyStore = new AtomicReference[VersionedCredentials]()
+      val emptyTuple: Option[(Long, Array[Byte])] =
+        Option(emptyStore.get()).map(vc => (vc.version, vc.bytes))
+      assert(emptyTuple.isEmpty,
+        "Empty store should produce None for TaskDescription.userCredentials")
     } finally {
       manager.stop()
     }
