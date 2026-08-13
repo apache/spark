@@ -21,8 +21,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, TypeVar
 
 from pyspark import keyword_only, since
-from pyspark.ml import PredictionModel, Predictor
-from pyspark.ml.base import Transformer, _PredictorParams
+from pyspark.ml.base import PredictionModel, Predictor, Transformer, _PredictorParams
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.param.shared import (

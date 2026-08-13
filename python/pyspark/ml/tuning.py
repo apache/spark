@@ -39,7 +39,7 @@ from typing import (
 import numpy as np
 
 from pyspark import inheritable_thread_target, keyword_only, since
-from pyspark.ml import Estimator, Model, Transformer
+from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.common import _java2py, _py2java, inherit_doc
 from pyspark.ml.evaluation import Evaluator, JavaEvaluator
 from pyspark.ml.param import Param, Params, TypeConverters
