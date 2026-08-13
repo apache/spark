@@ -33,8 +33,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import inheritable_thread_target, keyword_only, since
-from pyspark.ml.connect import Estimator, Model
-from pyspark.ml.connect.base import Evaluator
+from pyspark.ml.connect.base import Estimator, Evaluator, Model
 from pyspark.ml.connect.io_utils import (
     MetaAlgorithmReadWrite,
     ParamsReadWrite,
