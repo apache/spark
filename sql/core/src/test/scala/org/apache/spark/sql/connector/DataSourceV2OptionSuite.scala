@@ -75,6 +75,10 @@ class NullReturningInMemoryCatalog extends InMemoryCatalog {
   }
 }
 
+class WriteStateAwareInMemoryCatalog extends InMemoryCatalog {
+  override def tableStateOptionKeys(): util.Set[String] = util.Set.of("load-option")
+}
+
 class NullReturningStagingInMemoryCatalog extends InMemoryCatalog with StagingTableCatalog {
   override def stageCreate(ident: Identifier, tableInfo: TableInfo): StagedTable = {
     createTable(ident, tableInfo)
@@ -98,6 +102,9 @@ class NullReturningStagingInMemoryCatalog extends InMemoryCatalog with StagingTa
 
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
   import testImplicits._
+
+  override protected def testCatalogClass: Class[_ <: InMemoryCatalog] =
+    classOf[WriteStateAwareInMemoryCatalog]
 
   private val catalogAndNamespace = "testcat.ns1.ns2."
 
@@ -143,13 +150,14 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       tableCatalog: InMemoryTableCatalog,
       expectedPrivileges: Set[TableWritePrivilege]): Unit = {
     val matchingCalls = tableCatalog.loadTableCalls.filter {
-      case (_, options) => options.get(loadOption) == loadOptionValue
+      case (context, _) => context.writePrivileges() == expectedPrivileges.asJava
     }
-    assert(matchingCalls.nonEmpty,
-      s"loadTable did not receive $loadOption=$loadOptionValue")
+    assert(matchingCalls.nonEmpty, "loadTable did not receive the expected write privileges")
     matchingCalls.foreach { case (context, options) =>
-      assertTargetOptions(options)
       assert(context.writePrivileges() === expectedPrivileges.asJava)
+      assert(options.get(loadOption) === loadOptionValue)
+      assert(options.get(writeOption) === null)
+      assert(options.size() === 1)
     }
   }
 
@@ -583,7 +591,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: DataFrameWriter dynamic partition overwrite forwards options") {
+  test("SPARK-58389: dynamic partition overwrite separates load and write options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) PARTITIONED BY (id)")
@@ -662,7 +670,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: DataFrameWriter saveAsTable forwards options while loading the target") {
+  test("SPARK-58389: DataFrameWriter saveAsTable separates load and write options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -687,7 +695,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: schema evolution reload forwards write options") {
+  test("SPARK-58389: schema evolution reload separates table-state and write options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint)")
@@ -707,8 +715,9 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       }
       assert(matchingCalls.size >= 2, "expected initial target load and post-evolution reload")
       matchingCalls.foreach { case (context, options) =>
-        assertTargetOptions(options)
         assert(context.writePrivileges() === java.util.Set.of(TableWritePrivilege.INSERT))
+        assert(options.get(writeOption) === null)
+        assert(options.size() === 1)
       }
       assertV2Write(captured)
     }
@@ -718,9 +727,10 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     "non-staging" -> classOf[NullReturningInMemoryCatalog],
     "staging" -> classOf[NullReturningStagingInMemoryCatalog]
   ).foreach { case (catalogType, catalogClass) =>
-    test(s"SPARK-58389: $catalogType CTAS/RTAS fallback loads forward write options") {
+    test(s"SPARK-58389: $catalogType CTAS/RTAS fallback separates load and write options") {
       val catalogName = s"${catalogType.replace('-', '_')}_null_catalog"
       registerCatalog(catalogName, catalogClass)
+      spark.conf.set(s"spark.sql.catalog.$catalogName.tableStateOptionKeys", loadOption)
       val fallbackCatalog = catalog(catalogName).asInstanceOf[InMemoryCatalog]
       val t1 = s"$catalogName.table"
       withTable(t1) {
@@ -1558,9 +1568,11 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           s"option leaked to the option-free reference, got: $splitSizes")
         assert(splitSizes.contains(None),
           s"expected an option-free reference, got: $splitSizes")
-        assert(inMemoryCatalog.loadTableCalls.exists {
-          case (_, options) => options.get("split-size") == "5"
-        }, "V2TableReference temp-view reload did not receive the view options")
+        assert(inMemoryCatalog.loadTableCalls.nonEmpty,
+          "V2TableReference temp-view reload did not load the table")
+        assert(inMemoryCatalog.loadTableCalls.forall(_._2.isEmpty),
+          s"expected temp-view reloads to filter scan options, got: " +
+            inMemoryCatalog.loadTableCalls)
       }
     }
   }

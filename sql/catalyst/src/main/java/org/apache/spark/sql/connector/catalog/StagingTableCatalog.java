@@ -101,7 +101,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * @return metadata for the new table. This can be null if the catalog does not support atomic
    *         creation for this table. Spark will call
    *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} later,
-   *         forwarding the write options and required privileges.
+   *         forwarding the catalog-declared table-state options and required privileges.
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
@@ -167,7 +167,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * @return metadata for the new table. This can be null if the catalog does not support atomic
    *         creation for this table. Spark will call
    *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} later,
-   *         forwarding the write options and required privileges.
+   *         forwarding the catalog-declared table-state options and required privileges.
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @throws NoSuchTableException If the table does not exist
@@ -232,7 +232,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * @return metadata for the new table. This can be null if the catalog does not support atomic
    *         creation for this table. Spark will call
    *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} later,
-   *         forwarding the write options and required privileges.
+   *         forwarding the catalog-declared table-state options and required privileges.
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */

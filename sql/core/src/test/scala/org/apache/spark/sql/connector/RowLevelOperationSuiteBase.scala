@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
+import scala.jdk.CollectionConverters._
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, Encoders, Row}
@@ -48,12 +50,15 @@ abstract class RowLevelOperationSuiteBase
 
   before {
     spark.conf.set("spark.sql.catalog.cat", classOf[InMemoryRowLevelOperationTableCatalog].getName)
+    spark.conf.set(
+      "spark.sql.catalog.cat.tableStateOptionKeys", "load-option,targetLoadOption")
   }
 
   after {
     catalog.nextTxnRejectRegisteredScansAttempt = false
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf("spark.sql.catalog.cat")
+    spark.sessionState.conf.unsetConf("spark.sql.catalog.cat.tableStateOptionKeys")
   }
 
   protected final val PK_FIELD = StructField("pk", IntegerType, nullable = false)
@@ -206,12 +211,23 @@ abstract class RowLevelOperationSuiteBase
 
   protected def assertLastTransactionWriteLoadOptions(
       expectedOptions: (String, String)*): Unit = {
-    val targetLoads = catalog.lastTransaction.catalog.loadTableCalls.filter {
-      case (context, options) =>
-        !context.writePrivileges().isEmpty &&
-          expectedOptions.forall { case (key, value) => options.get(key) == value }
+    val stateKeys = catalog.tableStateOptionKeys().asScala
+    val expectedStateOptions = expectedOptions.filter { case (key, _) =>
+      stateKeys.exists(_.equalsIgnoreCase(key))
     }
-    assert(targetLoads.nonEmpty, "target loadTable did not receive the row-level write options")
+    val targetLoads = catalog.lastTransaction.catalog.loadTableCalls.filter {
+      case (context, _) => !context.writePrivileges().isEmpty
+    }
+    assert(targetLoads.nonEmpty, "target loadTable did not receive write privileges")
+    targetLoads.foreach { case (_, options) =>
+      assert(options.size() === expectedStateOptions.size)
+      expectedStateOptions.foreach { case (key, value) =>
+        assert(options.get(key) === value, s"table-state option '$key'")
+      }
+      expectedOptions.diff(expectedStateOptions).foreach { case (key, _) =>
+        assert(options.get(key) === null, s"non-state load option '$key'")
+      }
+    }
   }
 
   protected def assertNoScanPlanning(plan: LogicalPlan): Unit = {

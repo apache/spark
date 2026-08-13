@@ -243,8 +243,8 @@ class RelationResolution(
         }
         val key = toCacheKey(catalog, ident, finalTimeTravelSpec, finalOptions)
         // A reference that requires write privileges is never served from the per-query relation
-        // cache. The catalog authorizes the write in `loadTable(ident, writePrivileges)` below, and
-        // a cache hit would skip that call entirely. The hit happens whenever the write target is
+        // cache. The catalog authorizes the write during the uncached `loadTable` below, and a
+        // cache hit would skip that call entirely. The hit happens whenever the write target is
         // also read in the same statement -- the target is resolved after its query (see
         // `ResolveRelations`), so it finds the relation the query already put in the cache, e.g.
         // for `INSERT INTO t SELECT * FROM t`.

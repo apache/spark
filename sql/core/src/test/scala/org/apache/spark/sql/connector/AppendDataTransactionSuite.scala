@@ -40,13 +40,15 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
       expectedPrivileges: java.util.Set[TableWritePrivilege],
       minTargetLoads: Int = 1): Unit = {
     val targetLoads = txn.catalog.loadTableCalls.filter {
-      case (_, options) => options.get(targetLoadOption) == targetLoadValue
+      case (context, _) => context.writePrivileges() == expectedPrivileges
     }
     assert(targetLoads.size >= minTargetLoads,
       s"expected at least $minTargetLoads target loads with write options")
     targetLoads.foreach { case (context, options) =>
       assert(context.writePrivileges() === expectedPrivileges)
-      assert(options.get(targetWriteOption) === targetWriteValue)
+      assert(options.get(targetLoadOption) === targetLoadValue)
+      assert(options.get(targetWriteOption) === null)
+      assert(options.size() === 1)
     }
 
     assert(table.lastWriteInfo != null, "the V2 table did not receive LogicalWriteInfo")
@@ -81,18 +83,17 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     assert(txnTables.size === 1)
     assert(table.version() === "2")
     val sourceLoads = txn.catalog.loadTableCalls.filter {
-      case (_, options) => options.get("customReadOption") == "customValue"
+      case (context, _) => context.writePrivileges().isEmpty
     }
-    assert(sourceLoads.nonEmpty, "transaction re-resolution did not receive source options")
+    assert(sourceLoads.nonEmpty, "transaction re-resolution did not reload the source")
     sourceLoads.foreach { case (context, options) =>
       assert(context.timeTravel().isEmpty)
       assert(context.writePrivileges().isEmpty)
-      assert(options.get(targetLoadOption) === null)
-      assert(options.get(targetWriteOption) === null)
+      assert(options.isEmpty)
     }
     assertTargetLoadAndWriteOptions(txn, java.util.Set.of(TableWritePrivilege.INSERT))
     txn.catalog.loadTableCalls.filter {
-      case (_, options) => options.get(targetLoadOption) == targetLoadValue
+      case (context, _) => !context.writePrivileges().isEmpty
     }.foreach { case (_, options) =>
       assert(options.get("customReadOption") === null)
     }

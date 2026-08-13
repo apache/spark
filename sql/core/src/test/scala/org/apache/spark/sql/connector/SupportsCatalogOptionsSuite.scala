@@ -66,6 +66,7 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
       V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
     spark.conf.set(
       s"spark.sql.catalog.$catalogName", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set(s"spark.sql.catalog.$catalogName.tableStateOptionKeys", "load-option")
   }
 
   override def afterEach(): Unit = {
@@ -76,6 +77,7 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
       catalog(catalogName).dropTable(_))
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     spark.conf.unset(s"spark.sql.catalog.$catalogName")
+    spark.conf.unset(s"spark.sql.catalog.$catalogName.tableStateOptionKeys")
   }
 
   private def testCreateAndRead(
@@ -403,7 +405,7 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
     assert(opts.get.isEmpty)
   }
 
-  test("SPARK-58389: write options are forwarded to SupportsCatalogOptions loadTable") {
+  test("SPARK-58389: SupportsCatalogOptions separates table-state and write options") {
     sql(s"create table $catalogName.t1 (id bigint) using $format")
     val cat = catalog(catalogName).asInstanceOf[InMemoryTableCatalog]
     val loadOption = "load-option"
@@ -433,9 +435,8 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
       assert(matchingCalls.nonEmpty, "loadTable(context, options) was not invoked for the write")
       matchingCalls.foreach { case (context, options) =>
         assert(context.writePrivileges() === expectedPrivileges)
-        assert(options.get("name") === "t1")
-        assert(options.get("catalog") === catalogName)
-        assert(options.get(writeOption) === optionValue)
+        assert(options.size() === 1)
+        assert(options.get(writeOption) === null)
       }
 
       val actualWriteOptions = mode match {
@@ -454,6 +455,8 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
       assert(actualWriteOptions.isDefined, "expected a V2 in-memory batch write")
       assert(actualWriteOptions.get.get(loadOption) === loadValue)
       assert(actualWriteOptions.get.get(writeOption) === optionValue)
+      assert(actualWriteOptions.get.get("name") === "t1")
+      assert(actualWriteOptions.get.get("catalog") === catalogName)
     }
   }
 

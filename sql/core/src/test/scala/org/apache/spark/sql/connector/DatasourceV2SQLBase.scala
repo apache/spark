@@ -26,6 +26,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 trait DatasourceV2SQLBase extends SharedSparkSession with BeforeAndAfter {
 
+  protected def testCatalogClass: Class[_ <: CatalogPlugin] = classOf[InMemoryCatalog]
+
   protected def registerCatalog[T <: CatalogPlugin](name: String, clazz: Class[T]): Unit = {
     spark.conf.set(s"spark.sql.catalog.$name", clazz.getName)
   }
@@ -35,7 +37,7 @@ trait DatasourceV2SQLBase extends SharedSparkSession with BeforeAndAfter {
   }
 
   before {
-    registerCatalog("testcat", classOf[InMemoryCatalog])
+    registerCatalog("testcat", testCatalogClass)
     registerCatalog("testv2filter", classOf[InMemoryTableWithV2FilterCatalog])
     registerCatalog("testpart", classOf[InMemoryPartitionTableCatalog])
     registerCatalog("testcat_atomic", classOf[StagingInMemoryTableCatalog])

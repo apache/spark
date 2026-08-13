@@ -520,7 +520,9 @@ private[sql] object CatalogV2Util {
   }
 
   /**
-   * Loads a table for a write, forwarding both the required privileges and all write options.
+   * Loads a table for a write, forwarding the required privileges and only the write options that
+   * the catalog declares may affect table state. The complete option map remains on the write
+   * relation for write planning.
    */
   def getTableForWrite(
       catalog: CatalogPlugin,
@@ -528,7 +530,8 @@ private[sql] object CatalogV2Util {
       writePrivileges: Set[TableWritePrivilege],
       options: CaseInsensitiveStringMap): Table = {
     val context = new TableContext(null, writePrivileges.asJava)
-    catalog.asTableCatalog.loadTable(ident, context, options)
+    val stateOptions = extractTableStateOptions(catalog, options)
+    catalog.asTableCatalog.loadTable(ident, context, stateOptions)
   }
 
   /**

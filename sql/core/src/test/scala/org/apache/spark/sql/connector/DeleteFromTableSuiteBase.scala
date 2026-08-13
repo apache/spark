@@ -1152,7 +1152,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     // is planned as TruncateTableExec (not DeleteFromTableExec).
     withSQLConf(
         "spark.sql.catalog.trunccat" ->
-          classOf[InMemoryTruncatableOnlyTableCatalog].getName) {
+          classOf[InMemoryTruncatableOnlyTableCatalog].getName,
+        "spark.sql.catalog.trunccat.tableStateOptionKeys" -> "load-option") {
       withTable("trunccat.ns.tbl") {
         sql("CREATE TABLE trunccat.ns.tbl (pk INT NOT NULL, dep STRING) USING foo")
         sql("INSERT INTO trunccat.ns.tbl VALUES (1, 'hr'), (2, 'software')")
@@ -1174,9 +1175,10 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
           case (context, options) =>
             context.writePrivileges() === java.util.Set.of(TableWritePrivilege.DELETE) &&
               options.get("load-option") == "load-value" &&
-              options.get("write-option") == "write-value"
+              options.get("write-option") == null &&
+              options.size() == 1
         }
-        assert(targetLoads.nonEmpty, "target loadTable did not receive truncate options")
+        assert(targetLoads.nonEmpty, "target loadTable did not receive truncate state options")
 
         val truncTable = truncCatalog
           .loadTable(org.apache.spark.sql.connector.catalog.Identifier.of(

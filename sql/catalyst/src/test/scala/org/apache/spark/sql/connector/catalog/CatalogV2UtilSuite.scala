@@ -105,16 +105,21 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(e.getMessage.contains("Cannot set both time travel and write privileges"))
   }
 
-  test("getTableForWrite forwards write privileges and options") {
+  test("getTableForWrite forwards write privileges and only table-state options") {
     val testCatalog = mock(classOf[TableCatalog])
+    when(testCatalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("state"))
     val ident = mock(classOf[Identifier])
-    val options = new CaseInsensitiveStringMap(java.util.Map.of("custom", "value"))
+    val options = new CaseInsensitiveStringMap(
+      java.util.Map.of("state", "branch", "custom", "value"))
     val contextCaptor = ArgumentCaptor.forClass(classOf[TableContext])
 
     CatalogV2Util.getTableForWrite(
       testCatalog, ident, Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), options)
 
-    verify(testCatalog).loadTable(mockEq(ident), contextCaptor.capture(), mockEq(options))
+    val expectedStateOptions =
+      new CaseInsensitiveStringMap(java.util.Map.of("state", "branch"))
+    verify(testCatalog).loadTable(
+      mockEq(ident), contextCaptor.capture(), mockEq(expectedStateOptions))
     assert(contextCaptor.getValue.timeTravel().isEmpty)
     assert(contextCaptor.getValue.writePrivileges() ===
       java.util.Set.of(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))

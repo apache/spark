@@ -268,7 +268,8 @@ abstract class DataFrameWriter[T] {
    * }}}
    *
    * Because it inserts data to an existing table, the format is ignored. For data source V2
-   * tables, options are forwarded to the table load and write.
+   * tables, catalog-declared table-state options are forwarded to the table load and all options
+   * are forwarded to the write.
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit

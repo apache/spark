@@ -348,7 +348,8 @@ public interface TableCatalog extends CatalogPlugin {
    * @return metadata for the new table. This can be null if getting the metadata for the new table
    *         is expensive. Spark will call
    *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} if needed
-   *         (e.g. CTAS), forwarding the write options and required privileges.
+   *         (e.g. CTAS), forwarding the catalog-declared table-state options and required
+   *         privileges.
    *
    * @throws TableAlreadyExistsException If a table already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported
