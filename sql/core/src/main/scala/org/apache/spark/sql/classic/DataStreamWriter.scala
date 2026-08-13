@@ -31,10 +31,10 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, OptionList, UnresolvedTableSpec}
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, WriteToStream}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -195,7 +195,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
       Dataset.ofRows(ds.sparkSession, cmd)
     }
 
-    val tableInstance = catalog.asTableCatalog.loadTable(identifier)
+    val tableOptions = new CaseInsensitiveStringMap(extraOptions.originalMap.asJava)
+    val tableInstance = CatalogV2Util.getTableForWrite(
+      catalog, identifier, WriteToStream.writePrivileges(outputMode), tableOptions)
 
     def writeToV1Table(table: CatalogTable): StreamingQuery = {
       if (table.isViewLike) {

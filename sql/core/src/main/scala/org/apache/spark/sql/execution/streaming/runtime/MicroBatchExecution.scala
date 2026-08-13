@@ -55,6 +55,7 @@ import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.PartitionOffsetWithIndex
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, ErrorNotifier, Utils}
 
 class MicroBatchExecution(
@@ -417,6 +418,7 @@ class MicroBatchExecution(
 
     sink match {
       case s: SupportsWrite =>
+        val targetOptions = new CaseInsensitiveStringMap(extraOptions.asJava)
         val relation = plan.catalogAndIdent match {
           // For transactional catalog sinks, capture the baseline table metadata in a
           // V2TableReference so that each micro-batch re-resolves the table through the
@@ -427,10 +429,11 @@ class MicroBatchExecution(
             // detection and transaction begin must happen in the streaming session context.
             val catalogManager = sparkSessionForStream.sessionState.catalogManager
             val streamingCatalog = catalogManager.catalog(catalog.name)
-            val v2Relation = DataSourceV2Relation.create(s, Some(streamingCatalog), Some(ident))
-            V2TableReference.createForWriteTarget(v2Relation)
+            val v2Relation = DataSourceV2Relation.create(
+              s, Some(streamingCatalog), Some(ident), targetOptions)
+            V2TableReference.createForWriteTarget(v2Relation, plan.writePrivileges)
           case Some((catalog, ident)) =>
-            DataSourceV2Relation.create(s, Some(catalog), Some(ident))
+            DataSourceV2Relation.create(s, Some(catalog), Some(ident), targetOptions)
           case None => DataSourceV2Relation.create(s, None, None)
         }
         WriteToMicroBatchDataSource(

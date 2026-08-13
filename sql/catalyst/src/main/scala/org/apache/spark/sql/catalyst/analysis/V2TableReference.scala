@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.MetadataColumn
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.TableCatalog
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.V2TableUtil
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -100,7 +101,7 @@ private[sql] object V2TableReference {
   }
 
   /** Context for write targets. */
-  case object WriteTargetContext extends Context {
+  case class WriteTargetContext(writePrivileges: Set[TableWritePrivilege]) extends Context {
     val cacheable = false
   }
 
@@ -114,8 +115,10 @@ private[sql] object V2TableReference {
     create(relation, TransactionContext)
   }
 
-  def createForWriteTarget(relation: DataSourceV2Relation): V2TableReference = {
-    create(relation, WriteTargetContext)
+  def createForWriteTarget(
+      relation: DataSourceV2Relation,
+      writePrivileges: Set[TableWritePrivilege]): V2TableReference = {
+    create(relation, WriteTargetContext(writePrivileges))
   }
 
   private def create(relation: DataSourceV2Relation, context: Context): V2TableReference = {
@@ -140,7 +143,7 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
     ref.context match {
       case ctx: TemporaryViewContext =>
         validateLoadedTableInTempView(table, ref, ctx)
-      case TransactionContext | WriteTargetContext =>
+      case TransactionContext | _: WriteTargetContext =>
         validateNoChanges(table, ref)
       case ctx =>
         throw SparkException.internalError(s"Unknown table ref context: ${ctx.getClass.getName}")
