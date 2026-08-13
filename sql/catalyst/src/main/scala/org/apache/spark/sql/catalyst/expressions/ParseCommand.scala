@@ -46,9 +46,9 @@ import org.apache.spark.unsafe.types.UTF8String
   examples = """
     Examples:
       > SELECT _FUNC_('SELECT a, b FROM t');
-       {"parse_success":true,"statement_identifier":"SELECT","statement_code":21,...}
-      > SELECT _FUNC_('SELEC');
-       {"parse_success":false,"error":{"errorClass":"PARSE_SYNTAX_ERROR",...}}
+       {"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["t"]],"function_references":[],"select_list":[{"name":["a"],"expression":"a"},{"name":["b"],"expression":"b"}],"parameter_markers":{"named":[],"unnamed_count":0}}
+      > SELECT get_json_object(_FUNC_('SELEC'), '$.error.errorClass');
+       PARSE_SYNTAX_ERROR
   """,
   group = "misc_funcs",
   since = "4.3.0")
@@ -61,6 +61,8 @@ case class ParseCommand(child: Expression)
   override def prettyName: String = "parse_command"
 
   override def nullable: Boolean = true
+
+  override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = StringType
 
