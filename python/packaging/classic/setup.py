@@ -341,7 +341,7 @@ try:
         },
         package_data={
             "pyspark.jars": ["**/*.jar"],
-            "pyspark.bin": ["*"],
+            "pyspark.bin": ["**/*"],
             "pyspark.sbin": [
                 "spark-config.sh",
                 "spark-daemon.sh",
@@ -352,7 +352,7 @@ try:
             ],
             "pyspark.python.lib": ["**/*.zip"],
             "pyspark.data": ["**/*.txt", "**/*.data"],
-            "pyspark.licenses": ["*"],
+            "pyspark.licenses": ["**/*"],
             "pyspark.examples.src.main.python": ["**/*.py"],
         },
         scripts=scripts,
