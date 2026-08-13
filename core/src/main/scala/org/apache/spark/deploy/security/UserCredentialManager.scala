@@ -130,19 +130,6 @@ private[spark] class UserCredentialManager(
     if (renewalExecutor != null) {
       renewalExecutor.shutdownNow()
     }
-    // Close all initialized credential providers to release resources (e.g., HTTP clients).
-    // CredentialProviderLoader.closeAll() operates on global static state, which is safe
-    // because Spark enforces a single SparkContext (and thus a single UserCredentialManager)
-    // per JVM.
-    try {
-      CredentialProviderLoader.closeAll()
-    } catch {
-      case e: InterruptedException =>
-        Thread.currentThread().interrupt()
-        logWarning(log"Interrupted while closing credential providers during shutdown.", e)
-      case NonFatal(e) =>
-        logWarning(log"Error closing credential providers during shutdown.", e)
-    }
   }
 
   /**
