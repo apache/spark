@@ -325,6 +325,23 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     return list(dict.fromkeys(v for _, v in filtered)), warnings
 
 
+def additional_fix_versions(inferred_versions, existing_versions):
+    """Return inferred Fix Versions not already present on a JIRA issue.
+
+    Existing versions are preserved separately when the issue is updated, so this only
+    identifies the additions needed after a later backport.
+
+    >>> additional_fix_versions(["4.4.0"], ["5.0.0"])
+    ['4.4.0']
+    >>> additional_fix_versions(["4.4.0"], ["5.0.0", "4.4.0"])
+    []
+    >>> additional_fix_versions(["4.4.0", "4.3.4"], ["5.0.0", "4.4.0"])
+    ['4.3.4']
+    """
+    existing = set(existing_versions)
+    return [version for version in inferred_versions if version not in existing]
+
+
 def red(text):
     return "\033[91m%s\033[0m" % text
 
@@ -1061,7 +1078,7 @@ def reconcile_jira_components(issue, title_components):
         print_error("Failed to update components on JIRA %s: %s" % (issue.key, e))
 
 
-def get_jira_issue(prompt, default_jira_id=""):
+def get_jira_issue(prompt, default_jira_id="", allow_resolved=False):
     jira_id = bold_input("%s [%s]: " % (prompt, default_jira_id))
     if jira_id == "":
         jira_id = default_jira_id
@@ -1074,25 +1091,42 @@ def get_jira_issue(prompt, default_jira_id=""):
         status = issue.fields.status.name
         if status == "Resolved" or status == "Closed":
             print("JIRA issue %s already has status '%s'" % (jira_id, status))
-            return None
+            if not allow_resolved:
+                return None
         if get_input("Check if the JIRA information is as expected (y/N): ", ["y", "n", ""]) == "y":
             return issue
         else:
-            return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
+            return get_jira_issue(
+                "Enter the revised JIRA ID again or leave blank to skip",
+                allow_resolved=allow_resolved,
+            )
     except Exception as e:
         print_error("ASF JIRA could not find %s: %s" % (jira_id, e))
-        return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
+        return get_jira_issue(
+            "Enter the revised JIRA ID again or leave blank to skip",
+            allow_resolved=allow_resolved,
+        )
 
 
-def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_components=()):
-    issue = get_jira_issue("Enter a JIRA id", default_jira_id)
+def resolve_jira_issue(
+    merge_branches,
+    comment,
+    default_jira_id="",
+    title_components=(),
+    allow_resolved=False,
+):
+    issue = get_jira_issue("Enter a JIRA id", default_jira_id, allow_resolved)
     if issue is None:
         return
 
-    if issue.fields.assignee is None:
-        choose_jira_assignee(issue)
+    status = issue.fields.status.name
+    is_resolved = status == "Resolved" or status == "Closed"
 
-    reconcile_jira_components(issue, title_components)
+    if not is_resolved:
+        if issue.fields.assignee is None:
+            choose_jira_assignee(issue)
+
+        reconcile_jira_components(issue, title_components)
 
     versions = asf_jira.project_versions("SPARK")
     # Consider only x.y.z, unreleased, unarchived versions
@@ -1109,14 +1143,28 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_compon
     )
     for w in infer_warnings:
         print_error(w)
+
+    existing_fix_versions = list(issue.fields.fixVersions) if is_resolved else []
+    existing_fix_version_names = [v.name for v in existing_fix_versions]
+    if is_resolved:
+        # A later backport run must preserve the versions recorded by the original merge and
+        # only add versions inferred from the newly discovered branches.
+        default_fix_list = additional_fix_versions(default_fix_list, existing_fix_version_names)
+        if not default_fix_list:
+            print(
+                "JIRA issue %s already contains all inferred fix versions; no update needed."
+                % issue.key
+            )
+            return
     default_fix_versions = ",".join(default_fix_list)
 
     available_versions = set(list(map(lambda v: v.name, versions)))
     while True:
         try:
-            fix_versions = bold_input(
-                "Enter comma-separated fix version(s) [%s]: " % default_fix_versions
-            )
+            prompt = "Enter comma-separated fix version(s) [%s]: "
+            if is_resolved:
+                prompt = "Enter comma-separated additional fix version(s) [%s]: "
+            fix_versions = bold_input(prompt % default_fix_versions)
             if fix_versions == "":
                 fix_versions = default_fix_versions
             fix_versions = fix_versions.replace(" ", "").split(",")
@@ -1137,6 +1185,25 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_compon
         return list(filter(lambda v: v.name == version_str, versions))[0].raw
 
     jira_fix_versions = list(map(lambda v: get_version_json(v), fix_versions))
+
+    if is_resolved:
+        existing_names = set(existing_fix_version_names)
+        jira_fix_versions = [v for v in jira_fix_versions if v["name"] not in existing_names]
+        if not jira_fix_versions:
+            print("No new fix versions selected for JIRA issue %s; no update needed." % issue.key)
+            return
+        issue.update(
+            fields={"fixVersions": [v.raw for v in existing_fix_versions] + jira_fix_versions}
+        )
+        try:
+            print_jira_issue_summary(asf_jira.issue(issue.key))
+        except Exception:
+            print("Unable to fetch JIRA issue %s after updating fix versions" % issue.key)
+        print(
+            "Successfully updated %s with additional fixVersions=%s!"
+            % (issue.key, [v["name"] for v in jira_fix_versions])
+        )
+        return
 
     resolve = list(filter(lambda a: a["name"] == "Resolve Issue", asf_jira.transitions(issue.key)))[
         0
@@ -1232,13 +1299,41 @@ def assign_issue(issue: int, assignee: str) -> bool:
     return True
 
 
-def resolve_jira_issues(title, merge_branches, comment, title_components=()):
+def resolve_jira_issues(title, merge_branches, comment, title_components=(), allow_resolved=False):
     jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
 
     if len(jira_ids) == 0:
-        resolve_jira_issue(merge_branches, comment, title_components=title_components)
+        resolve_jira_issue(
+            merge_branches,
+            comment,
+            title_components=title_components,
+            allow_resolved=allow_resolved,
+        )
     for jira_id in jira_ids:
-        resolve_jira_issue(merge_branches, comment, jira_id, title_components=title_components)
+        resolve_jira_issue(
+            merge_branches,
+            comment,
+            jira_id,
+            title_components=title_components,
+            allow_resolved=allow_resolved,
+        )
+
+
+def update_jira_for_pr(pr_num, title, merge_branches, title_components, allow_resolved=False):
+    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
+    continue_maybe("Would you like to update an associated JIRA?")
+    jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
+        pr_num,
+        GITHUB_BASE,
+        pr_num,
+    )
+    resolve_jira_issues(
+        title,
+        merge_branches,
+        jira_comment,
+        title_components,
+        allow_resolved=allow_resolved,
+    )
 
 
 class Component:
@@ -1809,6 +1904,9 @@ def main():
             # pushes have already landed.
             if picked_commits:
                 post_merge_comment(pr_num, picked_commits)
+            # Backport mode may be the first chance to resolve a JIRA after an interrupted
+            # original merge. If it was already resolved, add any newly inferred fix versions.
+            update_jira_for_pr(pr_num, title, picked_refs, title_components, allow_resolved=True)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -1922,15 +2020,9 @@ def main():
                 close_pr(pr_num)
             # Record every branch that successfully received the change on the PR.
             post_merge_comment(pr_num, merged_commits)
-
-    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
-    continue_maybe("Would you like to update an associated JIRA?")
-    jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
-        pr_num,
-        GITHUB_BASE,
-        pr_num,
-    )
-    resolve_jira_issues(title, merged_refs, jira_comment, title_components)
+        # This is deliberately in the finally block: once the target branch has been pushed,
+        # cancelling a later cherry-pick must not bypass the mandatory JIRA update.
+        update_jira_for_pr(pr_num, title, merged_refs, title_components)
 
 
 if __name__ == "__main__":
