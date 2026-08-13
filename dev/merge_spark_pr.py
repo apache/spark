@@ -1321,6 +1321,7 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=(), all
 
 def update_jira_for_pr(pr_num, title, merge_branches, title_components, allow_resolved=False):
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
+    print()
     continue_maybe("Would you like to update an associated JIRA?")
     jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
         pr_num,
