@@ -296,6 +296,12 @@ class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         sources["string[pyarrow]:standard"] = pd.Series(["hello", "world"], dtype="string[pyarrow]")
         sources["string[pyarrow]:nullable"] = pd.Series(["hello", None], dtype="string[pyarrow]")
         sources["string[pyarrow]:empty"] = pd.Series([], dtype="string[pyarrow]")
+        # Binary is not auto-promoted to large_binary the way string is, so large_binary
+        # has to be requested explicitly.  This is the binary counterpart of the string
+        # rows, and lets the type tests exercise the binary half of SPARK-46776.
+        sources["large_binary[pyarrow]:standard"] = pd.Series(
+            [b"hello", b"world"], dtype="large_binary[pyarrow]"
+        )
         sources["timestamp[us][pyarrow]:standard"] = pd.Series(
             [datetime.datetime(2024, 1, 1, 12, 0, 0)], dtype="timestamp[us][pyarrow]"
         )
