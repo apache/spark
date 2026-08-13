@@ -8388,6 +8388,29 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_ARRAY_KEY" : {
+    "message" : [
+      "Array keys are not supported by:"
+    ],
+    "subClass" : {
+      "HASH_PARTITIONER" : {
+        "message" : [
+          "HashPartitioner."
+        ]
+      },
+      "MAP_SIDE_COMBINE" : {
+        "message" : [
+          "map-side combining."
+        ]
+      },
+      "REDUCE_BY_KEY_LOCALLY" : {
+        "message" : [
+          "reduceByKeyLocally()."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_ARROWTYPE" : {
     "message" : [
       "Unsupported arrow type <typeName>."
@@ -11473,21 +11496,6 @@
   "_LEGACY_ERROR_TEMP_3006" : {
     "message" : [
       "empty RDD"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3008" : {
-    "message" : [
-      "Cannot use map-side combining with array keys."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3009" : {
-    "message" : [
-      "HashPartitioner cannot partition array keys."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3010" : {
-    "message" : [
-      "reduceByKeyLocally() does not support array keys"
     ]
   },
   "_LEGACY_ERROR_TEMP_3011" : {
