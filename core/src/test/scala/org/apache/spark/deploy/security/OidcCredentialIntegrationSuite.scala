@@ -529,7 +529,7 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     }
   }
 
-  test("TaskSetManager credential attachment reads from SparkEnv store") {
+  test("credential serialization roundtrip through VersionedCredentials store") {
     val conf = createOidcConf()
     val ctx = createUserContext()
 
