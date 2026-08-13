@@ -488,10 +488,10 @@ private[sql] object CatalogV2Util {
   def extractTableStateOptions(
       catalog: CatalogPlugin,
       options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
-    val stateKeys = catalog.asTableCatalog.tableStateOptionKeys().asScala
+    val stateKeys = catalog.asTableCatalog.tableStateOptionKeys.asScala
       .map(_.toLowerCase(Locale.ROOT))
       .toSet
-    val projected = options.entrySet().asScala.collect {
+    val projected = options.entrySet.asScala.collect {
       case entry if stateKeys.contains(entry.getKey.toLowerCase(Locale.ROOT)) =>
         entry.getKey -> entry.getValue
     }.toMap

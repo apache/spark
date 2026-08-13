@@ -257,7 +257,11 @@ class RelationResolution(
           .orElse {
             lazy val tableKey =
               toTableCacheKey(catalog, ident, finalTimeTravelSpec, finalOptions)
-            val pinnedTable = if (writePrivileges == null) tableCache.get(tableKey) else None
+            val pinnedTable = if (writePrivileges == null && catalog.isInstanceOf[TableCatalog]) {
+              tableCache.get(tableKey)
+            } else {
+              None
+            }
 
             // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
             // `loadRelation` answers both "is there a table?" and "is there a view?" in one
@@ -493,12 +497,7 @@ class RelationResolution(
 
   def resolveReference(ref: V2TableReference): LogicalPlan = {
     val relation = if (ref.context.cacheable) {
-      // A temporary view may contain a relation pinned by CacheManager, so its re-resolution
-      // consults sharedRelationCache to preserve that Table. Transaction references use the
-      // Table loaded through the transaction catalog instead.
-      val useSharedRelationCache =
-        ref.context.isInstanceOf[V2TableReference.TemporaryViewContext]
-      getOrLoadRelation(ref, useSharedRelationCache)
+      getOrLoadRelation(ref)
     } else {
       loadRelation(ref)
     }
@@ -506,48 +505,35 @@ class RelationResolution(
     cloneWithPlanId(relation, planId)
   }
 
-  private def getOrLoadRelation(
-      ref: V2TableReference,
-      useSharedRelationCache: Boolean): LogicalPlan = {
+  private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
     val key = toCacheKey(ref.catalog, ref.identifier, None, ref.options)
     relationCache.get(key) match {
       case Some(cached) =>
         adaptCachedRelation(cached, ref)
       case None =>
-        val resolvedCatalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
-        val tableKey = toTableCacheKey(resolvedCatalog, ref.identifier, None, ref.options)
-        tableCache.get(tableKey) match {
+        val catalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
+        val tableKey = toTableCacheKey(catalog, ref.identifier, None, ref.options)
+        val relation = tableCache.get(tableKey) match {
           case Some(pinnedTable) =>
-            val relation = createRelation(ref, resolvedCatalog, pinnedTable)
-            relationCache.update(key, relation)
-            relation
+            createRelation(ref, catalog, pinnedTable)
           case None =>
-            val loadedTable = CatalogV2Util.getTable(
-              resolvedCatalog,
-              ref.identifier,
-              options = ref.options)
-            val sharedRelationCacheMatch = if (useSharedRelationCache) {
-              lookupSharedRelationCache(
-                resolvedCatalog,
-                ref.identifier,
-                loadedTable,
-                ref.options)
+            val table = CatalogV2Util.getTable(catalog, ref.identifier, options = ref.options)
+            val sharedCacheMatch = if (ref.context.sharedCacheable) {
+              lookupSharedRelationCache(catalog, ref.identifier, table, ref.options)
             } else {
               None
             }
-            sharedRelationCacheMatch match {
+            sharedCacheMatch match {
               case Some(cached) =>
-                val relation = adaptCachedRelation(cached, ref)
                 tableCache.update(tableKey, cached.table)
-                relationCache.update(key, relation)
-                relation
+                adaptCachedRelation(cached, ref)
               case None =>
-                val relation = createRelation(ref, resolvedCatalog, loadedTable)
-                tableCache.update(tableKey, loadedTable)
-                relationCache.update(key, relation)
-                relation
+                tableCache.update(tableKey, table)
+                createRelation(ref, catalog, table)
             }
         }
+        relationCache.update(key, relation)
+        relation
     }
   }
 
