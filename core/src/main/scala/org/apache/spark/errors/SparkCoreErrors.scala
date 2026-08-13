@@ -146,7 +146,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def emptyCollectionError(): Throwable = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3014")
+    new SparkUnsupportedOperationException("EMPTY_COLLECTION_NOT_ALLOWED")
   }
 
   def countByValueApproxNotSupportArraysError(): Throwable = {
