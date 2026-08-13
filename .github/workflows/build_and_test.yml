@@ -54,20 +54,17 @@ on:
       build_timeout_minutes:
         description: >-
           Timeout for each `build` matrix job. Raise it for a caller whose configuration makes the
-          Scala test modules slower, e.g. a non-default codegen compiler.
+          tests slower, e.g. a non-default codegen compiler.
         required: false
         type: number
         default: 150
       pyspark_timeout_minutes:
-        description: >-
-          Timeout for each `pyspark` matrix job. Same reason as above.
+        description: Timeout for each `pyspark` matrix job. Same reason as above.
         required: false
         type: number
         default: 120
       docker_integration_tests_timeout_minutes:
-        description: >-
-          Timeout for the `docker-integration-tests` job. Same reason as above; this job already
-          runs close to its default on the Janino backend.
+        description: Timeout for the `docker-integration-tests` job. Same reason as above.
         required: false
         type: number
         default: 120

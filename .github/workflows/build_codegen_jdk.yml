@@ -22,10 +22,9 @@
 # default backend is Janino, which leaves the javac path (SPARK-57403) exercised
 # only by its own suite even though every generated unit could take it.
 #
-# javac is several times slower than Janino on large generated units and up to
-# two orders of magnitude slower on small ones, so this runs on its own schedule
-# rather than on every push, and skips the jobs that do not compile generated
-# code (docs, lint, buf, ui).
+# javac is slower than Janino, so this runs on its own schedule rather than on
+# every push, skips the jobs that do not compile generated code (docs, lint, buf,
+# ui), and raises the timeout of the three jobs that no longer fit their default.
 name: "Build / Codegen JDK backend (master, Scala 2.13, JDK 17)"
 
 on:
@@ -44,20 +43,7 @@ jobs:
       java: 17
       branch: master
       hadoop: hadoop3
-      # Three jobs need more than their default on javac. The numbers come from three
-      # probe runs of the whole suite on this backend:
-      #
-      #   sql - other tests           171m on javac, 127m on Janino, default 150
-      #   pyspark-sql and friends     109m on javac,  73m on Janino, default 120
-      #   docker-integration-tests    116m on javac, 102m on Janino, default 120
-      #
-      # Each cap is the slowest run plus about 20%. The 171m is a single measurement: the
-      # two earlier probe runs cancelled that job at the 150 default, so all they say is
-      # that it costs more than 150.
-      #
-      # `build` and `pyspark` are matrices, so their other modules get the raised cap too.
-      # None of them came near even the default, the closest being `sql - slow tests` at
-      # 124m.
+      # See SPARK-57411 for the measurements behind these three.
       build_timeout_minutes: 200
       pyspark_timeout_minutes: 130
       docker_integration_tests_timeout_minutes: 140
