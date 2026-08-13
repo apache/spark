@@ -277,7 +277,9 @@ class RelationResolution(
                 case mc: RelationCatalog
                     if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
                   try {
-                    Some(mc.loadRelation(ident, finalOptions))
+                    val stateOptions =
+                      CatalogV2Util.extractTableStateOptions(mc, finalOptions)
+                    Some(mc.loadRelation(ident, stateOptions))
                   } catch {
                     case _: NoSuchTableException => None
                   }

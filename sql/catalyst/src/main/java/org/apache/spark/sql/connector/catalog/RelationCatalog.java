@@ -112,7 +112,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  *       carry no read options (DDL and miscellaneous commands), and as the base that the
  *       {@code loadTable(Identifier)} / {@code loadView} defaults derive from.</li>
  *   <li>{@link #loadRelation(Identifier, CaseInsensitiveStringMap)} -- the resolver's
- *       per-identifier read path: same contract, plus the user's read options.</li>
+ *       per-identifier read path: same contract, plus the options declared by
+ *       {@link #tableStateOptionKeys()}.</li>
  *   <li>{@link #listRelationSummaries(String[])} -- a unified listing of tables and views
  *       with the kind preserved on each {@link TableSummary}. Default impl performs both
  *       {@link TableCatalog#listTableSummaries} and {@link ViewCatalog#listViews}; override to
@@ -140,24 +141,24 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
 
   /**
    * Load the relation for an identifier that may resolve to either a table or a view, forwarding
-   * all user-specified options.
+   * the user-specified options that may affect table state.
    * <p>
-   * Behaves like {@link #loadRelation(Identifier)} but also receives the options passed to the
-   * read. The default implementation ignores {@code options} and delegates to
-   * {@link #loadRelation(Identifier)}; catalogs that want to receive the user options while
-   * reading a relation must override this method.
+   * Behaves like {@link #loadRelation(Identifier)} but also receives table-state options. The
+   * default implementation ignores {@code stateOptions} and delegates to
+   * {@link #loadRelation(Identifier)}; catalogs that want to receive table-state options while
+   * reading a relation must override {@link #tableStateOptionKeys()} and this method.
    * <p>
    * Spark calls this for a plain read only -- no time travel and no write privileges, both of
    * which apply to tables only and route through
    * {@link TableCatalog#loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} instead.
    *
    * @param ident the identifier
-   * @param options all options passed to the read
+   * @param stateOptions options declared to affect table state
    * @return a {@link Table} for tables, or a {@link View} for views
    * @throws NoSuchTableException if neither a table nor a view exists at {@code ident}
    * @since 4.3.0
    */
-  default Relation loadRelation(Identifier ident, CaseInsensitiveStringMap options)
+  default Relation loadRelation(Identifier ident, CaseInsensitiveStringMap stateOptions)
       throws NoSuchTableException {
     return loadRelation(ident);
   }
@@ -214,19 +215,19 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * {@inheritDoc}
    * <p>
    * The default implementation derives from {@link #loadRelation(Identifier,
-   * CaseInsensitiveStringMap)} for a plain read, so the user options reach the relation-level
-   * entry point. Time-travel and write-privilege loads keep {@link TableCatalog}'s dispatch --
-   * both apply to tables only.
+   * CaseInsensitiveStringMap)} for a plain read, so the already-projected table-state options
+   * reach the relation-level entry point. Time-travel and write-privilege loads keep
+   * {@link TableCatalog}'s dispatch -- both apply to tables only.
    */
   @Override
   default Table loadTable(
       Identifier ident,
       TableContext context,
-      CaseInsensitiveStringMap options) throws NoSuchTableException {
+      CaseInsensitiveStringMap stateOptions) throws NoSuchTableException {
     if (context.timeTravel().isPresent() || !context.writePrivileges().isEmpty()) {
-      return TableCatalog.super.loadTable(ident, context, options);
+      return TableCatalog.super.loadTable(ident, context, stateOptions);
     }
-    if (loadRelation(ident, options) instanceof Table t) {
+    if (loadRelation(ident, stateOptions) instanceof Table t) {
       return t;
     }
     throw new NoSuchTableException(ident);
