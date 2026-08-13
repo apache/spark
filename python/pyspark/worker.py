@@ -225,6 +225,17 @@ class EvalConf(Conf):
         return _parse_datatype_json_string(input_type)
 
     @property
+    def elementwise_nesting(self) -> Optional[list]:
+        # Per-UDF nesting depth (parallel to the UDF list) for the element-wise lift: how many
+        # ``array`` levels the worker flattens off each argument and re-nests onto the result. A UDF
+        # in a single lambda is depth 1; one lifted out of nested lambdas is deeper. Absent/empty
+        # means depth 1 for every UDF. See ExtractPythonUDFFromLambda.
+        raw = self.get("elementwise_nesting", None)
+        if raw is None or raw == "":
+            return None
+        return [int(x) for x in raw.split(",")]
+
+    @property
     def table_arg_offsets(self) -> Optional[list[int]]:
         offsets = self.get("table_arg_offsets", None)
         if offsets is None:
@@ -1857,6 +1868,68 @@ def _elementwise_renest(flat_values, shape_lengths, is_large):
     return list_cls.from_arrays(offsets_arr, flat_values, mask=null_mask)
 
 
+def _elementwise_leaf_type(data_type, depth):
+    """The element type ``depth`` ``ArrayType`` levels below ``data_type``.
+
+    A lifted UDF's argument arrives as ``array^depth<T>`` (one ``array`` level per enclosing higher-
+    order function lambda); this peels them off to the scalar leaf ``T`` the user function sees. See
+    ``ExtractPythonUDFFromLambda``.
+    """
+    for _ in range(depth):
+        data_type = data_type.elementType
+    return data_type
+
+
+def _elementwise_flatten_deep(col, depth):
+    """Flatten ``depth`` list levels off ``col``, keeping each level's shape for re-nesting.
+
+    Returns ``(leaf, shape_levels, is_large_levels)``: ``leaf`` is the fully flattened element
+    ``pa.Array`` (the leaves of the ``depth``-deep nesting), ``shape_levels[k]`` is the per-slot
+    length (``None`` for a null slot) at level ``k`` (0 = outermost), and ``is_large_levels[k]``
+    whether that level is a ``LargeListArray``. ``depth`` is 1 for a UDF in a single lambda and more
+    for one lifted out of nested lambdas. Shared by the element-wise worker paths. See
+    ``ExtractPythonUDFFromLambda``.
+    """
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    shape_levels = []
+    is_large_levels = []
+    cur = col
+    for _ in range(depth):
+        shape_levels.append(pc.list_value_length(cur).to_pylist())
+        is_large_levels.append(pa.types.is_large_list(cur.type))
+        cur = cur.flatten()
+    return cur, shape_levels, is_large_levels
+
+
+def _elementwise_flatten_leaf(col, depth):
+    """Flatten ``depth`` list levels off ``col`` to its leaf ``pa.Array``, without capturing shape.
+
+    A lifted UDF re-nests its result by the *first* argument's per-level shapes only, so the other
+    arguments need just their leaves. This skips the ``pc.list_value_length(...).to_pylist()`` and
+    ``is_large`` bookkeeping ``_elementwise_flatten_deep`` does for the first argument. See
+    ``ExtractPythonUDFFromLambda``.
+    """
+    cur = col
+    for _ in range(depth):
+        cur = cur.flatten()
+    return cur
+
+
+def _elementwise_renest_deep(flat_values, shape_levels, is_large_levels):
+    """Re-nest a flat leaf Array back through ``len(shape_levels)`` list levels, innermost first.
+
+    Inverse of ``_elementwise_flatten_deep``: rebuilds the ``array^depth<R>`` result from the flat
+    per-leaf results and the per-level shapes captured while flattening the input. For ``depth`` 1
+    this is a single ``_elementwise_renest``.
+    """
+    result = flat_values
+    for lengths, is_large in zip(reversed(shape_levels), reversed(is_large_levels)):
+        result = _elementwise_renest(result, lengths, is_large)
+    return result
+
+
 def _elementwise_flatten_column(flat, element_type, is_pandas, runner_conf):
     """Adapt one already-flattened ``array<T>`` element column to the vectorized fn's input.
 
@@ -3099,51 +3172,56 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         require_minimum_pyarrow_version()
 
         import pyarrow as pa
-        import pyarrow.compute as pc
 
         # Element-wise UDFs back higher-order lambdas like transform(arr, x -> udf(x)).
         # ExtractPythonUDFFromLambda rewrites them so the UDF receives *all* array elements
-        # at once (as ``array<T>``) rather than per-element. Flatten once, evaluate once over
-        # the batch, then re-nest with input offsets. Example: array<int> -> udf -> array<int>.
+        # at once (as ``array<T>``) rather than per-element. Flatten each argument down to its
+        # leaves, evaluate once over the batch, then re-nest with the input offsets. A UDF lifted
+        # out of nested lambdas (e.g. transform(arr, i -> transform(i, x -> udf(x)))) flattens more
+        # than one ``array`` level - its per-UDF depth comes from ``elementwise_nesting``.
+        # Example: array<array<int>> -> udf(depth 2) -> array<array<int>>.
 
         # UDF preparation
+        input_fields = list(eval_conf.input_type)
+        nesting = eval_conf.elementwise_nesting
         udf_infos = []
-        for udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type in udfs:
+        for udf_index, udf in enumerate(udfs):
+            udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type = udf
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
                 udf_func, udf_args_offsets, udf_kwargs_offsets
             )
-            # UDF returns one value per element; return type was pickled, unchanged.
-            # This is per-element, so element type equals the declared return type.
-            element_return_type = udf_return_type
+            depth = nesting[udf_index] if nesting is not None else 1
+            # Each argument arrives as ``array^depth<T>``; convert its leaves with the element type
+            # ``T`` reached by peeling ``depth`` array levels.
+            arg_converters = [
+                ArrowTableToRowsConversion._create_converter(
+                    _elementwise_leaf_type(input_fields[o].dataType, depth),
+                    none_on_identity=True,
+                    binary_as_bytes=runner_conf.binary_as_bytes,
+                )
+                for o in args_kwargs_offsets
+            ]
             udf_infos.append(
                 (
                     wrapped_func,
                     args_kwargs_offsets,
+                    depth,
+                    arg_converters,
+                    # UDF returns one value per element; return type was pickled, unchanged. This is
+                    # per-element, so element type equals the declared return type.
                     to_arrow_type(
-                        element_return_type,
+                        udf_return_type,
                         timezone="UTC",
                         prefers_large_types=runner_conf.use_large_var_types,
                     ),
                     LocalDataToArrowConversion._create_converter(
-                        element_return_type,
+                        udf_return_type,
                         none_on_identity=True,
                         int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                     ),
                 )
             )
         col_names = [f"_{i}" for i in range(len(udfs))]
-
-        # Input: every argument arrives as ``array<T>`` aligned with the iterated array.
-        # Flatten once per column; convert elements with the array's element type.
-        input_fields = list(eval_conf.input_type)
-        arrow_to_py_converters = [
-            ArrowTableToRowsConversion._create_converter(
-                f.dataType.elementType,
-                none_on_identity=True,
-                binary_as_bytes=runner_conf.binary_as_bytes,
-            )
-            for f in input_fields
-        ]
 
         @fail_on_stopiteration
         def _evaluate_elementwise_udf(udf_func, rows):
@@ -3154,48 +3232,42 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
                 return list(pool.map(lambda row: udf_func(*row), rows))
 
-        def renest_spec(shape):
-            """Offsets, list class and null mask that re-nest a flat result list by ``shape``.
-
-            Null rows stay null and consume no offsets. ``ListArray`` uses int32 offsets and
-            ``LargeListArray`` int64, so the input's list width is preserved.
-            """
-            lengths = pc.list_value_length(shape).to_pylist()
-            offsets = []
-            running = 0
-            for n in lengths:
-                offsets.append(running)
-                if n is not None:
-                    running += n
-            offsets.append(running)
-            is_large = pa.types.is_large_list(shape.type)
-            list_cls = pa.LargeListArray if is_large else pa.ListArray
-            offsets_arr = pa.array(offsets, type=pa.int64() if is_large else pa.int32())
-            null_mask = pa.array([n is None for n in lengths], type=pa.bool_())
-            total_elements = running
-            return list_cls, offsets_arr, null_mask, total_elements
-
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             for input_batch in data:
-                # Flatten each list column once to its element list, converting to Python.
-                columns = []
-                for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters):
-                    values = ArrowTableToRowsConversion._to_pylist(col.flatten())
-                    if conv is not None:
-                        values = [conv(v) for v in values]
-                    columns.append(values)
-
                 # Each UDF is re-nested by *its own* first argument's shape. ExtractPythonUDFs can
-                # fuse UDFs over differently shaped arrays into one batch, so a single shared shape
-                # would misalign every UDF but the first. The rewrite always passes at least one
-                # array argument, so `offsets_meta` is non-empty.
+                # fuse UDFs over differently shaped/nested arrays into one batch, so a single shared
+                # shape would misalign every UDF but the first. The rewrite always passes at least
+                # one array argument, so `offsets` is non-empty.
                 output_arrays = []
-                for wrapped_func, offsets_meta, arrow_element_type, result_conv in udf_infos:
-                    list_cls, offsets_arr, null_mask, total_elements = renest_spec(
-                        input_batch.column(offsets_meta[0])
+                for info in udf_infos:
+                    (
+                        wrapped_func,
+                        offsets,
+                        depth,
+                        arg_converters,
+                        arrow_element_type,
+                        result_conv,
+                    ) = info
+                    # Flatten each argument `depth` list levels to its leaves; the first argument's
+                    # per-level shapes drive the re-nest.
+                    leaf0, shape_levels, is_large_levels = _elementwise_flatten_deep(
+                        input_batch.column(offsets[0]), depth
                     )
+                    columns = []
+                    for i, (o, conv) in enumerate(zip(offsets, arg_converters)):
+                        leaf = (
+                            leaf0
+                            if i == 0
+                            else _elementwise_flatten_leaf(input_batch.column(o), depth)
+                        )
+                        values = ArrowTableToRowsConversion._to_pylist(leaf)
+                        if conv is not None:
+                            values = [conv(v) for v in values]
+                        columns.append(values)
+
+                    total_elements = len(columns[0])
                     # Stream the argument tuples rather than materializing a batch-sized list.
-                    rows = zip(*[columns[o] for o in offsets_meta])
+                    rows = zip(*columns)
                     results = _evaluate_elementwise_udf(wrapped_func, rows)
                     verify_result_row_count(len(results), total_elements)
 
@@ -3214,7 +3286,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                             target_type=arrow_element_type, safe=runner_conf.safecheck
                         )
                     output_arrays.append(
-                        list_cls.from_arrays(offsets_arr, flat_arr, mask=null_mask)
+                        _elementwise_renest_deep(flat_arr, shape_levels, is_large_levels)
                     )
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
@@ -3231,7 +3303,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         require_minimum_pyarrow_version()
 
         import pyarrow as pa
-        import pyarrow.compute as pc
 
         # A scalar pandas or Arrow UDF lifted out of a higher-order function's lambda by
         # ExtractPythonUDFFromLambda. Each argument arrives as ``array<T>`` aligned with the
@@ -3241,8 +3312,11 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # input's offsets - one row in, one row out, one Python round trip per batch.
         is_pandas = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF
 
+        input_fields = list(eval_conf.input_type)
+        nesting = eval_conf.elementwise_nesting
         udf_infos = []
-        for udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type in udfs:
+        for udf_index, udf in enumerate(udfs):
+            udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type = udf
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
                 udf_func, udf_args_offsets, udf_kwargs_offsets
             )
@@ -3251,37 +3325,59 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             arrow_element_type = to_arrow_type(
                 udf_return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
             )
+            depth = nesting[udf_index] if nesting is not None else 1
+            # Each argument arrives as ``array^depth<T>``; the vectorized function must see the leaf
+            # element type ``T`` reached by peeling ``depth`` array levels.
+            arg_leaf_types = [
+                _elementwise_leaf_type(input_fields[o].dataType, depth) for o in args_kwargs_offsets
+            ]
             udf_infos.append(
-                (wrapped_func, args_kwargs_offsets, udf_return_type, arrow_element_type)
+                (
+                    wrapped_func,
+                    args_kwargs_offsets,
+                    udf_return_type,
+                    arrow_element_type,
+                    depth,
+                    arg_leaf_types,
+                )
             )
         col_names = [f"_{i}" for i in range(len(udfs))]
 
         if is_pandas:
             import pandas as pd
 
-        # Each argument is ``array<T>``; the vectorized function must see the element type ``T``.
-        element_types = [f.dataType.elementType for f in eval_conf.input_type]
-
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             for input_batch in data:
-                # Flatten each list column to its element array once per batch and share it across
-                # fused UDFs (the 102 path does the same), rather than re-flattening per UDF.
-                flat_columns = [
-                    _elementwise_flatten_column(
-                        col.flatten(), element_types[i], is_pandas, runner_conf
-                    )
-                    for i, col in enumerate(input_batch.itercolumns())
-                ]
-
                 output_arrays = []
-                for wrapped_func, offsets, return_type, arrow_element_type in udf_infos:
-                    # Re-nest by this UDF's first argument's shape. Different UDFs in one operator
-                    # may iterate differently shaped arrays, so each re-nests by its own argument.
-                    shape = input_batch.column(offsets[0])
-                    shape_lengths = pc.list_value_length(shape).to_pylist()
-                    total_elements = sum(n for n in shape_lengths if n is not None)
+                for (
+                    wrapped_func,
+                    offsets,
+                    return_type,
+                    arrow_element_type,
+                    depth,
+                    arg_leaf_types,
+                ) in udf_infos:
+                    # Flatten each argument `depth` list levels to its leaves and adapt to the
+                    # vectorized fn's input. Different UDFs in one operator may iterate differently
+                    # shaped or differently nested arrays, so each flattens and re-nests by its own
+                    # argument (the first argument's per-level shapes drive the re-nest).
+                    leaf0, shape_levels, is_large_levels = _elementwise_flatten_deep(
+                        input_batch.column(offsets[0]), depth
+                    )
+                    total_elements = len(leaf0)
+                    flat_columns = [
+                        _elementwise_flatten_column(
+                            leaf0
+                            if i == 0
+                            else _elementwise_flatten_leaf(input_batch.column(o), depth),
+                            t,
+                            is_pandas,
+                            runner_conf,
+                        )
+                        for i, (o, t) in enumerate(zip(offsets, arg_leaf_types))
+                    ]
 
-                    result = wrapped_func(*[flat_columns[o] for o in offsets])
+                    result = wrapped_func(*flat_columns)
                     if is_pandas:
                         if not hasattr(result, "__len__"):
                             pd_type = (
@@ -3316,9 +3412,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     flat_arr = _elementwise_result_to_arrow(
                         result, return_type, arrow_element_type, is_pandas, runner_conf
                     )
-                    nested = _elementwise_renest(
-                        flat_arr, shape_lengths, pa.types.is_large_list(shape.type)
-                    )
+                    nested = _elementwise_renest_deep(flat_arr, shape_levels, is_large_levels)
                     output_arrays.append(nested)
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
@@ -3337,7 +3431,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         import collections
 
         import pyarrow as pa
-        import pyarrow.compute as pc
 
         is_pandas = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF
         if is_pandas:
@@ -3354,36 +3447,45 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # output to input positionally by row (one ``array<R>`` per input ``array<T>`` row, in
         # order), buffering a FIFO of the per-row element counts to re-group the streamed flat
         # results back into arrays. Output batch boundaries need not match input ones.
-        # Each argument is ``array<T>``; the pandas function must see each argument's own element
-        # type ``T`` (arguments may differ, e.g. an outer column repeated into an aligned array).
-        element_types = [f.dataType.elementType for f in eval_conf.input_type]
+        # Each argument arrives as ``array^depth<T>``; the vectorized function must see the leaf
+        # element type ``T`` (arguments may differ, e.g. an outer column repeated into an aligned
+        # array). ``depth`` > 1 for a UDF lifted out of nested lambdas.
+        input_fields = list(eval_conf.input_type)
+        nesting = eval_conf.elementwise_nesting
+        depth = nesting[0] if nesting is not None else 1
+        arg_leaf_types = [
+            _elementwise_leaf_type(input_fields[o].dataType, depth) for o in args_offsets
+        ]
         arrow_element_type = to_arrow_type(
             return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
-        is_large = None  # set from the first input batch; the list width is uniform per column.
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            # FIFO of per-row element counts (None for a null array) awaiting their flat results,
-            # and the flat elements produced so far but not yet enough to complete the head shapes.
+            # FIFO of per-input-batch nesting shapes awaiting their flat leaf results. Each entry
+            # (per-level shapes, per-level list width, leaf count) re-nests one input batch's worth
+            # of rows back to ``array^depth<R>`` once that many leaf results have streamed in.
             pending_shapes: "collections.deque" = collections.deque()
             num_input_elements = 0
 
             def extract_flat(batch: pa.RecordBatch):
-                nonlocal is_large, num_input_elements
-                shape = batch.column(args_offsets[0])
-                if is_large is None:
-                    is_large = pa.types.is_large_list(shape.type)
-                pending_shapes.append(pc.list_value_length(shape).to_pylist())
-                # Flatten each argument to its element column; the user function sees the flat
-                # elements as a pandas Series / DataFrame (pandas) or a pa.Array (Arrow). Each
-                # argument is converted with its own element type.
+                nonlocal num_input_elements
+                # Flatten each argument `depth` levels to its leaves; the first argument's per-level
+                # shapes re-nest this batch's rows. The user function sees the flat leaves as a
+                # pandas Series / DataFrame (pandas) or a pa.Array (Arrow), each with its leaf type.
+                leaf0, shape_levels, is_large_levels = _elementwise_flatten_deep(
+                    batch.column(args_offsets[0]), depth
+                )
+                pending_shapes.append((shape_levels, is_large_levels, len(leaf0)))
+                num_input_elements += len(leaf0)
                 flat_cols = [
                     _elementwise_flatten_column(
-                        batch.column(o).flatten(), element_types[o], is_pandas, runner_conf
+                        leaf0 if i == 0 else _elementwise_flatten_leaf(batch.column(o), depth),
+                        arg_leaf_types[i],
+                        is_pandas,
+                        runner_conf,
                     )
-                    for o in args_offsets
+                    for i, o in enumerate(args_offsets)
                 ]
-                num_input_elements += len(flat_cols[0])
                 return flat_cols[0] if len(flat_cols) == 1 else tuple(flat_cols)
 
             flat_args_iter = map(extract_flat, data)
@@ -3421,8 +3523,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             def emit_ready():
                 nonlocal pending_chunks, pending_len
                 while pending_shapes:
-                    lengths = pending_shapes[0]
-                    needed = sum(n for n in lengths if n is not None)
+                    shape_levels, is_large_levels, needed = pending_shapes[0]
                     if needed > pending_len:
                         break
                     pending_shapes.popleft()
@@ -3438,7 +3539,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         remainder = combined.slice(needed)
                         pending_chunks = [remainder] if len(remainder) else []
                         pending_len -= needed
-                    nested = _elementwise_renest(flat, lengths, bool(is_large))
+                    nested = _elementwise_renest_deep(flat, shape_levels, is_large_levels)
                     yield pa.RecordBatch.from_arrays([nested], ["_0"])
 
             def process_results():

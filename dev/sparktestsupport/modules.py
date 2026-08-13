@@ -545,6 +545,7 @@ pyspark_core = Module(
         "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_to_pandas",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_type_coercion",
     ],
 )
@@ -1200,6 +1201,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_retry",
         "pyspark.sql.tests.connect.test_connect_session",
         "pyspark.sql.tests.connect.test_connect_local_server",
+        "pyspark.sql.tests.connect.test_connect_local_server_pool",
         "pyspark.sql.tests.connect.test_connect_stat",
         "pyspark.sql.tests.connect.test_parity_geographytype",
         "pyspark.sql.tests.connect.test_parity_geometrytype",

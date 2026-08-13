@@ -883,7 +883,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-9</version>
+        <version>1.5.7-13</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
