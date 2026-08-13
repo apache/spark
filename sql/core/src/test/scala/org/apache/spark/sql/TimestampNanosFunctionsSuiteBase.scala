@@ -717,8 +717,9 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
 
   test("SPARK-56822: collect_set over nanos deduplicates on the full sub-microsecond value") {
     // Two values share the microsecond and differ only in the last nanosecond digit. Flooring the
-    // input to precision `p` collapses them when p < 9 (the distinguishing digit is below the grid),
-    // but keeps them apart at p = 9. collect_set must dedup on the full stored value, not on micros.
+    // input to precision `p` collapses them when p < 9 (the distinguishing digit is below the
+    // grid), but keeps them apart at p = 9. collect_set must dedup on the full stored value,
+    // not on micros.
     Seq(7, 8, 9).foreach { p =>
       val schema = new StructType().add("ntz", TimestampNTZNanosType(p))
       val data = Seq(
