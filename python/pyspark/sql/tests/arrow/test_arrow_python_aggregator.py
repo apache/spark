@@ -15,9 +15,11 @@
 # limitations under the License.
 #
 import unittest
+from decimal import Decimal
 
 from pyspark.sql import functions as sf
 from pyspark.sql.types import (
+    DecimalType,
     DoubleType,
     LongType,
     StructField,
@@ -47,13 +49,41 @@ if have_pyarrow:
 
         def reduce(self, buffer, value):
             (v,) = value
-            return (buffer[0] + (v or 0.0), buffer[1] + 1)
+            if v is None:  # ignore nulls, like SQL avg
+                return buffer
+            return (buffer[0] + v, buffer[1] + 1)
 
         def merge(self, b1, b2):
             return (b1[0] + b2[0], b1[1] + b2[1])
 
         def finish(self, buffer):
             return buffer[0] / buffer[1] if buffer[1] else None
+
+    class DecimalSum(Aggregator):
+        # Non-trivial output/buffer type: the result column and the intermediate buffer are both
+        # DecimalType, exercising explicit Arrow typing of the emitted arrays (a bare
+        # ``pa.array([Decimal(...)])`` would infer a decimal type whose precision/scale need not
+        # match the declared one).
+        @property
+        def bufferSchema(self):
+            return StructType([StructField("total", DecimalType(20, 4))])
+
+        @property
+        def outputType(self):
+            return DecimalType(20, 4)
+
+        def zero(self):
+            return (Decimal(0),)
+
+        def reduce(self, buffer, value):
+            (v,) = value
+            return buffer if v is None else (buffer[0] + Decimal(str(v)),)
+
+        def merge(self, b1, b2):
+            return (b1[0] + b2[0],)
+
+        def finish(self, buffer):
+            return buffer[0]
 
     class SumSquares(Aggregator):
         @property
@@ -123,6 +153,33 @@ class ArrowPythonAggregatorTestsMixin:
         exp = {r["k"]: r["s"] for r in expected}
         for k in exp:
             self.assertAlmostEqual(got[k], exp[k], places=6)
+
+    def test_incremental_aggregator_decimal_output(self):
+        # Non-trivial output/buffer type (DecimalType), crossing the shuffle as a decimal buffer
+        # and emitted as a decimal result -- guards the explicit Arrow typing of both stages.
+        df = self._data()
+        result = (
+            df.groupBy("k").agg(udaf(DecimalSum())(sf.col("v")).alias("s")).orderBy("k").collect()
+        )
+        expected = df.groupBy("k").agg(sf.sum("v").alias("s")).orderBy("k").collect()
+        got = {r["k"]: r["s"] for r in result}
+        exp = {r["k"]: r["s"] for r in expected}
+        for k in exp:
+            self.assertIsInstance(got[k], Decimal)
+            self.assertAlmostEqual(float(got[k]), exp[k], places=4)
+
+    def test_incremental_aggregator_null_inputs(self):
+        # reduce must tolerate null input values; the null-skipping Mean should match SQL avg,
+        # including a group whose values are all null (identity buffer -> finish returns None).
+        df = self.spark.createDataFrame(
+            [("a", 1.0), ("a", None), ("a", 3.0), ("b", None), ("b", None)],
+            "k string, v double",
+        )
+        result = df.groupBy("k").agg(udaf(Mean())(sf.col("v")).alias("m")).orderBy("k").collect()
+        expected = df.groupBy("k").agg(sf.avg("v").alias("m")).orderBy("k").collect()
+        got = {r["k"]: r["m"] for r in result}
+        exp = {r["k"]: r["m"] for r in expected}
+        self.assertEqual(got, exp)
 
     def test_multiple_incremental_aggregators(self):
         # Two aggregators with different buffer schemas over the same input in one agg call.

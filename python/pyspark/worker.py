@@ -2228,6 +2228,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             prefers_large_types=runner_conf.use_large_var_types,
         )
         col_names = ["_%d" % i for i in range(len(udfs))]
+        # Buffer field names are invariant across groups; compute them once per aggregator.
+        field_names_by_udf = [[f.name for f in agg.bufferSchema.fields] for agg, _, _, _ in udfs]
 
         def grouped_func(
             split_index: int, data: Iterator["GroupedBatch"]
@@ -2243,7 +2245,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         buffers[i] = buf
                 result_arrays = []
                 for i, (agg, _, _, _) in enumerate(udfs):
-                    field_names = [f.name for f in agg.bufferSchema.fields]
+                    field_names = field_names_by_udf[i]
                     struct_value = {name: buffers[i][j] for j, name in enumerate(field_names)}
                     result_arrays.append(pa.array([struct_value], type=return_schema.field(i).type))
                 batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
@@ -2266,6 +2268,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
+        # Buffer field names are invariant across groups and batches; compute once per aggregator.
+        field_names_by_udf = [[f.name for f in agg.bufferSchema.fields] for agg, _, _, _ in udfs]
 
         def grouped_func(
             split_index: int, data: Iterator["GroupedBatch"]
@@ -2274,7 +2278,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 merged: list = [None] * len(udfs)
                 for batch in group:
                     for i, (agg, args_offsets, _, _) in enumerate(udfs):
-                        field_names = [f.name for f in agg.bufferSchema.fields]
+                        field_names = field_names_by_udf[i]
                         m = merged[i]
                         for row in batch.column(args_offsets[0]).to_pylist():
                             if row is None:
@@ -2286,7 +2290,11 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 for i, (agg, _, _, _) in enumerate(udfs):
                     m = merged[i] if merged[i] is not None else agg.zero()
                     results.append(agg.finish(m))
-                result_arrays = [pa.array([r]) for r in results]
+                # Type each output array explicitly (mirroring the PARTIAL stage) so a non-trivial
+                # outputType or an all-None column does not depend on Arrow type inference.
+                result_arrays = [
+                    pa.array([r], type=return_schema.field(i).type) for i, r in enumerate(results)
+                ]
                 batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 

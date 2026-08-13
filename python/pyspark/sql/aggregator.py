@@ -71,6 +71,8 @@ class Aggregator(ABC):
 
             def reduce(self, buffer, value):
                 (v,) = value
+                if v is None:  # ignore null inputs, like SQL aggregates do
+                    return buffer
                 return (buffer[0] + v, buffer[1] + 1)
 
             def merge(self, b1, b2):
@@ -149,6 +151,9 @@ def udaf(agg: "Aggregator") -> Any:
     ------
     :class:`PySparkImportError`
         If a supported version of PyArrow is not installed.
+    :class:`PySparkTypeError`
+        If ``agg`` is not an :class:`Aggregator`, or its ``bufferSchema`` is not a
+        :class:`StructType`.
     """
     from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
     from pyspark.sql.utils import is_remote

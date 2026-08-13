@@ -352,8 +352,10 @@ case class PythonUDAF(
  * A serialized Python aggregator that supports true incremental (partial) aggregation, the
  * analog of the Scala typed `org.apache.spark.sql.expressions.Aggregator[IN, BUF, OUT]`. Unlike
  * [[PythonUDAF]] (which materializes the whole group and calls Python once), this is planned as a
- * two-stage aggregation by [[PythonIncrementalAggregateExec]]: a map-side PARTIAL stage folds
- * input rows into a per-group buffer via the aggregator's `reduce`, and a post-shuffle FINAL stage
+ * two-stage aggregation by
+ * [[org.apache.spark.sql.execution.python.PythonIncrementalAggregateExec]]: a map-side PARTIAL
+ * stage folds input rows into a per-group buffer via the aggregator's `reduce`, and a post-shuffle
+ * FINAL stage
  * merges the partial buffers via `merge` and produces the output via `finish`.
  *
  * `bufferSchema` is the schema of the intermediate buffer that crosses the shuffle between the two
