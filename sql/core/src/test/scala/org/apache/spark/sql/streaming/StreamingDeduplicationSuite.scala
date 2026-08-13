@@ -705,11 +705,12 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
     q.recentProgress.flatMap(_.stateOperators.headOption.map(_.numRowsRemoved)).sum
 
   test("deduplicate with watermark - incremental cleanup preserves dedup output") {
-    // With a non-zero incremental cleanup factor, watermark-expired state is removed spread across
-    // input-record processing rather than all at once at batch end. The deduplicated OUTPUT must be
-    // unchanged. (State is evicted against the late-events watermark under incremental cleanup, so
-    // the timing of state removal lags by a batch compared to the factor-0 default -- this test
-    // asserts on output and on the late-event safety property, not on per-batch state counts.)
+    // With a non-zero incremental cleanup factor, removal of watermark-expired state is spread
+    // across input-record processing rather than occurring all at once at batch end. The
+    // deduplicated OUTPUT must be unchanged. (State is evicted against the late-events watermark
+    // under incremental cleanup, so the timing of state removal lags by a batch compared to the
+    // factor-0 default -- this test asserts on output and on the late-event safety property, not
+    // on per-batch state counts.)
     withSQLConf(SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "10") {
       val inputData = MemoryStream[Int]
       val result = inputData.toDS()
@@ -764,9 +765,9 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
           "no incremental removal before any state is evictable"),
 
         // Batch 1: a new key at 100 advances the eviction watermark to 90, but the late-events
-        // watermark used by incremental cleanup becomes 0 -> then this batch's own late-events
-        // watermark lags, so removal of the [10,12] keys happens as batch 1's record is processed
-        // once they fall below the late-events watermark on the following batch.
+        // watermark used by incremental cleanup still lags (it is the previous batch's eviction
+        // watermark). The keys [10, 11, 12] are not yet below the late-events watermark, so no
+        // removal happens in this batch; it is deferred to batch 2.
         AddData(inputData, 100),
         CheckNewAnswer(100),
 
