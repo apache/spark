@@ -58,6 +58,12 @@ on:
         required: false
         type: number
         default: 150
+      pyspark_timeout_minutes:
+        description: >-
+          Timeout for each `pyspark` matrix job. Same reason as above.
+        required: false
+        type: number
+        default: 120
       docker_integration_tests_timeout_minutes:
         description: >-
           Timeout for the `docker-integration-tests` job. Same reason as above; this job already
@@ -642,7 +648,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.pyspark_timeout_minutes }}
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
       options: >-

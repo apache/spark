@@ -44,13 +44,19 @@ jobs:
       java: 17
       branch: master
       hadoop: hadoop3
-      # Every Scala test module runs longer on javac. The slowest, `sql - other tests`,
-      # was measured at 170 minutes against 126 on Janino, so it needs more than the
-      # 150 minute default.
+      # Three jobs need more time on javac. Each value below is about 20% above the
+      # slowest of three probe runs of the whole suite on this backend:
+      #
+      #   sql - other tests           171m on javac, 127m on Janino, default 150
+      #   pyspark-sql and friends     109m on javac,  73m on Janino, default 120
+      #   docker-integration-tests    116m on javac, 102m on Janino, default 120
+      #
+      # The first two inputs cover a whole matrix, so the other Scala and PySpark modules
+      # get the raised cap as well. That costs nothing: none of them came near even the
+      # default, the closest being `sql - slow tests` at 124m.
       build_timeout_minutes: 200
-      # `docker-integration-tests` took 86, 108 and 116 minutes across three javac runs
-      # against a 74 to 102 minute range on Janino, so the 120 default leaves it no room.
-      docker_integration_tests_timeout_minutes: 180
+      pyspark_timeout_minutes: 130
+      docker_integration_tests_timeout_minutes: 140
       envs: >-
         {
           "PYSPARK_IMAGE_TO_TEST": "python-312",
