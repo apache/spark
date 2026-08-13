@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.types.AnyTimestampNanoType
 
 /**
  * Analyzes the presence of unsupported operations in a logical plan.
@@ -504,6 +505,25 @@ object UnsupportedOperationChecker extends Logging {
                     "output modes")
                 }
               case _ => // further unsupported cases will be checked in the next pattern match
+            }
+          }
+
+          // SPARK-57843: Reject ALL stream-stream joins when the watermark column uses
+          // nanosecond precision. SymmetricHashJoinStateManager reads event-time via
+          // getLong (microseconds); a TimestampNanosVal would be silently misread.
+          // This check is hoisted above the per-join-type dispatch so that InnerLike
+          // (which skips checkForStreamStreamJoinWatermark) is also covered.
+          if (left.isStreaming && right.isStreaming) {
+            val allOutput = left.output ++ right.output
+            val nanoWatermarkInJoin = allOutput.exists { a =>
+              a.metadata.contains(EventTimeWatermark.delayKey) &&
+                a.dataType.isInstanceOf[AnyTimestampNanoType]
+            }
+            if (nanoWatermarkInJoin) {
+              throwError(
+                "Stream-stream joins do not yet support nanosecond-precision event-time " +
+                  "columns (SPARK-57843). Use a microsecond-precision timestamp type for " +
+                  "the watermark column instead.")(j)
             }
           }
 
