@@ -556,6 +556,16 @@ def run_cmd(cmd):
         return subprocess.check_output(cmd.split(" ")).decode("utf-8")
 
 
+class SkipCherryPick(Exception):
+    """Signals that the committer declined to resolve a conflicting cherry-pick.
+
+    A backport conflict is routine, and by the time one is hit the merge into the target
+    branch (and any earlier cherry-picks) has already been pushed. Declining it must skip
+    only that one branch -- letting the caller offer another branch and, crucially, still
+    resolve the JIRA -- instead of aborting the whole merge the way a hard `fail()` would.
+    """
+
+
 def continue_maybe(prompt, cherry=False):
     if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
@@ -563,6 +573,9 @@ def continue_maybe(prompt, cherry=False):
                 run_cmd("git cherry-pick --abort")
             except Exception:
                 print_error("Unable to abort and get back to the state before cherry-pick")
+            print("Skipping this cherry-pick; the merge continues.")
+            clean_up()
+            raise SkipCherryPick()
         fail("Okay, exiting")
 
 
@@ -654,7 +667,9 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
-    Returns the (pushed ref, pushed commit hash) pair.
+    Returns the (pushed ref, pushed commit hash) pair. Raises `SkipCherryPick` if the
+    cherry-pick conflicts and the committer declines to resolve it, after attempting to
+    abort the cherry-pick and restore the working tree.
     """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
@@ -764,7 +779,9 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     BOTH (the policy-compliant default) or branch-M.N only (treated as a
     maintenance-only bugfix). Returns the list of (ref, commit_hash) pairs actually
     picked into, so the main loop can advance its remaining-branches list correctly
-    and record each backport commit for the merge comment.
+    and record each backport commit for the merge comment. The list is empty (or, for the
+    Upstream-First two-branch path, holds only what landed) when the committer declines to
+    resolve a conflict, so the caller simply offers the next branch and still resolves JIRA.
     """
     while True:
         pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
@@ -796,17 +813,30 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             {"b": ["b", "both", ""], "o": ["o", "only"], "a": ["a", "abort"]},
         )
         if choice == "b":
-            picked_x = _do_cherry_pick(pr_num, merge_hash, sibling_x)
-            picked_n = _do_cherry_pick(pr_num, merge_hash, pick_ref)
-            return [picked_x, picked_n]
+            # Preserve any pick that was already pushed: if the branch-M.N pick is skipped after
+            # branch-M.x landed, still return branch-M.x so it's recorded and JIRA/comment
+            # reflect it.
+            picked = []
+            try:
+                picked.append(_do_cherry_pick(pr_num, merge_hash, sibling_x))
+                picked.append(_do_cherry_pick(pr_num, merge_hash, pick_ref))
+            except SkipCherryPick:
+                pass
+            return picked
         elif choice == "o":
-            return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+            try:
+                return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+            except SkipCherryPick:
+                return []
         elif choice == "a":
             fail("Aborted by user at Upstream-First policy prompt.")
         else:
             fail("Unrecognized choice %r; aborting." % choice)
 
-    return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+    try:
+        return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+    except SkipCherryPick:
+        return []
 
 
 # Common words carry no signal when comparing a PR title to a JIRA summary, so they are
