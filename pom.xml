@@ -129,7 +129,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.10.1</asm.version>
     <slf4j.version>2.0.17</slf4j.version>
-    <log4j.version>2.26.0</log4j.version>
+    <log4j.version>2.26.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.5.0</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -154,7 +154,7 @@
     <javaxservlet.version>4.0.1</javaxservlet.version>
     <chill.version>0.10.0</chill.version>
     <kryo.version>4.0.3</kryo.version>
-    <ivy.version>2.5.3</ivy.version>
+    <ivy.version>2.6.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
     If you change codahale.metrics.version, you also need to change
@@ -185,7 +185,7 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.22.0</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.22.1</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.2.0</netlib.ludovic.dev.version>
@@ -202,12 +202,12 @@
     <guava.version>33.6.0-jre</guava.version>
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
     <gson.version>2.14.0</gson.version>
-    <janino.version>3.1.9</janino.version>
+    <janino.version>3.1.12</janino.version>
     <jersey.version>3.1.11</jersey.version>
     <joda.version>2.14.3</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
-    <libthrift.version>0.16.0</libthrift.version>
+    <libthrift.version>0.24.0</libthrift.version>
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>4.32.0</selenium.version>
