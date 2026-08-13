@@ -59,7 +59,7 @@ import org.apache.spark.annotation.Private;
  * {@link CredentialProvider} contract, implementations must be thread-safe, so a returned
  * instance may be used concurrently.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @Private
 public final class CredentialProviderLoader {

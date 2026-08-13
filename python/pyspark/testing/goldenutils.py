@@ -338,6 +338,30 @@ class GoldenFileTestMixin:
         return f"{v_str}@{cls.repr_type(value.type)}"
 
     @classmethod
+    def repr_arrow_table_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a PyArrow Table for golden file.
+
+        Renders each column with PyArrow's scalar formatting (as ``repr_arrow_value``
+        does for an Array), keyed by column name, plus the Arrow schema.
+
+        Returns
+        -------
+        str
+            "{col: [val1, val2, None], ...}@Table[name: type, ...]"
+        """
+        columns = []
+        for name, column in zip(value.column_names, value.columns):
+            # Escape NULL bytes so the value can be safely stored in CSV files.
+            elements = [str(scalar).replace("\x00", "\\0") for scalar in column]
+            columns.append(f"{name}: [" + ", ".join(elements) + "]")
+        v_str = "{" + ", ".join(columns) + "}"
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        schema = ", ".join(f"{f.name}: {cls.repr_type(f.type)}" for f in value.schema)
+        return f"{v_str}@Table[{schema}]"
+
+    @classmethod
     def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
         """
         Format a pandas DataFrame for golden file.
@@ -404,6 +428,7 @@ class GoldenFileTestMixin:
         based on the value's type.
 
         - PyArrow Array/ChunkedArray -> repr_arrow_value
+        - PyArrow Table -> repr_arrow_table_value
         - pandas DataFrame -> repr_pandas_value
         - numpy ndarray -> repr_numpy_value
         - Everything else -> repr_python_value
@@ -422,6 +447,8 @@ class GoldenFileTestMixin:
         """
         if have_pyarrow and isinstance(value, (pa.Array, pa.ChunkedArray)):
             return cls.repr_arrow_value(value, max_len)
+        if have_pyarrow and isinstance(value, pa.Table):
+            return cls.repr_arrow_table_value(value, max_len)
 
         if have_pandas and isinstance(value, pd.DataFrame):
             return cls.repr_pandas_value(value, max_len)

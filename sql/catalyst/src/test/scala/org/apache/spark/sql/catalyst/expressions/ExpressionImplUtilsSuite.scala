@@ -480,4 +480,46 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
     tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), null)
   }
 
+  // These vectors follow Unicode Standard Annex #15's decomposition/composition algorithm and
+  // pin normalize() to Spark's bundled ICU4J/Unicode data (see icu4j.version in pom.xml): a
+  // future ICU4J upgrade that changed these mappings would fail this test, rather than silently
+  // changing query results.
+  test("Normalize with supported forms") {
+    def normalize(input: String, form: String): String =
+      ExpressionImplUtils.normalize(
+        UTF8String.fromString(input), UTF8String.fromString(form)).toString
+
+    // scalastyle:off nonascii
+    assert(normalize("\uFB01", "NFKC") == "fi")
+    assert(normalize("A\u030A", "NFC") == "\u00C5")
+    assert(normalize("\u00C5", "NFD") == "A\u030A")
+    assert(normalize("\uFB01", "nfkc") == "fi")
+    assert(normalize("\u00BD", "NFKD") == "1" + "\u2044" + "2")
+    assert(normalize("\u00BD", "NFD") == "\u00BD")
+    assert(normalize("\uD835\uDC00", "NFKC") == "A")
+    assert(normalize("", "NFC") == "")
+
+    // Combining marks with different combining classes are canonically reordered before
+    // composition (UAX #15 canonical ordering algorithm), so applying COMBINING DOT BELOW
+    // (U+0323) and COMBINING ACUTE ACCENT (U+0301) to the same base letter in either input
+    // order must normalize (NFC) to the same result.
+    val dotBelow = "\u0323"
+    val acute = "\u0301"
+    assert(normalize("a" + dotBelow + acute, "NFC") == normalize("a" + acute + dotBelow, "NFC"))
+    // scalastyle:on nonascii
+  }
+
+  test("Normalize invalid form error") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ExpressionImplUtils.normalize(
+          UTF8String.fromString("abc"), UTF8String.fromString("NFE"))
+      },
+      condition = "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+      parameters = Map(
+        "parameter" -> "`form`",
+        "functionName" -> "`normalize`",
+        "form" -> "'NFE'"))
+  }
+
 }

@@ -2815,6 +2815,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.try_variant_array_append(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
   }
 
+  functionTest("variant_strip_nulls") {
+    fn.variant_strip_nulls(fn.parse_json(fn.col("g")), false)
+  }
+
   functionTest("variant_get") {
     fn.variant_get(fn.parse_json(fn.col("g")), "$", "int")
   }
@@ -2825,6 +2829,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("schema_of_variant") {
     fn.schema_of_variant(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("variant_from_arrays") {
+    fn.variant_from_arrays(fn.array(lit("a"), lit("b")), fn.array(lit(1), lit(2)))
+  }
+
+  functionTest("variant_from_entries") {
+    fn.variant_from_entries(fn.array(fn.struct(lit("a"), lit(1)), fn.struct(lit("b"), lit(2))))
   }
 
   functionTest("schema_of_variant_agg") {

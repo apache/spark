@@ -106,7 +106,7 @@ class PyArrowArrayToPandasCoerceTemporalTests(_PyArrowToPandasTestBase):
     def _build_source_arrays(self):
         """
         Reuse the base's temporal group (the types this argument targets), then add
-        coercion-specific overflow rows and a few non-temporal controls.
+        coercion-specific overflow rows, chunked timestamps, and non-temporal controls.
         """
         sources = self._temporal_sources()
 
@@ -120,6 +120,18 @@ class PyArrowArrayToPandasCoerceTemporalTests(_PyArrowToPandasTestBase):
         # wraps around to a bogus value; this row pins that behavior.
         sources["duration[s]:overflow"] = pa.array(
             [datetime.timedelta(days=300 * 365)], pa.duration("s")
+        )
+
+        # Chunked timestamps: the base's _chunked_sources has no temporal rows, so pin
+        # here that a chunked (non-ns) timestamp coerces to the same datetime64[ns] as
+        # the equivalent contiguous Array.
+        dt1 = datetime.datetime(2024, 1, 1, 12, 0, 0)
+        dt2 = datetime.datetime(2024, 6, 15, 18, 30, 0)
+        sources["timestamp[us]:single-chunk"] = pa.chunked_array(
+            [pa.array([dt1, dt2], pa.timestamp("us"))]
+        )
+        sources["timestamp[us]:multi-chunk"] = pa.chunked_array(
+            [pa.array([dt1], pa.timestamp("us")), pa.array([dt2], pa.timestamp("us"))]
         )
 
         # Non-temporal controls (unaffected by coerce_temporal_nanoseconds).
@@ -218,10 +230,10 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
       behind an assertion.
 
     The row set mirrors ``test_pyarrow_arrow_to_pandas_default.py``'s rows exactly
-    -- every Arrow type it covers, in its standard / nullable / empty variants --
-    so both golden files pin the same types, and appends the layout variants that
-    only matter for zero-copy: sliced (offset) arrays and single- vs multi-chunk
-    ChunkedArrays.
+    -- every Arrow type it covers, in its standard / nullable / empty variants, plus
+    the shared ChunkedArray layouts -- so both golden files pin the same types, and
+    appends the one layout variant that only matters for zero-copy: sliced (offset)
+    arrays.
 
     A second test method repeats those rows with ``types_mapper=pd.ArrowDtype``, which
     asks pandas to keep pointing at the Arrow buffers instead of materializing them
@@ -233,25 +245,16 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
 
     def _build_source_arrays(self):
         """
-        Reuse the base's full inventory, then add the layout variants that only
-        matter for zero-copy.
-
-        Sharing the row set keeps this and the default golden pinning the same types,
-        and a type added to the base is covered here automatically.
-        A slice still views a contiguous no-null region, so it stays zero-copy even
-        though its data starts partway into the parent buffer.  A single chunk is
-        zero-copy, but multiple chunks must be concatenated into one contiguous
-        numpy buffer -- a copy.  Multi-chunk is the common shape in real PySpark,
-        where each partition arrives as its own chunk.
+        Reuse the base's full inventory, then add the sliced layout variants that only
+        matter for zero-copy: a slice views a contiguous no-null region, so it stays
+        zero-copy even though its data starts partway into the parent buffer.  The
+        chunk-count variants live in the base's ``_chunked_sources`` so every golden
+        records their zero-copy behavior, not just this one.
         """
         sources = super()._build_source_arrays()
 
         sources["int64:sliced"] = pa.array(list(range(10)), pa.int64()).slice(2, 3)
         sources["int64:sliced-with-null"] = pa.array([1, 2, None, 4, 5], pa.int64()).slice(1, 3)
-        sources["int64:single-chunk"] = pa.chunked_array([pa.array([1, 2, 3], pa.int64())])
-        sources["int64:multi-chunk"] = pa.chunked_array(
-            [pa.array([1, 2], pa.int64()), pa.array([3, 4], pa.int64())]
-        )
 
         return sources
 
@@ -371,6 +374,9 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
                 ("string:nullable", "['hello', nan, 'world']@Series[str]", "partial-copy"),
                 ("large_string:standard", "['hello', 'world']@Series[str]", "zero-copy"),
                 ("large_string:nullable", "['hello', nan]@Series[str]", "zero-copy"),
+                ("string:single-chunk", "['a', 'b']@Series[str]", "partial-copy"),
+                ("string:multi-chunk", "['a', 'b', 'c']@Series[str]", "partial-copy"),
+                ("string:multi-chunk-nullable", "['a', nan, 'c']@Series[str]", "partial-copy"),
             ]
             for row, expected, _ in non_empty_strings:
                 overrides[(row, self.COL_ZERO_COPY_OFF)] = expected
@@ -519,12 +525,6 @@ class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
 
         # Every value is null, so there is no integer left to convert.
         sources["int64:all-null"] = pa.array([None, None], pa.int64())
-        # Values split across buffers, with the null in one chunk and not the other.
-        # Reachable in production: cogrouped applyInPandas is the one UDF path that does
-        # not call combine_chunks() first.
-        sources["int64:multi-chunk-nullable"] = pa.chunked_array(
-            [pa.array([1, None], pa.int64()), pa.array([2], pa.int64())]
-        )
 
         # Nested types whose null is an integer ELEMENT, not a missing sub-list: the
         # shared rows only cover the latter, which this argument does not affect.
@@ -600,6 +600,9 @@ class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
             override_outputs("string:nullable", "['hello', nan, 'world']@Series[str]")
             override_outputs("large_string:standard", "['hello', 'world']@Series[str]")
             override_outputs("large_string:nullable", "['hello', nan]@Series[str]")
+            override_outputs("string:single-chunk", "['a', 'b']@Series[str]")
+            override_outputs("string:multi-chunk", "['a', 'b', 'c']@Series[str]")
+            override_outputs("string:multi-chunk-nullable", "['a', nan, 'c']@Series[str]")
 
         # Empty ones stay object until PyArrow 24, so the baseline holds before that.
         # Spark supports PyArrow 18+, so both branches are reachable.
@@ -625,6 +628,152 @@ class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
             col_names=col_names,
             compute_cell=compute_cell,
             golden_file_prefix="golden_pyarrow_arrow_to_pandas_integer_object_nulls",
+            index_name="test case",
+            overrides=overrides,
+        )
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas or not have_numpy,
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
+)
+class PyArrowChunkedArrayToPandasMemoryFlagsTests(_PyArrowToPandasTestBase):
+    """
+    Tests pa.ChunkedArray.to_pandas() under the memory-tuning arguments
+    ``self_destruct`` / ``split_blocks`` / ``use_threads`` via golden file comparison.
+
+    Spark sets all three together for ``df.toPandas()`` when Arrow self-destruct is
+    enabled (``python/pyspark/sql/pandas/conversion.py``), freeing each column's buffers
+    as it is converted to keep peak memory near one column.  They form one unit --
+    freeing (``self_destruct``) needs per-column blocks (``split_blocks``) and
+    single-threaded conversion (``use_threads=False``) -- so this golden records the
+    bundle (``spark memory options``) against ``default`` rather than a column per flag.
+    The path always converts a ``pa.ChunkedArray`` (``Table.column(i)``), hence the rows.
+
+    The arguments tune HOW the conversion runs, not WHAT it produces, so the bundle is
+    expected to match the default.  Pinning that equivalence catches drift: if these
+    arguments ever alter the output -- or ``self_destruct`` actually consumes the input,
+    which today it does not at this level -- a cell moves.  A final column records whether
+    the source is still readable after ``self_destruct=True``, since Spark treats freeing
+    as an optional optimization, not a contract.  Each cell rebuilds its source from a
+    factory so a destructive ``self_destruct`` cannot corrupt another cell.
+    """
+
+    def _memory_flag_source_factories(self):
+        """
+        Named factories, each returning a FRESH ChunkedArray per call, since
+        ``self_destruct=True`` may consume its input.  Rows span the chunk-count axis
+        across numeric, variable-width, and nested types (buffer layout differs by type).
+        """
+        struct_type = pa.struct([("x", pa.int64()), ("y", pa.string())])
+        return {
+            "int64:single-chunk": lambda: pa.chunked_array([pa.array([1, 2, 3], pa.int64())]),
+            "int64:multi-chunk": lambda: pa.chunked_array(
+                [pa.array([1, 2], pa.int64()), pa.array([3, 4], pa.int64())]
+            ),
+            "int64:multi-chunk-nullable": lambda: pa.chunked_array(
+                [pa.array([1, None], pa.int64()), pa.array([2], pa.int64())]
+            ),
+            "int64:multi-chunk-with-empty": lambda: pa.chunked_array(
+                [pa.array([1, 2], pa.int64()), pa.array([], pa.int64()), pa.array([3], pa.int64())]
+            ),
+            "int64:empty-chunk": lambda: pa.chunked_array([pa.array([], pa.int64())]),
+            "float64:multi-chunk": lambda: pa.chunked_array(
+                [pa.array([1.5, 2.5], pa.float64()), pa.array([3.5], pa.float64())]
+            ),
+            "string:multi-chunk": lambda: pa.chunked_array(
+                [pa.array(["a", "b"], pa.string()), pa.array(["c"], pa.string())]
+            ),
+            "string:multi-chunk-nullable": lambda: pa.chunked_array(
+                [pa.array(["a", None], pa.string()), pa.array(["c"], pa.string())]
+            ),
+            "list<int64>:multi-chunk": lambda: pa.chunked_array(
+                [
+                    pa.array([[1, 2], [3]], pa.list_(pa.int64())),
+                    pa.array([[4]], pa.list_(pa.int64())),
+                ]
+            ),
+            "struct:multi-chunk": lambda: pa.chunked_array(
+                [
+                    pa.array([{"x": 1, "y": "a"}], struct_type),
+                    pa.array([{"x": 2, "y": "b"}], struct_type),
+                ]
+            ),
+        }
+
+    # Default (no memory arguments) -- the baseline the bundle should match.
+    COL_DEFAULT = "default"
+    # All three flags as convert_arrow_table_to_pandas passes them together.
+    COL_SPARK_MEMORY_OPTIONS = "spark memory options"
+    # Whether the source ChunkedArray is still readable after self_destruct=True.
+    COL_SOURCE_READABLE = "source readable after self_destruct"
+
+    # Kept as one dict so the column cannot drift from the call site it mirrors
+    # (python/pyspark/sql/pandas/conversion.py).
+    SPARK_MEMORY_OPTIONS = {
+        "self_destruct": True,
+        "split_blocks": True,
+        "use_threads": False,
+    }
+
+    def _source_readable_after_self_destruct(self, factory) -> str:
+        """
+        Convert a fresh source with ``self_destruct=True``, then report whether it is
+        still readable: ``readable``, or ``unreadable@<ExceptionClass>`` if freed.
+        """
+        arr = factory()
+        try:
+            arr.to_pandas(self_destruct=True)
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
+        try:
+            arr.to_pylist()
+            return "readable"
+        except Exception as e:
+            return f"unreadable@{type(e).__name__}"
+
+    def test_to_pandas_memory_flags(self):
+        """Test pa.ChunkedArray.to_pandas() under the memory-tuning arguments."""
+        factories = self._memory_flag_source_factories()
+        row_names = list(factories.keys())
+        col_names = [
+            "pyarrow array",
+            self.COL_DEFAULT,
+            self.COL_SPARK_MEMORY_OPTIONS,
+            self.COL_SOURCE_READABLE,
+        ]
+
+        # Version-specific expected values go here, keyed by (row, col), when a newer
+        # pandas/PyArrow/NumPy legitimately changes a cell's output.  These arguments do
+        # not touch strings, so a string row shifts in both value columns at once.
+        overrides: dict[tuple[str, str], str] = {}
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            value_cols = [self.COL_DEFAULT, self.COL_SPARK_MEMORY_OPTIONS]
+            for row, expected in [
+                ("string:multi-chunk", "['a', 'b', 'c']@Series[str]"),
+                ("string:multi-chunk-nullable", "['a', nan, 'c']@Series[str]"),
+            ]:
+                for col in value_cols:
+                    overrides[(row, col)] = expected
+
+        def compute_cell(row_name, col_name):
+            factory = factories[row_name]
+            if col_name == "pyarrow array":
+                return self.repr_value(factory(), max_len=0)
+            elif col_name == self.COL_DEFAULT:
+                return self._to_pandas_cell(factory())
+            elif col_name == self.COL_SPARK_MEMORY_OPTIONS:
+                return self._to_pandas_cell(factory(), **self.SPARK_MEMORY_OPTIONS)
+            elif col_name == self.COL_SOURCE_READABLE:
+                return self._source_readable_after_self_destruct(factory)
+            else:
+                raise ValueError(f"unknown column: {col_name}")
+
+        self.compare_or_generate_golden_matrix(
+            row_names=row_names,
+            col_names=col_names,
+            compute_cell=compute_cell,
+            golden_file_prefix="golden_pyarrow_chunked_array_to_pandas_memory_flags",
             index_name="test case",
             overrides=overrides,
         )

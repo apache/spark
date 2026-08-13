@@ -107,19 +107,25 @@ private[spark] object SparkCoreErrors {
 
   def cannotUseMapSideCombiningWithArrayKeyError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3008", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.MAP_SIDE_COMBINE",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
   def hashPartitionerCannotPartitionArrayKeyError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3009", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
   def reduceByKeyLocallyNotSupportArrayKeysError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3010", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.REDUCE_BY_KEY_LOCALLY",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
@@ -422,12 +428,16 @@ private[spark] object SparkCoreErrors {
       cause = null)
   }
 
-  def outOfMemoryError(requestedBytes: Long, receivedBytes: Long): OutOfMemoryError = {
+  def outOfMemoryError(
+      requestedBytes: Long,
+      receivedBytes: Long,
+      consumerBreakdown: String): OutOfMemoryError = {
     new SparkOutOfMemoryError(
       "UNABLE_TO_ACQUIRE_MEMORY",
       Map(
         "requestedBytes" -> requestedBytes.toString,
-        "receivedBytes" -> receivedBytes.toString).asJava)
+        "receivedBytes" -> receivedBytes.toString,
+        "consumerBreakdown" -> consumerBreakdown).asJava)
   }
 
   def failedRenameTempFileError(srcFile: File, dstFile: File): Throwable = {

@@ -1462,6 +1462,10 @@ primaryExpression
     | ANY_VALUE LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                              #any_value
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
     | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
+    | JSON_VALUE LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (RETURNING returning=dataType)?
+      (emptyBehavior=jsonValueBehavior ON EMPTY)?
+      (errorBehavior=jsonValueBehavior ON ERROR)? RIGHT_PAREN                                  #jsonValue
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
@@ -1486,6 +1490,14 @@ primaryExpression
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
+    ;
+
+// The behavior selected by a JSON_VALUE `... ON EMPTY` / `... ON ERROR` clause. NULL and ERROR are
+// keywords; DEFAULT carries an expression evaluated in place of the missing/erroring value.
+jsonValueBehavior
+    : NULL                                                                                     #jsonValueBehaviorNull
+    | ERROR                                                                                     #jsonValueBehaviorError
+    | DEFAULT defaultExpr=expression                                                            #jsonValueBehaviorDefault
     ;
 
 semiStructuredExtractionPath
@@ -2171,6 +2183,7 @@ ansiNonReserved
     | DOUBLE
     | DROP
     | ELSEIF
+    | EMPTY
     | ENFORCED
     | ERROR
     | ESCAPED
@@ -2232,6 +2245,7 @@ ansiNonReserved
     | ITERATE
     | JSON
     | JSON_TABLE
+    | JSON_VALUE
     | KEY
     | KEYS
     | LANGUAGE
@@ -2330,6 +2344,7 @@ ansiNonReserved
     | RESPECT
     | RESTRICT
     | RETURN
+    | RETURNING
     | RETURNS
     | REVOKE
     | RLIKE
@@ -2592,6 +2607,7 @@ nonReserved
     | DROP
     | ELSE
     | ELSEIF
+    | EMPTY
     | END
     | ENFORCED
     | ERROR
@@ -2668,6 +2684,7 @@ nonReserved
     | ITERATE
     | JSON
     | JSON_TABLE
+    | JSON_VALUE
     | KEY
     | KEYS
     | LANGUAGE
@@ -2780,6 +2797,7 @@ nonReserved
     | RESPECT
     | RESTRICT
     | RETURN
+    | RETURNING
     | RETURNS
     | REVOKE
     | RLIKE
