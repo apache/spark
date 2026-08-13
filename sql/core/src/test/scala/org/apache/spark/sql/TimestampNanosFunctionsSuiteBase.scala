@@ -710,11 +710,11 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
-  // collect_list over nanosecond-precision timestamps (SPARK-56822). `CollectList` is type-agnostic:
-  // its `ArrayBuffer` buffer holds the physical `TimestampNanosVal` and the result element type is
-  // exactly `child.dataType`, so the input precision, family (NTZ/LTZ) and sub-microsecond remainder
-  // survive with no truncation to micros. The collection order after aggregation is not
-  // deterministic, so the contents are compared as a set.
+  // collect_list over nanosecond-precision timestamps (SPARK-56822). `CollectList` is
+  // type-agnostic: its `ArrayBuffer` buffer holds the physical `TimestampNanosVal` and the
+  // result element type is exactly `child.dataType`, so the input precision, family (NTZ/LTZ)
+  // and sub-microsecond remainder survive with no truncation to micros. The collection order
+  // after aggregation is not deterministic, so the contents are compared as a set.
 
   test("SPARK-56822: collect_list over nanosecond-precision timestamps preserves type and nanos " +
     "remainder") {
@@ -734,7 +734,8 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
 
       val sqlRes = df.selectExpr("collect_list(ntz)", "collect_list(ltz)")
-      // The result keeps the family (NTZ/LTZ) and precision; nulls are dropped so containsNull=false.
+      // The result keeps the family (NTZ/LTZ) and precision; nulls are dropped so
+      // containsNull=false.
       assert(sqlRes.schema.map(_.dataType) === Seq(
         ArrayType(TimestampNTZNanosType(p), containsNull = false),
         ArrayType(TimestampLTZNanosType(p), containsNull = false)))
@@ -745,7 +746,8 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       val expectedLtz = Set(
         Instant.parse("2020-01-01T12:34:56.000000100Z"),
         Instant.parse("2020-01-02T00:00:00.000000900Z"))
-      // The Scala Column API path agrees with the SQL path; both drop the null and keep both values.
+      // The Scala Column API path agrees with the SQL path; both drop the null and keep
+      // both values.
       val sqlRow = sqlRes.collect().head
       val colRow = df.select(collect_list(col("ntz")), collect_list(col("ltz"))).collect().head
       assert(sqlRow.getSeq[LocalDateTime](0).toSet === expectedNtz)
