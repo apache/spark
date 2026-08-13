@@ -1690,46 +1690,6 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
-  private[spark] val SECURITY_OIDC_ENABLED =
-    ConfigBuilder("spark.security.oidc.enabled")
-      .doc("Whether to enable OIDC credential propagation. When enabled, the driver reads an " +
-        "identity token from a file, exchanges it for short-lived service credentials via " +
-        "CredentialProvider implementations, and propagates those credentials to executors.")
-      .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val SECURITY_OIDC_IDENTITY_TOKEN_FILE =
-    ConfigBuilder("spark.security.oidc.identityToken.file")
-      .doc("Path to the OIDC identity token file on the driver. Required when " +
-        "spark.security.oidc.enabled is true. The file should contain a JWT token " +
-        "(e.g., a Kubernetes projected service account token).")
-      .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .stringConf
-      .createOptional
-
-  private[spark] val SECURITY_OIDC_RENEWAL_SAFETY_MARGIN =
-    ConfigBuilder("spark.security.oidc.renewal.safetyMargin")
-      .doc("How long before credential expiry to trigger renewal. Credentials are refreshed " +
-        "at min(identity token expiry, service credential expiry) minus this margin.")
-      .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(_ > 0, "The safety margin must be a positive time value.")
-      .createWithDefaultString("60s")
-
-  private[spark] val SECURITY_OIDC_RENEWAL_MIN_INTERVAL =
-    ConfigBuilder("spark.security.oidc.renewal.minInterval")
-      .doc("Minimum interval between credential renewal attempts. This prevents tight renewal " +
-        "loops when credentials have very short TTLs or when failures cause rapid retries.")
-      .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
-      .createWithDefaultString("30s")
-
   private[spark] val DIRECT_CREDENTIAL_PROVIDERS_ENABLED =
     ConfigBuilder("spark.security.directCredentialProviders.enabled")
       .doc(
