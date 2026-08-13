@@ -340,7 +340,10 @@ class RelationResolution(
                 finalOptions,
                 u.isStreaming,
                 finalTimeTravelSpec)
-              if (writePrivileges == null && pinnedTable.isEmpty) {
+              // A write target skips cache lookup above so authorization always runs, but its
+              // freshly loaded Table is still published for subsequent reads, matching the
+              // relation cache behavior below.
+              if (pinnedTable.isEmpty) {
                 table.foreach(tableCache.update(tableKey, _))
               }
               loaded.foreach(relationCache.update(key, _))

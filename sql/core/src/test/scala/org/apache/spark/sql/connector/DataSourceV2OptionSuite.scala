@@ -854,7 +854,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("persistent write targets bypass both query-scoped read caches") {
+  test("persistent write targets bypass query-scoped cache lookups") {
     withStateAwareTable { (stateCatalog, tableName) =>
       stateCatalog.resetLoadTableCalls()
       val resolver = new RelationResolution(
@@ -886,6 +886,44 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         _._1.writePrivileges().contains(TableWritePrivilege.INSERT)) == 1)
       assert(stateCatalog.loadTableCalls.forall(_._2.get("snapshot") == "s1"))
       assert(stateCatalog.loadTableCalls.forall(_._2.size() == 1))
+    }
+  }
+
+  test("persistent write targets establish table pins for subsequent reads") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      stateCatalog.resetLoadTableCalls()
+      val resolver = new RelationResolution(
+        spark.sessionState.catalogManager,
+        RelationCache.empty)
+      val writeOptions = new CaseInsensitiveStringMap(
+        java.util.Map.of("snapshot", "s1", "split-size", "5"))
+      val readOptions = new CaseInsensitiveStringMap(
+        java.util.Map.of("snapshot", "s1", "split-size", "9"))
+      val write = UnresolvedRelation(tableName.split("\\.").toSeq, writeOptions)
+        .requireWritePrivileges(Set(TableWritePrivilege.INSERT))
+      val read = UnresolvedRelation(tableName.split("\\.").toSeq, readOptions)
+
+      def resolve(relation: UnresolvedRelation): DataSourceV2Relation = {
+        resolver.resolveRelation(relation).flatMap(_.collectFirst {
+          case r: DataSourceV2Relation => r
+        }).getOrElse(fail(s"failed to resolve ${relation.name} as a v2 relation"))
+      }
+
+      AnalysisContext.withNewAnalysisContext {
+        val writeRelation = resolve(write)
+        val readRelation = resolve(read)
+
+        assert(writeRelation.table eq readRelation.table)
+        assert(writeRelation.options.get("split-size") == "5")
+        assert(readRelation.options.get("split-size") == "9")
+        assert(AnalysisContext.get.tableCache.size == 1)
+        assert(AnalysisContext.get.relationCache.size == 2)
+      }
+
+      assert(stateCatalog.loadTableCalls.size == 1)
+      assert(stateCatalog.loadTableCalls.head._1.writePrivileges().contains(
+        TableWritePrivilege.INSERT))
+      assertOnlySnapshotOptions(stateCatalog, "s1")
     }
   }
 
