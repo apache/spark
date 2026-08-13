@@ -712,8 +712,8 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
 
   // mode over nanosecond-precision timestamps (SPARK-56822). `Mode` counts frequencies in an
   // `OpenHashMap` keyed on the physical `TimestampNanosVal` (its `equals`/`hashCode` cover the full
-  // `(epochMicros, nanosWithinMicro)` pair) and returns `child.dataType`, so the most-frequent value
-  // is selected on the full nanos value and its precision and family (NTZ/LTZ) are preserved.
+  // `(epochMicros, nanosWithinMicro)` pair) and returns `child.dataType`, so the most-frequent
+  // value is selected on the full nanos value and its precision and family (NTZ/LTZ) are preserved.
 
   test("SPARK-56822: mode over nanosecond-precision timestamps returns the most frequent value") {
     Seq(7, 8, 9).foreach { p =>
