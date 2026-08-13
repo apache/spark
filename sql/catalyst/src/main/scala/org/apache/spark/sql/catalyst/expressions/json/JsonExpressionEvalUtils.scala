@@ -407,9 +407,14 @@ object JsonQueryLookup {
   case object Missing extends JsonQueryLookup
   /**
    * The path matched a value; `raw` is its verbatim JSON text (a string is still quoted), and
-   * `structural` is true iff the value is an object or array.
+   * `structural` is true iff the value is an object or array. `unquoted` is the `OMIT QUOTES`
+   * form -- a matched JSON string's decoded content (read straight from the parser), and `raw`
+   * itself for every other value (objects, arrays, numbers, booleans, and JSON `null`, for which
+   * `OMIT QUOTES` is a no-op). Carrying it here lets the caller apply `OMIT QUOTES` without
+   * re-parsing the serialized fragment.
    */
-  case class Found(raw: UTF8String, structural: Boolean) extends JsonQueryLookup
+  case class Found(raw: UTF8String, structural: Boolean, unquoted: UTF8String)
+    extends JsonQueryLookup
 }
 
 /**
@@ -577,9 +582,10 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
    *   - `None` if the input is not a single well-formed JSON value (malformed / trailing garbage /
    *     empty), which the caller maps to ON ERROR;
    *   - `Some(Missing)` if the path matches nothing (ON EMPTY);
-   *   - `Some(Found(raw, structural))` if the path matches, where `raw` is the value's verbatim
-   *     JSON text and `structural` is true for an object or array (as opposed to a scalar,
-   *     including a JSON `null`, whose text is `null`).
+   *   - `Some(Found(raw, structural, unquoted))` if the path matches, where `raw` is the value's
+   *     verbatim JSON text, `structural` is true for an object or array (as opposed to a scalar,
+   *     including a JSON `null`, whose text is `null`), and `unquoted` is the `OMIT QUOTES` form
+   *     (a matched JSON string's decoded content; `raw` for every other value).
    *
    * A `null` input is the caller's responsibility. Like [[lookup]] this navigates and validates
    * with a single parser: after the matched value is serialized (which consumes it),
@@ -598,11 +604,23 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
             // A JSON `null` literal is a scalar value for JSON_QUERY: serialize it to the text
             // `null` rather than reporting it specially. The parser is positioned on the token.
             case PositionResult.NullValue =>
-              JsonQueryLookup.Found(serializeCurrentValue(parser), structural = false)
+              val raw = serializeCurrentValue(parser)
+              JsonQueryLookup.Found(raw, structural = false, unquoted = raw)
             case PositionResult.AtValue =>
-              val structural = parser.currentToken == JsonToken.START_OBJECT ||
-                parser.currentToken == JsonToken.START_ARRAY
-              JsonQueryLookup.Found(serializeCurrentValue(parser), structural)
+              parser.currentToken match {
+                case JsonToken.START_OBJECT | JsonToken.START_ARRAY =>
+                  val raw = serializeCurrentValue(parser)
+                  JsonQueryLookup.Found(raw, structural = true, unquoted = raw)
+                case JsonToken.VALUE_STRING =>
+                  // Capture the decoded string straight from the parser so `OMIT QUOTES` need not
+                  // re-parse the serialized (re-quoted) form.
+                  val unquoted = UTF8String.fromString(parser.getText)
+                  JsonQueryLookup.Found(serializeCurrentValue(parser), structural = false, unquoted)
+                case _ =>
+                  // A non-string scalar (number/boolean): `OMIT QUOTES` is a no-op.
+                  val raw = serializeCurrentValue(parser)
+                  JsonQueryLookup.Found(raw, structural = false, unquoted = raw)
+              }
           }
           if (drainToRootEnd(parser)) Some(result) else None
         }

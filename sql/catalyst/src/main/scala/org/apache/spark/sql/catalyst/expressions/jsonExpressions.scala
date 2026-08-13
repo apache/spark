@@ -1110,21 +1110,20 @@ case class JsonQuery(
       else throw QueryExecutionErrors.jsonQueryOnErrorError(prettyName, path, cause = null)
   }
 
-  // Apply the array-wrapper and quotes clauses to a matched value's verbatim JSON text.
-  // `structural` is true for an object or array match (rather than a scalar, incl. JSON null).
-  private def wrapAndQuote(raw: UTF8String, structural: Boolean): UTF8String = wrapper match {
-    case JsonQueryWrapper.Without =>
-      // OMIT QUOTES unquotes a scalar string result; a no-op for objects, arrays, and non-string
-      // scalars. OMIT QUOTES combined with a wrapper is rejected at parse time. `unquotedString`
-      // re-parses the serialized scalar rather than reading the parser's `getText` during the
-      // lookup: this keeps the evaluator agnostic to the quotes clause and reuses a tested helper,
-      // at the cost of one extra parse of the (small) scalar on the opt-in OMIT QUOTES path only --
-      // the common KEEP QUOTES path needs the serialized form and pays nothing extra.
-      if (quotes == JsonQueryQuotes.Omit) evaluator.unquotedString(raw) else raw
-    case JsonQueryWrapper.Unconditional => JsonQuery.wrapInArray(raw)
-    // CONDITIONAL wraps only a scalar; an object or array is already a structural result.
-    case JsonQueryWrapper.Conditional => if (structural) raw else JsonQuery.wrapInArray(raw)
-  }
+  // Apply the array-wrapper and quotes clauses to a matched value. `raw` is its verbatim JSON text,
+  // `unquoted` is the OMIT QUOTES form (a string's decoded content; `raw` otherwise, so OMIT QUOTES
+  // is a no-op for objects, arrays, and non-string scalars), and `structural` is true for an object
+  // or array match (rather than a scalar, incl. JSON null).
+  private def wrapAndQuote(raw: UTF8String, unquoted: UTF8String, structural: Boolean): UTF8String =
+    wrapper match {
+      case JsonQueryWrapper.Without =>
+        // OMIT QUOTES reuses the string decoded during the lookup rather than re-parsing the
+        // serialized fragment; OMIT QUOTES combined with a wrapper is rejected at parse time.
+        if (quotes == JsonQueryQuotes.Omit) unquoted else raw
+      case JsonQueryWrapper.Unconditional => JsonQuery.wrapInArray(raw)
+      // CONDITIONAL wraps only a scalar; an object or array is already a structural result.
+      case JsonQueryWrapper.Conditional => if (structural) raw else JsonQuery.wrapInArray(raw)
+    }
 
   override def eval(input: InternalRow): Any = {
     val json = child.eval(input).asInstanceOf[UTF8String]
@@ -1136,7 +1135,8 @@ case class JsonQuery(
       // Path matched nothing.
       case Some(JsonQueryLookup.Missing) => onEmptyResult()
       // Matched a value: serialize it, applying the wrapper and quotes clauses.
-      case Some(JsonQueryLookup.Found(raw, structural)) => wrapAndQuote(raw, structural)
+      case Some(JsonQueryLookup.Found(raw, structural, unquoted)) =>
+        wrapAndQuote(raw, unquoted, structural)
     }
   }
 
