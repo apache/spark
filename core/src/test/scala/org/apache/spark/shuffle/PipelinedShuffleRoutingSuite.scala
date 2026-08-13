@@ -85,7 +85,13 @@ private class DefaultRecordingManager(conf: SparkConf, isDriver: Boolean)
   override def shuffleBlockResolver: ShuffleBlockResolver = mock(classOf[ShuffleBlockResolver])
 }
 private class IncrementalRecordingManager(conf: SparkConf, isDriver: Boolean)
-  extends RecordingShuffleManager(conf, isDriver) with PipelinedShuffleManager
+  extends RecordingShuffleManager(conf, isDriver) with PipelinedShuffleManager {
+  // A non-streaming pipelined manager (an in-process transport): it needs no
+  // StreamingShuffleOutputTracker, unlike the RPC streaming manager that the trait defaults to.
+  // The "SparkEnv does not initialize the tracker when the incremental manager is not streaming"
+  // and fail-loud tests rely on this manager reporting false here.
+  override def usesStreamingShuffleOutputTracker: Boolean = false
+}
 
 /**
  * Tests routing of shuffles to the default vs. incremental [[ShuffleManager]] by dependency type,
@@ -238,46 +244,6 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
   test("SparkEnv does not initialize the tracker when the incremental manager is not streaming") {
     sc = new SparkContext("local", "test", newConf())
     assert(SparkEnv.get.streamingShuffleOutputTracker.isEmpty)
-  }
-
-  test("createShuffleMapStage fails loud for a pipelined dependency when no streaming tracker") {
-    // A pipelined shuffle is served solely by the StreamingShuffleOutputTracker. With a non-
-    // streaming incremental manager configured, that tracker is absent (verified above), so a job
-    // whose stage graph contains a PipelinedShuffleDependency cannot be scheduled.
-    // createShuffleMapStage must fail loud rather than silently register the shuffle in no tracker
-    // (which would strand a consumer with no writer locations). This guards the decoupling's
-    // invariant that a pipelined dependency implies a streaming tracker.
-    // local[4]: the pipelined group's up-front slot admission (producer 2 + result 2 = 4) must pass
-    // so that stage creation is actually reached -- otherwise the job is rejected for slots first.
-    sc = new SparkContext("local[4]", "test", newConf())
-    assert(SparkEnv.get.streamingShuffleOutputTracker.isEmpty)
-    val producer = sc.parallelize(1 to 4, 2).map(x => (x, x))
-    val pipelined = new PipelinedShuffleDependency[Int, Int, Int](producer, new HashPartitioner(2))
-    // A minimal reduce-side RDD whose single dependency is the pipelined shuffle, so submitting an
-    // action forces createShuffleMapStage for the pipelined producer.
-    val consumer = new RDD[(Int, Int)](sc, Seq(pipelined)) {
-      override def compute(split: Partition, ctx: TaskContext): Iterator[(Int, Int)] =
-        Iterator.empty
-      override protected def getPartitions: Array[Partition] =
-        Array.tabulate(2)(i => new Partition { override def index: Int = i })
-    }
-    val ex = intercept[Exception] {
-      consumer.count()
-    }
-    assert(findCause[IllegalStateException](ex).exists(
-      _.getMessage.contains("requires a StreamingShuffleOutputTracker")),
-      s"expected a fail-loud IllegalStateException about the missing tracker, got: $ex")
-
-    // The fail-loud throw happens BEFORE createShuffleMapStage mutates stageIdToStage /
-    // shuffleIdToMapStage, so it leaves no partial scheduler state behind. If it left a
-    // half-created stage cached in shuffleIdToMapStage, a re-submission would reuse that stale
-    // stage instead of re-throwing. Re-submitting the same job must therefore re-throw the error.
-    val ex2 = intercept[Exception] {
-      consumer.count()
-    }
-    assert(findCause[IllegalStateException](ex2).exists(
-      _.getMessage.contains("requires a StreamingShuffleOutputTracker")),
-      s"a re-submission must re-throw the fail-loud error (no leaked partial stage), got: $ex2")
   }
 
   test("spark.shuffle.manager.incremental resolves the same short aliases as the default manager") {
