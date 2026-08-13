@@ -35,10 +35,11 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_(sqlStmt) - Parses `sqlStmt` and returns a JSON string describing the
-    statement (parse success, Table 39 statement identifier/code, table and function
-    references for lineage, select-list column names, and parameter markers). On
-    syntax / parse error returns JSON with `parse_success` false, source location,
+  usage = """_FUNC_(sqlStmt) - Parses `sqlStmt` with the stock Spark SQL parser and
+    returns a JSON string describing the statement (parse success, Table 39 statement
+    identifier/code, table and function references for lineage, select-list column
+    names, and parameter markers). Session parser extensions are not applied.
+    On syntax / parse error returns JSON with `parse_success` false, source location,
     and a nested STANDARD error object instead of throwing.""",
   arguments = """
     Arguments:

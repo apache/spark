@@ -77,6 +77,35 @@ Project [parse_sql(CACHE TABLE t) AS parse_sql(CACHE TABLE t)#x]
 
 
 -- !query
+SELECT parse_sql('TABLE t')
+-- !query analysis
+Project [parse_sql(TABLE t) AS parse_sql(TABLE t)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT parse_sql('VALUES (1), (2)')
+-- !query analysis
+Project [parse_sql(VALUES (1), (2)) AS parse_sql(VALUES (1), (2))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT get_json_object(parse_sql('CREATE FUNCTION f AS ''x'' USING JAR ''y.jar'''),
+  '$.table_references')
+-- !query analysis
+Project [get_json_object(parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar'), $.table_references) AS get_json_object(parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar'), $.table_references)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT get_json_object(parse_sql('DECLARE VARIABLE x INT'), '$.table_references')
+-- !query analysis
+Project [get_json_object(parse_sql(DECLARE VARIABLE x INT), $.table_references) AS get_json_object(parse_sql(DECLARE VARIABLE x INT), $.table_references)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT parse_sql('SELECT * FROM t WHERE a = :foo AND b = ?')
 -- !query analysis
 Project [parse_sql(SELECT * FROM t WHERE a = :foo AND b = ?) AS parse_sql(SELECT * FROM t WHERE a = :foo AND b = ?)#x]

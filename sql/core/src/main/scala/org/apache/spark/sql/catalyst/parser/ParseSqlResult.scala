@@ -30,19 +30,25 @@ import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryCommand, ExplainCommand}
+import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
 
 /**
  * Parses a SQL statement string and returns a compact JSON description of the
  * unresolved plan (parse-only; no catalog resolution).
  *
- * Uses [[SparkSqlParser]] so coverage matches the production session parser
- * (EXPLAIN / SET / ADD JAR / temp views / etc.).
+ * Uses a stock [[SparkSqlParser]] (ThreadLocal) so statement coverage matches
+ * the default production parser (EXPLAIN / SET / ADD JAR / temp views / etc.).
+ * Session-specific [[org.apache.spark.sql.SparkSessionExtensions]] parser
+ * wrappers are intentionally not applied: `parse_sql` must evaluate on
+ * executors without a session, so only the stock parser is available under
+ * distributed eval.
  *
  * On success the JSON includes the statement identifier/code (ISO/IEC
  * 9075-2:2023 Table 39), table/function references, select-list names, and
  * parameter markers. On parse failure it returns `parse_success: false` with
  * source location and a nested STANDARD-format error object, and does not
- * throw. Unexpected / internal failures propagate so the function fails.
+ * throw. Only [[ParseException]] / [[SqlScriptingException]] are converted to
+ * JSON; unexpected / internal failures propagate so the function fails.
  */
 object ParseSqlResult {
 
@@ -55,12 +61,10 @@ object ParseSqlResult {
       val plan = parser.get().parsePlan(sql)
       fromPlan(plan)
     } catch {
-      // User-facing parse / scripting failures become JSON; internal errors fail.
+      // User-facing parse / scripting failures become JSON; everything else fails.
       case e: ParseException =>
         errorJson(e)
       case e: SqlScriptingException =>
-        errorJson(e)
-      case e: SparkThrowable with Throwable =>
         errorJson(e)
     }
   }
@@ -154,14 +158,30 @@ object ParseSqlResult {
     }
   }
 
+  /** Multipart name from a table/view-shaped plan node, if any. */
+  private def tableOrViewParts(plan: LogicalPlan): Option[Seq[String]] = plan match {
+    case u: UnresolvedRelation => Some(u.multipartIdentifier)
+    case u: UnresolvedTable => Some(u.multipartIdentifier)
+    case u: UnresolvedView => Some(u.multipartIdentifier)
+    case u: UnresolvedTableOrView => Some(u.multipartIdentifier)
+    case u: UnresolvedIdentifier => Some(u.nameParts)
+    case _ => None
+  }
+
+  private def tableIdentifierParts(id: org.apache.spark.sql.catalyst.TableIdentifier): Seq[String] =
+    id.catalog.toSeq ++ id.database.toSeq :+ id.table
+
   /**
    * Collect multipart table/view identifiers for lineage (as written in the
    * SQL). CTE definition names and correlation aliases are omitted; tables
-   * referenced inside CTE bodies are still included. Deduplicates while
-   * preserving first-seen order.
+   * referenced inside CTE bodies are still included. Function / variable
+   * identifiers are not collected. Deduplicates while preserving first-seen
+   * order.
    */
   private def collectTableReferences(plan: LogicalPlan): Seq[Seq[String]] = {
     val seen = mutable.LinkedHashSet.empty[Seq[String]]
+    // CTE names are always single-part in the grammar; UnresolvedRelation refs
+    // to CTEs are likewise single-part, so filtering matches that shape.
     val cteNames = mutable.HashSet.empty[String]
 
     def addCteNames(w: UnresolvedWith): Unit = {
@@ -190,7 +210,24 @@ object ParseSqlResult {
       case u: UnresolvedTable => add(u.multipartIdentifier)
       case u: UnresolvedView => add(u.multipartIdentifier)
       case u: UnresolvedTableOrView => add(u.multipartIdentifier)
-      case u: UnresolvedIdentifier => add(u.nameParts)
+      // Table/view DDL targets only — not CreateFunction / CreateVariable names.
+      case c: CreateView => tableOrViewParts(c.child).foreach(add)
+      case c: CreateViewCommand => add(tableIdentifierParts(c.name))
+      case c: CreateTempViewUsing => add(tableIdentifierParts(c.tableIdent))
+      case c: CreateTable => tableOrViewParts(c.name).foreach(add)
+      case c: CreateTableAsSelect => tableOrViewParts(c.name).foreach(add)
+      case c: ReplaceTable => tableOrViewParts(c.name).foreach(add)
+      case c: ReplaceTableAsSelect => tableOrViewParts(c.name).foreach(add)
+      case c: DropTable => tableOrViewParts(c.child).foreach(add)
+      case c: DropView => tableOrViewParts(c.child).foreach(add)
+      case c: TruncateTable => tableOrViewParts(c.table).foreach(add)
+      case c: TruncatePartition => tableOrViewParts(c.table).foreach(add)
+      case c: CacheTable =>
+        if (c.multipartIdentifier.nonEmpty) add(c.multipartIdentifier)
+        else tableOrViewParts(c.table).foreach(add)
+      case c: UncacheTable => tableOrViewParts(c.table).foreach(add)
+      case c: RefreshTable => tableOrViewParts(c.child).foreach(add)
+      case c: CommentOnTable => tableOrViewParts(c.table).foreach(add)
       case _ =>
     }
     seen.toSeq

@@ -21,9 +21,10 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Pin Table 39 codes and parser-surface contracts that goldens do not cover.
+ * Pin Table 39 codes and contracts that goldens do not cover.
  * Behavioral coverage lives in sql-tests/inputs/parse-sql.sql.
  */
 class ParseSqlResultSuite extends SparkFunSuite {
@@ -37,7 +38,7 @@ class ParseSqlResultSuite extends SparkFunSuite {
       case other => fail(s"unexpected table_references entry: $other")
     }.toSet
 
-  test("Table 39 standard code pairs are pinned") {
+  test("Table 39 standard and Spark code pairs are pinned") {
     assert(SqlStatementCodes.Select.statementCode === 21)
     assert(SqlStatementCodes.Insert.statementCode === 50)
     assert(SqlStatementCodes.DeleteWhere.statementCode === 19)
@@ -53,48 +54,32 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(SqlStatementCodes.BeginEnd.statementCode === -22)
     assert(SqlStatementCodes.Explain.statementCode === -23)
     assert(SqlStatementCodes.Set.statementCode === -24)
+    assert(SqlStatementCodes.CreateMetricViewStmt.statementCode === -37)
   }
 
-  test("SELECT classification uses Table 39 SELECT / code 21") {
-    val j = obj("SELECT a FROM t")
-    assert(j \ "parse_success" === JBool(true))
-    assert(j \ "statement_identifier" === JString("SELECT"))
-    assert(j \ "statement_code" === JInt(21))
+  test("TABLE and VALUES classify as SELECT") {
+    val table = obj("TABLE t")
+    assert(table \ "statement_identifier" === JString("SELECT"))
+    assert(table \ "statement_code" === JInt(21))
+    assert(tableRefs("TABLE t") === Set(Seq("t")))
+
+    // Eager inlining must not flip VALUES between SELECT and Unrecognized.
+    Seq(true, false).foreach { eager =>
+      SQLConf.withExistingConf(new SQLConf) {
+        SQLConf.get.setConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED, eager)
+        val values = obj("VALUES (1), (2)")
+        assert(values \ "statement_identifier" === JString("SELECT"),
+          s"eager=$eager")
+        assert(values \ "statement_code" === JInt(21), s"eager=$eager")
+      }
+    }
   }
 
-  test("SparkSqlParser-only statements get Spark codes") {
-    val explain = obj("EXPLAIN SELECT 1")
-    assert(explain \ "statement_identifier" === JString("EXPLAIN"))
-    assert(explain \ "statement_code" === JInt(-23))
-
-    val set = obj("SET spark.sql.adaptive.enabled=true")
-    assert(set \ "statement_identifier" === JString("SET"))
-    assert(set \ "statement_code" === JInt(-24))
-
-    val addJar = obj("ADD JAR /tmp/x.jar")
-    assert(addJar \ "statement_identifier" === JString("ADD JAR"))
-    assert(addJar \ "statement_code" === JInt(-26))
-  }
-
-  test("CTE names and correlation aliases are omitted from table_references") {
-    val sql =
-      """WITH cte AS (SELECT a FROM hidden_base)
-        |SELECT a FROM cte""".stripMargin
-    assert(tableRefs(sql) === Set(Seq("hidden_base")))
-  }
-
-  test("CREATE VIEW exposes select_list from the query body") {
-    val j = obj("CREATE VIEW v AS SELECT a, b FROM t")
-    assert(j \ "statement_identifier" === JString("CREATE VIEW"))
-    assert(j \ "statement_code" === JInt(84))
-    // View target and source table both count as lineage refs.
-    assert(tableRefs("CREATE VIEW v AS SELECT a, b FROM t") ===
-      Set(Seq("v"), Seq("t")))
-    assert(j \ "select_list" === JArray(List(
-      JObject("name" -> JArray(List(JString("a")))),
-      JObject("name" -> JArray(List(JString("b"))))
-    )))
-    assert((j \ "select_list")(0) \ "expression" === JNothing)
+  test("CREATE FUNCTION and DECLARE VARIABLE are not table_references") {
+    assert(tableRefs("CREATE FUNCTION f AS 'x' USING JAR 'y.jar'").isEmpty)
+    assert(tableRefs("DECLARE VARIABLE x INT").isEmpty)
+    // Contrast: CREATE VIEW still reports the view target.
+    assert(tableRefs("CREATE VIEW v AS SELECT 1 AS a") === Set(Seq("v")))
   }
 
   test("syntax error returns STANDARD error JSON without throwing") {

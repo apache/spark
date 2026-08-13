@@ -22,6 +22,15 @@ SELECT parse_sql('DROP TABLE t');
 -- Spark-only statements (negative Table 39 codes)
 SELECT parse_sql('CACHE TABLE t');
 
+-- TABLE / VALUES are SELECT-shaped (not Unrecognized)
+SELECT parse_sql('TABLE t');
+SELECT parse_sql('VALUES (1), (2)');
+
+-- function / variable names are not table_references
+SELECT get_json_object(parse_sql('CREATE FUNCTION f AS ''x'' USING JAR ''y.jar'''),
+  '$.table_references');
+SELECT get_json_object(parse_sql('DECLARE VARIABLE x INT'), '$.table_references');
+
 -- parameter markers
 SELECT parse_sql('SELECT * FROM t WHERE a = :foo AND b = ?');
 

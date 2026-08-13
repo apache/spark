@@ -17,10 +17,19 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedExecuteImmediate, UnresolvedHaving}
+import org.apache.spark.sql.catalyst.analysis.{
+  RelationTimeTravel,
+  ResolvedInlineTable,
+  UnresolvedExecuteImmediate,
+  UnresolvedHaving,
+  UnresolvedInlineTable,
+  UnresolvedRelation,
+  UnresolvedTableValuedFunction
+}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
+import org.apache.spark.sql.metricview.logical.CreateMetricView
 
 /**
  * Classification of a parsed SQL statement using ISO/IEC 9075-2:2023 Table 39,
@@ -112,6 +121,7 @@ object SqlStatementCodes {
   val ShowCurrentNamespace: SqlStatementClassification =
     spark("SHOW CURRENT NAMESPACE", -35)
   val SetCatalog: SqlStatementClassification = spark("SET CATALOG", -36)
+  val CreateMetricViewStmt: SqlStatementClassification = spark("CREATE METRIC VIEW", -37)
 
   private def spark(identifier: String, code: Int): SqlStatementClassification = {
     assert(code < 0, s"Spark statement codes must be negative, got $code")
@@ -178,6 +188,7 @@ object SqlStatementCodes {
     case _: RefreshResource => RefreshResourceCmd
     case _: ShowCatalogsCommand => ShowCatalogs
     case _: ShowCurrentNamespaceCommand => ShowCurrentNamespace
+    case _: CreateMetricView | _: CreateMetricViewCommand => CreateMetricViewStmt
     case _: Command => Unrecognized
     case p if isQueryPlan(p) => Select
     case _ => Unrecognized
@@ -195,7 +206,9 @@ object SqlStatementCodes {
          _: OneRowRelation | _: LocalRelation | _: Deduplicate |
          _: Expand | _: Generate | _: Window | _: Tail | _: Offset |
          _: LateralJoin | _: UnresolvedHaving | _: CollectMetrics |
-         _: WithCTE => true
+         _: WithCTE | _: UnresolvedRelation | _: UnresolvedInlineTable |
+         _: ResolvedInlineTable | _: RelationTimeTravel |
+         _: UnresolvedTableValuedFunction => true
     case _ => false
   }
 }

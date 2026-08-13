@@ -88,6 +88,39 @@ struct<parse_sql(CACHE TABLE t):string>
 
 
 -- !query
+SELECT parse_sql('TABLE t')
+-- !query schema
+struct<parse_sql(TABLE t):string>
+-- !query output
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["t"]],"function_references":[],"select_list":[],"parameter_markers":{"named":[],"unnamed_count":0}}
+
+
+-- !query
+SELECT parse_sql('VALUES (1), (2)')
+-- !query schema
+struct<parse_sql(VALUES (1), (2)):string>
+-- !query output
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[],"function_references":[],"select_list":[],"parameter_markers":{"named":[],"unnamed_count":0}}
+
+
+-- !query
+SELECT get_json_object(parse_sql('CREATE FUNCTION f AS ''x'' USING JAR ''y.jar'''),
+  '$.table_references')
+-- !query schema
+struct<get_json_object(parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar'), $.table_references):string>
+-- !query output
+[]
+
+
+-- !query
+SELECT get_json_object(parse_sql('DECLARE VARIABLE x INT'), '$.table_references')
+-- !query schema
+struct<get_json_object(parse_sql(DECLARE VARIABLE x INT), $.table_references):string>
+-- !query output
+[]
+
+
+-- !query
 SELECT parse_sql('SELECT * FROM t WHERE a = :foo AND b = ?')
 -- !query schema
 struct<parse_sql(SELECT * FROM t WHERE a = :foo AND b = ?):string>
