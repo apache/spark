@@ -234,7 +234,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       fs.rename(tempOutputPath, finalOutputPath)
     } catch {
       case e: FileAlreadyExistsException =>
-        logDebug(s"Rename from $tempOutputPath to $finalOutputPath failed", e)
+        logDebug(log"Rename from ${MDC(TEMP_OUTPUT_PATH, tempOutputPath)} to" +
+          log" ${MDC(FINAL_OUTPUT_PATH, finalOutputPath)} failed", e)
         false
     }
     if (!renamed) {
