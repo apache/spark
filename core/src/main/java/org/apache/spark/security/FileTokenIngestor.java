@@ -38,7 +38,7 @@ import org.apache.spark.internal.SparkLoggerFactory;
  * <p>
  * The file path is typically a Kubernetes projected service account token
  * (e.g., {@code /var/run/secrets/tokens/spark-identity}) or a path configured via
- * {@code spark.security.oidc.identityToken.file}.
+ * {@code spark.security.credentials.identityToken.file}.
  * <p>
  * This implementation:
  * <ul>
