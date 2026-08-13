@@ -192,6 +192,17 @@ SELECT c, count(*) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
   GROUP BY c ORDER BY c;
+-- GROUP BY a nanosecond key with aggregates and a NULL group: exact-duplicate keys collapse, two
+-- keys sharing epochMicros but differing within the microsecond stay in separate groups, and all
+-- NULL keys group together (unlike an equi-join). Three groups: .000000001 (count 2, sum 3),
+-- .000000999 (count 1, sum 3), NULL (count 2, sum 9).
+SELECT k, count(*), sum(v) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
+  (CAST(NULL AS timestamp_ntz(9)), 4),
+  (CAST(NULL AS timestamp_ntz(9)), 5) AS t(k, v)
+  GROUP BY k ORDER BY k;
 
 -- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
 -- whole-second BIGINT; the sub-second digits are dropped and NTZ applies no zone shift, so the
