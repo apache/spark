@@ -1749,6 +1749,7 @@ def main():
     # Normalized PR-title component tags, used later to reconcile JIRA components. Empty for
     # Revert/Reapply PRs, whose titles are kept verbatim and not parsed for components.
     title_components: List[str] = []
+    is_minor = False
 
     # Revert and Reapply PRs keep their title verbatim.
     if not (is_revert_pr or is_reapply_pr):
@@ -1757,6 +1758,7 @@ def main():
             parsed = Title.parse(title)
         except ValueError as e:
             fail("Malformed PR title: %s" % e)
+        is_minor = "MINOR" in parsed.leading
 
         # Normalize component tags via the registry and track primary.
         components = []
@@ -1907,7 +1909,10 @@ def main():
                 post_merge_comment(pr_num, picked_commits)
             # Backport mode may be the first chance to resolve a JIRA after an interrupted
             # original merge. If it was already resolved, add any newly inferred fix versions.
-            update_jira_for_pr(pr_num, title, picked_refs, title_components, allow_resolved=True)
+            if not is_minor:
+                update_jira_for_pr(
+                    pr_num, title, picked_refs, title_components, allow_resolved=True
+                )
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -2023,7 +2028,8 @@ def main():
             post_merge_comment(pr_num, merged_commits)
         # This is deliberately in the finally block: once the target branch has been pushed,
         # cancelling a later cherry-pick must not bypass the mandatory JIRA update.
-        update_jira_for_pr(pr_num, title, merged_refs, title_components)
+        if not is_minor:
+            update_jira_for_pr(pr_num, title, merged_refs, title_components)
 
 
 if __name__ == "__main__":
