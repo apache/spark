@@ -500,13 +500,17 @@ function updateDetailsPanel(nodeId, nodeDetails) {
   var searchBox = document.getElementById("metric-search");
   if (searchBox) {
     searchBox.addEventListener("input", function () {
-      var query = this.value.toLowerCase();
-      bodyEl.querySelectorAll("table tbody tr").forEach(function (row) {
-        var metricName = row.cells[0] ? row.cells[0].textContent.toLowerCase() : "";
-        row.style.display = metricName.indexOf(query) >= 0 ? "" : "none";
-      });
+      filterMetricRows(bodyEl, this.value);
     });
   }
+}
+
+function filterMetricRows(container, query) {
+  var q = query.toLowerCase();
+  container.querySelectorAll("table.sortable > tbody > tr").forEach(function (row) {
+    var metricName = row.cells[0] ? row.cells[0].textContent.toLowerCase() : "";
+    row.style.display = metricName.indexOf(q) >= 0 ? "" : "none";
+  });
 }
 
 function htmlEscape(str) {
