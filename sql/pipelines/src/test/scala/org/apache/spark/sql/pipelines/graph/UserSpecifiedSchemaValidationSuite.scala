@@ -29,7 +29,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
 }
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
  * Tests for `GraphValidations.validateUserSpecifiedSchemas`, which requires a table's
@@ -226,6 +226,18 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
       flowName = "auto_cdc_flow",
       declaredSchema = Some(autoCdcInferredSchema("auto_cdc_flow"))).validate(
         spark.sessionState.conf.caseSensitiveAnalysis)
+  }
+
+  test("a user-specified schema that declares the reserved metadata column with the wrong " +
+    "type is rejected for an AUTO CDC flow") {
+    // Declaring the engine-owned metadata column is allowed, but only with the shape the engine
+    // produces. A conflicting type is caught when the declared schema is merged with the inferred
+    // one, before the AUTO CDC MERGE ever runs, so the target can never be created with a
+    // malformed metadata column.
+    val wrongTypeMetadata = StructType(
+      dataSchema.fields :+ StructField(AutoCdcReservedNames.cdcMetadataColName, StringType))
+    assertSchemaIncompatible(
+      autoCdcGraph(flowName = "auto_cdc_flow", declaredSchema = Some(wrongTypeMetadata)))
   }
 
   test("data-only user-specified schema is accepted for an SCD2 AUTO CDC flow") {
