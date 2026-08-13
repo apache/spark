@@ -158,7 +158,9 @@ def udaf(agg: "Aggregator") -> Any:
     if is_remote():
         from pyspark.sql.connect.udf import UserDefinedFunction
     else:
-        from pyspark.sql.udf import UserDefinedFunction
+        # The classic UserDefinedFunction is a distinct class from the Connect one above;
+        # both provide the same interface used below, so silence mypy's reassignment check.
+        from pyspark.sql.udf import UserDefinedFunction  # type: ignore[assignment]
 
     if not isinstance(agg, Aggregator):
         raise PySparkTypeError(
