@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedExecuteImmediate
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedExecuteImmediate, UnresolvedHaving}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
 
 /**
  * Classification of a parsed SQL statement using ISO/IEC 9075-2:2023 Table 39,
@@ -38,6 +40,9 @@ case class SqlStatementClassification(
  * Spark-only statements use the standard's implementation-defined escape hatch:
  * a product-specific identifier and a distinct negative code. Codes are
  * append-only and must never be renumbered.
+ *
+ * Unknown plans map to [[Unrecognized]] (empty identifier, code 0). Query
+ * shapes are allowlisted; unknown non-commands are not assumed to be SELECT.
  */
 object SqlStatementCodes {
 
@@ -91,6 +96,22 @@ object SqlStatementCodes {
   val CommentOnTable: SqlStatementClassification = spark("COMMENT ON TABLE", -21)
   // SQL/PSM-style scripting (9075-4); not in Foundation Table 39.
   val BeginEnd: SqlStatementClassification = spark("BEGIN END", -22)
+  // SparkSqlParser-only session / resource commands (append-only).
+  val Explain: SqlStatementClassification = spark("EXPLAIN", -23)
+  val Set: SqlStatementClassification = spark("SET", -24)
+  val Reset: SqlStatementClassification = spark("RESET", -25)
+  val AddJar: SqlStatementClassification = spark("ADD JAR", -26)
+  val AddFile: SqlStatementClassification = spark("ADD FILE", -27)
+  val AddArchive: SqlStatementClassification = spark("ADD ARCHIVE", -28)
+  val ListJar: SqlStatementClassification = spark("LIST JAR", -29)
+  val ListFile: SqlStatementClassification = spark("LIST FILE", -30)
+  val ClearCache: SqlStatementClassification = spark("CLEAR CACHE", -31)
+  val RefreshResourceCmd: SqlStatementClassification = spark("REFRESH RESOURCE", -32)
+  val DescribeQuery: SqlStatementClassification = spark("DESCRIBE QUERY", -33)
+  val ShowCatalogs: SqlStatementClassification = spark("SHOW CATALOGS", -34)
+  val ShowCurrentNamespace: SqlStatementClassification =
+    spark("SHOW CURRENT NAMESPACE", -35)
+  val SetCatalog: SqlStatementClassification = spark("SET CATALOG", -36)
 
   private def spark(identifier: String, code: Int): SqlStatementClassification = {
     assert(code < 0, s"Spark statement codes must be negative, got $code")
@@ -107,15 +128,18 @@ object SqlStatementCodes {
     case _: MergeIntoTable => Merge
     case _: CreateTableAsSelect | _: ReplaceTableAsSelect => CreateTable
     case _: CreateTable | _: CreateTableLike | _: ReplaceTable => CreateTable
-    case _: CreateView => CreateView
+    case _: CreateView | _: CreateViewCommand | _: CreateTempViewUsing => CreateView
     case _: DropTable => DropTable
     case _: DropView => DropView
     case _: CreateNamespace => CreateSchema
     case _: DropNamespace => DropSchema
-    case _: SetCatalogAndNamespace => SetSchema
+    case _: SetCatalogAndNamespace | _: SetNamespaceCommand => SetSchema
+    case _: SetCatalogCommand => SetCatalog
     case _: TruncateTable => TruncateTable
-    case _: CreateFunction => CreateRoutine
-    case _: DropFunction => DropRoutine
+    case _: CreateFunction | _: CreateFunctionCommand |
+         _: CreateUserDefinedFunction | _: CreateUserDefinedFunctionCommand =>
+      CreateRoutine
+    case _: DropFunction | _: DropFunctionCommand => DropRoutine
     case _: UnresolvedExecuteImmediate => ExecuteImmediate
     case _: Call => Call
     case _: CommentOnTable => CommentOnTable
@@ -127,6 +151,7 @@ object SqlStatementCodes {
     case _: ShowTables | _: ShowTablesExtended => ShowTables
     case _: DescribeRelation | _: DescribeTablePartition | _: DescribeColumn =>
       DescribeTable
+    case _: DescribeQueryCommand => DescribeQuery
     case _: AnalyzeTable | _: AnalyzeTables | _: AnalyzeColumn => AnalyzeTable
     case _: CreateVariable => DeclareVariable
     case _: SetVariable => SetVariable
@@ -141,7 +166,36 @@ object SqlStatementCodes {
     case _: ShowViews => ShowViews
     case _: RefreshFunction => RefreshFunction
     case _: CommentOnNamespace => CommentOnNamespace
+    case _: ExplainCommand => Explain
+    case _: SetCommand => Set
+    case _: ResetCommand => Reset
+    case _: AddJarsCommand => AddJar
+    case _: AddFilesCommand => AddFile
+    case _: AddArchivesCommand => AddArchive
+    case _: ListJarsCommand => ListJar
+    case _: ListFilesCommand => ListFile
+    case ClearCacheCommand => ClearCache
+    case _: RefreshResource => RefreshResourceCmd
+    case _: ShowCatalogsCommand => ShowCatalogs
+    case _: ShowCurrentNamespaceCommand => ShowCurrentNamespace
     case _: Command => Unrecognized
-    case _ => Select
+    case p if isQueryPlan(p) => Select
+    case _ => Unrecognized
+  }
+
+  /**
+   * Allowlisted query-shaped plans. Unknown non-command plans are not assumed
+   * to be SELECT.
+   */
+  private def isQueryPlan(plan: LogicalPlan): Boolean = plan match {
+    case _: Project | _: Aggregate | _: Distinct | _: Filter | _: Sort |
+         _: GlobalLimit | _: LocalLimit | _: Join | _: Union | _: Except |
+         _: Intersect | _: SubqueryAlias | _: Repartition |
+         _: RepartitionByExpression | _: Sample | _: Range |
+         _: OneRowRelation | _: LocalRelation | _: Deduplicate |
+         _: Expand | _: Generate | _: Window | _: Tail | _: Offset |
+         _: LateralJoin | _: UnresolvedHaving | _: CollectMetrics |
+         _: WithCTE => true
+    case _ => false
   }
 }

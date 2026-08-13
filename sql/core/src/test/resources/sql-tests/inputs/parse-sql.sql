@@ -1,38 +1,38 @@
--- End-to-end coverage for parse_command (SPARK-58738).
--- Returns compact JSON for parse-only statement analysis.
+-- End-to-end coverage for parse_sql (SPARK-58738).
+-- Returns compact JSON for parse-only statement analysis via SparkSqlParser.
 
 -- null input
-SELECT parse_command(NULL);
+SELECT parse_sql(NULL);
 
 -- basic SELECT classification and references
-SELECT parse_command('SELECT a, b FROM t');
-SELECT parse_command('SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2');
+SELECT parse_sql('SELECT a, b FROM t');
+SELECT parse_sql('SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2');
 
 -- DML
-SELECT parse_command('INSERT INTO t SELECT 1');
-SELECT parse_command('DELETE FROM t WHERE a = 1');
-SELECT parse_command('UPDATE t SET a = 1 WHERE b = 2');
-SELECT parse_command('MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE');
+SELECT parse_sql('INSERT INTO t SELECT 1');
+SELECT parse_sql('DELETE FROM t WHERE a = 1');
+SELECT parse_sql('UPDATE t SET a = 1 WHERE b = 2');
+SELECT parse_sql('MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE');
 
 -- DDL / CTAS
-SELECT parse_command('CREATE TABLE t (a INT)');
-SELECT parse_command('CREATE TABLE t AS SELECT 1 AS a');
-SELECT parse_command('DROP TABLE t');
+SELECT parse_sql('CREATE TABLE t (a INT)');
+SELECT parse_sql('CREATE TABLE t AS SELECT 1 AS a');
+SELECT parse_sql('DROP TABLE t');
 
 -- Spark-only statements (negative Table 39 codes)
-SELECT parse_command('CACHE TABLE t');
+SELECT parse_sql('CACHE TABLE t');
 
 -- parameter markers
-SELECT parse_command('SELECT * FROM t WHERE a = :foo AND b = ?');
+SELECT parse_sql('SELECT * FROM t WHERE a = :foo AND b = ?');
 
--- CTE: UnresolvedWith CTE bodies are innerChildren
-SELECT parse_command('WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte');
+-- CTE: lineage excludes CTE names; still walks CTE bodies for real tables
+SELECT parse_sql('WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte');
 
 -- nested subqueries
-SELECT parse_command('SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)');
+SELECT parse_sql('SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)');
 
 -- functions in projection, window, join, TVF, predicates, subquery, grouping, and ordering
-SELECT parse_command(
+SELECT parse_sql(
 'SELECT coalesce(t.a, 0), sum(abs(t.b)) OVER (
    PARTITION BY lower(t.c) ORDER BY length(t.d))
  FROM left_t t
@@ -45,7 +45,7 @@ SELECT parse_command(
  ORDER BY greatest(t.a, 1)');
 
 -- functions and tables throughout a multiline MERGE
-SELECT parse_command(
+SELECT parse_sql(
 'MERGE INTO target t
  USING (
    SELECT id, normalize_name(name) AS name
@@ -59,73 +59,74 @@ SELECT parse_command(
    INSERT (id, name) VALUES (s.id, lower(s.name))');
 
 -- functions embedded in DDL column defaults
-SELECT parse_command(
+SELECT parse_sql(
 'CREATE TABLE defaults (
    created DATE DEFAULT current_date(),
    normalized STRING DEFAULT upper(''x'')
  )');
 
 -- syntax error: never throws; STANDARD error nested under parse_success=false
-SELECT get_json_object(parse_command('SELEC FROM t'), '$.parse_success');
-SELECT get_json_object(parse_command('SELEC FROM t'), '$.error.errorClass');
-SELECT get_json_object(parse_command('SELEC FROM t'), '$.error.sqlState');
+SELECT get_json_object(parse_sql('SELEC FROM t'), '$.parse_success');
+SELECT get_json_object(parse_sql('SELEC FROM t'), '$.error.errorClass');
+SELECT get_json_object(parse_sql('SELEC FROM t'), '$.error.sqlState');
 
 -- source location from a multiline parse-time validation error
 SELECT
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'SELECT *
  FROM t
  ORDER BY a
  CLUSTER BY b'), '$.error.errorClass') AS error_class,
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'SELECT *
  FROM t
  ORDER BY a
  CLUSTER BY b'), '$.error.line') AS line,
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'SELECT *
  FROM t
  ORDER BY a
  CLUSTER BY b'), '$.error.position') AS position,
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'SELECT *
  FROM t
  ORDER BY a
  CLUSTER BY b'), '$.error.queryContext[0].startIndex') AS start_index;
 
 -- parse-only validation errors beyond PARSE_SYNTAX_ERROR
-SELECT get_json_object(parse_command(''), '$.error.errorClass');
-SELECT get_json_object(parse_command('USE bad-name'), '$.error.errorClass');
+SELECT get_json_object(parse_sql(''), '$.error.errorClass');
+SELECT get_json_object(parse_sql('USE bad-name'), '$.error.errorClass');
 SELECT get_json_object(
-  parse_command('WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c'),
+  parse_sql('WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c'),
   '$.error.errorClass');
 SELECT get_json_object(
-  parse_command('MERGE INTO target USING source ON target.id = source.id'),
+  parse_sql('MERGE INTO target USING source ON target.id = source.id'),
+  '$.error.errorClass');
+SELECT get_json_object(parse_sql('EXPLAIN SELECT 1'), '$.statement_identifier');
+SELECT get_json_object(parse_sql('SET spark.sql.adaptive.enabled=true'), '$.statement_code');
+SELECT get_json_object(parse_sql('ADD JAR /tmp/x.jar'), '$.statement_identifier');
+SELECT parse_sql('CREATE VIEW v AS SELECT a, b FROM t');
+SELECT get_json_object(
+  parse_sql('SELECT 1 AS IDENTIFIER(''alias.field'')'),
   '$.error.errorClass');
 SELECT get_json_object(
-  parse_command('DROP FUNCTION catalog.schema.func'),
-  '$.error.errorClass');
-SELECT get_json_object(
-  parse_command('SELECT 1 AS IDENTIFIER(''alias.field'')'),
-  '$.error.errorClass');
-SELECT get_json_object(
-  parse_command('SELECT DATE ''not-a-date'''),
+  parse_sql('SELECT DATE ''not-a-date'''),
   '$.error.errorClass');
 
 -- location for an error inside a multiline script
 --QUERY-DELIMITER-START
 SELECT
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'BEGIN
    SELECT 1;
    SELEC 2;
  END'), '$.error.errorClass') AS error_class,
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'BEGIN
    SELECT 1;
    SELEC 2;
  END'), '$.error.line') AS line,
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'BEGIN
    SELECT 1;
    SELEC 2;
@@ -135,19 +136,19 @@ SELECT
 -- location for a SQL scripting semantic validation error
 --QUERY-DELIMITER-START
 SELECT
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'BEGIN
    lbl_begin: BEGIN
      SELECT 1;
    END lbl_end;
  END'), '$.error.errorClass') AS error_class,
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'BEGIN
    lbl_begin: BEGIN
      SELECT 1;
    END lbl_end;
  END'), '$.error.line') AS line,
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'BEGIN
    lbl_begin: BEGIN
      SELECT 1;
@@ -156,7 +157,7 @@ SELECT
 --QUERY-DELIMITER-END
 
 -- batch over a column of SQL text
-SELECT sql_text, parse_command(sql_text) FROM VALUES
+SELECT sql_text, parse_sql(sql_text) FROM VALUES
   ('SELECT 1'),
   ('INSERT INTO t SELECT 1'),
   ('CACHE TABLE t')
@@ -165,26 +166,26 @@ AS t(sql_text);
 -- BEGIN END scripts contain ';' inside the string literal; use query delimiters
 -- so the test harness does not split on those semicolons.
 --QUERY-DELIMITER-START
-SELECT parse_command('BEGIN SELECT 1; END');
+SELECT parse_sql('BEGIN SELECT 1; END');
 --QUERY-DELIMITER-END
 
 --QUERY-DELIMITER-START
-SELECT parse_command('BEGIN SELECT count(a) FROM script_t WHERE c = :p; END');
+SELECT parse_sql('BEGIN SELECT count(a) FROM script_t WHERE c = :p; END');
 --QUERY-DELIMITER-END
 
 --QUERY-DELIMITER-START
-SELECT parse_command('BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END');
+SELECT parse_sql('BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END');
 --QUERY-DELIMITER-END
 
 --QUERY-DELIMITER-START
-SELECT parse_command('BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END');
+SELECT parse_sql('BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END');
 --QUERY-DELIMITER-END
 
 -- Complex, genuinely multiline script. Extract collections to keep the
 -- expected output focused on complete tree walking.
 --QUERY-DELIMITER-START
 SELECT
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'BEGIN
    DECLARE EXIT HANDLER FOR SQLEXCEPTION
    BEGIN
@@ -215,7 +216,7 @@ SELECT
      SELECT audit(row.id), count(*) FROM loop_body;
    END FOR;
  END'), '$.table_references') AS table_references,
-  get_json_object(parse_command(
+  get_json_object(parse_sql(
 'BEGIN
    DECLARE EXIT HANDLER FOR SQLEXCEPTION
    BEGIN
@@ -251,8 +252,8 @@ SELECT
 -- extract key fields from a script for readable assertions
 --QUERY-DELIMITER-START
 SELECT
-  get_json_object(parse_command('BEGIN SELECT 1; END'), '$.statement_identifier') AS statement_identifier,
-  get_json_object(parse_command('BEGIN SELECT 1; END'), '$.statement_code') AS statement_code,
-  get_json_object(parse_command('BEGIN SELECT count(a) FROM script_t; END'), '$.table_references') AS table_references,
-  get_json_object(parse_command('BEGIN SELECT count(a) FROM script_t; END'), '$.function_references') AS function_references;
+  get_json_object(parse_sql('BEGIN SELECT 1; END'), '$.statement_identifier') AS statement_identifier,
+  get_json_object(parse_sql('BEGIN SELECT 1; END'), '$.statement_code') AS statement_code,
+  get_json_object(parse_sql('BEGIN SELECT count(a) FROM script_t; END'), '$.table_references') AS table_references,
+  get_json_object(parse_sql('BEGIN SELECT count(a) FROM script_t; END'), '$.function_references') AS function_references;
 --QUERY-DELIMITER-END

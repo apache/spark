@@ -846,7 +846,6 @@ object FunctionRegistry {
     // misc functions
     expression[AssertTrue]("assert_true"),
     expressionBuilder("raise_error", RaiseErrorExpressionBuilder),
-    expression[ParseCommand]("parse_command"),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Uuid]("uuid"),

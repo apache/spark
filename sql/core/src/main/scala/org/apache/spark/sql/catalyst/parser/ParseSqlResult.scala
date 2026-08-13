@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.parser
 
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
@@ -29,42 +28,40 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryCommand, ExplainCommand}
 
 /**
  * Parses a SQL statement string and returns a compact JSON description of the
  * unresolved plan (parse-only; no catalog resolution).
  *
+ * Uses [[SparkSqlParser]] so coverage matches the production session parser
+ * (EXPLAIN / SET / ADD JAR / temp views / etc.).
+ *
  * On success the JSON includes the statement identifier/code (ISO/IEC
- * 9075-2:2023 Table 39), table/function references, select-list items, and
+ * 9075-2:2023 Table 39), table/function references, select-list names, and
  * parameter markers. On parse failure it returns `parse_success: false` with
- * source location and a nested STANDARD-format error object, and does not throw.
+ * source location and a nested STANDARD-format error object, and does not
+ * throw. Unexpected / internal failures propagate so the function fails.
  */
-object ParseCommandResult {
+object ParseSqlResult {
 
-  private val parser: ThreadLocal[CatalystSqlParser] =
-    ThreadLocal.withInitial(() => new CatalystSqlParser())
+  private val parser: ThreadLocal[SparkSqlParser] =
+    ThreadLocal.withInitial(() => new SparkSqlParser())
 
-  /** Parse `sql` and render the JSON result string. Never throws for bad SQL. */
+  /** Parse `sql` and render the JSON result string. */
   def fromSql(sql: String): String = {
     try {
       val plan = parser.get().parsePlan(sql)
       fromPlan(plan)
     } catch {
+      // User-facing parse / scripting failures become JSON; internal errors fail.
       case e: ParseException =>
+        errorJson(e)
+      case e: SqlScriptingException =>
         errorJson(e)
       case e: SparkThrowable with Throwable =>
         errorJson(e)
-      case NonFatal(e) =>
-        // Unexpected failures still must not fail a batch row.
-        compact(render(JObject(
-          "parse_success" -> JBool(false),
-          "error" -> JObject(
-            "errorClass" -> JString("LEGACY"),
-            "messageParameters" -> JObject(
-              "message" -> JString(Option(e.getMessage).getOrElse(e.toString))
-            )
-          )
-        )))
     }
   }
 
@@ -148,20 +145,46 @@ object ParseCommandResult {
           c.handlers.foreach(h => foreachPlanDeep(h)(f))
         case s: SimpleCaseStatement =>
           s.elseBody.foreach(b => foreachPlanDeep(b)(f))
+        case ExplainCommand(logicalPlan, _) =>
+          foreachPlanDeep(logicalPlan)(f)
+        case DescribeQueryCommand(_, queryPlan) =>
+          foreachPlanDeep(queryPlan)(f)
         case _ =>
       }
     }
   }
 
   /**
-   * Collect multipart table/view identifiers as written in the SQL.
-   * Deduplicates while preserving first-seen order.
+   * Collect multipart table/view identifiers for lineage (as written in the
+   * SQL). CTE definition names and correlation aliases are omitted; tables
+   * referenced inside CTE bodies are still included. Deduplicates while
+   * preserving first-seen order.
    */
-  def collectTableReferences(plan: LogicalPlan): Seq[Seq[String]] = {
+  private def collectTableReferences(plan: LogicalPlan): Seq[Seq[String]] = {
     val seen = mutable.LinkedHashSet.empty[Seq[String]]
-    def add(parts: Seq[String]): Unit = {
-      if (parts.nonEmpty) seen += parts
+    val cteNames = mutable.HashSet.empty[String]
+
+    def addCteNames(w: UnresolvedWith): Unit = {
+      w.cteRelations.foreach { case (name, _, _) =>
+        cteNames += name.toLowerCase(java.util.Locale.ROOT)
+      }
     }
+
+    def isCteName(parts: Seq[String]): Boolean = parts match {
+      case Seq(name) => cteNames.contains(name.toLowerCase(java.util.Locale.ROOT))
+      case _ => false
+    }
+
+    def add(parts: Seq[String]): Unit = {
+      if (parts.nonEmpty && !isCteName(parts)) seen += parts
+    }
+
+    // First pass: gather CTE names in scope (including nested).
+    foreachPlanDeep(plan) {
+      case w: UnresolvedWith => addCteNames(w)
+      case _ =>
+    }
+
     foreachPlanDeep(plan) {
       case u: UnresolvedRelation => add(u.multipartIdentifier)
       case u: UnresolvedTable => add(u.multipartIdentifier)
@@ -174,7 +197,7 @@ object ParseCommandResult {
   }
 
   /** Collect multipart function names, including table-valued functions. */
-  def collectFunctionReferences(plan: LogicalPlan): Seq[Seq[String]] = {
+  private def collectFunctionReferences(plan: LogicalPlan): Seq[Seq[String]] = {
     val seen = mutable.LinkedHashSet.empty[Seq[String]]
     def add(parts: Seq[String]): Unit = {
       if (parts.nonEmpty) seen += parts
@@ -194,10 +217,10 @@ object ParseCommandResult {
   }
 
   /**
-   * Collect the primary select list as `{name, expression}` objects.
-   * Empty for non-query statements without a projected query body.
+   * Collect the primary select list as `{name}` objects (multipart name
+   * parts only). Empty for non-query statements without a projected query body.
    */
-  def collectSelectList(plan: LogicalPlan): Seq[JObject] = {
+  private def collectSelectList(plan: LogicalPlan): Seq[JObject] = {
     val query = primaryQueryPlan(plan)
     val named: Seq[NamedExpression] = query match {
       case p: Project => p.projectList
@@ -213,32 +236,27 @@ object ParseCommandResult {
       primaryQueryPlan(query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)
     case r: ReplaceTableAsSelect => primaryQueryPlan(r.query)
+    case c: CreateView => primaryQueryPlan(c.query)
+    case c: CreateViewCommand => primaryQueryPlan(c.plan)
+    case c: CacheTableAsSelect => primaryQueryPlan(c.plan)
+    case ExplainCommand(logicalPlan, _) => primaryQueryPlan(logicalPlan)
+    case DescribeQueryCommand(_, queryPlan) => primaryQueryPlan(queryPlan)
     case SubqueryAlias(_, child) => primaryQueryPlan(child)
     case other => other
   }
 
   private def selectListItem(ne: NamedExpression): JObject = ne match {
-    case Alias(child, name) =>
-      JObject(
-        "name" -> partsToJArray(Seq(name)),
-        "expression" -> JString(child.sql))
-    case u: UnresolvedAlias =>
-      JObject(
-        "name" -> partsToJArray(Nil),
-        "expression" -> JString(u.child.sql))
+    case Alias(_, name) =>
+      JObject("name" -> partsToJArray(Seq(name)))
+    case _: UnresolvedAlias =>
+      JObject("name" -> partsToJArray(Nil))
     case s: UnresolvedStar =>
       val name = s.target.map(_ :+ "*").getOrElse(Seq("*"))
-      JObject(
-        "name" -> partsToJArray(name),
-        "expression" -> JString(s.sql))
+      JObject("name" -> partsToJArray(name))
     case a: UnresolvedAttribute =>
-      JObject(
-        "name" -> partsToJArray(a.nameParts),
-        "expression" -> JString(a.sql))
+      JObject("name" -> partsToJArray(a.nameParts))
     case other =>
-      JObject(
-        "name" -> partsToJArray(Seq(other.name)),
-        "expression" -> JString(other.sql))
+      JObject("name" -> partsToJArray(Seq(other.name)))
   }
 
   private def parameterMarkersJson(plan: LogicalPlan): JObject = {
