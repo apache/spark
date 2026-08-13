@@ -16,16 +16,15 @@
 
 # NOTE
 #
-#   The only files that need to be mentioned here are non-`.py` files that are not
-#   already included via explicit arguments to setup.cfg or setup.py like `package_data`,
-#   or via setuptools defaults which automatically look for license and README files.
+#   This file exists only for the exclude below, which applies across every
+#   package in every setup.py, unlike `exclude_package_data` (which is scoped
+#   to the individual package and setup.py it's declared in). Non-`.py` files
+#   to include should go through `package_data` in setup.py instead.
 #
 # See:
 #   - https://setuptools.pypa.io/en/latest/userguide/datafiles.html
 #   - https://setuptools.pypa.io/en/latest/userguide/miscellaneous.html
 
-recursive-include pyspark *.pyi py.typed *.json
-
-# MANIFEST.in commands are processed in the order they appear, so keep
-# this exclude at the end.
+# MANIFEST.in commands are processed in the order they appear, so if we add
+# other commands, keep this exclude at the end.
 global-exclude *.py[cod] __pycache__ .DS_Store

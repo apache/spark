@@ -214,7 +214,7 @@ try:
     copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if in_spark:
-        # !!HACK ALTERT!!
+        # !!HACK ALERT!!
         # `setup.py` has to be located with the same directory with the package.
         # Therefore, we copy the current file, and place it at `spark/python` directory.
         # After that, we remove it in the end.
@@ -340,6 +340,7 @@ try:
             "pyspark.examples.src.main.python": "deps/examples",
         },
         package_data={
+            "pyspark": ["**/*.pyi", "**/py.typed", "**/*.json"],
             "pyspark.jars": ["**/*.jar"],
             "pyspark.bin": ["**/*"],
             "pyspark.sbin": [
