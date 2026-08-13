@@ -19,8 +19,14 @@ from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Any, Generic, List, Optional, Type, TypeVar
 
 from pyspark import since
-from pyspark.ml import Estimator, Model, PredictionModel, Predictor, Transformer
-from pyspark.ml.base import _PredictorParams
+from pyspark.ml.base import (
+    Estimator,
+    Model,
+    PredictionModel,
+    Predictor,
+    Transformer,
+    _PredictorParams,
+)
 from pyspark.ml.common import _java2py, _py2java, inherit_doc
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import (
