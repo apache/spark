@@ -651,8 +651,8 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
     Returns the (pushed ref, pushed commit hash) pair. Raises `SkipCherryPick` if the
-    cherry-pick conflicts and the committer declines to resolve it, having first aborted
-    the cherry-pick and restored the working tree.
+    cherry-pick conflicts and the committer declines to resolve it, after attempting to
+    abort the cherry-pick and restore the working tree.
     """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
@@ -796,7 +796,7 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             {"b": ["b", "both", ""], "o": ["o", "only"], "a": ["a", "abort"]},
         )
         if choice == "b":
-            # Preserve any pick that already pushed: if the branch-M.N pick is skipped after
+            # Preserve any pick that was already pushed: if the branch-M.N pick is skipped after
             # branch-M.x landed, still return branch-M.x so it's recorded and JIRA/comment
             # reflect it.
             picked = []
