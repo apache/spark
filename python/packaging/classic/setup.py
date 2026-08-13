@@ -350,7 +350,7 @@ try:
                 "stop-connect-server.sh",
                 "stop-history-server.sh",
             ],
-            "pyspark.python.lib": ["*.zip"],
+            "pyspark.python.lib": ["**/*.zip"],
             "pyspark.data": ["**/*.txt", "**/*.data"],
             "pyspark.licenses": ["*"],
             "pyspark.examples.src.main.python": ["**/*.py"],
