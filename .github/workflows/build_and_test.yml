@@ -58,6 +58,13 @@ on:
         required: false
         type: number
         default: 150
+      docker_integration_tests_timeout_minutes:
+        description: >-
+          Timeout for the `docker-integration-tests` job. Same reason as above; this job already
+          runs close to its default on the Janino backend.
+        required: false
+        type: number
+        default: 120
     secrets:
       codecov_token:
         description: The upload token of codecov.
@@ -1389,7 +1396,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.docker_integration_tests_timeout_minutes }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3

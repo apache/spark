@@ -48,6 +48,9 @@ jobs:
       # was measured at 170 minutes against 126 on Janino, so it needs more than the
       # 150 minute default.
       build_timeout_minutes: 200
+      # `docker-integration-tests` took 86, 108 and 116 minutes across three javac runs
+      # against a 74 to 102 minute range on Janino, so the 120 default leaves it no room.
+      docker_integration_tests_timeout_minutes: 180
       envs: >-
         {
           "PYSPARK_IMAGE_TO_TEST": "python-312",
