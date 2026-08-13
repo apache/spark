@@ -1761,9 +1761,38 @@ object CollapseWindow extends Rule[LogicalPlan] {
       s1.zip(s2).forall(e => e._1.semanticEquals(e._2))
   }
 
+  /**
+   * Returns true if the given window expression can be evaluated under any ordering of the rows
+   * within a partition without changing the result, so that it can be merged into another window
+   * with a different (non-empty) order spec.
+   *
+   * The frame determines whether the ordering matters. When the frame is the whole partition
+   * (`UNBOUNDED PRECEDING` to `UNBOUNDED FOLLOWING`), it always covers all the rows of the
+   * partition regardless of the ordering, so the ordering does not affect the result: aggregates
+   * such as `count` or `sum` give the same value under any ordering, and functions whose result
+   * does depend on the row order, such as `collect_list` or `first`, are non-deterministic when
+   * the order spec is empty, so evaluating them under any ordering yields a valid result. On the
+   * other hand, a bounded frame (e.g. `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`) is
+   * order-sensitive: which rows are in the frame depends on the ordering, so even `count` or
+   * `sum` would change value, and such a window must not be merged.
+   */
+  private def orderInsensitive(windowExpression: NamedExpression): Boolean =
+    windowExpression match {
+      case Alias(WindowExpression(_, WindowSpecDefinition(_, _,
+          SpecifiedWindowFrame(_, UnboundedPreceding, UnboundedFollowing))), _) => true
+      case _ => false
+    }
+
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
     specCompatible(w1.partitionSpec, w2.partitionSpec) &&
-      specCompatible(w1.orderSpec, w2.orderSpec) &&
+      // The order specs can differ when one of them is empty, as long as the window expressions
+      // of the window with the empty order spec are insensitive to the row order. In that case,
+      // they can be evaluated under the non-empty order spec of the other window.
+      (specCompatible(w1.orderSpec, w2.orderSpec) ||
+        (w1.orderSpec.isEmpty && w2.orderSpec.nonEmpty &&
+          w1.windowExpressions.forall(orderInsensitive)) ||
+        (w2.orderSpec.isEmpty && w1.orderSpec.nonEmpty &&
+          w2.windowExpressions.forall(orderInsensitive))) &&
       w1.references.intersect(w2.windowOutputSet).isEmpty &&
       w1.windowExpressions.nonEmpty && w2.windowExpressions.nonEmpty &&
       // This assumes Window contains the same type of window expressions. This is ensured
@@ -1776,13 +1805,19 @@ object CollapseWindow extends Rule[LogicalPlan] {
     _.containsPattern(WINDOW), ruleId) {
     case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild, _), _)
         if windowsCompatible(w1, w2) =>
-      w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+      w1.copy(
+        orderSpec = if (w1.orderSpec.nonEmpty) w1.orderSpec else w2.orderSpec,
+        windowExpressions = we2 ++ we1,
+        child = grandChild)
 
     case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild, _)), _)
         if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
-        w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
+        w1.copy(
+          orderSpec = if (w1.orderSpec.nonEmpty) w1.orderSpec else w2.orderSpec,
+          windowExpressions = we2 ++ we1,
+          child = grandChild))
   }
 }
 
