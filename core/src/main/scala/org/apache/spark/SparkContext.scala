@@ -451,11 +451,19 @@ class SparkContext(config: SparkConf) extends Logging {
     // Set Spark driver host and port system properties. This explicitly sets the configuration
     // instead of relying on the default value of the config constant.
     if (SparkMasterRegex.isK8s(master) &&
-        _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", true) &&
-        !Utils.isAnyLocalAddress(_conf.get(DRIVER_BIND_ADDRESS))) {
-      logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
-        "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
-      _conf.set(DRIVER_HOST_ADDRESS, Utils.normalizeIpIfNeeded(_conf.get(DRIVER_BIND_ADDRESS)))
+        _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", true)) {
+      val bindAddress = _conf.get(DRIVER_BIND_ADDRESS)
+      if (Utils.isAnyLocalAddress(bindAddress)) {
+        val driverHost = _conf.get(DRIVER_HOST_ADDRESS)
+        logInfo(log"spark.kubernetes.executor.useDriverPodIP is true but bind address " +
+          log"${MDC(LogKeys.BIND_ADDRESS, bindAddress)} is a wildcard; " +
+          log"preserving advertised driver host ${MDC(LogKeys.HOST, driverHost)}")
+        _conf.set(DRIVER_HOST_ADDRESS, driverHost)
+      } else {
+        logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
+          "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
+        _conf.set(DRIVER_HOST_ADDRESS, Utils.normalizeIpIfNeeded(bindAddress))
+      }
     } else {
       _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
     }

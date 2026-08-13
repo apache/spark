@@ -721,26 +721,39 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       ("2001:DB8:0:0::BEEF", "driver-service", "[2001:db8::beef]")).foreach {
       case (bindAddress, advertisedAddress, expectedAddress) =>
         var observedAddress: Option[String] = None
+        val logAppender = new LogAppender("wildcard driver bind address")
         val conf = new SparkConf(false)
           .setMaster("k8s://https://localhost:6443")
           .setAppName("driver-bind-address")
           .set(DRIVER_BIND_ADDRESS, bindAddress)
           .set(DRIVER_HOST_ADDRESS, advertisedAddress)
 
-        val error = intercept[SparkException] {
-          new SparkContext(conf) {
-            override private[spark] def createSparkEnv(
-                conf: SparkConf,
-                isLocal: Boolean,
-                listenerBus: LiveListenerBus): SparkEnv = {
-              observedAddress = Some(conf.get(DRIVER_HOST_ADDRESS))
-              throw new SparkException("stop after resolving the driver address")
+        withLogAppender(logAppender) {
+          val error = intercept[SparkException] {
+            new SparkContext(conf) {
+              override private[spark] def createSparkEnv(
+                  conf: SparkConf,
+                  isLocal: Boolean,
+                  listenerBus: LiveListenerBus): SparkEnv = {
+                observedAddress = Some(conf.get(DRIVER_HOST_ADDRESS))
+                throw new SparkException("stop after resolving the driver address")
+              }
             }
           }
+          assert(error.getMessage === "stop after resolving the driver address")
         }
 
-        assert(error.getMessage === "stop after resolving the driver address")
         assert(observedAddress.contains(expectedAddress))
+        val wildcardMessages = logAppender.loggingEvents
+          .map(_.getMessage.getFormattedMessage)
+          .filter(_.contains("is a wildcard; preserving advertised driver host"))
+        if (Utils.isAnyLocalAddress(bindAddress)) {
+          assert(wildcardMessages.size === 1)
+          assert(wildcardMessages.head.contains(bindAddress))
+          assert(wildcardMessages.head.contains(advertisedAddress))
+        } else {
+          assert(wildcardMessages.isEmpty)
+        }
     }
   }
 
