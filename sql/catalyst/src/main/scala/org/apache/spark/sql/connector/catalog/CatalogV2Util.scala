@@ -498,6 +498,11 @@ private[sql] object CatalogV2Util {
     new CaseInsensitiveStringMap(projected.asJava)
   }
 
+  /**
+   * Loads a table from the catalog. Callers may pass the complete option map, but only the keys the
+   * catalog declares via `tableStateOptionKeys()` are forwarded to `loadTable`, so the loaded table
+   * state stays independent of non-state options and of how many times the table is referenced.
+   */
   def getTable(
       catalog: CatalogPlugin,
       ident: Identifier,

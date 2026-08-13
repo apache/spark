@@ -105,6 +105,26 @@ public interface TableCatalog extends CatalogPlugin {
   default Set<TableCatalogCapability> capabilities() { return Set.of(); }
 
   /**
+   * Returns the connector-specific option keys that select the table state (such as a branch, tag,
+   * snapshot, or version) and therefore must be known when the table is loaded. Keys that Spark
+   * parses and handles itself, such as time travel, must not be listed here.
+   * <p>
+   * Spark may need to resolve the same table more than once while analyzing or refreshing a query.
+   * Spark reuses one table instance only for references whose table-state options match and passes
+   * only the declared options to {@code loadTable}. The complete user option map remains on each
+   * resolved relation for subsequent scan and write planning.
+   * <p>
+   * The default implementation returns an empty set, treating all options as unable to select a
+   * different table state. Option key matching is case-insensitive, while option values remain
+   * case-sensitive.
+   *
+   * @return a non-null set of case-insensitive option keys
+   *
+   * @since 4.3.0
+   */
+  default Set<String> tableStateOptionKeys() { return Set.of(); }
+
+  /**
    * List the tables in a namespace from the catalog.
    *
    * @param namespace a multi-part namespace
@@ -194,27 +214,6 @@ public interface TableCatalog extends CatalogPlugin {
   default Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
     throw QueryCompilationErrors.noSuchTableError(name(), ident);
   }
-
-  /**
-   * Returns the raw option keys that may affect the table state selected by
-   * {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)}, such as a branch, tag,
-   * snapshot, or version.
-   * <p>
-   * Spark may need to resolve the same table more than once while analyzing or refreshing a query.
-   * Spark reuses one table instance only for references whose table-state options match and passes
-   * only the declared options to {@code loadTable}. The complete user option map remains on each
-   * resolved relation for subsequent scan and write planning.
-   * <p>
-   * The default implementation returns an empty set, treating all options as unable to select a
-   * different table state. Option key matching is case-insensitive, while option values remain
-   * case-sensitive. State that Spark parses and handles independently, such as time travel, must
-   * not be included in the returned set.
-   *
-   * @return a non-null set of case-insensitive option keys
-   *
-   * @since 4.3.0
-   */
-  default Set<String> tableStateOptionKeys() { return Set.of(); }
 
   /**
    * Load table metadata by {@link Identifier identifier} from the catalog, forwarding the

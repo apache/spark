@@ -383,8 +383,7 @@ class RelationResolution(
       ident: Identifier,
       table: Table,
       options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
-    CatalogV2Util.lookupCachedRelation(
-      sharedRelationCache, catalog, ident, table, options, conf)
+    CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, options, conf)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
