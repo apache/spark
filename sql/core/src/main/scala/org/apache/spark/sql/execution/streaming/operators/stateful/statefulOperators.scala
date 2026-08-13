@@ -631,18 +631,6 @@ trait WatermarkSupport extends SparkPlan {
     watermarkExpression.map(Predicate.create(_, child.output))
   }
 
-  protected def removeKeysOlderThanWatermark(store: StateStore): Unit = {
-    if (watermarkPredicateForKeysForEviction.nonEmpty) {
-      val numRemovedStateRows = longMetric("numRemovedStateRows")
-      store.iterator().foreach { rowPair =>
-        if (watermarkPredicateForKeysForEviction.get.eval(rowPair.key)) {
-          store.remove(rowPair.key)
-          numRemovedStateRows += 1
-        }
-      }
-    }
-  }
-
   protected def removeKeysOlderThanWatermark(
       storeManager: StreamingAggregationStateManager,
       store: StateStore): Unit = {
@@ -1422,9 +1410,10 @@ abstract class BaseStreamingDeduplicateExec
 
       val updatesStartTimeNs = System.nanoTime
 
-      // Only create the eviction iterator if we are doing incremental cleanup. If we instantiate it
-      // and are not doing incremental cleanup, then the iterator would not observe records inserted
-      // into the store during the batch (it is materialized before the batch processes any rows).
+      // Only create the eviction iterator if we are doing incremental cleanup. It is opened over
+      // the store before the batch processes any rows, so it may not observe records inserted into
+      // the store later in the batch (the guarantee depends on the store provider's iterator
+      // semantics). When cleanup is disabled we defer building it to batch end, after all inserts.
       val incrementalEvictionIter = if (doIncrementalCleanup) {
         Some(iteratorForEviction(store))
       } else {
@@ -1595,10 +1584,12 @@ case class StreamingDeduplicateExec(
       store,
       store.iterator(),
       keyExpressions,
-      // The previous full-eviction predicate (watermarkPredicateForKeysForEviction) also resolved
-      // the event time from `keyExpressions`, and matched the `allowMultipleStatefulOperators`
-      // knob, so pass !allowMultipleStatefulOperators here. This matches the aggregation eviction
-      // path and the runtime. (The old path additionally forced the watermark *expression* over
+      // The previous full-eviction predicate (watermarkPredicateForKeysForEviction) compiled
+      // against `keyExpressions` and only produced a predicate when `keyExpressions` carried an
+      // event-time column -- so resolving the event-time column from `keyExpressions` here is
+      // equivalent for the dedup key, and matches the aggregation eviction path and the runtime.
+      // The `allowMultipleStatefulOperators` knob is carried over unchanged, hence
+      // !allowMultipleStatefulOperators. (The old path found the event-time *column* from
       // child.output, which could throw MULTIPLE_EVENT_TIME_COLUMNS when child.output -- not the
       // dedup key -- carried several event-time columns; resolving from the key here does not, but
       // that only differs under the non-default allowMultiple=false with 2+ event-time columns
@@ -1700,7 +1691,8 @@ case class StreamingDeduplicateWithinWatermarkExec(
     val numRemovedStateRows = longMetric("numRemovedStateRows")
     val numRowsReadDuringEviction = longMetric("numRowsReadDuringEviction")
 
-    // Incremental cleanup is not enabled for this operator (see incrementalCleanupFactor above), so
+    // Incremental cleanup is not enabled for this operator (this class does not override the base
+    // incrementalCleanupFactor, which defaults to 0 -- see the class-level comment for why), so
     // eviction always runs once at batch end against the eviction watermark.
     val watermarkForEviction = DateTimeUtils.millisToMicros(eventTimeWatermarkForEviction.get)
 

@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.UTF8String
@@ -687,16 +686,23 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
   }
 
   // Total incremental removals reported across all batches, read from the operator's
-  // numRowsIncrementallyRemoved custom metric.
+  // numRowsIncrementallyRemoved custom metric. Where a stateful operator ran (stateOperators is
+  // non-empty) the metric must be present -- assert rather than default it to 0, so a regression
+  // that stops emitting the metric fails the test instead of silently reading as zero.
   private def numRowsIncrementallyRemoved(q: StreamingQuery): Long = {
-    q.recentProgress.map { p =>
-      if (p.stateOperators.isEmpty) {
-        0L
-      } else {
-        p.stateOperators.head.customMetrics.getOrDefault("numRowsIncrementallyRemoved", 0L).toLong
-      }
+    q.recentProgress.flatMap(_.stateOperators.headOption).map { op =>
+      assert(op.customMetrics.containsKey("numRowsIncrementallyRemoved"),
+        s"numRowsIncrementallyRemoved custom metric missing; got ${op.customMetrics}")
+      op.customMetrics.get("numRowsIncrementallyRemoved").toLong
     }.sum
   }
+
+  // Total state rows removed across all batches, read from the operator's first-class
+  // numRowsRemoved metric (the incremental removals are a subset of these). This asserts that
+  // eviction actually removed state, which numRowsIncrementallyRemoved alone does not: a batch-end
+  // drain removes rows without incrementing the incremental counter.
+  private def totalStateRowsRemoved(q: StreamingQuery): Long =
+    q.recentProgress.flatMap(_.stateOperators.headOption.map(_.numRowsRemoved)).sum
 
   test("deduplicate with watermark - incremental cleanup preserves dedup output") {
     // With a non-zero incremental cleanup factor, watermark-expired state is removed spread across
@@ -770,6 +776,12 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
         CheckNewAnswer(101),
         AssertOnQuery(q => numRowsIncrementallyRemoved(q) > 0,
           "expired keys should be removed incrementally while processing input records"),
+        // Assert the state was actually removed, not merely that the incremental counter moved:
+        // the three original keys [10, 11, 12] must be gone, leaving only the recent keys. Reading
+        // the first-class numRowsRemoved metric (rather than the output) is what catches a
+        // regression that leaves state behind while still producing correct output.
+        AssertOnQuery(q => totalStateRowsRemoved(q) >= 3,
+          "expired keys must be removed from state, not just counted as incremental"),
         // The surviving state is only the most recent keys; correctness is unchanged.
         AddData(inputData, 10), // below watermark, dropped
         CheckNewAnswer()
