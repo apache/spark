@@ -21,7 +21,7 @@ import java.util.Arrays
 
 import org.apache.spark.{SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader, ShuffleWriter}
+import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader, ShuffleReadMetricsReporter, ShuffleWriteMetricsReporter, ShuffleWriter}
 
 /**
  * Map-side of the in-process pipelined shuffle. Each input record is routed to the reduce
@@ -41,7 +41,8 @@ import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader, ShuffleWriter
 private[spark] class ChannelShuffleWriter[K, V](
     handle: BaseShuffleHandle[K, V, _],
     mapId: Long,
-    batchSize: Int)
+    batchSize: Int,
+    writeMetrics: ShuffleWriteMetricsReporter)
   extends ShuffleWriter[K, V] {
 
   require(batchSize > 0, s"batchSize must be positive, got $batchSize")
@@ -78,10 +79,21 @@ private[spark] class ChannelShuffleWriter[K, V](
   // is the cooperative unblock for the early-stop case -- abandon() also drains the queue to
   // release a parked put, and this re-check ensures the writer then stops rather than
   // re-filling. Returns false if the partition was abandoned before the batch was accepted.
-  private def putUnlessAbandoned(pid: Int, batch: AnyRef): Boolean = {
+  // On a successful hand-off, records the batch's records and the time spent (including any
+  // backpressure wait) against the write metrics; a dropped/abandoned batch counts nothing,
+  // since those records are never shuffled out. `records` is the number of pairs in `batch`
+  // (a full batch is `batchSize`, a trimmed tail is shorter; the end-of-stream marker is 0).
+  private def putUnlessAbandoned(pid: Int, batch: AnyRef, records: Int): Boolean = {
     val q = ChannelShuffleRendezvous.queue(shuffleId, pid)
+    val start = System.nanoTime()
     while (!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid)) {
-      if (q.offer(batch, 100, java.util.concurrent.TimeUnit.MILLISECONDS)) return true
+      if (q.offer(batch, 100, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+        if (records > 0) {
+          writeMetrics.incRecordsWritten(records.toLong)
+          writeMetrics.incWriteTime(System.nanoTime() - start)
+        }
+        return true
+      }
     }
     false
   }
@@ -115,7 +127,7 @@ private[spark] class ChannelShuffleWriter[K, V](
         batches(pid)(sizes(pid)) = (rec._1, rec._2)
         sizes(pid) += 1
         if (sizes(pid) == batchSize) {
-          putUnlessAbandoned(pid, batches(pid))
+          putUnlessAbandoned(pid, batches(pid), batchSize)
           batches(pid) = new Array[AnyRef](batchSize)
           sizes(pid) = 0
         }
@@ -131,11 +143,11 @@ private[spark] class ChannelShuffleWriter[K, V](
     while (p < numPartitions) {
       if (wants(p)) {
         if (sizes(p) > 0) {
-          putUnlessAbandoned(p, Arrays.copyOf(batches(p), sizes(p)))
+          putUnlessAbandoned(p, Arrays.copyOf(batches(p), sizes(p)), sizes(p))
         }
         // Re-check: the reader may have departed while the trimmed batch was being put.
         if (!ChannelShuffleRendezvous.isAbandoned(shuffleId, p)) {
-          putUnlessAbandoned(p, ChannelShuffleRendezvous.EndOfStream)
+          putUnlessAbandoned(p, ChannelShuffleRendezvous.EndOfStream, records = 0)
         }
       }
       p += 1
@@ -167,7 +179,8 @@ private[spark] class ChannelShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
     startPartition: Int,
     endPartition: Int,
-    numMaps: Int)
+    numMaps: Int,
+    readMetrics: ShuffleReadMetricsReporter)
   extends ShuffleReader[K, C] {
 
   // A reduce task may be asked to read a RANGE of reduce partitions in one go, not just one:
@@ -215,6 +228,9 @@ private[spark] class ChannelShuffleReader[K, C](
           item = q.take()
         }
         batch = item.asInstanceOf[Array[AnyRef]]
+        // Count the records handed to the consumer as this batch is fetched. Local, so this
+        // is the read-side records metric; there is no remote fetch and no wire bytes.
+        readMetrics.incRecordsRead(batch.length.toLong)
       }
 
       override def hasNext: Boolean = batch != null

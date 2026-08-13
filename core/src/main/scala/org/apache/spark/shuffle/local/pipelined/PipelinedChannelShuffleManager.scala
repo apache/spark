@@ -84,7 +84,7 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] =
     new ChannelShuffleWriter[K, V](
-      handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, batchSize)
+      handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, batchSize, metrics)
 
   override def getReader[K, C](
       handle: ShuffleHandle,
@@ -103,7 +103,7 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
     // numMaps -- how many end-of-stream markers to expect per queue -- was stamped into the
     // handle at registration, never kept in mutable manager state (see class scaladoc).
     val h = handle.asInstanceOf[ChannelShuffleHandle[K, _, C]]
-    new ChannelShuffleReader[K, C](h, startPartition, endPartition, h.numMaps)
+    new ChannelShuffleReader[K, C](h, startPartition, endPartition, h.numMaps, metrics)
   }
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {
