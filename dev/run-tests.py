@@ -188,7 +188,6 @@ def switch_scala_version(scala_version):
     Switch the code base to use the given Scala version.
     """
     assert scala_version is not None
-    print("[info] Switching to Scala version", scala_version)
     ver_num = scala_version[-4:]  # Simply extract. e.g.) 2.13 from scala2.13
     command = [os.path.join(SPARK_HOME, "dev", "change-scala-version.sh"), ver_num]
     run_cmd(command)
