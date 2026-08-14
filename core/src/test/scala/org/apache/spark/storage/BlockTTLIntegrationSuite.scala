@@ -34,12 +34,11 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     PatienceConfig(timeout = scaled(Span(20, Seconds)), interval = scaled(Span(5, Millis)))
 
   val blockTTL = 5000L
+  // Long enough that the cleaner won't reap mid-test; used by the tests that only check that
+  // tracking happens / atime is refreshed (not the removal-after-TTL tests).
+  val longTTL = 60000L
 
-  val numExecs = 3
   val numParts = 3
-  val TaskStarted = "TASK_STARTED"
-  val TaskEnded = "TASK_ENDED"
-  val JobEnded = "JOB_ENDED"
 
   // TODO(holden): This is shared with MapOutputTrackerSuite move to a BlockTestUtils or similar.
   private def fetchDeclaredField(value: AnyRef, fieldName: String): AnyRef = {
@@ -66,8 +65,8 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     val conf = new SparkConf()
       .setAppName("test-blockmanager-decommissioner")
       .setMaster("local-cluster[2, 1, 1024]")
-      .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
-      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
+      .set(config.SPARK_TTL_RDD_CLEANER, longTTL)
+      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, longTTL)
     sc = new SparkContext(conf)
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
@@ -90,8 +89,8 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-rdd-refresh")
       .setMaster("local-cluster[2, 1, 1024]")
-      .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
-      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
+      .set(config.SPARK_TTL_RDD_CLEANER, longTTL)
+      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, longTTL)
     sc = new SparkContext(conf)
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
@@ -116,7 +115,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-shuffle-only")
       .setMaster("local-cluster[2, 1, 1024]")
-      .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
+      .set(config.SPARK_TTL_RDD_CLEANER, blockTTL)
       .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
     sc = new SparkContext(conf)
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
@@ -148,7 +147,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-enabled")
       .setMaster("local-cluster[2, 1, 1024]")
-      .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
+      .set(config.SPARK_TTL_RDD_CLEANER, blockTTL)
       .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
     sc = new SparkContext(conf)
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
