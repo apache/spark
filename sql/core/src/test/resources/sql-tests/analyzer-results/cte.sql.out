@@ -33,14 +33,7 @@ CreateViewCommand `t3`, select * from t, false, false, LocalTempView, UNSUPPORTE
 -- !query
 create table t4(col1 TIMESTAMP)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-{
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`t4`"
-  }
-}
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t4`, false
 
 
 -- !query
