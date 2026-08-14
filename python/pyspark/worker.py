@@ -4707,8 +4707,11 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         def func(split_index: int, data: Iterator[Any]) -> Iterator[Any]:
             if num_udfs == 1:
                 arg_offsets, f = udfs[0]
-                return (f(*[a[o] for o in arg_offsets]) for a in data)
-            return (tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs) for a in data)
+                return (f(*[row[offset] for offset in arg_offsets]) for row in data)
+            return (
+                tuple(f(*[row[offset] for offset in arg_offsets]) for arg_offsets, f in udfs)
+                for row in data
+            )
 
         # profiling is not supported for UDF
         return func, None, ser, ser
