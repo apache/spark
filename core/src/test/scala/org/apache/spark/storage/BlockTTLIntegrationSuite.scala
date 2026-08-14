@@ -17,18 +17,14 @@
 
 package org.apache.spark.storage
 
-import scala.jdk.CollectionConverters._
-
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time._
 
 import org.apache.spark._
 import org.apache.spark.internal.config
-import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef}
-import org.apache.spark.util.ResetSystemProperties
 
 class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
-    with ResetSystemProperties with Eventually {
+    with Eventually {
 
   implicit override val patienceConfig: PatienceConfig =
     PatienceConfig(timeout = scaled(Span(20, Seconds)), interval = scaled(Span(5, Millis)))
@@ -40,20 +36,9 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
 
   val numParts = 3
 
-  // TODO(holden): This is shared with MapOutputTrackerSuite move to a BlockTestUtils or similar.
-  private def fetchDeclaredField(value: AnyRef, fieldName: String): AnyRef = {
-    val field = value.getClass.getDeclaredField(fieldName)
-    field.setAccessible(true)
-    field.get(value)
-  }
-
   private def lookupBlockManagerMasterEndpoint(sc: SparkContext): BlockManagerMasterEndpoint = {
-    val rpcEnv = sc.env.rpcEnv
-    val dispatcher = fetchDeclaredField(rpcEnv, "dispatcher")
-    fetchDeclaredField(dispatcher, "endpointRefs").
-      asInstanceOf[java.util.Map[RpcEndpoint, RpcEndpointRef]].asScala.
-      filter(_._1.isInstanceOf[BlockManagerMasterEndpoint]).
-      head._1.asInstanceOf[BlockManagerMasterEndpoint]
+    // The driver retains its endpoint instance precisely so this is reachable without reflection.
+    sc.env.blockManagerMasterEndpoint.get
   }
 
   private def lookupMapOutputTrackerMaster(sc: SparkContext): MapOutputTrackerMaster = {
@@ -74,10 +59,9 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     // Make some cache blocks
     val input = sc.parallelize(1.to(100)).cache()
     input.count()
-    // Check that the blocks were registered with the TTL tracker
-    assert(!managerMasterEndpoint.rddAccessTime.isEmpty)
-    val trackedRDDBlocks = managerMasterEndpoint.rddAccessTime.asScala.keys
-    assert(!trackedRDDBlocks.isEmpty)
+    // Check that the blocks were registered with the TTL tracker. Wrapped in eventually because the
+    // executors' UpdateBlockInfo reports can land just after count() returns.
+    eventually { assert(managerMasterEndpoint.rddAccessTime.containsKey(input.id)) }
   }
 
   test("Test that re-reading a cached RDD in a new job refreshes its access time") {
@@ -98,15 +82,18 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     input.count()
     // The cached blocks are tracked, keyed by RDD id.
     eventually { assert(managerMasterEndpoint.rddAccessTime.containsKey(input.id)) }
-    val firstAtime = managerMasterEndpoint.rddAccessTime.get(input.id)
+    // Read via Option, not get: a ConcurrentHashMap[Int, Long] miss unboxes null to 0L rather than
+    // throwing, which would let the "atime advanced" assertion below pass vacuously.
+    def atimeOf(rddId: Int): Option[Long] =
+      Option(managerMasterEndpoint.rddAccessTime.get(rddId)).map(_.longValue)
+    val firstAtime = atimeOf(input.id).getOrElse(
+      fail("the cached RDD should be TTL-tracked before we test the refresh"))
     // Re-reading the cached RDD in a new job must refresh (advance) its access time. Re-running
     // inside eventually guards against the clock not having ticked past firstAtime yet; if the
     // cleaner had already reaped it, count() re-materializes it and the atime still advances.
     eventually {
       input.count()
-      assert(managerMasterEndpoint.rddAccessTime.containsKey(input.id),
-        "cached RDD should stay tracked while it is being reused")
-      assert(managerMasterEndpoint.rddAccessTime.get(input.id) > firstAtime,
+      assert(atimeOf(input.id).exists(_ > firstAtime),
         s"a new job reading the cached RDD should refresh its atime (was $firstAtime)")
     }
   }
@@ -193,10 +180,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     checkpointed.localCheckpoint()
     assert(checkpointed.count() === 100)
     // Sit idle for longer than the TTL; a plain cached RDD would be reaped in this window.
-    val idleUntil = System.currentTimeMillis() + (blockTTL * 2)
-    eventually(timeout(Span(blockTTL * 4, Millis)), interval(Span(200, Millis))) {
-      assert(System.currentTimeMillis() > idleUntil)
-    }
+    Thread.sleep(blockTTL * 2)
     // The data must still be readable -- this is the assertion that would fail on data loss.
     assert(checkpointed.count() === 100,
       "a locally-checkpointed RDD must survive the TTL: its blocks are the only copy")
