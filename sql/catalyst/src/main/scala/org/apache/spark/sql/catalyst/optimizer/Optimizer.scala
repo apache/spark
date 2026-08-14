@@ -1762,21 +1762,22 @@ object CollapseWindow extends Rule[LogicalPlan] {
   }
 
   /**
-   * Returns true if the given window expression can be evaluated under any ordering of the rows
-   * within a partition without changing the result, so that it can be merged into another window
-   * with a different (non-empty) order spec.
+   * Returns true if the given window expression can still be evaluated correctly when the rows
+   * of the partition are reordered, so that it can be merged into another window with a different
+   * (non-empty) order spec.
    *
-   * The frame determines whether the ordering matters. When the frame is the whole partition
+   * The frame determines whether reordering is safe. When the frame is the whole partition
    * (`UNBOUNDED PRECEDING` to `UNBOUNDED FOLLOWING`), it always covers all the rows of the
-   * partition regardless of the ordering, so the ordering does not affect the result: aggregates
-   * such as `count` or `sum` give the same value under any ordering, and functions whose result
-   * does depend on the row order, such as `collect_list` or `first`, are non-deterministic when
-   * the order spec is empty, so evaluating them under any ordering yields a valid result. On the
-   * other hand, a bounded frame (e.g. `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`) is
-   * order-sensitive: which rows are in the frame depends on the ordering, so even `count` or
-   * `sum` would change value, and such a window must not be merged.
+   * partition regardless of the ordering, so reordering changes only the order in which the rows
+   * are seen, never which rows are in the frame. Since the order spec of the window is empty,
+   * the query does not fix the row order, so evaluating its expressions under any ordering
+   * yields a valid result, even though the value may differ for order-dependent expressions
+   * such as `first`, `collect_list`, or floating-point `sum`/`avg`. On the other hand, a bounded
+   * frame (e.g. `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`) is order-sensitive: which
+   * rows are in the frame depends on the ordering, so even `count` or `sum` would change value,
+   * and such a window must not be merged.
    */
-  private def orderInsensitive(windowExpression: NamedExpression): Boolean =
+  private def canEvaluateUnderAnyOrder(windowExpression: NamedExpression): Boolean =
     windowExpression match {
       case Alias(WindowExpression(_, WindowSpecDefinition(_, _,
           SpecifiedWindowFrame(_, UnboundedPreceding, UnboundedFollowing))), _) => true
@@ -1786,13 +1787,13 @@ object CollapseWindow extends Rule[LogicalPlan] {
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
     specCompatible(w1.partitionSpec, w2.partitionSpec) &&
       // The order specs can differ when one of them is empty, as long as the window expressions
-      // of the window with the empty order spec are insensitive to the row order. In that case,
-      // they can be evaluated under the non-empty order spec of the other window.
+      // of the window with the empty order spec are safe to evaluate under any row order. In that
+      // case, they can be evaluated under the non-empty order spec of the other window.
       (specCompatible(w1.orderSpec, w2.orderSpec) ||
         (w1.orderSpec.isEmpty && w2.orderSpec.nonEmpty &&
-          w1.windowExpressions.forall(orderInsensitive)) ||
+          w1.windowExpressions.forall(canEvaluateUnderAnyOrder)) ||
         (w2.orderSpec.isEmpty && w1.orderSpec.nonEmpty &&
-          w2.windowExpressions.forall(orderInsensitive))) &&
+          w2.windowExpressions.forall(canEvaluateUnderAnyOrder))) &&
       w1.references.intersect(w2.windowOutputSet).isEmpty &&
       w1.windowExpressions.nonEmpty && w2.windowExpressions.nonEmpty &&
       // This assumes Window contains the same type of window expressions. This is ensured
