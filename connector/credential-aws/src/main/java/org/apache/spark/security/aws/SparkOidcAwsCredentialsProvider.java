@@ -44,7 +44,8 @@ import org.apache.spark.security.UserCredentials;
  * the cached result or a freshly deserialized one.
  * <p>
  * Configure via:
- * {@code fs.s3a.aws.credentials.provider=org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider}
+ * {@code fs.s3a.aws.credentials.provider=
+ * org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider}
  *
  * @since 4.4.0
  */
@@ -61,7 +62,7 @@ public class SparkOidcAwsCredentialsProvider implements AwsCredentialsProvider {
   /** Version-keyed cache to avoid repeated deserialization on every S3A API call. */
   private volatile CachedResult cached;
 
-  private static record CachedResult(long version, AwsSessionCredentials credentials) {}
+  private record CachedResult(long version, AwsSessionCredentials credentials) {}
 
   @Override
   public AwsCredentials resolveCredentials() {

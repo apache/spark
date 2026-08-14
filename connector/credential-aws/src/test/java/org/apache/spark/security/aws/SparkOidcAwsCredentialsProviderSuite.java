@@ -230,7 +230,8 @@ public class SparkOidcAwsCredentialsProviderSuite {
     // Simulate the full driver->executor path:
     // 1. Driver creates ServiceCredential with S3A properties
     // 2. Driver wraps in UserCredentials
-    // 3. Driver serializes via UserCredentialManager.serializeUserCredentials (Java ObjectOutputStream)
+    // 3. Driver serializes via UserCredentialManager.serializeUserCredentials
+    //    (Java ObjectOutputStream)
     // 4. Bytes stored in VersionedCredentials
     // 5. Executor reads via SparkOidcAwsCredentialsProvider.resolveCredentials()
 
