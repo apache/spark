@@ -107,19 +107,25 @@ private[spark] object SparkCoreErrors {
 
   def cannotUseMapSideCombiningWithArrayKeyError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3008", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.MAP_SIDE_COMBINE",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
   def hashPartitionerCannotPartitionArrayKeyError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3009", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
   def reduceByKeyLocallyNotSupportArrayKeysError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3010", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.REDUCE_BY_KEY_LOCALLY",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
@@ -140,7 +146,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def emptyCollectionError(): Throwable = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3014")
+    new SparkUnsupportedOperationException("EMPTY_COLLECTION_NOT_ALLOWED")
   }
 
   def countByValueApproxNotSupportArraysError(): Throwable = {

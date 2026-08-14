@@ -710,6 +710,36 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  // mode over nanosecond-precision timestamps (SPARK-56822). `Mode` counts frequencies in an
+  // `OpenHashMap` keyed on the physical `TimestampNanosVal` (its `equals`/`hashCode` cover the full
+  // `(epochMicros, nanosWithinMicro)` pair) and returns `child.dataType`, so the most-frequent
+  // value is selected on the full nanos value and its precision and family (NTZ/LTZ) are preserved.
+
+  test("SPARK-56822: mode over nanosecond-precision timestamps returns the most frequent value") {
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p))
+        .add("ltz", TimestampLTZNanosType(p))
+      // The frequent value (3 rows) and the rare one (1 row) differ only within the microsecond, so
+      // frequency counting must key on the full nanos value; a NULL row is ignored. The fractions
+      // are multiples of 100ns, exact at every p in [7, 9]. There is a unique most-frequent value,
+      // so the result is deterministic without a WITHIN GROUP / deterministic argument.
+      val ldtHot = LocalDateTime.parse("2020-01-01T00:00:00.000000100")
+      val ldtCold = LocalDateTime.parse("2020-01-01T00:00:00.000000900")
+      val insHot = Instant.parse("2020-01-01T00:00:00.000000100Z")
+      val insCold = Instant.parse("2020-01-01T00:00:00.000000900Z")
+      val data = Seq(
+        Row(ldtHot, insHot), Row(ldtHot, insHot), Row(ldtHot, insHot),
+        Row(ldtCold, insCold), Row(null, null))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+      val res = df.selectExpr("mode(ntz)", "mode(ltz)")
+      // The result keeps the family (NTZ/LTZ) and precision of the input.
+      assert(res.schema.map(_.dataType) === Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p)))
+      checkAnswer(res, Row(ldtHot, insHot))
+    }
+  }
+
   // collect_set over nanosecond-precision timestamps (SPARK-56822). `CollectSet` deduplicates via a
   // `HashSet` keyed on the physical `TimestampNanosVal`, whose `equals`/`hashCode` cover the full
   // `(epochMicros, nanosWithinMicro)` pair, so sub-microsecond-distinct values are kept distinct;

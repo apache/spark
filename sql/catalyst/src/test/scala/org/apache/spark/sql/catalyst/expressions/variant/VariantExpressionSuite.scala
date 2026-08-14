@@ -708,6 +708,31 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("$[\"\\\"\"]")
   }
 
+  test("SPARK-58672: validate char/varchar target types in variant_get") {
+    def check(dataType: DataType, expected: Boolean): Unit = {
+      assert(
+        variantGet("""{"a": 1}""", "$", dataType)
+          .checkInputDataTypes().isSuccess == expected)
+    }
+
+    def targetTypes(stringType: StringType): Seq[DataType] = Seq(
+      stringType,
+      ArrayType(stringType),
+      MapType(stringType, IntegerType),
+      MapType(StringType, stringType),
+      StructType(Seq(StructField("v", stringType))))
+
+    targetTypes(StringType).foreach { dataType =>
+      check(dataType, expected = true)
+    }
+
+    Seq(CharType(10), VarcharType(10)).foreach { stringType =>
+      targetTypes(stringType).foreach { dataType =>
+        check(dataType, expected = false)
+      }
+    }
+  }
+
   test("cast from variant") {
     // We do not test too many type combinations, as the cast implementation is mostly the same as
     // variant_get.
@@ -984,6 +1009,30 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkFailure(true, toVariantObject = true)
     checkFailure(Literal.create(Literal.create(Period.ofMonths(0))), toVariantObject = true)
     checkFailure(Map(1 -> 1), toVariantObject = true)
+  }
+
+  test("SPARK-58672: validate char/varchar input types in to_variant_object") {
+    def check(dataType: DataType, expected: Boolean): Unit = {
+      assert(
+        ToVariantObject(Literal.create(null, dataType))
+          .checkInputDataTypes().isSuccess == expected)
+    }
+
+    def nestedTypes(stringType: StringType): Seq[DataType] = Seq(
+      ArrayType(stringType),
+      MapType(stringType, IntegerType),
+      MapType(StringType, stringType),
+      StructType(Seq(StructField("v", stringType))))
+
+    nestedTypes(StringType).foreach { dataType =>
+      check(dataType, expected = true)
+    }
+
+    Seq(CharType(10), VarcharType(10)).foreach { stringType =>
+      nestedTypes(stringType).foreach { dataType =>
+        check(dataType, expected = false)
+      }
+    }
   }
 
   test("variant_from_arrays and variant_from_entries") {
