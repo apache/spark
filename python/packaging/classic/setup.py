@@ -113,11 +113,14 @@ if not os.path.isdir(LICENSES_PATH):
     # were already copied to licenses/ (see dev/make-distribution.sh).
     LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
 
+CLI_PATH = os.path.join(SPARK_HOME, "cli")
+
 SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
 USER_SCRIPTS_TARGET = os.path.join(TEMP_PATH, "sbin")
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
 DATA_TARGET = os.path.join(TEMP_PATH, "data")
+CLI_TARGET = os.path.join(TEMP_PATH, "cli")
 LICENSES_TARGET = os.path.join(TEMP_PATH, "licenses")
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
@@ -231,6 +234,7 @@ try:
             os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
             os.symlink(DATA_PATH, DATA_TARGET)
             os.symlink(LICENSES_PATH, LICENSES_TARGET)
+            os.symlink(CLI_PATH, CLI_TARGET)
         else:
             # For windows fall back to the slower copytree
             copytree(JARS_PATH, JARS_TARGET)
@@ -239,6 +243,7 @@ try:
             copytree(EXAMPLES_PATH, EXAMPLES_TARGET)
             copytree(DATA_PATH, DATA_TARGET)
             copytree(LICENSES_PATH, LICENSES_TARGET)
+            copytree(CLI_PATH, CLI_TARGET)
     else:
         # If we are not inside of SPARK_HOME verify we have the required symlink farm
         if not os.path.exists(JARS_TARGET):
@@ -252,8 +257,8 @@ try:
         sys.exit(-1)
 
     # Scripts directive requires a list of each script path and does not take wild cards.
-    script_names = os.listdir(SCRIPTS_TARGET)
-    scripts = list(map(lambda script: os.path.join(SCRIPTS_TARGET, script), script_names))
+    # Exclude the spark CLI shell scripts; the CLI is shipped as a console_scripts entry point.
+    scripts = [str(p) for p in Path(SCRIPTS_TARGET).iterdir() if p.stem not in ("spark", "spark2")]
     # We add find_spark_home.py to the bin directory we install so that pip installed PySpark
     # will search for SPARK_HOME with Python.
     scripts.append("pyspark/find_spark_home.py")
@@ -318,6 +323,8 @@ try:
             "pyspark.pandas.typedef",
             "pyspark.pandas.usage_logging",
             "pyspark.pipelines",
+            "pyspark._cli",
+            "pyspark._cli._spark_cli",
             "pyspark.python.pyspark",
             "pyspark.python.lib",
             "pyspark.testing",
@@ -337,6 +344,9 @@ try:
             "pyspark.python.lib": "lib",
             "pyspark.data": "deps/data",
             "pyspark.licenses": "deps/licenses",
+            # The CLI is not meant to be consumed as a library,
+            # hence the leading underscore.
+            "pyspark._cli": "deps/cli",
             "pyspark.examples.src.main.python": "deps/examples",
         },
         package_data={
@@ -356,6 +366,11 @@ try:
             "pyspark.examples.src.main.python": ["*.py", "*/*.py"],
         },
         scripts=scripts,
+        entry_points={
+            "console_scripts": [
+                "spark = pyspark._cli.spark:main",
+            ],
+        },
         license="Apache-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
@@ -421,6 +436,7 @@ finally:
             os.remove(os.path.join(TEMP_PATH, "examples"))
             os.remove(os.path.join(TEMP_PATH, "data"))
             os.remove(os.path.join(TEMP_PATH, "licenses"))
+            os.remove(os.path.join(TEMP_PATH, "cli"))
         else:
             rmtree(os.path.join(TEMP_PATH, "jars"))
             rmtree(os.path.join(TEMP_PATH, "bin"))
@@ -428,4 +444,5 @@ finally:
             rmtree(os.path.join(TEMP_PATH, "examples"))
             rmtree(os.path.join(TEMP_PATH, "data"))
             rmtree(os.path.join(TEMP_PATH, "licenses"))
+            rmtree(os.path.join(TEMP_PATH, "cli"))
         os.rmdir(TEMP_PATH)

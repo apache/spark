@@ -365,6 +365,7 @@ mkdir "$DISTDIR/conf"
 cp "$SPARK_HOME"/conf/*.template "$DISTDIR/conf"
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
+cp -r "$SPARK_HOME/cli" "$DISTDIR"
 if command -v git && command -v cpio && git rev-parse --git-dir 2>/dev/null; then
   git ls-files -z "$SPARK_HOME/python" | cpio -0pdm "$DISTDIR"
 else
