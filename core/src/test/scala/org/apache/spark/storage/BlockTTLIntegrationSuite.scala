@@ -204,6 +204,49 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
       "the TTL cleaner must refuse to reap a locally-checkpointed RDD")
   }
 
+  test("Test that reaping an RDD removes every partition and leaves the RDD usable") {
+    // Access times are recorded per RDD id but stamped by individual block accesses, and a reap
+    // removes the whole RDD. Pin both halves of that: every partition's block goes away, and since
+    // the reap frees blocks without resetting the RDD's storage level it is an eviction, not an
+    // unpersist -- the RDD still computes the right answer and re-caches on the next action.
+    val conf = new SparkConf()
+      .setAppName("test-blockmanager-ttls-full-rdd-removal")
+      .setMaster("local-cluster[2, 1, 1024]")
+      .set(config.SPARK_TTL_RDD_CLEANER, blockTTL)
+      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, longTTL)
+    sc = new SparkContext(conf)
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+    val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
+    val input = sc.parallelize(1.to(100), numParts).cache()
+    assert(input.count() === 100)
+
+    def cachedPartitionsOf(rddId: Int): Int =
+      sc.env.blockManager.master.getMatchingBlockIds({
+        case RDDBlockId(id, _) => id == rddId
+        case _ => false
+      }, askStorageEndpoints = true).size
+
+    // All partitions are cached and the RDD is tracked.
+    eventually {
+      assert(managerMasterEndpoint.rddAccessTime.containsKey(input.id))
+      assert(cachedPartitionsOf(input.id) >= numParts,
+        s"expected all $numParts partitions cached")
+    }
+
+    // After the TTL every one of this RDD's blocks is gone from the master's directory, and it is
+    // no longer tracked.
+    eventually {
+      assert(!managerMasterEndpoint.rddAccessTime.containsKey(input.id),
+        "the reaped RDD should no longer be TTL-tracked")
+      assert(cachedPartitionsOf(input.id) === 0,
+        "every partition of the reaped RDD should be removed, not just the idle ones")
+    }
+
+    // Eviction, not unpersist: the RDD still produces the right answer and comes back tracked.
+    assert(input.count() === 100, "a reaped RDD must still be usable (recomputed)")
+    eventually { assert(managerMasterEndpoint.rddAccessTime.containsKey(input.id)) }
+  }
+
   test("Test that blocks TTLS are not tracked when not enabled") {
     val conf = new SparkConf()
       .setAppName("test-blockmanager-decommissioner")
