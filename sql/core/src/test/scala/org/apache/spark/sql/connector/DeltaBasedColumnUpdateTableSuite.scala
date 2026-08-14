@@ -323,6 +323,51 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
   }
 
+  test("column-update: requiredDataAttributes resolves case-insensitively on the row-ID " +
+    "column without adopting the declared spelling") {
+    // The connector declares `PK` (not `pk`); resolution must match case-insensitively but the
+    // narrow scan/write must still use the table's own column name, `pk`, not the connector's
+    // declared spelling -- otherwise column pruning can't find `PK` in the physical scan.
+    createAndInitTableWithReqAttrs("PK,salary,dep", "pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET salary = salary + 1 WHERE pk = 1")
+
+    val updateSchema = table.lastWriteInfo.updateSchema().get()
+    assert(updateSchema.fieldNames.contains("pk"),
+      s"update schema must use the table's own spelling `pk`, not `PK`: $updateSchema")
+    assert(!updateSchema.fieldNames.contains("PK"),
+      s"update schema must not adopt the connector's declared spelling `PK`: $updateSchema")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 101, "hr") :: Row(2, 200, "software") :: Nil)
+  }
+
+  test("column-update: requiredDataAttributes resolves case-insensitively on an assigned " +
+    "column without adopting the declared spelling") {
+    // Same as above, but the case mismatch is on `salary` (the assigned column) rather than
+    // the row-ID column.
+    createAndInitTableWithReqAttrs("pk,SALARY,dep", "pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET salary = salary + 1 WHERE pk = 1")
+
+    val updateSchema = table.lastWriteInfo.updateSchema().get()
+    assert(updateSchema.fieldNames.contains("salary"),
+      s"update schema must use the table's own spelling `salary`, not `SALARY`: $updateSchema")
+    assert(!updateSchema.fieldNames.contains("SALARY"),
+      s"update schema must not adopt the connector's declared spelling `SALARY`: $updateSchema")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 101, "hr") :: Row(2, 200, "software") :: Nil)
+  }
+
   test("column-update: empty requiredDataAttributes throws AnalysisException") {
     val props = new java.util.HashMap[String, String]()
     props.put("column-update-empty-req-attrs", "true")
@@ -480,6 +525,43 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     }
     assert(ex.getCondition == "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
       s"expected COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT but got: ${ex.getCondition}")
+  }
+
+  test("column-update split: row-ID reassignment is allowed when requiredDataAttributes " +
+    "covers every table column") {
+    // Finding 22: the SPLIT_UPDATE_ROW_ID_REASSIGNMENT message advertises a second remedy --
+    // "include every table column in requiredDataAttributes()" -- but the guard never checked
+    // for it. When the declaration covers the whole relation, the REINSERT payload already is
+    // the full row with the new row-ID value, and the DELETE half still carries the original
+    // row-ID via newLazyRowIdProjection, so reassignment is safe and must be allowed.
+    createAndInitTableSplitWithReqAttrs("pk,salary,dep",
+      "pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 WHERE dep = 'hr'")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(2, 200, "software") :: Row(11, -1, "hr") :: Nil)
+  }
+
+  private def createAndInitTableSplitWithReqAttrs(
+      reqAttrs: String,
+      schemaString: String,
+      jsonData: String): Unit = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("column-update-split-req-attrs", reqAttrs)
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    val transforms = Array[Transform](identity(reference(Seq("dep"))))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(transforms)
+      .withProperties(props)
+      .build()
+    catalog.createTable(ident, tableInfo)
+    append(schemaString, jsonData)
   }
 
   test("column-update split: undeclared row-ID column on narrow write is rejected") {

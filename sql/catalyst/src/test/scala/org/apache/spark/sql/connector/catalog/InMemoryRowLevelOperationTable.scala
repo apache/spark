@@ -89,6 +89,7 @@ class InMemoryRowLevelOperationTable private (
   private final val COLUMN_UPDATE_COW_NO_WRITE_UPDATE = "column-update-cow-no-write-update"
   private final val COLUMN_UPDATE_FROM_INFO = "column-update-from-info"
   private final val COLUMN_UPDATE_SPLIT = "column-update-split"
+  private final val COLUMN_UPDATE_SPLIT_REQ_ATTRS = "column-update-split-req-attrs"
   private final val COLUMN_UPDATE_EMPTY_REQ_ATTRS = "column-update-empty-req-attrs"
   private final val COLUMN_UPDATE_SCAN_ONLY = "column-update-scan-only"
   private final val COLUMN_UPDATE_OVERLAP = "column-update-overlap"
@@ -166,6 +167,9 @@ class InMemoryRowLevelOperationTable private (
         info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT, "false") == "true") {
       () => new DeltaBasedColumnUpdateSplitOperation(info.command, info.updatedColumns().toSeq)
+    } else if (properties.containsKey(COLUMN_UPDATE_SPLIT_REQ_ATTRS)) {
+      val reqCols = properties.get(COLUMN_UPDATE_SPLIT_REQ_ATTRS).split(",").map(_.trim)
+      () => new DeltaBasedColumnUpdateSplitOperationWithReqAttrs(info.command, reqCols)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT_MISSING_ROW_ID, "false") == "true") {
       () => new DeltaBasedColumnUpdateSplitMissingRowIdOperation(
         info.command, info.updatedColumns().toSeq)
@@ -547,6 +551,13 @@ class InMemoryRowLevelOperationTable private (
           }
       }
     }
+  }
+
+  // Test-only: a split-update fixture with a fully explicit requiredDataAttributes(), to
+  // exercise row-ID reassignment when the declaration covers every table column.
+  class DeltaBasedColumnUpdateSplitOperationWithReqAttrs(command: Command, reqCols: Array[String])
+      extends DeltaBasedColumnUpdateSplitOperation(command) {
+    override def requiredDataAttributes(): Array[NamedReference] = reqCols.map(FieldReference(_))
   }
 
   // Test-only: a split-update fixture whose requiredDataAttributes() excludes the row-ID

@@ -277,7 +277,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
 
     if (supportsColumnUpdate && operation.representUpdateAsDeleteAndInsert) {
-      validateNoRowIdReassignment(operation, assignments, rowIdAttrs)
+      validateNoRowIdReassignment(operation, relation, connectorDataAttrs, assignments, rowIdAttrs)
       validateRowIdDeclared(operation, connectorDataAttrs, rowIdAttrs)
     }
 
@@ -474,8 +474,13 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       relation: DataSourceV2Relation,
       operation: RowLevelOperation): Seq[AttributeReference] = operation match {
     case scu: SupportsColumnUpdates =>
-      V2ExpressionUtils.resolveRefs[AttributeReference](
+      val resolved = V2ExpressionUtils.resolveRefs[AttributeReference](
         scu.scanOnlyDataAttributes.toImmutableArraySeq, relation)
+      // Map back to the relation's own attribute (by exprId), for the same reason as
+      // resolveRequiredDataAttrs: `resolveRefs` matches case-insensitively but keeps the
+      // declared spelling.
+      val byExprId = relation.output.map(a => a.exprId -> a).toMap
+      resolved.map(a => byExprId.getOrElse(a.exprId, a).asInstanceOf[AttributeReference])
     case _ => Nil
   }
 
@@ -567,13 +572,22 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
   /**
    * For connectors that opt into narrow column updates AND represent UPDATE as delete + insert,
-   * reject reassignment of any row-ID column as the REINSERT path has no row-ID channel to
-   * reconstruct columns outside `requiredDataAttributes()`.
+   * reject reassignment of any row-ID column, unless `requiredDataAttributes()` covers every
+   * column in the relation. In that case the REINSERT payload already is the full row with the
+   * new row-ID value, and the DELETE half still carries the original row-ID via
+   * `newLazyRowIdProjection`, so reassignment is safe. Otherwise the REINSERT path has no
+   * row-ID channel to reconstruct columns outside `requiredDataAttributes()`.
    */
   private def validateNoRowIdReassignment(
       operation: RowLevelOperation,
+      relation: DataSourceV2Relation,
+      connectorDataAttrs: Seq[AttributeReference],
       assignments: Seq[Assignment],
       rowIdAttrs: Seq[Attribute]): Unit = {
+    val declaredIds = connectorDataAttrs.map(_.exprId).toSet
+    if (relation.output.forall(a => declaredIds.contains(a.exprId))) {
+      return
+    }
     val rowIdAttrSet = AttributeSet(rowIdAttrs)
     val reassigned = assignments.collect {
       case Assignment(key: AttributeReference, value)

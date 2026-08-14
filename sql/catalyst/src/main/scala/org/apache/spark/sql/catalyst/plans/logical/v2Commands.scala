@@ -375,9 +375,15 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
    */
   protected def projectedDataAttrs: Seq[Attribute] = operation match {
     case scu: SupportsColumnUpdates =>
-      V2ExpressionUtils.resolveRefs[AttributeReference](
+      val resolved = V2ExpressionUtils.resolveRefs[AttributeReference](
         scu.requiredDataAttributes.toImmutableArraySeq,
         originalTable)
+      // Map back to the table's own attribute (by exprId): `resolveRefs` matches
+      // case-insensitively but keeps the declared spelling, and `areCompatible` (used to
+      // validate this against the write-side projection) compares names, so a mismatched
+      // spelling here would make the two sides disagree.
+      val byExprId = originalTable.output.map(a => a.exprId -> a).toMap
+      resolved.map(a => byExprId.getOrElse(a.exprId, a))
     case _ => Nil
   }
 }
