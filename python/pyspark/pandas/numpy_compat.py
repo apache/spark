@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import platform
 from typing import Any, Callable, no_type_check
 
 import numpy as np
@@ -23,6 +24,41 @@ from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
+
+
+# For most functions the native Spark expression equals NumPy everywhere. fmax/fmin and reciprocal
+# are exceptions: the underlying operation is unspecified by C/IEEE, so NumPy's own result depends
+# on CPU architecture and NumPy version. Our native expression returns one fixed value, so it only
+# matches NumPy on the platform/version we verified; elsewhere we run real NumPy via a pandas UDF
+# (matches by construction). Each gates only on the axes that affect it -- the predicates below.
+
+# reciprocal's int 1/0 casts +inf to int -- undefined in C, resolved per CPU arch (x86-64 gives
+# INT64_MIN, aarch64 INT64_MAX). Check arch, not just OS: Linux also runs on aarch64.
+_native_platform = platform.system() == "Linux" and platform.machine() == "x86_64"
+
+# fmax/fmin's signed-zero tie is C99-unspecified; NumPy's scalar result returns the first operand
+# (what native produces) at 2.3.0+, the second below.
+_numpy_tie_returns_first = LooseVersion(np.__version__) >= LooseVersion("2.3.0")
+
+
+def _reciprocal_func(c: Column) -> Column:
+    return F.when(
+        F.typeof(c).isin("float", "double"),
+        F.when(c.isNull(), c.cast("double"))
+        .when(
+            c == 0,
+            F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
+        )
+        .otherwise(F.lit(1.0) / c),
+    ).otherwise(
+        # Integer input: numpy does integer division (truncated toward zero),
+        # so casting the float quotient to long reproduces 1 -> 1, -1 -> -1,
+        # and every other magnitude -> 0. Dividing by 0 overflows to the int64
+        # minimum, matching numpy's behavior on integer arrays.
+        F.when(c == 0, F.lit(float(np.iinfo(np.int64).min))).otherwise(
+            (F.lit(1) / c).cast("long").cast("double")
+        )
+    )
 
 
 unary_np_spark_mappings = {
@@ -68,22 +104,10 @@ unary_np_spark_mappings = {
     "positive": F.positive,
     "rad2deg": F.degrees,
     "radians": F.radians,
-    "reciprocal": lambda c: F.when(
-        F.typeof(c).isin("float", "double"),
-        F.when(c.isNull(), c.cast("double"))
-        .when(
-            c == 0,
-            F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
-        )
-        .otherwise(F.lit(1.0) / c),
-    ).otherwise(
-        # Integer input: numpy does integer division (truncated toward zero),
-        # so casting the float quotient to long reproduces 1 -> 1, -1 -> -1,
-        # and every other magnitude -> 0. Dividing by 0 overflows to the int64
-        # minimum, matching numpy's behavior on integer arrays.
-        F.when(c == 0, F.lit(float(np.iinfo(np.int64).min))).otherwise(
-            (F.lit(1) / c).cast("long").cast("double")
-        )
+    "reciprocal": (
+        _reciprocal_func
+        if _native_platform
+        else pandas_udf(lambda s: np.reciprocal(s), DoubleType())  # type: ignore[call-overload]
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
@@ -204,27 +228,23 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
     )
 
 
-# NumPy 2.3.0 changed how fmax/fmin break a signed-zero tie: for equal operands
-# (for example +0.0 and -0.0) it returns the first operand, while older versions
-# returned the second. Track the installed NumPy so the result keeps the matching
-# sign of zero.
-_tie_returns_first_operand = LooseVersion(np.__version__) >= LooseVersion("2.3.0")
-
-
+# fmax/fmin: when the two operands are equal (differing only in sign of zero, e.g. +0.0 vs -0.0),
+# NumPy may return either. Its scalar path returns the first operand from NumPy 2.3.0 on (and the
+# second before 2.3.0), so these helpers return the first operand (c1) to match NumPy >= 2.3.0.
+# The fmax/fmin entries below use them only where that holds (x86-64 Linux + NumPy >= 2.3.0) and
+# otherwise fall back to real NumPy; see the two predicates above.
 def _fmax_func(c1: Column, c2: Column) -> Column:
-    tie = c1 if _tie_returns_first_operand else c2
     return (
         F.when(F.isnan(c1.cast("double")), c2)
         .when(F.isnan(c2.cast("double")), c1)
-        .when(c1 == c2, tie)
+        .when(c1 == c2, c1)
         .otherwise(F.greatest(c1, c2))
         .cast("double")
     )
 
 
 def _fmin_func(c1: Column, c2: Column) -> Column:
-    tie = c1 if _tie_returns_first_operand else c2
-    return F.when(c1 == c2, tie).otherwise(F.least(c1, c2)).cast("double")
+    return F.when(c1 == c2, c1).otherwise(F.least(c1, c2)).cast("double")
 
 
 binary_np_spark_mappings = {
@@ -239,8 +259,16 @@ binary_np_spark_mappings = {
     # np.floor_divide dispatches to the pandas-on-Spark floordiv dunder operation
     # before this registry is consulted, so this mapping is not used for that case.
     "floor_divide": _floor_divide_func,
-    "fmax": _fmax_func,
-    "fmin": _fmin_func,
+    "fmax": (
+        _fmax_func
+        if _native_platform and _numpy_tie_returns_first
+        else pandas_udf(lambda s1, s2: np.fmax(s1, s2), DoubleType())  # type: ignore[call-overload]
+    ),
+    "fmin": (
+        _fmin_func
+        if _native_platform and _numpy_tie_returns_first
+        else pandas_udf(lambda s1, s2: np.fmin(s1, s2), DoubleType())  # type: ignore[call-overload]
+    ),
     "fmod": _fmod_func,
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "heaviside": lambda c1, c2: F.when(
