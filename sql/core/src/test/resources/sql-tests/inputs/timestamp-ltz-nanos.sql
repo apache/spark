@@ -220,6 +220,15 @@ SELECT c, count(*) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
   GROUP BY c ORDER BY c;
 
+-- SPARK-56822: mode over nanosecond-precision TIMESTAMP_LTZ. Frequencies are counted on the full
+-- nanos value, so the most-frequent value is selected down to the sub-microsecond and the result
+-- type stays TIMESTAMP_LTZ(9); the value renders in the session time zone (America/Los_Angeles).
+-- .000000001 appears twice, .000000999 once.
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c);
+
 -- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
 -- whole-second BIGINT; the sub-second digits are dropped. A literal without an explicit zone is
 -- read in the session time zone (America/Los_Angeles, UTC-08:00); an explicit-zone literal fixes
