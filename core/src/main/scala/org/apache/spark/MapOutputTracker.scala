@@ -811,12 +811,12 @@ private[spark] class MapOutputTrackerMaster(
   // Hook used by the shuffle TTL cleaner to reclaim a shuffle's on-disk blocks through the normal
   // removal path (ShuffleDriverComponents.removeShuffle -> RemoveShuffle RPC to executors/ESS).
   // Wired by SparkContext, which owns the ShuffleDriverComponents; the tracker itself is created in
-  // SparkEnv before those exist. When unset the cleaner still unregisters the driver-side status but
-  // cannot delete executor disk, so this must be wired for the shuffle TTL to actually reclaim space.
+  // SparkEnv before those exist. When unset the cleaner still unregisters the driver-side status
+  // but cannot delete executor disk, so this must be wired for the shuffle TTL to reclaim space.
   @volatile private[spark] var shuffleFileRemover: Option[Int => Unit] = None
 
-  // Cache the (immutable-after-start) shuffle TTL config once rather than re-parsing the time string
-  // on every updateShuffleAtime, which is on the hot path of serving map-output status requests.
+  // Cache the (immutable-after-start) shuffle TTL config once rather than re-parsing the time
+  // string on every updateShuffleAtime, which is on the hot path of serving map-output requests.
   private val shuffleTtl: Option[Long] = conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER)
 
   // The size at which we use Broadcast to send the map output statuses to the executors
