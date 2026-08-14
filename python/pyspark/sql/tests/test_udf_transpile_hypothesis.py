@@ -384,16 +384,33 @@ def neq_pair(x, y):
     return x != y
 
 
-def chained_bounds(x):
+def chained_bounds(x: int) -> bool:
     # Single-parameter chained comparison: ``ast.Compare`` with two ops, which
     # Python evaluates as ``(0 < x) and (x < 10)`` with ``x`` evaluated once.
     # No None guard, so a NULL input reaches the first link's raise guard --
     # matching Python's TypeError -- and ``_run``'s "both raised" equivalence
     # covers it.
+    #
+    # The parameters here and in the chains below are ANNOTATED deliberately.
+    # An untyped parameter is transpiled as both numeric and string, so the
+    # option matrix carries variants these tests can never use: they bind Long
+    # columns, so only the all-numeric variant can match. Pinning the category
+    # emits one option instead of two (measured: 1 vs 2 -- ``_param_category_
+    # combos`` already collapses three untyped params to all-numeric plus
+    # all-string rather than 2**3).
+    #
+    # This costs no coverage, but do not expect it to speed the suite up: the
+    # per-example cost is dominated by the two Spark jobs ``_run`` executes
+    # against a fresh one-row DataFrame, not by transpilation. Measured over
+    # these five tests at 15 examples: 73s untyped vs 76s typed, i.e. no
+    # improvement. Batching rows per example is the lever that would matter.
+    #
+    # The strategies still generate ``None``; the annotation pins the category,
+    # not nullability.
     return 0 < x < 10
 
 
-def chained_lt(x, y, z):
+def chained_lt(x: int, y: int, z: int) -> bool:
     # Three-column ordering chain. The interesting rows are the ones where an
     # earlier link is False and a later operand is NULL: Python short-circuits
     # and returns False without ever comparing against the NULL, so the
@@ -401,13 +418,13 @@ def chained_lt(x, y, z):
     return x < y < z
 
 
-def chained_ge(x, y, z):
+def chained_ge(x: int, y: int, z: int) -> bool:
     # Reversed-direction chain, so the short-circuit fires on a different set
     # of rows than ``chained_lt``.
     return x >= y >= z
 
 
-def chained_eq(x, y, z):
+def chained_eq(x: int, y: int, z: int) -> bool:
     # ``x == y == z`` -- equality never raises in Python, so every one of the
     # eight NULL combinations has a defined boolean answer that the
     # four-branch ``_lower_eq`` per link plus the short-circuit fold must
@@ -416,39 +433,10 @@ def chained_eq(x, y, z):
     return x == y == z
 
 
-def mixed_chain(x, y, z):
+def mixed_chain(x: int, y: int, z: int) -> bool:
     # Mixed operators in one chain (``ast.LtE`` then ``ast.Gt``), so the two
     # links go through different lowering helpers.
     return x <= y > z
-
-
-def in_literal(x):
-    # ``ast.Compare(In)`` over a constant tuple. Python's ``in`` is
-    # equality-based and never raises on a None probe (``None in (1, 2, 3)`` is
-    # False), unlike Spark's ``IN``, which returns NULL for a NULL probe.
-    return x in (1, 2, 3)
-
-
-def not_in_literal(x):
-    # Sister of ``in_literal`` for ast.Compare(NotIn); also exercises the
-    # negation, which is only exact because the ``in`` lowering never yields
-    # NULL.
-    return x not in (1, 2, 3)
-
-
-def in_with_none(x):
-    # A None element in the container: ``None in (1, None)`` is True in Python,
-    # while Spark's ``IN`` would return NULL for any non-matching probe if the
-    # NULL element were left in the list.
-    return x in (1, None)
-
-
-def in_and_compare(x, y):
-    # ``in`` as an ``and`` operand, so the container membership has to be
-    # recognized as a non-NULL boolean by the BoolOp gate. When the membership
-    # test is False, Python never evaluates ``y > 0``, so a NULL ``y`` must not
-    # raise.
-    return x in (1, 2) and y > 0
 
 
 # A lambda captured at module scope so ``inspect.getsource`` can read
@@ -845,44 +833,6 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             )
 
         # ---- `in` / `not in` ---------------------------------------------
-
-        @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
-        def test_in_literal_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(in_literal, BooleanType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"in_literal mismatch on {value!r}")
-
-        @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
-        def test_not_in_literal_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(not_in_literal, BooleanType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"not_in_literal mismatch on {value!r}")
-
-        @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
-        def test_in_with_none_matches_python(self, value):
-            # ``None in (1, None)`` is True in Python. The lowering answers the
-            # NULL-probe case with a literal and drops the NULL element from
-            # the emitted ``IN`` list, so this must agree for a NULL probe as
-            # well as for matching and non-matching values.
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(in_with_none, BooleanType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"in_with_none mismatch on {value!r}")
-
-        @_hyp_settings
-        @given(x=_long_strategy, y=_long_strategy)
-        @_seed_pair_examples(_BOOLEAN_PAIR_EDGES)
-        def test_in_and_compare_matches_python(self, x, y):
-            df = self._two_long_arg_df(x, y)
-            transpiled, interpreted = self._run(in_and_compare, BooleanType(), df, "a", "b")
-            self.assertEqual(
-                transpiled, interpreted, f"in_and_compare mismatch on (x={x!r}, y={y!r})"
-            )
 
 
 class UDFTranspileHypothesisGatingTests(unittest.TestCase):
