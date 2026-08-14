@@ -2290,9 +2290,11 @@ Apart from these, the following properties are also available, and may be useful
     the driver and their shuffle files deleted on the executors. By default shuffle data is only
     removed once the shuffle dependency is garbage collected on the driver. An access is recorded when
     a map task registers output or the driver serves map output locations; executors cache those
-    locations, so a shuffle being read may not appear to be in use. Set this comfortably longer than
-    the longest gap between uses and the longest stage runtime -- removing a shuffle that is still
-    needed forces the map stage to be recomputed. Must be set before the SparkContext is created.
+    locations for an epoch, so a shuffle that is actively being read may not appear to be in use.
+    Set this comfortably longer than the longest gap between uses and the longest stage runtime:
+    removing a shuffle that is still needed makes its readers fail and the map stage recompute, and
+    if that repeats it will exhaust <code>spark.stage.maxConsecutiveAttempts</code> and fail the job.
+    Must be set before the SparkContext is created.
   </td>
   <td>4.4.0</td>
 </tr>
