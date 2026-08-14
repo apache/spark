@@ -664,9 +664,17 @@ class SparkContext(config: SparkConf) extends Logging {
       // Never TTL-reap a locally-checkpointed RDD: localCheckpoint truncates lineage, so its cache
       // blocks are the only copy of the data and losing them is unrecoverable.
       endpoint.rddReapable = rddId => !persistentRdds.get(rddId).exists(_.isLocallyCheckpointed)
-      // Reap through unpersistRDD so persistentRdds and SparkListenerUnpersistRDD stay in step with
-      // the block removal (which still goes through the RemoveRdd RPC).
-      endpoint.rddReaper = Some(rddId => unpersistRDD(rddId, blocking = false))
+      // Reap through ContextCleaner.doCleanupRDD, the same entry point the GC-driven cleanup uses,
+      // rather than re-implementing it: it unpersists the RDD's blocks and notifies the
+      // CleanerListeners. Note this frees the blocks but does not reset the RDD's storage level
+      // (the cleaner only has an id), so a later action re-caches it.
+      // Falls back to unpersistRDD when reference tracking is disabled and there is no cleaner.
+      endpoint.rddReaper = Some { rddId =>
+        _cleaner match {
+          case Some(contextCleaner) => contextCleaner.doCleanupRDD(rddId, blocking = false)
+          case None => unpersistRDD(rddId, blocking = false)
+        }
+      }
     }
 
     if (_conf.get(UI_REVERSE_PROXY)) {
