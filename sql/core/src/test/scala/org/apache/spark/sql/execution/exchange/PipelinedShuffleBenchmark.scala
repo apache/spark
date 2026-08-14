@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 
 /**
- * WIP benchmark (SPARK-57399 local-repartition v2). Compares the in-process pipelined channel
- * shuffle against the regular (materializing) shuffle on simple batch queries.
+ * Benchmark to compare the in-process pipelined channel shuffle against the regular
+ * (materializing) shuffle on simple batch queries (SPARK-57399).
  *
  * Fair-comparison constraints, read before trusting any number:
  *   - Runs on `local[N]` with N = physical cores, and only queries whose pipelined
@@ -32,15 +34,39 @@ import org.apache.spark.sql.SparkSession
  *     sequential map-then-reduce; with demand <= cores neither is slot-limited, so the delta
  *     reflects stage overlap minus channel overhead, which is the honest comparison.
  *
+ * To run this benchmark:
  * {{{
- *   build/sbt "sql/Test/runMain org.apache.spark.sql.execution.exchange.PipelinedShuffleBenchmark"
+ *   1. build/sbt "sql/Test/runMain
+ *      org.apache.spark.sql.execution.exchange.PipelinedShuffleBenchmark"
+ *   2. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt
+ *      "sql/Test/runMain
+ *      org.apache.spark.sql.execution.exchange.PipelinedShuffleBenchmark"
+ *      Results will be written to "benchmarks/PipelinedShuffleBenchmark-results.txt".
  * }}}
  */
-object PipelinedShuffleBenchmark {
+object PipelinedShuffleBenchmark extends SqlBasedBenchmark {
+
+  override def getSparkSession: SparkSession = {
+    SparkSession.builder()
+      .master("local[1]")
+      .appName(this.getClass.getCanonicalName)
+      .config("spark.ui.enabled", "false")
+      .getOrCreate()
+  }
 
   private val cores = Runtime.getRuntime.availableProcessors()
+  private val numRows = 20000000L  // 20M: large enough that transport cost dominates startup
+  // Derive input partitions from the machine so the whole-group slot demand
+  // (inputParts + 8 shuffle + 1 final) stays within `cores` -- otherwise the pipelined runs do
+  // not just get slower, they fail gang admission (CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT) and
+  // the run dies. Needs cores >= 11 for the minimum shape (inputParts = 2); runBenchmarkSuite
+  // skips below that. Capped at 6 so a big machine still measures the small-fan-in shape.
+  private val inputParts = math.min(6, cores - 9)
 
-  private def newSession(
+  private val channelManagerClass =
+    "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager"
+
+  private def buildSession(
       pipelined: Boolean,
       shufflePartitions: Int,
       master: String,
@@ -53,69 +79,14 @@ object PipelinedShuffleBenchmark {
       .config("spark.sql.shuffle.partitions", shufflePartitions.toString)
       .config("spark.ui.enabled", "false")
     if (pipelined) {
-      b.config("spark.shuffle.manager.incremental",
-        "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
+      b.config("spark.shuffle.manager.incremental", channelManagerClass)
         .config("spark.sql.pipelinedShuffle.enabled", "true")
     }
     b.getOrCreate()
   }
 
-  private val numRows = 20000000L  // 20M: large enough that transport cost dominates startup noise
-  private val inputParts = 6       // demand = 6 (input) + 8 (shuffle) = 14 <= 16 cores: no oversub
-  private val iters = 6            // report best of N timed runs after a warm-up
-
-  // Time a workload under a fresh session (created/stopped OUTSIDE the timed region so session
-  // startup and manager init are not counted). One warm-up run, then `iters` timed runs; report
-  // the best (min) wall-clock ms.
-  private def bestMs(
-      pipelined: Boolean,
-      shufflePartitions: Int,
-      master: String,
-      aqe: Boolean,
-      workload: SparkSession => Unit): Long = {
-    val spark = newSession(pipelined, shufflePartitions, master, aqe)
-    try {
-      workload(spark) // warm up (JIT, caches, codegen)
-      var best = Long.MaxValue
-      var i = 0
-      while (i < iters) {
-        val t0 = System.nanoTime()
-        workload(spark)
-        best = math.min(best, (System.nanoTime() - t0) / 1000000L)
-        i += 1
-      }
-      best
-    } finally {
-      spark.stop()
-      SparkSession.clearActiveSession()
-      SparkSession.clearDefaultSession()
-    }
-  }
-
-  private def compare(
-      name: String,
-      shufflePartitions: Int = 8,
-      master: String = s"local[$cores]",
-      aqe: Boolean = false)(workload: SparkSession => Unit): Unit = {
-    val regular = bestMs(pipelined = false, shufflePartitions, master, aqe, workload)
-    val pipe = bestMs(pipelined = true, shufflePartitions, master, aqe, workload)
-    val speedup = regular.toDouble / pipe
-    // scalastyle:off println
-    println(f"[bench] $name%-40s  regular=${regular}%5dms  pipelined=${pipe}%5dms  " +
-      f"speedup=${speedup}%.2fx")
-    // scalastyle:on println
-  }
-
-  private val channelManagerClass =
-    "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager"
-
-  // Three-way TRANSPORT comparison: same scheduling (all-pipelined gang for the latter two),
-  // different byte paths -- regular materialized shuffle, RTM's RPC streaming transport
-  // (flag on, incremental manager left at its "streaming" default), and the in-process
-  // channel. Only shapes the streaming transport survives (no range sampling: the tracker
-  // accumulates writer registrations across the sample job's producer re-run and the reader
-  // dies on its writer-count assertion).
-  private def transportSession(mode: String, shufflePartitions: Int): SparkSession = {
+  private def buildTransportSession(
+      mode: String, shufflePartitions: Int): SparkSession = {
     val b = SparkSession.builder()
       .master(s"local[$cores]")
       .appName("pipelined-transport-benchmark")
@@ -134,167 +105,366 @@ object PipelinedShuffleBenchmark {
     b.getOrCreate()
   }
 
-  private def transportBestMs(
-      mode: String, shufflePartitions: Int, workload: SparkSession => Unit): Long = {
-    val spark = transportSession(mode, shufflePartitions)
-    try {
-      workload(spark)
-      var best = Long.MaxValue
-      var i = 0
-      while (i < iters) {
-        val t0 = System.nanoTime()
-        workload(spark)
-        best = math.min(best, (System.nanoTime() - t0) / 1000000L)
-        i += 1
-      }
-      best
-    } finally {
-      spark.stop()
+  // Each transport runs under its OWN SparkSession, because the shuffle manager and the
+  // pipelined flag are SparkContext-level and fixed at startup -- they cannot be switched with
+  // setConf on a shared session. So a case cannot reuse the base trait's session; it builds its
+  // own. Two consequences handled here:
+  //   - Session build/teardown must be EXCLUDED from the measured time (it is seconds of fixed
+  //     cost that would swamp the workload). addTimerCase gives manual timing: the session is
+  //     built before startTiming() and stopped after stopTiming(), so only the workload is timed
+  //     while the framework still runs its own warm-up + best-of-N iterations.
+  //   - Any lingering active session (the base trait eagerly creates a throwaway one, and a prior
+  //     case leaves none but be defensive) must be stopped first, or getOrCreate would REUSE it
+  //     and silently ignore this case's master/manager config.
+  private def addModeCase(
+      benchmark: Benchmark,
+      caseName: String,
+      buildSession: => SparkSession)(workload: SparkSession => Unit): Unit = {
+    benchmark.addTimerCase(caseName) { timer =>
+      // Stop whatever session is around (active or default -- the base trait's throwaway is set
+      // as the default) so the fresh build below is not short-circuited by getOrCreate reuse.
+      SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession).foreach(_.stop())
       SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
+      val sparkSession = buildSession
+      try {
+        timer.startTiming()
+        workload(sparkSession)
+        timer.stopTiming()
+      } finally {
+        sparkSession.stop()
+        SparkSession.clearActiveSession()
+        SparkSession.clearDefaultSession()
+      }
     }
   }
 
-  private def compareTransports(
-      name: String, shufflePartitions: Int = 8)(workload: SparkSession => Unit): Unit = {
-    val regular = transportBestMs("regular", shufflePartitions, workload)
-    val streaming = transportBestMs("streaming", shufflePartitions, workload)
-    val channel = transportBestMs("channel", shufflePartitions, workload)
-    // scalastyle:off println
-    println(f"[bench3] $name%-32s regular=${regular}%5dms  " +
-      f"streaming=${streaming}%5dms (${regular.toDouble / streaming}%.2fx)  " +
-      f"channel=${channel}%5dms (${regular.toDouble / channel}%.2fx)")
-    // scalastyle:on println
+  private def transportComparison(): Unit = {
+    runBenchmark(
+      "Transport comparison: regular vs RPC-streaming vs in-process channel") {
+      // repartition(k)+count
+      val repartitionWorkload: SparkSession => Unit = { spark =>
+        import spark.implicits._
+        spark.range(0, numRows, 1, inputParts)
+          .withColumn("k", $"id" % 1000).repartition($"k").count()
+      }
+
+      val b1 = new Benchmark(
+        "repartition(k)+count",
+        numRows,
+        output = output)
+      addModeCase(b1, "regular", buildTransportSession("regular", 8))(
+        repartitionWorkload)
+      addModeCase(b1, "streaming", buildTransportSession("streaming", 8))(
+        repartitionWorkload)
+      addModeCase(b1, "channel", buildTransportSession("channel", 8))(
+        repartitionWorkload)
+      b1.run()
+
+      // groupBy(k).count
+      val groupByWorkload: SparkSession => Unit = { spark =>
+        import spark.implicits._
+        spark.range(0, numRows, 1, inputParts)
+          .withColumn("k", $"id" % 1000).groupBy($"k").count().count()
+      }
+
+      val b2 = new Benchmark(
+        "groupBy(k).count",
+        numRows,
+        output = output)
+      addModeCase(b2, "regular", buildTransportSession("regular", 8))(
+        groupByWorkload)
+      addModeCase(b2, "streaming", buildTransportSession("streaming", 8))(
+        groupByWorkload)
+      addModeCase(b2, "channel", buildTransportSession("channel", 8))(
+        groupByWorkload)
+      b2.run()
+
+      // join 10M x 10M on unique k+count
+      val joinWorkload: SparkSession => Unit = { spark =>
+        import spark.implicits._
+        spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
+        val left = spark.range(0, 10000000L, 1, 2)
+          .select($"id".as("k"), $"id".as("lv"))
+        val right = spark.range(0, 10000000L, 1, 2)
+          .select($"id".as("k"), $"id".as("rv"))
+        left.join(right, "k").count()
+      }
+
+      val b3 = new Benchmark(
+        "join 10M x 10M on unique k+count",
+        10000000L,
+        output = output)
+      addModeCase(b3, "regular", buildTransportSession("regular", 8))(
+        joinWorkload)
+      addModeCase(b3, "streaming", buildTransportSession("streaming", 8))(
+        joinWorkload)
+      addModeCase(b3, "channel", buildTransportSession("channel", 8))(
+        joinWorkload)
+      b3.run()
+
+      // prototype 1M uniq
+      val prototypeWorkload: SparkSession => Unit = { spark =>
+        import org.apache.spark.sql.functions.{col, lit, repeat, sum}
+        spark.range(0L, 100000000L, 100L, inputParts)
+          .select(
+            col("id"),
+            col("id").cast("string").as("id2"),
+            (col("id") + 1).as("id3"),
+            repeat((col("id") + 1).cast("string"), 100000).as("id4"))
+          .repartition(col("id")).agg(sum(lit(1L))).collect()
+      }
+
+      val b4 = new Benchmark(
+        "prototype 1M uniq",
+        100000000L,
+        output = output)
+      addModeCase(b4, "regular", buildTransportSession("regular", 8))(
+        prototypeWorkload)
+      addModeCase(b4, "streaming", buildTransportSession("streaming", 8))(
+        prototypeWorkload)
+      addModeCase(b4, "channel", buildTransportSession("channel", 8))(
+        prototypeWorkload)
+      b4.run()
+    }
   }
 
-  def main(args: Array[String]): Unit = {
-    // scalastyle:off println
-    println(s"[bench] local[$cores], $numRows rows, best of $iters iters")
-    // scalastyle:on println
+  private def aqeOffComparison(): Unit = {
+    runBenchmark("Regular vs channel, AQE off") {
+      // repartition(k)+count
+      val repartitionWorkload: SparkSession => Unit = { spark =>
+        import spark.implicits._
+        spark.range(0, numRows, 1, inputParts)
+          .withColumn("k", $"id" % 1000).repartition($"k").count()
+      }
 
-    compareTransports("repartition(k) + count")({ spark =>
-      import spark.implicits._
-      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
-        .repartition($"k").count()
-    })
-    compareTransports("groupBy(k).count")({ spark =>
-      import spark.implicits._
-      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
-        .groupBy($"k").count().count()
-    })
-    compareTransports("join 10M x 10M on unique k + count")({ spark =>
-      import spark.implicits._
-      spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
-      val left = spark.range(0, 10000000L, 1, 2).select($"id".as("k"), $"id".as("lv"))
-      val right = spark.range(0, 10000000L, 1, 2).select($"id".as("k"), $"id".as("rv"))
-      left.join(right, "k").count()
-    })
-    compareTransports("prototype 1M uniq")({ spark =>
-      import org.apache.spark.sql.functions.{col, lit, repeat, sum}
-      spark.range(0L, 100000000L, 100L, inputParts)
-        .select(
-          col("id"),
-          col("id").cast("string").as("id2"),
-          (col("id") + 1).as("id3"),
-          repeat((col("id") + 1).cast("string"), 100000).as("id4"))
-        .repartition(col("id")).agg(sum(lit(1L))).collect()
-    })
+      val b1 = new Benchmark(
+        "repartition(k)+count",
+        numRows,
+        output = output)
+      addModeCase(b1, "regular", buildSession(
+        pipelined = false, 8, s"local[$cores]", aqe = false))(
+        repartitionWorkload)
+      addModeCase(b1, "pipelined", buildSession(
+        pipelined = true, 8, s"local[$cores]", aqe = false))(
+        repartitionWorkload)
+      b1.run()
 
-    compare("repartition(k) + count")({ spark =>
-      import spark.implicits._
-      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
-        .repartition($"k").count()
-    })
+      // groupBy(k).count
+      val groupByWorkload: SparkSession => Unit = { spark =>
+        import spark.implicits._
+        spark.range(0, numRows, 1, inputParts)
+          .withColumn("k", $"id" % 1000).groupBy($"k").count().count()
+      }
 
-    compare("groupBy(k).count")({ spark =>
-      import spark.implicits._
-      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
-        .groupBy($"k").count().count()
-    })
+      val b2 = new Benchmark(
+        "groupBy(k).count",
+        numRows,
+        output = output)
+      addModeCase(b2, "regular", buildSession(
+        pipelined = false, 8, s"local[$cores]", aqe = false))(
+        groupByWorkload)
+      addModeCase(b2, "pipelined", buildSession(
+        pipelined = true, 8, s"local[$cores]", aqe = false))(
+        groupByWorkload)
+      b2.run()
 
-    // Range over a plain scan (control): RangePartitioner's sample job runs the scan once,
-    // then the main job runs it again -- for BOTH modes (there is no shuffle below the range
-    // exchange, so regular has nothing materialized to reuse either). Expect no differential
-    // penalty. Demand: 6 (scan) + 8 (range) + 1 (final count) = 15 <= 16.
-    compare("repartitionByRange(k) + count")({ spark =>
-      import spark.implicits._
-      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
-        .repartitionByRange($"k").count()
-    })
+      // repartitionByRange(k)+count
+      val repartitionByRangeWorkload: SparkSession => Unit = { spark =>
+        import spark.implicits._
+        spark.range(0, numRows, 1, inputParts)
+          .withColumn("k", $"id" % 1000).repartitionByRange($"k").count()
+      }
 
-    // Range ABOVE a shuffle (the differential case): the range exchange's child contains the
-    // groupBy's hash shuffle. The sample job executes that child; the main job then needs it
-    // again. Regular reuses the hash shuffle's materialized map output (map stage skipped on
-    // the second run); pipelined channels are single-shot and completed-job stages are
-    // cleaned up, so the whole scan + partial agg + hash map side re-runs. Expect pipelined
-    // to pay roughly one extra scan+map pass. shufflePartitions = 4 keeps whole-group demand
-    // 6 + 4 + 4 = 14 <= 16 (sample job's own group is 6 + 4 = 10).
-    compare("groupBy(k).count + orderBy(k)", shufflePartitions = 4)({ spark =>
-      import spark.implicits._
-      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
-        .groupBy($"k").count().orderBy($"k").collect()
-    })
+      val b3 = new Benchmark(
+        "repartitionByRange(k)+count",
+        numRows,
+        output = output)
+      addModeCase(b3, "regular", buildSession(
+        pipelined = false, 8, s"local[$cores]", aqe = false))(
+        repartitionByRangeWorkload)
+      addModeCase(b3, "pipelined", buildSession(
+        pipelined = true, 8, s"local[$cores]", aqe = false))(
+        repartitionByRangeWorkload)
+      b3.run()
 
-    // v1's "prototype workload" (LocalRepartitionBenchmark), the case where v1 measured
-    // its largest win (4.1-4.5x over regular shuffle, AQE off, on local[32]): 1M rows,
-    // UNIQUE key per row, uncached. ColumnPruning removes the wide repeat(...) column, so
-    // this is pure per-row transport overhead with no batching benefit from key
-    // collisions -- small data, so the regular shuffle's fixed write/read cost dominates.
-    // Demand here: 6 (input) + 8 (repartition) + 1 (final agg) = 15 <= 16.
-    compare("prototype: repartition(id)+count, 1M uniq")({ spark =>
-      import org.apache.spark.sql.functions.{col, lit, repeat, sum}
-      spark.range(0L, 100000000L, 100L, inputParts)
-        .select(
-          col("id"),
-          col("id").cast("string").as("id2"),
-          (col("id") + 1).as("id3"),
-          repeat((col("id") + 1).cast("string"), 100000).as("id4"))
-        .repartition(col("id")).agg(sum(lit(1L))).collect()
-    })
+      // groupBy(k).count+orderBy(k)
+      val groupByOrderByWorkload: SparkSession => Unit = { spark =>
+        import spark.implicits._
+        spark.range(0, numRows, 1, inputParts)
+          .withColumn("k", $"id" % 1000).groupBy($"k").count().orderBy($"k")
+          .collect()
+      }
 
-    // AQE-on rows: both sides run with adaptive execution enabled. For v2 the AQE placement
-    // rule flips only the topmost free exchange; exchanges below it materialize as regular
-    // coalesced stages, so expect much more modest deltas than AQE-off.
-    compare("repartition(k) + count (AQE)", aqe = true)({ spark =>
-      import spark.implicits._
-      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
-        .repartition($"k").count()
-    })
-    compare("groupBy(k).count (AQE)", aqe = true)({ spark =>
-      import spark.implicits._
-      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
-        .groupBy($"k").count().count()
-    })
-    compare("groupBy.count + orderBy(k) (AQE)", shufflePartitions = 4, aqe = true)({ spark =>
-      import spark.implicits._
-      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
-        .groupBy($"k").count().orderBy($"k").collect()
-    })
-    compare("prototype 1M uniq (AQE)", aqe = true)({ spark =>
-      import org.apache.spark.sql.functions.{col, lit, repeat, sum}
-      spark.range(0L, 100000000L, 100L, inputParts)
-        .select(
-          col("id"),
-          col("id").cast("string").as("id2"),
-          (col("id") + 1).as("id3"),
-          repeat((col("id") + 1).cast("string"), 100000).as("id4"))
-        .repartition(col("id")).agg(sum(lit(1L))).collect()
-    })
+      val b4 = new Benchmark(
+        "groupBy(k).count+orderBy(k)",
+        numRows,
+        output = output)
+      addModeCase(b4, "regular", buildSession(
+        pipelined = false, 4, s"local[$cores]", aqe = false))(
+        groupByOrderByWorkload)
+      addModeCase(b4, "pipelined", buildSession(
+        pipelined = true, 4, s"local[$cores]", aqe = false))(
+        groupByOrderByWorkload)
+      b4.run()
 
-    // Same prototype with the HISTORICAL 32 map tasks (the config where v1 recorded
-    // 4.1-4.5x: many tiny map tasks multiply the regular shuffle's per-task/per-segment
-    // fixed cost). v2's gang demand is 32 + 8 + 1 = 41, far past the 16 honest slots, so
-    // this REQUIRES oversubscription (local[48]); the regular baseline's 32-wide map
-    // stage also exceeds the 16 cores there, so both sides oversubscribe symmetrically.
-    compare("prototype 32 maps (local[48], oversub)", master = "local[48]")({ spark =>
-      import org.apache.spark.sql.functions.{col, lit, repeat, sum}
-      spark.range(0L, 100000000L, 100L, 32)
-        .select(
-          col("id"),
-          col("id").cast("string").as("id2"),
-          (col("id") + 1).as("id3"),
-          repeat((col("id") + 1).cast("string"), 100000).as("id4"))
-        .repartition(col("id")).agg(sum(lit(1L))).collect()
-    })
+      // prototype: repartition(id)+count, 1M uniq
+      val prototypeWorkload: SparkSession => Unit = { spark =>
+        import org.apache.spark.sql.functions.{col, lit, repeat, sum}
+        spark.range(0L, 100000000L, 100L, inputParts)
+          .select(
+            col("id"),
+            col("id").cast("string").as("id2"),
+            (col("id") + 1).as("id3"),
+            repeat((col("id") + 1).cast("string"), 100000).as("id4"))
+          .repartition(col("id")).agg(sum(lit(1L))).collect()
+      }
+
+      val b5 = new Benchmark(
+        "prototype: repartition(id)+count, 1M uniq",
+        100000000L,
+        output = output)
+      addModeCase(b5, "regular", buildSession(
+        pipelined = false, 8, s"local[$cores]", aqe = false))(
+        prototypeWorkload)
+      addModeCase(b5, "pipelined", buildSession(
+        pipelined = true, 8, s"local[$cores]", aqe = false))(
+        prototypeWorkload)
+      b5.run()
+    }
+  }
+
+  private def aqeOnComparison(): Unit = {
+    runBenchmark("Regular vs channel, AQE on") {
+      // repartition(k)+count (AQE)
+      val repartitionWorkload: SparkSession => Unit = { spark =>
+        import spark.implicits._
+        spark.range(0, numRows, 1, inputParts)
+          .withColumn("k", $"id" % 1000).repartition($"k").count()
+      }
+
+      val b1 = new Benchmark(
+        "repartition(k)+count (AQE)",
+        numRows,
+        output = output)
+      addModeCase(b1, "regular", buildSession(
+        pipelined = false, 8, s"local[$cores]", aqe = true))(
+        repartitionWorkload)
+      addModeCase(b1, "pipelined", buildSession(
+        pipelined = true, 8, s"local[$cores]", aqe = true))(
+        repartitionWorkload)
+      b1.run()
+
+      // groupBy(k).count (AQE)
+      val groupByWorkload: SparkSession => Unit = { spark =>
+        import spark.implicits._
+        spark.range(0, numRows, 1, inputParts)
+          .withColumn("k", $"id" % 1000).groupBy($"k").count().count()
+      }
+
+      val b2 = new Benchmark(
+        "groupBy(k).count (AQE)",
+        numRows,
+        output = output)
+      addModeCase(b2, "regular", buildSession(
+        pipelined = false, 8, s"local[$cores]", aqe = true))(
+        groupByWorkload)
+      addModeCase(b2, "pipelined", buildSession(
+        pipelined = true, 8, s"local[$cores]", aqe = true))(
+        groupByWorkload)
+      b2.run()
+
+      // groupBy(k).count+orderBy(k) (AQE)
+      val groupByOrderByWorkload: SparkSession => Unit = { spark =>
+        import spark.implicits._
+        spark.range(0, numRows, 1, inputParts)
+          .withColumn("k", $"id" % 1000).groupBy($"k").count().orderBy($"k")
+          .collect()
+      }
+
+      val b3 = new Benchmark(
+        "groupBy(k).count+orderBy(k) (AQE)",
+        numRows,
+        output = output)
+      addModeCase(b3, "regular", buildSession(
+        pipelined = false, 4, s"local[$cores]", aqe = true))(
+        groupByOrderByWorkload)
+      addModeCase(b3, "pipelined", buildSession(
+        pipelined = true, 4, s"local[$cores]", aqe = true))(
+        groupByOrderByWorkload)
+      b3.run()
+
+      // prototype 1M uniq (AQE)
+      val prototypeWorkload: SparkSession => Unit = { spark =>
+        import org.apache.spark.sql.functions.{col, lit, repeat, sum}
+        spark.range(0L, 100000000L, 100L, inputParts)
+          .select(
+            col("id"),
+            col("id").cast("string").as("id2"),
+            (col("id") + 1).as("id3"),
+            repeat((col("id") + 1).cast("string"), 100000).as("id4"))
+          .repartition(col("id")).agg(sum(lit(1L))).collect()
+      }
+
+      val b4 = new Benchmark(
+        "prototype 1M uniq (AQE)",
+        100000000L,
+        output = output)
+      addModeCase(b4, "regular", buildSession(
+        pipelined = false, 8, s"local[$cores]", aqe = true))(
+        prototypeWorkload)
+      addModeCase(b4, "pipelined", buildSession(
+        pipelined = true, 8, s"local[$cores]", aqe = true))(
+        prototypeWorkload)
+      b4.run()
+    }
+  }
+
+  private def oversubscribeComparison(): Unit = {
+    runBenchmark("Prototype 32 maps, oversubscribed") {
+      // prototype 32 maps
+      val prototypeWorkload: SparkSession => Unit = { spark =>
+        import org.apache.spark.sql.functions.{col, lit, repeat, sum}
+        spark.range(0L, 100000000L, 100L, 32)
+          .select(
+            col("id"),
+            col("id").cast("string").as("id2"),
+            (col("id") + 1).as("id3"),
+            repeat((col("id") + 1).cast("string"), 100000).as("id4"))
+          .repartition(col("id")).agg(sum(lit(1L))).collect()
+      }
+
+      val b1 = new Benchmark(
+        "prototype 32 maps",
+        100000000L,
+        output = output)
+      addModeCase(b1, "regular", buildSession(
+        pipelined = false, 8, "local[48]", aqe = false))(
+        prototypeWorkload)
+      addModeCase(b1, "pipelined", buildSession(
+        pipelined = true, 8, "local[48]", aqe = false))(
+        prototypeWorkload)
+      b1.run()
+    }
+  }
+
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    // The pipelined groups gang-schedule inputParts + 8 + 1 stages; below 11 cores even the
+    // minimum shape (inputParts = 2) exceeds the machine and fails gang admission rather than
+    // producing a slower number. Skip loudly so the run does not just die with an
+    // insufficient-slot error, and so checked-in results are only ever generated where the fair
+    // comparison actually holds. (oversubscribeComparison intentionally over-subscribes, but on
+    // its own local[48]; it is skipped here too to keep the file all-or-nothing per machine.)
+    if (cores < 11) {
+      // scalastyle:off println
+      println(s"[skip] PipelinedShuffleBenchmark needs >= 11 cores for the gang to fit; " +
+        s"this machine has $cores. Skipping.")
+      // scalastyle:on println
+      return
+    }
+    transportComparison()
+    aqeOffComparison()
+    aqeOnComparison()
+    oversubscribeComparison()
   }
 }
