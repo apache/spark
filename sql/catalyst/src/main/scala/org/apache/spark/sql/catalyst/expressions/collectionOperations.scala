@@ -4141,8 +4141,14 @@ case class ArrayRepeat(left: Expression, right: Expression)
 
   private def genCodeForNumberOfElements(ctx: CodegenContext, count: String): (String, String) = {
     val numElements = ctx.freshName("numElements")
+    // The upper bound is checked here rather than left to the array allocation so that this path
+    // reports the same error as `eval`. Without it the allocation fails with an internal error.
     val numElementsCode =
       s"""
+         |if ($count > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+         |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(
+         |    "$prettyName", $count);
+         |}
          |int $numElements = 0;
          |if ($count > 0) {
          |  $numElements = $count;
@@ -5542,7 +5548,7 @@ case class ArrayInsert(
            |
            |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
            |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(
+           |    throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
            |      "$prettyName", $resLength);
            |  }
            |
