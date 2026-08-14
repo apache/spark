@@ -815,6 +815,10 @@ private[spark] class MapOutputTrackerMaster(
   // cannot delete executor disk, so this must be wired for the shuffle TTL to actually reclaim space.
   @volatile private[spark] var shuffleFileRemover: Option[Int => Unit] = None
 
+  // Cache the (immutable-after-start) shuffle TTL config once rather than re-parsing the time string
+  // on every updateShuffleAtime, which is on the hot path of serving map-output status requests.
+  private val shuffleTtl: Option[Long] = conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER)
+
   // The size at which we use Broadcast to send the map output statuses to the executors
   private val minSizeForBroadcast = conf.get(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST).toInt
 
@@ -855,11 +859,11 @@ private[spark] class MapOutputTrackerMaster(
 
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf, isDriver = true)
 
+  // The cleaner daemon is started at the end of construction (after the fail-fast broadcast-size
+  // check below), not here, so a failed construction can't orphan the thread.
   private[spark] val cleanerThreadpool: Option[ThreadPoolExecutor] = {
-    if (conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
-      val pool = ThreadUtils.newDaemonFixedThreadPool(1, "map-output-ttl-cleaner")
-      pool.execute(new TTLCleaner)
-      Some(pool)
+    if (shuffleTtl.isDefined) {
+      Some(ThreadUtils.newDaemonFixedThreadPool(1, "map-output-ttl-cleaner"))
     } else {
       None
     }
@@ -879,67 +883,8 @@ private[spark] class MapOutputTrackerMaster(
   private val availableProcessors = Runtime.getRuntime.availableProcessors()
 
   def updateShuffleAtime(shuffleId: Int): Unit = {
-    if (conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
+    if (shuffleTtl.isDefined) {
       shuffleAccessTime.put(shuffleId, System.currentTimeMillis())
-    }
-  }
-
-  private class TTLCleaner extends Runnable {
-    override def run(): Unit = {
-      try {
-        // Poll the shuffle access times if we're configured for it.
-        conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER) match {
-          case Some(ttl) =>
-            while (true) {
-              val maxAge = System.currentTimeMillis() - ttl
-              // Find the elements to be removed & track the oldest remaining time (if any).
-              // asScala over a ConcurrentHashMap is weakly consistent, so a concurrent put during
-              // iteration is safe (never throws); toList snapshots the (id, atime) pairs we saw.
-              var oldest = System.currentTimeMillis()
-              val toBeRemoved = shuffleAccessTime.asScala.toList.flatMap {
-                case (shuffleId, atime) =>
-                  if (atime < maxAge) {
-                    Some((shuffleId, atime))
-                  } else {
-                    if (atime < oldest) {
-                      oldest = atime
-                    }
-                    None
-                  }
-              }
-              toBeRemoved.foreach { case (shuffleId, atime) =>
-                try {
-                  // Only remove if the atime has not changed since our snapshot: a concurrent
-                  // access (updateShuffleAtime) in that window means the shuffle is back in use and
-                  // must not be reaped. remove(key, value) is a no-op when the value differs.
-                  if (shuffleAccessTime.remove(shuffleId, atime)) {
-                    // Route through the normal shuffle-removal path (mirrors
-                    // ContextCleaner.doCleanupShuffle): reclaim on-disk blocks on executors/ESS
-                    // first, then drop the driver-side ShuffleStatus. Removing before unregistering
-                    // matters so blocks served by the shuffle service on deallocated executors are
-                    // still found. If the remover hook isn't wired we can't reclaim executor disk,
-                    // but we still unregister the status (which also drops the shuffleAccessTime
-                    // entry -- a no-op here since we just removed it).
-                    shuffleFileRemover.foreach(_(shuffleId))
-                    unregisterShuffle(shuffleId)
-                  }
-                } catch {
-                  case NonFatal(e) =>
-                    logDebug(
-                      log"Error removing shuffle ${MDC(SHUFFLE_ID, shuffleId)}", e)
-                }
-              }
-              // Wait until the next possible element to be removed
-              val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 100)
-              Thread.sleep(delay)
-            }
-          case None =>
-            logDebug("Tried to start TTL cleaner when not configured.")
-        }
-      } catch {
-        case _: InterruptedException =>
-          logInfo("MapOutputTrackerMaster TTLCleaner thread interrupted, exiting.")
-      }
     }
   }
 
@@ -952,6 +897,27 @@ private[spark] class MapOutputTrackerMaster(
       log"bytes) to prevent sending an rpc message that is too large."
     logError(logEntry)
     throw new IllegalArgumentException(logEntry.message)
+  }
+
+  // Start the shuffle TTL cleaner only after the fail-fast check above, so a failed construction
+  // can't leave the daemon running. Reap only a shuffle that has actually produced output: a
+  // registered-but-not-yet-produced shuffle (e.g. a map stage still waiting on parents) has no
+  // files to reclaim, and removing its ShuffleStatus would make the first registerMapOutput throw
+  // ShuffleStatusNotFoundException -> abortStage. Reaping mirrors ContextCleaner.doCleanupShuffle:
+  // reclaim on-disk blocks on executors/ESS first (shuffleFileRemover), then drop the driver-side
+  // ShuffleStatus (unregisterShuffle, which also drops the shuffleAccessTime entry). Removing files
+  // before unregistering matters so blocks served by the shuffle service on deallocated executors
+  // are still found.
+  cleanerThreadpool.foreach { pool =>
+    pool.execute(new BlockTtlCleaner(
+      name = "shuffle",
+      ttlMillis = shuffleTtl.get,
+      accessTimes = shuffleAccessTime,
+      shouldReap = shuffleId => shuffleStatuses.get(shuffleId).exists(_.numAvailableMapOutputs > 0),
+      reap = shuffleId => {
+        shuffleFileRemover.foreach(_(shuffleId))
+        unregisterShuffle(shuffleId)
+      }))
   }
 
   def post(message: MapOutputTrackerMasterMessage): Unit = {
@@ -1074,9 +1040,8 @@ private[spark] class MapOutputTrackerMaster(
 
   /** Unregister all map and merge output information of the given shuffle. */
   def unregisterAllMapAndMergeOutput(shuffleId: Int): Unit = {
-    if (conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
-      shuffleAccessTime.remove(shuffleId)
-    }
+    // Drop any TTL tracking (a bare no-op when the map is empty / TTL disabled).
+    shuffleAccessTime.remove(shuffleId)
     val shuffleStatus = getShuffleStatusOrError(shuffleId, "unregisterAllMapAndMergeOutput")
     shuffleStatus.removeOutputsByFilter(x => true)
     shuffleStatus.removeMergeResultsByFilter(x => true)
@@ -1493,7 +1458,7 @@ private[spark] class MapOutputTrackerMaster(
   override def stop(): Unit = {
     mapOutputTrackerMasterMessages.offer(PoisonPill)
     threadpool.shutdown()
-    cleanerThreadpool.map(_.shutdownNow())
+    cleanerThreadpool.foreach(_.shutdownNow())
     try {
       sendTracker(StopMapOutputTracker)
     } catch {

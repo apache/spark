@@ -3263,11 +3263,12 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val SPARK_TTL_BLOCK_CLEANER =
-    ConfigBuilder("spark.cleaner.ttl.all")
-      .doc("Add a TTL for all blocks tracked in Spark. By default blocks are only removed " +
-        "after GC on driver, which with DataFrames or RDDs at the global scope will not occur. " +
-        "This must be configured before starting the SparkContext (e.g. can not be added to " +
+  private[spark] val SPARK_TTL_RDD_CLEANER =
+    ConfigBuilder("spark.cleaner.ttl.rdd")
+      .doc("Add a TTL for RDD cache blocks tracked in Spark (broadcast and other block types are " +
+        "not TTL-cleaned; shuffle blocks use spark.cleaner.ttl.shuffle). By default blocks are only " +
+        "removed after GC on driver, which with DataFrames or RDDs at the global scope will not " +
+        "occur. This must be configured before starting the SparkContext (e.g. can not be added to " +
         "a running Spark instance).")
       .version("5.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
