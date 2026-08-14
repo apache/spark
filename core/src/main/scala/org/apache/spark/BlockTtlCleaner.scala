@@ -52,7 +52,7 @@ private[spark] class BlockTtlCleaner(
 
   override def run(): Unit = {
     try {
-      while (true) {
+      while (!Thread.currentThread().isInterrupted) {
         val maxAge = System.currentTimeMillis() - ttlMillis
         // Track the oldest still-live atime so we can sleep until the next possible expiry.
         var oldest = System.currentTimeMillis()
@@ -75,14 +75,19 @@ private[spark] class BlockTtlCleaner(
               reap(id)
             }
           } catch {
+            // Warn, not debug: this loop's whole value is reclaiming space, so a reap that always
+            // fails (e.g. an unwired remover, or an RPC failure) must not be invisible at the
+            // default log level. The id has already been dropped from `accessTimes`, so it is not
+            // retried -- a persistent failure means that id is simply never reclaimed.
             case NonFatal(e) =>
-              logDebug(s"Error reaping $id in the $name TTL cleaner", e)
+              logWarning(s"Error reaping $id in the $name TTL cleaner", e)
           }
         }
         // Wait until the next possible element to be removed.
         val delay = math.max((oldest + ttlMillis) - System.currentTimeMillis(), 100)
         Thread.sleep(delay)
       }
+      logInfo(s"$name TTL cleaner thread interrupted, exiting.")
     } catch {
       case _: InterruptedException =>
         logInfo(s"$name TTL cleaner thread interrupted, exiting.")
