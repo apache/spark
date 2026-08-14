@@ -1639,7 +1639,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             (Tripler(), L, num, [(5,)], [15]),
         ]:
             with self.subTest(func=func):
-                self.assertEqual(self._vals(func, rt, schema, rows, require_lowered=True), expected)
+                self.assertEqual(self._vals(func, rt, schema, rows), expected)
 
     def test_udf_transpile_inline_and_wrapped_lambdas_now_lower(self):
         # SPARK-58650 side effect worth pinning: writing the lambda inline at the
@@ -1686,7 +1686,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         (lam,) = captured
         self.assertEqual(6, lam(5))
-        self.assertEqual(self._vals(lam, LongType(), "a long", [(5,)], require_lowered=True), [6])
+        self.assertEqual(self._vals(lam, LongType(), "a long", [(5,)]), [6])
 
     def test_udf_transpile_lambda_defaulted_by_a_lambda_falls_back(self):
         # A default whose value is itself a lambda once made the target's own
@@ -1707,9 +1707,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(df.select(u("a")).first()[0], 8)
         # The line mate takes both its arguments from the call site, so nothing
         # stops it lowering -- and it must lower to ITS body, not the target's.
-        self.assertEqual(
-            self._vals(plain, LongType(), "a long, b long", [(5, 9)], require_lowered=True), [14]
-        )
+        self.assertEqual(self._vals(plain, LongType(), "a long, b long", [(5, 9)]), [14])
 
     def test_udf_transpile_constant_folded_twins_on_shared_line(self):
         # These two fold to identical bytecode, so comparing what they COMPILE TO
@@ -1719,9 +1717,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         folded, direct = lambda x: x + (1 + 2), lambda x: x + 3
         for func in (folded, direct):
             with self.subTest(func=func):
-                self.assertEqual(
-                    self._vals(func, LongType(), "a long", [(5,)], require_lowered=True), [8]
-                )
+                self.assertEqual(self._vals(func, LongType(), "a long", [(5,)]), [8])
 
     def test_udf_transpile_nested_lambda_resolves_to_the_outer_one(self):
         # A lambda whose body holds another lambda does not lower today
@@ -1762,9 +1758,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # Fell back -> interpreted Python still computes the closure.
             df = self.spark.createDataFrame([(5,)], "a long")
             self.assertEqual(df.select(u("a")).first()[0], 9)
-        self.assertEqual(
-            self._vals(sibling, LongType(), "a long", [(5,)], require_lowered=True), [14]
-        )
+        self.assertEqual(self._vals(sibling, LongType(), "a long", [(5,)]), [14])
 
     def test_udf_transpile_call_dunder_is_resolved_on_the_type(self):
         # ``getattr(func, "__call__")`` disagrees with Python's call protocol in
@@ -1836,13 +1830,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         for key, expected in (("a", 26), ("b", 27), ("c", 28)):
             with self.subTest(key=key):
                 self.assertEqual(
-                    self._vals(table[key], LongType(), "a long", [(5,)], require_lowered=True),
+                    self._vals(table[key], LongType(), "a long", [(5,)]),
                     [expected],
                 )
         for key, expected in (("d", 36), ("e", 37), ("f", 38)):
             with self.subTest(key=key):
                 self.assertEqual(
-                    self._vals(multi[key], LongType(), "a long", [(5,)], require_lowered=True),
+                    self._vals(multi[key], LongType(), "a long", [(5,)]),
                     [expected],
                 )
 
@@ -1892,12 +1886,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     # is what ran, not interpreted Python returning the same
                     # number with the transpiled option quietly discarded.
                     self.assertEqual(
-                        self._vals(getattr(module, name), rt, schema, rows, require_lowered=True),
+                        self._vals(getattr(module, name), rt, schema, rows),
                         expected,
                     )
             with self.subTest(name="Incr"):
                 self.assertEqual(
-                    self._vals(module.Incr(), LongType(), "a long", [(5,)], require_lowered=True),
+                    self._vals(module.Incr(), LongType(), "a long", [(5,)]),
                     [6],
                 )
             with self.subTest(name="closure_after_a_line_mate"):
@@ -2058,6 +2052,65 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             _get_function_from_ast(functools.partial(lambda a, b: a + b, 1), partial_reasons)
         )
         self.assertIn("no parseable source", partial_reasons[0])
+
+    def test_udf_transpile_concurrent_resolution_preserves_warning_filters(self):
+        # Resolution parses and compiles under ``warnings.catch_warnings``, which
+        # swaps PROCESS-GLOBAL state and is documented as not thread-safe: if two
+        # threads interleave, the one exiting last restores the other's snapshot
+        # and can leave an ignore-everything filter installed for the life of the
+        # process -- silently swallowing every later warning in the driver,
+        # including PySpark's own. UDF construction runs on whatever thread the
+        # user calls from, so the suppression is serialized. This asserts the
+        # global state survives, which no functional test would notice.
+        import importlib.util
+        import os
+        import tempfile
+        import threading
+        import warnings
+
+        from pyspark.sql.transpile import _get_function_from_ast, _parse_file_lambdas
+
+        # A module whose own source emits a SyntaxWarning, so every parse here
+        # actually goes through the suppression path.
+        source = 'DOC = "bad escape \\d+"\n' + "".join(
+            f"f{i} = lambda x: x + {i}\n" for i in range(20)
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "spark_58650_threads.py")
+            with open(path, "w") as f:
+                f.write(source)
+            spec = importlib.util.spec_from_file_location("spark_58650_threads", path)
+            module = importlib.util.module_from_spec(spec)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                spec.loader.exec_module(module)
+
+            before = list(warnings.filters)
+            failures = []
+
+            def resolve_repeatedly(which):
+                for _ in range(20):
+                    _parse_file_lambdas.cache_clear()  # force real, warning-bearing parses
+                    if _get_function_from_ast(getattr(module, f"f{which}")) is None:
+                        failures.append(which)
+
+            threads = [threading.Thread(target=resolve_repeatedly, args=(i,)) for i in range(8)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+            self.assertEqual([], failures, "concurrent resolution should still resolve")
+            self.assertEqual(
+                before,
+                list(warnings.filters),
+                "concurrent resolution must not leave warnings.filters modified",
+            )
+            # And warnings must still actually be delivered.
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                warnings.warn("must be delivered", DeprecationWarning)
+            self.assertEqual(1, len(caught))
 
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so

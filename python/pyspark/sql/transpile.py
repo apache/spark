@@ -37,13 +37,15 @@ all-numeric and all-string variants.
 """
 
 import ast
+import contextlib
 import functools
 import linecache
 import os
+import threading
 import tokenize
 import warnings
 from types import CodeType
-from typing import Any, Callable, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Callable, Iterator, List, Optional, Tuple, TYPE_CHECKING
 import inspect
 import itertools
 import textwrap
@@ -1009,8 +1011,7 @@ def _recompiled_lambda_code(node: ast.Lambda, freevars: Tuple[str, ...]) -> Opti
     """
     try:
         lam = _defaults_stripped(node)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
+        with _warnings_suppressed():
             if freevars:
                 wrapper_args = ast.arguments(
                     posonlyargs=[],
@@ -1043,6 +1044,35 @@ def _recompiled_lambda_code(node: ast.Lambda, freevars: Tuple[str, ...]) -> Opti
     except Exception:
         return None
     return nested[0] if len(nested) == 1 else None
+
+
+# ``warnings.catch_warnings`` swaps process-global state and is documented as NOT
+# thread-safe: if two threads enter it concurrently, the one that exits last
+# restores the other's snapshot, and an ``ignore``-everything filter can be left
+# installed for the life of the process -- silently swallowing every later warning
+# in the driver, PySpark's own included. Verified reproducible. UDF construction
+# runs on whatever thread the user calls from, so serialize our own entries.
+#
+# This does not defend against a THIRD party entering ``catch_warnings``
+# concurrently; that hazard is inherent to the stdlib API. It removes the case we
+# can actually cause, which is two ``udf()`` constructions racing.
+_WARNINGS_LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def _warnings_suppressed() -> Iterator[None]:
+    """Parse/compile without emitting or tripping over the user's warnings.
+
+    Needed for two reasons. Re-parsing a whole module re-emits any
+    ``SyntaxWarning`` it contains, attributed to a file that does not exist from
+    the user's point of view; and under ``-W error`` / ``PYTHONWARNINGS=error`` /
+    pytest's ``filterwarnings = error`` the warning becomes an exception, which
+    would silently disable lowering for the whole module.
+    """
+    with _WARNINGS_LOCK:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            yield
 
 
 # ``co_flags`` bits that describe what the code DOES (as opposed to where it was
@@ -1138,11 +1168,8 @@ def _parse_text_lambdas(source: str) -> Tuple[ast.Lambda, ...]:
     Used for sources ``os.stat`` cannot reach, where there is no mtime to key on.
     Hashing the text is O(size) but roughly three orders of magnitude cheaper
     than re-parsing it, and it self-invalidates: different text, different key.
-
-    Parsing is warning-suppressed -- see ``_parse_file_lambdas``.
     """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with _warnings_suppressed():
         try:
             return tuple(_walk_lambdas(ast.parse(source)))
         except Exception:
@@ -1161,28 +1188,27 @@ def _parse_file_lambdas(path: str, _mtime_ns: int, _size: int) -> Tuple[ast.Lamb
     does not correspond to the running code fails verification and the UDF falls
     back -- so this key is an optimization, not the correctness boundary.
 
-    The read is fresh from disk (``tokenize.open`` respects the source's encoding
-    cookie), falling back to ``linecache`` when the on-disk text does not parse:
-    a file caught mid-write (an editor's partial save, a generator rewriting it)
-    would otherwise lose lowering for as long as it is broken, even though
-    ``linecache`` still holds the good source from import.
-
-    Parsing is warning-suppressed: re-parsing a whole module re-emits any
-    ``SyntaxWarning`` in it, attributed to a file that does not exist here, and
-    under ``-W error`` / ``PYTHONWARNINGS=error`` it would raise and silently
-    disable lowering for every lambda in the module.
+    The read is fresh from disk; ``tokenize.open`` respects the source's encoding
+    cookie. It falls back to ``linecache`` ONLY for a path already in its cache,
+    which means source captured by something else earlier (a traceback, a
+    debugger) -- import does not populate ``linecache``, so an unconditional
+    fallback would simply re-read the same broken file from disk and, worse, seed
+    the global cache with it. Returns an empty tuple when nothing parses.
     """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with _warnings_suppressed():
         try:
             with tokenize.open(path) as source:
                 return tuple(_walk_lambdas(ast.parse(source.read())))
         except Exception:
             pass
-        try:
-            return tuple(_walk_lambdas(ast.parse("".join(linecache.getlines(path)))))
-        except Exception:
-            return ()
+        # Only a PRE-EXISTING entry is useful here (see above); do not let
+        # ``getlines`` populate the cache from the same unreadable file.
+        if path in linecache.cache:
+            try:
+                return tuple(_walk_lambdas(ast.parse("".join(linecache.getlines(path)))))
+            except Exception:
+                return ()
+        return ()
 
 
 def _file_lambda_candidates(target: CodeType) -> List[ast.Lambda]:
@@ -1264,8 +1290,9 @@ def _resolve_lambda(
     if not candidates:
         if errors is not None:
             errors.append(
-                f"no readable source for {target.co_filename!r}, so the lambda cannot "
-                "be located (a REPL definition, or a module with no retrievable source)"
+                f"no lambda could be read from {target.co_filename!r}: it has no "
+                "retrievable source (a REPL definition), or its source does not parse "
+                "(caught mid-write, or generated), or it no longer contains any lambda"
             )
         return None
     # Cheap narrowing first: a lambda's code object starts on the line its
