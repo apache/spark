@@ -245,6 +245,44 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
             return False
 
 
+def _is_never_null_boolean(node: ast.AST) -> bool:
+    """Return True when ``node`` lowers to a boolean column that is never NULL.
+
+    Stricter than ``_is_definitely_boolean``, which also accepts operands that
+    may evaluate to NULL (a literal ``None``, a ternary with a ``None`` branch).
+    ``and`` / ``or`` need this even under the ``&`` / ``|`` fold, because Spark's
+    three-valued logic diverges from Python's short-circuit: ``NULL AND false``
+    is ``false`` where Python's ``None and False`` is ``None``. Checking for a
+    bare ``None`` operand is not enough -- a ternary that *evaluates* to ``None``
+    (``(True if c else None) and x``) reaches the fold the same way.
+
+    ``not`` and if/ternary *tests* keep using ``_is_definitely_boolean``, since
+    they wrap the operand in ``coalesce`` and so handle NULL explicitly.
+    """
+    match node:
+        case ast.Constant(value=v):
+            # A literal None is "boolean" for coalesce purposes but IS NULL.
+            return isinstance(v, bool)
+        case ast.Compare():
+            # Every comparison lowering is total (see ``_lower_compare_pair``),
+            # so only the operand shapes still need checking.
+            return _is_definitely_boolean(node)
+        case ast.UnaryOp(op=ast.Not()):
+            # Lowered as ``coalesce(~operand, lit(True))``, which is total.
+            return True
+        case ast.BoolOp(values=values):
+            return all(_is_never_null_boolean(v) for v in values)
+        case ast.IfExp(body=body, orelse=orelse):
+            return _is_never_null_boolean(body) and _is_never_null_boolean(orelse)
+        case _:
+            return False
+
+
+def _is_none_constant(node: ast.AST) -> bool:
+    """Return True for the literal ``None``."""
+    return isinstance(node, ast.Constant) and node.value is None
+
+
 def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
     """Return a boolean Column expressing Python's ``bool(c)`` for the given category.
 
@@ -263,11 +301,6 @@ def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
     if cat == "numeric":
         return coalesce(c != lit(0), lit(False))
     return None
-
-
-def _is_none_constant(node: ast.AST) -> bool:
-    """Return True for the literal ``None``."""
-    return isinstance(node, ast.Constant) and node.value is None
 
 
 class CatalystTranspiler(AbstractTranspiler):
@@ -728,34 +761,26 @@ class CatalystTranspiler(AbstractTranspiler):
                 # Python `and` / `or` short-circuit and return one of the
                 # operands rather than a strict boolean. For the booleans
                 # produced by Compare / UnaryOp(Not) / nested BoolOps that maps
-                # cleanly onto a nested CASE WHEN. For non-boolean operands
-                # (including bare parameter names whose runtime type is unknown)
-                # the right semantics would need Python's truthiness rules
-                # (0 / "" / None / [] all falsy), which we can't reproduce
-                # without the input column types -- Spark's `&` / `|` would do
-                # bitwise instead. Require statically known booleans so the
-                # caller falls back rather than emitting a divergent plan.
+                # cleanly onto `&` / `|`. For non-boolean operands (including
+                # bare parameter names whose runtime type is unknown) the right
+                # semantics would need Python's truthiness rules (0 / "" / None /
+                # [] all falsy), which we can't reproduce without the input
+                # column types -- Spark's `&` / `|` would do bitwise instead.
                 #
-                if not all(_is_definitely_boolean(v) for v in values):
+                # The gate is `_is_never_null_boolean`, not
+                # `_is_definitely_boolean`: Spark's three-valued `NULL AND false`
+                # is `false` where Python's `None and False` is `None`, so a
+                # NULL-valued operand diverges. Checking only for a bare `None`
+                # operand is not enough, because a ternary that evaluates to None
+                # (`(True if c else None) and x`) reaches the fold the same way.
+                if not all(_is_never_null_boolean(v) for v in values):
                     raise UnsupportedOperationException(
-                        "`and` / `or` operand type is not statically known "
-                        "to be boolean; Spark's `&` / `|` are bitwise, not "
-                        "Python truthiness, so the transpiler refuses to "
-                        "lower this and the UDF falls back to interpreted "
-                        "Python"
-                    )
-                # A literal None operand short-circuits differently: Python's
-                # `None and (x > 0)` returns None regardless of x, but Spark's
-                # three-valued `null AND false` is false (and `null OR true` is
-                # true), so the lowered form diverges. `_is_definitely_boolean`
-                # accepts None for `not`/if-test contexts where coalesce handles
-                # it; here it must force a fallback instead.
-                if any(_is_none_constant(v) for v in values):
-                    raise UnsupportedOperationException(
-                        "literal None operand in `and` / `or` cannot be lowered: "
-                        "Spark's three-valued logic diverges from Python's "
-                        "short-circuit-return-operand semantics, so the UDF "
-                        "falls back to interpreted Python"
+                        "`and` / `or` operand is not statically known to be a "
+                        "non-NULL boolean; Python's short-circuit returns the "
+                        "operand itself (so `None and x` is None) while Spark's "
+                        "`&` / `|` are bitwise over three-valued logic, so the "
+                        "transpiler refuses to lower this and the UDF falls back "
+                        "to interpreted Python"
                     )
                 cols = [self._convert_chunk(params, v) for v in values]
                 if isinstance(op, ast.And):
@@ -818,15 +843,18 @@ class CatalystTranspiler(AbstractTranspiler):
                 #
                 # `&` short-circuits at evaluation time -- both `And.eval` and
                 # `And.doGenCode` skip the right operand when the left is false --
-                # so the fold below reproduces that. What it does NOT survive is
-                # the optimizer: `splitConjunctivePredicates` decomposes `And`,
-                # and `PushPredicateThroughJoin` will push a conjunct it believes
-                # harmless, which a `raise_error` currently is because
-                # `RaiseError` does not override `Expression.throwable`. Fixing
-                # that override is the prerequisite change; see
-                # DEFERED_AND_OR_CASE_WHEN_ISSUE for the alternative (folding
-                # into nested CASE WHENs, which is atomic to predicate splitting
-                # but costs pushdown for every `and` / `or` UDF).
+                # so the fold below reproduces that. What it does NOT survive on
+                # its own is the optimizer: `splitConjunctivePredicates`
+                # decomposes `And`, and `PushPredicateThroughJoin` pushes a
+                # conjunct it believes harmless, which a `raise_error` is until
+                # `RaiseError` overrides `Expression.throwable` (as `Sequence`
+                # already does). That override is a prerequisite for this
+                # lowering: without it, a chain under a filter over a join can
+                # have a link's guard pushed below the join and raise on rows
+                # Python never evaluates. The alternative -- folding into nested
+                # CASE WHENs, atomic to predicate splitting -- was rejected
+                # because it costs pushdown for every `and` / `or` UDF, including
+                # those over non-nullable columns that need no guard at all.
                 #
                 # Python's "evaluate `b` once" rule is about side effects. The
                 # *Python-level* operand grammar we accept (Constant / Name /
