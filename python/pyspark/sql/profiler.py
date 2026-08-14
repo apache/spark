@@ -166,7 +166,7 @@ class WorkerSamplingProfiler:
         WorkerSamplingProfiler._sampling_thread = None
 
     def save(self, accumulator: Accumulator["ProfileResultsV2"]) -> None:
-        accumulator.add({self._get_task_key(): {"callstack": self._callstack_data}})
+        accumulator.add({self._get_task_key(): {"sampling": {"callstack": self._callstack_data}}})
 
     def _start_sampling_thread(self) -> None:
         if self._sampling_thread is not None:
@@ -406,6 +406,15 @@ class ProfilerCollector(ABC):
                 result_id: result["memory"]
                 for result_id, result in self._profile_results.items()
                 if result.get("memory", None) is not None
+            }
+
+    @property
+    def _sampling_profile_results(self) -> Dict[Union[int, str], dict]:
+        with self._lock:
+            return {
+                result_id: result["sampling"]
+                for result_id, result in self._profile_results.items()
+                if result.get("sampling", None) is not None
             }
 
     @property
