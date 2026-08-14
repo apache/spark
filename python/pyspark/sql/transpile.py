@@ -1127,6 +1127,10 @@ def _code_signature(code: CodeType) -> tuple:
     ``import pyspark.sql.functions as F`` idiom. Compiling the whole cached
     module AST and matching by position, instead of recompiling the node in
     isolation, would make the comparison context-exact.
+
+    Tracked in SPARK-58786 (consider transpiling lambdas from module imports);
+    pinned by ``test_udf_transpile_imported_module_call_does_not_verify_yet``,
+    which fails once it is fixed.
     """
     return (
         code.co_argcount,
@@ -1343,8 +1347,7 @@ def _resolve_lambda(
                 "match the compiled code, so it is not safe to lower. Either the source "
                 "has changed since it was imported, OR the lambda calls a module-level "
                 "attribute (e.g. `F.year(c)` after `import pyspark.sql.functions as F`), "
-                "which the bytecode comparison cannot yet reproduce -- see "
-                "``_code_signature``"
+                "which the bytecode comparison cannot yet reproduce (SPARK-58786)"
             )
         else:
             errors.append(

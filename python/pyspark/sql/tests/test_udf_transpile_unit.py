@@ -1975,7 +1975,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # these could not lower regardless -- but when call support lands this
         # must be fixed first, or lowering silently stops for every module using
         # the ``import pyspark.sql.functions as F`` idiom. When that happens this
-        # test fails, which is the point.
+        # test fails, which is the point. Tracked in SPARK-58786 (consider
+        # transpiling lambdas from module imports).
         import importlib.util
         import os
         import tempfile
@@ -2000,17 +2001,18 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             reasons = []
             self.assertIsNone(
                 _get_function_from_ast(module.calls_import, reasons),
-                "if this now resolves, the co_code context-sensitivity gap is "
-                "fixed -- delete this test and remove the caveat in "
-                "_code_signature's docstring",
+                "if this now resolves, SPARK-58786 is fixed -- delete this test, "
+                "drop the caveat in _code_signature's docstring, and drop the "
+                "'module-level attribute' half of the verification-failure message",
             )
-            # The diagnostic must name BOTH possible causes. Until the gap is
-            # fixed, a user hitting it would otherwise be sent looking for a
-            # stale file, which is the wrong investigation entirely.
+            # The diagnostic must name BOTH possible causes, and cite the ticket.
+            # Until the gap is fixed, a user hitting it would otherwise be sent
+            # looking for a stale file, which is the wrong investigation entirely.
             self.assertEqual(1, len(reasons))
             self.assertIn("does not match the compiled code", reasons[0])
             self.assertIn("changed since it was imported", reasons[0])
             self.assertIn("module-level attribute", reasons[0])
+            self.assertIn("SPARK-58786", reasons[0])
             # Attribute READ, and no import at all, both verify normally --
             # showing the gap is specific to the call form, not to imports.
             self.assertIsNotNone(_get_function_from_ast(module.reads_import))
