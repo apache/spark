@@ -2593,6 +2593,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.slice(fn.col("e"), 0, 5)
   }
 
+  functionTest("trim_array") {
+    fn.trim_array(fn.col("e"), 2)
+  }
+
   functionTest("array_join") {
     fn.array_join(fn.col("e"), ";")
   }

@@ -413,6 +413,7 @@ Array Functions
     shuffle
     slice
     sort_array
+    trim_array
 
 
 Struct Functions
