@@ -4698,22 +4698,23 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return func, None, ser, ser
 
+    elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
+        # Plain Python (pickle) UDFs, the only eval type reaching this branch. read_single_udf
+        # prepared each UDF as an (arg_offsets, eval_func) pair. Apply every one to each input
+        # row: a single UDF yields its bare result, multiple UDFs yield a tuple of results,
+        # which is the shape the JVM side expects. num_udfs is fixed, so the single-result
+        # case is handled once here rather than by unwrapping a one-element tuple per row.
+        def func(split_index: int, data: Iterator[Any]) -> Iterator[Any]:
+            if num_udfs == 1:
+                arg_offsets, f = udfs[0]
+                return (f(*[a[o] for o in arg_offsets]) for a in data)
+            return (tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs) for a in data)
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
     else:
-
-        def mapper(a):
-            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
-            # In the special case of a single UDF this will return a single result rather
-            # than a tuple of results; this is the format that the JVM side expects.
-            if len(result) == 1:
-                return result[0]
-            else:
-                return result
-
-    def func(_, it):
-        return map(mapper, it)
-
-    # profiling is not supported for UDF
-    return func, None, ser, ser
+        raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
