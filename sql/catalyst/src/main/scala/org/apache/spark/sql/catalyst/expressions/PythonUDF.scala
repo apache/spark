@@ -265,6 +265,12 @@ case class TranspiledUDFParameter(child: Expression, index: Int, id: ExprId)
   // the rewrite rather than part of the value, so canonicalize it away like PythonUDF's resultId.
   override lazy val canonicalized: Expression = copy(id = ExprId(-1), child = child.canonicalized)
 
+  // Markers exist from call construction until the first optimizer batch, so they show up in every
+  // analyzed-plan string, `explain(extended)` and any analysis error carrying the option. Print the
+  // id's number the way every other exprId-carrying node does rather than the full ExprId, whose
+  // per-JVM UUID is both noise and different on every run.
+  override def stringArgs: Iterator[Any] = Iterator(child, index, id.id)
+
   override protected def withNewChildInternal(newChild: Expression): TranspiledUDFParameter =
     copy(child = newChild)
 }

@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, ExtractValue, OuterReference, PlanExpression, TranspiledUDFParameter}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, GetArrayItem, GetStructField, OuterReference, PlanExpression, TranspiledUDFParameter}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Command, Expand, Generate, LateralJoin, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_UDF_PARAMETER
 import org.apache.spark.util.Utils
 
@@ -93,11 +93,20 @@ object PreEvaluateTranspiledUDFInputs {
    */
   private type InputKey = Either[Expression, ExprId]
 
+  /** Prefix of the aliases this rewrite adds; tests match on it, so it lives in one place. */
+  val INPUT_ALIAS_PREFIX = "_udf_input"
+
   private case class PreEvaluated(alias: Alias, childIndex: Int)
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.expressions.exists(_.containsPattern(TRANSPILED_UDF_PARAMETER))) {
       return plan
+    }
+    // A Command has no output to widen or restore, so the schema bookkeeping below cannot check
+    // itself there. Leave those inputs inline rather than restructure a plan shape this rewrite
+    // does not understand.
+    if (plan.isInstanceOf[Command]) {
+      return plan.mapExpressions(stripMarkers)
     }
     val preEvaluated = collectInputs(plan)
     val columns = preEvaluated.map { case (key, p) => key -> p.alias.toAttribute }
@@ -137,9 +146,11 @@ object PreEvaluateTranspiledUDFInputs {
     // output (Filter, Join, Sort, ...) would otherwise widen the query's schema with. Project them
     // away again, as RewriteWithExpression does for common expressions; CollapseProject and
     // ColumnPruning tidy the leftovers up.
-    assert(plan.output.length <= rewritten.output.length)
+    assert(plan.output.length <= rewritten.output.length,
+      s"Pre-evaluating an input narrowed the operator's output: $rewritten")
     if (plan.output.length < rewritten.output.length) {
-      assert(plan.outputSet.subsetOf(rewritten.outputSet))
+      assert(plan.outputSet.subsetOf(rewritten.outputSet),
+        s"Pre-evaluating an input dropped an output attribute: $rewritten")
       Project(plan.output, rewritten)
     } else {
       rewritten
@@ -185,6 +196,10 @@ object PreEvaluateTranspiledUDFInputs {
           // Aggregate.
           val reusable = existing.alias.dataType == arg.dataType &&
             existing.alias.nullable == arg.nullable &&
+            // A nondeterministic key compares copies by id, not by shape, so also require that they
+            // read the same columns: the column is built from the first copy, and a second copy
+            // referencing anything else would silently lose it.
+            existing.alias.references == arg.references &&
             canPreEvaluate(arg, underAggregate)
           if (!reusable) {
             preEvaluated.remove(key)
@@ -211,7 +226,7 @@ object PreEvaluateTranspiledUDFInputs {
           //
           // Keep the markers nested inside the argument, for the caller to pre-evaluate one level
           // down; they are transparent, so the column is the same either way.
-          val alias = Alias(p.child, s"_udf_input_$named")()
+          val alias = Alias(p.child, s"${INPUT_ALIAS_PREFIX}_$named")()
           named += 1
           // An aggregate, window or generator expression cannot live in a Project either. This is
           // reachable: `udf(sum(x))` in an Aggregate binds the parameter to the aggregate itself.
@@ -239,16 +254,17 @@ object PreEvaluateTranspiledUDFInputs {
     //    participating in the GROUP BY clause"). This is the hazard RewriteWithExpression avoids by
     //    splitting the Aggregate through PhysicalAggregation; declining is the cheaper answer, and
     //    a grouping key is computed once per row anyway.
-    //  - A nondeterministic argument only under a single-child operator. Below one side of a join
-    //    it would be drawn once per row of that side and reused for every row it is paired with --
-    //    not a fresh draw per output row but a correlated one, a bigger change than the drift this
+    //  - A nondeterministic argument only where the operator produces one output row per input row
+    //    (see preservesRowCount). Below one side of a join, or below a Generate or an Expand, a
+    //    draw would be made once per input row and then reused for every row it produces -- not a
+    //    fresh draw per output row but a correlated one, a bigger change than the drift this
     //    rewrite otherwise accepts.
     //  - Nothing carrying an OuterReference: that belongs to the enclosing query, and a Project
     //    inside a correlated subquery is not the place to evaluate it.
     def canPreEvaluate(arg: Expression, underAggregate: Boolean): Boolean =
       !isCheapInput(arg) &&
         (underAggregate || !plan.isInstanceOf[Aggregate]) &&
-        (arg.deterministic || plan.children.length == 1) &&
+        (arg.deterministic || preservesRowCount(plan)) &&
         !arg.exists(_.isInstanceOf[OuterReference])
 
     def collect(e: Expression, underAggregate: Boolean): Unit = e match {
@@ -298,8 +314,8 @@ object PreEvaluateTranspiledUDFInputs {
   /**
    * Cheap enough that reading it at every use site costs nothing, so pre-evaluating it would only
    * grow the plan: a column read, an outer reference, anything foldable (which constant folding
-   * collapses at each use site anyway, better than a column), or a field extracted from one of
-   * those.
+   * collapses at each use site anyway, better than a column), or a struct field / fixed array
+   * position read from one of those.
    *
    * Deliberately not `CollapseProject.isCheap`, which answers a different question -- whether
    * collapsing two Projects duplicates work -- and so also counts an `Alias`, a `BoundReference`,
@@ -312,8 +328,23 @@ object PreEvaluateTranspiledUDFInputs {
   private def isCheapInput(e: Expression): Boolean = e match {
     case _: Attribute | _: OuterReference => true
     case _ if e.foldable => true
-    case _: ExtractValue => e.children.forall(isCheapInput)
+    // A struct field is an offset read and an array item at a fixed position is an index. Not
+    // every ExtractValue is cheap: GetMapValue walks the key array comparing keys, so leaving a
+    // map probe inline would pay that scan at every use site.
+    case g: GetStructField => isCheapInput(g.child)
+    case g: GetArrayItem if g.ordinal.foldable => isCheapInput(g.child)
     case _ => false
+  }
+
+  /**
+   * Whether `plan` emits one row per input row, so a column computed below it is drawn once per row
+   * the operator emits. A join pairs rows, and [[Generate]] and [[Expand]] fan one row out into
+   * several, all of which would reuse a single draw. Deliberately a small allow-by-exclusion list:
+   * a new fan-out operator should be added here rather than silently inheriting a draw.
+   */
+  private def preservesRowCount(plan: LogicalPlan): Boolean = plan match {
+    case _: Generate | _: Expand | _: LateralJoin => false
+    case other => other.children.length == 1
   }
 
   private def stripMarkers(e: Expression): Expression =

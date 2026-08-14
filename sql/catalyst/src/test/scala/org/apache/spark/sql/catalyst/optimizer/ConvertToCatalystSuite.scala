@@ -22,8 +22,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, JoinHint, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, JoinHint, LateralJoin, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType}
 
@@ -289,6 +289,54 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
+  test("keeps transpiling in a non-inner join condition, where Python is not a viable fallback") {
+    transpileOn {
+      // ExtractPythonUDFFromJoinCondition rejects a scalar Python UDF that spans both sides of any
+      // non-inner join (UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE), so falling back there would
+      // turn a query that compiles into one that does not. Transpiling is the only working choice.
+      val attrC = $"c".long
+      val arg = Add(attrA, attrC)
+      val id = NamedExpression.newExprId
+      val tpudf = TranspiledPythonUDF(
+        "udf",
+        PythonUDF("udf", null, BooleanType, Seq(arg),
+          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
+        List(GreaterThan(Add(marker(arg, 0, id), marker(arg, 0, id)), Literal(0L))))
+      Seq(LeftOuter, RightOuter, FullOuter, LeftSemi, LeftAnti).foreach { joinType =>
+        val plan = Join(
+          LocalRelation(attrA), LocalRelation(attrC), joinType, Some(tpudf), JoinHint.NONE)
+        val condition = ConvertToCatalyst(plan).asInstanceOf[Join].condition.get
+        assert(!condition.exists(_.isInstanceOf[PythonUDF]),
+          s"$joinType kept a PythonUDF in the ON clause, which does not compile: $condition")
+      }
+      // The inner case does have a working fallback, so it takes it.
+      val inner = Join(
+        LocalRelation(attrA), LocalRelation(attrC), Inner, Some(tpudf), JoinHint.NONE)
+      assert(ConvertToCatalyst(inner).asInstanceOf[Join].condition.contains(tpudf.pythonUDFExpr),
+        "Expected the interpreted UDF for an inner join condition")
+    }
+  }
+
+  test("treats a lateral join condition as a predicate too") {
+    transpileOn {
+      // A LateralJoin is a UnaryNode, so a node-type check that only knows Filter and Join misses
+      // it and lets the option transpile into a condition the pushdown then inlines.
+      val attrC = $"c".long
+      val arg = Add(attrA, Literal(1L))
+      val id = NamedExpression.newExprId
+      val tpudf = TranspiledPythonUDF(
+        "udf",
+        PythonUDF("udf", null, BooleanType, Seq(arg),
+          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
+        List(GreaterThan(Add(marker(arg, 0, id), marker(arg, 0, id)), Literal(0L))))
+      val plan = LateralJoin(
+        LocalRelation(attrA), LateralSubquery(LocalRelation(attrC)), Inner, Some(tpudf))
+      val condition = ConvertToCatalyst(plan).asInstanceOf[LateralJoin].condition.get
+      assert(condition == tpudf.pythonUDFExpr,
+        s"Expected the interpreted UDF in the lateral join condition, got: $condition")
+    }
+  }
+
   test("transpiles the same call outside a predicate") {
     // The control: the position is what decides, not the UDF.
     transpileOn {
@@ -300,7 +348,10 @@ class ConvertToCatalystSuite extends PlanTest {
         s"Expected the option in a Project, got: $rewritten")
       val columns = rewritten.collect {
         case Project(projectList, _) =>
-          projectList.collect { case a: Alias if a.name.startsWith("_udf_input") => a.child }
+          projectList.collect {
+            case a: Alias
+              if a.name.startsWith(PreEvaluateTranspiledUDFInputs.INPUT_ALIAS_PREFIX) => a.child
+          }
       }.flatten
       assert(columns == Seq(arg), s"Expected the input pre-evaluated, got: $rewritten")
     }
@@ -392,7 +443,10 @@ class ConvertToCatalystSuite extends PlanTest {
       assert(!hasMarkers(optimized), s"A parameter marker survived: $optimized")
       val preEvaluated = optimized.collect {
         case Project(projectList, _) =>
-          projectList.collect { case a: Alias if a.name.startsWith("_udf_input") => a.child }
+          projectList.collect {
+            case a: Alias
+              if a.name.startsWith(PreEvaluateTranspiledUDFInputs.INPUT_ALIAS_PREFIX) => a.child
+          }
       }.flatten
       assert(preEvaluated == Seq(arg), s"Expected the input pre-evaluated once, got: $optimized")
     }

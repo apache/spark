@@ -1562,6 +1562,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual([0, 1, 2, 3, 4], sorted(r[0] for r in correlated.collect()))
             finally:
                 self.spark.catalog.dropTempView("t_58626")
+                self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS sq_test_58626")
 
     def test_udf_transpile_skips_a_udf_used_as_a_predicate(self):
         # SPARK-58626: a UDF used as a predicate is not transpiled. Predicate pushdown inlines a
@@ -1598,6 +1599,32 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(0, self._eval_python_count(selected))
             self.assertEqual([1.0, 4.0], [r[0] for r in selected.collect()])
 
+    def test_udf_transpile_unused_argument_diverges_under_ansi(self):
+        # SPARK-58626: an argument the body never uses never reaches the option, so it is not
+        # evaluated at all, where the interpreted UDF computes every argument column. Under ANSI
+        # that is an error-vs-rows difference, not merely saved work -- pinned with an argument that
+        # actually raises, since `test_udf_transpile_drops_unused_argument` uses `rand(1)`, which
+        # cannot show the asymmetry in either direction.
+        from pyspark.sql.functions import col, lit
+
+        first = lambda a, b: a  # noqa: E731
+        transpile_off = {
+            "spark.sql.experimental.optimizer.transpilePyUDFs": False,
+            "spark.sql.ansi.enabled": True,
+        }
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(first, LongType())
+            self.assertTrue(u.transpiled)
+            df = self.spark.createDataFrame([(3,)], "x long")
+            rows = df.select(u(col("x"), col("x") / lit(0))).collect()
+            self.assertEqual([3], [r[0] for r in rows])
+        with self.sql_conf(transpile_off):
+            u_i = UserDefinedFunction(first, LongType())
+            df = self.spark.createDataFrame([(3,)], "x long")
+            with self.assertRaises(Exception) as ctx:
+                df.select(u_i(col("x"), col("x") / lit(0))).collect()
+            self.assertIn("DIVIDE_BY_ZERO", str(ctx.exception))
+
     def test_udf_transpile_pre_evaluated_input_is_eager(self):
         # SPARK-58626: pre-evaluating an input below the operator makes it eager, so an input that
         # raises under ANSI raises even on the rows whose use of it sat in a branch they did not
@@ -1631,6 +1658,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         # Read twice, so the pre-evaluated column survives: eager, and both paths raise.
         for conf, label in ((_TRANSPILE_ON, "transpiled"), (transpile_off, "interpreted")):
+            with self.sql_conf(conf):
+                expect_transpiled = conf is _TRANSPILE_ON
+                transpiled = bool(UserDefinedFunction(used_twice, DoubleType()).transpiled)
+                self.assertEqual(expect_transpiled, transpiled, label)
             error = divide_by_zero_error(used_twice, conf)
             self.assertIsNotNone(error, label)
             self.assertIn("DIVIDE_BY_ZERO", error, label)

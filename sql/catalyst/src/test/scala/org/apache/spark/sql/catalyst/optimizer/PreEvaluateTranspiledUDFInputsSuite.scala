@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max, Sum}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, LocalRelation, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, IntegerType, LongType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, IntegerType, LongType, MapType, StringType}
 
 /**
  * Tests that every input a transpiled UDF option uses is evaluated once per row (SPARK-58626).
@@ -80,7 +80,9 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
   /** The columns the rewrite added, in plan order. */
   private def preEvaluated(plan: LogicalPlan): Seq[Alias] = plan.collect {
     case Project(projectList, _) =>
-      projectList.collect { case a: Alias if a.name.startsWith("_udf_input") => a }
+      projectList.collect {
+        case a: Alias if a.name.startsWith(PreEvaluateTranspiledUDFInputs.INPUT_ALIAS_PREFIX) => a
+      }
   }.flatten
 
   /** How many times `plan` evaluates something matching `f` (as opposed to reading its column). */
@@ -553,5 +555,51 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
     val optimized = convert(Filter(outer, relation))
     assert(preEvaluated(optimized).isEmpty,
       s"Expected no column inside the predicate, got: $optimized")
+  }
+
+  test("does not treat a map probe as a cheap input") {
+    // GetMapValue walks the key array comparing keys, so leaving `m['k']` inline pays that scan at
+    // every use site. A struct field read is an offset and stays inline.
+    val attrMap = AttributeReference("m", MapType(StringType, LongType))()
+    val attrStruct = $"s".struct($"f".long)
+    val mapRelation = LocalRelation(attrMap, attrStruct)
+    val probe = GetMapValue(attrMap, Literal("k"))
+    val id = newId
+    val mapPlan = Project(
+      Seq(Alias(tpudf(Add(marker(probe, 0, id), marker(probe, 0, id)), LongType, probe), "v")()),
+      mapRelation)
+    assert(preEvaluated(convert(mapPlan)).map(_.child) == Seq(probe),
+      s"Expected a column for a map probe: ${convert(mapPlan)}")
+
+    val field = GetStructField(attrStruct, 0)
+    val fieldPlan = Project(
+      Seq(Alias(tpudf(Add(marker(field, 0, id), marker(field, 0, id)), LongType, field), "v")()),
+      mapRelation)
+    assert(preEvaluated(convert(fieldPlan)).isEmpty,
+      s"Expected a struct field read to stay inline: ${convert(fieldPlan)}")
+  }
+
+  test("leaves a parameter inline when its copies read different columns") {
+    // A nondeterministic key compares copies by id, not by shape, and the column is built from the
+    // first copy -- so copies reading different columns must not share one, or the second copy's
+    // reference would silently vanish. Reachable from a custom transpiler.
+    val id = newId
+    val option = Add(
+      marker(Add(Rand(Literal(1L)), attrA), 0, id),
+      marker(Add(Rand(Literal(1L)), attrB), 0, id))
+    val optimized = convert(select(tpudf(option, DoubleType, Add(Rand(Literal(1L)), attrA))))
+    assert(preEvaluated(optimized).isEmpty,
+      s"Expected no shared column for copies reading different columns, got: $optimized")
+    assert(countEvaluations(optimized)(_.isInstanceOf[Rand]) == 2,
+      s"Expected both copies left inline, got: $optimized")
+  }
+
+  test("prints the marker's id as a number rather than a raw ExprId") {
+    // Markers live in the plan from call construction until this rewrite runs, so they show up in
+    // analyzed-plan strings and analysis errors. An ExprId's per-JVM UUID would make that text
+    // different on every run.
+    val marked = marker(Add(attrA, Literal(1L)), 0, newId).toString
+    assert(!marked.contains("ExprId("), s"Marker printed a raw ExprId: $marked")
+    assert(marked.contains("transpiledudfparameter"), s"Unexpected marker rendering: $marked")
   }
 }

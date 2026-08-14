@@ -85,10 +85,15 @@ knowing if you are reading a plan or relying on the eagerness above:
   the body by ``CollapseProject`` -- one read is one evaluation either way, so
   the count is unchanged, but it is lazy again inside a branch.
 
-An argument the body never uses is not evaluated at all, where the
-interpreted UDF computes every argument column. That difference is
-deliberate. See ``TranspiledUDFParameter`` in ``PythonUDF.scala`` and
-``PreEvaluateTranspiledUDFInputs`` for the JVM side.
+An argument the body never uses is not evaluated at all, where the interpreted
+UDF computes every argument column. Under ANSI that is an error-vs-rows
+difference, not just a saved computation: ``f(x, y / 0)`` with ``lambda a, b: a``
+returns rows when transpiled and raises DIVIDE_BY_ZERO when interpreted, because
+substitution drops the unused argument before it ever reaches the plan. It is
+deliberate -- an argument nothing reads is work nobody asked for -- but it is the
+one place this feature can turn a failing query into a passing one, so it is
+called out rather than filed under performance. See ``TranspiledUDFParameter`` in
+``PythonUDF.scala`` and ``PreEvaluateTranspiledUDFInputs`` for the JVM side.
 """
 
 import ast

@@ -1038,13 +1038,21 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     plan.transformDownWithSubqueriesAndPruning(
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
       case p =>
-        // A `Filter`'s condition and a join condition are the two places predicate pushdown will
-        // undo the input pre-evaluation below, putting every input back at each use site, so an
-        // option that needs a pre-evaluated column there keeps the interpreted UDF instead (see
-        // PreEvaluateTranspiledUDFInputs.needsPreEvaluatedColumn). Both operators hold nothing but
+        // A condition is where predicate pushdown will undo the input pre-evaluation below, putting
+        // every input back at each use site, so an option that needs a pre-evaluated column there
+        // keeps the interpreted UDF instead (see
+        // PreEvaluateTranspiledUDFInputs.needsPreEvaluatedColumn). These operators hold nothing but
         // that condition, so the position is a property of the node.
+        //
+        // Only for an *inner* join, though: `ExtractPythonUDFFromJoinCondition` rejects a scalar
+        // Python UDF that spans both sides of any other join type
+        // (UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE), so keeping Python there would turn a query
+        // that compiles today into one that does not. There is no fallback to prefer when the
+        // fallback does not work, so those keep transpiling.
         val inPredicate = p match {
-          case _: Filter | _: Join => true
+          case _: Filter => true
+          case Join(_, _, _: InnerLike, Some(_), _) => true
+          case LateralJoin(_, _, _: InnerLike, Some(_)) => true
           case _ => false
         }
         val substituted = p.mapExpressions { e =>
