@@ -996,6 +996,7 @@ object FunctionRegistry {
     expressionBuilder("try_variant_set", TryVariantSetExpressionBuilder),
     expressionBuilder("variant_array_append", VariantArrayAppendExpressionBuilder),
     expressionBuilder("try_variant_array_append", TryVariantArrayAppendExpressionBuilder),
+    expressionBuilder("variant_strip_nulls", VariantStripNullsExpressionBuilder),
 
     // Spatial
     expression[ST_AsBinary]("st_asbinary"),
