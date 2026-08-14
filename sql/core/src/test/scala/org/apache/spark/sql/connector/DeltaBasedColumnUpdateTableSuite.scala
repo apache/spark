@@ -344,8 +344,8 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     val ex = intercept[org.apache.spark.sql.AnalysisException] {
       sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
     }
-    assert(ex.getCondition == "EMPTY_REQUIRED_DATA_ATTRIBUTES",
-      s"expected EMPTY_REQUIRED_DATA_ATTRIBUTES but got: ${ex.getCondition}")
+    assert(ex.getCondition == "COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES",
+      s"expected COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES but got: ${ex.getCondition}")
   }
 
   test("column-update: requiredDataAttributes throws AnalysisException for invalid column") {
@@ -478,8 +478,8 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     val ex = intercept[org.apache.spark.sql.AnalysisException] {
       sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 WHERE dep = 'hr'")
     }
-    assert(ex.getCondition == "SPLIT_UPDATE_ROW_ID_REASSIGNMENT",
-      s"expected SPLIT_UPDATE_ROW_ID_REASSIGNMENT but got: ${ex.getCondition}")
+    assert(ex.getCondition == "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
+      s"expected COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT but got: ${ex.getCondition}")
   }
 
   test("column-update split: undeclared row-ID column on narrow write is rejected") {
@@ -495,8 +495,8 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     val ex = intercept[org.apache.spark.sql.AnalysisException] {
       sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
     }
-    assert(ex.getCondition == "SPLIT_UPDATE_ROW_ID_NOT_DECLARED",
-      s"expected SPLIT_UPDATE_ROW_ID_NOT_DECLARED but got: ${ex.getCondition}")
+    assert(ex.getCondition == "COLUMN_UPDATE_SPLIT_ROW_ID_NOT_DECLARED",
+      s"expected COLUMN_UPDATE_SPLIT_ROW_ID_NOT_DECLARED but got: ${ex.getCondition}")
     assert(ex.getMessage.contains("pk"),
       s"error message must name the undeclared row ID column `pk`: ${ex.getMessage}")
   }
@@ -562,8 +562,9 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     val ex = intercept[org.apache.spark.sql.AnalysisException] {
       sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
     }
-    assert(ex.getCondition == "REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES",
-      s"expected REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES but got: ${ex.getCondition}")
+    val expectedCondition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES"
+    assert(ex.getCondition == expectedCondition,
+      s"expected $expectedCondition but got: ${ex.getCondition}")
   }
 
   private def createAndInitTableOverlap(schemaString: String, jsonData: String): Unit = {
@@ -587,8 +588,9 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     val ex = intercept[org.apache.spark.sql.AnalysisException] {
       sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
     }
-    assert(ex.getCondition == "REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS",
-      s"expected REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS but got: ${ex.getCondition}")
+    val expectedCondition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS"
+    assert(ex.getCondition == expectedCondition,
+      s"expected $expectedCondition but got: ${ex.getCondition}")
     assert(ex.getMessage.contains("dep"),
       s"error message must name the undeclared partition column `dep`: ${ex.getMessage}")
   }
@@ -675,8 +677,9 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     val ex = intercept[org.apache.spark.sql.AnalysisException] {
       sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
     }
-    assert(ex.getCondition == "REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
-      s"expected REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS but got: ${ex.getCondition}")
+    val expectedCondition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS"
+    assert(ex.getCondition == expectedCondition,
+      s"expected $expectedCondition but got: ${ex.getCondition}")
     assert(ex.getMessage.contains("id"),
       s"error message must name the missing column `id`: ${ex.getMessage}")
   }
