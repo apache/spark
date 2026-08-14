@@ -76,7 +76,7 @@ WHERE  t1b IN (SELECT cte1.t1b
                FROM   cte1
                WHERE  cte1.t1b > 0)
 -- !query schema
-struct<t1a:string,t1b:int,t1c:int,t1d:int,t1h:timestamp>
+struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1d:int,t1h:timestamp>
 -- !query output
 val1a	16	12	10	2014-07-04 01:01:00
 val1a	16	12	21	2014-06-04 01:02:00.001
@@ -150,7 +150,7 @@ WHERE  t1c IN
               LEFT OUTER JOIN  cte1 cte6
               ON              cte1.t1d > cte6.t1d)
 -- !query schema
-struct<t1a:string,t1b:int,t1c:int,t1h:timestamp>
+struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1h:timestamp>
 -- !query output
 val1b	8	16	2014-05-04 01:01:00
 val1c	8	16	2014-05-04 01:02:00.001
@@ -181,7 +181,7 @@ FROM   (SELECT *
                INNER JOIN cte1 cte4
                        ON cte1.t1b = cte4.t1b) s
 -- !query schema
-struct<t1a:string,t1b:int,t1a:string,t1b:int,t1a:string,t1b:int,t1a:string,t1b:int>
+struct<t1a:string collate UTF8_BINARY,t1b:int,t1a:string collate UTF8_BINARY,t1b:int,t1a:string collate UTF8_BINARY,t1b:int,t1a:string collate UTF8_BINARY,t1b:int>
 -- !query output
 val1b	8	val1b	8	val1b	8	val1b	8
 
@@ -239,7 +239,7 @@ FROM            (
                        LEFT OUTER JOIN cte1 cte4 ON cte1.t1c = cte4.t1c
                        ) s
 -- !query schema
-struct<t1a:string,t1b:int,t1c:int,t1a:string,t1b:int,t1c:int,t1a:string,t1b:int,t1c:int,t1a:string,t1b:int,t1c:int>
+struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1a:string collate UTF8_BINARY,t1b:int,t1c:int>
 -- !query output
 val1b	8	16	val1b	8	16	val1b	8	16	val1b	8	16
 
@@ -311,7 +311,7 @@ WHERE  t1b NOT IN (SELECT cte1.t1b
                    WHERE  cte1.t1b < 0) AND
        t1c > 10
 -- !query schema
-struct<t1a:string,t1b:int,t1c:int,t1h:timestamp>
+struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1h:timestamp>
 -- !query output
 val1a	16	12	2014-06-04 01:02:00.001
 val1a	16	12	2014-07-04 01:01:00
@@ -352,7 +352,7 @@ WHERE    t1b NOT IN
          t1c IS NOT NULL
 ORDER BY t1c DESC
 -- !query schema
-struct<t1a:string,t1b:int,t1c:int,t1d:int,t1h:timestamp>
+struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1d:int,t1h:timestamp>
 -- !query output
 val1b	8	16	19	2014-05-04 01:01:00
 val1c	8	16	19	2014-05-04 01:02:00.001

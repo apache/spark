@@ -251,7 +251,7 @@ FROM trades t ASOF JOIN
   ON t.symbol = q.symbol
 ORDER BY t.trade_time
 -- !query schema
-struct<symbol:string,bid_price:decimal(5,2)>
+struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
 -- !query output
 MSFT	420.50
 

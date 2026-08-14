@@ -18,7 +18,7 @@ struct<>
 -- !query
 SELECT current_user FROM v_user
 -- !query schema
-struct<current_user:string>
+struct<current_user:string collate UTF8_BINARY>
 -- !query output
 admin.admin
 
@@ -58,7 +58,7 @@ struct<>
 -- !query
 SELECT current_user, current_user FROM v_user
 -- !query schema
-struct<current_user:string,current_user:string>
+struct<current_user:string collate UTF8_BINARY,current_user:string collate UTF8_BINARY>
 -- !query output
 admin.admin	admin.admin
 

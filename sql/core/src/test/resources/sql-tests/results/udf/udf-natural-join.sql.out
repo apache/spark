@@ -26,7 +26,7 @@ struct<>
 -- !query
 SELECT * FROM nt1 natural join nt2 where udf(k) = "one"
 -- !query schema
-struct<k:string,v1:int,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,v2:int>
 -- !query output
 one	1	1
 one	1	5
@@ -35,7 +35,7 @@ one	1	5
 -- !query
 SELECT * FROM nt1 natural left join nt2 where k <> udf("") order by v1, v2
 -- !query schema
-struct<k:string,v1:int,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,v2:int>
 -- !query output
 one	1	1
 one	1	5
@@ -46,7 +46,7 @@ three	3	NULL
 -- !query
 SELECT * FROM nt1 natural right join nt2 where udf(k) <> udf("") order by v1, v2
 -- !query schema
-struct<k:string,v1:int,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,v2:int>
 -- !query output
 one	1	1
 one	1	5

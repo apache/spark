@@ -43,7 +43,7 @@ SELECT * FROM tbl_view
 Project [id#x, name#x, data#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -55,7 +55,7 @@ SELECT * EXCEPT (id) FROM tbl_view
 Project [name#x, data#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -67,7 +67,7 @@ SELECT * EXCEPT (name) FROM tbl_view
 Project [id#x, data#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -79,7 +79,7 @@ SELECT * EXCEPT (data) FROM tbl_view
 Project [id#x, name#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -91,7 +91,7 @@ SELECT * EXCEPT (data.f1) FROM tbl_view
 Project [id#x, name#x, named_struct(s2, data#x.s2) AS data#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -103,7 +103,7 @@ SELECT * EXCEPT (data.s2) FROM tbl_view
 Project [id#x, name#x, named_struct(f1, data#x.f1) AS data#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -115,7 +115,7 @@ SELECT * EXCEPT (data.s2.f2) FROM tbl_view
 Project [id#x, name#x, named_struct(f1, data#x.f1, s2, named_struct(f3, data#x.s2.f3)) AS data#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -127,7 +127,7 @@ SELECT * EXCEPT (data.f1, data.s2) FROM tbl_view
 Project [id#x, name#x, named_struct() AS data#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -139,7 +139,7 @@ SELECT * EXCEPT (id, name, data) FROM tbl_view
 Project
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -160,7 +160,7 @@ SELECT tbl_view.* EXCEPT (name) FROM tbl_view
 Project [id#x, data#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -175,7 +175,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
    +- Project [id#x]
       +- SubqueryAlias tbl_view
          +- View (`tbl_view`, [id#x, name#x, data#x])
-            +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
                +- Project [id#x, name#x, data#x]
                   +- SubqueryAlias tbl_view
                      +- LocalRelation [id#x, name#x, data#x]
@@ -203,7 +203,7 @@ SELECT data.* EXCEPT (s2) FROM tbl_view
 Project [data#x.f1 AS f1#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -215,7 +215,7 @@ SELECT data.* EXCEPT (s2.f2) FROM tbl_view
 Project [data#x.f1 AS f1#x, named_struct(f3, data#x.s2.f3) AS s2#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]
@@ -227,7 +227,7 @@ SELECT data.s2.* EXCEPT (f2) FROM tbl_view
 Project [data#x.s2.f3 AS f3#x]
 +- SubqueryAlias tbl_view
    +- View (`tbl_view`, [id#x, name#x, data#x])
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
                +- LocalRelation [id#x, name#x, data#x]

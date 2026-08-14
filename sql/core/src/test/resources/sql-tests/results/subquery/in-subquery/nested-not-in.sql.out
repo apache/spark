@@ -150,7 +150,7 @@ WHERE  emp_name IN (SELECT emp_name
             AND dept_id NOT IN (SELECT dept_id 
                                 FROM   dept))
 -- !query schema
-struct<id:int,dept_id:int,emp_name:string>
+struct<id:int,dept_id:int,emp_name:string collate UTF8_BINARY>
 -- !query output
 100	10	emp 1
 200	NULL	emp 2
@@ -172,7 +172,7 @@ WHERE  EXISTS (SELECT emp_name
            AND dept_id NOT IN (SELECT dept_id 
                                FROM   dept))
 -- !query schema
-struct<id:int,dept_id:int,emp_name:string>
+struct<id:int,dept_id:int,emp_name:string collate UTF8_BINARY>
 -- !query output
 100	10	emp 1
 200	NULL	emp 2
@@ -190,7 +190,7 @@ FROM   emp
 WHERE  dept_id = 10
 OR (id, emp_name) NOT IN (SELECT id, emp_name FROM address)
 -- !query schema
-struct<id:int,dept_id:int,emp_name:string>
+struct<id:int,dept_id:int,emp_name:string collate UTF8_BINARY>
 -- !query output
 100	10	emp 1
 
@@ -208,7 +208,7 @@ WHERE  dept_id = 10
                                              AND emp_name IS NOT NULL) 
              AND id > 400 )
 -- !query schema
-struct<id:int,dept_id:int,emp_name:string>
+struct<id:int,dept_id:int,emp_name:string collate UTF8_BINARY>
 -- !query output
 100	10	emp 1
 500	NULL	emp 5
@@ -226,7 +226,7 @@ WHERE  dept_id = 10
                                   AND emp_name IS NOT NULL
                                   AND emp.id = address.id)
 -- !query schema
-struct<id:int,dept_id:int,emp_name:string>
+struct<id:int,dept_id:int,emp_name:string collate UTF8_BINARY>
 -- !query output
 100	10	emp 1
 200	NULL	emp 2
@@ -252,7 +252,7 @@ WHERE  id NOT IN (SELECT id
                                   AND emp.id = address.id
                                   AND id < 400)
 -- !query schema
-struct<id:int,dept_id:int,emp_name:string>
+struct<id:int,dept_id:int,emp_name:string collate UTF8_BINARY>
 -- !query output
 100	10	emp 1
 200	NULL	emp 2

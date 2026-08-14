@@ -38,7 +38,7 @@ struct<ten:int>
 -- !query
 SELECT DISTINCT string4 FROM tmp ORDER BY 1
 -- !query schema
-struct<string4:string>
+struct<string4:string collate UTF8_BINARY>
 -- !query output
 AAAAxx
 HHHHxx
@@ -51,7 +51,7 @@ SELECT DISTINCT two, string4, ten
    FROM tmp
    ORDER BY two ASC, string4 ASC, ten ASC
 -- !query schema
-struct<two:int,string4:string,ten:int>
+struct<two:int,string4:string collate UTF8_BINARY,ten:int>
 -- !query output
 0	AAAAxx	0
 0	AAAAxx	2

@@ -43,7 +43,7 @@ select to_time(time_str, fmt_str) from time_view
 Project [to_time(time_str#x, Some(fmt_str#x)) AS to_time(time_str, fmt_str)#x]
 +- SubqueryAlias time_view
    +- View (`time_view`, [time_str#x, fmt_str#x])
-      +- Project [cast(time_str#x as string) AS time_str#x, cast(fmt_str#x as string) AS fmt_str#x]
+      +- Project [cast(time_str#x as string collate UTF8_BINARY) AS time_str#x, cast(fmt_str#x as string collate UTF8_BINARY) AS fmt_str#x]
          +- Project [11:53:26.038344 AS time_str#x, HH:mm:ss.SSSSSS AS fmt_str#x]
             +- OneRowRelation
 
@@ -1235,7 +1235,7 @@ SELECT time_trunc('HOUR', time_val) FROM trunc_time_view
 Project [time_trunc(HOUR, time_val#x) AS time_trunc(HOUR, time_val)#x]
 +- SubqueryAlias trunc_time_view
    +- View (`trunc_time_view`, [time_val#x, unit#x])
-      +- Project [cast(time_val#x as time(6)) AS time_val#x, cast(unit#x as string) AS unit#x]
+      +- Project [cast(time_val#x as time(6)) AS time_val#x, cast(unit#x as string collate UTF8_BINARY) AS unit#x]
          +- Project [11:53:26.038344 AS time_val#x, MINUTE AS unit#x]
             +- OneRowRelation
 
@@ -1246,7 +1246,7 @@ SELECT time_trunc(unit, time'12:34:56') FROM trunc_time_view
 Project [time_trunc(unit#x, 12:34:56) AS time_trunc(unit, TIME '12:34:56')#x]
 +- SubqueryAlias trunc_time_view
    +- View (`trunc_time_view`, [time_val#x, unit#x])
-      +- Project [cast(time_val#x as time(6)) AS time_val#x, cast(unit#x as string) AS unit#x]
+      +- Project [cast(time_val#x as time(6)) AS time_val#x, cast(unit#x as string collate UTF8_BINARY) AS unit#x]
          +- Project [11:53:26.038344 AS time_val#x, MINUTE AS unit#x]
             +- OneRowRelation
 
@@ -1257,7 +1257,7 @@ SELECT time_trunc(unit, time_val) FROM trunc_time_view
 Project [time_trunc(unit#x, time_val#x) AS time_trunc(unit, time_val)#x]
 +- SubqueryAlias trunc_time_view
    +- View (`trunc_time_view`, [time_val#x, unit#x])
-      +- Project [cast(time_val#x as time(6)) AS time_val#x, cast(unit#x as string) AS unit#x]
+      +- Project [cast(time_val#x as time(6)) AS time_val#x, cast(unit#x as string collate UTF8_BINARY) AS unit#x]
          +- Project [11:53:26.038344 AS time_val#x, MINUTE AS unit#x]
             +- OneRowRelation
 
@@ -1837,7 +1837,7 @@ SELECT time_diff('SECOND', time_start, time_end) FROM timediff_view
 Project [time_diff(SECOND, time_start#x, time_end#x) AS time_diff(SECOND, time_start, time_end)#xL]
 +- SubqueryAlias timediff_view
    +- View (`timediff_view`, [time_start#x, time_end#x, unit#x])
-      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string) AS unit#x]
+      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string collate UTF8_BINARY) AS unit#x]
          +- Project [01:02:03 AS time_start#x, 04:05:06 AS time_end#x, SECOND AS unit#x]
             +- OneRowRelation
 
@@ -1848,7 +1848,7 @@ SELECT time_diff(unit, time'01:02:03', time_end) FROM timediff_view
 Project [time_diff(unit#x, 01:02:03, time_end#x) AS time_diff(unit, TIME '01:02:03', time_end)#xL]
 +- SubqueryAlias timediff_view
    +- View (`timediff_view`, [time_start#x, time_end#x, unit#x])
-      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string) AS unit#x]
+      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string collate UTF8_BINARY) AS unit#x]
          +- Project [01:02:03 AS time_start#x, 04:05:06 AS time_end#x, SECOND AS unit#x]
             +- OneRowRelation
 
@@ -1859,7 +1859,7 @@ SELECT time_diff(unit, time_start, time'04:05:06') FROM timediff_view
 Project [time_diff(unit#x, time_start#x, 04:05:06) AS time_diff(unit, time_start, TIME '04:05:06')#xL]
 +- SubqueryAlias timediff_view
    +- View (`timediff_view`, [time_start#x, time_end#x, unit#x])
-      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string) AS unit#x]
+      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string collate UTF8_BINARY) AS unit#x]
          +- Project [01:02:03 AS time_start#x, 04:05:06 AS time_end#x, SECOND AS unit#x]
             +- OneRowRelation
 
@@ -1870,7 +1870,7 @@ SELECT time_diff('SECOND', time'01:02:03', time_end) FROM timediff_view
 Project [time_diff(SECOND, 01:02:03, time_end#x) AS time_diff(SECOND, TIME '01:02:03', time_end)#xL]
 +- SubqueryAlias timediff_view
    +- View (`timediff_view`, [time_start#x, time_end#x, unit#x])
-      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string) AS unit#x]
+      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string collate UTF8_BINARY) AS unit#x]
          +- Project [01:02:03 AS time_start#x, 04:05:06 AS time_end#x, SECOND AS unit#x]
             +- OneRowRelation
 
@@ -1881,7 +1881,7 @@ SELECT time_diff('SECOND', time_start, time'04:05:06') FROM timediff_view
 Project [time_diff(SECOND, time_start#x, 04:05:06) AS time_diff(SECOND, time_start, TIME '04:05:06')#xL]
 +- SubqueryAlias timediff_view
    +- View (`timediff_view`, [time_start#x, time_end#x, unit#x])
-      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string) AS unit#x]
+      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string collate UTF8_BINARY) AS unit#x]
          +- Project [01:02:03 AS time_start#x, 04:05:06 AS time_end#x, SECOND AS unit#x]
             +- OneRowRelation
 
@@ -1892,7 +1892,7 @@ SELECT time_diff(unit, time'01:02:03', time'04:05:06') FROM timediff_view
 Project [time_diff(unit#x, 01:02:03, 04:05:06) AS time_diff(unit, TIME '01:02:03', TIME '04:05:06')#xL]
 +- SubqueryAlias timediff_view
    +- View (`timediff_view`, [time_start#x, time_end#x, unit#x])
-      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string) AS unit#x]
+      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string collate UTF8_BINARY) AS unit#x]
          +- Project [01:02:03 AS time_start#x, 04:05:06 AS time_end#x, SECOND AS unit#x]
             +- OneRowRelation
 
@@ -1903,7 +1903,7 @@ SELECT time_diff(unit, time_start, time_end) FROM timediff_view
 Project [time_diff(unit#x, time_start#x, time_end#x) AS time_diff(unit, time_start, time_end)#xL]
 +- SubqueryAlias timediff_view
    +- View (`timediff_view`, [time_start#x, time_end#x, unit#x])
-      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string) AS unit#x]
+      +- Project [cast(time_start#x as time(6)) AS time_start#x, cast(time_end#x as time(6)) AS time_end#x, cast(unit#x as string collate UTF8_BINARY) AS unit#x]
          +- Project [01:02:03 AS time_start#x, 04:05:06 AS time_end#x, SECOND AS unit#x]
             +- OneRowRelation
 

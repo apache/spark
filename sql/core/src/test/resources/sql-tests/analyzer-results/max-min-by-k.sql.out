@@ -26,7 +26,7 @@ SELECT max_by(name, score, 3) FROM basic_data
 Aggregate [max_by(name#x, score#x, 3, false, 0, 0) AS max_by(name, score, 3)#x]
 +- SubqueryAlias basic_data
    +- View (`basic_data`, [name#x, score#x])
-      +- Project [cast(name#x as string) AS name#x, cast(score#x as int) AS score#x]
+      +- Project [cast(name#x as string collate UTF8_BINARY) AS name#x, cast(score#x as int) AS score#x]
          +- Project [name#x, score#x]
             +- SubqueryAlias basic_data
                +- LocalRelation [name#x, score#x]
@@ -38,7 +38,7 @@ SELECT min_by(name, score, 3) FROM basic_data
 Aggregate [min_by(name#x, score#x, 3, true, 0, 0) AS min_by(name, score, 3)#x]
 +- SubqueryAlias basic_data
    +- View (`basic_data`, [name#x, score#x])
-      +- Project [cast(name#x as string) AS name#x, cast(score#x as int) AS score#x]
+      +- Project [cast(name#x as string collate UTF8_BINARY) AS name#x, cast(score#x as int) AS score#x]
          +- Project [name#x, score#x]
             +- SubqueryAlias basic_data
                +- LocalRelation [name#x, score#x]
@@ -50,7 +50,7 @@ SELECT max_by(name, score, 1) FROM basic_data
 Aggregate [max_by(name#x, score#x, 1, false, 0, 0) AS max_by(name, score, 1)#x]
 +- SubqueryAlias basic_data
    +- View (`basic_data`, [name#x, score#x])
-      +- Project [cast(name#x as string) AS name#x, cast(score#x as int) AS score#x]
+      +- Project [cast(name#x as string collate UTF8_BINARY) AS name#x, cast(score#x as int) AS score#x]
          +- Project [name#x, score#x]
             +- SubqueryAlias basic_data
                +- LocalRelation [name#x, score#x]
@@ -62,7 +62,7 @@ SELECT min_by(name, score, 1) FROM basic_data
 Aggregate [min_by(name#x, score#x, 1, true, 0, 0) AS min_by(name, score, 1)#x]
 +- SubqueryAlias basic_data
    +- View (`basic_data`, [name#x, score#x])
-      +- Project [cast(name#x as string) AS name#x, cast(score#x as int) AS score#x]
+      +- Project [cast(name#x as string collate UTF8_BINARY) AS name#x, cast(score#x as int) AS score#x]
          +- Project [name#x, score#x]
             +- SubqueryAlias basic_data
                +- LocalRelation [name#x, score#x]
@@ -74,7 +74,7 @@ SELECT max_by(name, score, 10) FROM basic_data
 Aggregate [max_by(name#x, score#x, 10, false, 0, 0) AS max_by(name, score, 10)#x]
 +- SubqueryAlias basic_data
    +- View (`basic_data`, [name#x, score#x])
-      +- Project [cast(name#x as string) AS name#x, cast(score#x as int) AS score#x]
+      +- Project [cast(name#x as string collate UTF8_BINARY) AS name#x, cast(score#x as int) AS score#x]
          +- Project [name#x, score#x]
             +- SubqueryAlias basic_data
                +- LocalRelation [name#x, score#x]
@@ -86,7 +86,7 @@ SELECT min_by(name, score, 10) FROM basic_data
 Aggregate [min_by(name#x, score#x, 10, true, 0, 0) AS min_by(name, score, 10)#x]
 +- SubqueryAlias basic_data
    +- View (`basic_data`, [name#x, score#x])
-      +- Project [cast(name#x as string) AS name#x, cast(score#x as int) AS score#x]
+      +- Project [cast(name#x as string collate UTF8_BINARY) AS name#x, cast(score#x as int) AS score#x]
          +- Project [name#x, score#x]
             +- SubqueryAlias basic_data
                +- LocalRelation [name#x, score#x]
@@ -122,7 +122,7 @@ Sort [dept#x ASC NULLS FIRST], true
 +- Aggregate [dept#x], [dept#x, max_by(emp#x, salary#x, 2, false, 0, 0) AS max_by(emp, salary, 2)#x]
    +- SubqueryAlias dept_data
       +- View (`dept_data`, [dept#x, emp#x, salary#x])
-         +- Project [cast(dept#x as string) AS dept#x, cast(emp#x as string) AS emp#x, cast(salary#x as int) AS salary#x]
+         +- Project [cast(dept#x as string collate UTF8_BINARY) AS dept#x, cast(emp#x as string collate UTF8_BINARY) AS emp#x, cast(salary#x as int) AS salary#x]
             +- Project [dept#x, emp#x, salary#x]
                +- SubqueryAlias dept_data
                   +- LocalRelation [dept#x, emp#x, salary#x]
@@ -135,7 +135,7 @@ Sort [dept#x ASC NULLS FIRST], true
 +- Aggregate [dept#x], [dept#x, min_by(emp#x, salary#x, 2, true, 0, 0) AS min_by(emp, salary, 2)#x]
    +- SubqueryAlias dept_data
       +- View (`dept_data`, [dept#x, emp#x, salary#x])
-         +- Project [cast(dept#x as string) AS dept#x, cast(emp#x as string) AS emp#x, cast(salary#x as int) AS salary#x]
+         +- Project [cast(dept#x as string collate UTF8_BINARY) AS dept#x, cast(emp#x as string collate UTF8_BINARY) AS emp#x, cast(salary#x as int) AS salary#x]
             +- Project [dept#x, emp#x, salary#x]
                +- SubqueryAlias dept_data
                   +- LocalRelation [dept#x, emp#x, salary#x]
@@ -166,7 +166,7 @@ SELECT max_by(x, y, 2) FROM null_data
 Aggregate [max_by(x#x, y#x, 2, false, 0, 0) AS max_by(x, y, 2)#x]
 +- SubqueryAlias null_data
    +- View (`null_data`, [x#x, y#x])
-      +- Project [cast(x#x as string) AS x#x, cast(y#x as int) AS y#x]
+      +- Project [cast(x#x as string collate UTF8_BINARY) AS x#x, cast(y#x as int) AS y#x]
          +- Project [x#x, y#x]
             +- SubqueryAlias null_data
                +- LocalRelation [x#x, y#x]
@@ -178,7 +178,7 @@ SELECT min_by(x, y, 2) FROM null_data
 Aggregate [min_by(x#x, y#x, 2, true, 0, 0) AS min_by(x, y, 2)#x]
 +- SubqueryAlias null_data
    +- View (`null_data`, [x#x, y#x])
-      +- Project [cast(x#x as string) AS x#x, cast(y#x as int) AS y#x]
+      +- Project [cast(x#x as string collate UTF8_BINARY) AS x#x, cast(y#x as int) AS y#x]
          +- Project [x#x, y#x]
             +- SubqueryAlias null_data
                +- LocalRelation [x#x, y#x]
@@ -207,7 +207,7 @@ SELECT max_by(x, y, 2) FROM null_value_data
 Aggregate [max_by(x#x, y#x, 2, false, 0, 0) AS max_by(x, y, 2)#x]
 +- SubqueryAlias null_value_data
    +- View (`null_value_data`, [x#x, y#x])
-      +- Project [cast(x#x as string) AS x#x, cast(y#x as int) AS y#x]
+      +- Project [cast(x#x as string collate UTF8_BINARY) AS x#x, cast(y#x as int) AS y#x]
          +- Project [x#x, y#x]
             +- SubqueryAlias null_value_data
                +- LocalRelation [x#x, y#x]
@@ -219,7 +219,7 @@ SELECT min_by(x, y, 2) FROM null_value_data
 Aggregate [min_by(x#x, y#x, 2, true, 0, 0) AS min_by(x, y, 2)#x]
 +- SubqueryAlias null_value_data
    +- View (`null_value_data`, [x#x, y#x])
-      +- Project [cast(x#x as string) AS x#x, cast(y#x as int) AS y#x]
+      +- Project [cast(x#x as string collate UTF8_BINARY) AS x#x, cast(y#x as int) AS y#x]
          +- Project [x#x, y#x]
             +- SubqueryAlias null_value_data
                +- LocalRelation [x#x, y#x]
@@ -248,7 +248,7 @@ SELECT max_by(name, score, 2) FROM typed_data
 Aggregate [max_by(name#x, score#x, 2, false, 0, 0) AS max_by(name, score, 2)#x]
 +- SubqueryAlias typed_data
    +- View (`typed_data`, [name#x, score#x])
-      +- Project [cast(name#x as string) AS name#x, cast(score#x as decimal(2,1)) AS score#x]
+      +- Project [cast(name#x as string collate UTF8_BINARY) AS name#x, cast(score#x as decimal(2,1)) AS score#x]
          +- Project [name#x, score#x]
             +- SubqueryAlias typed_data
                +- LocalRelation [name#x, score#x]
@@ -260,7 +260,7 @@ SELECT min_by(name, score, 2) FROM typed_data
 Aggregate [min_by(name#x, score#x, 2, true, 0, 0) AS min_by(name, score, 2)#x]
 +- SubqueryAlias typed_data
    +- View (`typed_data`, [name#x, score#x])
-      +- Project [cast(name#x as string) AS name#x, cast(score#x as decimal(2,1)) AS score#x]
+      +- Project [cast(name#x as string collate UTF8_BINARY) AS name#x, cast(score#x as decimal(2,1)) AS score#x]
          +- Project [name#x, score#x]
             +- SubqueryAlias typed_data
                +- LocalRelation [name#x, score#x]
@@ -289,7 +289,7 @@ SELECT max_by(event, event_date, 2) FROM date_data
 Aggregate [max_by(event#x, event_date#x, 2, false, 0, 0) AS max_by(event, event_date, 2)#x]
 +- SubqueryAlias date_data
    +- View (`date_data`, [event#x, event_date#x])
-      +- Project [cast(event#x as string) AS event#x, cast(event_date#x as date) AS event_date#x]
+      +- Project [cast(event#x as string collate UTF8_BINARY) AS event#x, cast(event_date#x as date) AS event_date#x]
          +- Project [event#x, event_date#x]
             +- SubqueryAlias date_data
                +- LocalRelation [event#x, event_date#x]
@@ -301,7 +301,7 @@ SELECT min_by(event, event_date, 2) FROM date_data
 Aggregate [min_by(event#x, event_date#x, 2, true, 0, 0) AS min_by(event, event_date, 2)#x]
 +- SubqueryAlias date_data
    +- View (`date_data`, [event#x, event_date#x])
-      +- Project [cast(event#x as string) AS event#x, cast(event_date#x as date) AS event_date#x]
+      +- Project [cast(event#x as string collate UTF8_BINARY) AS event#x, cast(event_date#x as date) AS event_date#x]
          +- Project [event#x, event_date#x]
             +- SubqueryAlias date_data
                +- LocalRelation [event#x, event_date#x]
@@ -321,7 +321,7 @@ Sort [dept#x ASC NULLS FIRST, emp#x ASC NULLS FIRST], true
          +- Project [dept#x, emp#x, salary#x]
             +- SubqueryAlias dept_data
                +- View (`dept_data`, [dept#x, emp#x, salary#x])
-                  +- Project [cast(dept#x as string) AS dept#x, cast(emp#x as string) AS emp#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(dept#x as string collate UTF8_BINARY) AS dept#x, cast(emp#x as string collate UTF8_BINARY) AS emp#x, cast(salary#x as int) AS salary#x]
                      +- Project [dept#x, emp#x, salary#x]
                         +- SubqueryAlias dept_data
                            +- LocalRelation [dept#x, emp#x, salary#x]

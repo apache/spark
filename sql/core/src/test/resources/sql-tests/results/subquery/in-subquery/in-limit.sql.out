@@ -71,7 +71,7 @@ WHERE  t1a IN (SELECT t2a
                WHERE  t1d = t2d)
 LIMIT  2
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
@@ -86,7 +86,7 @@ WHERE  t1a IN (SELECT t2a
                LIMIT 10)
 LIMIT  2
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
@@ -101,7 +101,7 @@ WHERE  t1a IN (SELECT t2a
 LIMIT  2
 OFFSET 1
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
 val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
@@ -119,7 +119,7 @@ WHERE  t1a IN (SELECT t2a
 LIMIT  2
 OFFSET 1
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
 val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
@@ -133,7 +133,7 @@ WHERE  t1a IN (SELECT t2a
                WHERE  t1d = t2d)
 OFFSET 1
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
 val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
@@ -150,7 +150,7 @@ WHERE  t1a IN (SELECT t2a
                OFFSET 2)
 OFFSET 1
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
 val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
@@ -167,7 +167,7 @@ WHERE  t1c IN (SELECT t2c
                LIMIT  2)
 LIMIT 4
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
 val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
@@ -200,7 +200,7 @@ WHERE  t1c IN (SELECT t2c
                LIMIT  2)
 LIMIT 4
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
 val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
@@ -215,7 +215,7 @@ WHERE  t1b NOT IN (SELECT t2b
                    ORDER  BY t2b
                    LIMIT  2)
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
 val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
@@ -271,7 +271,7 @@ WHERE  t1a IN (SELECT t2a
 LIMIT  2
 OFFSET 2
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
@@ -288,7 +288,7 @@ WHERE  t1a IN (SELECT t2a
 LIMIT  2
 OFFSET 2
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 
 
@@ -305,7 +305,7 @@ WHERE  t1c IN (SELECT t2c
 LIMIT 4
 OFFSET 2
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1d	NULL	16	19	17.0	25.0	2600	2014-07-04 01:02:00.001	NULL
 val1d	NULL	16	22	17.0	25.0	2600	2014-06-04 01:01:00	NULL
@@ -339,7 +339,7 @@ WHERE  t1b NOT IN (SELECT t2b
                    LIMIT  2
                    OFFSET 2)
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
 val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
@@ -360,7 +360,7 @@ WHERE  t1b NOT IN (SELECT t2b
                    ORDER  BY t2b
                    LIMIT  2)
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
 val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
@@ -379,7 +379,7 @@ WHERE  t1b NOT IN (SELECT t2b
                    LIMIT  2
                    OFFSET 2)
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
 val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
@@ -440,7 +440,7 @@ WHERE  t1a IN (SELECT t2a
                WHERE  t1d = t2d)
 OFFSET 2
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
@@ -456,7 +456,7 @@ WHERE  t1a IN (SELECT t2a
                OFFSET 2)
 OFFSET 2
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
@@ -472,7 +472,7 @@ WHERE  t1c IN (SELECT t2c
                OFFSET 2)
 OFFSET 4
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1d	NULL	16	19	17.0	25.0	2600	2014-07-04 01:02:00.001	NULL
 val1d	NULL	16	22	17.0	25.0	2600	2014-06-04 01:01:00	NULL
@@ -488,7 +488,7 @@ WHERE  t1c IN (SELECT t2c
                OFFSET 2)
 OFFSET 1
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
 
@@ -520,7 +520,7 @@ WHERE  t1b NOT IN (SELECT t2b
                    ORDER  BY t2b
                    OFFSET 2)
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
 val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
@@ -616,7 +616,7 @@ WHERE  t1b NOT IN (SELECT t2b
                    LIMIT  2
                    OFFSET 2)
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
 val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04

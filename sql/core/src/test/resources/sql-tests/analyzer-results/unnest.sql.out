@@ -112,7 +112,7 @@ Sort [id#x ASC NULLS FIRST, elem#x ASC NULLS FIRST], true
       :           +- OneRowRelation
       +- SubqueryAlias nested
          +- View (`nested`, [id#x, xs#x, ys#x])
-            +- Project [cast(id#x as int) AS id#x, cast(xs#x as array<int>) AS xs#x, cast(ys#x as array<string>) AS ys#x]
+            +- Project [cast(id#x as int) AS id#x, cast(xs#x as array<int>) AS xs#x, cast(ys#x as array<string collate UTF8_BINARY>) AS ys#x]
                +- Project [id#x, xs#x, ys#x]
                   +- SubqueryAlias nested
                      +- LocalRelation [id#x, xs#x, ys#x]
@@ -132,7 +132,7 @@ Sort [id#x ASC NULLS FIRST, ord#xL ASC NULLS FIRST], true
       :           +- OneRowRelation
       +- SubqueryAlias nested
          +- View (`nested`, [id#x, xs#x, ys#x])
-            +- Project [cast(id#x as int) AS id#x, cast(xs#x as array<int>) AS xs#x, cast(ys#x as array<string>) AS ys#x]
+            +- Project [cast(id#x as int) AS id#x, cast(xs#x as array<int>) AS xs#x, cast(ys#x as array<string collate UTF8_BINARY>) AS ys#x]
                +- Project [id#x, xs#x, ys#x]
                   +- SubqueryAlias nested
                      +- LocalRelation [id#x, xs#x, ys#x]
@@ -152,7 +152,7 @@ Sort [id#x ASC NULLS FIRST, elem#x ASC NULLS FIRST], true
       :           +- OneRowRelation
       +- SubqueryAlias nested
          +- View (`nested`, [id#x, xs#x, ys#x])
-            +- Project [cast(id#x as int) AS id#x, cast(xs#x as array<int>) AS xs#x, cast(ys#x as array<string>) AS ys#x]
+            +- Project [cast(id#x as int) AS id#x, cast(xs#x as array<int>) AS xs#x, cast(ys#x as array<string collate UTF8_BINARY>) AS ys#x]
                +- Project [id#x, xs#x, ys#x]
                   +- SubqueryAlias nested
                      +- LocalRelation [id#x, xs#x, ys#x]

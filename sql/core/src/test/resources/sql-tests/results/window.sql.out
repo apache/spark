@@ -65,7 +65,7 @@ struct<>
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val ROWS CURRENT ROW) FROM testData
 ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW):bigint>
+struct<val:int,cate:string collate UTF8_BINARY,count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW):bigint>
 -- !query output
 NULL	NULL	0
 3	NULL	1
@@ -82,7 +82,7 @@ NULL	a	0
 SELECT val, cate, sum(val) OVER(PARTITION BY cate ORDER BY val
 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):bigint>
+struct<val:int,cate:string collate UTF8_BINARY,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):bigint>
 -- !query output
 NULL	NULL	3
 3	NULL	3
@@ -125,7 +125,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val RANGE 1 PRECEDING) FROM testData
 ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW):bigint>
+struct<val:int,cate:string collate UTF8_BINARY,count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW):bigint>
 -- !query output
 NULL	NULL	0
 3	NULL	1
@@ -142,7 +142,7 @@ NULL	a	0
 SELECT val, cate, sum(val) OVER(PARTITION BY cate ORDER BY val
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING):bigint>
+struct<val:int,cate:string collate UTF8_BINARY,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING):bigint>
 -- !query output
 NULL	NULL	NULL
 3	NULL	3
@@ -159,7 +159,7 @@ NULL	a	NULL
 SELECT val_long, cate, sum(val_long) OVER(PARTITION BY cate ORDER BY val_long
 RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, val_long
 -- !query schema
-struct<val_long:bigint,cate:string,sum(val_long) OVER (PARTITION BY cate ORDER BY val_long ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING):bigint>
+struct<val_long:bigint,cate:string collate UTF8_BINARY,sum(val_long) OVER (PARTITION BY cate ORDER BY val_long ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING):bigint>
 -- !query output
 NULL	NULL	NULL
 1	NULL	1
@@ -176,7 +176,7 @@ NULL	b	NULL
 SELECT val_double, cate, sum(val_double) OVER(PARTITION BY cate ORDER BY val_double
 RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING) FROM testData ORDER BY cate, val_double
 -- !query schema
-struct<val_double:double,cate:string,sum(val_double) OVER (PARTITION BY cate ORDER BY val_double ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING):double>
+struct<val_double:double,cate:string collate UTF8_BINARY,sum(val_double) OVER (PARTITION BY cate ORDER BY val_double ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING):double>
 -- !query output
 NULL	NULL	NULL
 1.0	NULL	1.0
@@ -193,7 +193,7 @@ NULL	NULL	NULL
 SELECT val_date, cate, max(val_date) OVER(PARTITION BY cate ORDER BY val_date
 RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING) FROM testData ORDER BY cate, val_date
 -- !query schema
-struct<val_date:date,cate:string,max(val_date) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING):date>
+struct<val_date:date,cate:string collate UTF8_BINARY,max(val_date) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING):date>
 -- !query output
 NULL	NULL	NULL
 2017-08-01	NULL	2017-08-01
@@ -211,7 +211,7 @@ SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY v
 RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp
 -- !query schema
-struct<val_timestamp:timestamp,cate:string,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING):double>
+struct<val_timestamp:timestamp,cate:string collate UTF8_BINARY,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING):double>
 -- !query output
 NULL	NULL	NULL
 2017-07-31 17:00:00	NULL	1.5015456E9
@@ -229,7 +229,7 @@ SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY t
 RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
 ORDER BY cate, to_timestamp_ntz(val_timestamp)
 -- !query schema
-struct<val_timestamp:timestamp,cate:string,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING):double>
+struct<val_timestamp:timestamp,cate:string collate UTF8_BINARY,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING):double>
 -- !query output
 NULL	NULL	NULL
 2017-07-31 17:00:00	NULL	1.5015456E9
@@ -247,7 +247,7 @@ SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY v
 RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp
 -- !query schema
-struct<val_timestamp:timestamp,cate:string,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING):double>
+struct<val_timestamp:timestamp,cate:string collate UTF8_BINARY,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING):double>
 -- !query output
 NULL	NULL	NULL
 2017-07-31 17:00:00	NULL	1.5015456E9
@@ -265,7 +265,7 @@ SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY t
 RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
 ORDER BY cate, to_timestamp_ntz(val_timestamp)
 -- !query schema
-struct<val_timestamp:timestamp,cate:string,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING):double>
+struct<val_timestamp:timestamp,cate:string collate UTF8_BINARY,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING):double>
 -- !query output
 NULL	NULL	NULL
 2017-07-31 17:00:00	NULL	1.5015456E9
@@ -283,7 +283,7 @@ SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY v
 RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp
 -- !query schema
-struct<val_timestamp:timestamp,cate:string,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING):double>
+struct<val_timestamp:timestamp,cate:string collate UTF8_BINARY,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING):double>
 -- !query output
 NULL	NULL	NULL
 2017-07-31 17:00:00	NULL	1.5015456E9
@@ -301,7 +301,7 @@ SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY t
 RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
 ORDER BY cate, to_timestamp_ntz(val_timestamp)
 -- !query schema
-struct<val_timestamp:timestamp,cate:string,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING):double>
+struct<val_timestamp:timestamp,cate:string collate UTF8_BINARY,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING):double>
 -- !query output
 NULL	NULL	NULL
 2017-07-31 17:00:00	NULL	1.5015456E9
@@ -319,7 +319,7 @@ SELECT val_date, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_da
 RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
 ORDER BY cate, val_date
 -- !query schema
-struct<val_date:date,cate:string,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING):double>
+struct<val_date:date,cate:string collate UTF8_BINARY,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING):double>
 -- !query output
 NULL	NULL	NULL
 2017-08-01	NULL	1.5015456E9
@@ -362,7 +362,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SELECT val, cate, sum(val) OVER(PARTITION BY cate ORDER BY val DESC
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING):bigint>
+struct<val:int,cate:string collate UTF8_BINARY,sum(val) OVER (PARTITION BY cate ORDER BY val DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING):bigint>
 -- !query output
 NULL	NULL	NULL
 3	NULL	3
@@ -577,7 +577,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT val, cate, avg(null) OVER(PARTITION BY cate ORDER BY val) FROM testData ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,avg(NULL) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double>
+struct<val:int,cate:string collate UTF8_BINARY,avg(NULL) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double>
 -- !query output
 NULL	NULL	NULL
 3	NULL	NULL
@@ -626,7 +626,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT val, cate, sum(val) OVER(), avg(val) OVER() FROM testData ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,sum(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,avg(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
+struct<val:int,cate:string collate UTF8_BINARY,sum(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,avg(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
 -- !query output
 NULL	NULL	13	1.8571428571428572
 3	NULL	13	1.8571428571428572
@@ -654,7 +654,7 @@ FROM testData
 WINDOW w AS ()
 ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,first_value:boolean,first_value_ignore_null:boolean,first_value_contain_null:boolean,any_value:boolean,any_value_ignore_null:boolean,any_value_contain_null:boolean,last_value:boolean,last_value_ignore_null:boolean,last_value_contain_null:boolean>
+struct<val:int,cate:string collate UTF8_BINARY,first_value:boolean,first_value_ignore_null:boolean,first_value_contain_null:boolean,any_value:boolean,any_value_ignore_null:boolean,any_value_contain_null:boolean,last_value:boolean,last_value_ignore_null:boolean,last_value_contain_null:boolean>
 -- !query output
 NULL	NULL	false	true	false	false	true	false	false	true	false
 3	NULL	false	true	false	false	true	false	false	true	false
@@ -673,7 +673,7 @@ FROM testData
 WHERE val is not null
 WINDOW w AS (PARTITION BY cate ORDER BY val)
 -- !query schema
-struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+struct<cate:string collate UTF8_BINARY,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
 -- !query output
 NULL	3
 a	2
@@ -692,7 +692,7 @@ last_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long NULLS LAST, val
   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS last_a
 FROM testData ORDER BY val_long NULLS LAST, val NULLS LAST, cate NULLS LAST
 -- !query schema
-struct<val:int,cate:string,first_a:int,last_a:int>
+struct<val:int,cate:string collate UTF8_BINARY,first_a:int,last_a:int>
 -- !query output
 1	a	1	1
 3	NULL	1	1
@@ -715,7 +715,7 @@ count(val) FILTER (WHERE val > 1) OVER(ORDER BY val_long
   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cnt_gt1
 FROM testData ORDER BY val_long, cate
 -- !query schema
-struct<val:int,cate:string,sum_a:bigint,sum_b:bigint,cnt_gt1:bigint>
+struct<val:int,cate:string collate UTF8_BINARY,sum_a:bigint,sum_b:bigint,cnt_gt1:bigint>
 -- !query output
 NULL	NULL	NULL	1	0
 1	b	NULL	1	0
@@ -733,7 +733,7 @@ SELECT val, cate,
 sum(val) FILTER (WHERE cate = 'a') OVER(PARTITION BY cate) AS total_sum_filtered
 FROM testData ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,total_sum_filtered:bigint>
+struct<val:int,cate:string collate UTF8_BINARY,total_sum_filtered:bigint>
 -- !query output
 NULL	NULL	NULL
 3	NULL	NULL
@@ -752,7 +752,7 @@ sum(val) FILTER (WHERE val > 1) OVER(ORDER BY val_long
   ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sliding_sum_filtered
 FROM testData ORDER BY val_long, cate
 -- !query schema
-struct<val:int,cate:string,sliding_sum_filtered:bigint>
+struct<val:int,cate:string collate UTF8_BINARY,sliding_sum_filtered:bigint>
 -- !query output
 NULL	NULL	NULL
 1	b	NULL
@@ -771,7 +771,7 @@ sum(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val
   RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS range_sum_filtered
 FROM testData ORDER BY val, cate
 -- !query schema
-struct<val:int,cate:string,range_sum_filtered:bigint>
+struct<val:int,cate:string collate UTF8_BINARY,range_sum_filtered:bigint>
 -- !query output
 NULL	NULL	NULL
 NULL	a	NULL
@@ -796,7 +796,7 @@ FROM
 WINDOW w AS (ORDER BY salary DESC)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string collate UTF8_BINARY,salary:int,highest_salary:string collate UTF8_BINARY,highest_salary:string collate UTF8_BINARY,second_highest_salary:string collate UTF8_BINARY>
 -- !query output
 Larry Bott	11798	Larry Bott	Larry Bott	NULL
 Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
@@ -829,7 +829,7 @@ FROM
 WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string collate UTF8_BINARY,salary:int,highest_salary:string collate UTF8_BINARY,highest_salary:string collate UTF8_BINARY,second_highest_salary:string collate UTF8_BINARY>
 -- !query output
 Larry Bott	11798	Larry Bott	Larry Bott	NULL
 Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
@@ -862,7 +862,7 @@ FROM
 WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string collate UTF8_BINARY,salary:int,highest_salary:string collate UTF8_BINARY,highest_salary:string collate UTF8_BINARY,second_highest_salary:string collate UTF8_BINARY>
 -- !query output
 Larry Bott	11798	Larry Bott	Larry Bott	NULL
 Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
@@ -895,7 +895,7 @@ FROM
 WINDOW w AS (ORDER BY salary RANGE BETWEEN 2000 PRECEDING AND 1000 FOLLOWING)
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string collate UTF8_BINARY,salary:int,highest_salary:string collate UTF8_BINARY,highest_salary:string collate UTF8_BINARY,second_highest_salary:string collate UTF8_BINARY>
 -- !query output
 Leslie Thompson	5186	Leslie Thompson	Leslie Thompson	NULL
 Anthony Bow	6627	Leslie Thompson	Leslie Thompson	Anthony Bow
@@ -928,7 +928,7 @@ FROM
 WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string collate UTF8_BINARY,salary:int,highest_salary:string collate UTF8_BINARY,highest_salary:string collate UTF8_BINARY,second_highest_salary:string collate UTF8_BINARY>
 -- !query output
 Larry Bott	11798	Larry Bott	Larry Bott	Gerard Bondur
 Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
@@ -961,7 +961,7 @@ FROM
 WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string collate UTF8_BINARY,salary:int,highest_salary:string collate UTF8_BINARY,highest_salary:string collate UTF8_BINARY,second_highest_salary:string collate UTF8_BINARY>
 -- !query output
 Larry Bott	11798	Larry Bott	Larry Bott	Gerard Bondur
 Gerard Bondur	11472	Gerard Bondur	Gerard Bondur	Pamela Castillo
@@ -994,7 +994,7 @@ FROM
 WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string collate UTF8_BINARY,salary:int,highest_salary:string collate UTF8_BINARY,highest_salary:string collate UTF8_BINARY,second_highest_salary:string collate UTF8_BINARY>
 -- !query output
 Larry Bott	11798	Larry Bott	Larry Bott	Gerard Bondur
 Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
@@ -1027,7 +1027,7 @@ FROM
 WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string collate UTF8_BINARY,salary:int,highest_salary:string collate UTF8_BINARY,highest_salary:string collate UTF8_BINARY,second_highest_salary:string collate UTF8_BINARY>
 -- !query output
 Larry Bott	11798	Larry Bott	Larry Bott	Gerard Bondur
 Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
@@ -1060,7 +1060,7 @@ FROM
 WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
-struct<employee_name:string,salary:int,highest_salary:string,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string collate UTF8_BINARY,salary:int,highest_salary:string collate UTF8_BINARY,highest_salary:string collate UTF8_BINARY,second_highest_salary:string collate UTF8_BINARY>
 -- !query output
 Larry Bott	11798	Larry Bott	Larry Bott	Gerard Bondur
 Gerard Bondur	11472	Larry Bott	Larry Bott	Gerard Bondur
@@ -1097,7 +1097,7 @@ WINDOW w AS (
 )
 ORDER BY department
 -- !query schema
-struct<employee_name:string,department:string,salary:int,highest_salary:string,second_highest_salary:string>
+struct<employee_name:string collate UTF8_BINARY,department:string collate UTF8_BINARY,salary:int,highest_salary:string collate UTF8_BINARY,second_highest_salary:string collate UTF8_BINARY>
 -- !query output
 Gerard Bondur	Accounting	11472	Gerard Bondur	Mary Patterson
 Mary Patterson	Accounting	9998	Gerard Bondur	Mary Patterson
@@ -1176,7 +1176,7 @@ FROM
 WINDOW w AS (ORDER BY id)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,lead_0:string,lead_1:string,lead_2:string,lead_3:string,lag_0:string,lag_1:string,lag_2:string,lag_3:string,lag_plus_3:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string collate UTF8_BINARY,id:int,v:string collate UTF8_BINARY,lead_0:string collate UTF8_BINARY,lead_1:string collate UTF8_BINARY,lead_2:string collate UTF8_BINARY,lead_3:string collate UTF8_BINARY,lag_0:string collate UTF8_BINARY,lag_1:string collate UTF8_BINARY,lag_2:string collate UTF8_BINARY,lag_3:string collate UTF8_BINARY,lag_plus_3:string collate UTF8_BINARY,nth_value_1:string collate UTF8_BINARY,nth_value_2:string collate UTF8_BINARY,nth_value_3:string collate UTF8_BINARY,first_value:string collate UTF8_BINARY,any_value:string collate UTF8_BINARY,last_value:string collate UTF8_BINARY>
 -- !query output
 a	0	NULL	NULL	x	y	z	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
 a	1	x	x	y	z	v	x	NULL	NULL	NULL	NULL	x	NULL	NULL	x	x	x
@@ -1205,7 +1205,7 @@ FROM
 WINDOW w AS (ORDER BY id RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string collate UTF8_BINARY,id:int,v:string collate UTF8_BINARY,nth_value_1:string collate UTF8_BINARY,nth_value_2:string collate UTF8_BINARY,nth_value_3:string collate UTF8_BINARY,first_value:string collate UTF8_BINARY,any_value:string collate UTF8_BINARY,last_value:string collate UTF8_BINARY>
 -- !query output
 a	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL
 a	1	x	x	NULL	NULL	x	x	x
@@ -1234,7 +1234,7 @@ FROM
 WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string collate UTF8_BINARY,id:int,v:string collate UTF8_BINARY,nth_value_1:string collate UTF8_BINARY,nth_value_2:string collate UTF8_BINARY,nth_value_3:string collate UTF8_BINARY,first_value:string collate UTF8_BINARY,any_value:string collate UTF8_BINARY,last_value:string collate UTF8_BINARY>
 -- !query output
 a	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL
 a	1	x	x	NULL	NULL	x	x	x
@@ -1263,7 +1263,7 @@ FROM
 WINDOW w AS (ORDER BY id RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string collate UTF8_BINARY,id:int,v:string collate UTF8_BINARY,nth_value_1:string collate UTF8_BINARY,nth_value_2:string collate UTF8_BINARY,nth_value_3:string collate UTF8_BINARY,first_value:string collate UTF8_BINARY,any_value:string collate UTF8_BINARY,last_value:string collate UTF8_BINARY>
 -- !query output
 a	0	NULL	x	NULL	NULL	x	x	x
 a	1	x	x	NULL	NULL	x	x	x
@@ -1292,7 +1292,7 @@ FROM
 WINDOW w AS (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string collate UTF8_BINARY,id:int,v:string collate UTF8_BINARY,nth_value_1:string collate UTF8_BINARY,nth_value_2:string collate UTF8_BINARY,nth_value_3:string collate UTF8_BINARY,first_value:string collate UTF8_BINARY,any_value:string collate UTF8_BINARY,last_value:string collate UTF8_BINARY>
 -- !query output
 a	0	NULL	x	NULL	NULL	x	x	x
 a	1	x	x	NULL	NULL	x	x	x
@@ -1321,7 +1321,7 @@ FROM
 WINDOW w AS (ORDER BY id RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string collate UTF8_BINARY,id:int,v:string collate UTF8_BINARY,nth_value_1:string collate UTF8_BINARY,nth_value_2:string collate UTF8_BINARY,nth_value_3:string collate UTF8_BINARY,first_value:string collate UTF8_BINARY,any_value:string collate UTF8_BINARY,last_value:string collate UTF8_BINARY>
 -- !query output
 a	0	NULL	x	y	z	x	x	v
 a	1	x	x	y	z	x	x	v
@@ -1350,7 +1350,7 @@ FROM
 WINDOW w AS (ORDER BY id RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string collate UTF8_BINARY,id:int,v:string collate UTF8_BINARY,nth_value_1:string collate UTF8_BINARY,nth_value_2:string collate UTF8_BINARY,nth_value_3:string collate UTF8_BINARY,first_value:string collate UTF8_BINARY,any_value:string collate UTF8_BINARY,last_value:string collate UTF8_BINARY>
 -- !query output
 a	0	NULL	x	y	z	x	x	v
 a	1	x	x	y	z	x	x	v
@@ -1379,7 +1379,7 @@ FROM
 WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string collate UTF8_BINARY,id:int,v:string collate UTF8_BINARY,nth_value_1:string collate UTF8_BINARY,nth_value_2:string collate UTF8_BINARY,nth_value_3:string collate UTF8_BINARY,first_value:string collate UTF8_BINARY,any_value:string collate UTF8_BINARY,last_value:string collate UTF8_BINARY>
 -- !query output
 a	0	NULL	x	y	z	x	x	v
 a	1	x	x	y	z	x	x	v
@@ -1408,7 +1408,7 @@ FROM
 WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string collate UTF8_BINARY,id:int,v:string collate UTF8_BINARY,nth_value_1:string collate UTF8_BINARY,nth_value_2:string collate UTF8_BINARY,nth_value_3:string collate UTF8_BINARY,first_value:string collate UTF8_BINARY,any_value:string collate UTF8_BINARY,last_value:string collate UTF8_BINARY>
 -- !query output
 a	0	NULL	x	NULL	NULL	x	x	x
 a	1	x	x	NULL	NULL	x	x	x
@@ -1481,7 +1481,7 @@ struct<p:int,o:int,rnk:int>
 -- !query
 SELECT * FROM (SELECT cate, val, rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
 -- !query schema
-struct<cate:string,val:int,r:int>
+struct<cate:string collate UTF8_BINARY,val:int,r:int>
 -- !query output
 NULL	NULL	1
 a	NULL	1
@@ -1491,7 +1491,7 @@ b	1	1
 -- !query
 SELECT * FROM (SELECT cate, val, rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
 -- !query schema
-struct<cate:string,val:int,r:int>
+struct<cate:string collate UTF8_BINARY,val:int,r:int>
 -- !query output
 NULL	3	2
 NULL	NULL	1
@@ -1505,7 +1505,7 @@ b	2	2
 -- !query
 SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
 -- !query schema
-struct<cate:string,val:int,r:int>
+struct<cate:string collate UTF8_BINARY,val:int,r:int>
 -- !query output
 NULL	NULL	1
 a	NULL	1
@@ -1515,7 +1515,7 @@ b	1	1
 -- !query
 SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
 -- !query schema
-struct<cate:string,val:int,r:int>
+struct<cate:string collate UTF8_BINARY,val:int,r:int>
 -- !query output
 NULL	3	2
 NULL	NULL	1
@@ -1529,7 +1529,7 @@ b	2	2
 -- !query
 SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
 -- !query schema
-struct<cate:string,val:int,r:int>
+struct<cate:string collate UTF8_BINARY,val:int,r:int>
 -- !query output
 NULL	NULL	1
 a	NULL	1
@@ -1539,7 +1539,7 @@ b	1	1
 -- !query
 SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
 -- !query schema
-struct<cate:string,val:int,r:int>
+struct<cate:string collate UTF8_BINARY,val:int,r:int>
 -- !query output
 NULL	3	2
 NULL	NULL	1
@@ -1552,7 +1552,7 @@ b	2	2
 -- !query
 SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '5' DAY PRECEDING) AS mean FROM testData
 -- !query schema
-struct<val:int,val_long:bigint,val_double:double,val_date:date,val_timestamp:timestamp,cate:string,mean:double>
+struct<val:int,val_long:bigint,val_double:double,val_date:date,val_timestamp:timestamp,cate:string collate UTF8_BINARY,mean:double>
 -- !query output
 1	1	1.0	2017-08-01	2017-07-31 17:00:00	a	1.0
 1	2	2.5	2017-08-02	2017-08-05 23:13:20	a	1.5

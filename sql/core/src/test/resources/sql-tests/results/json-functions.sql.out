@@ -275,7 +275,7 @@ struct<>
 -- !query
 SELECT json_tuple(jsonField, 'b', CAST(NULL AS STRING), a) FROM jsonTable
 -- !query schema
-struct<c0:string,c1:string,c2:string>
+struct<c0:string collate UTF8_BINARY,c1:string collate UTF8_BINARY,c2:string collate UTF8_BINARY>
 -- !query output
 2	NULL	1
 
@@ -542,7 +542,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputExpr" : "\"jsonField\"",
     "inputName" : "`json`",
-    "inputType" : "\"STRING\"",
+    "inputType" : "\"STRING COLLATE UTF8_BINARY\"",
     "sqlExpr" : "\"schema_of_json(jsonField)\""
   },
   "queryContext" : [ {

@@ -1653,7 +1653,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"STRING\"",
+    "right" : "\"STRING COLLATE UTF8_BINARY\"",
     "sqlExpr" : "\"(INTERVAL '2' YEAR + str)\""
   },
   "queryContext" : [ {
@@ -1675,7 +1675,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"STRING\"",
+    "right" : "\"STRING COLLATE UTF8_BINARY\"",
     "sqlExpr" : "\"(INTERVAL '2' YEAR - str)\""
   },
   "queryContext" : [ {
@@ -1691,10 +1691,10 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select str - interval '4 22:12' day to minute from interval_view
 -- !query analysis
-Project [cast(str#x - INTERVAL '4 22:12' DAY TO MINUTE as string) AS str - INTERVAL '4 22:12' DAY TO MINUTE#x]
+Project [cast(str#x - INTERVAL '4 22:12' DAY TO MINUTE as string collate UTF8_BINARY) AS str - INTERVAL '4 22:12' DAY TO MINUTE#x]
 +- SubqueryAlias interval_view
    +- View (`interval_view`, [str#x])
-      +- Project [cast(str#x as string) AS str#x]
+      +- Project [cast(str#x as string collate UTF8_BINARY) AS str#x]
          +- Project [1 AS str#x]
             +- OneRowRelation
 
@@ -1702,10 +1702,10 @@ Project [cast(str#x - INTERVAL '4 22:12' DAY TO MINUTE as string) AS str - INTER
 -- !query
 select str + interval '4 22:12' day to minute from interval_view
 -- !query analysis
-Project [cast(cast(str#x as timestamp) + INTERVAL '4 22:12' DAY TO MINUTE as string) AS str + INTERVAL '4 22:12' DAY TO MINUTE#x]
+Project [cast(cast(str#x as timestamp) + INTERVAL '4 22:12' DAY TO MINUTE as string collate UTF8_BINARY) AS str + INTERVAL '4 22:12' DAY TO MINUTE#x]
 +- SubqueryAlias interval_view
    +- View (`interval_view`, [str#x])
-      +- Project [cast(str#x as string) AS str#x]
+      +- Project [cast(str#x as string collate UTF8_BINARY) AS str#x]
          +- Project [1 AS str#x]
             +- OneRowRelation
 

@@ -90,7 +90,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -105,7 +105,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -139,7 +139,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -154,7 +154,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -187,7 +187,7 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, sum(earni
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
          +- View (`courseSales`, [course#x, year#x, earnings#x])
-            +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+            +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                +- Project [course#x, year#x, earnings#x]
                   +- SubqueryAlias courseSales
                      +- LocalRelation [course#x, year#x, earnings#x]
@@ -201,7 +201,7 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, sum(earni
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
          +- View (`courseSales`, [course#x, year#x, earnings#x])
-            +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+            +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                +- Project [course#x, year#x, earnings#x]
                   +- SubqueryAlias courseSales
                      +- LocalRelation [course#x, year#x, earnings#x]
@@ -215,7 +215,7 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, sum(earni
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
          +- View (`courseSales`, [course#x, year#x, earnings#x])
-            +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+            +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                +- Project [course#x, year#x, earnings#x]
                   +- SubqueryAlias courseSales
                      +- LocalRelation [course#x, year#x, earnings#x]
@@ -229,7 +229,7 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, sum(earni
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
          +- View (`courseSales`, [course#x, year#x, earnings#x])
-            +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+            +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                +- Project [course#x, year#x, earnings#x]
                   +- SubqueryAlias courseSales
                      +- LocalRelation [course#x, year#x, earnings#x]
@@ -244,7 +244,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -259,7 +259,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -274,7 +274,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -290,7 +290,7 @@ Sort [course#x ASC NULLS FIRST, sum#xL ASC NULLS FIRST], true
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, earnings#x AS earnings#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -306,7 +306,7 @@ Sort [course#x ASC NULLS FIRST, sum#xL ASC NULLS FIRST], true
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, earnings#x AS earnings#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -321,7 +321,7 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, cast((shi
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
          +- View (`courseSales`, [course#x, year#x, earnings#x])
-            +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+            +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                +- Project [course#x, year#x, earnings#x]
                   +- SubqueryAlias courseSales
                      +- LocalRelation [course#x, year#x, earnings#x]
@@ -370,7 +370,7 @@ Sort [grouping__id#xL ASC NULLS FIRST, course#x ASC NULLS FIRST, year#x ASC NULL
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -388,7 +388,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
             +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
                +- SubqueryAlias coursesales
                   +- View (`courseSales`, [course#x, year#x, earnings#x])
-                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                     +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales
                               +- LocalRelation [course#x, year#x, earnings#x]
@@ -424,7 +424,7 @@ Project [course#x, year#x]
          +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
             +- SubqueryAlias coursesales
                +- View (`courseSales`, [course#x, year#x, earnings#x])
-                  +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                  +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                      +- Project [course#x, year#x, earnings#x]
                         +- SubqueryAlias courseSales
                            +- LocalRelation [course#x, year#x, earnings#x]
@@ -440,7 +440,7 @@ Sort [grouping(course)#x ASC NULLS FIRST, grouping(year)#x ASC NULLS FIRST, cour
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -456,7 +456,7 @@ Sort [cast((shiftright(grouping_id(course, year)#xL, 1) & 1) as tinyint) ASC NUL
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -492,7 +492,7 @@ Project [course#x, year#x]
          +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
             +- SubqueryAlias coursesales
                +- View (`courseSales`, [course#x, year#x, earnings#x])
-                  +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                  +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                      +- Project [course#x, year#x, earnings#x]
                         +- SubqueryAlias courseSales
                            +- LocalRelation [course#x, year#x, earnings#x]
@@ -1152,7 +1152,7 @@ Sort [col1#x ASC NULLS LAST, col2#x ASC NULLS LAST], true
       +- Project [col1#x, col2#x, col3#x, col1#x AS col1#x, col2#x AS col2#x]
          +- SubqueryAlias tristr
             +- View (`triStr`, [col1#x, col2#x, col3#x])
-               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as int) AS col3#x]
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as int) AS col3#x]
                   +- Project [col1#x, col2#x, col3#x]
                      +- SubqueryAlias triStr
                         +- LocalRelation [col1#x, col2#x, col3#x]
@@ -1384,7 +1384,7 @@ Sort [col1#x ASC NULLS FIRST], true
       +- Project [col1#x, col2#x, s1#x, s2#x, s3#x, col1#x AS col1#x, col2#x AS col2#x]
          +- SubqueryAlias structthree
             +- View (`structThree`, [col1#x, col2#x, s1#x, s2#x, s3#x])
-               +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(s1#x as struct<val:bigint>) AS s1#x, cast(s2#x as struct<val:decimal(2,1)>) AS s2#x, cast(s3#x as struct<val:decimal(2,1)>) AS s3#x]
+               +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(s1#x as struct<val:bigint>) AS s1#x, cast(s2#x as struct<val:decimal(2,1)>) AS s2#x, cast(s3#x as struct<val:decimal(2,1)>) AS s3#x]
                   +- Project [col1#x, col2#x, s1#x, s2#x, s3#x]
                      +- SubqueryAlias structThree
                         +- LocalRelation [col1#x, col2#x, s1#x, s2#x, s3#x]
@@ -1402,7 +1402,7 @@ Sort [col1#x ASC NULLS FIRST, col2#x ASC NULLS FIRST], true
       +- Project [col1#x, col2#x, s1#x, col1#x AS col1#x, col2#x AS col2#x]
          +- SubqueryAlias structone
             +- View (`structOne`, [col1#x, col2#x, s1#x])
-               +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(s1#x as struct<val:bigint>) AS s1#x]
+               +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(s1#x as struct<val:bigint>) AS s1#x]
                   +- Project [col1#x, col2#x, s1#x]
                      +- SubqueryAlias structOne
                         +- LocalRelation [col1#x, col2#x, s1#x]
@@ -1420,7 +1420,7 @@ Sort [col1#x ASC NULLS FIRST], true
       +- Project [col1#x, s1#x, col1#x AS col1#x]
          +- SubqueryAlias structnested
             +- View (`structNested`, [col1#x, s1#x])
-               +- Project [cast(col1#x as string) AS col1#x, cast(s1#x as struct<inner:struct<val:bigint>>) AS s1#x]
+               +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(s1#x as struct<inner:struct<val:bigint>>) AS s1#x]
                   +- Project [col1#x, s1#x]
                      +- SubqueryAlias structNested
                         +- LocalRelation [col1#x, s1#x]
@@ -1498,7 +1498,7 @@ Sort [col1#x ASC NULLS LAST, col2#x ASC NULLS LAST], true
       +- Project [col1#x, col2#x, col3#x, col1#x AS col1#x, col2#x AS col2#x]
          +- SubqueryAlias cubestr
             +- View (`cubeStr`, [col1#x, col2#x, col3#x])
-               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as int) AS col3#x]
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as int) AS col3#x]
                   +- Project [col1#x, col2#x, col3#x]
                      +- SubqueryAlias cubeStr
                         +- LocalRelation [col1#x, col2#x, col3#x]
@@ -2057,7 +2057,7 @@ Sort [col1#x ASC NULLS LAST, col2#x ASC NULLS LAST], true
             :                             +- LocalRelation [a#x, b#x]
             +- SubqueryAlias cubestr
                +- View (`cubeStr`, [col1#x, col2#x, col3#x])
-                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as int) AS col3#x]
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as int) AS col3#x]
                      +- Project [col1#x, col2#x, col3#x]
                         +- SubqueryAlias cubeStr
                            +- LocalRelation [col1#x, col2#x, col3#x]
@@ -2320,7 +2320,7 @@ Sort [col1#x ASC NULLS LAST, col2#x ASC NULLS LAST], true
             :                    +- LocalRelation [a#x, b#x]
             +- SubqueryAlias cubestr
                +- View (`cubeStr`, [col1#x, col2#x, col3#x])
-                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as int) AS col3#x]
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as int) AS col3#x]
                      +- Project [col1#x, col2#x, col3#x]
                         +- SubqueryAlias cubeStr
                            +- LocalRelation [col1#x, col2#x, col3#x]

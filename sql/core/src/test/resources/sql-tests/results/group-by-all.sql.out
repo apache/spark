@@ -18,7 +18,7 @@ struct<>
 -- !query
 select country, count(*) from data group by ALL
 -- !query schema
-struct<country:string,count(1):bigint>
+struct<country:string collate UTF8_BINARY,count(1):bigint>
 -- !query output
 China	2
 Korea	1
@@ -29,7 +29,7 @@ USA	3
 -- !query
 select country, count(*) from data group by aLl
 -- !query schema
-struct<country:string,count(1):bigint>
+struct<country:string collate UTF8_BINARY,count(1):bigint>
 -- !query output
 China	2
 Korea	1
@@ -40,7 +40,7 @@ USA	3
 -- !query
 select all, city, count(*) from (select country as all, city, id from data) group by all, city
 -- !query schema
-struct<all:string,city:string,count(1):bigint>
+struct<all:string collate UTF8_BINARY,city:string collate UTF8_BINARY,count(1):bigint>
 -- !query output
 China	Hangzhou	1
 China	Shanghai	1
@@ -63,7 +63,7 @@ struct<count(1):bigint>
 -- !query
 select country, city, count(*), sum(power) from data group by all
 -- !query schema
-struct<country:string,city:string,count(1):bigint,sum(power):decimal(13,1)>
+struct<country:string collate UTF8_BINARY,city:string collate UTF8_BINARY,count(1):bigint,sum(power):decimal(13,1)>
 -- !query output
 China	Hangzhou	1	14.0
 China	Shanghai	1	15.0
@@ -76,7 +76,7 @@ USA	San Francisco	2	23.0
 -- !query
 select count(*), country, city, sum(power) from data group by all
 -- !query schema
-struct<count(1):bigint,country:string,city:string,sum(power):decimal(13,1)>
+struct<count(1):bigint,country:string collate UTF8_BINARY,city:string collate UTF8_BINARY,sum(power):decimal(13,1)>
 -- !query output
 1	China	Hangzhou	14.0
 1	China	Shanghai	15.0
@@ -89,7 +89,7 @@ struct<count(1):bigint,country:string,city:string,sum(power):decimal(13,1)>
 -- !query
 select country as con, count(*) from data group by all
 -- !query schema
-struct<con:string,count(1):bigint>
+struct<con:string collate UTF8_BINARY,count(1):bigint>
 -- !query output
 China	2
 Korea	1
@@ -100,7 +100,7 @@ USA	3
 -- !query
 select country, count(*) as cnt from data group by all
 -- !query schema
-struct<country:string,cnt:bigint>
+struct<country:string collate UTF8_BINARY,cnt:bigint>
 -- !query output
 China	2
 Korea	1
@@ -111,7 +111,7 @@ USA	3
 -- !query
 select upper(country), count(*) as powerup from data group by all
 -- !query schema
-struct<upper(country):string,powerup:bigint>
+struct<upper(country):string collate UTF8_BINARY,powerup:bigint>
 -- !query output
 CHINA	2
 KOREA	1
@@ -122,7 +122,7 @@ USA	3
 -- !query
 select country, sum(power) + 10 as powerup from data group by all
 -- !query schema
-struct<country:string,powerup:decimal(14,1)>
+struct<country:string collate UTF8_BINARY,powerup:decimal(14,1)>
 -- !query output
 China	39.0
 Korea	26.0
@@ -133,7 +133,7 @@ USA	46.0
 -- !query
 select country, city from data group by all
 -- !query schema
-struct<country:string,city:string>
+struct<country:string collate UTF8_BINARY,city:string collate UTF8_BINARY>
 -- !query output
 China	Hangzhou
 China	Shanghai
@@ -147,7 +147,7 @@ USA	San Francisco
 select con, powerup from
   (select country as con, sum(power) + 10 as powerup from data group by all)
 -- !query schema
-struct<con:string,powerup:decimal(14,1)>
+struct<con:string collate UTF8_BINARY,powerup:decimal(14,1)>
 -- !query output
 China	39.0
 Korea	26.0
@@ -158,7 +158,7 @@ USA	46.0
 -- !query
 select country, count(id) as cnt from data group by all having cnt > 1
 -- !query schema
-struct<country:string,cnt:bigint>
+struct<country:string collate UTF8_BINARY,cnt:bigint>
 -- !query output
 China	2
 USA	3
@@ -229,7 +229,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select country, (select count(*) from data) as cnt, count(id) as cnt_id from data group by all
 -- !query schema
-struct<country:string,cnt:bigint,cnt_id:bigint>
+struct<country:string collate UTF8_BINARY,cnt:bigint,cnt_id:bigint>
 -- !query output
 China	7	2
 Korea	7	1
@@ -240,7 +240,7 @@ USA	7	3
 -- !query
 select country, (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all
 -- !query schema
-struct<country:string,scalarsubquery(country):bigint,count(id):bigint>
+struct<country:string collate UTF8_BINARY,scalarsubquery(country):bigint,count(id):bigint>
 -- !query output
 China	2	2
 Korea	1	1
@@ -293,7 +293,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT * FROM data GROUP BY ALL
 -- !query schema
-struct<country:string,city:string,name:string,id:int,power:decimal(3,1)>
+struct<country:string collate UTF8_BINARY,city:string collate UTF8_BINARY,name:string collate UTF8_BINARY,id:int,power:decimal(3,1)>
 -- !query output
 China	Hangzhou	Wenchen	4	14.0
 China	Shanghai	Shanghaiese	5	15.0
@@ -307,7 +307,7 @@ USA	San Francisco	Reynold	1	11.0
 -- !query
 SELECT 4 AS a, 5 AS b, 6 AS c, * FROM data GROUP BY ALL
 -- !query schema
-struct<a:int,b:int,c:int,country:string,city:string,name:string,id:int,power:decimal(3,1)>
+struct<a:int,b:int,c:int,country:string collate UTF8_BINARY,city:string collate UTF8_BINARY,name:string collate UTF8_BINARY,id:int,power:decimal(3,1)>
 -- !query output
 4	5	6	China	Hangzhou	Wenchen	4	14.0
 4	5	6	China	Shanghai	Shanghaiese	5	15.0
@@ -321,7 +321,7 @@ struct<a:int,b:int,c:int,country:string,city:string,name:string,id:int,power:dec
 -- !query
 SELECT *, 4 AS a, 5 AS b, 6 AS c FROM data GROUP BY ALL
 -- !query schema
-struct<country:string,city:string,name:string,id:int,power:decimal(3,1),a:int,b:int,c:int>
+struct<country:string collate UTF8_BINARY,city:string collate UTF8_BINARY,name:string collate UTF8_BINARY,id:int,power:decimal(3,1),a:int,b:int,c:int>
 -- !query output
 China	Hangzhou	Wenchen	4	14.0	4	5	6
 China	Shanghai	Shanghaiese	5	15.0	4	5	6
@@ -335,7 +335,7 @@ USA	San Francisco	Reynold	1	11.0	4	5	6
 -- !query
 SELECT 4 AS a, 5 AS b, *, 6 AS c FROM data GROUP BY ALL
 -- !query schema
-struct<a:int,b:int,country:string,city:string,name:string,id:int,power:decimal(3,1),c:int>
+struct<a:int,b:int,country:string collate UTF8_BINARY,city:string collate UTF8_BINARY,name:string collate UTF8_BINARY,id:int,power:decimal(3,1),c:int>
 -- !query output
 4	5	China	Hangzhou	Wenchen	4	14.0	6
 4	5	China	Shanghai	Shanghaiese	5	15.0	6
@@ -370,6 +370,6 @@ FROM
 GROUP BY
   ALL
 -- !query schema
-struct<subq1:string>
+struct<subq1:string collate UTF8_BINARY>
 -- !query output
 USA

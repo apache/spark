@@ -28,7 +28,7 @@ Project [user_id#x, product#x]
    +- SubqueryAlias p
       +- SubqueryAlias spark_catalog.default.products
          +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+            +- Project [cast(col1#x as string collate UTF8_BINARY) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
                +- LocalRelation [col1#x, col2#x]
 
 
@@ -47,7 +47,7 @@ Project [user_id#x, score#x, product#x, pscore#x]
    +- SubqueryAlias p
       +- SubqueryAlias spark_catalog.default.products
          +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+            +- Project [cast(col1#x as string collate UTF8_BINARY) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
                +- LocalRelation [col1#x, col2#x]
 
 
@@ -66,7 +66,7 @@ Project [user_id#x, score#x, product#x, pscore#x]
    +- SubqueryAlias p
       +- SubqueryAlias spark_catalog.default.products
          +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+            +- Project [cast(col1#x as string collate UTF8_BINARY) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
                +- LocalRelation [col1#x, col2#x]
 
 
@@ -85,7 +85,7 @@ Project [user_id#x, product#x, pscore#x]
    +- SubqueryAlias p
       +- SubqueryAlias spark_catalog.default.products
          +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+            +- Project [cast(col1#x as string collate UTF8_BINARY) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
                +- LocalRelation [col1#x, col2#x]
 
 
@@ -104,7 +104,7 @@ Project [user_id#x, product#x]
    +- SubqueryAlias p
       +- SubqueryAlias spark_catalog.default.products
          +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+            +- Project [cast(col1#x as string collate UTF8_BINARY) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
                +- LocalRelation [col1#x, col2#x]
 
 
@@ -125,7 +125,7 @@ Project [user_id#x, product#x]
          +- Filter false
             +- SubqueryAlias spark_catalog.default.products
                +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-                  +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+                  +- Project [cast(col1#x as string collate UTF8_BINARY) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
                      +- LocalRelation [col1#x, col2#x]
 
 
@@ -146,7 +146,7 @@ Project [user_id#x, product#x]
          +- Filter false
             +- SubqueryAlias spark_catalog.default.products
                +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-                  +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+                  +- Project [cast(col1#x as string collate UTF8_BINARY) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
                      +- LocalRelation [col1#x, col2#x]
 
 
@@ -165,7 +165,7 @@ Project [user_id#x, product#x]
    +- SubqueryAlias p
       +- SubqueryAlias spark_catalog.default.products
          +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+            +- Project [cast(col1#x as string collate UTF8_BINARY) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
                +- LocalRelation [col1#x, col2#x]
 
 
@@ -404,7 +404,7 @@ Sort [user_id#x ASC NULLS FIRST], true
       +- SubqueryAlias p
          +- SubqueryAlias tied_products
             +- View (`tied_products`, [product#x, pscore#x])
-               +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+               +- Project [cast(col1#x as string collate UTF8_BINARY) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
                   +- LocalRelation [col1#x, col2#x]
 
 

@@ -68,7 +68,7 @@ WHERE  t1a NOT IN (SELECT t2a
                    FROM   t2)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string,avg(t1b):double>
+struct<t1a:string collate UTF8_BINARY,avg(t1b):double>
 -- !query output
 val1a	11.0
 val1d	10.0
@@ -83,7 +83,7 @@ WHERE  t1d NOT IN (SELECT t2d
                    WHERE  t1h < t2h)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string,sum(DISTINCT t1b):bigint>
+struct<t1a:string collate UTF8_BINARY,sum(DISTINCT t1b):bigint>
 -- !query output
 val1a	22
 val1d	10
@@ -117,7 +117,7 @@ WHERE  t1c NOT IN (SELECT Max(t2b)
                    GROUP  BY t2a)
 GROUP BY t1a
 -- !query schema
-struct<t1a:string,max(t1b):int>
+struct<t1a:string collate UTF8_BINARY,max(t1b):int>
 -- !query output
 val1a	16
 val1b	8
@@ -136,7 +136,7 @@ WHERE  t1c IN (SELECT t2b
                                   WHERE  t3a = t2a
                                   GROUP  BY t3b) order by t2a)
 -- !query schema
-struct<t1a:string,t1b:int>
+struct<t1a:string collate UTF8_BINARY,t1b:int>
 -- !query output
 val1a	16
 val1a	16

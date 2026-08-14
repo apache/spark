@@ -81,16 +81,16 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x, dept_id#x, dept_name
    :     +- Filter (emp_name#x = outer(emp_name#x))
    :        +- SubqueryAlias bonus
    :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
-   :              +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
+   :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
    :                 +- LocalRelation [col1#x, col2#x]
    +- Join Inner
       :- SubqueryAlias emp
       :  +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+      :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
       :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
       +- SubqueryAlias dept
          +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-            +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+            +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
                +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -109,16 +109,16 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x, dept_id#x, dept_name
    :     +- Filter (emp_name#x = outer(emp_name#x))
    :        +- SubqueryAlias bonus
    :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
-   :              +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
+   :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
    :                 +- LocalRelation [col1#x, col2#x]
    +- Join Inner, (dept_id#x = dept_id#x)
       :- SubqueryAlias emp
       :  +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+      :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
       :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
       +- SubqueryAlias dept
          +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-            +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+            +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
                +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -137,16 +137,16 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x, dept_id#x, dept_name
    :     +- Filter (emp_name#x = outer(emp_name#x))
    :        +- SubqueryAlias bonus
    :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
-   :              +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
+   :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
    :                 +- LocalRelation [col1#x, col2#x]
    +- Join LeftOuter, (dept_id#x = dept_id#x)
       :- SubqueryAlias emp
       :  +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+      :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
       :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
       +- SubqueryAlias dept
          +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-            +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+            +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
                +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -165,16 +165,16 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x, dept_id#x, dept_name
    :     +- Filter (emp_name#x = outer(emp_name#x))
    :        +- SubqueryAlias bonus
    :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
-   :              +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
+   :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
    :                 +- LocalRelation [col1#x, col2#x]
    +- Join Inner
       :- SubqueryAlias emp
       :  +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+      :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
       :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
       +- SubqueryAlias dept
          +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-            +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+            +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
                +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -194,15 +194,15 @@ Project [emp_name#x, bonus_amt#x]
    :        +- Join Inner, (dept_id#x = dept_id#x)
    :           :- SubqueryAlias emp
    :           :  +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-   :           :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+   :           :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
    :           :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
    :           +- SubqueryAlias dept
    :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                    +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias bonus
       +- View (`BONUS`, [emp_name#x, bonus_amt#x])
-         +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
             +- LocalRelation [col1#x, col2#x]
 
 
@@ -222,15 +222,15 @@ Project [emp_name#x, bonus_amt#x]
    :        +- Join RightOuter, (dept_id#x = dept_id#x)
    :           :- SubqueryAlias emp
    :           :  +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-   :           :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+   :           :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
    :           :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
    :           +- SubqueryAlias dept
    :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                    +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias bonus
       +- View (`BONUS`, [emp_name#x, bonus_amt#x])
-         +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
             +- LocalRelation [col1#x, col2#x]
 
 
@@ -257,15 +257,15 @@ Project [emp_name#x, bonus_amt#x]
    :           +- Join Inner, (dept_id#x = dept_id#x)
    :              :- SubqueryAlias emp
    :              :  +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-   :              :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+   :              :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
    :              :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
    :              +- SubqueryAlias dept
    :                 +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                    +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                    +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                       +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias bonus
       +- View (`BONUS`, [emp_name#x, bonus_amt#x])
-         +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
             +- LocalRelation [col1#x, col2#x]
 
 
@@ -294,15 +294,15 @@ Aggregate [emp_name#x], [emp_name#x, sum(bonus_amt#x) AS sum(bonus_amt)#x]
    :                 +- Join Inner, (dept_id#x = dept_id#x)
    :                    :- SubqueryAlias emp
    :                    :  +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-   :                    :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+   :                    :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
    :                    :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
    :                    +- SubqueryAlias dept
    :                       +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                          +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                          +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                             +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias bonus
       +- View (`BONUS`, [emp_name#x, bonus_amt#x])
-         +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
             +- LocalRelation [col1#x, col2#x]
 
 
@@ -331,15 +331,15 @@ Aggregate [emp_name#x], [emp_name#x, sum(bonus_amt#x) AS sum(bonus_amt)#x]
    :                 +- Join Inner, (dept_id#x = dept_id#x)
    :                    :- SubqueryAlias emp
    :                    :  +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-   :                    :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+   :                    :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
    :                    :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
    :                    +- SubqueryAlias dept
    :                       +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                          +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                          +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                             +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias bonus
       +- View (`BONUS`, [emp_name#x, bonus_amt#x])
-         +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS emp_name#x, cast(col2#x as decimal(6,2)) AS bonus_amt#x]
             +- LocalRelation [col1#x, col2#x]
 
 
@@ -363,17 +363,17 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :        :  +- Filter (dept_id#x < 30)
    :        :     +- SubqueryAlias dept
    :        :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :        :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :        :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :        :              +- LocalRelation [col1#x, col2#x, col3#x]
    :        +- Project [dept_id#x, dept_name#x, state#x]
    :           +- Filter ((dept_id#x >= 30) AND (dept_id#x <= 50))
    :              +- SubqueryAlias dept
    :                 +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                    +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                    +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                       +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -396,17 +396,17 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :     :  +- Filter (dept_id#x < 30)
    :     :     +- SubqueryAlias dept
    :     :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :     :              +- LocalRelation [col1#x, col2#x, col3#x]
    :     +- Project [dept_id#x, dept_name#x, state#x]
    :        +- Filter ((dept_id#x >= 30) AND (dept_id#x <= 50))
    :           +- SubqueryAlias dept
    :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                    +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -429,17 +429,17 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :     :  +- Filter (dept_id#x < 30)
    :     :     +- SubqueryAlias dept
    :     :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :     :              +- LocalRelation [col1#x, col2#x, col3#x]
    :     +- Project [dept_id#x, dept_name#x, state#x]
    :        +- Filter ((dept_id#x >= 30) AND (dept_id#x <= 50))
    :           +- SubqueryAlias dept
    :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                    +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -471,17 +471,17 @@ Union false, false
 :     :     :- Project [dept_id#x, dept_name#x, state#x]
 :     :     :  +- SubqueryAlias dept
 :     :     :     +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-:     :     :        +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+:     :     :        +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
 :     :     :           +- LocalRelation [col1#x, col2#x, col3#x]
 :     :     +- Project [dept_id#x, dept_name#x, state#x]
 :     :        +- Filter (dept_id#x > 50)
 :     :           +- SubqueryAlias dept
 :     :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-:     :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+:     :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
 :     :                    +- LocalRelation [col1#x, col2#x, col3#x]
 :     +- SubqueryAlias emp
 :        +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-:           +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+:           +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
 :              +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    +- Filter exists#x []
@@ -490,17 +490,17 @@ Union false, false
       :     :  +- Filter (dept_id#x < 30)
       :     :     +- SubqueryAlias dept
       :     :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-      :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+      :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
       :     :              +- LocalRelation [col1#x, col2#x, col3#x]
       :     +- Project [dept_id#x, dept_name#x, state#x]
       :        +- Filter ((dept_id#x >= 30) AND (dept_id#x <= 50))
       :           +- SubqueryAlias dept
       :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-      :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+      :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
       :                    +- LocalRelation [col1#x, col2#x, col3#x]
       +- SubqueryAlias emp
          +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
                +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -533,17 +533,17 @@ Distinct
    :     :     :- Project [dept_id#x, dept_name#x, state#x]
    :     :     :  +- SubqueryAlias dept
    :     :     :     +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :     :     :        +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :     :     :        +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :     :     :           +- LocalRelation [col1#x, col2#x, col3#x]
    :     :     +- Project [dept_id#x, dept_name#x, state#x]
    :     :        +- Filter (dept_id#x > 50)
    :     :           +- SubqueryAlias dept
    :     :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :     :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :     :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :     :                    +- LocalRelation [col1#x, col2#x, col3#x]
    :     +- SubqueryAlias emp
    :        +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-   :           +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+   :           +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
    :              +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
    +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
       +- Filter exists#x []
@@ -552,17 +552,17 @@ Distinct
          :     :  +- Filter (dept_id#x < 30)
          :     :     +- SubqueryAlias dept
          :     :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-         :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+         :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
          :     :              +- LocalRelation [col1#x, col2#x, col3#x]
          :     +- Project [dept_id#x, dept_name#x, state#x]
          :        +- Filter ((dept_id#x >= 30) AND (dept_id#x <= 50))
          :           +- SubqueryAlias dept
          :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-         :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+         :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
          :                    +- LocalRelation [col1#x, col2#x, col3#x]
          +- SubqueryAlias emp
             +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-               +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+               +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
                   +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -585,17 +585,17 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :        :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
    :        :     +- SubqueryAlias dept
    :        :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :        :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :        :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :        :              +- LocalRelation [col1#x, col2#x, col3#x]
    :        +- Project [dept_id#x, dept_name#x, state#x]
    :           +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = TX))
    :              +- SubqueryAlias dept
    :                 +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                    +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                    +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                       +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -618,17 +618,17 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :        :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
    :        :     +- SubqueryAlias dept
    :        :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :        :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :        :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :        :              +- LocalRelation [col1#x, col2#x, col3#x]
    :        +- Project [dept_id#x, dept_name#x, state#x]
    :           +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = TX))
    :              +- SubqueryAlias dept
    :                 +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                    +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                    +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                       +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -650,17 +650,17 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
    :     :     +- SubqueryAlias dept
    :     :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :     :              +- LocalRelation [col1#x, col2#x, col3#x]
    :     +- Project [dept_id#x, dept_name#x, state#x]
    :        +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = TX))
    :           +- SubqueryAlias dept
    :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                    +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -682,17 +682,17 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
    :     :     +- SubqueryAlias dept
    :     :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :     :              +- LocalRelation [col1#x, col2#x, col3#x]
    :     +- Project [dept_id#x, dept_name#x, state#x]
    :        +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = TX))
    :           +- SubqueryAlias dept
    :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                    +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -714,17 +714,17 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
    :     :     +- SubqueryAlias dept
    :     :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :     :              +- LocalRelation [col1#x, col2#x, col3#x]
    :     +- Project [dept_id#x, dept_name#x, state#x]
    :        +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = TX))
    :           +- SubqueryAlias dept
    :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                    +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -746,17 +746,17 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
    :     :     +- SubqueryAlias dept
    :     :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :     :              +- LocalRelation [col1#x, col2#x, col3#x]
    :     +- Project [dept_id#x, dept_name#x, state#x]
    :        +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = TX))
    :           +- SubqueryAlias dept
    :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                    +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -778,17 +778,17 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
    :     :     +- SubqueryAlias dept
    :     :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :     :              +- LocalRelation [col1#x, col2#x, col3#x]
    :     +- Project [dept_id#x, dept_name#x, state#x]
    :        +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = TX))
    :           +- SubqueryAlias dept
    :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                    +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -810,15 +810,15 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
    :     :     +- SubqueryAlias dept
    :     :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :     :           +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :     :              +- LocalRelation [col1#x, col2#x, col3#x]
    :     +- Project [dept_id#x, dept_name#x, state#x]
    :        +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = TX))
    :           +- SubqueryAlias dept
    :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string) AS dept_name#x, cast(col3#x as string) AS state#x]
+   :                 +- Project [cast(col1#x as int) AS dept_id#x, cast(col2#x as string collate UTF8_BINARY) AS dept_name#x, cast(col3#x as string collate UTF8_BINARY) AS state#x]
    :                    +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias emp
       +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string collate UTF8_BINARY) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as decimal(5,2)) AS salary#x, cast(col5#x as int) AS dept_id#x]
             +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]

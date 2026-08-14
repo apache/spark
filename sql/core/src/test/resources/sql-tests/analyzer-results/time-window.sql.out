@@ -36,7 +36,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
             +- Filter isnotnull(ts#x)
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -59,7 +59,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
             +- Filter isnotnull(ts#x)
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -82,7 +82,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
             +- Filter isnotnull(ts#x)
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -101,7 +101,7 @@ Sort [cnt#xL ASC NULLS FIRST], true
       +- Filter isnotnull(ts#x)
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -123,7 +123,7 @@ Sort [start#x ASC NULLS FIRST], true
          +- Filter isnotnull(ts#x)
             +- SubqueryAlias ts_data
                +- View (`ts_data`, [a#x, ts#x])
-                  +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                  +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                      +- Project [a#x, ts#x]
                         +- SubqueryAlias tab
                            +- LocalRelation [a#x, ts#x]
@@ -148,7 +148,7 @@ Sort [a#x ASC NULLS FIRST, ws#x ASC NULLS FIRST], true
             +- Filter isnotnull(ts#x)
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -211,7 +211,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
             +- Expand [[named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000) + 300000000), LongType, TimestampType))), a#x, ts#x]], [window#x, a#x, ts#x]
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -234,7 +234,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
             +- Expand [[named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000) + 300000000), LongType, TimestampType))), a#x, ts#x]], [window#x, a#x, ts#x]
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -257,7 +257,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
             +- Expand [[named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000) + 300000000), LongType, TimestampType))), a#x, ts#x]], [window#x, a#x, ts#x]
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -276,7 +276,7 @@ Sort [cnt#xL ASC NULLS FIRST], true
       +- Expand [[named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000) + 300000000), LongType, TimestampType))), a#x, ts#x]], [window#x, a#x, ts#x]
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -298,7 +298,7 @@ Sort [start#x ASC NULLS FIRST], true
          +- Expand [[named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000) + 300000000), LongType, TimestampType))), a#x, ts#x]], [window#x, a#x, ts#x]
             +- SubqueryAlias ts_data
                +- View (`ts_data`, [a#x, ts#x])
-                  +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                  +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                      +- Project [a#x, ts#x]
                         +- SubqueryAlias tab
                            +- LocalRelation [a#x, ts#x]
@@ -323,7 +323,7 @@ Sort [a#x ASC NULLS FIRST, ws#x ASC NULLS FIRST], true
             +- Expand [[named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 0) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 60000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 120000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 180000000) + 300000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) + 60000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 60000000) END) - 240000000) + 300000000), LongType, TimestampType))), a#x, ts#x]], [window#x, a#x, ts#x]
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -386,7 +386,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
             +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(ts#x, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(ts#x + cast(5 minutes as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#x, a#x, ts#x]
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -409,7 +409,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
             +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(ts#x, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(ts#x + cast(5 minutes as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#x, a#x, ts#x]
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -432,7 +432,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
             +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(ts#x, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(ts#x + cast(5 minutes as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#x, a#x, ts#x]
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -451,7 +451,7 @@ Sort [cnt#xL ASC NULLS FIRST], true
       +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(ts#x, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(ts#x + cast(5 minutes as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#x, a#x, ts#x]
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -473,7 +473,7 @@ Sort [start#x ASC NULLS FIRST], true
          +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(ts#x, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(ts#x + cast(5 minutes as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#x, a#x, ts#x]
             +- SubqueryAlias ts_data
                +- View (`ts_data`, [a#x, ts#x])
-                  +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                  +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                      +- Project [a#x, ts#x]
                         +- SubqueryAlias tab
                            +- LocalRelation [a#x, ts#x]
@@ -498,7 +498,7 @@ Sort [a#x ASC NULLS FIRST, ws#x ASC NULLS FIRST], true
             +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(ts#x, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(ts#x + cast(5 minutes as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#x, a#x, ts#x]
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -559,7 +559,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
       +- Filter isnotnull(ts#x)
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -580,7 +580,7 @@ Sort [start#x ASC NULLS FIRST], true
       +- Filter isnotnull(ts#x)
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -601,7 +601,7 @@ Sort [start#x ASC NULLS FIRST], true
       +- Expand [[named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) + 300000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) + 300000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) END) - 0) + 600000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) + 300000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) END) - 300000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) + 300000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 300000000) END) - 300000000) + 600000000), LongType, TimestampType))), a#x, ts#x]], [window#x, a#x, ts#x]
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -622,7 +622,7 @@ Sort [start#x ASC NULLS FIRST], true
       +- Expand [[named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 0) + 420000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 180000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 180000000) + 420000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 360000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 360000000) + 420000000), LongType, TimestampType))), a#x, ts#x]], [window#x, a#x, ts#x]
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -671,7 +671,7 @@ Sort [start#x ASC NULLS FIRST], true
       +- Expand [[named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) + 300000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) + 300000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) END) - 0) + 600000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) + 300000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) END) - 300000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) + 300000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 120000000) % 300000000) END) - 300000000) + 600000000), LongType, TimestampType))), a#x, ts#x]], [window#x, a#x, ts#x]
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -714,7 +714,7 @@ Sort [start#x DESC NULLS LAST], true
       +- Filter isnotnull(ts#x)
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -752,7 +752,7 @@ Sort [bucket_start#x ASC NULLS FIRST], true
       +- Filter isnotnull(ts#x)
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -769,7 +769,7 @@ Sort [bucket_start#x ASC NULLS FIRST], true
       +- Expand [[named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 0) + 420000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 180000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 180000000) + 420000000), LongType, TimestampType))), a#x, ts#x], [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 360000000), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) + 180000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 180000000) END) - 360000000) + 420000000), LongType, TimestampType))), a#x, ts#x]], [window#x, a#x, ts#x]
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -993,7 +993,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
             +- Filter isnotnull(ts#x)
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -1149,14 +1149,14 @@ Sort [start#x ASC NULLS FIRST], true
             :        +- SubqueryAlias t2
             :           +- SubqueryAlias ts_data
             :              +- View (`ts_data`, [a#x, ts#x])
-            :                 +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+            :                 +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
             :                    +- Project [a#x, ts#x]
             :                       +- SubqueryAlias tab
             :                          +- LocalRelation [a#x, ts#x]
             +- SubqueryAlias t1
                +- SubqueryAlias ts_data
                   +- View (`ts_data`, [a#x, ts#x])
-                     +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                     +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                         +- Project [a#x, ts#x]
                            +- SubqueryAlias tab
                               +- LocalRelation [a#x, ts#x]
@@ -1259,7 +1259,7 @@ Sort [bucket_end#x ASC NULLS FIRST], true
       +- Filter isnotnull(ts#x)
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -1280,7 +1280,7 @@ Sort [bucket_start#x ASC NULLS FIRST], true
       +- Filter isnotnull(ts#x)
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -1301,7 +1301,7 @@ Sort [bucket_start#x ASC NULLS FIRST], true
       +- Filter isnotnull(ts#x)
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -1443,7 +1443,7 @@ Sort [outer_start#x ASC NULLS FIRST], true
                            +- Filter isnotnull(ts#x)
                               +- SubqueryAlias ts_data
                                  +- View (`ts_data`, [a#x, ts#x])
-                                    +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                                    +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                                        +- Project [a#x, ts#x]
                                           +- SubqueryAlias tab
                                              +- LocalRelation [a#x, ts#x]
@@ -1466,7 +1466,7 @@ Sort [outer_start#x ASC NULLS FIRST], true
                +- Filter isnotnull(ts#x)
                   +- SubqueryAlias ts_data
                      +- View (`ts_data`, [a#x, ts#x])
-                        +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                        +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                            +- Project [a#x, ts#x]
                               +- SubqueryAlias tab
                                  +- LocalRelation [a#x, ts#x]
@@ -1490,7 +1490,7 @@ Sort [outer_start#x ASC NULLS FIRST], true
                +- Filter isnotnull(ts#x)
                   +- SubqueryAlias ts_data
                      +- View (`ts_data`, [a#x, ts#x])
-                        +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                        +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                            +- Project [a#x, ts#x]
                               +- SubqueryAlias tab
                                  +- LocalRelation [a#x, ts#x]
@@ -1582,7 +1582,7 @@ Sort [bucket_start#x ASC NULLS FIRST], true
       +- Filter isnotnull(ts#x)
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -1618,7 +1618,7 @@ Aggregate [count(1) AS count(1)#xL]
       +- Filter isnotnull(ts#x)
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -1683,7 +1683,7 @@ Filter isnotnull(window#x.start)
                +- Project [ts#x]
                   +- SubqueryAlias ts_data
                      +- View (`ts_data`, [a#x, ts#x])
-                        +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                        +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                            +- Project [a#x, ts#x]
                               +- SubqueryAlias tab
                                  +- LocalRelation [a#x, ts#x]
@@ -1751,7 +1751,7 @@ Sort [a#x ASC NULLS FIRST, start#x ASC NULLS FIRST], true
       +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(ts#x, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(ts#x + cast(5 minutes as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#x, a#x, ts#x]
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -1876,7 +1876,7 @@ Aggregate [session_window#x], [count(1) AS count(1)#xL]
    +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(ts#x, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(ts#x + cast(-5 minutes as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#x, a#x, ts#x]
       +- SubqueryAlias ts_data
          +- View (`ts_data`, [a#x, ts#x])
-            +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+            +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                +- Project [a#x, ts#x]
                   +- SubqueryAlias tab
                      +- LocalRelation [a#x, ts#x]
@@ -1890,7 +1890,7 @@ Aggregate [session_window#x], [count(1) AS count(1)#xL]
    +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(ts#x, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(ts#x + cast(0 seconds as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#x, a#x, ts#x]
       +- SubqueryAlias ts_data
          +- View (`ts_data`, [a#x, ts#x])
-            +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+            +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                +- Project [a#x, ts#x]
                   +- SubqueryAlias tab
                      +- LocalRelation [a#x, ts#x]
@@ -1964,7 +1964,7 @@ Aggregate [count(1) AS count(1)#xL]
       +- Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(ts#x, TimestampType, LongType), LongType, TimestampType), end, knownnullable(precisetimestampconversion(precisetimestampconversion(cast(ts#x + cast(5 minutes as interval) as timestamp), TimestampType, LongType), LongType, TimestampType))) AS session_window#x, a#x, ts#x]
          +- SubqueryAlias ts_data
             +- View (`ts_data`, [a#x, ts#x])
-               +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                   +- Project [a#x, ts#x]
                      +- SubqueryAlias tab
                         +- LocalRelation [a#x, ts#x]
@@ -1984,7 +1984,7 @@ Filter isnotnull(session_window#x.start)
                +- Project [ts#x]
                   +- SubqueryAlias ts_data
                      +- View (`ts_data`, [a#x, ts#x])
-                        +- Project [cast(a#x as string) AS a#x, cast(ts#x as timestamp) AS ts#x]
+                        +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(ts#x as timestamp) AS ts#x]
                            +- Project [a#x, ts#x]
                               +- SubqueryAlias tab
                                  +- LocalRelation [a#x, ts#x]

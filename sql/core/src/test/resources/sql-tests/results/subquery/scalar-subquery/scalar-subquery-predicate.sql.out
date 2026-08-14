@@ -113,7 +113,7 @@ FROM   t1
 WHERE  t1c = (SELECT max(t2c)
               FROM   t2)
 -- !query schema
-struct<t1a:string,t1b:smallint>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint>
 -- !query output
 val1b	8
 val1c	8
@@ -129,7 +129,7 @@ WHERE  t1c = (SELECT max(t2c)
 AND    t1b > (SELECT min(t3b)
               FROM   t3)
 -- !query schema
-struct<t1a:string,t1d:bigint,t1f:double>
+struct<t1a:string collate UTF8_BINARY,t1d:bigint,t1f:double>
 -- !query output
 val1b	19	25.0
 val1c	19	25.0
@@ -144,7 +144,7 @@ OR     t1b = (SELECT min(t3b)
               FROM   t3
               WHERE  t3b > 10)
 -- !query schema
-struct<t1a:string,t1h:timestamp>
+struct<t1a:string collate UTF8_BINARY,t1h:timestamp>
 -- !query output
 val1b	2014-05-04 01:01:00
 val1c	2014-05-04 01:02:00.001
@@ -159,7 +159,7 @@ FROM   t1 LEFT JOIN t2
 WHERE  t1b = (SELECT min(t3b)
               FROM   t3)
 -- !query schema
-struct<t1a:string,t1b:smallint,t2d:bigint>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t2d:bigint>
 -- !query output
 val1a	6	NULL
 val1a	6	NULL
@@ -171,7 +171,7 @@ FROM   t1
 WHERE  t1c + 5 = (SELECT max(t2e)
                   FROM   t2)
 -- !query schema
-struct<t1a:string,t1b:smallint,t1g:decimal(4,0)>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint,t1g:decimal(4,0)>
 -- !query output
 val1a	16	2000
 val1a	16	2000
@@ -183,7 +183,7 @@ FROM   t1
 WHERE  date(t1h) = (SELECT min(t2i)
                     FROM   t2)
 -- !query schema
-struct<t1a:string,t1h:timestamp>
+struct<t1a:string collate UTF8_BINARY,t1h:timestamp>
 -- !query output
 val1a	2014-04-04 00:00:00
 val1a	2014-04-04 01:02:00.001
@@ -197,7 +197,7 @@ AND    t2c + 1 = (SELECT max(t2c) + 1
                   FROM   t2, t1
                   WHERE  t2b = t1b)
 -- !query schema
-struct<t2d:bigint,t1a:string>
+struct<t2d:bigint,t1a:string collate UTF8_BINARY>
 -- !query output
 119	val1b
 119	val1c
@@ -214,7 +214,7 @@ WHERE  t2a = t1a
 AND    max_t1g = (SELECT max(t1g)
                   FROM   t1)
 -- !query schema
-struct<t2a:string,max_t1g:decimal(4,0)>
+struct<t2a:string collate UTF8_BINARY,max_t1g:decimal(4,0)>
 -- !query output
 val1b	2600
 val1c	2600
@@ -248,7 +248,7 @@ WHERE  t1a < (SELECT   max(t2a)
               WHERE    t2c = t1c
               GROUP BY t2c)
 -- !query schema
-struct<t1a:string>
+struct<t1a:string collate UTF8_BINARY>
 -- !query output
 val1a
 val1a
@@ -263,7 +263,7 @@ WHERE  (SELECT   max(t2a)
         WHERE    t2c = t1c
         GROUP BY t2c) IS NULL
 -- !query schema
-struct<t1a:string,t1c:int>
+struct<t1a:string collate UTF8_BINARY,t1c:int>
 -- !query output
 val1a	8
 val1a	8
@@ -283,7 +283,7 @@ WHERE  t1a = (SELECT   max(t2a)
               HAVING   count(*) >= 0)
 OR     t1i > '2014-12-31'
 -- !query schema
-struct<t1a:string>
+struct<t1a:string collate UTF8_BINARY>
 -- !query output
 val1c
 val1d
@@ -299,7 +299,7 @@ WHERE  t1a = (SELECT   max(t2a)
               HAVING   count(*) >= 1)
 OR     t1i > '2014-12-31'
 -- !query schema
-struct<t1a:string>
+struct<t1a:string collate UTF8_BINARY>
 -- !query output
 val1c
 val1d
@@ -331,7 +331,7 @@ AND    t1b >= (SELECT   min(t2b)
                WHERE    t2c = t1c
                GROUP BY t2c)
 -- !query schema
-struct<t1a:string>
+struct<t1a:string collate UTF8_BINARY>
 -- !query output
 val1b
 val1c
@@ -352,7 +352,7 @@ WHERE  t1a >= (SELECT   min(t2a)
                WHERE    t2c = t1c
                GROUP BY t2c)
 -- !query schema
-struct<t1a:string>
+struct<t1a:string collate UTF8_BINARY>
 -- !query output
 val1b
 val1c
@@ -373,7 +373,7 @@ WHERE  t1a >= (SELECT   min(t2a)
                WHERE    t2c = t1c
                GROUP BY t2c)
 -- !query schema
-struct<t1a:string>
+struct<t1a:string collate UTF8_BINARY>
 -- !query output
 val1a
 val1a
@@ -400,7 +400,7 @@ WHERE  t1a >= (SELECT   min(t2a)
                WHERE    t2c = t1c
                GROUP BY t2c)
 -- !query schema
-struct<t1a:string>
+struct<t1a:string collate UTF8_BINARY>
 -- !query output
 val1a
 val1b
@@ -423,7 +423,7 @@ WHERE  t1a >= (SELECT   min(t2a)
                WHERE    t2c = t1c
                GROUP BY t2c)
 -- !query schema
-struct<t1a:string>
+struct<t1a:string collate UTF8_BINARY>
 -- !query output
 val1a
 
@@ -437,7 +437,7 @@ HAVING   max(t1b) <= (SELECT   max(t2b)
                       WHERE    t2c = t1c
                       GROUP BY t2c)
 -- !query schema
-struct<t1a:string>
+struct<t1a:string collate UTF8_BINARY>
 -- !query output
 val1b
 val1c
@@ -564,7 +564,7 @@ WHERE  t1c = (SELECT t2c
               WHERE  t2b < t1b
               ORDER BY t2d LIMIT 1)
 -- !query schema
-struct<t1a:string,t1b:smallint>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint>
 -- !query output
 val1a	16
 val1a	16
@@ -578,7 +578,7 @@ WHERE  t1c = (SELECT t2c
               WHERE  t2c = t1c
               ORDER BY t2c LIMIT 1)
 -- !query schema
-struct<t1a:string,t1b:smallint>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint>
 -- !query output
 val1a	16
 val1a	16
@@ -596,7 +596,7 @@ WHERE  t1c = (SELECT t2c
               WHERE  t1b < t1d
               ORDER BY t2c LIMIT 1)
 -- !query schema
-struct<t1a:string,t1b:smallint>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint>
 -- !query output
 
 
@@ -609,7 +609,7 @@ WHERE  t1c = (SELECT MAX(t2c)
               WHERE  t1b < t1d
               ORDER BY min(t2c) LIMIT 1)
 -- !query schema
-struct<t1a:string,t1b:smallint>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint>
 -- !query output
 val1b	8
 val1c	8
@@ -623,7 +623,7 @@ WHERE  t1c = (SELECT DISTINCT t2c
               WHERE  t1b < t1d
               ORDER BY t2c LIMIT 1)
 -- !query schema
-struct<t1a:string,t1b:smallint>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint>
 -- !query output
 
 

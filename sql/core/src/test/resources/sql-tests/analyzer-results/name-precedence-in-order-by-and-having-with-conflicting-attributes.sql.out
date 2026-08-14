@@ -352,7 +352,7 @@ Sort [col1#x ASC NULLS FIRST], true
 +- Project [col1 AS col1#x]
    +- SubqueryAlias v2
       +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
             +- Project [col1#x]
                +- LocalRelation [col1#x]
 
@@ -364,7 +364,7 @@ Sort [col1#x ASC NULLS FIRST], true
 +- Aggregate [col1], [col1 AS col1#x]
    +- SubqueryAlias v2
       +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
             +- Project [col1#x]
                +- LocalRelation [col1#x]
 
@@ -376,7 +376,7 @@ Filter (col1#x > banana)
 +- Aggregate [col1], [col1 AS col1#x]
    +- SubqueryAlias v2
       +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
             +- Project [col1#x]
                +- LocalRelation [col1#x]
 
@@ -393,7 +393,7 @@ Sort [c#x ASC NULLS FIRST], true
          +- Project [col1#x AS c#x, col1 AS col1#x]
             +- SubqueryAlias v2
                +- View (`v2`, [col1#x])
-                  +- Project [cast(col1#x as string) AS col1#x]
+                  +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
                      +- Project [col1#x]
                         +- LocalRelation [col1#x]
 
@@ -410,7 +410,7 @@ Sort [c#x ASC NULLS FIRST], true
          +- Aggregate [col1#x, col1], [col1#x AS c#x, col1 AS col1#x]
             +- SubqueryAlias v2
                +- View (`v2`, [col1#x])
-                  +- Project [cast(col1#x as string) AS col1#x]
+                  +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
                      +- Project [col1#x]
                         +- LocalRelation [col1#x]
 
@@ -427,7 +427,7 @@ Sort [c#x ASC NULLS FIRST], true
          +- Aggregate [col1#x, col1], [col1#x AS c#x, col1 AS col1#x]
             +- SubqueryAlias v2
                +- View (`v2`, [col1#x])
-                  +- Project [cast(col1#x as string) AS col1#x]
+                  +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
                      +- Project [col1#x]
                         +- LocalRelation [col1#x]
 
@@ -440,7 +440,7 @@ Project [col1#x, col1#x]
    +- Project [col1 AS col1#x, col1 AS col1#x, col1#x]
       +- SubqueryAlias v2
          +- View (`v2`, [col1#x])
-            +- Project [cast(col1#x as string) AS col1#x]
+            +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
                +- Project [col1#x]
                   +- LocalRelation [col1#x]
 
@@ -495,7 +495,7 @@ Project [c#x, col1#x, col1#x]
    +- Project [col1#x AS c#x, col1 AS col1#x, col1 AS col1#x, col1#x]
       +- SubqueryAlias v2
          +- View (`v2`, [col1#x])
-            +- Project [cast(col1#x as string) AS col1#x]
+            +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
                +- Project [col1#x]
                   +- LocalRelation [col1#x]
 
@@ -507,7 +507,7 @@ Sort [c#x ASC NULLS FIRST], true
 +- Aggregate [col1#x, col1, col1], [col1#x AS c#x, col1 AS col1#x, col1 AS col1#x]
    +- SubqueryAlias v2
       +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
             +- Project [col1#x]
                +- LocalRelation [col1#x]
 
@@ -524,7 +524,7 @@ Sort [c#x ASC NULLS FIRST], true
          +- Aggregate [col1#x, col1, col1], [col1#x AS c#x, col1 AS col1#x, col1 AS col1#x]
             +- SubqueryAlias v2
                +- View (`v2`, [col1#x])
-                  +- Project [cast(col1#x as string) AS col1#x]
+                  +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
                      +- Project [col1#x]
                         +- LocalRelation [col1#x]
 
@@ -536,7 +536,7 @@ Sort [col1#x ASC NULLS FIRST], true
 +- Project [col1#x, col1 AS col1#x]
    +- SubqueryAlias v2
       +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
             +- Project [col1#x]
                +- LocalRelation [col1#x]
 
@@ -548,7 +548,7 @@ Sort [col1#x ASC NULLS FIRST], true
 +- Aggregate [col1#x, col1], [col1#x, col1 AS col1#x]
    +- SubqueryAlias v2
       +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
             +- Project [col1#x]
                +- LocalRelation [col1#x]
 
@@ -565,7 +565,7 @@ Sort [col1#x ASC NULLS FIRST], true
          +- Aggregate [col1#x, col1], [col1#x, col1 AS col1#x]
             +- SubqueryAlias v2
                +- View (`v2`, [col1#x])
-                  +- Project [cast(col1#x as string) AS col1#x]
+                  +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x]
                      +- Project [col1#x]
                         +- LocalRelation [col1#x]
 

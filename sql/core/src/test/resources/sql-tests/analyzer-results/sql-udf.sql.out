@@ -3188,7 +3188,7 @@ Project [spark_catalog.default.foo3_1a(a#x, b#x) AS spark_catalog.default.foo3_1
 +- Project [x#x, cast(x#x[a] as double) AS a#x, cast(x#x[b] as double) AS b#x]
    +- SubqueryAlias spark_catalog.default.tm
       +- View (`spark_catalog`.`default`.`tm`, [x#x])
-         +- Project [cast(col1#x as map<string,int>) AS x#x]
+         +- Project [cast(col1#x as map<string collate UTF8_BINARY,int>) AS x#x]
             +- LocalRelation [col1#x]
 
 

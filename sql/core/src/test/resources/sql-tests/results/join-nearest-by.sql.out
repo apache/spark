@@ -20,7 +20,7 @@ SELECT u.user_id, p.product
 FROM users u JOIN products p
   APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
 -- !query schema
-struct<user_id:int,product:string>
+struct<user_id:int,product:string collate UTF8_BINARY>
 -- !query output
 1	A
 2	B
@@ -32,7 +32,7 @@ SELECT *
 FROM users u JOIN products p
   APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
 -- !query schema
-struct<user_id:int,score:decimal(3,1),product:string,pscore:decimal(3,1)>
+struct<user_id:int,score:decimal(3,1),product:string collate UTF8_BINARY,pscore:decimal(3,1)>
 -- !query output
 1	10.0	A	11.0
 2	20.0	B	22.0
@@ -44,7 +44,7 @@ SELECT *
 FROM users u LEFT OUTER JOIN products p
   APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
 -- !query schema
-struct<user_id:int,score:decimal(3,1),product:string,pscore:decimal(3,1)>
+struct<user_id:int,score:decimal(3,1),product:string collate UTF8_BINARY,pscore:decimal(3,1)>
 -- !query output
 1	10.0	A	11.0
 2	20.0	B	22.0
@@ -56,7 +56,7 @@ SELECT u.user_id, p.product, p.pscore
 FROM users u JOIN products p
   APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
 -- !query schema
-struct<user_id:int,product:string,pscore:decimal(3,1)>
+struct<user_id:int,product:string collate UTF8_BINARY,pscore:decimal(3,1)>
 -- !query output
 1	A	11.0
 1	C	5.0
@@ -71,7 +71,7 @@ SELECT u.user_id, p.product
 FROM users u INNER JOIN products p
   EXACT NEAREST BY SIMILARITY -abs(u.score - p.pscore)
 -- !query schema
-struct<user_id:int,product:string>
+struct<user_id:int,product:string collate UTF8_BINARY>
 -- !query output
 1	A
 2	B
@@ -83,7 +83,7 @@ SELECT u.user_id, p.product
 FROM users u LEFT OUTER JOIN (SELECT * FROM products WHERE false) p
   APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
 -- !query schema
-struct<user_id:int,product:string>
+struct<user_id:int,product:string collate UTF8_BINARY>
 -- !query output
 1	NULL
 2	NULL
@@ -95,7 +95,7 @@ SELECT u.user_id, p.product
 FROM users u INNER JOIN (SELECT * FROM products WHERE false) p
   APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
 -- !query schema
-struct<user_id:int,product:string>
+struct<user_id:int,product:string collate UTF8_BINARY>
 -- !query output
 
 
@@ -105,7 +105,7 @@ SELECT u.user_id, p.product
 FROM users u INNER JOIN products p
   APPROX NEAREST 1 BY DISTANCE abs(u.score - p.pscore)
 -- !query schema
-struct<user_id:int,product:string>
+struct<user_id:int,product:string collate UTF8_BINARY>
 -- !query output
 1	A
 2	B

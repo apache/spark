@@ -26,7 +26,7 @@ struct<>
 -- !query
 SELECT * FROM nt1 cross join nt2
 -- !query schema
-struct<k:string,v1:int,k:string,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,k:string collate UTF8_BINARY,v2:int>
 -- !query output
 one	1	one	1
 one	1	one	5
@@ -42,7 +42,7 @@ two	2	two	22
 -- !query
 SELECT * FROM nt1 cross join nt2 where nt1.k = nt2.k
 -- !query schema
-struct<k:string,v1:int,k:string,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,k:string collate UTF8_BINARY,v2:int>
 -- !query output
 one	1	one	1
 one	1	one	5
@@ -52,7 +52,7 @@ two	2	two	22
 -- !query
 SELECT * FROM nt1 cross join nt2 on (nt1.k = nt2.k)
 -- !query schema
-struct<k:string,v1:int,k:string,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,k:string collate UTF8_BINARY,v2:int>
 -- !query output
 one	1	one	1
 one	1	one	5
@@ -62,7 +62,7 @@ two	2	two	22
 -- !query
 SELECT * FROM nt1 cross join nt2 where nt1.v1 = 1 and nt2.v2 = 22
 -- !query schema
-struct<k:string,v1:int,k:string,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,k:string collate UTF8_BINARY,v2:int>
 -- !query output
 one	1	two	22
 
@@ -73,7 +73,7 @@ SELECT a.key, b.key FROM
 CROSS JOIN
 (SELECT k key FROM nt2 WHERE v2 = 22) b
 -- !query schema
-struct<key:string,key:string>
+struct<key:string collate UTF8_BINARY,key:string collate UTF8_BINARY>
 -- !query output
 one	two
 
@@ -113,7 +113,7 @@ struct<>
 -- !query
 select * from ((A join B on (a = b)) cross join C) join D on (a = d)
 -- !query schema
-struct<a:string,va:int,b:string,vb:int,c:string,vc:int,d:string,vd:int>
+struct<a:string collate UTF8_BINARY,va:int,b:string collate UTF8_BINARY,vb:int,c:string collate UTF8_BINARY,vc:int,d:string collate UTF8_BINARY,vd:int>
 -- !query output
 one	1	one	1	one	1	one	1
 one	1	one	1	three	3	one	1
@@ -129,7 +129,7 @@ two	2	two	2	two	2	two	2
 -- !query
 SELECT * FROM nt1 CROSS JOIN nt2 ON (nt1.k > nt2.k)
 -- !query schema
-struct<k:string,v1:int,k:string,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,k:string collate UTF8_BINARY,v2:int>
 -- !query output
 three	3	one	1
 three	3	one	5

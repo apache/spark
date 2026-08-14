@@ -44,7 +44,7 @@ struct<i:int,ci:bigint,f:decimal(6,4),sif:decimal(25,4)>
 SELECT i + 1, f / i, substring(s, 2, 3), extract(year from t), octet_length(d), size(a) FROM stuff
 GROUP BY ALL ORDER BY 1, 3, 4, 5, 6, 2
 -- !query schema
-struct<(i + 1):int,(f / i):decimal(17,15),substring(s, 2, 3):string,extract(year FROM t):int,octet_length(d):int,size(a):int>
+struct<(i + 1):int,(f / i):decimal(17,15),substring(s, 2, 3):string collate UTF8_BINARY,extract(year FROM t):int,octet_length(d):int,size(a):int>
 -- !query output
 43	0.232142857142857	ell	1970	5	3
 43	0.318333333333333	est	1970	10	3
@@ -73,7 +73,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT s AS s, COUNT(*) c FROM stuff GROUP BY ALL HAVING SUM(f) > 0 ORDER BY s
 -- !query schema
-struct<s:string,c:bigint>
+struct<s:string collate UTF8_BINARY,c:bigint>
 -- !query output
 hello world	1
 oh no	1

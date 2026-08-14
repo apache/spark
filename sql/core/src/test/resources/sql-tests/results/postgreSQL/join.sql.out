@@ -2712,7 +2712,7 @@ select * from
       left join zv1 on (f3 = f1)
 where f2 = 53
 -- !query schema
-struct<f2:int,f3:int,f1:int,junk:string>
+struct<f2:int,f3:int,f1:int,junk:string collate UTF8_BINARY>
 -- !query output
 53	NULL	NULL	NULL
 
@@ -2834,7 +2834,7 @@ from c left join
   on (c.a = ss.code)
 order by c.name
 -- !query schema
-struct<name:string,code:string,b_cnt:bigint,const:int>
+struct<name:string collate UTF8_BINARY,code:string collate UTF8_BINARY,b_cnt:bigint,const:int>
 -- !query output
 A	p	2	-1
 B	q	0	-1
@@ -3080,7 +3080,7 @@ select * from
   left join int4_tbl i4
   on i8.q1 = i4.f1
 -- !query schema
-struct<f1:string,q1:bigint,q2:bigint,f1:string,f1:int>
+struct<f1:string collate UTF8_BINARY,q1:bigint,q2:bigint,f1:string collate UTF8_BINARY,f1:int>
 -- !query output
 doh!	123	456	doh!	NULL
 doh!	123	456	hi de ho neighbor	NULL
@@ -3094,7 +3094,7 @@ select * from
    lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
 where t1.f1 = ss.f1
 -- !query schema
-struct<f1:string,q1:bigint,q2:bigint,q1:bigint,f1:string>
+struct<f1:string collate UTF8_BINARY,q1:bigint,q2:bigint,q1:bigint,f1:string collate UTF8_BINARY>
 -- !query output
 doh!	4567890123456789	123	4567890123456789	doh!
 
@@ -3107,7 +3107,7 @@ select * from
   lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
 where t1.f1 = ss.f1
 -- !query schema
-struct<f1:string,q1:bigint,q2:bigint,q1:bigint,f1:string>
+struct<f1:string collate UTF8_BINARY,q1:bigint,q2:bigint,q1:bigint,f1:string collate UTF8_BINARY>
 -- !query output
 doh!	4567890123456789	123	4567890123456789	doh!
 
@@ -3121,7 +3121,7 @@ select * from
   lateral (select ss1.* from text_tbl t3 limit 1) as ss2
 where t1.f1 = ss2.f1
 -- !query schema
-struct<f1:string,q1:bigint,q2:bigint,q1:bigint,f1:string,q1:bigint,f1:string>
+struct<f1:string collate UTF8_BINARY,q1:bigint,q2:bigint,q1:bigint,f1:string collate UTF8_BINARY,q1:bigint,f1:string collate UTF8_BINARY>
 -- !query output
 doh!	4567890123456789	123	4567890123456789	doh!	4567890123456789	doh!
 
@@ -3135,7 +3135,7 @@ select * from
   lateral (select ss1.* from text_tbl t3 limit 1) as ss2
 where t1.f1 = ss2.f1
 -- !query schema
-struct<f1:string,q1:bigint,q2:bigint,q1:bigint,f1:string,q1:bigint,f1:string>
+struct<f1:string collate UTF8_BINARY,q1:bigint,q2:bigint,q1:bigint,f1:string collate UTF8_BINARY,q1:bigint,f1:string collate UTF8_BINARY>
 -- !query output
 doh!	4567890123456789	123	4567890123456789	doh!	4567890123456789	doh!
 

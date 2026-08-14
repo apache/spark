@@ -141,7 +141,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`map_zip_with`",
-    "leftType" : "\"STRING\"",
+    "leftType" : "\"STRING COLLATE UTF8_BINARY\"",
     "rightType" : "\"INT\"",
     "sqlExpr" : "\"map_zip_with(string_map1, int_map, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
   },
@@ -167,7 +167,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`map_zip_with`",
-    "leftType" : "\"STRING\"",
+    "leftType" : "\"STRING COLLATE UTF8_BINARY\"",
     "rightType" : "\"DATE\"",
     "sqlExpr" : "\"map_zip_with(string_map2, date_map, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
   },
@@ -194,7 +194,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "functionName" : "`map_zip_with`",
     "leftType" : "\"TIMESTAMP\"",
-    "rightType" : "\"STRING\"",
+    "rightType" : "\"STRING COLLATE UTF8_BINARY\"",
     "sqlExpr" : "\"map_zip_with(timestamp_map, string_map3, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
   },
   "queryContext" : [ {
@@ -220,7 +220,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "functionName" : "`map_zip_with`",
     "leftType" : "\"DECIMAL(36,0)\"",
-    "rightType" : "\"STRING\"",
+    "rightType" : "\"STRING COLLATE UTF8_BINARY\"",
     "sqlExpr" : "\"map_zip_with(decimal_map1, string_map4, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
   },
   "queryContext" : [ {

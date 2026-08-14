@@ -956,7 +956,7 @@ SELECT * FROM tt1
 Project [a#x, b#x, c#x, d#x]
 +- SubqueryAlias spark_catalog.testviewschm2.tt1
    +- View (`spark_catalog`.`testviewschm2`.`tt1`, [a#x, b#x, c#x, d#x])
-      +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as decimal(12,2)) AS c#x, cast(d#x as string) AS d#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x, cast(c#x as decimal(12,2)) AS c#x, cast(d#x as string collate UTF8_BINARY) AS d#x]
          +- Project [a#x, b#x, c#x, d#x]
             +- SubqueryAlias vv
                +- Project [col1#x AS a#x, col2#x AS b#x, col3#x AS c#x, col4#x AS d#x]
@@ -969,7 +969,7 @@ SELECT string(a) FROM tt1
 Project [cast(a#x as string) AS a#x]
 +- SubqueryAlias spark_catalog.testviewschm2.tt1
    +- View (`spark_catalog`.`testviewschm2`.`tt1`, [a#x, b#x, c#x, d#x])
-      +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as decimal(12,2)) AS c#x, cast(d#x as string) AS d#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x, cast(c#x as decimal(12,2)) AS c#x, cast(d#x as string collate UTF8_BINARY) AS d#x]
          +- Project [a#x, b#x, c#x, d#x]
             +- SubqueryAlias vv
                +- Project [col1#x AS a#x, col2#x AS b#x, col3#x AS c#x, col4#x AS d#x]

@@ -25,7 +25,7 @@ CreateViewCommand `view_ansi`, SELECT ColumnA + 1 FROM testData, false, false, L
    +- Project [(cast(ColumnA#x as double) + cast(1 as double)) AS (ColumnA + 1)#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [ColumnA#x, ColumnB#x])
-            +- Project [cast(ColumnA#x as string) AS ColumnA#x, cast(ColumnB#x as int) AS ColumnB#x]
+            +- Project [cast(ColumnA#x as string collate UTF8_BINARY) AS ColumnA#x, cast(ColumnB#x as int) AS ColumnB#x]
                +- Project [ColumnA#x, ColumnB#x]
                   +- SubqueryAlias testData
                      +- LocalRelation [ColumnA#x, ColumnB#x]
@@ -47,7 +47,7 @@ Project [(ColumnA + 1)#x]
          +- Project [(cast(ColumnA#x as double) + cast(1 as double)) AS (ColumnA + 1)#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [ColumnA#x, ColumnB#x])
-                  +- Project [cast(ColumnA#x as string) AS ColumnA#x, cast(ColumnB#x as int) AS ColumnB#x]
+                  +- Project [cast(ColumnA#x as string collate UTF8_BINARY) AS ColumnA#x, cast(ColumnB#x as int) AS ColumnB#x]
                      +- Project [ColumnA#x, ColumnB#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [ColumnA#x, ColumnB#x]
@@ -66,7 +66,7 @@ CreateViewCommand `view_case_sensitivity`, SELECT CoLuMNa FROM testData, false, 
    +- Project [CoLuMNa#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [ColumnA#x, ColumnB#x])
-            +- Project [cast(ColumnA#x as string) AS ColumnA#x, cast(ColumnB#x as int) AS ColumnB#x]
+            +- Project [cast(ColumnA#x as string collate UTF8_BINARY) AS ColumnA#x, cast(ColumnB#x as int) AS ColumnB#x]
                +- Project [ColumnA#x, ColumnB#x]
                   +- SubqueryAlias testData
                      +- LocalRelation [ColumnA#x, ColumnB#x]
@@ -84,11 +84,11 @@ SELECT * FROM view_case_sensitivity
 Project [CoLuMNa#x]
 +- SubqueryAlias view_case_sensitivity
    +- View (`view_case_sensitivity`, [CoLuMNa#x])
-      +- Project [cast(CoLuMNa#x as string) AS CoLuMNa#x]
+      +- Project [cast(CoLuMNa#x as string collate UTF8_BINARY) AS CoLuMNa#x]
          +- Project [CoLuMNa#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [ColumnA#x, ColumnB#x])
-                  +- Project [cast(ColumnA#x as string) AS ColumnA#x, cast(ColumnB#x as int) AS ColumnB#x]
+                  +- Project [cast(ColumnA#x as string collate UTF8_BINARY) AS ColumnA#x, cast(ColumnB#x as int) AS ColumnB#x]
                      +- Project [ColumnA#x, ColumnB#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [ColumnA#x, ColumnB#x]

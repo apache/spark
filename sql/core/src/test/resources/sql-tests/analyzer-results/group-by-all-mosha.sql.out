@@ -23,7 +23,7 @@ Sort [f2#x ASC NULLS FIRST], true
 +- Aggregate [i#x], [(cast((cast(100 as bigint) * sum(i#x)) as decimal(20,0)) + (sum(f#x) / cast(count(s#x) as decimal(20,0)))) AS f1#x, i#x AS f2#x]
    +- SubqueryAlias stuff
       +- View (`stuff`, [i#x, f#x, s#x, t#x, d#x, a#x])
-         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string) AS s#x, cast(t#x as string) AS t#x, cast(d#x as string) AS d#x, cast(a#x as array<int>) AS a#x]
+         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string collate UTF8_BINARY) AS s#x, cast(t#x as string collate UTF8_BINARY) AS t#x, cast(d#x as string collate UTF8_BINARY) AS d#x, cast(a#x as array<int>) AS a#x]
             +- Project [i#x, f#x, s#x, t#x, d#x, a#x]
                +- SubqueryAlias stuff
                   +- LocalRelation [i#x, f#x, s#x, t#x, d#x, a#x]
@@ -36,7 +36,7 @@ Sort [i1#x ASC NULLS FIRST, fi#x ASC NULLS FIRST], true
 +- Aggregate [(i#x + 1), (f#x / cast(i#x as decimal(10,0)))], [(i#x + 1) AS i1#x, count((i#x - 2)) AS ci#xL, (f#x / cast(i#x as decimal(10,0))) AS fi#x, sum((cast(i#x as decimal(10,0)) + f#x)) AS sif#x]
    +- SubqueryAlias stuff
       +- View (`stuff`, [i#x, f#x, s#x, t#x, d#x, a#x])
-         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string) AS s#x, cast(t#x as string) AS t#x, cast(d#x as string) AS d#x, cast(a#x as array<int>) AS a#x]
+         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string collate UTF8_BINARY) AS s#x, cast(t#x as string collate UTF8_BINARY) AS t#x, cast(d#x as string collate UTF8_BINARY) AS d#x, cast(a#x as array<int>) AS a#x]
             +- Project [i#x, f#x, s#x, t#x, d#x, a#x]
                +- SubqueryAlias stuff
                   +- LocalRelation [i#x, f#x, s#x, t#x, d#x, a#x]
@@ -49,7 +49,7 @@ Sort [i#x ASC NULLS FIRST, i#x ASC NULLS FIRST, ci#xL ASC NULLS FIRST, ci#xL ASC
 +- Aggregate [i#x, f#x], [i#x AS i#x, count(i#x) AS ci#xL, f#x AS f#x, sum((cast(i#x as decimal(10,0)) + f#x)) AS sif#x]
    +- SubqueryAlias stuff
       +- View (`stuff`, [i#x, f#x, s#x, t#x, d#x, a#x])
-         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string) AS s#x, cast(t#x as string) AS t#x, cast(d#x as string) AS d#x, cast(a#x as array<int>) AS a#x]
+         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string collate UTF8_BINARY) AS s#x, cast(t#x as string collate UTF8_BINARY) AS t#x, cast(d#x as string collate UTF8_BINARY) AS d#x, cast(a#x as array<int>) AS a#x]
             +- Project [i#x, f#x, s#x, t#x, d#x, a#x]
                +- SubqueryAlias stuff
                   +- LocalRelation [i#x, f#x, s#x, t#x, d#x, a#x]
@@ -63,7 +63,7 @@ Sort [(i + 1)#x ASC NULLS FIRST, substring(s, 2, 3)#x ASC NULLS FIRST, extract(y
 +- Aggregate [(i#x + 1), (f#x / cast(i#x as decimal(10,0))), substring(s#x, 2, 3), extract(year, t#x), octet_length(d#x), size(a#x, false)], [(i#x + 1) AS (i + 1)#x, (f#x / cast(i#x as decimal(10,0))) AS (f / i)#x, substring(s#x, 2, 3) AS substring(s, 2, 3)#x, extract(year, t#x) AS extract(year FROM t)#x, octet_length(d#x) AS octet_length(d)#x, size(a#x, false) AS size(a)#x]
    +- SubqueryAlias stuff
       +- View (`stuff`, [i#x, f#x, s#x, t#x, d#x, a#x])
-         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string) AS s#x, cast(t#x as string) AS t#x, cast(d#x as string) AS d#x, cast(a#x as array<int>) AS a#x]
+         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string collate UTF8_BINARY) AS s#x, cast(t#x as string collate UTF8_BINARY) AS t#x, cast(d#x as string collate UTF8_BINARY) AS d#x, cast(a#x as array<int>) AS a#x]
             +- Project [i#x, f#x, s#x, t#x, d#x, a#x]
                +- SubqueryAlias stuff
                   +- LocalRelation [i#x, f#x, s#x, t#x, d#x, a#x]
@@ -95,7 +95,7 @@ Sort [s#x ASC NULLS FIRST], true
       +- Aggregate [s#x], [s#x AS s#x, count(1) AS c#xL, sum(f#x) AS sum(f)#x]
          +- SubqueryAlias stuff
             +- View (`stuff`, [i#x, f#x, s#x, t#x, d#x, a#x])
-               +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string) AS s#x, cast(t#x as string) AS t#x, cast(d#x as string) AS d#x, cast(a#x as array<int>) AS a#x]
+               +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string collate UTF8_BINARY) AS s#x, cast(t#x as string collate UTF8_BINARY) AS t#x, cast(d#x as string collate UTF8_BINARY) AS d#x, cast(a#x as array<int>) AS a#x]
                   +- Project [i#x, f#x, s#x, t#x, d#x, a#x]
                      +- SubqueryAlias stuff
                         +- LocalRelation [i#x, f#x, s#x, t#x, d#x, a#x]
@@ -108,7 +108,7 @@ Filter (si#xL > cast(2 as bigint))
 +- Aggregate [sum(i#x) AS si#xL]
    +- SubqueryAlias stuff
       +- View (`stuff`, [i#x, f#x, s#x, t#x, d#x, a#x])
-         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string) AS s#x, cast(t#x as string) AS t#x, cast(d#x as string) AS d#x, cast(a#x as array<int>) AS a#x]
+         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string collate UTF8_BINARY) AS s#x, cast(t#x as string collate UTF8_BINARY) AS t#x, cast(d#x as string collate UTF8_BINARY) AS d#x, cast(a#x as array<int>) AS a#x]
             +- Project [i#x, f#x, s#x, t#x, d#x, a#x]
                +- SubqueryAlias stuff
                   +- LocalRelation [i#x, f#x, s#x, t#x, d#x, a#x]
@@ -121,7 +121,7 @@ Filter (si#xL < cast(2 as bigint))
 +- Aggregate [sum(i#x) AS si#xL]
    +- SubqueryAlias stuff
       +- View (`stuff`, [i#x, f#x, s#x, t#x, d#x, a#x])
-         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string) AS s#x, cast(t#x as string) AS t#x, cast(d#x as string) AS d#x, cast(a#x as array<int>) AS a#x]
+         +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string collate UTF8_BINARY) AS s#x, cast(t#x as string collate UTF8_BINARY) AS t#x, cast(d#x as string collate UTF8_BINARY) AS d#x, cast(a#x as array<int>) AS a#x]
             +- Project [i#x, f#x, s#x, t#x, d#x, a#x]
                +- SubqueryAlias stuff
                   +- LocalRelation [i#x, f#x, s#x, t#x, d#x, a#x]
