@@ -40,7 +40,7 @@ SPARK_VERSION - (optional) Version of Spark being built (e.g. 2.1.2)
 
 ASF_USERNAME - Username of ASF committer account
 ASF_PASSWORD - Password of ASF committer account
-ASF_NEXUS_TOKEN - API token in ASF Nexus reposiotry
+ASF_NEXUS_TOKEN - API token in ASF Nexus repository
 
 GPG_KEY - GPG key used to sign release artifacts
 GPG_PASSPHRASE - Passphrase for GPG key
@@ -695,14 +695,6 @@ elif [[ $JAVA_VERSION < "17.0." ]] && [[ $SPARK_VERSION > "3.5.99" ]]; then
   echo "Java version $JAVA_VERSION is less than required 17 for 4.0+"
   echo "Please set JAVA_HOME correctly."
   exit 1
-fi
-
-# This is a band-aid fix to avoid the failure of Maven nightly snapshot in some Jenkins
-# machines by explicitly calling /usr/sbin/lsof. Please see SPARK-22377 and the discussion
-# in its pull request.
-LSOF=lsof
-if ! hash $LSOF 2>/dev/null; then
-  LSOF=/usr/sbin/lsof
 fi
 
 if [ -z "$SPARK_PACKAGE_VERSION" ]; then

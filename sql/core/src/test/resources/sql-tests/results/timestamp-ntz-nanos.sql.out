@@ -767,6 +767,17 @@ NULL	2	9
 
 
 -- !query
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
+-- !query schema
+struct<mode(c):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000001
+
+
+-- !query
 SELECT unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
 struct<unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss):bigint>
@@ -824,6 +835,21 @@ SELECT max_by(v, k), min_by(v, k) FROM VALUES
 struct<max_by(v, k):timestamp_ntz(9),min_by(v, k):timestamp_ntz(9)>
 -- !query output
 2020-01-01 00:00:00.000000999	2020-01-01 00:00:00.000000001
+
+
+-- !query
+SELECT DISTINCT c FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+  ORDER BY c
+-- !query schema
+struct<c:timestamp_ntz(9)>
+-- !query output
+NULL
+2020-01-01 00:00:00.000000001
+2020-01-01 00:00:00.000000999
 
 
 -- !query
