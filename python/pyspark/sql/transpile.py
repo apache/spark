@@ -37,10 +37,11 @@ all-numeric and all-string variants.
 """
 
 import ast
-import dis
 import functools
+import linecache
 import os
 import tokenize
+import warnings
 from types import CodeType
 from typing import Any, Callable, List, Optional, Tuple, TYPE_CHECKING
 import inspect
@@ -905,37 +906,38 @@ def _instruction_extent(code: CodeType) -> Optional[Tuple[Tuple[int, int], Tuple
     """The (start, end) source bounds enclosing every instruction of ``code``.
 
     Returned as lexicographic ``((line, col), (line, col))`` pairs. Reducing the
-    per-instruction spans to one bounding box up front makes the containment test
-    a single comparison per candidate instead of a scan over every instruction,
-    and it is equivalent: requiring a candidate to contain every span is exactly
-    requiring it to contain their min start and max end.
+    per-instruction spans to one bounding box up front makes the enclosure test a
+    single comparison per candidate, and it is equivalent: requiring a candidate
+    to contain every span is exactly requiring it to contain their min start and
+    max end.
 
-    ``Instruction.positions`` (3.11+) rather than ``code.co_positions()``: the
-    latter yields one entry per code UNIT, including inline cache slots, so
-    zipping it against the instruction stream silently misaligns.
+    ``co_positions()`` is safe here even though it yields one entry per code UNIT
+    (including inline cache slots) rather than per instruction: nothing is zipped
+    against the instruction stream, only ``min``/``max`` are taken, and a cache
+    slot carries its own instruction's position so it cannot move either bound.
+    Verified identical to a ``dis.get_instructions()`` walk across 3.11/3.12/3.13,
+    and it avoids building an ``Instruction`` (with ``argval``/``argrepr``) per
+    opcode on a path that runs per ``udf()`` construction.
 
-    An instruction is skipped when ANY of its four bounds is absent (a partial
-    position tells us nothing) and when it is a degenerate column-0 marker (the
-    synthetic ``RESUME``, attributed to ``(line, line, 0, 0)``, which sits before
-    the lambda's own start column and would reject every real match).
+    An entry is skipped when ANY of its four bounds is absent (a partial position
+    tells us nothing), and when it is a degenerate column-0 marker -- the
+    synthetic ``RESUME``, and on 3.11 also a trailing ``RETURN_VALUE``, are
+    attributed to ``(line, line, 0, 0)``, which sits before the lambda's own
+    start column and would reject every real match. Do NOT narrow this to a
+    specific opcode: which opcodes carry that marker varies by version.
 
-    Returns ``None`` when no instruction has a usable position -- the case for a
-    whole interpreter run under ``-X no_debug_ranges`` /
-    ``PYTHONNODEBUGRANGES=1``, where lambda lowering is simply unavailable.
+    Returns ``None`` when no entry has a usable position -- the case for a whole
+    interpreter run under ``-X no_debug_ranges`` / ``PYTHONNODEBUGRANGES=1``, and
+    for ``.pyc`` files compiled that way, where lambda lowering is unavailable.
     """
     starts = []
     ends = []
-    for instruction in dis.get_instructions(code):
-        position = instruction.positions
-        if position is None:
+    for lineno, end_lineno, start_col, end_col in code.co_positions():
+        if lineno is None or end_lineno is None or start_col is None or end_col is None:
             continue
-        lineno, end_lineno = position.lineno, position.end_lineno
-        col, end_col = position.col_offset, position.end_col_offset
-        if lineno is None or end_lineno is None or col is None or end_col is None:
+        if start_col == 0 and end_col == 0:
             continue
-        if col == 0 and end_col == 0:
-            continue
-        starts.append((lineno, col))
+        starts.append((lineno, start_col))
         ends.append((end_lineno, end_col))
     if not starts:
         return None
@@ -953,16 +955,6 @@ def _node_encloses(node: ast.expr, extent: Tuple[Tuple[int, int], Tuple[int, int
     )
 
 
-def _positioned(new: ast.AST, reference: ast.AST) -> Any:
-    """Give a synthesized node ``reference``'s position and return it.
-
-    Only ever called on nodes this module just built, so it never writes to a
-    cached node or its children.
-    """
-    ast.copy_location(new, reference)
-    return new
-
-
 def _defaults_stripped(node: ast.Lambda) -> ast.Lambda:
     """``node`` with its parameter defaults removed.
 
@@ -973,21 +965,21 @@ def _defaults_stripped(node: ast.Lambda) -> ast.Lambda:
     extra nested code objects a lambda-valued default would contribute
     (``lambda x, k=(lambda: 3)(): x + k``), which is what lets the caller expect
     exactly one.
+
+    ``ast.arguments`` carries no position attributes, so only the ``Lambda``
+    needs ``copy_location``.
     """
     args = node.args
-    bare_args = _positioned(
-        ast.arguments(
-            posonlyargs=list(getattr(args, "posonlyargs", [])),
-            args=list(args.args),
-            vararg=args.vararg,
-            kwonlyargs=list(args.kwonlyargs),
-            kw_defaults=[None] * len(args.kw_defaults),
-            kwarg=args.kwarg,
-            defaults=[],
-        ),
-        node,
+    bare_args = ast.arguments(
+        posonlyargs=list(getattr(args, "posonlyargs", [])),
+        args=list(args.args),
+        vararg=args.vararg,
+        kwonlyargs=list(args.kwonlyargs),
+        kw_defaults=[None] * len(args.kw_defaults),
+        kwarg=args.kwarg,
+        defaults=[],
     )
-    return _positioned(ast.Lambda(args=bare_args, body=node.body), node)
+    return ast.copy_location(ast.Lambda(args=bare_args, body=node.body), node)
 
 
 def _nested_code(code: CodeType) -> List[CodeType]:
@@ -1008,39 +1000,46 @@ def _recompiled_lambda_code(node: ast.Lambda, freevars: Tuple[str, ...]) -> Opti
     the same ``LOAD_DEREF`` form the target does and can match. Without that
     wrapper a captured name compiles to a global load and a genuine match would
     be rejected as if the source were stale.
+
+    The compile is warning-suppressed. A user's own lambda can legitimately emit
+    a ``SyntaxWarning`` (``lambda x: x is 1``), and re-emitting it here would
+    attribute it to ``<transpiler>``; worse, under ``-W error`` /
+    ``PYTHONWARNINGS=error`` it would raise and silently disable lowering for
+    that lambda.
     """
     try:
         lam = _defaults_stripped(node)
-        if freevars:
-            wrapper_args = _positioned(
-                ast.arguments(
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if freevars:
+                wrapper_args = ast.arguments(
                     posonlyargs=[],
-                    args=[_positioned(ast.arg(arg=name), node) for name in freevars],
+                    args=[ast.copy_location(ast.arg(arg=name), node) for name in freevars],
                     vararg=None,
                     kwonlyargs=[],
                     kw_defaults=[],
                     kwarg=None,
                     defaults=[],
-                ),
-                node,
-            )
-            fn_ctor: Any = ast.FunctionDef
-            wrapper = _positioned(
-                fn_ctor(
-                    name="__transpiler_scope",
-                    args=wrapper_args,
-                    body=[_positioned(ast.Return(value=lam), node)],
-                    decorator_list=[],
-                ),
-                node,
-            )
-            module = compile(ast.Module(body=[wrapper], type_ignores=[]), "<transpiler>", "exec")
-            enclosing = _nested_code(module)
-            if len(enclosing) != 1:
-                return None
-            nested = _nested_code(enclosing[0])
-        else:
-            nested = _nested_code(compile(ast.Expression(body=lam), "<transpiler>", "eval"))
+                )
+                fn_ctor: Any = ast.FunctionDef
+                wrapper = ast.copy_location(
+                    fn_ctor(
+                        name="__transpiler_scope",
+                        args=wrapper_args,
+                        body=[ast.copy_location(ast.Return(value=lam), node)],
+                        decorator_list=[],
+                    ),
+                    node,
+                )
+                module = compile(
+                    ast.Module(body=[wrapper], type_ignores=[]), "<transpiler>", "exec"
+                )
+                enclosing = _nested_code(module)
+                if len(enclosing) != 1:
+                    return None
+                nested = _nested_code(enclosing[0])
+            else:
+                nested = _nested_code(compile(ast.Expression(body=lam), "<transpiler>", "eval"))
     except Exception:
         return None
     return nested[0] if len(nested) == 1 else None
@@ -1060,7 +1059,7 @@ _BEHAVIORAL_CO_FLAGS = (
 
 
 def _code_signature(code: CodeType) -> tuple:
-    """A position-independent fingerprint of everything a code object DOES.
+    """A fingerprint used to confirm a recompile reproduced ``code``.
 
     Covers signature shape, the behavioral ``co_flags``, local/global/closure
     names, the emitted bytecode, and the constants -- constants keyed by
@@ -1069,6 +1068,19 @@ def _code_signature(code: CodeType) -> tuple:
     by identity. Deliberately excludes ``co_filename`` / ``co_name`` /
     ``co_firstlineno`` and ``CO_NESTED``, which differ between the target and a
     standalone recompile of the same source.
+
+    NOT a pure function of the lambda's own source, because raw ``co_code`` is
+    not: for a lambda that CALLS an attribute of a module-level import
+    (``import math`` + ``lambda x: math.floor(x)``) the defining module's
+    bytecode differs from an isolated recompile -- the method-call flag packed
+    into ``LOAD_ATTR``'s oparg on 3.12+, and ``LOAD_ATTR`` vs ``LOAD_METHOD`` on
+    3.11 -- so a genuine match is REJECTED and the lambda falls back. That is
+    latent today (the transpiler refuses ``ast.Call``, so such lambdas cannot
+    lower anyway) and the direction is safe, but it must be fixed before call
+    support lands or lowering will silently stop for any module using the
+    ``import pyspark.sql.functions as F`` idiom. Compiling the whole cached
+    module AST and matching by position, instead of recompiling the node in
+    isolation, would make the comparison context-exact.
     """
     return (
         code.co_argcount,
@@ -1120,6 +1132,24 @@ def _walk_lambdas(tree: ast.AST) -> List[ast.Lambda]:
 
 
 @functools.lru_cache(maxsize=_LAMBDA_CANDIDATES_MAX_FILES)
+def _parse_text_lambdas(source: str) -> Tuple[ast.Lambda, ...]:
+    """Every ``ast.Lambda`` in ``source``, LRU-cached by the source TEXT.
+
+    Used for sources ``os.stat`` cannot reach, where there is no mtime to key on.
+    Hashing the text is O(size) but roughly three orders of magnitude cheaper
+    than re-parsing it, and it self-invalidates: different text, different key.
+
+    Parsing is warning-suppressed -- see ``_parse_file_lambdas``.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            return tuple(_walk_lambdas(ast.parse(source)))
+        except Exception:
+            return ()
+
+
+@functools.lru_cache(maxsize=_LAMBDA_CANDIDATES_MAX_FILES)
 def _parse_file_lambdas(path: str, _mtime_ns: int, _size: int) -> Tuple[ast.Lambda, ...]:
     """Parse ``path`` and return every ``ast.Lambda`` in it, LRU-cached per file.
 
@@ -1132,15 +1162,27 @@ def _parse_file_lambdas(path: str, _mtime_ns: int, _size: int) -> Tuple[ast.Lamb
     back -- so this key is an optimization, not the correctness boundary.
 
     The read is fresh from disk (``tokenize.open`` respects the source's encoding
-    cookie) rather than through ``linecache``. Returns an empty tuple on a
-    read/parse error, which the caller treats as "no candidate".
+    cookie), falling back to ``linecache`` when the on-disk text does not parse:
+    a file caught mid-write (an editor's partial save, a generator rewriting it)
+    would otherwise lose lowering for as long as it is broken, even though
+    ``linecache`` still holds the good source from import.
+
+    Parsing is warning-suppressed: re-parsing a whole module re-emits any
+    ``SyntaxWarning`` in it, attributed to a file that does not exist here, and
+    under ``-W error`` / ``PYTHONWARNINGS=error`` it would raise and silently
+    disable lowering for every lambda in the module.
     """
-    try:
-        with tokenize.open(path) as source:
-            tree = ast.parse(source.read())
-    except Exception:
-        return ()
-    return tuple(_walk_lambdas(tree))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            with tokenize.open(path) as source:
+                return tuple(_walk_lambdas(ast.parse(source.read())))
+        except Exception:
+            pass
+        try:
+            return tuple(_walk_lambdas(ast.parse("".join(linecache.getlines(path)))))
+        except Exception:
+            return ()
 
 
 def _file_lambda_candidates(target: CodeType) -> List[ast.Lambda]:
@@ -1159,10 +1201,13 @@ def _file_lambda_candidates(target: CodeType) -> List[ast.Lambda]:
     all.
 
     Parsing is O(file) and a lambda in a large module would otherwise be
-    re-parsed on every ``udf()`` call (measured 114 ms for a 20k-line module),
-    so a file-backed source goes through the ``(path, mtime, size)``-keyed LRU
-    cache. A source with no stat (a REPL or exec'd module kept alive only by
-    ``linecache``) is read uncached via ``inspect.findsource``.
+    re-parsed on every ``udf()`` call (measured 114 ms for a 20k-line module), so
+    BOTH routes are cached. The non-stat route matters more than it looks: a
+    ``--py-files`` zip/egg lands on ``sys.path``, so ``co_filename`` becomes
+    ``/path/deps.zip/mod.py`` and ``os.stat`` raises ``NotADirectoryError``, and a
+    notebook cell filename is ``linecache``-only. Those go through
+    ``inspect.findsource``, which consults the module's loader and so can read a
+    zip entry that ``tokenize.open`` and a bare ``linecache`` lookup cannot.
 
     Returns an empty list when there is no readable source at all.
     """
@@ -1171,10 +1216,9 @@ def _file_lambda_candidates(target: CodeType) -> List[ast.Lambda]:
     except Exception:
         try:
             lines, _ = inspect.findsource(target)
-            tree = ast.parse("".join(lines))
         except Exception:
             return []
-        return _walk_lambdas(tree)
+        return list(_parse_text_lambdas("".join(lines)))
     return list(_parse_file_lambdas(target.co_filename, stat.st_mtime_ns, stat.st_size))
 
 

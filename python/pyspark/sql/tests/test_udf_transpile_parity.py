@@ -196,24 +196,36 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
 
         left = self.spark.createDataFrame([Row(a=1, a1=1)])
         right = self.spark.createDataFrame([Row(b=1, b1=1)])
-        captured = 0
 
         # Deliberately un-lowerable in a way that will STAY un-lowerable: a
-        # multi-statement ``def`` is outside the transpiler's single-expression
-        # subset by construction. A closure would read more naturally here, but
-        # closures are only un-lowerable pending SPARK-55207 ("Handle
-        # assignments, class vars, and closures via scope evaluation"), so this
-        # test would start failing -- pointing at the join planner rather than at
-        # its own fixture -- the moment that TODO is closed.
+        # multi-statement body is outside the transpiler's single-expression
+        # subset by construction. It must NOT rely on a closure -- closures are
+        # un-lowerable only pending SPARK-55207 ("Handle assignments, class vars,
+        # and closures via scope evaluation"), so keying on that would make this
+        # test fail confusingly (pointing at the join planner rather than at its
+        # own fixture) the moment that TODO closes. Hence no captured variable:
+        # the two statements alone are what make it refuse.
         def not_lowerable(a, b):
             same = a == b
-            return same or captured > 0
+            return same
 
         refused = udf(not_lowerable, BooleanType())
-        for how in ("leftouter", "rightouter", "fullouter", "leftanti", "leftsemi"):
+        # Assert the rendered join type, not just the prefix: the skipped test
+        # checked each one, so a bug labelling a LEFT ANTI join "LEFT SEMI"
+        # should still fail here. Two-predicate ON clause matches the shape the
+        # original exercised.
+        for how, rendered in (
+            ("leftouter", "LEFT OUTER"),
+            ("rightouter", "RIGHT OUTER"),
+            ("fullouter", "FULL OUTER"),
+            ("leftanti", "LEFT ANTI"),
+            ("leftsemi", "LEFT SEMI"),
+        ):
             with self.subTest(how=how):
-                with self.assertRaisesRegex(AnalysisException, "Python UDF in the ON clause"):
-                    left.join(right, refused("a", "b"), how).collect()
+                with self.assertRaisesRegex(
+                    AnalysisException, "Python UDF in the ON clause of a %s JOIN" % rendered
+                ):
+                    left.join(right, [refused("a", "b"), left.a1 == right.b1], how).collect()
 
 
 @unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)
