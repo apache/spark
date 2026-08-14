@@ -319,16 +319,16 @@ class GoldenFileTestMixin:
         A temporal value can be valid in Arrow yet outside Python's ``datetime`` range
         (e.g. a date32 past year 9999), where ``str`` builds a Python datetime and
         raises ``OverflowError``.  For those, record the raw stored count as
-        ``raw=<value>`` (its unit is in the type suffix) instead of failing.  A
-        non-temporal ``OverflowError`` is unexpected, so it propagates.
+        ``temporal[raw](<value>)`` (its unit is in the type suffix) instead of failing.
+        A non-temporal ``OverflowError`` is unexpected, so it propagates.
         """
         try:
             return str(scalar).replace("\x00", "\\0")
         except OverflowError:
             # No Python datetime exists for this value; record the raw stored count as
-            # ``raw=<value>``.  A non-temporal overflow is unexpected, so re-raise.
+            # ``temporal[raw](<value>)``.  A non-temporal overflow is unexpected -> re-raise.
             if pa.types.is_temporal(scalar.type):
-                return f"raw={scalar.value}"
+                return f"temporal[raw]({scalar.value})"
             raise
 
     @classmethod
