@@ -2053,25 +2053,65 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         )
         self.assertIn("no parseable source", partial_reasons[0])
 
-    def test_udf_transpile_concurrent_resolution_preserves_warning_filters(self):
+    def test_udf_transpile_warning_suppression_is_narrow_and_restores_filters(self):
         # Resolution parses and compiles under ``warnings.catch_warnings``, which
-        # swaps PROCESS-GLOBAL state and is documented as not thread-safe: if two
-        # threads interleave, the one exiting last restores the other's snapshot
-        # and can leave an ignore-everything filter installed for the life of the
-        # process -- silently swallowing every later warning in the driver,
-        # including PySpark's own. UDF construction runs on whatever thread the
-        # user calls from, so the suppression is serialized. This asserts the
-        # global state survives, which no functional test would notice.
+        # swaps PROCESS-GLOBAL state. Two properties matter, and both are asserted
+        # DETERMINISTICALLY here rather than by racing threads and hoping the
+        # window is hit -- a timing-based version of this test passed even with a
+        # blanket filter installed, because the suppression window was a
+        # negligible fraction of the run.
         import importlib.util
         import os
         import tempfile
         import threading
         import warnings
 
-        from pyspark.sql.transpile import _get_function_from_ast, _parse_file_lambdas
+        from pyspark.sql.transpile import (
+            _WARNINGS_LOCK,
+            _get_function_from_ast,
+            _parse_file_lambdas,
+            _syntax_warnings_suppressed,
+        )
 
-        # A module whose own source emits a SyntaxWarning, so every parse here
-        # actually goes through the suppression path.
+        # (1) The filter must be NARROW. While it is installed, any other thread's
+        # unrelated warnings are dropped too -- a blanket ``simplefilter("ignore")``
+        # would silently swallow every DeprecationWarning, pandas/pyarrow warning
+        # and PySpark's own fall-back warning for the duration. So: inside the
+        # suppression, an unrelated category must still be delivered, while the
+        # categories parse/compile actually raise must not be. Also assert the lock
+        # is held, because ``catch_warnings`` mutates process-global state and the
+        # thread interleave it guards against cannot be provoked reliably.
+        original_showwarning = warnings.showwarning
+        saved_filters = list(warnings.filters)
+        seen = []
+        lock_held = None
+        try:
+            warnings.simplefilter("always")  # defeat the per-location registry
+            warnings.showwarning = lambda message, category, *a, **k: seen.append(category)
+            with _syntax_warnings_suppressed():
+                lock_held = _WARNINGS_LOCK.locked()
+                warnings.warn("unrelated", UserWarning)
+                warnings.warn("ours", SyntaxWarning)
+        finally:
+            warnings.showwarning = original_showwarning
+            warnings.filters[:] = saved_filters
+        self.assertIn(
+            UserWarning,
+            seen,
+            "suppression must not swallow an unrelated warning: while its filter is "
+            "installed it applies to every thread in the process",
+        )
+        self.assertNotIn(SyntaxWarning, seen, "the source's own SyntaxWarning is suppressed")
+        self.assertTrue(
+            lock_held,
+            "suppression must hold the lock: without it, two threads interleaving "
+            "catch_warnings leave one's snapshot installed for the life of the process",
+        )
+
+        # (2) Smoke check only: resolution keeps working under concurrency and
+        # leaves the filter list as it found it. This does NOT reliably detect a
+        # missing lock -- the interleave window is far too small to hit on demand,
+        # which is why (1) asserts the lock directly.
         source = 'DOC = "bad escape \\d+"\n' + "".join(
             f"f{i} = lambda x: x + {i}\n" for i in range(20)
         )
@@ -2106,11 +2146,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 list(warnings.filters),
                 "concurrent resolution must not leave warnings.filters modified",
             )
-            # And warnings must still actually be delivered.
-            with warnings.catch_warnings(record=True) as caught:
-                warnings.simplefilter("always")
-                warnings.warn("must be delivered", DeprecationWarning)
-            self.assertEqual(1, len(caught))
 
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
