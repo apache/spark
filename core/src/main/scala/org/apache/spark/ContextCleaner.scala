@@ -124,6 +124,18 @@ private[spark] class ContextCleaner(
     listeners.add(listener)
   }
 
+  /**
+   * Notify listeners that a shuffle's data was reclaimed by something other than the
+   * reference-tracking path -- specifically the shuffle TTL cleaner, which removes the shuffle
+   * itself and so must issue this fan-out on its own. Without it `ExecutorMonitor` never sees the
+   * shuffle go away, so under `spark.dynamicAllocation.shuffleTracking.enabled` an executor holding
+   * only that shuffle would never become idle and the reclaimed space would not release the
+   * executor.
+   */
+  private[spark] def notifyShuffleCleaned(shuffleId: Int): Unit = {
+    listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
+  }
+
   /** Start the cleaner. */
   def start(): Unit = {
     cleaningThread.setDaemon(true)

@@ -126,6 +126,19 @@ class BlockManagerMasterEndpoint(
   // every updateBlockAtime, which is on the hot path of block-location lookups.
   private val rddTtl: Option[Long] = conf.get(config.SPARK_TTL_RDD_CLEANER)
 
+  // Gate consulted before the TTL cleaner reaps an RDD. Wired by SparkContext (which can see the
+  // live RDDs) to refuse locally-checkpointed RDDs: localCheckpoint truncates lineage, so its cache
+  // blocks are the only copy of the data and reaping them loses it unrecoverably. Defaults to
+  // allowing everything for the (test-only) case where nothing wired it.
+  @volatile private[spark] var rddReapable: Int => Boolean = _ => true
+
+  // How the TTL cleaner reaps an RDD. Wired by SparkContext to SparkContext.unpersistRDD so the
+  // reap also clears `persistentRdds` and posts SparkListenerUnpersistRDD (keeping the Storage UI
+  // and getPersistentRDDs accurate); it still removes the blocks through the same RemoveRdd RPC.
+  // When unwired we fall back to sending ourselves RemoveRdd, which frees the blocks but leaves
+  // that bookkeeping stale.
+  @volatile private[spark] var rddReaper: Option[Int => Unit] = None
+
   // Created here so onStop can shut it down, but the cleaner is not started until onStart: it
   // routes removals through self.ask(RemoveRdd(...)), and self is only valid once the endpoint is
   // registered (i.e. from onStart onward).
@@ -1193,10 +1206,12 @@ class BlockManagerMasterEndpoint(
         name = "RDD",
         ttlMillis = rddTtl.get,
         accessTimes = rddAccessTime,
-        shouldReap = _ => true,
-        reap = rddId => {
-          self.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
-          ()
+        shouldReap = rddId => rddReapable(rddId),
+        reap = rddId => rddReaper match {
+          case Some(reaper) => reaper(rddId)
+          case None =>
+            self.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
+            ()
         }))
     }
   }

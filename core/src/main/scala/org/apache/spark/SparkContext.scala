@@ -645,15 +645,28 @@ class SparkContext(config: SparkConf) extends Logging {
       _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
     }
 
-    // Wire the shuffle TTL cleaner (which lives in the driver MapOutputTrackerMaster, created back
-    // in SparkEnv before ShuffleDriverComponents exist) to the normal shuffle-removal path, so
-    // reaping a stale shuffle reclaims on-disk blocks on executors/ESS rather than only forgetting
-    // the driver-side metadata.
+    // Wire the TTL cleaners, which live in SparkEnv components created before the pieces they need
+    // exist (ShuffleDriverComponents, the ContextCleaner's listeners, and this SparkContext).
+    // Without this wiring a reap still frees blocks, but reclaims no executor disk for shuffles and
+    // leaves the unpersist bookkeeping stale.
     _env.mapOutputTracker match {
       case mapOutputTrackerMaster: MapOutputTrackerMaster =>
-        mapOutputTrackerMaster.shuffleFileRemover =
-          Some(shuffleId => _shuffleDriverComponents.removeShuffle(shuffleId, false))
+        mapOutputTrackerMaster.shuffleFileRemover = Some { shuffleId =>
+          // Reclaim the on-disk blocks on executors/ESS, then tell the CleanerListeners, which is
+          // what lets dynamic allocation's shuffle tracking release an executor that only held this
+          // shuffle. Mirrors the tail of ContextCleaner.doCleanupShuffle.
+          _shuffleDriverComponents.removeShuffle(shuffleId, false)
+          _cleaner.foreach(_.notifyShuffleCleaned(shuffleId))
+        }
       case _ =>
+    }
+    _env.blockManagerMasterEndpoint.foreach { endpoint =>
+      // Never TTL-reap a locally-checkpointed RDD: localCheckpoint truncates lineage, so its cache
+      // blocks are the only copy of the data and losing them is unrecoverable.
+      endpoint.rddReapable = rddId => !persistentRdds.get(rddId).exists(_.isLocallyCheckpointed)
+      // Reap through unpersistRDD so persistentRdds and SparkListenerUnpersistRDD stay in step with
+      // the block removal (which still goes through the RemoveRdd RPC).
+      endpoint.rddReaper = Some(rddId => unpersistRDD(rddId, blocking = false))
     }
 
     if (_conf.get(UI_REVERSE_PROXY)) {

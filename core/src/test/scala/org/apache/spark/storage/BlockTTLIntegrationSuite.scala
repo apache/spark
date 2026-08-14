@@ -177,6 +177,33 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     }
   }
 
+  test("Test that a locally-checkpointed RDD is never reaped by the TTL cleaner") {
+    // localCheckpoint truncates lineage, so the cache blocks are the only copy of the data: reaping
+    // them loses it unrecoverably (LocalCheckpointRDD.compute always throws). The cleaner must skip
+    // such RDDs no matter how long they sit idle.
+    val conf = new SparkConf()
+      .setAppName("test-blockmanager-ttls-local-checkpoint")
+      .setMaster("local-cluster[2, 1, 1024]")
+      .set(config.SPARK_TTL_RDD_CLEANER, blockTTL)
+      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
+    sc = new SparkContext(conf)
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+    val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
+    val checkpointed = sc.parallelize(1.to(100), numParts)
+    checkpointed.localCheckpoint()
+    assert(checkpointed.count() === 100)
+    // Sit idle for longer than the TTL; a plain cached RDD would be reaped in this window.
+    val idleUntil = System.currentTimeMillis() + (blockTTL * 2)
+    eventually(timeout(Span(blockTTL * 4, Millis)), interval(Span(200, Millis))) {
+      assert(System.currentTimeMillis() > idleUntil)
+    }
+    // The data must still be readable -- this is the assertion that would fail on data loss.
+    assert(checkpointed.count() === 100,
+      "a locally-checkpointed RDD must survive the TTL: its blocks are the only copy")
+    assert(managerMasterEndpoint.rddReapable(checkpointed.id) === false,
+      "the TTL cleaner must refuse to reap a locally-checkpointed RDD")
+  }
+
   test("Test that blocks TTLS are not tracked when not enabled") {
     val conf = new SparkConf()
       .setAppName("test-blockmanager-decommissioner")

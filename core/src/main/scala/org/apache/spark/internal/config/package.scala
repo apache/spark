@@ -3272,6 +3272,8 @@ package object config {
         "be added to a running Spark instance).")
       .version("4.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "The RDD block TTL must be positive. A zero or negative TTL would make " +
+        "every block immediately eligible for removal.")
       .createOptional
 
   private[spark] val SPARK_TTL_SHUFFLE_BLOCK_CLEANER =
@@ -3282,5 +3284,7 @@ package object config {
         "a running Spark instance).")
       .version("4.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "The shuffle block TTL must be positive. A zero or negative TTL would " +
+        "make every shuffle immediately eligible for removal.")
       .createOptional
 }
