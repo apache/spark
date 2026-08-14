@@ -131,9 +131,14 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     if (refs.isEmpty) {
       throw QueryCompilationErrors.emptyRequiredDataAttributesError(operation.getClass.getName)
     }
-    V2ExpressionUtils.resolveRefs[AttributeReference](
+    val resolved = V2ExpressionUtils.resolveRefs[AttributeReference](
       refs.toImmutableArraySeq,
       relation)
+    // `resolveRefs` matches case-insensitively but keeps the declared spelling, so map each
+    // resolved attribute back to the relation's own (by exprId) to avoid a spelling mismatch
+    // between the connector's declaration and the table's actual column name.
+    val byExprId = relation.output.map(a => a.exprId -> a).toMap
+    resolved.map(a => byExprId.getOrElse(a.exprId, a).asInstanceOf[AttributeReference])
   }
 
   protected def resolveRowIdAttrs(
