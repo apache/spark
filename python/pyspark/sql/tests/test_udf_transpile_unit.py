@@ -1583,13 +1583,20 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # Differ in the parameter NAME only -- again just distinct positions.
         by_x, by_y = lambda x: x + 3, lambda y: y + 3
         # More than two on one line: resolution filters every candidate by
-        # position, not a pairwise comparison. ``fmt: off`` because sharing the
-        # line IS the fixture -- this is 95 of 100 columns, so without the guard
-        # a one-character edit would let the formatter split it into four
-        # single-lambda lines and quietly retire the multi-candidate coverage.
+        # position, not a pairwise comparison. ``fmt: off`` keeps them on one
+        # line (this is 95 of 100 columns, so a one-character edit would
+        # otherwise let the formatter split it), but the directive is only a
+        # hint -- the precondition is ASSERTED below, so if the fixture ever
+        # does get split the test fails loudly instead of quietly covering
+        # nothing.
         # fmt: off
         t1, t2, t3, t4 = lambda x: x + 41, lambda x: x + 42, lambda x: x + 43, lambda x: x + 44
         # fmt: on
+        self.assertEqual(
+            1,
+            len({f.__code__.co_firstlineno for f in (t1, t2, t3, t4)}),
+            "fixture must keep all four lambdas on ONE line to exercise multi-candidate resolution",
+        )
         # Lambdas reachable only inside a collection literal -- the old
         # first-statement walk bailed out on these entirely.
         table = {"inc": lambda x: x + 100, "dec": lambda x: x - 100}
@@ -1806,6 +1813,26 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         }
         multi = {"d": lambda x: x + 31, "e": lambda x: x + 32,
                  "f": lambda x: x + 33}  # fmt: skip
+        # Assert the preconditions rather than trusting the formatter
+        # directives: ``table`` must put each lambda on its OWN line (so "c" is
+        # on a continuation line), and ``multi`` must share a line for "d"/"e"
+        # while "f" continues onto the next. If either fixture collapses, these
+        # fail loudly instead of silently covering nothing.
+        self.assertEqual(
+            3,
+            len({table[k].__code__.co_firstlineno for k in "abc"}),
+            "table fixture must keep each lambda on its own (continuation) line",
+        )
+        self.assertEqual(
+            multi["d"].__code__.co_firstlineno,
+            multi["e"].__code__.co_firstlineno,
+            "multi fixture must keep d/e on one line",
+        )
+        self.assertNotEqual(
+            multi["e"].__code__.co_firstlineno,
+            multi["f"].__code__.co_firstlineno,
+            "multi fixture must keep f on a continuation line",
+        )
         for key, expected in (("a", 26), ("b", 27), ("c", 28)):
             with self.subTest(key=key):
                 self.assertEqual(
@@ -1939,6 +1966,53 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                         self.assertEqual([], u.transpiled)
                         df = self.spark.createDataFrame([(arg,)], "a long")
                         self.assertEqual(df.select(u("a")).first()[0], expected)
+
+    def test_udf_transpile_imported_module_call_does_not_verify_yet(self):
+        # Pins a KNOWN LIMITATION so the future ``ast.Call`` work trips over it
+        # instead of silently losing lowering. Verification compares raw
+        # ``co_code``, which is not purely a function of the lambda's own source:
+        # for a lambda that CALLS an attribute of a module-level import, the
+        # defining module's bytecode differs from an isolated recompile (the
+        # method-call flag packed into ``LOAD_ATTR``'s oparg on 3.12+, and
+        # ``LOAD_ATTR`` vs ``LOAD_METHOD`` on 3.11), so a GENUINE match is
+        # rejected and the lambda does not resolve.
+        #
+        # Harmless today -- ``ast.Call`` is refused by the lowering anyway, so
+        # these could not lower regardless -- but when call support lands this
+        # must be fixed first, or lowering silently stops for every module using
+        # the ``import pyspark.sql.functions as F`` idiom. When that happens this
+        # test fails, which is the point.
+        import importlib.util
+        import os
+        import tempfile
+
+        from pyspark.sql.transpile import _get_function_from_ast, _parse_file_lambdas
+
+        source = (
+            "import math\n"
+            "calls_import = lambda x: math.floor(x)\n"
+            "reads_import = lambda x: math.pi + x\n"
+            "no_import = lambda x: x + 1\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "spark_58650_import.py")
+            with open(path, "w") as f:
+                f.write(source)
+            spec = importlib.util.spec_from_file_location("spark_58650_import", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            _parse_file_lambdas.cache_clear()
+            # Attribute CALL on an imported module: does not verify (the gap).
+            self.assertIsNone(
+                _get_function_from_ast(module.calls_import),
+                "if this now resolves, the co_code context-sensitivity gap is "
+                "fixed -- delete this test and remove the caveat in "
+                "_code_signature's docstring",
+            )
+            # Attribute READ, and no import at all, both verify normally --
+            # showing the gap is specific to the call form, not to imports.
+            self.assertIsNotNone(_get_function_from_ast(module.reads_import))
+            self.assertIsNotNone(_get_function_from_ast(module.no_import))
 
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
