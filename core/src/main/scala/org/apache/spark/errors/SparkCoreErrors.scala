@@ -157,22 +157,28 @@ private[spark] object SparkCoreErrors {
 
   def checkpointDirectoryHasNotBeenSetInSparkContextError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3016", messageParameters = Map.empty, cause = null
+      errorClass = "CHECKPOINT_DIRECTORY_NOT_SET",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
-  def invalidCheckpointFileError(path: Path): Throwable = {
+  def invalidCheckpointFileError(path: Path, expectedFileName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3017",
-      messageParameters = Map("path" -> s"$path"),
+      errorClass = "INVALID_CHECKPOINT_FILE",
+      messageParameters = Map(
+        "path" -> s"${path.getParent}",
+        "expectedFileName" -> expectedFileName,
+        "fileName" -> path.getName
+      ),
       cause = null
     )
   }
 
   def failToCreateCheckpointPathError(checkpointDirPath: Path): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3018",
-      messageParameters = Map("checkpointDirPath" -> s"$checkpointDirPath"),
+      errorClass = "FAILED_CREATE_CHECKPOINT_DIRECTORY",
+      messageParameters = Map("path" -> s"$checkpointDirPath"),
       cause = null
     )
   }
@@ -183,7 +189,7 @@ private[spark] object SparkCoreErrors {
       newRDDId: Int,
       newRDDLength: Int): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3019",
+      errorClass = "CHECKPOINT_RDD_PARTITION_COUNT_MISMATCH",
       messageParameters = Map(
         "originalRDDId" -> s"$originalRDDId",
         "originalRDDLength" -> s"$originalRDDLength",
@@ -200,9 +206,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def mustSpecifyCheckpointDirError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3020", messageParameters = Map.empty, cause = null
-    )
+    SparkException.internalError("Checkpoint dir must be specified.")
   }
 
   def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {
