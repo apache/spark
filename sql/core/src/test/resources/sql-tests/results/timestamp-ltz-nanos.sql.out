@@ -833,6 +833,17 @@ struct<c:timestamp_ltz(9),count(1):bigint>
 
 
 -- !query
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
+-- !query schema
+struct<mode(c):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000001
+
+
+-- !query
 SELECT unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
 struct<unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss):bigint>

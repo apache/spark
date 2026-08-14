@@ -741,6 +741,17 @@ Sort [c#x ASC NULLS FIRST], true
 
 
 -- !query
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
+-- !query analysis
+Aggregate [mode(c#x, 0, 0, None) AS mode(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
 SELECT unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
 Project [unix_timestamp(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss)#xL]
