@@ -2334,6 +2334,114 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  test("SPARK-58783: SPJ with runtime filtering when join keys are subset of partition keys") {
+    val table1 = "table1"
+    val table2 = "table2"
+    // the join key is the second partition key of `table1`, so its scan partitioning is projected
+    // down to `dept_id` when SPJ is applied
+    createTable(table1, columns2, Array(identity("store_id"), identity("dept_id")))
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "(100, 1, 'aa'), " +
+        "(100, 2, 'ab'), " +
+        "(200, 1, 'ac'), " +
+        "(200, 3, 'ad')")
+
+    createTable(table2, columns2, Array(identity("dept_id")))
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+        "(100, 1, 'x'), " +
+        "(100, 2, 'y'), " +
+        "(100, 3, 'x')")
+
+    Seq(true, false).foreach { partiallyClustered =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+            partiallyClustered.toString) {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("t1", "t2")}
+             |t1.store_id, t1.dept_id, t1.data AS t1data, t2.data AS t2data
+             |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+             |ON t1.dept_id = t2.dept_id WHERE t2.data = 'x'
+             |ORDER BY t1.store_id, t1.dept_id, t1data
+             |""".stripMargin)
+        // the dynamic filter must land on the `table1` scan, the side whose partitioning is
+        // projected down to a non-prefix of its partition keys
+        val scans = collectScans(df.queryExecution.executedPlan)
+        assert(
+          scans.exists(s =>
+            s.runtimeFilters.nonEmpty && s.spjParams.joinKeyPositions.contains(Seq(1))),
+          "the dynamic filter should be pushed to the scan with the projected partitioning")
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "SPJ should be triggered")
+        checkAnswer(df, Seq(
+          Row(100, 1, "aa", "x"),
+          Row(200, 1, "ac", "x"),
+          Row(200, 3, "ad", "x")))
+      }
+    }
+  }
+
+  test("SPARK-58783: SPJ with runtime filtering when join keys are a non-prefix subset of " +
+      "partition keys") {
+    val table1 = "table1"
+    val table2 = "table2"
+    // the join keys are the first and the third partition key of `table1`, so its scan partitioning
+    // is projected down to `data, dept_id` when SPJ is applied. The partition key the projection
+    // drops, `store_id`, sits between them, which is what makes the values it is compared against
+    // line up with the wrong column.
+    createTable(table1, columns2,
+      Array(identity("data"), identity("store_id"), identity("dept_id")))
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "(100, 1, 'aa'), " +
+        "(200, 2, 'aa'), " +
+        "(100, 3, 'bb')")
+
+    createTable(table2, columns2, Array(identity("data"), identity("dept_id")))
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+        "(500, 1, 'aa'), " +
+        "(500, 2, 'aa'), " +
+        "(500, 3, 'bb')")
+
+    Seq(true, false).foreach { partiallyClustered =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+            partiallyClustered.toString) {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("t1", "t2")}
+             |t1.store_id, t1.dept_id, t1.data, t2.store_id AS t2store_id
+             |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+             |ON t1.data = t2.data AND t1.dept_id = t2.dept_id WHERE t2.data = 'aa'
+             |ORDER BY t1.store_id, t1.dept_id
+             |""".stripMargin)
+        val scans = collectScans(df.queryExecution.executedPlan)
+        assert(
+          scans.exists(s =>
+            s.runtimeFilters.nonEmpty && s.spjParams.joinKeyPositions.contains(Seq(0, 2))),
+          "the dynamic filter should be pushed to the scan with the projected partitioning")
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "SPJ should be triggered")
+        checkAnswer(df, Seq(
+          Row(100, 1, "aa", 500),
+          Row(200, 2, "aa", 500)))
+      }
+    }
+  }
+
   test("SPARK-48012: one-side shuffle with partition transforms") {
     val items_partitions = Array(bucket(2, "id"), identity("arrive_time"))
     val items_partitions2 = Array(identity("arrive_time"), bucket(2, "id"))
