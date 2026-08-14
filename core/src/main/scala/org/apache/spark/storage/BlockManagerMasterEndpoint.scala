@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{BlockTtlCleaner, MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
@@ -122,11 +122,15 @@ class BlockManagerMasterEndpoint(
     ExecutionContext.fromExecutorService(askThreadPool)
 
 
+  // Cache the (immutable-after-start) RDD TTL config once rather than re-parsing the time string on
+  // every updateBlockAtime, which is on the hot path of block-location lookups.
+  private val rddTtl: Option[Long] = conf.get(config.SPARK_TTL_RDD_CLEANER)
+
   // Created here so onStop can shut it down, but the cleaner is not started until onStart: it
   // routes removals through self.ask(RemoveRdd(...)), and self is only valid once the endpoint is
   // registered (i.e. from onStart onward).
   private[spark] val cleanerThreadpool: Option[ThreadPoolExecutor] = {
-    if (conf.get(config.SPARK_TTL_BLOCK_CLEANER).isDefined) {
+    if (rddTtl.isDefined) {
       Some(ThreadUtils.newDaemonFixedThreadPool(1, "rdd-ttl-cleaner"))
     } else {
       None
@@ -291,84 +295,20 @@ class BlockManagerMasterEndpoint(
   }
 
   private def updateBlockAtime(blockId: BlockId): Unit = {
-    // First handle "regular" blocks
-    if (!blockId.isShuffle) {
-      // Only update access times if we have the cleaner enabled.
-      if (conf.get(config.SPARK_TTL_BLOCK_CLEANER).isDefined) {
-        // Note: we don't _really_ care about concurrency here too much, if we have
-        // conflicting updates in time they're going to "close enough" to be a wash
-        // so we don't bother checking the return value here.
-        // For now we only do RDD blocks, because I'm not convinced it's safe to TTL
-        // clean Broadcast blocks, but maybe we can revisit that.
-        // Only record an access for a block we actually track: a lookup of an absent/evicted
-        // block must not create a phantom rddAccessTime entry that the cleaner would later try to
-        // reap (broadcasting a RemoveRdd for an RDD that has nothing to remove).
-        blockId.asRDDId.foreach { r =>
-          if (blockLocations.containsKey(blockId)) {
-            rddAccessTime.put(r.rddId, System.currentTimeMillis())
-          }
+    blockId.asRDDId match {
+      case Some(r) =>
+        // Only RDD cache blocks are TTL-tracked (not broadcast). Record an access only for a block
+        // we actually track: a lookup of an absent/evicted block must not create a phantom
+        // rddAccessTime entry that the cleaner would later try to reap (broadcasting a RemoveRdd
+        // for an RDD that has nothing to remove). Timestamp races are "close enough" so we don't
+        // check the return value.
+        if (rddTtl.isDefined && blockLocations.containsKey(blockId)) {
+          rddAccessTime.put(r.rddId, System.currentTimeMillis())
         }
-      }
-    } else if (conf.get(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
-      // We track shuffles in the mapoutput tracker.
-      blockId.asShuffleId.foreach(s => mapOutputTracker.updateShuffleAtime(s.shuffleId))
-    }
-  }
-
-
-  private class TTLCleaner extends Runnable {
-    override def run(): Unit = {
-      try {
-        // Poll the RDD access times if we're configured for it.
-        conf.get(config.SPARK_TTL_BLOCK_CLEANER) match {
-          case Some(ttl) =>
-            while (true) {
-              val maxAge = System.currentTimeMillis() - ttl
-              // Find the elements to be removed & track the oldest remaining time (if any).
-              // asScala over a ConcurrentHashMap is weakly consistent, so a concurrent put during
-              // iteration is safe (never throws); toList snapshots the (id, atime) pairs we saw.
-              var oldest = System.currentTimeMillis()
-              val toBeRemoved = rddAccessTime.asScala.toList.flatMap { case (rddId, atime) =>
-                if (atime < maxAge) {
-                  Some((rddId, atime))
-                } else {
-                  if (atime < oldest) {
-                    oldest = atime
-                  }
-                  None
-                }
-              }
-              toBeRemoved.foreach { case (rddId, atime) =>
-                try {
-                  // Only act if the atime has not changed since our snapshot: a concurrent access
-                  // in that window means the RDD is back in use and must not be reaped.
-                  // remove(key, value) is a no-op (returns false) when the value differs.
-                  if (rddAccessTime.remove(rddId, atime)) {
-                    // Route the removal through our own message loop rather than calling removeRdd
-                    // directly: this endpoint is an IsolatedThreadSafeRpcEndpoint whose
-                    // non-concurrent maps (blockLocations, blockChecksums, sealedChecksums, ...) are
-                    // only safe because a single dispatcher thread touches them. Doing the mutation
-                    // here on the cleaner thread would race that dispatcher thread; asking ourselves
-                    // keeps removeRdd on the dispatcher thread where it belongs.
-                    self.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
-                  }
-                } catch {
-                  case NonFatal(e) =>
-                    logDebug(log"Error removing rdd ${MDC(RDD_ID, rddId)} with TTL cleaner", e)
-                }
-              }
-              // Wait until the next possible element to be removed
-              val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 100)
-              Thread.sleep(delay)
-            }
-          case None =>
-            logDebug("Tried to start TTL cleaner when not configured.")
-        }
-      } catch {
-        case _: InterruptedException =>
-          // Exit gracefully
-          logInfo("RDD TTL cleaner thread interrupted, shutting down.")
-      }
+      case None =>
+        // Shuffle blocks are tracked in the map output tracker (which self-guards on its own TTL
+        // config); everything else (e.g. broadcast) is not TTL-tracked.
+        blockId.asShuffleId.foreach(s => mapOutputTracker.updateShuffleAtime(s.shuffleId))
     }
   }
 
@@ -468,15 +408,8 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
-    // Drop the RDD from TTL tracking.
-    try {
-      if (conf.get(config.SPARK_TTL_BLOCK_CLEANER).isDefined) {
-        rddAccessTime.remove(rddId)
-      }
-    } catch {
-      case NonFatal(e) =>
-        logWarning(log"Error removing ${MDC(RDD_ID, rddId)} from RDD TTL tracking", e)
-    }
+    // Drop the RDD from TTL tracking (a bare no-op when the map is empty / TTL disabled).
+    rddAccessTime.remove(rddId)
 
     // Then remove the metadata for the given RDD, and then asynchronously remove the blocks
     // from the storage endpoints.
@@ -1251,9 +1184,21 @@ class BlockManagerMasterEndpoint(
   }
 
   override def onStart(): Unit = {
-    // Start the TTL cleaner only now that the endpoint is registered: the cleaner routes removals
-    // through self.ask(RemoveRdd(...)), and self is only valid from onStart onward.
-    cleanerThreadpool.foreach(_.execute(new TTLCleaner))
+    // Start the TTL cleaner only now that the endpoint is registered: it reaps by routing through
+    // self.ask(RemoveRdd(...)) (so blockLocations et al. are mutated only on the single dispatcher
+    // thread, preserving the IsolatedThreadSafeRpcEndpoint invariant), and self is only valid from
+    // onStart onward. RemoveRdd is the existing message; its reply is the async block-removal Future.
+    cleanerThreadpool.foreach { pool =>
+      pool.execute(new BlockTtlCleaner(
+        name = "RDD",
+        ttlMillis = rddTtl.get,
+        accessTimes = rddAccessTime,
+        shouldReap = _ => true,
+        reap = rddId => {
+          self.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
+          ()
+        }))
+    }
   }
 
   override def onStop(): Unit = {
