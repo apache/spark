@@ -117,7 +117,7 @@ WithCTE
 :        +- Filter (t1a#x = val1a)
 :           +- SubqueryAlias t1
 :              +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:                 +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :                    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 +- Project [t1a#x, t1b#x, t1c#x, t1d#x, t1h#x]
    +- Filter t1b#x IN (list#x [])
@@ -127,7 +127,7 @@ WithCTE
       :           +- CTERelationRef xxxx, true, [t1a#x, t1b#x], false, false
       +- SubqueryAlias t1
          +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-            +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+            +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
                +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 
 
@@ -166,7 +166,7 @@ WithCTE
 :     +- Project [t1a#x, t1b#x]
 :        +- SubqueryAlias t1
 :           +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:              +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:              +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :                 +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 +- Filter isnotnull(t1c#x)
    +- Aggregate [t1a#x, t1b#x, t1c#x], [count(distinct t1a#x) AS count(DISTINCT t1a)#xL, t1b#x, t1c#x]
@@ -196,7 +196,7 @@ WithCTE
          :              +- CTERelationRef xxxx, true, [t1a#x, t1b#x], false, false
          +- SubqueryAlias t1
             +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-               +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+               +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
                   +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 
 
@@ -235,7 +235,7 @@ WithCTE
 :     +- Project [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x]
 :        +- SubqueryAlias t1
 :           +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:              +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:              +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :                 +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 +- Project [t1a#x, t1b#x, t1c#x, t1h#x]
    +- Filter t1c#x IN (list#x [])
@@ -264,7 +264,7 @@ WithCTE
       :              +- CTERelationRef xxxx, true, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x], false, false
       +- SubqueryAlias t1
          +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-            +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+            +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
                +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 
 
@@ -301,19 +301,19 @@ WithCTE
 :           :        :- Join RightOuter, (t1c#x = t2c#x)
 :           :        :  :- SubqueryAlias t2
 :           :        :  :  +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#x, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
-:           :        :  :     +- Project [cast(col1#x as string collate UTF8_BINARY) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
+:           :        :  :     +- Project [cast(col1#x as string) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
 :           :        :  :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           :        :  +- SubqueryAlias t1
 :           :        :     +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:           :        :        +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:           :        :        +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :           :        :           +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           :        +- SubqueryAlias t3
 :           :           +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#x, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
-:           :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS t3a#x, cast(col2#x as int) AS t3b#x, cast(col3#x as int) AS t3c#x, cast(col4#x as int) AS t3d#x, cast(col5#x as decimal(3,1)) AS t3e#x, cast(col6#x as decimal(3,1)) AS t3f#x, cast(col7#x as double) AS t3g#x, cast(col8#x as timestamp) AS t3h#x, cast(col9#x as date) AS t3i#x]
+:           :              +- Project [cast(col1#x as string) AS t3a#x, cast(col2#x as int) AS t3b#x, cast(col3#x as int) AS t3c#x, cast(col4#x as int) AS t3d#x, cast(col5#x as decimal(3,1)) AS t3e#x, cast(col6#x as decimal(3,1)) AS t3f#x, cast(col7#x as double) AS t3g#x, cast(col8#x as timestamp) AS t3h#x, cast(col9#x as date) AS t3i#x]
 :           :                 +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           +- SubqueryAlias t1
 :              +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:                 +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :                    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 +- Project [t1a#x, t1b#x, t1a#x, t1b#x, t1a#x, t1b#x, t1a#x, t1b#x]
    +- SubqueryAlias s
@@ -369,18 +369,18 @@ WithCTE
 :           :     +- Filter (outer(t1b#x) < t2b#x)
 :           :        +- SubqueryAlias t2
 :           :           +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#x, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
-:           :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
+:           :              +- Project [cast(col1#x as string) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
 :           :                 +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           +- SubqueryAlias t1
 :              +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:                 +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :                    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 +- Aggregate [t1b#x], [count(distinct t1a#x) AS count(DISTINCT t1a)#xL, t1b#x]
    +- Filter t1b#x IN (list#x [])
       :  +- Project [t1b#x]
       :     +- SubqueryAlias t1
       :        +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-      :           +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+      :           +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
       :              +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
       +- SubqueryAlias s
          +- Project [t1a#x, t1b#x]
@@ -424,15 +424,15 @@ WithCTE
 :           :        +- Join FullOuter, (t2a#x = t3a#x)
 :           :           :- SubqueryAlias t2
 :           :           :  +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#x, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
-:           :           :     +- Project [cast(col1#x as string collate UTF8_BINARY) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
+:           :           :     +- Project [cast(col1#x as string) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
 :           :           :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           :           +- SubqueryAlias t3
 :           :              +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#x, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
-:           :                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS t3a#x, cast(col2#x as int) AS t3b#x, cast(col3#x as int) AS t3c#x, cast(col4#x as int) AS t3d#x, cast(col5#x as decimal(3,1)) AS t3e#x, cast(col6#x as decimal(3,1)) AS t3f#x, cast(col7#x as double) AS t3g#x, cast(col8#x as timestamp) AS t3h#x, cast(col9#x as date) AS t3i#x]
+:           :                 +- Project [cast(col1#x as string) AS t3a#x, cast(col2#x as int) AS t3b#x, cast(col3#x as int) AS t3c#x, cast(col4#x as int) AS t3d#x, cast(col5#x as decimal(3,1)) AS t3e#x, cast(col6#x as decimal(3,1)) AS t3f#x, cast(col7#x as double) AS t3g#x, cast(col8#x as timestamp) AS t3h#x, cast(col9#x as date) AS t3i#x]
 :           :                    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           +- SubqueryAlias t1
 :              +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:                 +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :                    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 +- Project [t1a#x, t1b#x, t1c#x, t1a#x, t1b#x, t1c#x, t1a#x, t1b#x, t1c#x, t1a#x, t1b#x, t1c#x]
    +- SubqueryAlias s
@@ -479,11 +479,11 @@ WithCTE
 :           :     +- Filter (outer(t1c#x) = t2c#x)
 :           :        +- SubqueryAlias t2
 :           :           +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#x, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
-:           :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
+:           :              +- Project [cast(col1#x as string) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
 :           :                 +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           +- SubqueryAlias t1
 :              +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:                 +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :                    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 +- Aggregate [t1b#x], [count(distinct t1a#x) AS count(DISTINCT t1a)#xL, t1b#x]
    +- SubqueryAlias s
@@ -529,11 +529,11 @@ WithCTE
 :           :     +- Filter (outer(t1c#x) = t2c#x)
 :           :        +- SubqueryAlias t2
 :           :           +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#x, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
-:           :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
+:           :              +- Project [cast(col1#x as string) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
 :           :                 +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           +- SubqueryAlias t1
 :              +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:                 +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :                    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 +- Distinct
    +- Project [t1b#x]
@@ -542,7 +542,7 @@ WithCTE
          :     +- Join Inner, (t1a#x = t1a#x)
          :        :- SubqueryAlias t1
          :        :  +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-         :        :     +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+         :        :     +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
          :        :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
          :        +- SubqueryAlias cte1
          :           +- CTERelationRef xxxx, true, [t1a#x, t1b#x], false, false
@@ -579,7 +579,7 @@ WithCTE
 :        +- Filter (t1a#x = val1d)
 :           +- SubqueryAlias t1
 :              +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:                 +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :                    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 +- Project [t1a#x, t1b#x, t1c#x, t1h#x]
    +- Filter (NOT t1b#x IN (list#x []) AND (t1c#x > 10))
@@ -589,7 +589,7 @@ WithCTE
       :           +- CTERelationRef xxxx, true, [t1a#x, t1b#x], false, false
       +- SubqueryAlias t1
          +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-            +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+            +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
                +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 
 
@@ -634,19 +634,19 @@ WithCTE
 :           :        :- Join FullOuter, (t2a#x = t3a#x)
 :           :        :  :- SubqueryAlias t2
 :           :        :  :  +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#x, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
-:           :        :  :     +- Project [cast(col1#x as string collate UTF8_BINARY) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
+:           :        :  :     +- Project [cast(col1#x as string) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x, cast(col4#x as int) AS t2d#x, cast(col5#x as decimal(3,1)) AS t2e#x, cast(col6#x as decimal(3,1)) AS t2f#x, cast(col7#x as double) AS t2g#x, cast(col8#x as timestamp) AS t2h#x, cast(col9#x as date) AS t2i#x]
 :           :        :  :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           :        :  +- SubqueryAlias t3
 :           :        :     +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#x, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
-:           :        :        +- Project [cast(col1#x as string collate UTF8_BINARY) AS t3a#x, cast(col2#x as int) AS t3b#x, cast(col3#x as int) AS t3c#x, cast(col4#x as int) AS t3d#x, cast(col5#x as decimal(3,1)) AS t3e#x, cast(col6#x as decimal(3,1)) AS t3f#x, cast(col7#x as double) AS t3g#x, cast(col8#x as timestamp) AS t3h#x, cast(col9#x as date) AS t3i#x]
+:           :        :        +- Project [cast(col1#x as string) AS t3a#x, cast(col2#x as int) AS t3b#x, cast(col3#x as int) AS t3c#x, cast(col4#x as int) AS t3d#x, cast(col5#x as decimal(3,1)) AS t3e#x, cast(col6#x as decimal(3,1)) AS t3f#x, cast(col7#x as double) AS t3g#x, cast(col8#x as timestamp) AS t3h#x, cast(col9#x as date) AS t3i#x]
 :           :        :           +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           :        +- SubqueryAlias t1
 :           :           +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:           :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:           :              +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :           :                 +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 :           +- SubqueryAlias t1
 :              +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+:                 +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
 :                    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]
 +- Sort [t1c#x DESC NULLS LAST], true
    +- Project [t1a#x, t1b#x, t1c#x, t1d#x, t1h#x]
@@ -668,5 +668,5 @@ WithCTE
          :              +- CTERelationRef xxxx, true, [t1a#x, t1b#x, t1c#x, t1d#x, t1h#x], false, false
          +- SubqueryAlias t1
             +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#x, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
-               +- Project [cast(col1#x as string collate UTF8_BINARY) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
+               +- Project [cast(col1#x as string) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x, cast(col4#x as int) AS t1d#x, cast(col5#x as decimal(3,1)) AS t1e#x, cast(col6#x as decimal(3,1)) AS t1f#x, cast(col7#x as double) AS t1g#x, cast(col8#x as timestamp) AS t1h#x, cast(col9#x as date) AS t1i#x]
                   +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x, col9#x]

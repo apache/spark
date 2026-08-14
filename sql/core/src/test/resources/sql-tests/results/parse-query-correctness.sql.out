@@ -69,7 +69,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<1:int,a:string collate UTF8_BINARY>
+struct<1:int,a:string>
 -- !query output
 1	a
 2	b
@@ -95,7 +95,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<num:int,a:string collate UTF8_BINARY>
+struct<num:int,a:string>
 -- !query output
 1	a
 2	b
@@ -121,7 +121,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<1:int,a:string collate UTF8_BINARY>
+struct<1:int,a:string>
 -- !query output
 1	a
 2	b
@@ -147,7 +147,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<num:int,a:string collate UTF8_BINARY>
+struct<num:int,a:string>
 -- !query output
 1	a
 2	b
@@ -219,7 +219,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<1:int,a:string collate UTF8_BINARY>
+struct<1:int,a:string>
 -- !query output
 
 
@@ -242,7 +242,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<num:int,a:string collate UTF8_BINARY>
+struct<num:int,a:string>
 -- !query output
 
 
@@ -265,7 +265,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<1:int,a:string collate UTF8_BINARY>
+struct<1:int,a:string>
 -- !query output
 
 
@@ -288,7 +288,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<num:int,a:string collate UTF8_BINARY>
+struct<num:int,a:string>
 -- !query output
 
 
@@ -357,7 +357,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<1:int,a:string collate UTF8_BINARY>
+struct<1:int,a:string>
 -- !query output
 
 
@@ -380,7 +380,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<num:int,a:string collate UTF8_BINARY>
+struct<num:int,a:string>
 -- !query output
 
 
@@ -403,7 +403,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<1:int,a:string collate UTF8_BINARY>
+struct<1:int,a:string>
 -- !query output
 
 
@@ -426,7 +426,7 @@ struct<>
 -- !query
 SELECT * FROM v1
 -- !query schema
-struct<num:int,a:string collate UTF8_BINARY>
+struct<num:int,a:string>
 -- !query output
 
 

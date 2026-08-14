@@ -50,7 +50,7 @@ FROM trades t ASOF JOIN quotes q
 WHERE q.bid_price > 200
 ORDER BY t.symbol
 -- !query schema
-struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
+struct<symbol:string,bid_price:decimal(5,2)>
 -- !query output
 MSFT	420.50
 
@@ -62,7 +62,7 @@ FROM (SELECT * FROM trades WHERE symbol = 'AAPL') t ASOF JOIN quotes q
   ON t.symbol = q.symbol
 ORDER BY t.trade_time
 -- !query schema
-struct<trade_time:timestamp,symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
+struct<trade_time:timestamp,symbol:string,bid_price:decimal(5,2)>
 -- !query output
 2026-06-29 10:00:05	AAPL	180.10
 2026-06-29 10:00:11	AAPL	180.20
@@ -76,7 +76,7 @@ FROM trades t ASOF JOIN quotes q
 GROUP BY t.symbol
 ORDER BY t.symbol
 -- !query schema
-struct<symbol:string collate UTF8_BINARY,avg_bid:decimal(9,6)>
+struct<symbol:string,avg_bid:decimal(9,6)>
 -- !query output
 AAPL	180.150000
 MSFT	420.500000
@@ -91,7 +91,7 @@ GROUP BY t.symbol
 HAVING count(*) > 1
 ORDER BY t.symbol
 -- !query schema
-struct<symbol:string collate UTF8_BINARY,cnt:bigint>
+struct<symbol:string,cnt:bigint>
 -- !query output
 AAPL	2
 
@@ -103,7 +103,7 @@ FROM trades t ASOF JOIN quotes q
   ON t.symbol = q.symbol
 ORDER BY t.trade_time
 -- !query schema
-struct<trade_time:timestamp,symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
+struct<trade_time:timestamp,symbol:string,bid_price:decimal(5,2)>
 -- !query output
 2026-06-29 10:00:05	AAPL	180.10
 2026-06-29 10:00:11	AAPL	180.20
@@ -118,7 +118,7 @@ FROM trades t ASOF JOIN quotes q
 ORDER BY t.trade_time
 LIMIT 2 OFFSET 1
 -- !query schema
-struct<trade_time:timestamp,symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
+struct<trade_time:timestamp,symbol:string,bid_price:decimal(5,2)>
 -- !query output
 2026-06-29 10:00:11	AAPL	180.20
 2026-06-29 10:00:12	MSFT	420.50
@@ -132,7 +132,7 @@ FROM trades t ASOF JOIN quotes q
 QUALIFY row_number() OVER (PARTITION BY t.symbol ORDER BY t.trade_time DESC) = 1
 ORDER BY t.symbol
 -- !query schema
-struct<trade_time:timestamp,symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
+struct<trade_time:timestamp,symbol:string,bid_price:decimal(5,2)>
 -- !query output
 2026-06-29 10:00:11	AAPL	180.20
 2026-06-29 10:00:12	MSFT	420.50
@@ -220,7 +220,7 @@ WHERE bid_price IN (
 )
 ORDER BY symbol, bid_price
 -- !query schema
-struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
+struct<symbol:string,bid_price:decimal(5,2)>
 -- !query output
 AAPL	180.10
 AAPL	180.20
@@ -239,7 +239,7 @@ FROM alerts a ASOF JOIN maintenance m
   ON a.host = m.host
 ORDER BY trade_time, symbol
 -- !query schema
-struct<trade_time:timestamp,symbol:string collate UTF8_BINARY,quote_time:timestamp,direction:string>
+struct<trade_time:timestamp,symbol:string,quote_time:timestamp,direction:string>
 -- !query output
 2026-06-29 10:00:00	db-01	2026-06-29 12:00:00	forward
 2026-06-29 10:00:05	AAPL	2026-06-29 10:00:00	backward
@@ -255,7 +255,7 @@ FROM trades t ASOF JOIN quotes q
 INTERSECT
 SELECT symbol FROM quotes
 -- !query schema
-struct<symbol:string collate UTF8_BINARY>
+struct<symbol:string>
 -- !query output
 AAPL
 MSFT
@@ -269,7 +269,7 @@ FROM trades t ASOF JOIN quotes q
 EXCEPT
 SELECT 'GOOG'
 -- !query schema
-struct<symbol:string collate UTF8_BINARY>
+struct<symbol:string>
 -- !query output
 AAPL
 MSFT
@@ -314,7 +314,7 @@ FROM (
 ) PIVOT (max(bid_price) FOR h IN (10))
 ORDER BY symbol
 -- !query schema
-struct<symbol:string collate UTF8_BINARY,10:decimal(5,2)>
+struct<symbol:string,10:decimal(5,2)>
 -- !query output
 AAPL	180.20
 MSFT	420.50
@@ -332,7 +332,7 @@ FROM (
 UNPIVOT (bid_price FOR hour_bucket IN (hour_10))
 ORDER BY symbol, hour_bucket
 -- !query schema
-struct<symbol:string collate UTF8_BINARY,hour_bucket:string,bid_price:decimal(5,2)>
+struct<symbol:string,hour_bucket:string,bid_price:decimal(5,2)>
 -- !query output
 AAPL	hour_10	180.10
 AAPL	hour_10	180.20

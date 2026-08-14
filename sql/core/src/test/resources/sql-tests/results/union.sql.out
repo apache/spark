@@ -29,7 +29,7 @@ FROM   (SELECT * FROM t1
         UNION ALL
         SELECT * FROM t1)
 -- !query schema
-struct<c1:int,c2:string collate UTF8_BINARY>
+struct<c1:int,c2:string>
 -- !query output
 1	a
 1	a

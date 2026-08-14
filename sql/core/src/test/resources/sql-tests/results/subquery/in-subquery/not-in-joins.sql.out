@@ -73,7 +73,7 @@ WHERE  t1a NOT IN (SELECT t2a
                    FROM   t2)
        AND t1b = t3b
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t3a:string collate UTF8_BINARY,t3b:int,t3c:int>
+struct<t1a:string,t1b:int,t1c:int,t3a:string,t3b:int,t3c:int>
 -- !query output
 val1a	6	8	val3a	6	12
 val1a	6	8	val3a	6	12
@@ -108,7 +108,7 @@ GROUP BY        t1a, t1b, t1c, t3a, t3b, t3c
 HAVING          count(distinct(t3a)) >= 1
 ORDER BY        t1a, t3b
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,count(DISTINCT t3a):bigint,t3b:int,t3c:int>
+struct<t1a:string,t1b:int,t1c:int,count(DISTINCT t3a):bigint,t3b:int,t3c:int>
 -- !query output
 val1c	8	16	1	6	12
 val1c	8	16	1	10	12
@@ -136,7 +136,7 @@ AND    t1d NOT IN
               RIGHT JOIN t1 on t2e = t1e
               WHERE t1a = t2a)
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1d:int,t1h:timestamp>
+struct<t1a:string,t1b:int,t1c:int,t1d:int,t1h:timestamp>
 -- !query output
 val1a	16	12	10	2014-07-04 01:01:00
 val1a	16	12	21	2014-06-04 01:02:00.001

@@ -433,7 +433,7 @@ struct<>
 -- !query
 SELECT * FROM vsubdepartment ORDER BY name
 -- !query schema
-struct<id:int,parent_department:int,name:string collate UTF8_BINARY>
+struct<id:int,parent_department:int,name:string>
 -- !query output
 1	0	A
 2	1	B

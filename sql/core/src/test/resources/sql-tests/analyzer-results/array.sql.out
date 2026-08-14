@@ -20,7 +20,7 @@ select * from data
 Project [a#x, b#x, c#x]
 +- SubqueryAlias data
    +- View (`data`, [a#x, b#x, c#x])
-      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
+      +- Project [cast(a#x as string) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
          +- Project [a#x, b#x, c#x]
             +- SubqueryAlias data
                +- LocalRelation [a#x, b#x, c#x]
@@ -32,7 +32,7 @@ select a, b[0], b[0] + b[1] from data
 Project [a#x, b#x[0] AS b[0]#x, (b#x[0] + b#x[1]) AS (b[0] + b[1])#x]
 +- SubqueryAlias data
    +- View (`data`, [a#x, b#x, c#x])
-      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
+      +- Project [cast(a#x as string) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
          +- Project [a#x, b#x, c#x]
             +- SubqueryAlias data
                +- LocalRelation [a#x, b#x, c#x]
@@ -44,7 +44,7 @@ select a, c[0][0] + c[0][0 + 1] from data
 Project [a#x, (c#x[0][0] + c#x[0][(0 + 1)]) AS (c[0][0] + c[0][(0 + 1)])#x]
 +- SubqueryAlias data
    +- View (`data`, [a#x, b#x, c#x])
-      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
+      +- Project [cast(a#x as string) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
          +- Project [a#x, b#x, c#x]
             +- SubqueryAlias data
                +- LocalRelation [a#x, b#x, c#x]
@@ -138,7 +138,7 @@ select array_contains(b, 11), array_contains(c, array(111, 112, 113)) from data
 Project [array_contains(b#x, 11) AS array_contains(b, 11)#x, array_contains(c#x, array(111, 112, 113)) AS array_contains(c, array(111, 112, 113))#x]
 +- SubqueryAlias data
    +- View (`data`, [a#x, b#x, c#x])
-      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
+      +- Project [cast(a#x as string) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
          +- Project [a#x, b#x, c#x]
             +- SubqueryAlias data
                +- LocalRelation [a#x, b#x, c#x]

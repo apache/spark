@@ -74,14 +74,14 @@ Project [col1#x, col2#x]
          :     :- Project [col1#x, col2#x]
          :     :  +- SubqueryAlias spark_catalog.default.v1
          :     :     +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-         :     :        +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+         :     :        +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
          :     :           +- Project [col1#x, col2#x, col3#x]
          :     :              +- SubqueryAlias spark_catalog.default.t1
          :     :                 +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
          :     +- Project [col3#x, col2#x]
          :        +- SubqueryAlias spark_catalog.default.v1
          :           +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-         :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+         :              +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
          :                 +- Project [col1#x, col2#x, col3#x]
          :                    +- SubqueryAlias spark_catalog.default.t1
          :                       +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
@@ -89,7 +89,7 @@ Project [col1#x, col2#x]
             +- Project [col2#x, col2#x]
                +- SubqueryAlias spark_catalog.default.v1
                   +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-                     +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+                     +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
                         +- Project [col1#x, col2#x, col3#x]
                            +- SubqueryAlias spark_catalog.default.t1
                               +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
@@ -121,7 +121,7 @@ Project [col1#x, col2#x]
             +- Project [col2#x, col2#x]
                +- SubqueryAlias spark_catalog.default.v1
                   +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-                     +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+                     +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
                         +- Project [col1#x, col2#x, col3#x]
                            +- SubqueryAlias spark_catalog.default.t1
                               +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
@@ -149,7 +149,7 @@ Project [col1#x, col2#x]
          :     +- Project [col3#x, col2#x]
          :        +- SubqueryAlias spark_catalog.default.v1
          :           +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-         :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+         :              +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
          :                 +- Project [col1#x, col2#x, col3#x]
          :                    +- SubqueryAlias spark_catalog.default.t1
          :                       +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
@@ -178,7 +178,7 @@ Project [col1#x, col2#x]
          :     :- Project [col1#x, col2#x]
          :     :  +- SubqueryAlias spark_catalog.default.v1
          :     :     +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-         :     :        +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+         :     :        +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
          :     :           +- Project [col1#x, col2#x, col3#x]
          :     :              +- SubqueryAlias spark_catalog.default.t1
          :     :                 +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
@@ -210,14 +210,14 @@ Project [col1#x, col2#x]
          :     :- Project [col1#x, col2#x]
          :     :  +- SubqueryAlias spark_catalog.default.v1
          :     :     +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-         :     :        +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+         :     :        +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
          :     :           +- Project [col1#x, col2#x, col3#x]
          :     :              +- SubqueryAlias spark_catalog.default.t1
          :     :                 +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
          :     +- Project [col3#x, col2#x]
          :        +- SubqueryAlias spark_catalog.default.v1
          :           +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-         :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+         :              +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
          :                 +- Project [col1#x, col2#x, col3#x]
          :                    +- SubqueryAlias spark_catalog.default.t1
          :                       +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
@@ -246,7 +246,7 @@ Project [col1#x, col2#x]
          :     :- Project [col1#x, col2#x]
          :     :  +- SubqueryAlias spark_catalog.default.v1
          :     :     +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-         :     :        +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+         :     :        +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
          :     :           +- Project [col1#x, col2#x, col3#x]
          :     :              +- SubqueryAlias spark_catalog.default.t1
          :     :                 +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
@@ -257,7 +257,7 @@ Project [col1#x, col2#x]
             +- Project [col2#x, col2#x]
                +- SubqueryAlias spark_catalog.default.v1
                   +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-                     +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+                     +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
                         +- Project [col1#x, col2#x, col3#x]
                            +- SubqueryAlias spark_catalog.default.t1
                               +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
@@ -285,7 +285,7 @@ Project [col1#x, col2#x]
          :     +- Project [col3#x, col2#x]
          :        +- SubqueryAlias spark_catalog.default.v1
          :           +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-         :              +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+         :              +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
          :                 +- Project [col1#x, col2#x, col3#x]
          :                    +- SubqueryAlias spark_catalog.default.t1
          :                       +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet
@@ -293,7 +293,7 @@ Project [col1#x, col2#x]
             +- Project [col2#x, col2#x]
                +- SubqueryAlias spark_catalog.default.v1
                   +- View (`spark_catalog`.`default`.`v1`, [col1#x, col2#x, col3#x])
-                     +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x, cast(col3#x as string collate UTF8_BINARY) AS col3#x]
+                     +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as string) AS col3#x]
                         +- Project [col1#x, col2#x, col3#x]
                            +- SubqueryAlias spark_catalog.default.t1
                               +- Relation spark_catalog.default.t1[col1#x,col2#x,col3#x] parquet

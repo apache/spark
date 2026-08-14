@@ -68,7 +68,7 @@ WHERE  a.bonus_amt > 30
                    FROM   bonus_cte b 
                    WHERE  a.emp_name = b.emp_name)
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,bonus_amt:decimal(6,2)>
+struct<emp_name:string,bonus_amt:decimal(6,2)>
 -- !query output
 emp 2	100.00
 emp 2	300.00
@@ -94,7 +94,7 @@ WHERE  EXISTS (SELECT *
                         ON a.dept_id = b.dept_id 
                WHERE  bonus.emp_name = a.emp_name)
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,bonus_amt:decimal(6,2)>
+struct<emp_name:string,bonus_amt:decimal(6,2)>
 -- !query output
 emp 1	10.00
 emp 1	20.00
@@ -125,7 +125,7 @@ WHERE  e.dept_id = d.dept_id
                                  ON a.dept_id = b.dept_id 
                    WHERE  e.emp_name = a.emp_name)
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,bonus_amt:decimal(6,2)>
+struct<emp_name:string,bonus_amt:decimal(6,2)>
 -- !query output
 emp 1	10.00
 emp 1	20.00
@@ -154,7 +154,7 @@ WHERE  EXISTS (SELECT dept_id,
                HAVING count(*) > 1) 
 GROUP  BY emp_name
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,sum(bonus_amt):decimal(16,2)>
+struct<emp_name:string,sum(bonus_amt):decimal(16,2)>
 -- !query output
 emp 1	30.00
 emp 2	400.00
@@ -184,7 +184,7 @@ WHERE  NOT EXISTS (SELECT dept_id,
                    HAVING count(*) < 1) 
 GROUP  BY emp_name
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,sum(bonus_amt):decimal(16,2)>
+struct<emp_name:string,sum(bonus_amt):decimal(16,2)>
 -- !query output
 emp 1	30.00
 emp 2	400.00

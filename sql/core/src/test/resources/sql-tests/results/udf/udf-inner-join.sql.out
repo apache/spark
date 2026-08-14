@@ -56,7 +56,7 @@ struct<>
 -- !query
 SELECT tb.* FROM ta INNER JOIN tb ON ta.a = tb.a AND ta.tag = tb.tag
 -- !query schema
-struct<a:int,tag:string collate UTF8_BINARY>
+struct<a:int,tag:string>
 -- !query output
 1	a
 1	a

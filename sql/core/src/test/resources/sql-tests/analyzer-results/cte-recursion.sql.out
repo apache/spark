@@ -1391,7 +1391,7 @@ WithCTE
 :              :- SubqueryAlias r
 :              :  +- SubqueryAlias routes
 :              :     +- View (`routes`, [origin#x, destination#x])
-:              :        +- Project [cast(col1#x as string collate UTF8_BINARY) AS origin#x, cast(col2#x as string collate UTF8_BINARY) AS destination#x]
+:              :        +- Project [cast(col1#x as string) AS origin#x, cast(col2#x as string) AS destination#x]
 :              :           +- LocalRelation [col1#x, col2#x]
 :              +- SubqueryAlias d
 :                 +- SubqueryAlias destinations_from_new_york

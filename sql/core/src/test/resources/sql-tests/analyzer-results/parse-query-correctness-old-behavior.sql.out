@@ -236,7 +236,7 @@ SELECT * FROM v1
 Project [1#x, a#x]
 +- SubqueryAlias v1
    +- View (`v1`, [1#x, a#x])
-      +- Project [cast(1#x as int) AS 1#x, cast(a#x as string collate UTF8_BINARY) AS a#x]
+      +- Project [cast(1#x as int) AS 1#x, cast(a#x as string) AS a#x]
          +- Distinct
             +- Union false, false
                :- Project [1 AS 1#x, a AS a#x]
@@ -284,7 +284,7 @@ SELECT * FROM v1
 Project [num#x, a#x]
 +- SubqueryAlias v1
    +- View (`v1`, [num#x, a#x])
-      +- Project [cast(num#x as int) AS num#x, cast(a#x as string collate UTF8_BINARY) AS a#x]
+      +- Project [cast(num#x as int) AS num#x, cast(a#x as string) AS a#x]
          +- Distinct
             +- Union false, false
                :- Project [1 AS num#x, a AS a#x]
@@ -514,7 +514,7 @@ SELECT * FROM v1
 Project [1#x, a#x]
 +- SubqueryAlias v1
    +- View (`v1`, [1#x, a#x])
-      +- Project [cast(1#x as int) AS 1#x, cast(a#x as string collate UTF8_BINARY) AS a#x]
+      +- Project [cast(1#x as int) AS 1#x, cast(a#x as string) AS a#x]
          +- Except false
             :- Project [1 AS 1#x, a AS a#x]
             :  +- OneRowRelation
@@ -558,7 +558,7 @@ SELECT * FROM v1
 Project [num#x, a#x]
 +- SubqueryAlias v1
    +- View (`v1`, [num#x, a#x])
-      +- Project [cast(num#x as int) AS num#x, cast(a#x as string collate UTF8_BINARY) AS a#x]
+      +- Project [cast(num#x as int) AS num#x, cast(a#x as string) AS a#x]
          +- Except false
             :- Project [1 AS num#x, a AS a#x]
             :  +- OneRowRelation
@@ -787,7 +787,7 @@ SELECT * FROM v1
 Project [1#x, a#x]
 +- SubqueryAlias v1
    +- View (`v1`, [1#x, a#x])
-      +- Project [cast(1#x as int) AS 1#x, cast(a#x as string collate UTF8_BINARY) AS a#x]
+      +- Project [cast(1#x as int) AS 1#x, cast(a#x as string) AS a#x]
          +- Intersect false
             :- Project [1 AS 1#x, a AS a#x]
             :  +- OneRowRelation
@@ -831,7 +831,7 @@ SELECT * FROM v1
 Project [num#x, a#x]
 +- SubqueryAlias v1
    +- View (`v1`, [num#x, a#x])
-      +- Project [cast(num#x as int) AS num#x, cast(a#x as string collate UTF8_BINARY) AS a#x]
+      +- Project [cast(num#x as int) AS num#x, cast(a#x as string) AS a#x]
          +- Intersect false
             :- Project [1 AS num#x, a AS a#x]
             :  +- OneRowRelation

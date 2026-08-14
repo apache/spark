@@ -38,14 +38,14 @@ Aggregate [count(1) AS cnt#xL]
    :- SubqueryAlias t
    :  +- SubqueryAlias trades
    :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :           +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- Project [quote_time#x, symbol#x, bid_price#x]
          +- Filter (1 = 0)
             +- SubqueryAlias quotes
                +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-                  +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+                  +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                      +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -60,14 +60,14 @@ Aggregate [count(1) AS cnt#xL]
    :- SubqueryAlias t
    :  +- SubqueryAlias trades
    :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :           +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- Project [quote_time#x, symbol#x, bid_price#x]
          +- Filter (1 = 0)
             +- SubqueryAlias quotes
                +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-                  +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+                  +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                      +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -84,12 +84,12 @@ Aggregate [count(1) AS cnt#xL]
    :     +- Filter (1 = 0)
    :        +- SubqueryAlias trades
    :           +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :              +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :              +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :                 +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- SubqueryAlias quotes
          +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -106,12 +106,12 @@ Aggregate [count(1) AS cnt#xL]
    :     +- Filter (1 = 0)
    :        +- SubqueryAlias trades
    :           +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :              +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :              +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :                 +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- SubqueryAlias quotes
          +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -128,14 +128,14 @@ Aggregate [count(1) AS inner_cnt#xL]
    :     +- Filter (1 = 0)
    :        +- SubqueryAlias trades
    :           +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :              +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :              +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :                 +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- Project [quote_time#x, symbol#x, bid_price#x]
          +- Filter (1 = 0)
             +- SubqueryAlias quotes
                +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-                  +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+                  +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                      +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -152,14 +152,14 @@ Aggregate [count(1) AS left_cnt#xL]
    :     +- Filter (1 = 0)
    :        +- SubqueryAlias trades
    :           +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :              +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :              +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :                 +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- Project [quote_time#x, symbol#x, bid_price#x]
          +- Filter (1 = 0)
             +- SubqueryAlias quotes
                +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-                  +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+                  +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                      +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -218,12 +218,12 @@ Aggregate [count(1) AS inner_cnt#xL]
    :  +- Project [cast(null as timestamp) AS trade_time#x, symbol#x, quantity#x]
    :     +- SubqueryAlias trades
    :        +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :           +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :           +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :              +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- SubqueryAlias quotes
          +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -240,12 +240,12 @@ Aggregate [count(1) AS left_cnt#xL]
    :  +- Project [cast(null as timestamp) AS trade_time#x, symbol#x, quantity#x]
    :     +- SubqueryAlias trades
    :        +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :           +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :           +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :              +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- SubqueryAlias quotes
          +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -261,13 +261,13 @@ Aggregate [count(1) AS inner_cnt#xL]
    :- SubqueryAlias t
    :  +- SubqueryAlias trades
    :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :           +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- Project [cast(null as timestamp) AS quote_time#x, symbol#x, bid_price#x]
          +- SubqueryAlias quotes
             +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-               +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+               +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                   +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -283,13 +283,13 @@ Aggregate [count(1) AS left_cnt#xL]
    :- SubqueryAlias t
    :  +- SubqueryAlias trades
    :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :           +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- Project [cast(null as timestamp) AS quote_time#x, symbol#x, bid_price#x]
          +- SubqueryAlias quotes
             +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-               +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+               +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                   +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -341,12 +341,12 @@ Project [trade_time#x, prev_trade_time#x]
          :- SubqueryAlias a
          :  +- SubqueryAlias trades
          :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-         :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+         :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
          :           +- LocalRelation [col1#x, col2#x, col3#x]
          +- SubqueryAlias b
             +- SubqueryAlias trades
                +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-                  +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+                  +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
                      +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -361,12 +361,12 @@ Aggregate [count(1) AS cnt#xL]
    :- SubqueryAlias t
    :  +- SubqueryAlias trades
    :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
    :           +- LocalRelation [col1#x, col2#x, col3#x]
    +- SubqueryAlias q
       +- SubqueryAlias quotes
          +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -417,14 +417,14 @@ Project [symbol#x, bid_price#x]
          :- SubqueryAlias t
          :  +- SubqueryAlias trades
          :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
-         :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]
+         :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
          :           +- LocalRelation [col1#x, col2#x, col3#x]
          +- SubqueryAlias q
             +- Project [quote_time#x, symbol#x, bid_price#x]
                +- Filter (symbol#x = MSFT)
                   +- SubqueryAlias quotes
                      +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
-                        +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+                        +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
                            +- LocalRelation [col1#x, col2#x, col3#x]
 
 

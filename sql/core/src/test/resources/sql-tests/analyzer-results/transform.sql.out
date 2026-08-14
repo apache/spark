@@ -71,7 +71,7 @@ ScriptTransformation cat, [a#x], ScriptInputOutputSchema(List(),List(),None,None
 +- Project [a#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -102,7 +102,7 @@ Project [a#x, b#x, decode(c#x, UTF-8) AS decode(c, UTF-8)#x, d#x, e#x, f#x, g#xL
       +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
          +- SubqueryAlias t
             +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+               +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
                   +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                      +- SubqueryAlias t
                         +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -133,7 +133,7 @@ Project [a#x, b#x, decode(c#x, UTF-8) AS decode(c, UTF-8)#x, d#x, e#x, f#x, g#x,
       +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
          +- SubqueryAlias t
             +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+               +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
                   +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                      +- SubqueryAlias t
                         +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -148,7 +148,7 @@ ScriptTransformation cat, [key#x, value#x], ScriptInputOutputSchema(List(),List(
 +- Project [a#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -163,7 +163,7 @@ ScriptTransformation cat, [key#x, value#x], ScriptInputOutputSchema(List(),List(
 +- Project [a#x, b#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -178,7 +178,7 @@ ScriptTransformation cat, [key#x, value#x], ScriptInputOutputSchema(List(),List(
 +- Project [a#x, b#x, c#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -206,7 +206,7 @@ ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None
 +- Aggregate [b#x], [b#x, max(a#x) AS max(a)#x, sum(f#x) AS sum(f)#xL]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -219,7 +219,7 @@ ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None
 +- Project [a#x, b#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -232,7 +232,7 @@ ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None
 +- Project [a#x, b#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -257,7 +257,7 @@ ScriptTransformation cat, [a#x, b#x, c#x, d#x], ScriptInputOutputSchema(List((TO
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -282,7 +282,7 @@ ScriptTransformation cat, [d#x], ScriptInputOutputSchema(List((TOK_TABLEROWFORMA
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -306,7 +306,7 @@ ScriptTransformation cat, [a#x, b#x, c#x, d#x], ScriptInputOutputSchema(List((TO
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -329,7 +329,7 @@ ScriptTransformation cat, [a#x, b#x, c#x, d#x], ScriptInputOutputSchema(List((TO
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -353,7 +353,7 @@ ScriptTransformation cat, [a#x, b#x, c#x, d#x], ScriptInputOutputSchema(List((TO
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -378,7 +378,7 @@ ScriptTransformation cat, [a#x, b#x, c#x, d#x], ScriptInputOutputSchema(List((TO
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+         +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
             +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                +- SubqueryAlias t
                   +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -419,7 +419,7 @@ Project [a#x, b#x, decode(c#x, UTF-8) AS decode(c, UTF-8)#x, d#x, e#x, f#x, g#xL
       +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
          +- SubqueryAlias t
             +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+               +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
                   +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                      +- SubqueryAlias t
                         +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -460,7 +460,7 @@ Project [a#x, b#xL, decode(c#x, UTF-8) AS decode(c, UTF-8)#x, d#x, e#x, f#x, g#x
       +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
          +- SubqueryAlias t
             +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-               +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+               +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
                   +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
                      +- SubqueryAlias t
                         +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
@@ -881,7 +881,7 @@ WithCTE
 :        +- Project [a#x]
 :           +- SubqueryAlias t
 :              +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
-:                 +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
+:                 +- Project [cast(a#x as string) AS a#x, cast(b#x as boolean) AS b#x, cast(c#x as binary) AS c#x, cast(d#x as tinyint) AS d#x, cast(e#x as int) AS e#x, cast(f#x as smallint) AS f#x, cast(g#xL as bigint) AS g#xL, cast(h#x as float) AS h#x, cast(i#x as decimal(2,1)) AS i#x, cast(j#x as decimal(10,0)) AS j#x, cast(k#x as timestamp) AS k#x, cast(l#x as date) AS l#x]
 :                    +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
 :                       +- SubqueryAlias t
 :                          +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]

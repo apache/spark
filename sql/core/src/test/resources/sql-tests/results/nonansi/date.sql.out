@@ -636,7 +636,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"int_str\"",
-    "inputType" : "\"STRING COLLATE UTF8_BINARY\"",
+    "inputType" : "\"STRING\"",
     "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(2011-11-11, int_str)\""
@@ -662,7 +662,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"int_str\"",
-    "inputType" : "\"STRING COLLATE UTF8_BINARY\"",
+    "inputType" : "\"STRING\"",
     "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_sub(2011-11-11, int_str)\""

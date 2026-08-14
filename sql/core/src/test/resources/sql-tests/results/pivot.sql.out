@@ -57,7 +57,7 @@ PIVOT (
   FOR year IN (2012, 2013)
 )
 -- !query schema
-struct<course:string collate UTF8_BINARY,2012:bigint,2013:bigint>
+struct<course:string,2012:bigint,2013:bigint>
 -- !query output
 Java	20000	30000
 dotNET	15000	48000
@@ -117,7 +117,7 @@ PIVOT (
   FOR s IN (1, 2)
 )
 -- !query schema
-struct<course:string collate UTF8_BINARY,year:int,1:bigint,2:bigint>
+struct<course:string,year:int,1:bigint,2:bigint>
 -- !query output
 Java	2012	20000	NULL
 Java	2013	NULL	30000
@@ -168,7 +168,7 @@ PIVOT (
   FOR y IN (2012, 2013)
 )
 -- !query schema
-struct<2012_s:bigint,2013_s:bigint,2012_a:double,2013_a:double,c:string collate UTF8_BINARY>
+struct<2012_s:bigint,2013_s:bigint,2012_a:double,2013_a:double,c:string>
 -- !query output
 15000	48000	7500.0	48000.0	dotNET
 20000	30000	20000.0	30000.0	Java
@@ -183,7 +183,7 @@ PIVOT (
   FOR y IN (2012 as firstYear, 2013 secondYear)
 )
 -- !query schema
-struct<firstYear_s:bigint,secondYear_s:bigint,firstYear_a:double,secondYear_a:double,c:string collate UTF8_BINARY>
+struct<firstYear_s:bigint,secondYear_s:bigint,firstYear_a:double,secondYear_a:double,c:string>
 -- !query output
 15000	48000	7500.0	48000.0	dotNET
 20000	30000	20000.0	30000.0	Java
@@ -348,7 +348,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "pivotType" : "struct<course:string collate UTF8_BINARY,year:int>",
+    "pivotType" : "struct<course:string,year:int>",
     "value" : "dotNET",
     "valueType" : "string"
   }

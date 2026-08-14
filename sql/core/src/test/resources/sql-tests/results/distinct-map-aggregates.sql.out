@@ -36,7 +36,7 @@ FROM (
 ) AS collected_maps
 ORDER BY element_at(m, 'a')
 -- !query schema
-struct<map_entries(m):array<struct<key:string collate UTF8_BINARY,value:int>>>
+struct<map_entries(m):array<struct<key:string,value:int>>>
 -- !query output
 [{"key":"a","value":1},{"key":"b","value":2}]
 [{"key":"a","value":3}]
@@ -85,7 +85,7 @@ FROM distinct_map_data
 GROUP BY m
 ORDER BY element_at(m, 'a')
 -- !query schema
-struct<m:map<string collate UTF8_BINARY,int>,count(DISTINCT m):bigint,collect_list(DISTINCT m):array<map<string collate UTF8_BINARY,int>>>
+struct<m:map<string,int>,count(DISTINCT m):bigint,collect_list(DISTINCT m):array<map<string,int>>>
 -- !query output
 {"a":1,"b":2}	1	[{"a":1,"b":2}]
 {"a":3}	1	[{"a":3}]
@@ -230,7 +230,7 @@ FROM (
 ) AS collected_maps
 ORDER BY element_at(m, 'a'), map_entries(m)[0].key
 -- !query schema
-struct<map_entries(m):array<struct<key:string collate UTF8_BINARY,value:int>>>
+struct<map_entries(m):array<struct<key:string,value:int>>>
 -- !query output
 [{"key":"a","value":1},{"key":"b","value":2}]
 [{"key":"b","value":2},{"key":"a","value":1}]
@@ -251,7 +251,7 @@ FROM distinct_map_data
 GROUP BY m
 ORDER BY element_at(m, 'a')
 -- !query schema
-struct<m:map<string collate UTF8_BINARY,int>,count(DISTINCT m):bigint>
+struct<m:map<string,int>,count(DISTINCT m):bigint>
 -- !query output
 {"a":1,"b":2}	1
 {"a":3}	1

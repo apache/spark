@@ -70,7 +70,7 @@ WHERE  t1b IN (SELECT t2b
                GROUP BY t2b
                HAVING t2b < 10)
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int,t1h:timestamp>
+struct<t1a:string,t1b:int,t1h:timestamp>
 -- !query output
 val1a	6	2014-04-04 01:00:00
 val1a	6	2014-04-04 01:02:00.001
@@ -89,7 +89,7 @@ WHERE  t1b IN (SELECT Min(t2b)
                GROUP  BY t2b
                HAVING t2b > 1)
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int>
+struct<t1a:string,t1b:int,t1c:int>
 -- !query output
 val1b	8	16
 
@@ -103,7 +103,7 @@ WHERE  t1b IN (SELECT t2b
 GROUP BY t1a, t1b, t1c
 HAVING t1b < 10
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int>
+struct<t1a:string,t1b:int,t1c:int>
 -- !query output
 val1a	6	8
 
@@ -117,7 +117,7 @@ WHERE  t1b IN (SELECT t2b
 GROUP BY t1a, t1b, t1c
 HAVING COUNT (DISTINCT t1b) < 10
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int>
+struct<t1a:string,t1b:int,t1c:int>
 -- !query output
 val1b	8	16
 val1c	8	16
@@ -153,7 +153,7 @@ HAVING t1a IN (SELECT t2a
                               WHERE  t2c = t3c)
                )
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,max(t1b):int>
+struct<t1a:string,max(t1b):int>
 -- !query output
 val1b	8
 
@@ -170,7 +170,7 @@ WHERE  t1a NOT IN (SELECT t2a
 GROUP BY t1a, t1c
 HAVING Min(t1d) > t1c
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1c:int,min(t1d):int>
+struct<t1a:string,t1c:int,min(t1d):int>
 -- !query output
 val1a	8	10
 val1b	16	19
@@ -190,7 +190,7 @@ WHERE  t1d NOT IN (SELECT t2d
 GROUP  BY t1a, t1b
 HAVING t1b < 10
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int>
+struct<t1a:string,t1b:int>
 -- !query output
 val1a	6
 
@@ -205,7 +205,7 @@ HAVING t1a NOT IN (SELECT t2a
                    FROM   t2
                    WHERE  t2b > 3)
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,max(t1b):int>
+struct<t1a:string,max(t1b):int>
 -- !query output
 val1a	16
 val1d	10

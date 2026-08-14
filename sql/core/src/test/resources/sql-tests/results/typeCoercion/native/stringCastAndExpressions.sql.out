@@ -276,7 +276,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"a\"",
-    "srcType" : "\"STRING COLLATE UTF8_BINARY\"",
+    "srcType" : "\"STRING\"",
     "targetType" : "\"ARRAY<STRING>\""
   },
   "queryContext" : [ {
@@ -300,7 +300,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"a\"",
-    "srcType" : "\"STRING COLLATE UTF8_BINARY\"",
+    "srcType" : "\"STRING\"",
     "targetType" : "\"STRUCT<s: STRING>\""
   },
   "queryContext" : [ {
@@ -324,7 +324,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"a\"",
-    "srcType" : "\"STRING COLLATE UTF8_BINARY\"",
+    "srcType" : "\"STRING\"",
     "targetType" : "\"MAP<STRING, STRING>\""
   },
   "queryContext" : [ {
@@ -612,7 +612,7 @@ NULL
 -- !query
 select json_tuple(a, a) from t
 -- !query schema
-struct<c0:string collate UTF8_BINARY>
+struct<c0:string>
 -- !query output
 NULL
 

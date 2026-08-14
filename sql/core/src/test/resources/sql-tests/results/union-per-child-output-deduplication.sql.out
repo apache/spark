@@ -56,7 +56,7 @@ FROM (
          SELECT col2, col2 FROM v1
      )
 -- !query schema
-struct<col1:string collate UTF8_BINARY,col2:string collate UTF8_BINARY>
+struct<col1:string,col2:string>
 -- !query output
 
 
@@ -101,7 +101,7 @@ FROM (
          SELECT col2, col2 FROM t1
      )
 -- !query schema
-struct<col1:string collate UTF8_BINARY,col2:string collate UTF8_BINARY>
+struct<col1:string,col2:string>
 -- !query output
 
 
@@ -116,7 +116,7 @@ FROM (
          SELECT col2, col2 FROM t1
      )
 -- !query schema
-struct<col1:string collate UTF8_BINARY,col2:string collate UTF8_BINARY>
+struct<col1:string,col2:string>
 -- !query output
 
 
@@ -131,7 +131,7 @@ FROM (
          SELECT col2, col2 FROM v1
      )
 -- !query schema
-struct<col1:string collate UTF8_BINARY,col2:string collate UTF8_BINARY>
+struct<col1:string,col2:string>
 -- !query output
 
 

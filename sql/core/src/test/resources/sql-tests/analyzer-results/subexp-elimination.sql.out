@@ -18,7 +18,7 @@ SELECT from_json(a, 'struct<a:int,b:string>').a, from_json(a, 'struct<a:int,b:st
 Project [from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).a AS from_json(a).a#x, from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).b AS from_json(a).b#x, from_json(ArrayType(StructType(StructField(a,IntegerType,true),StructField(b,IntegerType,true)),true), b#x, Some(America/Los_Angeles), false)[0].a AS from_json(b)[0].a#x, from_json(ArrayType(StructType(StructField(a,IntegerType,true),StructField(b,IntegerType,true)),true), b#x, Some(America/Los_Angeles), false)[0].b AS from_json(b)[0].b#x]
 +- SubqueryAlias testdata
    +- View (`testData`, [a#x, b#x])
-      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x]
+      +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
                +- LocalRelation [a#x, b#x]
@@ -30,7 +30,7 @@ SELECT if(from_json(a, 'struct<a:int,b:string>').a > 1, from_json(b, 'array<stru
 Project [if ((from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).a > 1)) from_json(ArrayType(StructType(StructField(a,IntegerType,true),StructField(b,IntegerType,true)),true), b#x, Some(America/Los_Angeles), false)[0].a else (from_json(ArrayType(StructType(StructField(a,IntegerType,true),StructField(b,IntegerType,true)),true), b#x, Some(America/Los_Angeles), false)[0].a + 1) AS (IF((from_json(a).a > 1), from_json(b)[0].a, (from_json(b)[0].a + 1)))#x]
 +- SubqueryAlias testdata
    +- View (`testData`, [a#x, b#x])
-      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x]
+      +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
                +- LocalRelation [a#x, b#x]
@@ -42,7 +42,7 @@ SELECT if(isnull(from_json(a, 'struct<a:int,b:string>').a), from_json(b, 'array<
 Project [if (isnull(from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).a)) (from_json(ArrayType(StructType(StructField(a,IntegerType,true),StructField(b,IntegerType,true)),true), b#x, Some(America/Los_Angeles), false)[0].b + 1) else from_json(ArrayType(StructType(StructField(a,IntegerType,true),StructField(b,IntegerType,true)),true), b#x, Some(America/Los_Angeles), false)[0].b AS (IF((from_json(a).a IS NULL), (from_json(b)[0].b + 1), from_json(b)[0].b))#x]
 +- SubqueryAlias testdata
    +- View (`testData`, [a#x, b#x])
-      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x]
+      +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
                +- LocalRelation [a#x, b#x]
@@ -54,7 +54,7 @@ SELECT case when from_json(a, 'struct<a:int,b:string>').a > 5 then from_json(a, 
 Project [CASE WHEN (from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).a > 5) THEN cast(from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).b as bigint) WHEN (from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).a > 4) THEN (cast(from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).b as bigint) + cast(1 as bigint)) ELSE (cast(from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).b as bigint) + cast(2 as bigint)) END AS CASE WHEN (from_json(a).a > 5) THEN from_json(a).b WHEN (from_json(a).a > 4) THEN (from_json(a).b + 1) ELSE (from_json(a).b + 2) END#xL]
 +- SubqueryAlias testdata
    +- View (`testData`, [a#x, b#x])
-      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x]
+      +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
                +- LocalRelation [a#x, b#x]
@@ -66,7 +66,7 @@ SELECT case when from_json(a, 'struct<a:int,b:string>').a > 5 then from_json(b, 
 Project [CASE WHEN (from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).a > 5) THEN from_json(ArrayType(StructType(StructField(a,IntegerType,true),StructField(b,IntegerType,true)),true), b#x, Some(America/Los_Angeles), false)[0].b WHEN (from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), a#x, Some(America/Los_Angeles), false).a > 4) THEN (from_json(ArrayType(StructType(StructField(a,IntegerType,true),StructField(b,IntegerType,true)),true), b#x, Some(America/Los_Angeles), false)[0].b + 1) ELSE (from_json(ArrayType(StructType(StructField(a,IntegerType,true),StructField(b,IntegerType,true)),true), b#x, Some(America/Los_Angeles), false)[0].b + 2) END AS CASE WHEN (from_json(a).a > 5) THEN from_json(b)[0].b WHEN (from_json(a).a > 4) THEN (from_json(b)[0].b + 1) ELSE (from_json(b)[0].b + 2) END#x]
 +- SubqueryAlias testdata
    +- View (`testData`, [a#x, b#x])
-      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x]
+      +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
                +- LocalRelation [a#x, b#x]

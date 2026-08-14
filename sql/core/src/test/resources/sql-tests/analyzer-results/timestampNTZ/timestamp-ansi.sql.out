@@ -908,7 +908,7 @@ select str - timestamp'2011-11-11 11:11:11' from ts_view
 Project [(cast(str#x as timestamp_ntz) - 2011-11-11 11:11:11) AS (str - TIMESTAMP_NTZ '2011-11-11 11:11:11')#x]
 +- SubqueryAlias ts_view
    +- View (`ts_view`, [str#x])
-      +- Project [cast(str#x as string collate UTF8_BINARY) AS str#x]
+      +- Project [cast(str#x as string) AS str#x]
          +- Project [2011-11-11 11:11:11 AS str#x]
             +- OneRowRelation
 
@@ -919,7 +919,7 @@ select timestamp'2011-11-11 11:11:11' - str from ts_view
 Project [(2011-11-11 11:11:11 - cast(str#x as timestamp_ntz)) AS (TIMESTAMP_NTZ '2011-11-11 11:11:11' - str)#x]
 +- SubqueryAlias ts_view
    +- View (`ts_view`, [str#x])
-      +- Project [cast(str#x as string collate UTF8_BINARY) AS str#x]
+      +- Project [cast(str#x as string) AS str#x]
          +- Project [2011-11-11 11:11:11 AS str#x]
             +- OneRowRelation
 

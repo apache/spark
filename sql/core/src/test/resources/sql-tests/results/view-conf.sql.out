@@ -76,7 +76,7 @@ spark.sql.caseSensitive	true
 -- !query
 SELECT * FROM view_case_sensitivity
 -- !query schema
-struct<CoLuMNa:string collate UTF8_BINARY>
+struct<CoLuMNa:string>
 -- !query output
 NULL
 NULL

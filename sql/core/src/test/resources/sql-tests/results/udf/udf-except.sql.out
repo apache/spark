@@ -29,7 +29,7 @@ struct<>
 -- !query
 SELECT udf(k), udf(v) FROM t1 EXCEPT SELECT udf(k), udf(v) FROM t2
 -- !query schema
-struct<udf(k):string collate UTF8_BINARY,udf(v):int>
+struct<udf(k):string,udf(v):int>
 -- !query output
 three	3
 two	2
@@ -38,7 +38,7 @@ two	2
 -- !query
 SELECT * FROM t1 EXCEPT SELECT * FROM t1 where udf(v) <> 1 and v <> udf(2)
 -- !query schema
-struct<k:string collate UTF8_BINARY,v:int>
+struct<k:string,v:int>
 -- !query output
 one	1
 one	NULL
@@ -48,7 +48,7 @@ two	2
 -- !query
 SELECT * FROM t1 where udf(v) <> 1 and v <> udf(22) EXCEPT SELECT * FROM t1 where udf(v) <> 2 and v >= udf(3)
 -- !query schema
-struct<k:string collate UTF8_BINARY,v:int>
+struct<k:string,v:int>
 -- !query output
 two	2
 
@@ -58,7 +58,7 @@ SELECT t1.* FROM t1, t2 where t1.k = t2.k
 EXCEPT
 SELECT t1.* FROM t1, t2 where t1.k = t2.k and t1.k != udf('one')
 -- !query schema
-struct<k:string collate UTF8_BINARY,v:int>
+struct<k:string,v:int>
 -- !query output
 one	1
 one	NULL
@@ -67,7 +67,7 @@ one	NULL
 -- !query
 SELECT * FROM t2 where v >= udf(1) and udf(v) <> 22 EXCEPT SELECT * FROM t1
 -- !query schema
-struct<k:string collate UTF8_BINARY,v:int>
+struct<k:string,v:int>
 -- !query output
 NULL	5
 one	5
@@ -78,7 +78,7 @@ SELECT (SELECT min(udf(k)) FROM t2 WHERE t2.k = t1.k) min_t2 FROM t1
 MINUS
 SELECT (SELECT udf(min(k)) FROM t2) abs_min_t2 FROM t1 WHERE  t1.k = udf('one')
 -- !query schema
-struct<min_t2:string collate UTF8_BINARY>
+struct<min_t2:string>
 -- !query output
 NULL
 two
@@ -97,6 +97,6 @@ WHERE  udf(t1.v) >= (SELECT   min(udf(t2.v))
                 FROM     t2
                 WHERE    t2.k = t1.k)
 -- !query schema
-struct<k:string collate UTF8_BINARY>
+struct<k:string>
 -- !query output
 two

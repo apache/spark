@@ -153,7 +153,7 @@ FROM requests r ASOF JOIN deploys d
   ON r.service = d.service
 ORDER BY r.req_ts, r.seq
 -- !query schema
-struct<req_ts:timestamp,seq:int,version:string collate UTF8_BINARY>
+struct<req_ts:timestamp,seq:int,version:string>
 -- !query output
 2026-06-29 10:00:00	5	v1.1
 2026-06-29 10:03:00	1	v1.1

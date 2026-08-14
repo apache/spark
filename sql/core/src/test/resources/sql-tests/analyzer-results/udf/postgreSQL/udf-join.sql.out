@@ -2003,7 +2003,7 @@ Project [f2#x, f3#x, f1#x, junk#x]
       :        +- Relation [f3#x] parquet
       +- SubqueryAlias zv1
          +- View (`zv1`, [f1#x, junk#x])
-            +- Project [cast(f1#x as int) AS f1#x, cast(junk#x as string collate UTF8_BINARY) AS junk#x]
+            +- Project [cast(f1#x as int) AS f1#x, cast(junk#x as string) AS junk#x]
                +- Project [f1#x, dummy AS junk#x]
                   +- SubqueryAlias zt1
                      +- View (`zt1`, [f1#x])
@@ -2193,21 +2193,21 @@ order by c.name
 -- !query analysis
 Project [udf(name)#x, udf(code)#x, udf(b_cnt)#xL, udf(const)#x]
 +- Sort [name#x ASC NULLS FIRST], true
-   +- Project [cast(udf(cast(name#x as string)) as string collate UTF8_BINARY) AS udf(name)#x, cast(udf(cast(code#x as string)) as string collate UTF8_BINARY) AS udf(code)#x, cast(udf(cast(b_cnt#xL as string)) as bigint) AS udf(b_cnt)#xL, cast(udf(cast(const#x as string)) as int) AS udf(const)#x, name#x]
-      +- Join LeftOuter, (cast(udf(cast(cast(udf(cast(a#x as string)) as string collate UTF8_BINARY) as string)) as string collate UTF8_BINARY) = cast(udf(cast(code#x as string)) as string collate UTF8_BINARY))
+   +- Project [cast(udf(cast(name#x as string)) as string) AS udf(name)#x, cast(udf(cast(code#x as string)) as string) AS udf(code)#x, cast(udf(cast(b_cnt#xL as string)) as bigint) AS udf(b_cnt)#xL, cast(udf(cast(const#x as string)) as int) AS udf(const)#x, name#x]
+      +- Join LeftOuter, (cast(udf(cast(cast(udf(cast(a#x as string)) as string) as string)) as string) = cast(udf(cast(code#x as string)) as string))
          :- SubqueryAlias c
          :  +- View (`c`, [name#x, a#x])
-         :     +- Project [cast(name#x as string collate UTF8_BINARY) AS name#x, cast(a#x as string collate UTF8_BINARY) AS a#x]
+         :     +- Project [cast(name#x as string) AS name#x, cast(a#x as string) AS a#x]
          :        +- Project [name#x, a#x]
          :           +- SubqueryAlias v
          :              +- Project [col1#x AS name#x, col2#x AS a#x]
          :                 +- LocalRelation [col1#x, col2#x]
          +- SubqueryAlias ss
             +- Project [code#x, coalesce(cnt#xL, cast(0 as bigint)) AS b_cnt#xL, -1 AS const#x]
-               +- Join LeftOuter, (cast(udf(cast(code#x as string)) as string collate UTF8_BINARY) = cast(udf(cast(cast(udf(cast(a#x as string)) as string collate UTF8_BINARY) as string)) as string collate UTF8_BINARY))
+               +- Join LeftOuter, (cast(udf(cast(code#x as string)) as string) = cast(udf(cast(cast(udf(cast(a#x as string)) as string) as string)) as string))
                   :- SubqueryAlias a
                   :  +- View (`a`, [code#x])
-                  :     +- Project [cast(code#x as string collate UTF8_BINARY) AS code#x]
+                  :     +- Project [cast(code#x as string) AS code#x]
                   :        +- Project [code#x]
                   :           +- SubqueryAlias v
                   :              +- Project [col1#x AS code#x]
@@ -2216,7 +2216,7 @@ Project [udf(name)#x, udf(code)#x, udf(b_cnt)#xL, udf(const)#x]
                      +- Aggregate [a#x], [cast(udf(cast(count(1) as string)) as bigint) AS cnt#xL, a#x AS a#x]
                         +- SubqueryAlias b
                            +- View (`b`, [a#x, num#x])
-                              +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(num#x as int) AS num#x]
+                              +- Project [cast(a#x as string) AS a#x, cast(num#x as int) AS num#x]
                                  +- Project [a#x, num#x]
                                     +- SubqueryAlias v
                                        +- Project [col1#x AS a#x, col2#x AS num#x]
@@ -2642,12 +2642,12 @@ select * from
 -- !query analysis
 Project [f1#x, q1#xL, q2#xL, f1#x, f1#x]
 +- Join LeftOuter, (cast(udf(cast(cast(udf(cast(q1#xL as string)) as bigint) as string)) as bigint) = cast(f1#x as bigint))
-   :- Join RightOuter, (cast(udf(cast(f1#x as string)) as string collate UTF8_BINARY) = cast(udf(cast(cast(udf(cast(doh! as string)) as string) as string)) as string))
+   :- Join RightOuter, (cast(udf(cast(f1#x as string)) as string) = cast(udf(cast(cast(udf(cast(doh! as string)) as string) as string)) as string))
    :  :- Join Inner, (cast(udf(cast(q2#xL as string)) as bigint) = cast(cast(udf(cast(cast(udf(cast(456 as string)) as int) as string)) as int) as bigint))
    :  :  :- SubqueryAlias t1
    :  :  :  +- SubqueryAlias text_tbl
    :  :  :     +- View (`TEXT_TBL`, [f1#x])
-   :  :  :        +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
+   :  :  :        +- Project [cast(f1#x as string) AS f1#x]
    :  :  :           +- Project [f1#x]
    :  :  :              +- SubqueryAlias v
    :  :  :                 +- Project [col1#x AS f1#x]
@@ -2663,7 +2663,7 @@ Project [f1#x, q1#xL, q2#xL, f1#x, f1#x]
    :  +- SubqueryAlias t2
    :     +- SubqueryAlias text_tbl
    :        +- View (`TEXT_TBL`, [f1#x])
-   :           +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
+   :           +- Project [cast(f1#x as string) AS f1#x]
    :              +- Project [f1#x]
    :                 +- SubqueryAlias v
    :                    +- Project [col1#x AS f1#x]

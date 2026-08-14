@@ -113,7 +113,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -130,7 +130,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -171,7 +171,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -188,7 +188,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -205,7 +205,7 @@ Sort [cate#x ASC NULLS FIRST, val_long#xL ASC NULLS FIRST], true
          +- Project [val_long#xL, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -222,7 +222,7 @@ Sort [cate#x ASC NULLS FIRST, val_double#x ASC NULLS FIRST], true
          +- Project [val_double#x, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -239,7 +239,7 @@ Sort [cate#x ASC NULLS FIRST, val_date#x ASC NULLS FIRST], true
          +- Project [val_date#x, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -257,7 +257,7 @@ Sort [cate#x ASC NULLS FIRST, val_timestamp#x ASC NULLS FIRST], true
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -275,7 +275,7 @@ Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampN
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), true) AS _w1#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -293,7 +293,7 @@ Sort [cate#x ASC NULLS FIRST, val_timestamp#x ASC NULLS FIRST], true
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -311,7 +311,7 @@ Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampN
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), true) AS _w1#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -329,7 +329,7 @@ Sort [cate#x ASC NULLS FIRST, val_timestamp#x ASC NULLS FIRST], true
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -347,7 +347,7 @@ Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampN
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), true) AS _w1#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -365,7 +365,7 @@ Sort [cate#x ASC NULLS FIRST, val_date#x ASC NULLS FIRST], true
          +- Project [val_date#x, cate#x, cast(val_timestamp#x as double) AS _w0#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -406,7 +406,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -587,7 +587,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x, cast(val#x as double) AS _w0#x, cast(val_long#xL as double) AS _w1#x, val_double#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -603,7 +603,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -648,7 +648,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -676,7 +676,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -695,7 +695,7 @@ Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST R
          +- Filter isnotnull(val#x)
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -717,7 +717,7 @@ Project [val#x, cate#x, first_a#x, last_a#x]
             +- Project [val#x, cate#x, (cate#x = a) AS _w0#x, val_long#xL]
                +- SubqueryAlias testdata
                   +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                     +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                     +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
                               +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -741,7 +741,7 @@ Project [val#x, cate#x, sum_a#xL, sum_b#xL, cnt_gt1#xL]
             +- Project [val#x, cate#x, (cate#x = a) AS _w0#x, val_long#xL, (cate#x = b) AS _w2#x, (val#x > 1) AS _w3#x]
                +- SubqueryAlias testdata
                   +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                     +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                     +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
                               +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -759,7 +759,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x, (cate#x = a) AS _w0#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -779,7 +779,7 @@ Project [val#x, cate#x, sliding_sum_filtered#xL]
             +- Project [val#x, cate#x, (val#x > 1) AS _w0#x, val_long#xL]
                +- SubqueryAlias testdata
                   +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                     +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                     +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
                               +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -798,7 +798,7 @@ Sort [val#x ASC NULLS FIRST, cate#x ASC NULLS FIRST], true
          +- Project [val#x, cate#x, (cate#x = a) AS _w0#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -823,7 +823,7 @@ Sort [salary#x DESC NULLS LAST], true
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -848,7 +848,7 @@ Sort [salary#x DESC NULLS LAST], true
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -873,7 +873,7 @@ Sort [salary#x DESC NULLS LAST], true
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -898,7 +898,7 @@ Sort [salary#x ASC NULLS FIRST], true
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -923,7 +923,7 @@ Sort [salary#x DESC NULLS LAST], true
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -948,7 +948,7 @@ Sort [salary#x DESC NULLS LAST], true
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -973,7 +973,7 @@ Sort [salary#x DESC NULLS LAST], true
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -998,7 +998,7 @@ Sort [salary#x DESC NULLS LAST], true
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -1023,7 +1023,7 @@ Sort [salary#x DESC NULLS LAST], true
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -1052,7 +1052,7 @@ Sort [department#x ASC NULLS FIRST], true
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -1121,7 +1121,7 @@ Sort [id#x ASC NULLS FIRST], true
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
                +- View (`test_ignore_null`, [content#x, id#x, v#x])
-                  +- Project [cast(content#x as string collate UTF8_BINARY) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string collate UTF8_BINARY) AS v#x]
+                  +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
                            +- LocalRelation [content#x, id#x, v#x]
@@ -1150,7 +1150,7 @@ Sort [id#x ASC NULLS FIRST], true
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
                +- View (`test_ignore_null`, [content#x, id#x, v#x])
-                  +- Project [cast(content#x as string collate UTF8_BINARY) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string collate UTF8_BINARY) AS v#x]
+                  +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
                            +- LocalRelation [content#x, id#x, v#x]
@@ -1179,7 +1179,7 @@ Sort [id#x ASC NULLS FIRST], true
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
                +- View (`test_ignore_null`, [content#x, id#x, v#x])
-                  +- Project [cast(content#x as string collate UTF8_BINARY) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string collate UTF8_BINARY) AS v#x]
+                  +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
                            +- LocalRelation [content#x, id#x, v#x]
@@ -1208,7 +1208,7 @@ Sort [id#x ASC NULLS FIRST], true
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
                +- View (`test_ignore_null`, [content#x, id#x, v#x])
-                  +- Project [cast(content#x as string collate UTF8_BINARY) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string collate UTF8_BINARY) AS v#x]
+                  +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
                            +- LocalRelation [content#x, id#x, v#x]
@@ -1237,7 +1237,7 @@ Sort [id#x ASC NULLS FIRST], true
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
                +- View (`test_ignore_null`, [content#x, id#x, v#x])
-                  +- Project [cast(content#x as string collate UTF8_BINARY) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string collate UTF8_BINARY) AS v#x]
+                  +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
                            +- LocalRelation [content#x, id#x, v#x]
@@ -1266,7 +1266,7 @@ Sort [id#x ASC NULLS FIRST], true
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
                +- View (`test_ignore_null`, [content#x, id#x, v#x])
-                  +- Project [cast(content#x as string collate UTF8_BINARY) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string collate UTF8_BINARY) AS v#x]
+                  +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
                            +- LocalRelation [content#x, id#x, v#x]
@@ -1295,7 +1295,7 @@ Sort [id#x ASC NULLS FIRST], true
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
                +- View (`test_ignore_null`, [content#x, id#x, v#x])
-                  +- Project [cast(content#x as string collate UTF8_BINARY) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string collate UTF8_BINARY) AS v#x]
+                  +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
                            +- LocalRelation [content#x, id#x, v#x]
@@ -1324,7 +1324,7 @@ Sort [id#x ASC NULLS FIRST], true
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
                +- View (`test_ignore_null`, [content#x, id#x, v#x])
-                  +- Project [cast(content#x as string collate UTF8_BINARY) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string collate UTF8_BINARY) AS v#x]
+                  +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
                            +- LocalRelation [content#x, id#x, v#x]
@@ -1353,7 +1353,7 @@ Sort [id#x ASC NULLS FIRST], true
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
                +- View (`test_ignore_null`, [content#x, id#x, v#x])
-                  +- Project [cast(content#x as string collate UTF8_BINARY) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string collate UTF8_BINARY) AS v#x]
+                  +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
                            +- LocalRelation [content#x, id#x, v#x]
@@ -1428,7 +1428,7 @@ Project [cate#x, val#x, r#x]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
                      +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
                                  +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -1446,7 +1446,7 @@ Project [cate#x, val#x, r#x]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
                      +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
                                  +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -1464,7 +1464,7 @@ Project [cate#x, val#x, r#x]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
                      +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
                                  +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -1482,7 +1482,7 @@ Project [cate#x, val#x, r#x]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
                      +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
                                  +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -1500,7 +1500,7 @@ Project [cate#x, val#x, r#x]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
                      +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
                                  +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -1518,7 +1518,7 @@ Project [cate#x, val#x, r#x]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
                      +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
                                  +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -1533,7 +1533,7 @@ Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x, 
       +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
          +- SubqueryAlias testdata
             +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                   +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                      +- SubqueryAlias testData
                         +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]

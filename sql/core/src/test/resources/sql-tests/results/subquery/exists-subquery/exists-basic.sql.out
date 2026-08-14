@@ -54,7 +54,7 @@ WHERE  EXISTS (SELECT 1
                WHERE  dept.dept_id > 10 
                       AND dept.dept_id < 30)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -74,7 +74,7 @@ WHERE  EXISTS (SELECT dept.dept_name
                FROM   dept 
                WHERE  emp.dept_id = dept.dept_id)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -92,7 +92,7 @@ WHERE  EXISTS (SELECT dept.dept_name
                WHERE  emp.dept_id = dept.dept_id 
                        OR emp.dept_id IS NULL)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -111,7 +111,7 @@ WHERE  EXISTS (SELECT dept.dept_name
                WHERE  emp.dept_id = dept.dept_id) 
        AND emp.id > 200
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 300	emp 3	2002-01-01	300.00	20
 400	emp 4	2005-01-01	400.00	30
@@ -126,7 +126,7 @@ WHERE  EXISTS (SELECT dept.state
                WHERE  emp.dept_id = dept.dept_id) 
        AND emp.id > 200
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY>
+struct<emp_name:string>
 -- !query output
 emp 3
 emp 4
@@ -140,7 +140,7 @@ WHERE  NOT EXISTS (SELECT emp_name
                    FROM   emp 
                    WHERE  emp.dept_id = dept.dept_id)
 -- !query schema
-struct<dept_id:int,dept_name:string collate UTF8_BINARY,state:string collate UTF8_BINARY>
+struct<dept_id:int,dept_name:string,state:string>
 -- !query output
 40	dept 4 - unassigned	OR
 50	dept 5 - unassigned	NJ
@@ -154,7 +154,7 @@ WHERE  NOT EXISTS (SELECT emp_name
                    WHERE  emp.dept_id = dept.dept_id 
                            OR state = 'NJ')
 -- !query schema
-struct<dept_id:int,dept_name:string collate UTF8_BINARY,state:string collate UTF8_BINARY>
+struct<dept_id:int,dept_name:string,state:string>
 -- !query output
 40	dept 4 - unassigned	OR
 
@@ -167,7 +167,7 @@ WHERE  NOT EXISTS (SELECT *
                    WHERE  emp.emp_name = emp_name 
                           AND bonus_amt > emp.salary)
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,bonus_amt:decimal(6,2)>
+struct<emp_name:string,bonus_amt:decimal(6,2)>
 -- !query output
 emp 1	10.00
 emp 1	20.00
@@ -182,7 +182,7 @@ WHERE  NOT EXISTS (SELECT NULL
                    FROM   bonus
                    WHERE  bonus.emp_name = emp.emp_name)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 700	emp 7	2010-01-01	400.00	100
 800	emp 8	2016-01-01	150.00	70
@@ -198,7 +198,7 @@ WHERE  EXISTS (SELECT emp_name
                                   FROM   dept 
                                   WHERE  dept.dept_id = emp.dept_id))
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,bonus_amt:decimal(6,2)>
+struct<emp_name:string,bonus_amt:decimal(6,2)>
 -- !query output
 emp 1	10.00
 emp 1	20.00

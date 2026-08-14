@@ -420,7 +420,7 @@ SELECT * FROM (
   SELECT col1 AS c, 'col1' FROM v2 ORDER BY col1
 ) ORDER BY 1
 -- !query schema
-struct<c:string collate UTF8_BINARY,col1:string>
+struct<c:string,col1:string>
 -- !query output
 apple	col1
 apple	col1
@@ -444,7 +444,7 @@ SELECT * FROM (
   SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL ORDER BY col1
 ) ORDER BY 1
 -- !query schema
-struct<c:string collate UTF8_BINARY,col1:string>
+struct<c:string,col1:string>
 -- !query output
 apple	col1
 banana	col1
@@ -463,7 +463,7 @@ SELECT * FROM (
   SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
 ) ORDER BY 1
 -- !query schema
-struct<c:string collate UTF8_BINARY,col1:string>
+struct<c:string,col1:string>
 -- !query output
 cherry	col1
 date	col1
@@ -546,7 +546,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT col1 AS c, 'col1', 'col1' FROM v2 ORDER BY col1
 -- !query schema
-struct<c:string collate UTF8_BINARY,col1:string,col1:string>
+struct<c:string,col1:string,col1:string>
 -- !query output
 apple	col1	col1
 apple	col1	col1
@@ -568,7 +568,7 @@ orange	col1	col1
 -- !query
 SELECT col1 AS c, 'col1', 'col1' FROM v2 GROUP BY ALL ORDER BY col1
 -- !query schema
-struct<c:string collate UTF8_BINARY,col1:string,col1:string>
+struct<c:string,col1:string,col1:string>
 -- !query output
 apple	col1	col1
 banana	col1	col1
@@ -587,7 +587,7 @@ SELECT * FROM (
   SELECT col1 AS c, 'col1', 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
 ) ORDER BY 1
 -- !query schema
-struct<c:string collate UTF8_BINARY,col1:string,col1:string>
+struct<c:string,col1:string,col1:string>
 -- !query output
 cherry	col1	col1
 date	col1	col1
@@ -602,7 +602,7 @@ orange	col1	col1
 -- !query
 SELECT col1, 'col1' FROM v2 ORDER BY col1
 -- !query schema
-struct<col1:string collate UTF8_BINARY,col1:string>
+struct<col1:string,col1:string>
 -- !query output
 apple	col1
 apple	col1
@@ -624,7 +624,7 @@ orange	col1
 -- !query
 SELECT col1, 'col1' FROM v2 GROUP BY ALL ORDER BY col1
 -- !query schema
-struct<col1:string collate UTF8_BINARY,col1:string>
+struct<col1:string,col1:string>
 -- !query output
 apple	col1
 banana	col1
@@ -643,7 +643,7 @@ SELECT * FROM (
   SELECT col1, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
 ) ORDER BY 1
 -- !query schema
-struct<col1:string collate UTF8_BINARY,col1:string>
+struct<col1:string,col1:string>
 -- !query output
 cherry	col1
 date	col1

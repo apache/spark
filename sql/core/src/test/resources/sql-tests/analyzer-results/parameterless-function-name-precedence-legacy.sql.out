@@ -21,7 +21,7 @@ SELECT current_user FROM v_user
 Project [current_user#x]
 +- SubqueryAlias v_user
    +- View (`v_user`, [current_user#x])
-      +- Project [cast(current_user#x as string collate UTF8_BINARY) AS current_user#x]
+      +- Project [cast(current_user#x as string) AS current_user#x]
          +- Project [admin.admin AS current_user#x]
             +- OneRowRelation
 
@@ -62,7 +62,7 @@ SELECT current_user, current_user FROM v_user
 Project [current_user#x, current_user#x]
 +- SubqueryAlias v_user
    +- View (`v_user`, [current_user#x])
-      +- Project [cast(current_user#x as string collate UTF8_BINARY) AS current_user#x]
+      +- Project [cast(current_user#x as string) AS current_user#x]
          +- Project [admin.admin AS current_user#x]
             +- OneRowRelation
 
@@ -110,7 +110,7 @@ Aggregate [current_user#x, spark_grouping_id#xL], [typeof(spark_grouping_id#xL) 
    +- Project [current_user#x, current_user#x AS current_user#x]
       +- SubqueryAlias v_user
          +- View (`v_user`, [current_user#x])
-            +- Project [cast(current_user#x as string collate UTF8_BINARY) AS current_user#x]
+            +- Project [cast(current_user#x as string) AS current_user#x]
                +- Project [admin.admin AS current_user#x]
                   +- OneRowRelation
 

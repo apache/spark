@@ -14,7 +14,7 @@ struct<>
 -- !query
 SELECT a, b, c, count(d) FROM grouping GROUP BY a, b, c GROUPING SETS (())
 -- !query schema
-struct<a:string collate UTF8_BINARY,b:string collate UTF8_BINARY,c:string collate UTF8_BINARY,count(d):bigint>
+struct<a:string,b:string,c:string,count(d):bigint>
 -- !query output
 NULL	NULL	NULL	3
 
@@ -22,7 +22,7 @@ NULL	NULL	NULL	3
 -- !query
 SELECT a, b, c, count(d) FROM grouping GROUP BY a, b, c GROUPING SETS ((a))
 -- !query schema
-struct<a:string collate UTF8_BINARY,b:string collate UTF8_BINARY,c:string collate UTF8_BINARY,count(d):bigint>
+struct<a:string,b:string,c:string,count(d):bigint>
 -- !query output
 1	NULL	NULL	1
 4	NULL	NULL	1
@@ -32,7 +32,7 @@ struct<a:string collate UTF8_BINARY,b:string collate UTF8_BINARY,c:string collat
 -- !query
 SELECT a, b, c, count(d) FROM grouping GROUP BY a, b, c GROUPING SETS ((c))
 -- !query schema
-struct<a:string collate UTF8_BINARY,b:string collate UTF8_BINARY,c:string collate UTF8_BINARY,count(d):bigint>
+struct<a:string,b:string,c:string,count(d):bigint>
 -- !query output
 NULL	NULL	3	1
 NULL	NULL	6	1
@@ -42,7 +42,7 @@ NULL	NULL	9	1
 -- !query
 SELECT a, b, c, d FROM grouping GROUP BY GROUPING SETS (a, b, c, d)
 -- !query schema
-struct<a:string collate UTF8_BINARY,b:string collate UTF8_BINARY,c:string collate UTF8_BINARY,d:int>
+struct<a:string,b:string,c:string,d:int>
 -- !query output
 1	NULL	NULL	NULL
 4	NULL	NULL	NULL
@@ -59,7 +59,7 @@ NULL	NULL	NULL	1
 -- !query
 SELECT a, b FROM grouping GROUP BY GROUPING SETS (a, b, d + 1) ORDER BY `(d + 1)`
 -- !query schema
-struct<a:string collate UTF8_BINARY,b:string collate UTF8_BINARY>
+struct<a:string,b:string>
 -- !query output
 NULL	2
 1	NULL

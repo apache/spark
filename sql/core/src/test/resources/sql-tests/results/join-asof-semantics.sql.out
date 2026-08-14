@@ -127,7 +127,7 @@ FROM VALUES (CAST(NULL AS TIMESTAMP), 'AAPL', 100) AS t(trade_time, symbol, quan
   MATCH_CONDITION (t.trade_time >= q.quote_time)
   ON t.symbol = q.symbol
 -- !query schema
-struct<trade_time:timestamp,symbol:string,quantity:int,quote_time:timestamp,symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
+struct<trade_time:timestamp,symbol:string,quantity:int,quote_time:timestamp,symbol:string,bid_price:decimal(5,2)>
 -- !query output
 NULL	AAPL	100	NULL	NULL	NULL
 
@@ -151,7 +151,7 @@ FROM trades t ASOF JOIN quotes q
   ON t.symbol = q.symbol AND q.bid_price > 200
 ORDER BY t.symbol
 -- !query schema
-struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
+struct<symbol:string,bid_price:decimal(5,2)>
 -- !query output
 MSFT	420.50
 
@@ -243,7 +243,7 @@ FROM trades t ASOF JOIN quotes q
   ON abs(unix_timestamp(t.trade_time) - unix_timestamp(q.quote_time)) < 30
 ORDER BY t.symbol, t.trade_time
 -- !query schema
-struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
+struct<symbol:string,bid_price:decimal(5,2)>
 -- !query output
 AAPL	180.10
 AAPL	180.20
@@ -269,7 +269,7 @@ FROM trades t ASOF JOIN quotes q
   ON substr(t.symbol, 1, 1) = substr(q.symbol, 1, 1)
 ORDER BY t.symbol, t.trade_time
 -- !query schema
-struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
+struct<symbol:string,bid_price:decimal(5,2)>
 -- !query output
 AAPL	180.10
 AAPL	180.20
@@ -324,7 +324,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "treeNode" : "AsOfJoin (trade_time#x >= quote_time#x), ((symbol#x = symbol#x) AND (cast(bid_price#x as decimal(9,6)) > scalar-subquery#x [symbol#x])), Inner\n:  +- Aggregate [avg(bid_price#x) AS avg(bid_price)#x]\n:     +- Filter (symbol#x = outer(symbol#x))\n:        +- SubqueryAlias qq\n:           +- SubqueryAlias quotes\n:              +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])\n:                 +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]\n:                    +- LocalRelation [col1#x, col2#x, col3#x]\n:- SubqueryAlias t\n:  +- SubqueryAlias trades\n:     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])\n:        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as int) AS quantity#x]\n:           +- LocalRelation [col1#x, col2#x, col3#x]\n+- SubqueryAlias q\n   +- SubqueryAlias quotes\n      +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])\n         +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string collate UTF8_BINARY) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]\n            +- LocalRelation [col1#x, col2#x, col3#x]\n"
+    "treeNode" : "AsOfJoin (trade_time#x >= quote_time#x), ((symbol#x = symbol#x) AND (cast(bid_price#x as decimal(9,6)) > scalar-subquery#x [symbol#x])), Inner\n:  +- Aggregate [avg(bid_price#x) AS avg(bid_price)#x]\n:     +- Filter (symbol#x = outer(symbol#x))\n:        +- SubqueryAlias qq\n:           +- SubqueryAlias quotes\n:              +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])\n:                 +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]\n:                    +- LocalRelation [col1#x, col2#x, col3#x]\n:- SubqueryAlias t\n:  +- SubqueryAlias trades\n:     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])\n:        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]\n:           +- LocalRelation [col1#x, col2#x, col3#x]\n+- SubqueryAlias q\n   +- SubqueryAlias quotes\n      +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])\n         +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]\n            +- LocalRelation [col1#x, col2#x, col3#x]\n"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -40,13 +40,13 @@ Project [k#x, v1#x, k#x, v2#x]
 +- Join Cross
    :- SubqueryAlias nt1
    :  +- View (`nt1`, [k#x, v1#x])
-   :     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :        +- Project [k#x, v1#x]
    :           +- SubqueryAlias nt1
    :              +- LocalRelation [k#x, v1#x]
    +- SubqueryAlias nt2
       +- View (`nt2`, [k#x, v2#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v2#x as int) AS v2#x]
+         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
             +- Project [k#x, v2#x]
                +- SubqueryAlias nt2
                   +- LocalRelation [k#x, v2#x]
@@ -60,13 +60,13 @@ Project [k#x, v1#x, k#x, v2#x]
    +- Join Cross
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
          +- View (`nt2`, [k#x, v2#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v2#x as int) AS v2#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
                      +- LocalRelation [k#x, v2#x]
@@ -79,13 +79,13 @@ Project [k#x, v1#x, k#x, v2#x]
 +- Join Cross, (k#x = k#x)
    :- SubqueryAlias nt1
    :  +- View (`nt1`, [k#x, v1#x])
-   :     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :        +- Project [k#x, v1#x]
    :           +- SubqueryAlias nt1
    :              +- LocalRelation [k#x, v1#x]
    +- SubqueryAlias nt2
       +- View (`nt2`, [k#x, v2#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v2#x as int) AS v2#x]
+         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
             +- Project [k#x, v2#x]
                +- SubqueryAlias nt2
                   +- LocalRelation [k#x, v2#x]
@@ -99,13 +99,13 @@ Project [k#x, v1#x, k#x, v2#x]
    +- Join Cross
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
          +- View (`nt2`, [k#x, v2#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v2#x as int) AS v2#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
                      +- LocalRelation [k#x, v2#x]
@@ -124,7 +124,7 @@ Project [key#x, key#x]
    :     +- Filter (v1#x < 2)
    :        +- SubqueryAlias nt1
    :           +- View (`nt1`, [k#x, v1#x])
-   :              +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+   :              +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :                 +- Project [k#x, v1#x]
    :                    +- SubqueryAlias nt1
    :                       +- LocalRelation [k#x, v1#x]
@@ -133,7 +133,7 @@ Project [key#x, key#x]
          +- Filter (v2#x = 22)
             +- SubqueryAlias nt2
                +- View (`nt2`, [k#x, v2#x])
-                  +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v2#x as int) AS v2#x]
+                  +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                      +- Project [k#x, v2#x]
                         +- SubqueryAlias nt2
                            +- LocalRelation [k#x, v2#x]
@@ -146,7 +146,7 @@ CreateViewCommand `A`, [(a,None), (va,None)], select * from nt1, false, false, L
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- View (`nt1`, [k#x, v1#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
                +- Project [k#x, v1#x]
                   +- SubqueryAlias nt1
                      +- LocalRelation [k#x, v1#x]
@@ -159,7 +159,7 @@ CreateViewCommand `B`, [(b,None), (vb,None)], select * from nt1, false, false, L
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- View (`nt1`, [k#x, v1#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
                +- Project [k#x, v1#x]
                   +- SubqueryAlias nt1
                      +- LocalRelation [k#x, v1#x]
@@ -172,7 +172,7 @@ CreateViewCommand `C`, [(c,None), (vc,None)], select * from nt1, false, false, L
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- View (`nt1`, [k#x, v1#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
                +- Project [k#x, v1#x]
                   +- SubqueryAlias nt1
                      +- LocalRelation [k#x, v1#x]
@@ -185,7 +185,7 @@ CreateViewCommand `D`, [(d,None), (vd,None)], select * from nt1, false, false, L
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- View (`nt1`, [k#x, v1#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
                +- Project [k#x, v1#x]
                   +- SubqueryAlias nt1
                      +- LocalRelation [k#x, v1#x]
@@ -200,41 +200,41 @@ Project [a#x, va#x, b#x, vb#x, c#x, vc#x, d#x, vd#x]
    :  :- Join Inner, (a#x = b#x)
    :  :  :- SubqueryAlias a
    :  :  :  +- View (`A`, [a#x, va#x])
-   :  :  :     +- Project [cast(k#x as string collate UTF8_BINARY) AS a#x, cast(v1#x as int) AS va#x]
+   :  :  :     +- Project [cast(k#x as string) AS a#x, cast(v1#x as int) AS va#x]
    :  :  :        +- Project [k#x, v1#x]
    :  :  :           +- SubqueryAlias nt1
    :  :  :              +- View (`nt1`, [k#x, v1#x])
-   :  :  :                 +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+   :  :  :                 +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :  :  :                    +- Project [k#x, v1#x]
    :  :  :                       +- SubqueryAlias nt1
    :  :  :                          +- LocalRelation [k#x, v1#x]
    :  :  +- SubqueryAlias b
    :  :     +- View (`B`, [b#x, vb#x])
-   :  :        +- Project [cast(k#x as string collate UTF8_BINARY) AS b#x, cast(v1#x as int) AS vb#x]
+   :  :        +- Project [cast(k#x as string) AS b#x, cast(v1#x as int) AS vb#x]
    :  :           +- Project [k#x, v1#x]
    :  :              +- SubqueryAlias nt1
    :  :                 +- View (`nt1`, [k#x, v1#x])
-   :  :                    +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+   :  :                    +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :  :                       +- Project [k#x, v1#x]
    :  :                          +- SubqueryAlias nt1
    :  :                             +- LocalRelation [k#x, v1#x]
    :  +- SubqueryAlias c
    :     +- View (`C`, [c#x, vc#x])
-   :        +- Project [cast(k#x as string collate UTF8_BINARY) AS c#x, cast(v1#x as int) AS vc#x]
+   :        +- Project [cast(k#x as string) AS c#x, cast(v1#x as int) AS vc#x]
    :           +- Project [k#x, v1#x]
    :              +- SubqueryAlias nt1
    :                 +- View (`nt1`, [k#x, v1#x])
-   :                    +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+   :                    +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :                       +- Project [k#x, v1#x]
    :                          +- SubqueryAlias nt1
    :                             +- LocalRelation [k#x, v1#x]
    +- SubqueryAlias d
       +- View (`D`, [d#x, vd#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS d#x, cast(v1#x as int) AS vd#x]
+         +- Project [cast(k#x as string) AS d#x, cast(v1#x as int) AS vd#x]
             +- Project [k#x, v1#x]
                +- SubqueryAlias nt1
                   +- View (`nt1`, [k#x, v1#x])
-                     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+                     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
                         +- Project [k#x, v1#x]
                            +- SubqueryAlias nt1
                               +- LocalRelation [k#x, v1#x]
@@ -247,13 +247,13 @@ Project [k#x, v1#x, k#x, v2#x]
 +- Join Cross, (k#x > k#x)
    :- SubqueryAlias nt1
    :  +- View (`nt1`, [k#x, v1#x])
-   :     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :        +- Project [k#x, v1#x]
    :           +- SubqueryAlias nt1
    :              +- LocalRelation [k#x, v1#x]
    +- SubqueryAlias nt2
       +- View (`nt2`, [k#x, v2#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v2#x as int) AS v2#x]
+         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
             +- Project [k#x, v2#x]
                +- SubqueryAlias nt2
                   +- LocalRelation [k#x, v2#x]
