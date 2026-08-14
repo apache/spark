@@ -1418,6 +1418,7 @@ object SQLConf {
       .internal()
       .doc("When true, applies default collation to implicit casts to string.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 

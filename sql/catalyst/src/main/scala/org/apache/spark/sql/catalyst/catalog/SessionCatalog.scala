@@ -1192,6 +1192,8 @@ class SessionCatalog(
     col: Expression,
     toField: StructField,
     schemaMode: ViewSchemaMode): NamedExpression = {
+    // Preserve the stored view schema: non-collated string fields must stay UTF8_BINARY
+    // instead of inheriting the view's default collation when resolving the view.
     val fieldDataType =
       DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(toField.dataType)
     val cast = schemaMode match {
