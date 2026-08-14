@@ -17,14 +17,14 @@
 # NOTE
 #
 #   This file exists only for the exclude below, which applies across every
-#   package in every setup.py, unlike `exclude_package_data` (which is scoped
-#   to the individual package and setup.py it's declared in). Non-`.py` files
-#   to include should go through `package_data` in setup.py instead.
+#   package in every setup.py. (setuptools's `exclude_package_data` is scoped
+#   to the individual package and setup.py it's declared in). To include non-
+#   `.py` files, use `package_data` in setup.py instead of adding them here.
 #
 # See:
 #   - https://setuptools.pypa.io/en/latest/userguide/datafiles.html
 #   - https://setuptools.pypa.io/en/latest/userguide/miscellaneous.html
 
-# MANIFEST.in commands are processed in the order they appear, so if we add
-# other commands, keep this exclude at the end.
+# Keep this exclude at the end. MANIFEST.in commands are processed in the order
+# they appear.
 global-exclude *.py[cod] __pycache__ .DS_Store
