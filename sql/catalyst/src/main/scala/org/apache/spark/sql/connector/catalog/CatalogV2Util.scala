@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -535,18 +536,21 @@ private[sql] object CatalogV2Util {
     catalog.asTableCatalog.loadTable(ident, context, stateOptions)
   }
 
-  private def rejectTimeTravelOptionsForWrite(
+  def rejectTimeTravelOptionsForWrite(
       catalog: CatalogPlugin,
       ident: Identifier,
       options: CaseInsensitiveStringMap): Unit = {
+    if (containsTimeTravelOptions(options)) {
+      throw QueryCompilationErrors.timeTravelUnsupportedError(
+        toSQLId(ident.toQualifiedNameParts(catalog)))
+    }
+  }
+
+  def containsTimeTravelOptions(options: CaseInsensitiveStringMap): Boolean = {
     val conf = SQLConf.get
-    val containsTimeTravelOption = Seq(
+    Seq(
       conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
       conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY)).exists(options.containsKey)
-    if (containsTimeTravelOption) {
-      throw QueryCompilationErrors.timeTravelUnsupportedError(
-        ident.toQualifiedNameParts(catalog).quoted)
-    }
   }
 
   /**

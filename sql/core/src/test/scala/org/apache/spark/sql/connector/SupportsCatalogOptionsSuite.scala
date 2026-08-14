@@ -408,7 +408,7 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
   test("SPARK-58389: SupportsCatalogOptions separates table-state and write options") {
     sql(s"create table $catalogName.t1 (id bigint) using $format")
     val cat = catalog(catalogName).asInstanceOf[InMemoryTableCatalog]
-    val loadOption = "load-option"
+    val loadOption = "load-Option"
     val loadValue = "load-value"
     val writeOption = "write-option"
 
@@ -436,6 +436,7 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
       matchingCalls.foreach { case (context, options) =>
         assert(context.writePrivileges() === expectedPrivileges)
         assert(options.size() === 1)
+        assert(options.asCaseSensitiveMap().containsKey(loadOption))
         assert(options.get(writeOption) === null)
       }
 
@@ -458,6 +459,21 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
       assert(actualWriteOptions.get.get("name") === "t1")
       assert(actualWriteOptions.get.get("catalog") === catalogName)
     }
+  }
+
+  test("SPARK-58389: SupportsCatalogOptions rejects time travel options for table creation") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(1).write
+          .format(format)
+          .option("name", "t1")
+          .option("catalog", catalogName)
+          .option("versionAsOf", "v1")
+          .option("timestampAsOf", "2021-01-01")
+          .save()
+      },
+      condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+      parameters = Map("relationId" -> "`testcat`.`t1`"))
   }
 
   private def load(

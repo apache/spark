@@ -135,7 +135,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }, s"expected only snapshot=$expectedSnapshot to be forwarded, got: $loadOptions")
   }
 
-  private val loadOption = "load-option"
+  private val loadOption = "load-Option"
   private val loadOptionValue = "load-value"
   private val writeOption = "write-option"
   private val writeOptionValue = "write-value"
@@ -156,6 +156,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     matchingCalls.foreach { case (context, options) =>
       assert(context.writePrivileges() === expectedPrivileges.asJava)
       assert(options.get(loadOption) === loadOptionValue)
+      assert(options.asCaseSensitiveMap().containsKey(loadOption))
       assert(options.get(writeOption) === null)
       assert(options.size() === 1)
     }
@@ -1404,32 +1405,59 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
   test("SPARK-58389: time travel options on write targets are rejected consistently") {
     val t1 = s"${catalogAndNamespace}table"
-    withTable(t1) {
+    val newTable = s"${catalogAndNamespace}new_table"
+    withTable(t1, newTable) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
 
-      // A time-travel option on a write target is reachable via the option form (the `AS OF`
-      // syntax is blocked earlier by the parser). It must surface as a user-facing analysis error,
-      // not the internal TableContext mutual-exclusion guard (which would report INTERNAL_ERROR).
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"INSERT INTO $t1 WITH ('versionAsOf' = 'v1') VALUES (1, 'a')")
-        },
-        condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
-        parameters = Map("relationId" -> "`testcat`.`ns1`.`ns2`.`table`"))
-
       val input = Seq(1L -> "a").toDF("id", "data")
+      val existingRelationId = "`testcat`.`ns1`.`ns2`.`table`"
+      val newRelationId = "`testcat`.`ns1`.`ns2`.`new_table`"
       Seq(
-        (() => spark.table(t1).writeTo(t1).option("versionAsOf", "v1").append()) ->
-          "`testcat`.`ns1`.`ns2`.`table`",
-        (() => input.write.option("versionAsOf", "v1").insertInto(t1)) ->
-          "testcat.ns1.ns2.table",
-        (() => input.write.option("versionAsOf", "v1").mode("append").saveAsTable(t1)) ->
-          "testcat.ns1.ns2.table"
-      ).foreach { case (writeToTimeTravelTarget, relationId) =>
+        existingRelationId -> (() => sql(s"INSERT INTO $t1 WITH " +
+          "('versionAsOf' = 'v1', 'timestampAsOf' = '2021-01-01') VALUES (1, 'a')")),
+        existingRelationId -> (() => input.writeTo(t1)
+          .option("versionAsOf", "v1")
+          .option("timestampAsOf", "2021-01-01")
+          .append()),
+        existingRelationId -> (() => input.write
+          .option("versionAsOf", "v1")
+          .option("timestampAsOf", "2021-01-01")
+          .insertInto(t1)),
+        existingRelationId -> (() => input.write
+          .option("versionAsOf", "v1")
+          .option("timestampAsOf", "2021-01-01")
+          .mode("append")
+          .saveAsTable(t1)),
+        newRelationId -> (() => input.writeTo(newTable)
+          .option("versionAsOf", "v1")
+          .option("timestampAsOf", "2021-01-01")
+          .create()),
+        existingRelationId -> (() => input.writeTo(t1)
+          .option("versionAsOf", "v1")
+          .option("timestampAsOf", "2021-01-01")
+          .replace()),
+        existingRelationId -> (() => input.writeTo(t1)
+          .option("versionAsOf", "v1")
+          .option("timestampAsOf", "2021-01-01")
+          .createOrReplace())
+      ).foreach { case (relationId, writeToTimeTravelTarget) =>
         checkError(
           exception = intercept[AnalysisException](writeToTimeTravelTarget()),
           condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
           parameters = Map("relationId" -> relationId))
+      }
+
+      withTempView("temp_view") {
+        input.createOrReplaceTempView("temp_view")
+        checkError(
+          exception = intercept[AnalysisException] {
+            input.writeTo("temp_view")
+              .option("versionAsOf", "v1")
+              .option("timestampAsOf", "2021-01-01")
+              .append()
+          },
+          condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+          parameters = Map("relationId" -> "`temp_view`"))
       }
     }
   }
