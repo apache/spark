@@ -1,5 +1,7 @@
 -- End-to-end coverage for parse_sql (SPARK-58738).
 -- Returns compact JSON for parse-only statement analysis via SparkSqlParser.
+-- Off by default while the JSON contract is still evolving.
+--SET spark.sql.parseSql.enabled=true
 
 -- null input
 SELECT parse_sql(NULL);
@@ -7,6 +9,13 @@ SELECT parse_sql(NULL);
 -- basic SELECT classification and references
 SELECT parse_sql('SELECT a, b FROM t');
 SELECT parse_sql('SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2');
+
+-- JSON-path access over one shared successful parse result
+SELECT
+  get_json_object(result, '$.statement_identifier') AS statement_identifier,
+  get_json_object(result, '$.table_references[0][0]') AS first_table,
+  get_json_object(result, '$.select_list[1].name[0]') AS second_column
+FROM (SELECT parse_sql('SELECT a, b FROM t') AS result);
 
 -- DML
 SELECT parse_sql('INSERT INTO t SELECT 1');
@@ -27,9 +36,8 @@ SELECT parse_sql('TABLE t');
 SELECT parse_sql('VALUES (1), (2)');
 
 -- function / variable names are not table_references
-SELECT get_json_object(parse_sql('CREATE FUNCTION f AS ''x'' USING JAR ''y.jar'''),
-  '$.table_references');
-SELECT get_json_object(parse_sql('DECLARE VARIABLE x INT'), '$.table_references');
+SELECT parse_sql('CREATE FUNCTION f AS ''x'' USING JAR ''y.jar''');
+SELECT parse_sql('DECLARE VARIABLE x INT');
 
 -- parameter markers
 SELECT parse_sql('SELECT * FROM t WHERE a = :foo AND b = ?');
@@ -74,95 +82,99 @@ SELECT parse_sql(
    normalized STRING DEFAULT upper(''x'')
  )');
 
--- syntax error: never throws; STANDARD error nested under parse_success=false
-SELECT get_json_object(parse_sql('SELEC FROM t'), '$.parse_success');
-SELECT get_json_object(parse_sql('SELEC FROM t'), '$.error.errorClass');
-SELECT get_json_object(parse_sql('SELEC FROM t'), '$.error.sqlState');
+-- syntax error: dump the complete STANDARD error, including query context
+SELECT parse_sql('SELEC FROM t');
 
--- source location from a multiline parse-time validation error
+-- JSON-path access over one shared parse result
 SELECT
-  get_json_object(parse_sql(
+  get_json_object(result, '$.parse_success') AS parse_success,
+  get_json_object(result, '$.error.errorClass') AS error_class,
+  get_json_object(result, '$.error.queryContext[0].fragment') AS fragment
+FROM (SELECT parse_sql('SELEC FROM t') AS result);
+
+-- full multiline parse-time validation error, including context and location
+SELECT parse_sql(
 'SELECT *
  FROM t
  ORDER BY a
- CLUSTER BY b'), '$.error.errorClass') AS error_class,
-  get_json_object(parse_sql(
+ CLUSTER BY b');
+
+-- JSON-path access over one shared multiline parse result
+SELECT
+  get_json_object(result, '$.error.errorClass') AS error_class,
+  get_json_object(result, '$.error.line') AS line,
+  get_json_object(result, '$.error.position') AS position,
+  get_json_object(result, '$.error.queryContext[0].startIndex') AS start_index
+FROM (
+  SELECT parse_sql(
 'SELECT *
  FROM t
  ORDER BY a
- CLUSTER BY b'), '$.error.line') AS line,
-  get_json_object(parse_sql(
-'SELECT *
- FROM t
- ORDER BY a
- CLUSTER BY b'), '$.error.position') AS position,
-  get_json_object(parse_sql(
-'SELECT *
- FROM t
- ORDER BY a
- CLUSTER BY b'), '$.error.queryContext[0].startIndex') AS start_index;
+ CLUSTER BY b') AS result
+);
 
 -- parse-only validation errors beyond PARSE_SYNTAX_ERROR
-SELECT get_json_object(parse_sql(''), '$.error.errorClass');
-SELECT get_json_object(parse_sql('USE bad-name'), '$.error.errorClass');
-SELECT get_json_object(
-  parse_sql('WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c'),
-  '$.error.errorClass');
-SELECT get_json_object(
-  parse_sql('MERGE INTO target USING source ON target.id = source.id'),
-  '$.error.errorClass');
-SELECT get_json_object(parse_sql('EXPLAIN SELECT 1'), '$.statement_identifier');
-SELECT get_json_object(parse_sql('SET spark.sql.adaptive.enabled=true'), '$.statement_code');
-SELECT get_json_object(parse_sql('ADD JAR /tmp/x.jar'), '$.statement_identifier');
+SELECT parse_sql('');
+SELECT parse_sql('USE bad-name');
+SELECT parse_sql('WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c');
+SELECT parse_sql('MERGE INTO target USING source ON target.id = source.id');
+SELECT parse_sql('EXPLAIN SELECT 1');
+SELECT parse_sql('SET spark.sql.adaptive.enabled=true');
+SELECT parse_sql('ADD JAR /tmp/x.jar');
 SELECT parse_sql('CREATE VIEW v AS SELECT a, b FROM t');
-SELECT get_json_object(
-  parse_sql('SELECT 1 AS IDENTIFIER(''alias.field'')'),
-  '$.error.errorClass');
-SELECT get_json_object(
-  parse_sql('SELECT DATE ''not-a-date'''),
-  '$.error.errorClass');
+SELECT parse_sql('SELECT 1 AS IDENTIFIER(''alias.field'')');
+SELECT parse_sql('SELECT DATE ''not-a-date''');
 
 -- location for an error inside a multiline script
 --QUERY-DELIMITER-START
+SELECT parse_sql(
+'BEGIN
+   SELECT 1;
+   SELEC 2;
+ END');
+--QUERY-DELIMITER-END
+
+-- JSON-path access over one shared scripting parse result
+--QUERY-DELIMITER-START
 SELECT
-  get_json_object(parse_sql(
+  get_json_object(result, '$.error.errorClass') AS error_class,
+  get_json_object(result, '$.error.line') AS line,
+  get_json_object(result, '$.error.position') AS position,
+  get_json_object(result, '$.error.queryContext[0].fragment') AS fragment
+FROM (
+  SELECT parse_sql(
 'BEGIN
    SELECT 1;
    SELEC 2;
- END'), '$.error.errorClass') AS error_class,
-  get_json_object(parse_sql(
-'BEGIN
-   SELECT 1;
-   SELEC 2;
- END'), '$.error.line') AS line,
-  get_json_object(parse_sql(
-'BEGIN
-   SELECT 1;
-   SELEC 2;
- END'), '$.error.position') AS position;
+ END') AS result
+);
 --QUERY-DELIMITER-END
 
 -- location for a SQL scripting semantic validation error
 --QUERY-DELIMITER-START
+SELECT parse_sql(
+'BEGIN
+   lbl_begin: BEGIN
+     SELECT 1;
+   END lbl_end;
+ END');
+--QUERY-DELIMITER-END
+
+-- JSON-path access over one shared scripting validation result
+--QUERY-DELIMITER-START
 SELECT
-  get_json_object(parse_sql(
+  get_json_object(result, '$.error.errorClass') AS error_class,
+  get_json_object(result, '$.error.line') AS line,
+  get_json_object(result, '$.error.position') AS position,
+  get_json_object(result, '$.error.queryContext[0].fragment') AS fragment
+FROM (
+  SELECT parse_sql(
 'BEGIN
    lbl_begin: BEGIN
      SELECT 1;
    END lbl_end;
- END'), '$.error.errorClass') AS error_class,
-  get_json_object(parse_sql(
-'BEGIN
-   lbl_begin: BEGIN
-     SELECT 1;
-   END lbl_end;
- END'), '$.error.line') AS line,
-  get_json_object(parse_sql(
-'BEGIN
-   lbl_begin: BEGIN
-     SELECT 1;
-   END lbl_end;
- END'), '$.error.position') AS position;
+ END') AS result
+);
 --QUERY-DELIMITER-END
 
 -- batch over a column of SQL text
@@ -190,11 +202,9 @@ SELECT parse_sql('BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT 
 SELECT parse_sql('BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END');
 --QUERY-DELIMITER-END
 
--- Complex, genuinely multiline script. Extract collections to keep the
--- expected output focused on complete tree walking.
+-- Complex, genuinely multiline script: dump the complete JSON result.
 --QUERY-DELIMITER-START
-SELECT
-  get_json_object(parse_sql(
+SELECT parse_sql(
 'BEGIN
    DECLARE EXIT HANDLER FOR SQLEXCEPTION
    BEGIN
@@ -224,45 +234,5 @@ SELECT
    DO
      SELECT audit(row.id), count(*) FROM loop_body;
    END FOR;
- END'), '$.table_references') AS table_references,
-  get_json_object(parse_sql(
-'BEGIN
-   DECLARE EXIT HANDLER FOR SQLEXCEPTION
-   BEGIN
-     INSERT INTO error_log
-     SELECT format_string(''%s'', message) FROM error_source;
-   END;
-
-   WITH prepared AS (
-     SELECT id, normalize_name(name) AS name
-     FROM input_names
-     WHERE is_valid(id)
-   )
-   INSERT INTO output_names
-   SELECT id, upper(name) FROM prepared;
-
-   IF EXISTS (SELECT 1 FROM control_flags WHERE enabled()) THEN
-     UPDATE update_target
-     SET value = coalesce((SELECT max(value) FROM update_source), 0)
-     WHERE should_update(id);
-   ELSE
-     DELETE FROM delete_target
-     WHERE id IN (SELECT id FROM delete_source WHERE expired(ts));
-   END IF;
-
-   FOR row AS
-     SELECT id FROM loop_source WHERE ready(id)
-   DO
-     SELECT audit(row.id), count(*) FROM loop_body;
-   END FOR;
- END'), '$.function_references') AS function_references;
---QUERY-DELIMITER-END
-
--- extract key fields from a script for readable assertions
---QUERY-DELIMITER-START
-SELECT
-  get_json_object(parse_sql('BEGIN SELECT 1; END'), '$.statement_identifier') AS statement_identifier,
-  get_json_object(parse_sql('BEGIN SELECT 1; END'), '$.statement_code') AS statement_code,
-  get_json_object(parse_sql('BEGIN SELECT count(a) FROM script_t; END'), '$.table_references') AS table_references,
-  get_json_object(parse_sql('BEGIN SELECT count(a) FROM script_t; END'), '$.function_references') AS function_references;
+ END');
 --QUERY-DELIMITER-END

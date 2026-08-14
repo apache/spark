@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, FunctionRegistryBase}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, FunctionRegistryBase, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.parser.ParseSqlResult
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -30,8 +32,9 @@ import org.apache.spark.unsafe.types.UTF8String
  * parameters), or a STANDARD-format error object when the statement does not
  * parse.
  *
- * Designed for batch evaluation over DataFrames of SQL text. User-facing parse
- * errors become JSON; unexpected internal failures propagate.
+ * Behind [[SQLConf.PARSE_SQL_ENABLED]] while the JSON contract is still
+ * evolving. Designed for batch evaluation over DataFrames of SQL text.
+ * User-facing parse errors become JSON; unexpected internal failures propagate.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -39,8 +42,9 @@ import org.apache.spark.unsafe.types.UTF8String
     returns a JSON string describing the statement (parse success, Table 39 statement
     identifier/code, table and function references for lineage, select-list column
     names, and parameter markers). Session parser extensions are not applied.
-    On syntax / parse error returns JSON with `parse_success` false, source location,
-    and a nested STANDARD error object instead of throwing.""",
+    Requires spark.sql.parseSql.enabled=true. On syntax / parse error returns JSON
+    with `parse_success` false, source location, and a nested STANDARD error object
+    instead of throwing.""",
   arguments = """
     Arguments:
       * sqlStmt - A SQL statement string to parse.
@@ -49,7 +53,7 @@ import org.apache.spark.unsafe.types.UTF8String
   examples = """
     Examples:
       > SELECT _FUNC_('SELECT a, b FROM t');
-       {"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["t"]],"function_references":[],"select_list":[{"name":["a"]},{"name":["b"]}],"parameter_markers":{"named":[],"unnamed_count":0}}
+       {"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["t"]],"select_list":[{"name":["a"]},{"name":["b"]}]}
       > SELECT get_json_object(_FUNC_('SELEC'), '$.error.errorClass');
        PARSE_SYNTAX_ERROR
   """,
@@ -71,6 +75,18 @@ case class ParseSql(child: Expression)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!SQLConf.get.parseSqlEnabled) {
+      throw new AnalysisException(
+        errorClass = "FEATURE_NOT_ENABLED",
+        messageParameters = Map(
+          "featureName" -> "parse_sql",
+          "configKey" -> SQLConf.PARSE_SQL_ENABLED.key,
+          "configValue" -> "true"))
+    }
+    super.checkInputDataTypes()
+  }
 
   override def nullSafeEval(input: Any): Any = {
     val sql = input.asInstanceOf[UTF8String].toString

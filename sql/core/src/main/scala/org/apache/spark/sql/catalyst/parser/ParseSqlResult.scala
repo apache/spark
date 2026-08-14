@@ -26,7 +26,7 @@ import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelpe
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext}
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryCommand, ExplainCommand}
@@ -43,12 +43,14 @@ import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
  * executors without a session, so only the stock parser is available under
  * distributed eval.
  *
- * On success the JSON includes the statement identifier/code (ISO/IEC
- * 9075-2:2023 Table 39), table/function references, select-list names, and
- * parameter markers. On parse failure it returns `parse_success: false` with
- * source location and a nested STANDARD-format error object, and does not
- * throw. Only [[ParseException]] / [[SqlScriptingException]] are converted to
- * JSON; unexpected / internal failures propagate so the function fails.
+ * On success the JSON always includes `parse_success`, the statement
+ * identifier/code (ISO/IEC 9075-2:2023 Table 39), and omits unused optional
+ * fields (`table_references`, `function_references`, `select_list`,
+ * `parameter_markers`) when empty. On parse failure it returns
+ * `parse_success: false` with source location and a nested STANDARD-format
+ * error object, and does not throw. Only [[ParseException]] /
+ * [[SqlScriptingException]] are converted to JSON; unexpected / internal
+ * failures propagate so the function fails.
  */
 object ParseSqlResult {
 
@@ -58,8 +60,17 @@ object ParseSqlResult {
   /** Parse `sql` and render the JSON result string. */
   def fromSql(sql: String): String = {
     try {
-      val plan = parser.get().parsePlan(sql)
-      fromPlan(plan)
+      // Do not inherit the outer query's origin from the parse_sql expression.
+      // Errors and parsed nodes must refer to the SQL string passed to this function.
+      val origin = if (sql.nonEmpty) {
+        Origin(startIndex = Some(0), stopIndex = Some(sql.length - 1), sqlText = Some(sql))
+      } else {
+        Origin(sqlText = Some(sql))
+      }
+      CurrentOrigin.withOrigin(origin) {
+        val plan = parser.get().parsePlan(sql)
+        fromPlan(plan)
+      }
     } catch {
       // User-facing parse / scripting failures become JSON; everything else fails.
       case e: ParseException =>
@@ -76,12 +87,20 @@ object ParseSqlResult {
     fields += "parse_success" -> JBool(true)
     fields += "statement_identifier" -> JString(classification.statementIdentifier)
     fields += "statement_code" -> JInt(classification.statementCode)
-    fields += "table_references" -> JArray(
-      collectTableReferences(plan).map(partsToJArray).toList)
-    fields += "function_references" -> JArray(
-      collectFunctionReferences(plan).map(partsToJArray).toList)
-    fields += "select_list" -> JArray(collectSelectList(plan).toList)
-    fields += "parameter_markers" -> parameterMarkersJson(plan)
+    // Omit unused collections / markers so consumers can treat absence as empty.
+    val tables = collectTableReferences(plan)
+    if (tables.nonEmpty) {
+      fields += "table_references" -> JArray(tables.map(partsToJArray).toList)
+    }
+    val functions = collectFunctionReferences(plan)
+    if (functions.nonEmpty) {
+      fields += "function_references" -> JArray(functions.map(partsToJArray).toList)
+    }
+    val selectList = collectSelectList(plan)
+    if (selectList.nonEmpty) {
+      fields += "select_list" -> JArray(selectList.toList)
+    }
+    parameterMarkersJson(plan).foreach(markers => fields += "parameter_markers" -> markers)
     compact(render(JObject(fields.toList)))
   }
 
@@ -94,10 +113,27 @@ object ParseSqlResult {
       case _ => None
     }
     val locationFields = origin.toSeq.flatMap(originFields)
+    val contextFields = if (errorObj.obj.exists(_._1 == "queryContext")) {
+      Nil
+    } else {
+      origin.toSeq.flatMap(queryContextField)
+    }
     compact(render(JObject(
       "parse_success" -> JBool(false),
-      "error" -> JObject(errorObj.obj ++ locationFields)
+      "error" -> JObject(errorObj.obj ++ contextFields ++ locationFields)
     )))
+  }
+
+  private def queryContextField(origin: Origin): Option[JField] = origin.context match {
+    case context: SQLQueryContext if context.isValid =>
+      Some("queryContext" -> JArray(List(JObject(
+        "objectType" -> JString(context.objectType),
+        "objectName" -> JString(context.objectName),
+        "startIndex" -> JInt(context.startIndex + 1),
+        "stopIndex" -> JInt(context.stopIndex + 1),
+        "fragment" -> JString(context.fragment)
+      ))))
+    case _ => None
   }
 
   private def originFields(origin: Origin): Seq[JField] = Seq(
@@ -279,6 +315,17 @@ object ParseSqlResult {
     case ExplainCommand(logicalPlan, _) => primaryQueryPlan(logicalPlan)
     case DescribeQueryCommand(_, queryPlan) => primaryQueryPlan(queryPlan)
     case SubqueryAlias(_, child) => primaryQueryPlan(child)
+    case Sort(_, _, child, _) => primaryQueryPlan(child)
+    case Filter(_, child) => primaryQueryPlan(child)
+    case UnresolvedHaving(_, child) => primaryQueryPlan(child)
+    case UnresolvedQualify(_, child) => primaryQueryPlan(child)
+    case Distinct(child) => primaryQueryPlan(child)
+    case GlobalLimit(_, child) => primaryQueryPlan(child)
+    case LocalLimit(_, child) => primaryQueryPlan(child)
+    case Offset(_, child) => primaryQueryPlan(child)
+    case Repartition(_, _, child) => primaryQueryPlan(child)
+    case RepartitionByExpression(_, child, _, _) => primaryQueryPlan(child)
+    case Sample(_, _, _, _, child, _) => primaryQueryPlan(child)
     case other => other
   }
 
@@ -296,7 +343,12 @@ object ParseSqlResult {
       JObject("name" -> partsToJArray(Seq(other.name)))
   }
 
-  private def parameterMarkersJson(plan: LogicalPlan): JObject = {
+  /**
+   * Parameter-marker object, or None when the statement has neither named nor
+   * positional markers. Nested empty members are also omitted: `named` only
+   * when non-empty, `unnamed_count` only when > 0.
+   */
+  private def parameterMarkersJson(plan: LogicalPlan): Option[JObject] = {
     val named = mutable.LinkedHashSet.empty[String]
     var unnamedCount = 0
     def visitExpr(e: Expression): Unit = e.foreach {
@@ -307,9 +359,13 @@ object ParseSqlResult {
     foreachPlanDeep(plan) { p =>
       foreachExpressionDeep(p)(visitExpr)
     }
-    JObject(
-      "named" -> JArray(named.toList.map(JString)),
-      "unnamed_count" -> JInt(unnamedCount)
-    )
+    if (named.isEmpty && unnamedCount == 0) {
+      None
+    } else {
+      val fields = mutable.ListBuffer.empty[JField]
+      if (named.nonEmpty) fields += "named" -> JArray(named.toList.map(JString))
+      if (unnamedCount > 0) fields += "unnamed_count" -> JInt(unnamedCount)
+      Some(JObject(fields.toList))
+    }
   }
 }

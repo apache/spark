@@ -33,10 +33,14 @@ class ParseSqlResultSuite extends SparkFunSuite {
     parse(ParseSqlResult.fromSql(sql)).asInstanceOf[JObject]
 
   private def tableRefs(sql: String): Set[Seq[String]] =
-    (obj(sql) \ "table_references").asInstanceOf[JArray].arr.map {
-      case JArray(parts) => parts.map(_.asInstanceOf[JString].s)
-      case other => fail(s"unexpected table_references entry: $other")
-    }.toSet
+    obj(sql) \ "table_references" match {
+      case JNothing => Set.empty
+      case JArray(arr) => arr.map {
+        case JArray(parts) => parts.map(_.asInstanceOf[JString].s)
+        case other => fail(s"unexpected table_references entry: $other")
+      }.toSet
+      case other => fail(s"unexpected table_references: $other")
+    }
 
   test("Table 39 standard and Spark code pairs are pinned") {
     assert(SqlStatementCodes.Select.statementCode === 21)

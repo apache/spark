@@ -21,38 +21,70 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 
-class ParseSqlSuite extends SparkFunSuite with ExpressionEvalHelper {
+class ParseSqlSuite extends SparkFunSuite with ExpressionEvalHelper with SQLHelper {
 
   private def evalJson(sql: String): JValue = {
     val result = ParseSql(Literal(sql)).eval().asInstanceOf[UTF8String].toString
     parse(result)
   }
 
+  test("parse_sql is disabled by default") {
+    assert(!SQLConf.get.parseSqlEnabled)
+    checkError(
+      exception = intercept[AnalysisException] {
+        ParseSql(Literal("SELECT 1")).checkInputDataTypes()
+      },
+      condition = "FEATURE_NOT_ENABLED",
+      parameters = Map(
+        "featureName" -> "parse_sql",
+        "configKey" -> SQLConf.PARSE_SQL_ENABLED.key,
+        "configValue" -> "true"))
+  }
+
+  test("parse_sql type check succeeds when enabled") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      assert(ParseSql(Literal("SELECT 1")).checkInputDataTypes() ===
+        TypeCheckResult.TypeCheckSuccess)
+    }
+  }
+
   test("parse_sql returns JSON for a valid SELECT") {
-    val j = evalJson("SELECT 1 AS a")
-    assert(j \ "parse_success" === JBool(true))
-    assert(j \ "statement_identifier" === JString("SELECT"))
-    assert(j \ "statement_code" === JInt(21))
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val j = evalJson("SELECT 1 AS a")
+      assert(j \ "parse_success" === JBool(true))
+      assert(j \ "statement_identifier" === JString("SELECT"))
+      assert(j \ "statement_code" === JInt(21))
+    }
   }
 
   test("parse_sql returns null for null input") {
-    checkEvaluation(ParseSql(Literal.create(null, StringType)), null)
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      checkEvaluation(ParseSql(Literal.create(null, StringType)), null)
+    }
   }
 
   test("parse_sql does not throw on syntax error") {
-    val j = evalJson("NOT A STATEMENT !!!")
-    assert(j \ "parse_success" === JBool(false))
-    assert(j \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val j = evalJson("NOT A STATEMENT !!!")
+      assert(j \ "parse_success" === JBool(false))
+      assert(j \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
+    }
   }
 
   test("parse_sql works with CodegenFallback path") {
-    val expr = ParseSql(Literal("INSERT INTO t SELECT 1"))
-    assert(expr.isInstanceOf[CodegenFallback])
-    val j = evalJson("INSERT INTO t SELECT 1")
-    assert(j \ "statement_identifier" === JString("INSERT"))
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val expr = ParseSql(Literal("INSERT INTO t SELECT 1"))
+      assert(expr.isInstanceOf[CodegenFallback])
+      val j = evalJson("INSERT INTO t SELECT 1")
+      assert(j \ "statement_identifier" === JString("INSERT"))
+    }
   }
 }

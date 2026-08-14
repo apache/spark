@@ -21,6 +21,19 @@ Project [parse_sql(SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2) AS par
 
 
 -- !query
+SELECT
+  get_json_object(result, '$.statement_identifier') AS statement_identifier,
+  get_json_object(result, '$.table_references[0][0]') AS first_table,
+  get_json_object(result, '$.select_list[1].name[0]') AS second_column
+FROM (SELECT parse_sql('SELECT a, b FROM t') AS result)
+-- !query analysis
+Project [get_json_object(result#x, $.statement_identifier) AS statement_identifier#x, get_json_object(result#x, $.table_references[0][0]) AS first_table#x, get_json_object(result#x, $.select_list[1].name[0]) AS second_column#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [parse_sql(SELECT a, b FROM t) AS result#x]
+      +- OneRowRelation
+
+
+-- !query
 SELECT parse_sql('INSERT INTO t SELECT 1')
 -- !query analysis
 Project [parse_sql(INSERT INTO t SELECT 1) AS parse_sql(INSERT INTO t SELECT 1)#x]
@@ -91,17 +104,16 @@ Project [parse_sql(VALUES (1), (2)) AS parse_sql(VALUES (1), (2))#x]
 
 
 -- !query
-SELECT get_json_object(parse_sql('CREATE FUNCTION f AS ''x'' USING JAR ''y.jar'''),
-  '$.table_references')
+SELECT parse_sql('CREATE FUNCTION f AS ''x'' USING JAR ''y.jar''')
 -- !query analysis
-Project [get_json_object(parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar'), $.table_references) AS get_json_object(parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar'), $.table_references)#x]
+Project [parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar') AS parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar')#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT get_json_object(parse_sql('DECLARE VARIABLE x INT'), '$.table_references')
+SELECT parse_sql('DECLARE VARIABLE x INT')
 -- !query analysis
-Project [get_json_object(parse_sql(DECLARE VARIABLE x INT), $.table_references) AS get_json_object(parse_sql(DECLARE VARIABLE x INT), $.table_references)#x]
+Project [parse_sql(DECLARE VARIABLE x INT) AS parse_sql(DECLARE VARIABLE x INT)#x]
 +- OneRowRelation
 
 
@@ -217,115 +229,111 @@ Project [parse_sql(CREATE TABLE defaults (
 
 
 -- !query
-SELECT get_json_object(parse_sql('SELEC FROM t'), '$.parse_success')
+SELECT parse_sql('SELEC FROM t')
 -- !query analysis
-Project [get_json_object(parse_sql(SELEC FROM t), $.parse_success) AS get_json_object(parse_sql(SELEC FROM t), $.parse_success)#x]
-+- OneRowRelation
-
-
--- !query
-SELECT get_json_object(parse_sql('SELEC FROM t'), '$.error.errorClass')
--- !query analysis
-Project [get_json_object(parse_sql(SELEC FROM t), $.error.errorClass) AS get_json_object(parse_sql(SELEC FROM t), $.error.errorClass)#x]
-+- OneRowRelation
-
-
--- !query
-SELECT get_json_object(parse_sql('SELEC FROM t'), '$.error.sqlState')
--- !query analysis
-Project [get_json_object(parse_sql(SELEC FROM t), $.error.sqlState) AS get_json_object(parse_sql(SELEC FROM t), $.error.sqlState)#x]
+Project [parse_sql(SELEC FROM t) AS parse_sql(SELEC FROM t)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT
-  get_json_object(parse_sql(
+  get_json_object(result, '$.parse_success') AS parse_success,
+  get_json_object(result, '$.error.errorClass') AS error_class,
+  get_json_object(result, '$.error.queryContext[0].fragment') AS fragment
+FROM (SELECT parse_sql('SELEC FROM t') AS result)
+-- !query analysis
+Project [get_json_object(result#x, $.parse_success) AS parse_success#x, get_json_object(result#x, $.error.errorClass) AS error_class#x, get_json_object(result#x, $.error.queryContext[0].fragment) AS fragment#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [parse_sql(SELEC FROM t) AS result#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT parse_sql(
 'SELECT *
  FROM t
  ORDER BY a
- CLUSTER BY b'), '$.error.errorClass') AS error_class,
-  get_json_object(parse_sql(
+ CLUSTER BY b')
+-- !query analysis
+Project [parse_sql(SELECT *
+ FROM t
+ ORDER BY a
+ CLUSTER BY b) AS parse_sql(SELECT *
+ FROM t
+ ORDER BY a
+ CLUSTER BY b)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT
+  get_json_object(result, '$.error.errorClass') AS error_class,
+  get_json_object(result, '$.error.line') AS line,
+  get_json_object(result, '$.error.position') AS position,
+  get_json_object(result, '$.error.queryContext[0].startIndex') AS start_index
+FROM (
+  SELECT parse_sql(
 'SELECT *
  FROM t
  ORDER BY a
- CLUSTER BY b'), '$.error.line') AS line,
-  get_json_object(parse_sql(
-'SELECT *
+ CLUSTER BY b') AS result
+)
+-- !query analysis
+Project [get_json_object(result#x, $.error.errorClass) AS error_class#x, get_json_object(result#x, $.error.line) AS line#x, get_json_object(result#x, $.error.position) AS position#x, get_json_object(result#x, $.error.queryContext[0].startIndex) AS start_index#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [parse_sql(SELECT *
  FROM t
  ORDER BY a
- CLUSTER BY b'), '$.error.position') AS position,
-  get_json_object(parse_sql(
-'SELECT *
- FROM t
- ORDER BY a
- CLUSTER BY b'), '$.error.queryContext[0].startIndex') AS start_index
+ CLUSTER BY b) AS result#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT parse_sql('')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT *
- FROM t
- ORDER BY a
- CLUSTER BY b), $.error.errorClass) AS error_class#x, get_json_object(parse_sql(SELECT *
- FROM t
- ORDER BY a
- CLUSTER BY b), $.error.line) AS line#x, get_json_object(parse_sql(SELECT *
- FROM t
- ORDER BY a
- CLUSTER BY b), $.error.position) AS position#x, get_json_object(parse_sql(SELECT *
- FROM t
- ORDER BY a
- CLUSTER BY b), $.error.queryContext[0].startIndex) AS start_index#x]
+Project [parse_sql() AS parse_sql()#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT get_json_object(parse_sql(''), '$.error.errorClass')
+SELECT parse_sql('USE bad-name')
 -- !query analysis
-Project [get_json_object(parse_sql(), $.error.errorClass) AS get_json_object(parse_sql(), $.error.errorClass)#x]
+Project [parse_sql(USE bad-name) AS parse_sql(USE bad-name)#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT get_json_object(parse_sql('USE bad-name'), '$.error.errorClass')
+SELECT parse_sql('WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c')
 -- !query analysis
-Project [get_json_object(parse_sql(USE bad-name), $.error.errorClass) AS get_json_object(parse_sql(USE bad-name), $.error.errorClass)#x]
+Project [parse_sql(WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c) AS parse_sql(WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c)#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT get_json_object(
-  parse_sql('WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c'),
-  '$.error.errorClass')
+SELECT parse_sql('MERGE INTO target USING source ON target.id = source.id')
 -- !query analysis
-Project [get_json_object(parse_sql(WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c), $.error.errorClass) AS get_json_object(parse_sql(WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c), $.error.errorClass)#x]
+Project [parse_sql(MERGE INTO target USING source ON target.id = source.id) AS parse_sql(MERGE INTO target USING source ON target.id = source.id)#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT get_json_object(
-  parse_sql('MERGE INTO target USING source ON target.id = source.id'),
-  '$.error.errorClass')
+SELECT parse_sql('EXPLAIN SELECT 1')
 -- !query analysis
-Project [get_json_object(parse_sql(MERGE INTO target USING source ON target.id = source.id), $.error.errorClass) AS get_json_object(parse_sql(MERGE INTO target USING source ON target.id = source.id), $.error.errorClass)#x]
+Project [parse_sql(EXPLAIN SELECT 1) AS parse_sql(EXPLAIN SELECT 1)#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT get_json_object(parse_sql('EXPLAIN SELECT 1'), '$.statement_identifier')
+SELECT parse_sql('SET spark.sql.adaptive.enabled=true')
 -- !query analysis
-Project [get_json_object(parse_sql(EXPLAIN SELECT 1), $.statement_identifier) AS get_json_object(parse_sql(EXPLAIN SELECT 1), $.statement_identifier)#x]
+Project [parse_sql(SET spark.sql.adaptive.enabled=true) AS parse_sql(SET spark.sql.adaptive.enabled=true)#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT get_json_object(parse_sql('SET spark.sql.adaptive.enabled=true'), '$.statement_code')
+SELECT parse_sql('ADD JAR /tmp/x.jar')
 -- !query analysis
-Project [get_json_object(parse_sql(SET spark.sql.adaptive.enabled=true), $.statement_code) AS get_json_object(parse_sql(SET spark.sql.adaptive.enabled=true), $.statement_code)#x]
-+- OneRowRelation
-
-
--- !query
-SELECT get_json_object(parse_sql('ADD JAR /tmp/x.jar'), '$.statement_identifier')
--- !query analysis
-Project [get_json_object(parse_sql(ADD JAR /tmp/x.jar), $.statement_identifier) AS get_json_object(parse_sql(ADD JAR /tmp/x.jar), $.statement_identifier)#x]
+Project [parse_sql(ADD JAR /tmp/x.jar) AS parse_sql(ADD JAR /tmp/x.jar)#x]
 +- OneRowRelation
 
 
@@ -337,89 +345,102 @@ Project [parse_sql(CREATE VIEW v AS SELECT a, b FROM t) AS parse_sql(CREATE VIEW
 
 
 -- !query
-SELECT get_json_object(
-  parse_sql('SELECT 1 AS IDENTIFIER(''alias.field'')'),
-  '$.error.errorClass')
+SELECT parse_sql('SELECT 1 AS IDENTIFIER(''alias.field'')')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT 1 AS IDENTIFIER('alias.field')), $.error.errorClass) AS get_json_object(parse_sql(SELECT 1 AS IDENTIFIER('alias.field')), $.error.errorClass)#x]
+Project [parse_sql(SELECT 1 AS IDENTIFIER('alias.field')) AS parse_sql(SELECT 1 AS IDENTIFIER('alias.field'))#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT get_json_object(
-  parse_sql('SELECT DATE ''not-a-date'''),
-  '$.error.errorClass')
+SELECT parse_sql('SELECT DATE ''not-a-date''')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT DATE 'not-a-date'), $.error.errorClass) AS get_json_object(parse_sql(SELECT DATE 'not-a-date'), $.error.errorClass)#x]
+Project [parse_sql(SELECT DATE 'not-a-date') AS parse_sql(SELECT DATE 'not-a-date')#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT
-  get_json_object(parse_sql(
+SELECT parse_sql(
 'BEGIN
    SELECT 1;
    SELEC 2;
- END'), '$.error.errorClass') AS error_class,
-  get_json_object(parse_sql(
-'BEGIN
-   SELECT 1;
-   SELEC 2;
- END'), '$.error.line') AS line,
-  get_json_object(parse_sql(
-'BEGIN
-   SELECT 1;
-   SELEC 2;
- END'), '$.error.position') AS position
+ END')
 -- !query analysis
-Project [get_json_object(parse_sql(BEGIN
+Project [parse_sql(BEGIN
    SELECT 1;
    SELEC 2;
- END), $.error.errorClass) AS error_class#x, get_json_object(parse_sql(BEGIN
+ END) AS parse_sql(BEGIN
    SELECT 1;
    SELEC 2;
- END), $.error.line) AS line#x, get_json_object(parse_sql(BEGIN
-   SELECT 1;
-   SELEC 2;
- END), $.error.position) AS position#x]
+ END)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT
-  get_json_object(parse_sql(
+  get_json_object(result, '$.error.errorClass') AS error_class,
+  get_json_object(result, '$.error.line') AS line,
+  get_json_object(result, '$.error.position') AS position,
+  get_json_object(result, '$.error.queryContext[0].fragment') AS fragment
+FROM (
+  SELECT parse_sql(
 'BEGIN
-   lbl_begin: BEGIN
-     SELECT 1;
-   END lbl_end;
- END'), '$.error.errorClass') AS error_class,
-  get_json_object(parse_sql(
-'BEGIN
-   lbl_begin: BEGIN
-     SELECT 1;
-   END lbl_end;
- END'), '$.error.line') AS line,
-  get_json_object(parse_sql(
-'BEGIN
-   lbl_begin: BEGIN
-     SELECT 1;
-   END lbl_end;
- END'), '$.error.position') AS position
+   SELECT 1;
+   SELEC 2;
+ END') AS result
+)
 -- !query analysis
-Project [get_json_object(parse_sql(BEGIN
+Project [get_json_object(result#x, $.error.errorClass) AS error_class#x, get_json_object(result#x, $.error.line) AS line#x, get_json_object(result#x, $.error.position) AS position#x, get_json_object(result#x, $.error.queryContext[0].fragment) AS fragment#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [parse_sql(BEGIN
+   SELECT 1;
+   SELEC 2;
+ END) AS result#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT parse_sql(
+'BEGIN
    lbl_begin: BEGIN
      SELECT 1;
    END lbl_end;
- END), $.error.errorClass) AS error_class#x, get_json_object(parse_sql(BEGIN
+ END')
+-- !query analysis
+Project [parse_sql(BEGIN
    lbl_begin: BEGIN
      SELECT 1;
    END lbl_end;
- END), $.error.line) AS line#x, get_json_object(parse_sql(BEGIN
+ END) AS parse_sql(BEGIN
    lbl_begin: BEGIN
      SELECT 1;
    END lbl_end;
- END), $.error.position) AS position#x]
+ END)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT
+  get_json_object(result, '$.error.errorClass') AS error_class,
+  get_json_object(result, '$.error.line') AS line,
+  get_json_object(result, '$.error.position') AS position,
+  get_json_object(result, '$.error.queryContext[0].fragment') AS fragment
+FROM (
+  SELECT parse_sql(
+'BEGIN
+   lbl_begin: BEGIN
+     SELECT 1;
+   END lbl_end;
+ END') AS result
+)
+-- !query analysis
+Project [get_json_object(result#x, $.error.errorClass) AS error_class#x, get_json_object(result#x, $.error.line) AS line#x, get_json_object(result#x, $.error.position) AS position#x, get_json_object(result#x, $.error.queryContext[0].fragment) AS fragment#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [parse_sql(BEGIN
+   lbl_begin: BEGIN
+     SELECT 1;
+   END lbl_end;
+ END) AS result#x]
+      +- OneRowRelation
 
 
 -- !query
@@ -463,8 +484,7 @@ Project [parse_sql(BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO
 
 
 -- !query
-SELECT
-  get_json_object(parse_sql(
+SELECT parse_sql(
 'BEGIN
    DECLARE EXIT HANDLER FOR SQLEXCEPTION
    BEGIN
@@ -494,40 +514,9 @@ SELECT
    DO
      SELECT audit(row.id), count(*) FROM loop_body;
    END FOR;
- END'), '$.table_references') AS table_references,
-  get_json_object(parse_sql(
-'BEGIN
-   DECLARE EXIT HANDLER FOR SQLEXCEPTION
-   BEGIN
-     INSERT INTO error_log
-     SELECT format_string(''%s'', message) FROM error_source;
-   END;
-
-   WITH prepared AS (
-     SELECT id, normalize_name(name) AS name
-     FROM input_names
-     WHERE is_valid(id)
-   )
-   INSERT INTO output_names
-   SELECT id, upper(name) FROM prepared;
-
-   IF EXISTS (SELECT 1 FROM control_flags WHERE enabled()) THEN
-     UPDATE update_target
-     SET value = coalesce((SELECT max(value) FROM update_source), 0)
-     WHERE should_update(id);
-   ELSE
-     DELETE FROM delete_target
-     WHERE id IN (SELECT id FROM delete_source WHERE expired(ts));
-   END IF;
-
-   FOR row AS
-     SELECT id FROM loop_source WHERE ready(id)
-   DO
-     SELECT audit(row.id), count(*) FROM loop_body;
-   END FOR;
- END'), '$.function_references') AS function_references
+ END')
 -- !query analysis
-Project [get_json_object(parse_sql(BEGIN
+Project [parse_sql(BEGIN
    DECLARE EXIT HANDLER FOR SQLEXCEPTION
    BEGIN
      INSERT INTO error_log
@@ -556,7 +545,7 @@ Project [get_json_object(parse_sql(BEGIN
    DO
      SELECT audit(row.id), count(*) FROM loop_body;
    END FOR;
- END), $.table_references) AS table_references#x, get_json_object(parse_sql(BEGIN
+ END) AS parse_sql(BEGIN
    DECLARE EXIT HANDLER FOR SQLEXCEPTION
    BEGIN
      INSERT INTO error_log
@@ -585,16 +574,5 @@ Project [get_json_object(parse_sql(BEGIN
    DO
      SELECT audit(row.id), count(*) FROM loop_body;
    END FOR;
- END), $.function_references) AS function_references#x]
-+- OneRowRelation
-
-
--- !query
-SELECT
-  get_json_object(parse_sql('BEGIN SELECT 1; END'), '$.statement_identifier') AS statement_identifier,
-  get_json_object(parse_sql('BEGIN SELECT 1; END'), '$.statement_code') AS statement_code,
-  get_json_object(parse_sql('BEGIN SELECT count(a) FROM script_t; END'), '$.table_references') AS table_references,
-  get_json_object(parse_sql('BEGIN SELECT count(a) FROM script_t; END'), '$.function_references') AS function_references
--- !query analysis
-Project [get_json_object(parse_sql(BEGIN SELECT 1; END), $.statement_identifier) AS statement_identifier#x, get_json_object(parse_sql(BEGIN SELECT 1; END), $.statement_code) AS statement_code#x, get_json_object(parse_sql(BEGIN SELECT count(a) FROM script_t; END), $.table_references) AS table_references#x, get_json_object(parse_sql(BEGIN SELECT count(a) FROM script_t; END), $.function_references) AS function_references#x]
+ END)#x]
 +- OneRowRelation
