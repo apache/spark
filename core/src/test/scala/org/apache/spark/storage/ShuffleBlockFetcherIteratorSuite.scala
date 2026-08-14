@@ -2078,7 +2078,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(!iterator.hasNext)
   }
 
-  test("SPARK-57491: fallback behavior when stale mapIndex is in/not in merged block") {
+  test("SPARK-57491: chunk-granularity fallback when stale mapIndex is in a chunk") {
     val blockManager = createMockBlockManager()
     val localHost = "test-local-host"
     val localBmId = BlockManagerId("test-client", localHost, 1)
@@ -2087,23 +2087,24 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     initHostLocalDirManager(blockManager, Map(SHUFFLE_MERGER_IDENTIFIER -> localDirs))
 
     when(mapOutputTracker.getStaleMapIndexes(0)).thenReturn(mutable.Set(1))
-    when(mapOutputTracker.getMapSizesForMergeResult(0, 2))
-      .thenReturn(Seq((localBmId,
-        toBlockList(Seq(ShuffleBlockId(0, 0, 2), ShuffleBlockId(0, 1, 2)), 1L, 1))).iterator)
     doReturn(createMockManagedBuffer(100)).when(blockManager)
       .getLocalBlockData(ShuffleBlockId(0, 0, 2))
     doReturn(createMockManagedBuffer(100)).when(blockManager)
       .getLocalBlockData(ShuffleBlockId(0, 1, 2))
 
-    // Stale mapIndex IS in the merged block's bitmap -> should trigger fallback
+    // Stale mapIndex (1) IS in the only chunk's bitmap -> that chunk falls back to its
+    // original blocks (mapIndex 0 and 1), instead of falling back the whole merged block.
     val bitmaps1 = Array(new RoaringBitmap)
     bitmaps1(0).add(0) // chunk 0 has mapIndex 0
     bitmaps1(0).add(1) // chunk 0 also has mapIndex 1 (stale)
+    when(mapOutputTracker.getMapSizesForMergeResult(0, 2, bitmaps1(0)))
+      .thenReturn(Seq((localBmId,
+        toBlockList(Seq(ShuffleBlockId(0, 0, 2), ShuffleBlockId(0, 1, 2)), 1L, 1))).iterator)
 
     val pushMergedBlockMeta1 = createMockPushMergedBlockMeta(bitmaps1.length, bitmaps1)
     when(blockManager.getLocalMergedBlockMeta(ShuffleMergedBlockId(0, 0, 2), localDirs))
       .thenReturn(pushMergedBlockMeta1)
-    doReturn(Seq(createMockManagedBuffer(100), createMockManagedBuffer(100)))
+    doReturn(Seq(createMockManagedBuffer(100)))
       .when(blockManager).getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 2), localDirs)
     doReturn(createMockManagedBuffer(100)).when(blockManager)
       .getLocalBlockData(ShuffleBlockId(0, 3, 2))
@@ -2129,7 +2130,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(!iterator1.hasNext)
     assert(shuffleMetrics1.mergedFetchFallbackCount === 1)
 
-    // Stale mapIndex is NOT in the merged block's bitmap -> should NOT trigger fallback
+    // Stale mapIndex is NOT in any chunk's bitmap -> no fallback, chunks are read normally.
     val bitmaps2 = Array(new RoaringBitmap, new RoaringBitmap)
     bitmaps2(0).add(0) // chunk 0 has mapIndex 0
     bitmaps2(1).add(2) // chunk 1 has mapIndex 2
@@ -2156,5 +2157,45 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(id5.isInstanceOf[ShuffleBlockChunkId])
     assert(!iterator2.hasNext)
     assert(shuffleMetrics2.mergedFetchFallbackCount === 0)
+
+    // Only the chunk containing the stale mapIndex falls back; the other chunk of the same
+    // merged block is still read normally as a shuffle chunk (no whole-block fallback).
+    val bitmaps3 = Array(new RoaringBitmap, new RoaringBitmap)
+    bitmaps3(0).add(0) // chunk 0 has mapIndex 0
+    bitmaps3(0).add(1) // chunk 0 also has mapIndex 1 (stale)
+    bitmaps3(1).add(2) // chunk 1 has mapIndex 2 (not stale)
+    when(mapOutputTracker.getMapSizesForMergeResult(0, 2, bitmaps3(0)))
+      .thenReturn(Seq((localBmId,
+        toBlockList(Seq(ShuffleBlockId(0, 0, 2), ShuffleBlockId(0, 1, 2)), 1L, 1))).iterator)
+
+    val pushMergedBlockMeta3 = createMockPushMergedBlockMeta(bitmaps3.length, bitmaps3)
+    when(blockManager.getLocalMergedBlockMeta(ShuffleMergedBlockId(0, 0, 2), localDirs))
+      .thenReturn(pushMergedBlockMeta3)
+    doReturn(Seq(createMockManagedBuffer(100), createMockManagedBuffer(100)))
+      .when(blockManager).getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 2), localDirs)
+
+    val blocksByAddress3 = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
+      (pushMergedBmId, toBlockList(Seq(ShuffleMergedBlockId(0, 0, 2)), 200L,
+        SHUFFLE_PUSH_MAP_ID)))
+
+    val taskContext3 = TaskContext.empty()
+    val shuffleMetrics3 = taskContext3.taskMetrics.createTempShuffleReadMetrics()
+    val iterator3 = createShuffleBlockIteratorWithDefaults(blocksByAddress3,
+      blockManager = Some(blockManager),
+      shuffleMetrics = Some(shuffleMetrics3))
+
+    val results3 = scala.collection.mutable.ArrayBuffer[BlockId]()
+    while (iterator3.hasNext) {
+      results3 += iterator3.next()._1
+    }
+    // chunk 0 (stale) falls back to original blocks 0 and 1; chunk 1 (not stale) is read
+    // normally as a ShuffleBlockChunkId.
+    assert(results3.exists(_.isInstanceOf[ShuffleBlockChunkId]),
+      "Expected the non-stale chunk to be read as a shuffle chunk")
+    assert(results3.exists(_ == ShuffleBlockId(0, 0, 2)),
+      "Expected stale chunk to fall back to original block 0")
+    assert(results3.exists(_ == ShuffleBlockId(0, 1, 2)),
+      "Expected stale chunk to fall back to original block 1")
+    assert(shuffleMetrics3.mergedFetchFallbackCount === 1)
   }
 }

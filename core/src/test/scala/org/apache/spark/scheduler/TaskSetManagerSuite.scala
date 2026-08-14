@@ -2921,11 +2921,49 @@ class TaskSetManagerSuite
         s"\nCaptured logs:\n${logs.mkString("\n")}")
   }
 
-  test("SPARK-57491: late-arriving speculative ShuffleMapTask marks stale partitionId") {
-    sc = new SparkContext("local", "test")
+  test("SPARK-57491: late speculative ShuffleMapTask marks stale only when fallback enabled") {
+    // (fallbackEnabled, detectAllStagesEnabled, expectStale)
+    Seq(
+      // Both switches enabled: the late attempt is marked stale regardless of stage determinism
+      // (the test does not register an indeterminate ShuffleMapStage, so detectAllStages is
+      // required here).
+      (true, true, true),
+      // Fallback disabled (default): the late attempt is reported (logged) but no map index is
+      // marked stale, so reducers keep reading the merged block.
+      (false, false, false)
+    ).foreach { case (fallbackEnabled, detectAllStagesEnabled, expectStale) =>
+      val staleMapIndexes =
+        runLateSpeculativeShuffleMapAttempt(fallbackEnabled, detectAllStagesEnabled)
+      if (expectStale) {
+        assert(staleMapIndexes.contains(0),
+          s"Expected staleMapIndexes to contain mapIndex 0 " +
+            s"(fallback=$fallbackEnabled), got $staleMapIndexes")
+      } else {
+        assert(staleMapIndexes.isEmpty,
+          s"Expected no stale map indexes (fallback=$fallbackEnabled), got $staleMapIndexes")
+      }
+    }
+  }
+
+  /**
+   * Drives a shuffle map stage through a late speculative attempt: task 0 and task 1 start,
+   * task 1 finishes, task 0 is speculated, then the original task 0 finishes (killing the
+   * speculative attempt) and finally the speculative attempt's result arrives late. Returns
+   * the stale pushed map indexes recorded by the MapOutputTracker, which are non-empty only
+   * when reducer fallback marking is enabled.
+   *
+   * Each invocation gets its own SparkContext via [[withSpark]] so the caller can loop without
+   * leaking contexts.
+   */
+  private def runLateSpeculativeShuffleMapAttempt(
+      fallbackEnabled: Boolean,
+      detectAllStagesEnabled: Boolean): Set[Int] = LocalSparkContext.withSpark(
+    new SparkContext("local", "test")) { sc =>
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
     sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
     sc.conf.set(config.SPECULATION_ENABLED, true)
+    sc.conf.set(config.STALE_PUSH_FALLBACK_ENABLED, fallbackEnabled)
+    sc.conf.set(config.STALE_PUSH_DETECT_ALL_STAGES_ENABLED, detectAllStagesEnabled)
 
     val taskSet = FakeTask.createShuffleMapTaskSet(2, 0, 0,
       Seq(TaskLocation("host1", "exec1")),
@@ -2952,8 +2990,8 @@ class TaskSetManagerSuite
 
     // Complete task 1 (partition 1) successfully with a MapStatus
     val mapStatus1 = MapStatus(BlockManagerId("exec2", "host2", 2000), Array(2L, 2L), mapTaskId = 1)
-    val result1 = createMapStatusTaskResult(mapStatus1, accumUpdatesByTask(1))
-    manager.handleSuccessfulTask(task1.taskId, result1)
+    manager.handleSuccessfulTask(task1.taskId,
+      createMapStatusTaskResult(mapStatus1, accumUpdatesByTask(1)))
     assert(sched.endedTasks(task1.index) === Success)
 
     // Advance clock so task 0 has been running long enough for speculation.
@@ -2976,8 +3014,8 @@ class TaskSetManagerSuite
 
     // Complete original task 0 (partition 0) - this will kill the speculative attempt
     val mapStatus0 = MapStatus(BlockManagerId("exec1", "host1", 1000), Array(1L, 1L), mapTaskId = 0)
-    val result0 = createMapStatusTaskResult(mapStatus0, accumUpdatesByTask(0))
-    manager.handleSuccessfulTask(task0.taskId, result0)
+    manager.handleSuccessfulTask(task0.taskId,
+      createMapStatusTaskResult(mapStatus0, accumUpdatesByTask(0)))
 
     // Verify no stale pushed map indexes yet (stale is only marked when late result arrives)
     assert(mapOutputTrackerMaster.getStaleMapIndexes(shuffleId).isEmpty)
@@ -2987,13 +3025,10 @@ class TaskSetManagerSuite
     // the speculative tid, triggering detectStalePushIfShuffleTask.
     val specMapStatus = MapStatus(
       BlockManagerId("exec3", "host3", 3000), Array(3L, 3L), mapTaskId = 999)
-    val specResult = createMapStatusTaskResult(specMapStatus, accumUpdatesByTask(0))
-    manager.handleSuccessfulTask(specTask.taskId, specResult)
+    manager.handleSuccessfulTask(specTask.taskId,
+      createMapStatusTaskResult(specMapStatus, accumUpdatesByTask(0)))
 
-    // Verify that partition 0 is now tracked as stale
-    val staleMapIndexes = mapOutputTrackerMaster.getStaleMapIndexes(shuffleId)
-    assert(staleMapIndexes.contains(0),
-      s"Expected staleMapIndexes to contain mapIndex 0, got $staleMapIndexes")
+    mapOutputTrackerMaster.getStaleMapIndexes(shuffleId).toSet
   }
 
   private def createMapStatusTaskResult(
