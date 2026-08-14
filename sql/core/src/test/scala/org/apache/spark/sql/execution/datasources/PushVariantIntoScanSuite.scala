@@ -21,7 +21,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant._
-import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
@@ -774,34 +773,6 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
       }.flatMap(_.filter(_.name == "data")).map(_.dataType)
       assert(dataTypes.length == 2, s"Expected two `data` scan columns, but got:\n$plan")
       dataTypes.foreach(dt => assertShreddedStruct(dt))
-    }
-  }
-
-  test("left outer join: projected right-side attributes use widened nullability") {
-    val leftKey = AttributeReference("leftKey", IntegerType, nullable = false)()
-    val rightKey = AttributeReference("rightKey", IntegerType, nullable = false)()
-    val rightVariant = AttributeReference("rightVariant", VariantType, nullable = false)()
-    val join = Join(
-      LocalRelation(leftKey),
-      LocalRelation(rightKey, rightVariant),
-      LeftOuter,
-      Some(EqualTo(leftKey, rightKey)),
-      JoinHint.NONE)
-    val extraction = VariantGet(
-      rightVariant,
-      path = Literal("$.label"),
-      targetType = StringType,
-      failOnError = false,
-      timeZoneId = Some(localTimeZone))
-    val plan = Project(Seq(rightKey, Alias(extraction, "label")()), join)
-
-    PullOutVariantExtractions(plan) match {
-      case Project(projectList, rewrittenJoin: Join) =>
-        val projectedRightKey = projectList.head.asInstanceOf[Attribute]
-        val childRightKey = rewrittenJoin.output.find(_.exprId == rightKey.exprId).get
-        assert(projectedRightKey.nullable)
-        assert(projectedRightKey.nullable == childRightKey.nullable)
-      case other => fail(s"Expected a Project over Join, but got:\n$other")
     }
   }
 

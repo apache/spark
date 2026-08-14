@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeSet, Cast,
-  Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Cast, Expression,
+  NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.plans.LeftExistence
@@ -105,10 +105,15 @@ import org.apache.spark.sql.types.VariantType
  * [[SQLConf.PUSH_VARIANT_INTO_SCAN]] is also enabled) and only fires when a hoistable extraction is
  * present, so non-variant plans are untouched.
  *
- * Cast-error surface: relocating a throwable extraction below a `Join` means it is evaluated at the
- * scan on rows the join later eliminates. Such extractions cross a join only when
- * [[SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR]] is enabled. Expressions not classified as
- * throwable retain the existing behavior, including strict `VariantGet` and `Cast` expressions.
+ * Cast-error surface: relocating a strict extraction (`variant_get(..., failOnError = true)` or a
+ * strict `Cast`) below a `Join` means it is evaluated at the scan on rows the join later eliminates
+ * -- so a cast failure can surface for a row the un-hoisted plan would never have cast. This is the
+ * same pre-existing trade-off as [[PushVariantIntoScan]] pushing casts below a `Filter`. When
+ * [[SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR]] is set, the cast error is deferred until the
+ * original expression consumes the failing row, suppressing errors from rows eliminated by either
+ * operator. With the flag off, strict `VariantGet` and `Cast` retain their existing behavior
+ * because they are not currently classified as [[Expression.throwable]]. If an extraction is
+ * classified as throwable, it crosses a join only when cast-error deferral is enabled.
  */
 object PullOutVariantExtractions extends Rule[LogicalPlan] {
 
@@ -193,8 +198,19 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
     }
   }
 
-  private def extractionHoister(crossesJoin: Boolean): ExtractionHoister = {
-    if (crossesJoin) new ExtractionHoister(isJoinHoistable) else new ExtractionHoister
+  // Mirrors the traversal in pushSideAliases for one extraction. A Project is pass-through only
+  // when the extraction resolves against its child; all other operators stop alias placement.
+  private def extractionCrossesJoin(child: LogicalPlan, e: Expression): Boolean = child match {
+    case _: Join => true
+    case Project(_, grandChild) if e.references.subsetOf(grandChild.outputSet) =>
+      extractionCrossesJoin(grandChild, e)
+    case _ => false
+  }
+
+  private def extractionHoister(child: LogicalPlan): ExtractionHoister = {
+    new ExtractionHoister(e =>
+      if (extractionCrossesJoin(child, e)) isJoinHoistable(e) else isHoistable(e)
+    )
   }
 
   // Recursively pushes hoisted extraction aliases down through a join tree until each lands in a
@@ -311,7 +327,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
   }
 
   private def rewriteAggregate(agg: Aggregate): LogicalPlan = {
-    val hoister = extractionHoister(agg.child.containsPattern(JOIN))
+    val hoister = extractionHoister(agg.child)
     // Only hoist extractions that sit inside an aggregate function's arguments (or filter). A
     // top-level extraction in `aggregateExpressions` is a grouping-key reference (grouping keys are
     // already pulled out by `PullOutGroupingExpressions`); hoisting it would leave the `Aggregate`
@@ -387,7 +403,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
 
   private def rewriteSortUnderProject(
       project: Project, projectList: Seq[NamedExpression], sort: Sort): LogicalPlan = {
-    val hoister = extractionHoister(sort.child.containsPattern(JOIN))
+    val hoister = extractionHoister(sort.child)
     val newOrder = sort.order.map(hoister.hoist(_).asInstanceOf[SortOrder])
     if (hoister.isEmpty) {
       project
@@ -418,7 +434,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
   // yielding a multi-slot shredded struct with a full-variant slot -- the same shape as a
   // Sort-under-Project whose `v` is also selected. See the class doc.
   private def rewriteBareSort(sort: Sort): LogicalPlan = {
-    val hoister = extractionHoister(sort.child.containsPattern(JOIN))
+    val hoister = extractionHoister(sort.child)
     val newOrder = sort.order.map(hoister.hoist(_).asInstanceOf[SortOrder])
     if (hoister.isEmpty) {
       sort
@@ -441,8 +457,9 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
       project: Project, projectList: Seq[NamedExpression], join: Join): LogicalPlan = {
     val leftOutput = join.left.outputSet
     val rightOutput = join.right.outputSet
-    val leftHoister = extractionHoister(crossesJoin = true)
-    val rightHoister = extractionHoister(crossesJoin = true)
+    // Join-crossing eligibility is checked at the routing sites before aliasFor is called.
+    val leftHoister = new ExtractionHoister
+    val rightHoister = new ExtractionHoister
 
     // A single variant extraction references exactly one attribute, hence one join side; route it
     // to that side's hoister. Anything not cleanly on one side is left in place. We hoist from both
@@ -480,13 +497,7 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
         left = pushSideAliases(join.left, leftHoister.aliases, needed),
         right = pushSideAliases(join.right, rightHoister.aliases, needed),
         condition = newCondition)
-      // Outer joins widen attributes on their nullable side. Remap references in the parent
-      // Project to the copied Join's actual output so their nullability matches the child.
-      val newJoinOutput = AttributeMap(newJoin.output.map(attr => attr -> attr))
-      val remappedProjectList = newProjectList.map(_.transformDown {
-        case attr: Attribute => newJoinOutput.getOrElse(attr, attr)
-      }.asInstanceOf[NamedExpression])
-      project.copy(projectList = remappedProjectList, child = newJoin)
+      project.copy(projectList = newProjectList, child = newJoin)
     }
   }
 }
