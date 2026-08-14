@@ -101,7 +101,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     val firstAtime = managerMasterEndpoint.rddAccessTime.get(input.id)
     // Re-reading the cached RDD in a new job must refresh (advance) its access time. Re-running
     // inside eventually guards against the clock not having ticked past firstAtime yet; if the
-    // cleaner had already reaped it, count() simply re-materializes it and the atime still advances.
+    // cleaner had already reaped it, count() re-materializes it and the atime still advances.
     eventually {
       input.count()
       assert(managerMasterEndpoint.rddAccessTime.containsKey(input.id),
