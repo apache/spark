@@ -193,6 +193,14 @@ SELECT c, count(*) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
   GROUP BY c ORDER BY c;
 
+-- SPARK-56822: mode over nanosecond-precision TIMESTAMP_NTZ. Frequencies are counted on the full
+-- nanos value, so the most-frequent value is selected down to the sub-microsecond and the result
+-- type stays TIMESTAMP_NTZ(9). .000000001 appears twice, .000000999 once.
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c);
+
 -- SPARK-56822: collect_list over nanosecond-precision TIMESTAMP_NTZ. The buffer holds the full
 -- nanos value, so the sub-microsecond remainder survives and the result element type stays
 -- TIMESTAMP_NTZ(9). collect_list order is non-deterministic, so the output is stabilized with
@@ -223,6 +231,15 @@ SELECT max_by(v, k), min_by(v, k) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500', 2),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000007', CAST(NULL AS INT)) AS t(v, k);
+-- DISTINCT over a nanosecond column: exact duplicates are removed, two values sharing epochMicros
+-- but differing within the microsecond are both kept, and NULL survives as a single row. Three
+-- rows: .000000001, .000000999, NULL.
+SELECT DISTINCT c FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+  ORDER BY c;
 
 -- SPARK-57527: unix_nanos over nanosecond-precision values returns DECIMAL(21, 0) nanoseconds since
 -- the epoch; NTZ applies no zone shift, so the wall-clock value is read as the epoch instant. The

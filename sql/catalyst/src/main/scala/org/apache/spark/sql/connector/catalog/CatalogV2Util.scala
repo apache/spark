@@ -481,6 +481,28 @@ private[sql] object CatalogV2Util {
       case _: NoSuchDatabaseException => None
     }
 
+  /**
+   * Extracts the options that may select table state from a complete option map. These are the
+   * only options passed to `loadTable` and used to identify a pinned table state.
+   */
+  def extractTableStateOptions(
+      catalog: CatalogPlugin,
+      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val stateKeys = catalog.asTableCatalog.tableStateOptionKeys.asScala
+      .map(_.toLowerCase(Locale.ROOT))
+      .toSet
+    val projected = options.entrySet.asScala.collect {
+      case entry if stateKeys.contains(entry.getKey.toLowerCase(Locale.ROOT)) =>
+        entry.getKey -> entry.getValue
+    }.toMap
+    new CaseInsensitiveStringMap(projected.asJava)
+  }
+
+  /**
+   * Loads a table from the catalog. Callers may pass the complete option map, but only the keys the
+   * catalog declares via `tableStateOptionKeys()` are forwarded to `loadTable`, so the loaded table
+   * state stays independent of non-state options and of how many times the table is referenced.
+   */
   def getTable(
       catalog: CatalogPlugin,
       ident: Identifier,
@@ -493,7 +515,8 @@ private[sql] object CatalogV2Util {
       case None => null
     }
     val context = new TableContext(timeTravel, parseWritePrivileges(writePrivilegesString))
-    catalog.asTableCatalog.loadTable(ident, context, options)
+    val stateOptions = extractTableStateOptions(catalog, options)
+    catalog.asTableCatalog.loadTable(ident, context, stateOptions)
   }
 
   /**
@@ -534,25 +557,19 @@ private[sql] object CatalogV2Util {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
-  def isSameTable(
-      rel: DataSourceV2Relation,
-      catalog: CatalogPlugin,
-      ident: Identifier,
-      table: Table): Boolean = {
-    rel.catalog.contains(catalog) && rel.identifier.contains(ident) && rel.table.id == table.id
-  }
-
   def lookupCachedRelation(
       cache: RelationCache,
       catalog: CatalogPlugin,
       ident: Identifier,
       table: Table,
+      options: CaseInsensitiveStringMap,
       conf: SQLConf): Option[DataSourceV2Relation] = {
-    val nameParts = ident.toQualifiedNameParts(catalog)
-    val cached = cache.lookup(nameParts, conf.resolver)
-    cached.collect {
-      case r: DataSourceV2Relation if isSameTable(r, catalog, ident, table) => r
-    }
+    cache.lookup(
+      catalog,
+      ident,
+      Some(table.id),
+      extractTableStateOptions(catalog, options),
+      conf.resolver).collect { case r: DataSourceV2Relation => r }
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {

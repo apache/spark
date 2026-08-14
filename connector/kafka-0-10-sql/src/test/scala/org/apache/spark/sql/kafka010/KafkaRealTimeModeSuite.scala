@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.datasources.v2.LowLatencyClock
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
@@ -679,6 +680,85 @@ class KafkaRealTimeModeSuite
         }
       )
   }
+
+  // Aggregation over a Kafka source in Real-Time Mode. The aggregate is planned as the streamline
+  // operator, which merges each record against state and emits as it goes, so in update mode a key
+  // seen twice produces two outputs -- the running value after each record.
+  test("aggregation over a Kafka source") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 2)
+
+    testUtils.sendMessages(topic, Array("a", "b"), Some(0))
+    testUtils.sendMessages(topic, Array("a"), Some(1))
+
+    val aggregated = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING) AS key")
+      .groupBy($"key")
+      .agg(count("*").as("count"))
+      .as[(String, Long)]
+
+    testStream(aggregated, Update, sink = new ContinuousMemorySink())(
+      StartStream(),
+      // "a" arrives twice, so it is emitted at count 1 and again at count 2.
+      CheckAnswerWithTimeout(60000, ("a", 1L), ("a", 2L), ("b", 1L)),
+      WaitUntilCurrentBatchProcessed,
+      new ExternalAction() {
+        override def runAction(): Unit = {
+          testUtils.sendMessages(topic, Array("b", "c"), Some(0))
+        }
+      },
+      CheckAnswerWithTimeout(30000,
+        ("a", 1L), ("a", 2L), ("b", 1L), ("b", 2L), ("c", 1L)),
+      WaitUntilCurrentBatchProcessed,
+      StopStream,
+      new ExternalAction() {
+        override def runAction(): Unit = {
+          testUtils.sendMessages(topic, Array("a"), Some(1))
+        }
+      },
+      StartStream(),
+      // The counts continue from the committed state across the restart rather than restarting.
+      CheckAnswerWithTimeout(30000,
+        ("a", 1L), ("a", 2L), ("b", 1L), ("b", 2L), ("c", 1L), ("a", 3L)),
+      WaitUntilCurrentBatchProcessed)
+  }
+
+  // A tumbling window aggregation over a Kafka source, where the grouping key is derived from an
+  // event time column rather than being a bare field.
+  test("tumbling window aggregation over a Kafka source") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 2)
+
+    // Values are seconds since the epoch; a 10 second window buckets 1-9 together and 11-19 next.
+    testUtils.sendMessages(topic, Array("1", "2"), Some(0))
+    testUtils.sendMessages(topic, Array("11"), Some(1))
+
+    val windowed = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING) AS value")
+      .select(timestamp_seconds($"value".cast("long")).as("eventTime"))
+      .groupBy(window($"eventTime", "10 seconds").as("window"))
+      .agg(count("*").as("count"))
+      .select($"window".getField("end").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowed, Update, sink = new ContinuousMemorySink())(
+      StartStream(),
+      // window ending at 10 holds 1 and 2, emitted at count 1 then 2; window ending at 20 holds 11.
+      CheckAnswerWithTimeout(60000, (10L, 1L), (10L, 2L), (20L, 1L)),
+      WaitUntilCurrentBatchProcessed)
+  }
+
 }
 
 class KafkaConsumerPoolRealTimeModeSuite
