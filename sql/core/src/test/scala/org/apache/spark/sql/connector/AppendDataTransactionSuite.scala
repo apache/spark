@@ -19,11 +19,19 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, TableWritePrivilege, Txn}
+import org.apache.spark.sql.connector.catalog.{
+  Aborted,
+  Committed,
+  TableContext,
+  TableWritePrivilege,
+  TimeTravel,
+  Txn,
+  TxnTableCatalog}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
@@ -47,13 +55,32 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     targetLoads.foreach { case (context, options) =>
       assert(context.writePrivileges() === expectedPrivileges)
       assert(options.get(targetLoadOption) === targetLoadValue)
+      assert(options.asCaseSensitiveMap().containsKey(targetLoadOption))
       assert(options.get(targetWriteOption) === null)
       assert(options.size() === 1)
     }
 
     assert(table.lastWriteInfo != null, "the V2 table did not receive LogicalWriteInfo")
     assert(table.lastWriteInfo.options().get(targetLoadOption) === targetLoadValue)
+    assert(table.lastWriteInfo.options().asCaseSensitiveMap().containsKey(targetLoadOption))
     assert(table.lastWriteInfo.options().get(targetWriteOption) === targetWriteValue)
+  }
+
+  test("transaction catalog honors time travel context") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+    val pinnedVersion = catalog.loadTable(ident).version()
+    catalog.pinTable(ident, "pinned")
+    append("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 2, "salary": 200, "dep": "software" }""")
+    assert(catalog.loadTable(ident).version() !== pinnedVersion)
+
+    val txnCatalog = new TxnTableCatalog(catalog)
+    val context = new TableContext(
+      new TimeTravel.AsOfVersion("pinned"), java.util.Set.of[TableWritePrivilege]())
+    val loaded = txnCatalog.loadTable(ident, context, CaseInsensitiveStringMap.empty())
+
+    assert(loaded.version() === pinnedVersion)
   }
 
   test("writeTo append with transactional checks") {

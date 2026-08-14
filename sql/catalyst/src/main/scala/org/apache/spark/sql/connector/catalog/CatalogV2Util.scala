@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
@@ -491,9 +492,8 @@ private[sql] object CatalogV2Util {
     val stateKeys = catalog.asTableCatalog.tableStateOptionKeys.asScala
       .map(_.toLowerCase(Locale.ROOT))
       .toSet
-    val projected = options.entrySet.asScala.collect {
-      case entry if stateKeys.contains(entry.getKey.toLowerCase(Locale.ROOT)) =>
-        entry.getKey -> entry.getValue
+    val projected = options.asCaseSensitiveMap().asScala.collect {
+      case (key, value) if stateKeys.contains(key.toLowerCase(Locale.ROOT)) => key -> value
     }.toMap
     new CaseInsensitiveStringMap(projected.asJava)
   }
@@ -509,6 +509,9 @@ private[sql] object CatalogV2Util {
       timeTravelSpec: Option[TimeTravelSpec] = None,
       writePrivilegesString: Option[String] = None,
       options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): Table = {
+    if (writePrivilegesString.nonEmpty) {
+      rejectTimeTravelOptionsForWrite(catalog, ident, options)
+    }
     val timeTravel: TimeTravel = timeTravelSpec match {
       case Some(v: AsOfVersion) => new TimeTravel.AsOfVersion(v.version)
       case Some(ts: AsOfTimestamp) => new TimeTravel.AsOfTimestamp(ts.timestamp)
@@ -529,9 +532,24 @@ private[sql] object CatalogV2Util {
       ident: Identifier,
       writePrivileges: Set[TableWritePrivilege],
       options: CaseInsensitiveStringMap): Table = {
+    rejectTimeTravelOptionsForWrite(catalog, ident, options)
     val context = new TableContext(null, writePrivileges.asJava)
     val stateOptions = extractTableStateOptions(catalog, options)
     catalog.asTableCatalog.loadTable(ident, context, stateOptions)
+  }
+
+  private def rejectTimeTravelOptionsForWrite(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      options: CaseInsensitiveStringMap): Unit = {
+    val conf = SQLConf.get
+    val containsTimeTravelOption = Seq(
+      conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
+      conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY)).exists(options.containsKey)
+    if (containsTimeTravelOption) {
+      throw QueryCompilationErrors.timeTravelUnsupportedError(
+        ident.toQualifiedNameParts(catalog).quoted)
+    }
   }
 
   /**

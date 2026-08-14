@@ -22,9 +22,11 @@ import org.mockito.ArgumentMatchers.{any, eq => mockEq}
 import org.mockito.Mockito.{mock, verify, when}
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
   AsOfTimestamp, AsOfVersion, TimeTravelSpec, UnresolvedRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -123,6 +125,30 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(contextCaptor.getValue.timeTravel().isEmpty)
     assert(contextCaptor.getValue.writePrivileges() ===
       java.util.Set.of(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
+  }
+
+  test("table loads for writes reject configured time travel options") {
+    val testCatalog = mock(classOf[TableCatalog])
+    when(testCatalog.name()).thenReturn("testcat")
+    val ident = Identifier.of(Array("ns"), "table")
+    val conf = new SQLConf
+    conf.setConf(SQLConf.TIME_TRAVEL_VERSION_KEY, "customVersion")
+    conf.setConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY, "customTimestamp")
+
+    SQLConf.withExistingConf(conf) {
+      Seq("customVersion", "customTimestamp").foreach { key =>
+        val options = new CaseInsensitiveStringMap(java.util.Map.of(key, "value"))
+        Seq(
+          () => CatalogV2Util.getTable(
+            testCatalog, ident, writePrivilegesString = Some("INSERT"), options = options),
+          () => CatalogV2Util.getTableForWrite(
+            testCatalog, ident, Set(TableWritePrivilege.INSERT), options)
+        ).foreach { loadTableForWrite =>
+          val e = intercept[AnalysisException](loadTableForWrite())
+          assert(e.getCondition === "UNSUPPORTED_FEATURE.TIME_TRAVEL")
+        }
+      }
+    }
   }
 
   test("UnresolvedRelation preserves option key case while updating write privileges") {

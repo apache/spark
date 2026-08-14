@@ -1402,7 +1402,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: time travel option on a write target is rejected with a user-facing error") {
+  test("SPARK-58389: time travel options on write targets are rejected consistently") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -1416,6 +1416,21 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         },
         condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
         parameters = Map("relationId" -> "`testcat`.`ns1`.`ns2`.`table`"))
+
+      val input = Seq(1L -> "a").toDF("id", "data")
+      Seq(
+        (() => spark.table(t1).writeTo(t1).option("versionAsOf", "v1").append()) ->
+          "`testcat`.`ns1`.`ns2`.`table`",
+        (() => input.write.option("versionAsOf", "v1").insertInto(t1)) ->
+          "testcat.ns1.ns2.table",
+        (() => input.write.option("versionAsOf", "v1").mode("append").saveAsTable(t1)) ->
+          "testcat.ns1.ns2.table"
+      ).foreach { case (writeToTimeTravelTarget, relationId) =>
+        checkError(
+          exception = intercept[AnalysisException](writeToTimeTravelTarget()),
+          condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+          parameters = Map("relationId" -> relationId))
+      }
     }
   }
 

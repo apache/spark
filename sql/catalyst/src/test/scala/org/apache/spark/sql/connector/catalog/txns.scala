@@ -205,7 +205,15 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
       context: TableContext,
       options: CaseInsensitiveStringMap): Table = {
     loadTableCalls += ((context, options))
-    loadTable(ident)
+    super.loadTable(ident, context, options)
+  }
+
+  override def loadTable(ident: Identifier, version: String): Table = {
+    delegate.loadTable(ident, version)
+  }
+
+  override def loadTable(ident: Identifier, timestamp: Long): Table = {
+    delegate.loadTable(ident, timestamp)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
