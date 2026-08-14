@@ -39,7 +39,6 @@ all-numeric and all-string variants.
 import ast
 import contextlib
 import functools
-import linecache
 import os
 import threading
 import tokenize
@@ -83,9 +82,10 @@ class AbstractTranspiler(object):
     ``_transpile_from_ast`` is the extension point, and its signature is NOT
     stable: SPARK-58650 dropped the ``src`` and ``ast_info`` parameters it never
     read. An out-of-tree subclass still implementing the older signature raises
-    ``TypeError``, which ``_transpile_func`` catches into its error list -- so a
-    stale transpiler stops firing quietly rather than failing loudly. Check the
-    signature when upgrading.
+    ``TypeError``. ``_transpile_func`` collects it into the error list, which
+    ``udf.py`` surfaces as an "Unable to transpile UDF" warning -- so the breakage
+    is visible, but only as a warning on a fall-back, not as a hard failure. Check
+    the signature when upgrading.
     """
 
     varieties: dict[str, type["AbstractTranspiler"]] = {}
@@ -917,7 +917,10 @@ def _instruction_extent(code: CodeType) -> Optional[Tuple[Tuple[int, int], Tuple
     (including inline cache slots) rather than per instruction: nothing is zipped
     against the instruction stream, only ``min``/``max`` are taken, and a cache
     slot carries its own instruction's position so it cannot move either bound.
-    Verified identical to a ``dis.get_instructions()`` walk across 3.11/3.12/3.13,
+    Verified identical to a ``dis.get_instructions()`` walk on 3.11/3.12/3.13
+    (NOT on 3.14, which Spark's CI also runs -- if a future version changes which
+    opcodes carry the degenerate marker, lambda lowering stops, safely but
+    silently),
     and it avoids building an ``Instruction`` (with ``argval``/``argrepr``) per
     opcode on a path that runs per ``udf()`` construction.
 
@@ -1011,7 +1014,7 @@ def _recompiled_lambda_code(node: ast.Lambda, freevars: Tuple[str, ...]) -> Opti
     """
     try:
         lam = _defaults_stripped(node)
-        with _warnings_suppressed():
+        with _syntax_warnings_suppressed():
             if freevars:
                 wrapper_args = ast.arguments(
                     posonlyargs=[],
@@ -1048,30 +1051,43 @@ def _recompiled_lambda_code(node: ast.Lambda, freevars: Tuple[str, ...]) -> Opti
 
 # ``warnings.catch_warnings`` swaps process-global state and is documented as NOT
 # thread-safe: if two threads enter it concurrently, the one that exits last
-# restores the other's snapshot, and an ``ignore``-everything filter can be left
-# installed for the life of the process -- silently swallowing every later warning
-# in the driver, PySpark's own included. Verified reproducible. UDF construction
-# runs on whatever thread the user calls from, so serialize our own entries.
+# restores the other's snapshot, and the filter can be left installed for the life
+# of the process. Verified reproducible. UDF construction runs on whatever thread
+# the user calls from, so serialize our own entries.
 #
-# This does not defend against a THIRD party entering ``catch_warnings``
-# concurrently; that hazard is inherent to the stdlib API. It removes the case we
-# can actually cause, which is two ``udf()`` constructions racing.
+# The lock cannot make the WINDOW harmless -- while our filter is installed, a
+# concurrent thread's matching warnings are dropped too -- so the filter is
+# narrowed to the only categories parse/compile can raise, and held for as little
+# work as possible. It does not defend against a THIRD party entering
+# ``catch_warnings`` concurrently; that hazard is inherent to the stdlib API.
 _WARNINGS_LOCK = threading.Lock()
 
 
 @contextlib.contextmanager
-def _warnings_suppressed() -> Iterator[None]:
-    """Parse/compile without emitting or tripping over the user's warnings.
+def _syntax_warnings_suppressed() -> Iterator[None]:
+    """Parse/compile without emitting or tripping over the source's own warnings.
 
-    Needed for two reasons. Re-parsing a whole module re-emits any
-    ``SyntaxWarning`` it contains, attributed to a file that does not exist from
-    the user's point of view; and under ``-W error`` / ``PYTHONWARNINGS=error`` /
-    pytest's ``filterwarnings = error`` the warning becomes an exception, which
-    would silently disable lowering for the whole module.
+    Needed for two reasons. Re-parsing a whole module re-emits any warning its
+    source carries, attributed to a file that does not exist from the user's point
+    of view; and under ``-W error`` / ``PYTHONWARNINGS=error`` / pytest's
+    ``filterwarnings = error`` that warning becomes an exception, which would
+    silently disable lowering for the whole module.
+
+    Only ``SyntaxWarning`` and ``DeprecationWarning`` are filtered -- measured to
+    be the only categories ``ast.parse``/``compile`` raise on 3.11/3.12/3.13
+    (invalid escape sequences are ``DeprecationWarning`` on 3.11 and
+    ``SyntaxWarning`` from 3.12). A blanket ``simplefilter("ignore")`` would drop
+    every unrelated warning any other thread emitted during the window, which was
+    measured at 93% of a large-module resolution.
+
+    Callers must keep the wrapped region to the parse/compile call itself: the
+    lock is held for its duration, so putting file I/O inside it would serialize
+    concurrent ``udf()`` construction behind the read as well.
     """
     with _WARNINGS_LOCK:
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
+            warnings.filterwarnings("ignore", category=SyntaxWarning)
+            warnings.filterwarnings("ignore", category=DeprecationWarning)
             yield
 
 
@@ -1161,6 +1177,20 @@ def _walk_lambdas(tree: ast.AST) -> List[ast.Lambda]:
     return [node for node in ast.walk(tree) if isinstance(node, ast.Lambda)]
 
 
+def _lambdas_in_text(source: str) -> Tuple[ast.Lambda, ...]:
+    """Parse ``source`` and return every ``ast.Lambda`` in it, or ``()``.
+
+    The suppression wraps ONLY the parse, so the lock it takes is not held across
+    any I/O the caller does.
+    """
+    try:
+        with _syntax_warnings_suppressed():
+            tree = ast.parse(source)
+    except Exception:
+        return ()
+    return tuple(_walk_lambdas(tree))
+
+
 @functools.lru_cache(maxsize=_LAMBDA_CANDIDATES_MAX_FILES)
 def _parse_text_lambdas(source: str) -> Tuple[ast.Lambda, ...]:
     """Every ``ast.Lambda`` in ``source``, LRU-cached by the source TEXT.
@@ -1168,12 +1198,11 @@ def _parse_text_lambdas(source: str) -> Tuple[ast.Lambda, ...]:
     Used for sources ``os.stat`` cannot reach, where there is no mtime to key on.
     Hashing the text is O(size) but roughly three orders of magnitude cheaper
     than re-parsing it, and it self-invalidates: different text, different key.
+
+    Note the cap is applied per cache, so this and ``_parse_file_lambdas`` hold up
+    to ``_LAMBDA_CANDIDATES_MAX_FILES`` entries EACH.
     """
-    with _warnings_suppressed():
-        try:
-            return tuple(_walk_lambdas(ast.parse(source)))
-        except Exception:
-            return ()
+    return _lambdas_in_text(source)
 
 
 @functools.lru_cache(maxsize=_LAMBDA_CANDIDATES_MAX_FILES)
@@ -1188,27 +1217,17 @@ def _parse_file_lambdas(path: str, _mtime_ns: int, _size: int) -> Tuple[ast.Lamb
     does not correspond to the running code fails verification and the UDF falls
     back -- so this key is an optimization, not the correctness boundary.
 
-    The read is fresh from disk; ``tokenize.open`` respects the source's encoding
-    cookie. It falls back to ``linecache`` ONLY for a path already in its cache,
-    which means source captured by something else earlier (a traceback, a
-    debugger) -- import does not populate ``linecache``, so an unconditional
-    fallback would simply re-read the same broken file from disk and, worse, seed
-    the global cache with it. Returns an empty tuple when nothing parses.
+    The read is fresh from disk and happens OUTSIDE the warning-suppression lock;
+    ``tokenize.open`` respects the source's encoding cookie. Returns an empty tuple
+    when the file cannot be read or does not parse (caught mid-write, generated
+    badly), which the caller reports as such.
     """
-    with _warnings_suppressed():
-        try:
-            with tokenize.open(path) as source:
-                return tuple(_walk_lambdas(ast.parse(source.read())))
-        except Exception:
-            pass
-        # Only a PRE-EXISTING entry is useful here (see above); do not let
-        # ``getlines`` populate the cache from the same unreadable file.
-        if path in linecache.cache:
-            try:
-                return tuple(_walk_lambdas(ast.parse("".join(linecache.getlines(path)))))
-            except Exception:
-                return ()
+    try:
+        with tokenize.open(path) as handle:
+            source = handle.read()
+    except Exception:
         return ()
+    return _lambdas_in_text(source)
 
 
 def _file_lambda_candidates(target: CodeType) -> List[ast.Lambda]:
@@ -1296,8 +1315,9 @@ def _resolve_lambda(
             )
         return None
     # Cheap narrowing first: a lambda's code object starts on the line its
-    # ``lambda`` keyword is on (verified across 3.11-3.13 for every shape,
-    # including multi-line bodies and multi-line defaults), so candidates
+    # ``lambda`` keyword is on (verified on 3.11/3.12/3.13 for every shape,
+    # including multi-line bodies and multi-line defaults; 3.14 is in Spark's CI
+    # matrix but was not checked here), so candidates
     # elsewhere cannot be it. Keeps the enclosure test off whole-module lists.
     located = [
         node
