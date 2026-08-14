@@ -127,7 +127,7 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       java.util.Set.of(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
   }
 
-  test("table loads for writes reject configured time travel options") {
+  test("getTableForWrite rejects configured time travel options") {
     val testCatalog = mock(classOf[TableCatalog])
     when(testCatalog.name()).thenReturn("testcat")
     val ident = Identifier.of(Array("ns"), "table")
@@ -138,15 +138,11 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     SQLConf.withExistingConf(conf) {
       Seq("customVersion", "customTimestamp").foreach { key =>
         val options = new CaseInsensitiveStringMap(java.util.Map.of(key, "value"))
-        Seq(
-          () => CatalogV2Util.getTable(
-            testCatalog, ident, writePrivilegesString = Some("INSERT"), options = options),
-          () => CatalogV2Util.getTableForWrite(
+        val e = intercept[AnalysisException] {
+          CatalogV2Util.getTableForWrite(
             testCatalog, ident, Set(TableWritePrivilege.INSERT), options)
-        ).foreach { loadTableForWrite =>
-          val e = intercept[AnalysisException](loadTableForWrite())
-          assert(e.getCondition === "UNSUPPORTED_FEATURE.TIME_TRAVEL")
         }
+        assert(e.getCondition === "UNSUPPORTED_FEATURE.TIME_TRAVEL")
       }
     }
   }

@@ -509,9 +509,6 @@ private[sql] object CatalogV2Util {
       timeTravelSpec: Option[TimeTravelSpec] = None,
       writePrivilegesString: Option[String] = None,
       options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): Table = {
-    if (writePrivilegesString.nonEmpty) {
-      rejectTimeTravelOptionsForWrite(catalog, ident, options)
-    }
     val timeTravel: TimeTravel = timeTravelSpec match {
       case Some(v: AsOfVersion) => new TimeTravel.AsOfVersion(v.version)
       case Some(ts: AsOfTimestamp) => new TimeTravel.AsOfTimestamp(ts.timestamp)
