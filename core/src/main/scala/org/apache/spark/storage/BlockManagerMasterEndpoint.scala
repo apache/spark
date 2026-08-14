@@ -1187,7 +1187,7 @@ class BlockManagerMasterEndpoint(
     // Start the TTL cleaner only now that the endpoint is registered: it reaps by routing through
     // self.ask(RemoveRdd(...)) (so blockLocations et al. are mutated only on the single dispatcher
     // thread, preserving the IsolatedThreadSafeRpcEndpoint invariant), and self is only valid from
-    // onStart onward. RemoveRdd is the existing message; its reply is the async block-removal Future.
+    // onStart onward. RemoveRdd is the existing message; its reply is the async removal Future.
     cleanerThreadpool.foreach { pool =>
       pool.execute(new BlockTtlCleaner(
         name = "RDD",
