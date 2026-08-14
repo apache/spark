@@ -66,12 +66,10 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
     }
     def total(name: String): Long = {
       val mOpt = windowNode.metrics.find(_.name == name)
-      mOpt
-        .map { m =>
-          val raw = metricValues(m.accumulatorId)
-          "-?\\d+".r.findFirstIn(raw).map(_.toLong).getOrElse(0L)
-        }
-        .getOrElse(0L)
+      mOpt.map { m =>
+        val raw = metricValues(m.accumulatorId)
+        "-?\\d+".r.findFirstIn(raw).map(_.toLong).getOrElse(0L)
+      }.getOrElse(0L)
     }
     (
       total("number of segment-tree frames prepared"),
@@ -90,12 +88,10 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
     }
     def total(name: String): Long = {
       val mOpt = windowNode.metrics.find(_.name == name)
-      mOpt
-        .map { m =>
-          val raw = metricValues(m.accumulatorId)
-          "-?\\d+".r.findFirstIn(raw).map(_.toLong).getOrElse(0L)
-        }
-        .getOrElse(0L)
+      mOpt.map { m =>
+        val raw = metricValues(m.accumulatorId)
+        "-?\\d+".r.findFirstIn(raw).map(_.toLong).getOrElse(0L)
+      }.getOrElse(0L)
     }
     total("number of monotonic-deque frames prepared")
   }
@@ -114,18 +110,21 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
     ("var_samp", (c: org.apache.spark.sql.Column) => var_samp(c)),
     ("first", (c: org.apache.spark.sql.Column) => first(c)),
     ("last", (c: org.apache.spark.sql.Column) => last(c)),
-    ("first_ignore_nulls", (c: org.apache.spark.sql.Column) => first(c, ignoreNulls = true)),
-    ("last_ignore_nulls", (c: org.apache.spark.sql.Column) => last(c, ignoreNulls = true)))
-    .foreach { case (name, fn) =>
-      test(s"$name routes to the segment-tree path") {
-        withSQLConf(enableSegTree.toSeq: _*) {
-          val df = baseDF.withColumn("agg", fn($"vd").over(winSpec))
-          val (seg, fallback) = segTreeCounters(df)
-          assert(seg > 0, s"$name should bump numSegmentTreeFrames (got $seg)")
-          assert(fallback == 0, s"$name should not fall back (fallback counter: $fallback)")
-        }
+    ("first_ignore_nulls",
+      (c: org.apache.spark.sql.Column) => first(c, ignoreNulls = true)),
+    ("last_ignore_nulls",
+      (c: org.apache.spark.sql.Column) => last(c, ignoreNulls = true))
+  ).foreach { case (name, fn) =>
+    test(s"$name routes to the segment-tree path") {
+      withSQLConf(enableSegTree.toSeq: _*) {
+        val df = baseDF.withColumn("agg", fn($"vd").over(winSpec))
+        val (seg, fallback) = segTreeCounters(df)
+        assert(seg > 0, s"$name should bump numSegmentTreeFrames (got $seg)")
+        assert(fallback == 0,
+          s"$name should not fall back (fallback counter: $fallback)")
       }
     }
+  }
 
   // Negative: non-allowlisted aggregates fall through
 
@@ -170,8 +169,8 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
   // (e.g., pushing the predicate into the aggregate function), this test
   // fails and forces an explicit eligibility review.
   test("FILTER (WHERE ...) disables segment-tree path") {
-    baseDF.createOrReplaceTempView("t")
-    try {
+    withTempView("t") {
+      baseDF.createOrReplaceTempView("t")
       checkFallbackEquivalence(() => {
         spark.sql("""SELECT id, pk, v,
             |  sum(v) FILTER (WHERE v % 2 = 0)
@@ -179,8 +178,6 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
             |    AS filtered_sum
             |FROM t""".stripMargin)
       })
-    } finally {
-      spark.catalog.dropTempView("t")
     }
   }
 
@@ -188,14 +185,12 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
 
   test("mix of allowlisted + non-allowlisted aggregates falls through entirely") {
     withSQLConf(enableSegTree.toSeq: _*) {
-      val df = baseDF
-        .withColumn("s", sum($"v").over(winSpec))
+      val df = baseDF.withColumn("s", sum($"v").over(winSpec))
         .withColumn("cl", collect_list($"v").over(winSpec))
       val (seg, _) = segTreeCounters(df)
       // Both aggregates share the same Window node; gating is forall(isEligible),
       // so `collect_list` (unbounded-buffer denylist) drops the whole group.
-      assert(
-        seg == 0,
+      assert(seg == 0,
         s"Window group containing a non-allowlisted agg must fall through (got $seg)")
     }
   }
@@ -210,12 +205,10 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
 
   test("mix of MIN/MAX + other allowlisted aggregates falls through deque") {
     withSQLConf(enableDeque.toSeq: _*) {
-      val df = baseDF
-        .withColumn("m", min($"v").over(winSpec))
+      val df = baseDF.withColumn("m", min($"v").over(winSpec))
         .withColumn("s", sum($"v").over(winSpec))
       val dequeFrames = dequeCounters(df)
-      assert(
-        dequeFrames == 0,
+      assert(dequeFrames == 0,
         s"Window group containing a non-MIN/MAX agg must fall through (got $dequeFrames)")
     }
   }

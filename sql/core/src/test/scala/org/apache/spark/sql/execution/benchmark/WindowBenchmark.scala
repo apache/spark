@@ -44,9 +44,9 @@ import org.apache.spark.sql.internal.SQLConf
 object WindowBenchmark extends SqlBasedBenchmark {
 
   // Section A: per-case N calibrated so naive baseline lands ~3-5s/iter.
-  private val A_N_INT: Long = 256L * 1024 // MIN/MAX/SUM/COUNT @ W=1001
-  private val A_N_AVG: Long = 192L * 1024 // AVG  @ W=1001
-  private val A_N_STDDEV: Long = 2L * 1000L * 1000L // STDDEV stress
+  private val A_N_INT: Long = 256L * 1024              // MIN/MAX/SUM/COUNT @ W=1001
+  private val A_N_AVG: Long = 192L * 1024              // AVG  @ W=1001
+  private val A_N_STDDEV: Long = 2L * 1000L * 1000L    // STDDEV stress
 
   // Section B: W-sweep (W=10/50 stress: Pareto loss zone; W=4001 stress: O(W) cliff).
   private val B_N_W10: Long = 2L * 1000L * 1000L
@@ -61,9 +61,9 @@ object WindowBenchmark extends SqlBasedBenchmark {
   private val C_N_SMALL: Long = 2L * 1000L * 1000L
   private val C_N_MID: Long = 8L * 1000L * 1000L
   private val C_N_LARGE: Long = 16L * 1000L * 1000L
-  private val C_HALF_W: Int = 500 // W=1001
+  private val C_HALF_W: Int = 500                      // W=1001
 
-  private val MAIN_HALF_W: Int = 500 // Section A W=1001
+  private val MAIN_HALF_W: Int = 500                   // Section A W=1001
 
   // Section G: MIN deque vs segtree, 2M rows x W=100001.
   private val G_N: Long = 2L * 1000L * 1000L
@@ -81,8 +81,7 @@ object WindowBenchmark extends SqlBasedBenchmark {
     val smokeHalfW = if (mainArgs.length > 1) mainArgs(1).toInt else 100
 
     if (smokeMode) {
-      require(
-        smokeRowCount >= 4096,
+      require(smokeRowCount >= 4096,
         s"rowCount=$smokeRowCount too small; segtree may fallback. Use >= 4096.")
     }
 
@@ -105,8 +104,7 @@ object WindowBenchmark extends SqlBasedBenchmark {
     val allCaseNames = mutable.ArrayBuffer[String]()
 
     def setupIntTable(n: Long): Unit = {
-      spark
-        .range(n)
+      spark.range(n)
         .selectExpr("id", "cast(rand(42) * 1000000 as int) as v")
         .coalesce(1)
         .createOrReplaceTempView("t")
@@ -114,8 +112,7 @@ object WindowBenchmark extends SqlBasedBenchmark {
 
     def setupStringTable(n: Long): Unit = {
       // ~20-char variable-length string; exercises spill path.
-      spark
-        .range(n)
+      spark.range(n)
         .selectExpr("id", "repeat(cast(id as string), 5) as v")
         .coalesce(1)
         .createOrReplaceTempView("t")
@@ -135,7 +132,7 @@ object WindowBenchmark extends SqlBasedBenchmark {
     // bugs >1e-3 rel err are still caught. Integer aggregates remain bit-exact.
     def digestExprFor(aggFn: String): String = {
       if (aggFn.startsWith("AVG") || aggFn.startsWith("STDDEV") ||
-        aggFn.startsWith("VAR")) {
+          aggFn.startsWith("VAR")) {
         "CAST(ROUND(m, 3) * 1000 AS BIGINT)"
       } else {
         "HASH(m)"
@@ -145,10 +142,8 @@ object WindowBenchmark extends SqlBasedBenchmark {
     def digest(aggFn: String, frame: String, sqlConfs: (String, String)*): Long = {
       val expr = digestExprFor(aggFn)
       withSQLConf(sqlConfs: _*) {
-        spark
-          .sql(s"SELECT SUM($expr) FROM (SELECT $aggFn(v) $frame AS m FROM t)")
-          .head()
-          .getLong(0)
+        spark.sql(s"SELECT SUM($expr) FROM (SELECT $aggFn(v) $frame AS m FROM t)")
+          .head().getLong(0)
       }
     }
 
@@ -178,8 +173,7 @@ object WindowBenchmark extends SqlBasedBenchmark {
       if (isMinOrMax) {
         val dMonotonic =
           digest(aggFn, frame, SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true")
-        require(
-          dNaive == dMonotonic,
+        require(dNaive == dMonotonic,
           s"$aggFn monotonic deque digest mismatch: naive=$dNaive monotonic=$dMonotonic")
       }
 
@@ -191,16 +185,14 @@ object WindowBenchmark extends SqlBasedBenchmark {
           SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
           SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
           SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "256")
-        require(
-          dNaive == dSegBs,
+        require(dNaive == dSegBs,
           s"$aggFn segtree bs=256 digest mismatch: naive=$dNaive segBs=$dSegBs")
       }
 
       val W = 2 * halfW + 1
       val benchmark = new Benchmark(
         s"$aggFn sliding window, W=$W, ${rowsLabel(rows)} rows$stressMark",
-        rows,
-        output = output)
+        rows, output = output)
       // Use labelSuffix to disambiguate case names when runSectionA is called from
       // multiple sections (e.g., Section A and Section H) to avoid duplicate entries
       // in allCaseNames and incorrect metric merging in the Memory/Spill trailer.
@@ -251,11 +243,7 @@ object WindowBenchmark extends SqlBasedBenchmark {
     }
 
     def runSectionB(
-        halfW: Int,
-        stressBs: Boolean,
-        rows: Long,
-        iters: Int,
-        stressMark: String): Unit = {
+        halfW: Int, stressBs: Boolean, rows: Long, iters: Int, stressMark: String): Unit = {
       val aggFn = "SUM"
       val frame = frameFor(halfW)
       val W = 2 * halfW + 1
@@ -264,9 +252,7 @@ object WindowBenchmark extends SqlBasedBenchmark {
       require(dNaive == dSeg, s"Section B W=$W digest mismatch: naive=$dNaive seg=$dSeg")
 
       val benchmark = new Benchmark(
-        s"$aggFn scaling, W=$W, ${rowsLabel(rows)} rows$stressMark",
-        rows,
-        output = output)
+        s"$aggFn scaling, W=$W, ${rowsLabel(rows)} rows$stressMark", rows, output = output)
       val nNaive = s"$aggFn naive W=$W"
       val nSeg = s"$aggFn segtree (default) W=$W"
       allCaseNames ++= Seq(nNaive, nSeg)
@@ -290,8 +276,7 @@ object WindowBenchmark extends SqlBasedBenchmark {
           frame,
           SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
           SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "256")
-        require(
-          dNaive == dSegBs,
+        require(dNaive == dSegBs,
           s"Section B W=$W bs=256 digest mismatch: naive=$dNaive segBs=$dSegBs")
         val nSegBs = s"$aggFn segtree (blockSize=256) W=$W"
         allCaseNames += nSegBs
@@ -313,9 +298,7 @@ object WindowBenchmark extends SqlBasedBenchmark {
       // Digest parity skipped: pre-check scan on 1M String x W=1001 naive costs
       // ~90s; correctness covered by SegmentTreeWindowFunctionSuite.
       val benchmark = new Benchmark(
-        "MAX String spill guard, W=1001, 1M rows (stress)",
-        SPILL_N,
-        output = output)
+        "MAX String spill guard, W=1001, 1M rows (stress)", SPILL_N, output = output)
       val nNaive = "MAX naive (String)"
       val nSeg = "MAX segtree default (String)"
       allCaseNames ++= Seq(nNaive, nSeg)
@@ -345,8 +328,7 @@ object WindowBenchmark extends SqlBasedBenchmark {
       val W = 2 * C_HALF_W + 1
       val benchmark = new Benchmark(
         s"$aggFn N-sweep (segtree-only), W=$W, ${rowsLabel(rows)} rows (stress)",
-        rows,
-        output = output)
+        rows, output = output)
       val nSeg = s"$aggFn segtree (default) N=${rowsLabel(rows)}"
       allCaseNames += nSeg
       benchmark.addCase(nSeg, numIters = ITERS_STRESS) { _ =>
@@ -382,15 +364,13 @@ object WindowBenchmark extends SqlBasedBenchmark {
         SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true")
       val dMonotonic = digest(aggFn, frame, SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true")
-      require(
-        dSeg == dMonotonic,
+      require(dSeg == dMonotonic,
         s"$aggFn $pattern digest mismatch: seg=$dSeg monotonic=$dMonotonic")
 
       val W = 2 * halfW + 1
       val benchmark = new Benchmark(
         s"$aggFn sliding window ($pattern), W=$W, ${rowsLabel(rows)} rows",
-        rows,
-        output = output)
+        rows, output = output)
       val nSeg = s"$aggFn segtree ($pattern)"
       val nMonotonic = s"$aggFn monotonic deque ($pattern)"
       allCaseNames ++= Seq(nSeg, nMonotonic)
