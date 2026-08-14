@@ -3624,6 +3624,20 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(1)
 
+  val STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1 =
+    buildConf("spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled")
+      .internal()
+      .doc("Whether to allow a Real-Time Mode query to start with state store checkpoint format " +
+        "version 1. Real-Time Mode re-executes a failed batch, and with checkpoint format " +
+        "version 1 the re-execution can reuse the state file names of the partially-written " +
+        "failed batch, so starting on a version 1 checkpoint exposes the query to data loss on " +
+        "failure. Format version 2 avoids this with per-batch state store checkpoint ids. " +
+        "Escape hatch only; prefer a fresh checkpoint location.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val STREAMING_MAX_NUM_STATE_SCHEMA_FILES =
     buildConf("spark.sql.streaming.stateStore.maxNumStateSchemaFiles")
       .internal()
@@ -4040,6 +4054,16 @@ object SQLConf {
     .version("4.1.0")
     .booleanConf
     .createWithDefault(true)
+
+  val STREAMING_TRANSFORM_WITH_STATE_REAL_TIME_MODE_TTL_EVICTION_INTERVAL_MS = buildConf(
+    "spark.sql.streaming.realTimeMode.transformWithState.ttlEvictionIntervalMs")
+    .internal()
+    .doc("The threshold in milliseconds to perform eviction of TTL when using the JVM " +
+      "transformWithState operator with real-time mode.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .longConf
+    .createWithDefault(1 * 1000)
 
   val STREAMING_ASYNC_PROGRESS_TRACKING_REAL_TIME_MODE_ENABLED_BY_DEFAULT = buildConf(
     "spark.sql.streaming.realTimeMode.asyncProgressTrackingByDefault.enabled")
@@ -8786,6 +8810,14 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
 
   def streamingOffsetLogFormatVersion: Int = getConf(STREAMING_OFFSET_LOG_FORMAT_VERSION)
+
+  // The commit log format version implied by the session config for a fresh checkpoint. A state
+  // store checkpoint format of v2 makes each batch write stateUniqueIds, which only a commit log at
+  // VERSION_2 or above can persist, so the commit log version tracks the state store format. It is
+  // capped at VERSION_2 here: VERSION_3 exists only to carry sink-evolution metadata and is written
+  // exclusively by the sink-evolution path in MicroBatchExecution, never derived from a config.
+  def streamingCommitLogFormatVersion: Int =
+    if (getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION) >= 2) 2 else 1
 
   def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
 

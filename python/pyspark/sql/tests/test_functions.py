@@ -4236,6 +4236,54 @@ class FunctionsTestsMixin:
         self.assertEqual(result[0][1], ["Alice", "Carol"])  # Eng
         self.assertEqual(result[1][1], ["Frank", "Dave"])  # Sales
 
+    def test_xxh3_64(self):
+        """Test xxh3_64 hash function"""
+        # Test with string input
+        df = self.spark.createDataFrame([("Spark",), ("",), (None,)], ["data"])
+        result = df.select(F.xxh3_64("data")).collect()
+
+        # Verify against known values from Scala tests
+        self.assertEqual(result[0][0], 80997306238743657)  # "Spark"
+        self.assertEqual(result[1][0], 0x2D06800538D394C2)  # empty string
+        self.assertIsNone(result[2][0])  # null
+
+        # Test with binary input
+        df_binary = self.spark.createDataFrame([(bytearray([1, 2, 3, 4, 5, 6]),)], ["data"])
+        result_binary = df_binary.select(F.xxh3_64("data")).collect()
+        # Value from DataFrameFunctionsSuite.scala
+        self.assertEqual(result_binary[0][0], -4044731995552965649)
+
+    def test_xxh3_128(self):
+        """Test xxh3_128 hash function"""
+        # Test with string input
+        df = self.spark.createDataFrame([("Spark",), ("",), (None,)], ["data"])
+        result = df.select(F.xxh3_128("data")).collect()
+
+        # Verify against known values from Scala tests
+        self.assertEqual(result[0][0], "7d57dd84c60c86ca1f4e82ab91a12b5e")  # "Spark"
+        self.assertEqual(result[1][0], "99aa06d3014798d86001c324468d497f")  # empty string
+        self.assertIsNone(result[2][0])  # null
+
+        # Test with binary input
+        df_binary = self.spark.createDataFrame([(bytearray([1, 2, 3, 4, 5, 6]),)], ["data"])
+        result_binary = df_binary.select(F.xxh3_128("data")).collect()
+        # Value from DataFrameFunctionsSuite.scala
+        self.assertEqual(result_binary[0][0], "866737830f560dbf3e1f439d2d785f44")
+
+    def test_xxh3_with_cast(self):
+        """Test xxh3 functions with explicit cast to binary"""
+        df = self.spark.createDataFrame([("ABC",)], ["a"])
+
+        # Test xxh3_64 with cast
+        result_64 = df.select(F.xxh3_64(F.col("a").cast("binary"))).collect()
+        # Value from DataFrameFunctionsSuite.scala
+        self.assertEqual(result_64[0][0], 2615927343983396622)
+
+        # Test xxh3_128 with cast
+        result_128 = df.select(F.xxh3_128(F.col("a").cast("binary"))).collect()
+        # Value from DataFrameFunctionsSuite.scala
+        self.assertEqual(result_128[0][0], "9e947f00ecd6acb2244da40f405c870e")
+
 
 class FunctionsTests(FunctionsTestsMixin, ReusedSQLTestCase):
     pass

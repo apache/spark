@@ -202,7 +202,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         pyFuncs, evalType, argMetas, udfInputSchema,
         sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
         pythonMetrics, jobArtifactUUID, sessionUUID,
-        columnIndices)
+        columnIndices, udfs.map(_.elementwiseNestingDepth))
 
       val resultIter = pyRunner.compute(
         bufferedIter, context.partitionId(), context)
@@ -262,7 +262,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
             pyFuncs, evalType, argMetas, udfInputSchema,
             sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
             pythonMetrics, jobArtifactUUID, sessionUUID,
-            inputColumnIndices.get)
+            inputColumnIndices.get, udfs.map(_.elementwiseNestingDepth))
         pyRunner.compute(
           bufferedIter, context.partitionId(), context)
       } else {
@@ -279,7 +279,8 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         val pyRunner = new ArrowPythonWithNamedArgumentRunner(
           pyFuncs, evalType, argMetas, udfInputSchema,
           sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
-          pythonMetrics, jobArtifactUUID, sessionUUID
+          pythonMetrics, jobArtifactUUID, sessionUUID,
+          udfs.map(_.elementwiseNestingDepth)
         ) with BasicPythonArrowInput
         pyRunner.compute(
           batchIter, context.partitionId(), context)

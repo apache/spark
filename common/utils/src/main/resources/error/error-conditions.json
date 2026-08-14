@@ -2491,6 +2491,12 @@
     ],
     "sqlState" : "42815"
   },
+  "EMPTY_COLLECTION_NOT_ALLOWED" : {
+    "message" : [
+      "empty collection"
+    ],
+    "sqlState" : "0A000"
+  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -7752,6 +7758,12 @@
           "The checkpointing interval for async progress tracking must be set to 0, which means each progress update is checkpointed. Set option asyncProgressTrackingCheckpointIntervalMs to 0 in DataStreamWriter options and retry your query."
         ]
       },
+      "CHECKPOINT_FORMAT_V1_NOT_SUPPORTED" : {
+        "message" : [
+          "Real-time mode does not support state store checkpoint format v1, because a re-executed batch can reuse the state file names of a partially-written failed batch and lose data. If you encountered this while switching an existing query to real-time mode, use a fresh checkpoint location.",
+          "If you must continue with your existing checkpoint and accept that doing so exposes you to the possibility of data loss on failure, set <config> to true."
+        ]
+      },
       "IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED" : {
         "message" : [
           "Real-time mode does not support union on two or more identical streaming data sources in a single query. This includes scenarios such as referencing the same source DataFrame more than once, or using two data sources with identical configurations for some sources. For Kafka, avoid reusing the same DataFrame and create different ones. Sources provided in the query: <sources>"
@@ -7775,6 +7787,16 @@
       "SINK_NOT_SUPPORTED" : {
         "message" : [
           "The <className> sink is currently not supported. See the Real-Time Mode User Guide for a list of supported sinks."
+        ]
+      },
+      "SQL_CONFIGURATION_NOT_SUPPORTED" : {
+        "message" : [
+          "The following session configuration(s) are incompatible with Real-Time Mode: <invalidReasons>. Update or remove them and restart the query."
+        ]
+      },
+      "STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming queries in real-time mode cannot include stateful operators (e.g. aggregate, deduplicate, transformWithState) before a union. Please restructure your query to apply the union before any stateful operations."
         ]
       }
     },
@@ -7896,6 +7918,12 @@
         ]
       }
     },
+    "sqlState" : "42601"
+  },
+  "TABLE_LOCATION_URI_NOT_SPECIFIED" : {
+    "message" : [
+      "Table <identifier> did not specify locationUri."
+    ],
     "sqlState" : "42601"
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
@@ -8372,6 +8400,29 @@
       "LOCAL_DIRECTORY" : {
         "message" : [
           "The local directory <path> is not supported in a non-local master mode."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_ARRAY_KEY" : {
+    "message" : [
+      "Array keys are not supported by:"
+    ],
+    "subClass" : {
+      "HASH_PARTITIONER" : {
+        "message" : [
+          "HashPartitioner."
+        ]
+      },
+      "MAP_SIDE_COMBINE" : {
+        "message" : [
+          "map-side combining."
+        ]
+      },
+      "REDUCE_BY_KEY_LOCALLY" : {
+        "message" : [
+          "reduceByKeyLocally()."
         ]
       }
     },
@@ -9700,6 +9751,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WRITING_JOB_FAILED" : {
+    "message" : [
+      "Writing job failed."
+    ],
+    "sqlState" : "58030"
+  },
   "WRONG_COMMAND_FOR_OBJECT_TYPE" : {
     "message" : [
       "The operation <operation> requires a <requiredType>. But <objectName> is a <foundType>. Use <alternative> instead."
@@ -10006,11 +10063,6 @@
   "_LEGACY_ERROR_TEMP_1080" : {
     "message" : [
       "Table <identifier> did not specify database."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1081" : {
-    "message" : [
-      "Table <identifier> did not specify locationUri."
     ]
   },
   "_LEGACY_ERROR_TEMP_1082" : {
@@ -10791,11 +10843,6 @@
       "Missing database location."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2070" : {
-    "message" : [
-      "Writing job failed."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2071" : {
     "message" : [
       "Commit denied for partition <partId> (task <taskId>, attempt <attemptId>, stage <stageId>.<stageAttempt>)."
@@ -11464,21 +11511,6 @@
       "empty RDD"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3008" : {
-    "message" : [
-      "Cannot use map-side combining with array keys."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3009" : {
-    "message" : [
-      "HashPartitioner cannot partition array keys."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3010" : {
-    "message" : [
-      "reduceByKeyLocally() does not support array keys"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3011" : {
     "message" : [
       "This RDD lacks a SparkContext. It could happen in the following cases:",
@@ -11494,11 +11526,6 @@
   "_LEGACY_ERROR_TEMP_3013" : {
     "message" : [
       "Can only zip RDDs with same number of elements in each partition"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3014" : {
-    "message" : [
-      "empty collection"
     ]
   },
   "_LEGACY_ERROR_TEMP_3015" : {

@@ -220,6 +220,15 @@ SELECT c, count(*) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
   GROUP BY c ORDER BY c;
 
+-- SPARK-56822: mode over nanosecond-precision TIMESTAMP_LTZ. Frequencies are counted on the full
+-- nanos value, so the most-frequent value is selected down to the sub-microsecond and the result
+-- type stays TIMESTAMP_LTZ(9); the value renders in the session time zone (America/Los_Angeles).
+-- .000000001 appears twice, .000000999 once.
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c);
+
 -- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
 -- whole-second BIGINT; the sub-second digits are dropped. A literal without an explicit zone is
 -- read in the session time zone (America/Los_Angeles, UTC-08:00); an explicit-zone literal fixes
@@ -242,6 +251,15 @@ SELECT max_by(v, k), min_by(v, k) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 3),
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC', 2),
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000007 UTC', CAST(NULL AS INT)) AS t(v, k);
+-- DISTINCT over a nanosecond column: exact duplicates are removed, two values sharing epochMicros
+-- but differing within the microsecond are both kept, and NULL survives as a single row. Three
+-- rows: .000000001, .000000999, NULL. Values render in the session time zone.
+SELECT DISTINCT c FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c)
+  ORDER BY c;
 
 -- SPARK-57527: unix_nanos over nanosecond-precision values returns DECIMAL(21, 0) nanoseconds since
 -- the epoch. The explicit-zone literals below fix the instant directly, independent of the session

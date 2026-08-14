@@ -45,7 +45,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -710,6 +710,50 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("client mode with a k8s master url") {
     intercept[SparkException] {
       sc = new SparkContext("k8s://https://host:port", "test", new SparkConf())
+    }
+  }
+
+  test("SPARK-58748: Kubernetes drivers do not advertise wildcard bind addresses") {
+    Seq(
+      ("0.0.0.0", "10.129.36.37", "10.129.36.37"),
+      ("::", "10.129.36.37", "10.129.36.37"),
+      ("10.138.148.230", "driver-service", "10.138.148.230"),
+      ("2001:DB8:0:0::BEEF", "driver-service", "[2001:db8::beef]")).foreach {
+      case (bindAddress, advertisedAddress, expectedAddress) =>
+        var observedAddress: Option[String] = None
+        val logAppender = new LogAppender("wildcard driver bind address")
+        val conf = new SparkConf(false)
+          .setMaster("k8s://https://localhost:6443")
+          .setAppName("driver-bind-address")
+          .set(DRIVER_BIND_ADDRESS, bindAddress)
+          .set(DRIVER_HOST_ADDRESS, advertisedAddress)
+
+        withLogAppender(logAppender) {
+          val error = intercept[SparkException] {
+            new SparkContext(conf) {
+              override private[spark] def createSparkEnv(
+                  conf: SparkConf,
+                  isLocal: Boolean,
+                  listenerBus: LiveListenerBus): SparkEnv = {
+                observedAddress = Some(conf.get(DRIVER_HOST_ADDRESS))
+                throw new SparkException("stop after resolving the driver address")
+              }
+            }
+          }
+          assert(error.getMessage === "stop after resolving the driver address")
+        }
+
+        assert(observedAddress.contains(expectedAddress))
+        val wildcardMessages = logAppender.loggingEvents
+          .map(_.getMessage.getFormattedMessage)
+          .filter(_.contains("is a wildcard; preserving advertised driver host"))
+        if (Utils.isAnyLocalAddress(bindAddress)) {
+          assert(wildcardMessages.size === 1)
+          assert(wildcardMessages.head.contains(bindAddress))
+          assert(wildcardMessages.head.contains(advertisedAddress))
+        } else {
+          assert(wildcardMessages.isEmpty)
+        }
     }
   }
 
@@ -1520,6 +1564,19 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .set(MEMORY_OFFHEAP_SIZE, 5L * 1024 * 1024)
     sc = new SparkContext(conf)
     assert(sc.env.memoryManager.maxOffHeapStorageMemory > 0)
+  }
+
+  test("SPARK-41246: fail-fast on RDD id overflow") {
+    val conf = new SparkConf().setAppName("test").setMaster("local[1]")
+    sc = new SparkContext(conf)
+    sc.setNextRddIdForTesting(Int.MaxValue)
+    val last = sc.parallelize(Seq(1), 1)
+    assert(last.id === Int.MaxValue)
+    val err = intercept[SparkException] {
+      sc.parallelize(Seq(2), 1)
+    }
+    assert(err.getMessage.contains("Int.MaxValue"))
+    assert(err.getMessage.contains("overflowed"))
   }
 }
 
