@@ -1846,7 +1846,7 @@ abstract class RDD[T: ClassTag](
    * Return whether this RDD is marked for local checkpointing.
    * Exposed for testing.
    */
-  private[rdd] def isLocallyCheckpointed: Boolean = {
+  private[spark] def isLocallyCheckpointed: Boolean = {
     checkpointData match {
       case Some(_: LocalRDDCheckpointData[T]) => true
       case _ => false
