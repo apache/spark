@@ -34,6 +34,61 @@ UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category and
 keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
+
+Every argument the transpiled body uses is evaluated once per row: it is
+computed in a projection below the operator and each use in the body reads
+that column, the way the Python eval operator it replaces computes one column
+per argument. Arguments too cheap to bother with -- a plain column, a literal
+-- stay inline and are evaluated per use, and so do these, for which a column
+is either impossible or unsafe:
+
+* an argument that cannot live in a projection: an aggregate, a window or
+  generator expression, a lambda variable, one reading both sides of a join,
+  or one carrying an outer reference from an enclosing query;
+* any argument in a ``GROUP BY`` aggregation that an aggregate function does
+  not enclose -- such an argument has to match a grouping expression, and
+  rewriting one side of that match would make the aggregation invalid;
+* a nondeterministic argument under a multi-child operator such as a join,
+  where a single draw would be reused across every paired row rather than
+  redrawn per output row;
+* (rarely) copies of one nondeterministic argument that analysis left with
+  different types, since one column cannot stand in for both.
+
+Two consequences, both moving toward interpreted Python rather than away
+from it. First, a pre-evaluated argument is *eager*: with
+``lambda x, y: (x + x) if y > 0 else 0.0`` over ``f(a / b, y)``, ``a / b``
+used to be skipped on the rows where the branch was not taken and now raises
+for every row with ``b = 0``. That is what the interpreted UDF does -- it
+computes every argument column for every row, wherever the call sits -- but
+it is a visible difference for a query that leaned on the branch to guard an
+error. Second, a per-row nondeterministic argument such as ``rand()`` may be
+*invoked* a different number of times than inline copies would be; each value
+is still a legitimate draw, and per-row values line up with the interpreted
+UDF's one column per argument more closely than inline copies do.
+
+A UDF used *as a predicate* -- in a ``where``/``filter`` condition or a join
+condition -- is transpiled only when none of its arguments needs a projection in
+the first place, which in practice means they are all plain columns or literals.
+Predicate pushdown would otherwise inline the pre-evaluated column back into the
+predicate it pushes down (arithmetic does not count as expensive to Catalyst),
+putting a repeated argument back at every use site and back inside the body's
+branches -- so a query that raises under interpreted Python could quietly return
+rows instead. Rather than emit that, the call runs as interpreted Python, whose
+eval operator computes one input column per argument per row. So
+``df.where(f(col("x")))`` still avoids Python entirely, while
+``df.where(f(col("a") / col("b"))) `` does not.
+
+One later optimizer rule can still put an argument back inline, which is worth
+knowing if you are reading a plan or relying on the eagerness above:
+
+* a *deterministic* argument the body reads exactly once is inlined back into
+  the body by ``CollapseProject`` -- one read is one evaluation either way, so
+  the count is unchanged, but it is lazy again inside a branch.
+
+An argument the body never uses is not evaluated at all, where the
+interpreted UDF computes every argument column. That difference is
+deliberate. See ``TranspiledUDFParameter`` in ``PythonUDF.scala`` and
+``PreEvaluateTranspiledUDFInputs`` for the JVM side.
 """
 
 import ast

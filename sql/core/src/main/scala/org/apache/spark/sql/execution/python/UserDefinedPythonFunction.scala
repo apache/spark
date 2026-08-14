@@ -28,7 +28,7 @@ import net.razorvine.pickle.Pickler
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, TableArg}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, TranspiledUDFParameter, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NamedExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, TranspiledUDFParameter, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
@@ -147,23 +147,23 @@ case class UserDefinedPythonFunction(
           }
         case _ => None
       }
-      // `tagged` holds the parameters this option uses more than once. Substitution is about to
-      // splice one copy of the argument per use, leaving copies that nothing distinguishes -- two
-      // parameters can even be bound to structurally equal arguments -- so mark them while we still
-      // know which parameter they came from. ConvertToCatalyst gives each tagged parameter a single
-      // evaluation; a parameter used once needs no marker, and a foldable argument is folded in at
-      // each use site instead of shared.
-      def resolveUDFParams(expression: Expression, tagged: Set[Int]): Expression =
+      // Substitution is about to splice one copy of the argument per use, leaving copies that
+      // nothing distinguishes -- two parameters can even be bound to structurally equal arguments,
+      // and analysis reseeds an unresolved `rand()` per copy. So mark each copy while we still know
+      // which parameter it came from, with one id per parameter of this call so that the copies
+      // that belong together can be recognized later. `PreEvaluateTranspiledUDFInputs` then gives
+      // each marked parameter a single evaluation per row, the way the Python eval operator this
+      // replaces computes one column per argument. A foldable argument is left bare: constant
+      // folding collapses it at each use site, which beats reading a shared column.
+      val paramIds = udfChildren.map(_ => NamedExpression.newExprId)
+      def resolveUDFParams(expression: Expression): Expression =
         placeholderIndex(expression) match {
-          case Some(index) if tagged.contains(index) && !udfChildren(index).foldable =>
-            TranspiledUDFParameter(udfChildren(index), index)
-          case Some(index) => udfChildren(index)
-          case None => expression.mapChildren(resolveUDFParams(_, tagged))
+          case Some(index) if udfChildren(index).foldable => udfChildren(index)
+          case Some(index) =>
+            TranspiledUDFParameter(udfChildren(index), index, paramIds(index))
+          case None => expression.mapChildren(resolveUDFParams)
         }
-      val resolvedOptions = transpiledExprsForUse.map { option =>
-        val uses = option.flatMap(placeholderIndex(_).toSeq).groupBy(identity)
-        resolveUDFParams(option, uses.filter(_._2.size > 1).keySet)
-      }
+      val resolvedOptions = transpiledExprsForUse.map(resolveUDFParams)
       TranspiledPythonUDF(name, udfExpr, resolvedOptions, optionInputTypesForUse)
     } else {
       udfExpr
