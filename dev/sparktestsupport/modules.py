@@ -675,6 +675,7 @@ pyspark_testing = Module(
         "pyspark.testing.utils",
         "pyspark.testing.pandasutils",
         # unittests
+        "pyspark.testing.tests.test_changed_files",
         "pyspark.testing.tests.test_fail",
         "pyspark.testing.tests.test_fail_in_set_up_class",
         "pyspark.testing.tests.test_no_tests",
