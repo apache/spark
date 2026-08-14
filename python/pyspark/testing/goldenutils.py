@@ -366,6 +366,12 @@ class GoldenFileTestMixin:
         """
         Format a pandas DataFrame for golden file.
 
+        Renders each column with tolist() (as ``repr_pandas_series_value`` does for a
+        Series), keyed by column name, plus the schema. tolist() gives a stable
+        Python-native representation and avoids ``DataFrame.to_json``'s epoch date
+        serialization, which overflows on out-of-nanosecond-range dates (year 9999
+        with the default date_as_object=True) and misreads non-ns units on pandas 2.
+
         Parameters
         ----------
         value : pd.DataFrame
@@ -376,9 +382,9 @@ class GoldenFileTestMixin:
         Returns
         -------
         str
-            "value@Dataframe[schema]"
+            "{col: [val1, val2], ...}@Dataframe[schema]"
         """
-        v_str = value.to_json().replace("\n", " ")
+        v_str = str({name: col.tolist() for name, col in value.items()}).replace("\n", " ")
         if max_len > 0:
             v_str = v_str[:max_len]
         simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
