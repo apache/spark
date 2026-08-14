@@ -45,6 +45,7 @@ license: |
 - Since Spark 4.3, `hash()` and `xxhash64()` include the `days` field of `CalendarInterval` when computing the hash, so their output for interval values differs from earlier releases. Previously the codegen path dropped `days`, disagreeing with interpreted evaluation.
 - Since Spark 4.3, when a `SELECT` or `INSERT` statement references the same table more than once with different `WITH (...)` options (for example a self-join, or `INSERT INTO t WITH (...) SELECT * FROM t WITH (...)`), each reference now uses its own options instead of the second reference silently inheriting the first reference's options via the analyzer's relation cache.
 - Since Spark 4.3, `HAVING` is evaluated before window functions when the `SELECT` list also contains generator functions such as `explode`. Previously, window functions could include groups removed by `HAVING` and produce incorrect results.
+- Since Spark 4.3, the Spark Connect session errors `INVALID_HANDLE.SESSION_CHANGED`/`SESSION_CLOSED`/`SESSION_NOT_FOUND` carry SQLSTATE `08003` instead of `HY000`; the condition names are unchanged. Code matching these errors on SQLSTATE should match `08003` or class `08`.
 
 ## Upgrading from Spark SQL 4.1 to 4.2
 
