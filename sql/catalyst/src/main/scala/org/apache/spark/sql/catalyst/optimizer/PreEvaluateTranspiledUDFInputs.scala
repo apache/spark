@@ -47,19 +47,29 @@ import org.apache.spark.util.Utils
  * different number of times than leaving it inline would; each value is still a legitimate draw.
  * `transpile.py`'s module docstring spells both out for users.
  *
- * Two later rules can undo a column, which is worth knowing before trusting a plan:
+ * The column is best-effort for a *deterministic* input, and that is worth knowing before reading a
+ * plan and believing it. Three later rules can put such an input back at its use sites:
  *
  *  - [[CollapseProject]] inlines a deterministic column read exactly once back into the body
  *    (`canCollapseExpressions` allows it, one read being one evaluation either way). Still one
  *    evaluation, but back inside the branch and so back to being lazy.
- *  - `PushPredicateThroughNonJoin` inlines a deterministic column into a predicate it pushes
- *    below this Project, unless the column is [[Expression.expensive]] -- which arithmetic is not.
- *    That would put a repeated input back at every use site whenever the transpiled call is used
- *    *as* a predicate, so `ConvertToCatalyst` asks [[needsPreEvaluatedColumn]] first and keeps the
- *    interpreted UDF there unless the option needs no column at all. This rewrite therefore only
- *    ever sees a `Filter` or join condition whose inputs are all cheap -- the guards below about a
- *    join's two children are effectively unreachable through `ConvertToCatalyst`, and are kept
- *    because the rewrite should not depend on that.
+ *  - `PushPredicateThroughNonJoin` inlines a deterministic column that is not
+ *    [[Expression.expensive]] -- which arithmetic is not -- into a predicate it pushes below this
+ *    Project, at every use site. `ConvertToCatalyst` declines to transpile into a condition for
+ *    that reason (see [[needsPreEvaluatedColumn]]), but it can only see the conditions that exist
+ *    when it runs, in the first optimizer batch: a `Filter` that arrives *above* this Project later
+ *    is pushed *through* it, so `df.select(f(a / b, b)).where(...)` ends up evaluating `a / b` once
+ *    per use inside the pushed predicate. The same `replaceAlias` substitutes the expression behind
+ *    a cheap `Attribute` argument, so even an option whose arguments are all cheap can be
+ *    duplicated when those columns come from a Project of their own.
+ *  - `spark.sql.optimizer.collapseProjectAlwaysInline` (false by default) force-inlines every
+ *    deterministic column at every use site, which reverts this rewrite wholesale.
+ *
+ * What does survive all three is a *nondeterministic* input: the pushdown requires
+ * `fields.forall(_.deterministic)` and [[CollapseProject]] never inlines a nondeterministic
+ * producer, so the single draw this rewrite exists to guarantee is not at the mercy of any of them.
+ * A deterministic input's column is an optimization; a nondeterministic input's column is a
+ * semantic guarantee.
  *
  * An input stays inline (evaluated at each use) when pre-evaluating it cannot help, cannot be done,
  * or would not be safe: see [[isCheapInput]] for the first and `canPreEvaluate` plus the child

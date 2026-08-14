@@ -1599,6 +1599,33 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(0, self._eval_python_count(selected))
             self.assertEqual([1.0, 4.0], [r[0] for r in selected.collect()])
 
+    def test_udf_transpile_a_later_filter_undoes_the_pre_evaluation(self):
+        # SPARK-58626: a UDF written directly in a `where` is not transpiled, because predicate
+        # pushdown would inline the pre-evaluated column back into the predicate. That decision is
+        # made in the first optimizer batch, though, so a filter added ABOVE the call still reaches
+        # it: the Filter is pushed through the pre-evaluating Project and the input goes back to one
+        # evaluation per use, inside the body's branch. The transpiled query then returns rows where
+        # interpreted Python raises. Pinned as a known limitation so a change either way is
+        # deliberate -- see transpile.py's module docstring.
+        from pyspark.sql.functions import col
+
+        used_twice = lambda a, b: (a + a) if b > 0 else 0.0  # noqa: E731
+        rows = [(1.0, 2.0), (1.0, 0.0)]
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(used_twice, DoubleType())
+            self.assertTrue(u.transpiled)
+            df = self.spark.createDataFrame(rows, "a double, b double")
+            filtered = df.select(u(col("a") / col("b"), col("b")).alias("v")).where(col("v") > 1.0)
+            # No raise, and the argument is back at both use sites in the pushed-down predicate.
+            self.assertEqual([], filtered.collect())
+            self.assertGreaterEqual(self._optimized_plan(filtered).count("(a#"), 2)
+
+            # The same query without the filter keeps its column and is eager, so it raises like
+            # interpreted Python does. That contrast is the whole point.
+            with self.assertRaises(Exception) as ctx:
+                df.select(u(col("a") / col("b"), col("b")).alias("v")).collect()
+            self.assertIn("DIVIDE_BY_ZERO", str(ctx.exception))
+
     def test_udf_transpile_unused_argument_diverges_under_ansi(self):
         # SPARK-58626: an argument the body never uses never reaches the option, so it is not
         # evaluated at all, where the interpreted UDF computes every argument column. Under ANSI

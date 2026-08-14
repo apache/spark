@@ -78,12 +78,29 @@ eval operator computes one input column per argument per row. So
 ``df.where(f(col("x")))`` still avoids Python entirely, while
 ``df.where(f(col("a") / col("b"))) `` does not.
 
-One later optimizer rule can still put an argument back inline, which is worth
-knowing if you are reading a plan or relying on the eagerness above:
+For a *deterministic* argument the projection is best-effort: three later
+optimizer rules can put it back at its use sites, which matters if you are
+reading a plan or relying on the eagerness above.
 
-* a *deterministic* argument the body reads exactly once is inlined back into
-  the body by ``CollapseProject`` -- one read is one evaluation either way, so
-  the count is unchanged, but it is lazy again inside a branch.
+* an argument the body reads exactly once is inlined back by
+  ``CollapseProject`` -- one read is one evaluation either way, so the count is
+  unchanged, but it is lazy again inside a branch;
+* predicate pushdown inlines it into a predicate it pushes below the
+  projection. A UDF written directly in a ``where`` is not transpiled for that
+  reason, but the decision is made before the rest of the optimizer runs, so a
+  filter added *above* the call still reaches it: ``df.select(f(a / b, b))
+  .where(...)`` evaluates ``a / b`` once per use inside the pushed predicate,
+  and can therefore return rows where interpreted Python raises. The same
+  substitution reaches the expression behind a plain column argument, so even a
+  UDF whose arguments are all columns can be duplicated when those columns come
+  from a projection of their own;
+* ``spark.sql.optimizer.collapseProjectAlwaysInline`` (off by default) inlines
+  every deterministic column everywhere, which undoes the rewrite entirely.
+
+A *nondeterministic* argument is not subject to any of them -- pushdown refuses
+to push through a nondeterministic projection and ``CollapseProject`` never
+inlines one -- so the single ``rand()`` draw per row is a guarantee, while a
+deterministic argument's single evaluation is an optimization.
 
 An argument the body never uses is not evaluated at all, where the interpreted
 UDF computes every argument column. Under ANSI that is an error-vs-rows
