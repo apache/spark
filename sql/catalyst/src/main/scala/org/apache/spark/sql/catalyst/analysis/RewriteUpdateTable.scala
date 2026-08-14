@@ -208,7 +208,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   /**
    * Variant of `buildReplaceDataUpdateProjection` for the `SupportsColumnUpdates` narrow-scan
    * path.
-   * For narrow attributes, looks up assignments by `ExprId` via `AttributeMap`and passes through
+   * For narrow attributes, looks up assignments by `ExprId` via `AttributeMap` and passes through
    * carry-along data columns (partition refs, cond refs, non-identity RHS refs) that landed in the
    * narrow scan but weren't user-assigned.
    */
@@ -272,7 +272,6 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       validateNoOverlap(operation, connectorDataAttrs, scanOnlyDataAttrs)
       validatePartitionAttrsDeclared(operation, relation, connectorDataAttrs, scanOnlyDataAttrs)
     }
-
 
     val rowIdAttrs = resolveRowIdAttrs(relation, operation)
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
@@ -340,7 +339,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // Connector-required columns whose value isn't being changed by the UPDATE: pass through the
     // current value so the connector receives a complete write row. Row-ID columns are excluded
     // here even when also connector-required (e.g. a primary key used for both row lookup and
-    // write payload) they are emitted once, below, via rowIdValues.
+    // write payload); they are emitted once, below, via rowIdValues.
     val assignedKeyIds = assignments.collect {
       case Assignment(key: AttributeReference, value) if !isIdentityAssignment(key, value) =>
         key.exprId
@@ -349,7 +348,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val connectorPassThroughValues = connectorDataAttrs.filterNot(a =>
       assignedKeyIds.contains(a.exprId) || rowIdAttrSet.contains(a))
 
-    // scanOnlyDataAttrs are never assigned carry them through the write query so
+    // scanOnlyDataAttrs are never assigned; carry them through the write query so
     // scan-side / write-side planning (e.g. RequiresDistributionAndOrdering clustering keys)
     // can resolve them, but they are intentionally excluded from the write payload.
     val scanOnlyPassThroughValues = scanOnlyDataAttrs.filterNot(a =>

@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, InMemoryTable, Insert, MetadataColumn, Operation, Reinsert, RowLevelOperationWithOptions, Table, TableInfo, Txn, TxnTable, Update, Write, WriteUpdate}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.RowLevelOperationTable
+import org.apache.spark.sql.connector.write.{RowLevelOperationTable, UpdateSummary}
 import org.apache.spark.sql.execution.{InSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
@@ -319,10 +319,10 @@ abstract class RowLevelOperationSuiteBase
     assert(actualUpdateSchema == expectedUpdateSchema, "update schema must match")
   }
 
-  protected def getUpdateSummary(): org.apache.spark.sql.connector.write.UpdateSummary = {
+  protected def getUpdateSummary(): UpdateSummary = {
     catalog.loadTable(ident).asInstanceOf[InMemoryTable]
       .commits.last.writeSummary.get
-      .asInstanceOf[org.apache.spark.sql.connector.write.UpdateSummary]
+      .asInstanceOf[UpdateSummary]
   }
 
   /**

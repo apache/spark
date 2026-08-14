@@ -4564,7 +4564,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def emptyRequiredDataAttributesError(connectorClass: String): Throwable = {
     new AnalysisException(
-      errorClass = "EMPTY_REQUIRED_DATA_ATTRIBUTES",
+      errorClass = "COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES",
       messageParameters = Map("connector" -> connectorClass))
   }
 
@@ -4572,7 +4572,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       connectorClass: String,
       missingColumns: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS",
+      errorClass = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS",
       messageParameters = Map(
         "connector" -> connectorClass,
         "missingColumns" -> missingColumns.mkString("[", ", ", "]")))
@@ -4582,7 +4582,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       connectorClass: String,
       missingColumns: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
+      errorClass = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
       messageParameters = Map(
         "connector" -> connectorClass,
         "missingColumns" -> missingColumns.mkString("[", ", ", "]")))
@@ -4592,7 +4592,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       connectorClass: String,
       overlappingColumns: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES",
+      errorClass = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES",
       messageParameters = Map(
         "connector" -> connectorClass,
         "overlappingColumns" -> overlappingColumns.mkString("[", ", ", "]")))
@@ -4602,7 +4602,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       connectorClass: String,
       rowIds: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "SPLIT_UPDATE_ROW_ID_NOT_DECLARED",
+      errorClass = "COLUMN_UPDATE_SPLIT_ROW_ID_NOT_DECLARED",
       messageParameters = Map(
         "connector" -> connectorClass,
         "rowIds" -> rowIds.mkString("[", ", ", "]")))
@@ -4612,7 +4612,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       connectorClass: String,
       rowIds: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "SPLIT_UPDATE_ROW_ID_REASSIGNMENT",
+      errorClass = "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
       messageParameters = Map(
         "connector" -> connectorClass,
         "rowIds" -> rowIds.mkString("[", ", ", "]")))

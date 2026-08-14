@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.distributions.{Distribution, Distributions
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
-import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsColumnUpdates, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsColumnUpdates, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -86,6 +86,7 @@ class InMemoryRowLevelOperationTable private (
   private final val COLUMN_UPDATE = "column-update"
   private final val COLUMN_UPDATE_REQ_ATTRS = "column-update-req-attrs"
   private final val COLUMN_UPDATE_COW = "column-update-cow"
+  private final val COLUMN_UPDATE_COW_NO_WRITE_UPDATE = "column-update-cow-no-write-update"
   private final val COLUMN_UPDATE_FROM_INFO = "column-update-from-info"
   private final val COLUMN_UPDATE_SPLIT = "column-update-split"
   private final val COLUMN_UPDATE_EMPTY_REQ_ATTRS = "column-update-empty-req-attrs"
@@ -160,6 +161,9 @@ class InMemoryRowLevelOperationTable private (
       () => new DeltaBasedColumnUpdateOperationFromInfo(info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(COLUMN_UPDATE_COW, "false") == "true") {
       () => new PartitionBasedColumnUpdateOperation(info.command, info.updatedColumns().toSeq)
+    } else if (properties.getOrDefault(COLUMN_UPDATE_COW_NO_WRITE_UPDATE, "false") == "true") {
+      () => new PartitionBasedColumnUpdateOperationNoWriteUpdate(
+        info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT, "false") == "true") {
       () => new DeltaBasedColumnUpdateSplitOperation(info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT_MISSING_ROW_ID, "false") == "true") {
@@ -614,6 +618,42 @@ class InMemoryRowLevelOperationTable private (
     override def description(): String = "InMemoryPartitionColumnUpdateOperation"
   }
 
+  // Test-only: mixes in SupportsColumnUpdates like PartitionBasedColumnUpdateOperation, but its
+  // DataWriter never overrides writeUpdate(), to exercise the DataWriter#writeUpdate default
+  // that throws DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED.
+  class PartitionBasedColumnUpdateOperationNoWriteUpdate(
+      command: Command,
+      updatedCols: Seq[NamedReference] = Nil)
+      extends PartitionBasedColumnUpdateOperation(command, updatedCols) {
+
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+      lastWriteInfo = info
+      new WriteBuilder {
+        override def build(): Write = new Write with RequiresDistributionAndOrdering {
+          override def requiredDistribution: Distribution =
+            Distributions.clustered(Array(PARTITION_COLUMN_REF))
+
+          override def requiredOrdering: Array[SortOrder] = Array[SortOrder](
+            LogicalExpressions.sort(
+              PARTITION_COLUMN_REF,
+              SortDirection.ASCENDING,
+              SortDirection.ASCENDING.defaultNullOrdering()))
+
+          override def toBatch: BatchWrite = new TestBatchWrite {
+            override def createBatchWriterFactory(
+                info: PhysicalWriteInfo): DataWriterFactory = {
+              new NoWriteUpdateOverrideWriterFactory
+            }
+
+            override protected def doCommit(messages: Array[WriterCommitMessage]): Unit = {}
+          }
+
+          override def description: String = "InMemoryColumnUpdateNoWriteUpdateOverride"
+        }
+      }
+    }
+  }
+
   // CoW write handler for narrow column-update writes.
   // Narrow rows (UPDATE/COPY) are sent via writeUpdate, wide rows (INSERT) via write.
   // Both arrive in the same buffer; rows are routed by the operation tag in the log entry,
@@ -745,6 +785,22 @@ private class DeltaBufferedRowsWriterFactory(schema: StructType) extends DeltaWr
   override def createWriter(partitionId: Int, taskId: Long): DeltaWriter[InternalRow] = {
     new DeltaBufferWriter(schema)
   }
+}
+
+// Test-only: a writer factory for a connector that never overrides writeUpdate(), to exercise
+// the DataWriter#writeUpdate default that throws DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED.
+// Declared top-level (no reference to the enclosing table) so it stays task-serializable.
+private class NoWriteUpdateOverrideWriterFactory extends DataWriterFactory {
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
+    new NoWriteUpdateOverrideWriter
+  }
+}
+
+private class NoWriteUpdateOverrideWriter extends DataWriter[InternalRow] {
+  override def write(record: InternalRow): Unit = {}
+  override def commit(): WriterCommitMessage = new BufferedRows(Seq.empty, StructType(Nil))
+  override def abort(): Unit = {}
+  override def close(): Unit = {}
 }
 
 private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)

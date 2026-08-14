@@ -1206,6 +1206,42 @@
     ],
     "sqlState" : "22003"
   },
+  "COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates` but returned an empty array from `requiredDataAttributes()`. Connectors that opt into column-level updates must declare at least one required data attribute."
+    ],
+    "sqlState" : "42000"
+  },
+  "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates` but its `requiredDataAttributes()` and `scanOnlyDataAttributes()` do not cover every partition column: <missingColumns>. Spark does not implicitly add partition columns to the narrow scan; a connector that needs them for partitioning resolution or write-side clustering must declare them in one of the two methods."
+    ],
+    "sqlState" : "42000"
+  },
+  "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates` but its `requiredDataAttributes()` does not cover every column being updated. Missing columns: <missingColumns>. Connectors must include every column reported by `RowLevelOperationInfo.updatedColumns()` in `requiredDataAttributes()`."
+    ],
+    "sqlState" : "42000"
+  },
+  "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES" : {
+    "message" : [
+      "Connector <connector> declares the same column(s) in both `requiredDataAttributes()` and `scanOnlyDataAttributes()`: <overlappingColumns>. A column must be declared in exactly one of the two methods."
+    ],
+    "sqlState" : "42000"
+  },
+  "COLUMN_UPDATE_SPLIT_ROW_ID_NOT_DECLARED" : {
+    "message" : [
+      "Data source <connector> represents UPDATE as delete + insert but its `requiredDataAttributes()` does not include row ID column(s) <rowIds>. The REINSERT payload is projected down to `requiredDataAttributes()`, so an undeclared row ID column leaves the reinserted row with no identity for the connector to place it by. Include the row ID column(s) in `requiredDataAttributes()`."
+    ],
+    "sqlState" : "42000"
+  },
+  "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT" : {
+    "message" : [
+      "Cannot reassign row ID column(s) <rowIds> in a column-level UPDATE when data source <connector> represents UPDATE as delete + insert. The REINSERT path has no row-ID channel to reconstruct columns outside `requiredDataAttributes()`, so undeclared columns would become NULL. Either avoid reassigning row ID columns, or include every table column in `requiredDataAttributes()`."
+    ],
+    "sqlState" : "42000"
+  },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
       "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>.",
@@ -2590,12 +2626,6 @@
       "Found an empty partition column value in the path segment '<columnSpec>'. Each partition directory must have a non-empty value after the '=' sign (e.g., 'col=value')."
     ],
     "sqlState" : "KD009"
-  },
-  "EMPTY_REQUIRED_DATA_ATTRIBUTES" : {
-    "message" : [
-      "Connector <connector> mixes in `SupportsColumnUpdates` but returned an empty array from `requiredDataAttributes()`. Connectors that opt into column-level updates must declare at least one required data attribute."
-    ],
-    "sqlState" : "42000"
   },
   "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE" : {
     "message" : [
@@ -6967,24 +6997,6 @@
     ],
     "sqlState" : "42614"
   },
-  "REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS" : {
-    "message" : [
-      "Connector <connector> mixes in `SupportsColumnUpdates` but its `requiredDataAttributes()` and `scanOnlyDataAttributes()` do not cover every partition column: <missingColumns>. Spark does not implicitly add partition columns to the narrow scan; a connector that needs them for partitioning resolution or write-side clustering must declare them in one of the two methods."
-    ],
-    "sqlState" : "42000"
-  },
-  "REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS" : {
-    "message" : [
-      "Connector <connector> mixes in `SupportsColumnUpdates` but its `requiredDataAttributes()` does not cover every column being updated. Missing columns: <missingColumns>. Connectors must include every column reported by `RowLevelOperationInfo.updatedColumns()` in `requiredDataAttributes()`."
-    ],
-    "sqlState" : "42000"
-  },
-  "REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES" : {
-    "message" : [
-      "Connector <connector> declares the same column(s) in both `requiredDataAttributes()` and `scanOnlyDataAttributes()`: <overlappingColumns>. A column must be declared in exactly one of the two methods."
-    ],
-    "sqlState" : "42000"
-  },
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
       "Cannot invoke routine <routineName> because the parameter named <parameterName> is required, but the routine call did not supply a value. Please update the routine call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
@@ -7267,18 +7279,6 @@
       "Error while calling spill() on <consumerToSpill> : <message>"
     ],
     "sqlState" : "82003"
-  },
-  "SPLIT_UPDATE_ROW_ID_NOT_DECLARED" : {
-    "message" : [
-      "Data source <connector> represents UPDATE as delete + insert but its `requiredDataAttributes()` does not include row ID column(s) <rowIds>. The REINSERT payload is projected down to `requiredDataAttributes()`, so an undeclared row ID column leaves the reinserted row with no identity for the connector to place it by. Include the row ID column(s) in `requiredDataAttributes()`."
-    ],
-    "sqlState" : "42000"
-  },
-  "SPLIT_UPDATE_ROW_ID_REASSIGNMENT" : {
-    "message" : [
-      "Cannot reassign row ID column(s) <rowIds> in a column-level UPDATE when data source <connector> represents UPDATE as delete + insert. The REINSERT path has no row-ID channel to reconstruct columns outside `requiredDataAttributes()`, so undeclared columns would become NULL. Either avoid reassigning row ID columns, or include every table column in `requiredDataAttributes()`."
-    ],
-    "sqlState" : "42000"
   },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [
