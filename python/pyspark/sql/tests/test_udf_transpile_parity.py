@@ -98,13 +98,13 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     # the CASE WHEN references both sides so CheckCartesianProducts no longer
     # flags it, yet no equi-join key is extractable, so the query still executes
     # as an O(n*m) CartesianProduct -- the guard is defeated rather than
-    # satisfied. That is a real consequence of lowering, tracked separately; it
-    # is not something these skips can assert either way.
+    # satisfied. That is a real consequence of lowering, tracked in SPARK-58780;
+    # it is not something these skips can assert either way.
     @unittest.skip(
         "Transpilation lowers the inline lambda to a native join condition, so the "
         "implicit-cartesian-product error this asserts no longer occurs (SPARK-58650). "
         "NOTE the query still runs as a CartesianProduct -- the guard stops firing "
-        "rather than the cross join going away."
+        "rather than the cross join going away; see SPARK-58780."
     )
     def test_udf_in_join_condition(self):
         pass
