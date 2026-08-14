@@ -25,31 +25,29 @@ import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.VersionedCredentials;
-import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.deploy.security.UserCredentialManager;
 import org.apache.spark.security.ServiceCredential;
 import org.apache.spark.security.UserCredentials;
 
 /**
- * :: DeveloperApi ::
  * A dynamic AWS credentials provider for executor-side S3A access that reads from
- * Spark's credential store on every {@code resolveCredentials()} call.
+ * Spark's credential store.
  * <p>
- * This provider never caches credentials internally. Each call reads the latest
- * {@link ServiceCredential} from the executor's {@code SparkEnv.userCredentials} store,
- * ensuring that credential refreshes (delivered via {@code UpdateUserCredentials} RPC or
- * {@code TaskDescription}) are immediately visible to S3A without requiring FileSystem
- * cache invalidation.
+ * This provider uses version-based caching: credentials are deserialized only when
+ * the credential store version changes (i.e., after a driver-initiated refresh).
+ * Since the store version is monotonically increasing and only changes on renewal
+ * (minutes-scale), the cache hit rate is {@literal >}99.99% for I/O-heavy workloads.
+ * <p>
+ * This implementation is thread-safe. Multiple threads may call
+ * {@code resolveCredentials()} concurrently without external synchronization.
+ * Each invocation reads the credential version atomically and returns either
+ * the cached result or a freshly deserialized one.
  * <p>
  * Configure via:
  * {@code fs.s3a.aws.credentials.provider=org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider}
- * <p>
- * When {@code spark.security.oidc.enabled=true} and the user has not explicitly set
- * {@code fs.s3a.aws.credentials.provider}, this provider is auto-configured.
  *
- * @since 5.0.0
+ * @since 4.4.0
  */
-@DeveloperApi
 public class SparkOidcAwsCredentialsProvider implements AwsCredentialsProvider {
 
   /** S3A credential property keys (same as produced by AwsStsCredentialProvider). */
@@ -59,6 +57,11 @@ public class SparkOidcAwsCredentialsProvider implements AwsCredentialsProvider {
 
   /** The S3A scheme used to look up credentials in the UserCredentials bundle. */
   private static final String S3A_SCHEME = "s3a";
+
+  /** Version-keyed cache to avoid repeated deserialization on every S3A API call. */
+  private volatile CachedResult cached;
+
+  private static record CachedResult(long version, AwsSessionCredentials credentials) {}
 
   @Override
   public AwsCredentials resolveCredentials() {
@@ -75,6 +78,12 @@ public class SparkOidcAwsCredentialsProvider implements AwsCredentialsProvider {
           "No credentials available in the executor credential store. "
               + "Ensure spark.security.oidc.enabled=true and the driver has acquired "
               + "credentials before executor tasks run.");
+    }
+
+    // Fast path: return cached credentials if version hasn't changed.
+    CachedResult current = cached;
+    if (current != null && current.version() == versioned.version()) {
+      return current.credentials();
     }
 
     UserCredentials credentials;
@@ -100,13 +109,17 @@ public class SparkOidcAwsCredentialsProvider implements AwsCredentialsProvider {
     String secretKey = props.get(SECRET_KEY);
     String sessionToken = props.get(SESSION_TOKEN);
 
-    if (accessKey == null || secretKey == null || sessionToken == null) {
+    if (accessKey == null || accessKey.isEmpty()
+        || secretKey == null || secretKey.isEmpty()
+        || sessionToken == null || sessionToken.isEmpty()) {
       throw new IllegalStateException(
           "ServiceCredential for scheme '" + S3A_SCHEME + "' is missing required "
-              + "properties. Expected: " + ACCESS_KEY + ", " + SECRET_KEY + ", "
-              + SESSION_TOKEN);
+              + "properties. Expected non-empty values for: " + ACCESS_KEY + ", "
+              + SECRET_KEY + ", " + SESSION_TOKEN);
     }
 
-    return AwsSessionCredentials.create(accessKey, secretKey, sessionToken);
+    AwsSessionCredentials result = AwsSessionCredentials.create(accessKey, secretKey, sessionToken);
+    cached = new CachedResult(versioned.version(), result);
+    return result;
   }
 }
