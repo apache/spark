@@ -157,17 +157,7 @@ case class TransformWithStateInPySparkExec(
       groupingKeySchema,
       driverProcessorHandle
     )
-    // runner initialization
-    runner.init()
-    try {
-      // execute UDF on the python runner
-      runner.process()
-    } catch {
-      case e: Throwable =>
-        throw new SparkException("TransformWithStateInPySpark driver worker " +
-          "exited unexpectedly (crashed)", e)
-    }
-    runner.stop()
+    TransformWithStateInPySparkExec.runPreInitRunner(runner)
     val info = getStateInfo
     val stateSchemaDir = stateSchemaDirPath()
 
@@ -407,6 +397,22 @@ case class TransformWithStateInPySparkExec(
 
 // scalastyle:off argcount
 object TransformWithStateInPySparkExec {
+
+  private[streaming] def runPreInitRunner(
+      runner: TransformWithStateInPySparkPythonPreInitRunner): Unit = {
+    Utils.tryWithSafeFinally {
+      runner.init()
+      try {
+        runner.process()
+      } catch {
+        case e: Throwable =>
+          throw new SparkException("TransformWithStateInPySpark driver worker " +
+            "exited unexpectedly (crashed)", e)
+      }
+    } {
+      runner.stop()
+    }
+  }
 
   // Plan logical transformWithStateInPySpark for batch queries
   def generateSparkPlanForBatchQueries(
