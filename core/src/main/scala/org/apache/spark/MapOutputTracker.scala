@@ -900,14 +900,27 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   // Start the shuffle TTL cleaner only after the fail-fast check above, so a failed construction
-  // can't leave the daemon running. Reap only a shuffle that has actually produced output: a
-  // registered-but-not-yet-produced shuffle (e.g. a map stage still waiting on parents) has no
-  // files to reclaim, and removing its ShuffleStatus would make the first registerMapOutput throw
-  // ShuffleStatusNotFoundException -> abortStage. Reaping mirrors ContextCleaner.doCleanupShuffle:
-  // reclaim on-disk blocks on executors/ESS first (shuffleFileRemover), then drop the driver-side
-  // ShuffleStatus (unregisterShuffle, which also drops the shuffleAccessTime entry). Removing files
-  // before unregistering matters so blocks served by the shuffle service on deallocated executors
-  // are still found.
+  // can't leave the daemon running.
+  //
+  // Reap only a shuffle that has actually produced output: a registered-but-not-yet-produced
+  // shuffle (e.g. a map stage still waiting on parents) has no files to reclaim.
+  //
+  // Reaping reclaims the on-disk blocks on executors/ESS (shuffleFileRemover, i.e. the normal
+  // ShuffleDriverComponents.removeShuffle path) and then clears the driver-side outputs via
+  // unregisterAllMapAndMergeOutput. Deliberately NOT unregisterShuffle: keeping the (now empty)
+  // ShuffleStatus registered is what makes this safe against a shuffle that is still referenced.
+  //   - unregisterAllMapAndMergeOutput calls incrementEpoch, so executors drop their cached
+  //     statuses and re-ask rather than fetching files we just deleted. Re-asking yields an empty
+  //     status -> MetadataFetchFailedException, which is a FetchFailed, so the DAGScheduler
+  //     recomputes the map stage. unregisterShuffle bumps no epoch, so executors would instead
+  //     fetch deleted files.
+  //   - The DAGScheduler's own FetchFailed recovery calls unregisterAllMapAndMergeOutput /
+  //     unregisterMapOutput, which go through getShuffleStatusOrError. With the status removed
+  //     those throw ShuffleStatusNotFoundException on the event-loop thread, and
+  //     DAGSchedulerEventProcessLoop.onError responds by cancelling all jobs and stopping the
+  //     SparkContext -- i.e. reaping a still-referenced shuffle would kill the application.
+  // The cost is that an emptied ShuffleStatus stays in shuffleStatuses until the ContextCleaner
+  // collects it; emptying it also makes numAvailableMapOutputs 0, so it is not reaped again.
   cleanerThreadpool.foreach { pool =>
     pool.execute(new BlockTtlCleaner(
       name = "shuffle",
@@ -916,7 +929,7 @@ private[spark] class MapOutputTrackerMaster(
       shouldReap = shuffleId => shuffleStatuses.get(shuffleId).exists(_.numAvailableMapOutputs > 0),
       reap = shuffleId => {
         shuffleFileRemover.foreach(_(shuffleId))
-        unregisterShuffle(shuffleId)
+        unregisterAllMapAndMergeOutput(shuffleId)
       }))
   }
 
