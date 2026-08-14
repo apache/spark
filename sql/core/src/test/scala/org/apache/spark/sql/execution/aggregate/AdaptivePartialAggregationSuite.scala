@@ -657,7 +657,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("both execution paths agree on an order-sensitive aggregate") {
+  test("order-sensitive aggregates match a non-bypassed run") {
     // Bypassing must merge a group's buffers in the same order as a run that never bypasses: a
     // group can straddle the freeze and hold both a map buffer and pass-through buffers, and the
     // `Final` merges in emit order. The queue holds each passed-through row behind the frozen map
@@ -722,15 +722,15 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // the freeze point still merges its map buffer before its pass-through buffers, matching a
     // non-bypassed run.
     //
-    // The colliding key must not be the first one the map drains: key 0 is emitted before any
-    // bypassed row can overtake it, so `lit(0L)` cannot expose the interleaving. Key 6 is inserted
-    // early (by id 3) but drained after keys 0-5, so a bypassed row colliding with it lands ahead
-    // of its map buffer unless the map output still precedes the held batch.
+    // The colliding row is the first row of the trigger batch, so it is the first one queued: a
+    // design that emitted queued rows ahead of the frozen map would put it before its map buffer.
+    // Key 2 is inserted early (by id 1) and drained third, so id 4's first exploded element
+    // collides with it; the other two fan-out tests cover collisions on later batch elements.
     checkAdaptiveMatchesReference { parts =>
       spark.range(0, 20, 1, parts)
         .select($"id", explode(array(
-          $"id" * 2,
-          when($"id" === 4, lit(6L)).otherwise($"id" * 2 + 1))) as "k")
+          when($"id" === 4, lit(2L)).otherwise($"id" * 2),
+          $"id" * 2 + 1)) as "k")
         .select($"k", ($"id" * 100 + $"k") as "v")
         .groupBy($"k").agg(first($"v") as "f", last($"v") as "l")
     }

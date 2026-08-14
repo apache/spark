@@ -882,10 +882,12 @@ case class HashAggregateExec(
 
   // Blocking operators normally do not copy their result because every output row is drained (via
   // `shouldStop()`) before the next one is produced. Adaptive pass-through breaks that assumption:
-  // when an `Expand` sits below, one input row fans out into several pass-through rows that are all
-  // appended in the same child loop iteration before any drain, and they all alias the single
-  // result `UnsafeRow`. Such children report `needCopyResult` themselves, so propagate their
-  // requirement rather than copying for every adaptive aggregate.
+  // `outputFunc` writes every output row into the same reusable result `UnsafeRow`, and under a
+  // fan-out child several such rows are appended without an intervening drain - the frozen-map
+  // rows, emitted one per queued row inside the child's fan-out loop, and the held pass-through
+  // batch, flushed from `outputMapAndFlush` after the maps drain. Without a copy they would all
+  // alias the single result row. Such children report `needCopyResult` themselves, so propagate
+  // their requirement rather than copying for every adaptive aggregate.
   override def needCopyResult: Boolean = adaptivePartialAggEnabled &&
     child.asInstanceOf[CodegenSupport].needCopyResult
 
