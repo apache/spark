@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableInfo, WriteUpdate}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
@@ -152,6 +153,38 @@ class GroupBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     val ops = table.lastWriteLog.map(_.getUTF8String(0).toString).toSet
     assert(ops == Set(WriteUpdate.toString),
       s"all CoW column-update log entries must use writeUpdate, got: $ops")
+  }
+
+  test("column-update ReplaceData: connector missing writeUpdate override is rejected") {
+    // A connector that mixes in SupportsColumnUpdates but never overrides
+    // DataWriter#writeUpdate falls through to the default implementation, which must throw
+    // DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED rather than silently forwarding narrow rows to
+    // write(...).
+    createAndInitTableReplaceDataNoWriteUpdate("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    val ex = intercept[SparkUnsupportedOperationException] {
+      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+    }
+    assert(ex.getCondition == "DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED",
+      s"expected DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED but got: ${ex.getCondition}")
+  }
+
+  private def createAndInitTableReplaceDataNoWriteUpdate(
+      schemaString: String, jsonData: String): Unit = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("column-update-cow-no-write-update", "true")
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    val transforms = Array[Transform](identity(reference(Seq("dep"))))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(transforms)
+      .withProperties(props)
+      .build()
+    catalog.createTable(ident, tableInfo)
+    append(schemaString, jsonData)
   }
 
   // ---------------------------------------------------------------------------
