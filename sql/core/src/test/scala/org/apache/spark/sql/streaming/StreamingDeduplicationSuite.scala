@@ -685,7 +685,8 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
     )
   }
 
-  // Total incremental removals reported across all batches, read from the operator's
+  // Total incremental removals over the query's retained recent progress (recentProgress is
+  // retention-bounded, so this is not the full batch history), read from the operator's
   // numRowsIncrementallyRemoved custom metric. Where a stateful operator ran (stateOperators is
   // non-empty) the metric must be present -- assert rather than default it to 0, so a regression
   // that stops emitting the metric fails the test instead of silently reading as zero.
@@ -697,7 +698,8 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
     }.sum
   }
 
-  // Total state rows removed across all batches, read from the operator's first-class
+  // Total state rows removed over the query's retained recent progress (recentProgress is
+  // retention-bounded, so this is not the full batch history), read from the operator's first-class
   // numRowsRemoved metric (the incremental removals are a subset of these). This asserts that
   // eviction actually removed state, which numRowsIncrementallyRemoved alone does not: a batch-end
   // drain removes rows without incrementing the incremental counter.

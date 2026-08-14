@@ -1696,7 +1696,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
     // eviction always runs once at batch end against the eviction watermark.
     val watermarkForEviction = DateTimeUtils.millisToMicros(eventTimeWatermarkForEviction.get)
 
-    // We cannot reuse [[EvictionIterator]] here because it reads the eviction timestamp from the
+    // We cannot reuse `EvictionIterator` here because it reads the eviction timestamp from the
     // state store key, whereas this operator stores `expiresAtMicros` in the value row (the key is
     // only the dedup key columns). We still match EvictionIterator's semantics by returning only
     // the rows that are actually evicted, so each next() corresponds to a real removal and the
