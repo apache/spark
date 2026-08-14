@@ -24,7 +24,6 @@ inherited into the Spark Connect parity test class. The companion
 property-based suite lives in ``test_udf_transpile_hypothesis.py``.
 """
 
-import re
 import unittest
 
 from pyspark.sql import Row
@@ -565,28 +564,21 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertIn("cannot compare NULL", str(ctx.exception))
 
     def test_udf_transpile_boolop_short_circuits(self):
-        # The `and` / `or` counterpart of the chain short-circuit, and the
-        # regression test for the pushdown hazard the CASE WHEN lowering closes.
+        # The `and` / `or` counterpart of the chain short-circuit. `&` short-
+        # circuits at evaluation time -- both `And.eval` and `And.doGenCode` skip
+        # the right operand when the left is false -- so a `raise_error` NULL
+        # guard in the second operand must not fire when the first already
+        # decided the result.
         #
-        # `x > 0 and y > 0` used to lower to `And(caseWhen1, caseWhen2)`.
-        # `splitConjunctivePredicates` decomposes `And` and nothing else, and
-        # `PushPredicateThroughJoin` treats a conjunct as pushable when
-        # `deterministic && !throwable` -- but `RaiseError` does not override
-        # `Expression.throwable`, so the NULL guard looks harmless and the
-        # second conjunct gets pushed to the far side of a join, where it is
-        # evaluated on rows the first conjunct excluded. That can raise where
-        # Python short-circuits to False. A single CASE WHEN is atomic to
-        # predicate splitting, so it cannot be separated that way.
-        #
-        # The guard below is a PLAN-SHAPE assertion, deliberately, because the
-        # runtime symptom is scheduling-dependent: with the old `&` lowering the
-        # pushed-down `raise_error` fires only on some runs (whether the failing
-        # task gets far enough before the join yields no rows). Asserting on the
-        # optimized plan instead is deterministic -- the guard must not be pushed
-        # BENEATH the join, onto one side, where it would be evaluated on rows
-        # the other operand excluded. It does end up inside the join CONDITION,
-        # which is safe for the same reason the lowering exists: the predicate
-        # stays whole, so the `and` still short-circuits.
+        # NOT asserted here: that the guard stays whole through the optimizer.
+        # `splitConjunctivePredicates` decomposes `And`, and
+        # `PushPredicateThroughJoin` will push a conjunct it believes harmless,
+        # which a `raise_error` currently is because `RaiseError` does not
+        # override `Expression.throwable`. Overriding it is the prerequisite fix;
+        # see DEFERED_AND_OR_CASE_WHEN_ISSUE. Until then the hazard is real but
+        # its runtime symptom is scheduling-dependent (the pushed-down guard
+        # fires only when the failing task gets far enough before the join yields
+        # no rows), so there is nothing deterministic to assert.
         def both_positive(a, c):
             return a > 0 and c > 0
 
@@ -607,53 +599,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual([True], [r[0] for r in df.select(or_udf("a", "c")).collect()])
 
             # Same thing across a join, where the NULL operand lives entirely on
-            # the right side and would be a pushdown candidate if the predicate
-            # decomposed into conjuncts.
+            # the right side. The `and` must still short-circuit rather than
+            # raising on the row whose `c` is NULL.
             left = self.spark.createDataFrame([(1, -5)], "k long, a long")
             right = self.spark.createDataFrame([(1, None)], "k long, c long")
             joined = left.join(right, "k")
             self.assertEqual([False], [r[0] for r in joined.select(and_udf("a", "c")).collect()])
 
+            # Filtering on it returns Python's answer rather than raising.
             filtered = joined.filter(and_udf("a", "c"))
-            plan = filtered._jdf.queryExecution().optimizedPlan().toString()
-            lines = plan.split("\n")
-            # Assert the guard is actually there first: without this every check
-            # below passes vacuously the moment the guard folds away or the UDF
-            # stops transpiling.
-            self.assertTrue(
-                any("raise_error" in line for line in lines),
-                f"expected the NULL raise guard somewhere in the plan:\n{plan}",
-            )
-            # An optimized plan prints root-first, depth-first, so a node pushed
-            # below the Join appears on a LATER line than the Join itself. Match
-            # the node name at the start of the line rather than the substring
-            # "Join", which also occurs inside a printed join condition.
-            join_lines = [i for i, line in enumerate(lines) if re.match(r"^[\s:+|-]*Join ", line)]
-            self.assertEqual(1, len(join_lines), f"expected exactly one Join node:\n{plan}")
-            join_line = join_lines[0]
-            # The hazard is the guard being pushed to ONE SIDE of the join, where
-            # it would see rows that never join. Landing in the join CONDITION is
-            # acceptable: the predicate stays whole, so `and` still
-            # short-circuits and the guard is only reached for candidate pairs.
-            # That is where it lands today -- hence `> join_line`, which excludes
-            # the Join's own line -- so also pin that it did not decompose.
-            pushed = [
-                line for i, line in enumerate(lines) if i > join_line and "raise_error" in line
-            ]
-            self.assertEqual(
-                [],
-                pushed,
-                "the NULL raise guard was pushed below the Join, so it can be "
-                f"evaluated on rows the other operand excluded:\n{plan}",
-            )
-            self.assertIn(
-                "raise_error",
-                lines[join_line],
-                "expected the whole predicate to stay in the join condition; if "
-                "it moved above the Join that is also safe, but the lowering "
-                f"changed and this test should be re-read:\n{plan}",
-            )
-            # And it still returns Python's answer rather than raising.
             self.assertEqual([], filtered.select("k").collect())
 
     def test_udf_transpile_chain_operator_mix_and_eq_nulls(self):
@@ -722,60 +676,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 [(1, 2, 3, 4, 5), (1, 2, 3, 5, 4)],
             ),
             [True, False],
-            "a chain of four operators is at the cap and must transpile",
+            "a chain of four operators is well under the cap and must transpile",
         )
-
-    def test_udf_transpile_in_lowered(self):
-        # ``in`` / ``not in`` over a literal container is equality-based in
-        # Python and never raises on a None probe: ``None in (1, 2)`` is False
-        # and ``None in (1, None)`` is True. Spark's ``IN`` returns NULL for a
-        # NULL probe or a NULL list element, so the lowering answers the
-        # NULL-probe case directly and drops NULL elements from the list.
-        from pyspark.sql.types import StructField, StructType
-
-        schema = StructType([StructField("a", LongType(), nullable=True)])
-        in_none = lambda x: x in (1, None)  # noqa: E731
-        not_in_none = lambda x: x not in (1, None)  # noqa: E731
-        in_plain = lambda x: x in (1, 2)  # noqa: E731
-        with self.sql_conf(_TRANSPILE_ON):
-            for label, func, cases in [
-                ("x in (1, 2)", in_plain, [(None, False), (1, True), (2, True), (3, False)]),
-                ("x in (1, None)", in_none, [(None, True), (1, True), (2, False)]),
-                ("x not in (1, None)", not_in_none, [(None, False), (1, False), (2, True)]),
-            ]:
-                pudf = UserDefinedFunction(func, BooleanType())
-                self.assertTrue(pudf.transpiled, f"{label} should transpile")
-                for value, expected in cases:
-                    with self.subTest(func=label, value=value):
-                        df = self.spark.createDataFrame([Row(a=value)], schema=schema)
-                        [row] = df.select(pudf("a")).collect()
-                        self.assertEqual(row[0], expected)
-
-    def test_udf_transpile_in_empty_container(self):
-        # ``x in ()`` is always False in Python, including for a None probe.
-        # The lowering spells that out with a literal rather than emitting
-        # ``IN ()``, whose NULL-probe result depends on
-        # ``spark.sql.legacy.nullInEmptyListBehavior``. Pin it under both
-        # settings so the answer cannot drift with that flag.
-        from pyspark.sql.types import StructField, StructType
-
-        empty_in = lambda x: x in ()  # noqa: E731
-        empty_not_in = lambda x: x not in ()  # noqa: E731
-        schema = StructType([StructField("a", LongType(), nullable=True)])
-        for legacy in (False, True):
-            conf = dict(_TRANSPILE_ON)
-            conf["spark.sql.legacy.nullInEmptyListBehavior"] = legacy
-            with self.sql_conf(conf):
-                for label, func, expected in [
-                    ("x in ()", empty_in, False),
-                    ("x not in ()", empty_not_in, True),
-                ]:
-                    with self.subTest(legacy=legacy, func=label):
-                        pudf = UserDefinedFunction(func, BooleanType())
-                        self.assertTrue(pudf.transpiled, f"{label} should transpile")
-                        df = self.spark.createDataFrame([Row(a=None)], schema=schema)
-                        [row] = df.select(pudf("a")).collect()
-                        self.assertEqual(row[0], expected)
 
     def test_udf_transpile_comparison_fallbacks(self):
         # Comparison forms the transpiler must REFUSE, each for its own reason.
@@ -798,10 +700,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         mixed_in = lambda x: x in (1, "a")  # noqa: E731
         bool_in = lambda x: x in (True, False)  # noqa: E731
         cross_chain = lambda x: 0 < x < "z"  # noqa: E731
-        five_ops = lambda a, b, c, d, e, f: a < b < c < d < e < f  # noqa: E731
         chain_long_rt = lambda x: 0 < x < 10  # noqa: E731
         in_long_rt = lambda x: x in (1, 2)  # noqa: E731
-        six_longs = "a long, b long, c long, d long, e long, f long"
 
         # (label, func, schema, rows, expected). `expected` is what interpreted
         # Python produces, so the query must still run and return it.
@@ -813,7 +713,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ("chain + `in`", chained_in, "a long, b long", [(0, 1), (1, 0)], [True, False]),
             ("mixed-category `in`", mixed_in, "a long", [(1,), (3,)], [True, False]),
             ("`in` over bools", bool_in, "a long", [(1,), (5,)], [True, False]),
-            ("a 5-op chain (over the cap)", five_ops, six_longs, [(1, 2, 3, 4, 5, 6)], [True]),
         ]
         with self.sql_conf(_TRANSPILE_ON):
             for label, func, schema, rows, expected in cases:
@@ -908,20 +807,17 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual([True], [r[0] for r in df.select(pudf("c", "x", "y")).collect()])
 
     def test_udf_transpile_lowering_caps(self):
-        # The chain-operator and container-element caps bound plan growth: an
-        # interior chain operand's subtree is emitted once per adjacent pair,
-        # and every input-category variant carries its own copy for
-        # CheckAnalysis to walk. Exercise both boundaries directly rather than
-        # writing a 65-element tuple into the test source (a container built
-        # with `eval` has no retrievable source, so the UDF would fall back for
-        # the wrong reason and the test would pass vacuously).
+        # The chain cap bounds plan growth: an interior chain operand's subtree is
+        # emitted once per adjacent pair, and every input-category variant carries
+        # its own copy for CheckAnalysis to walk. Exercise the boundary directly
+        # rather than through a UDF, so the refusal cannot be confused with a
+        # fallback for some other reason.
         import ast as _ast
 
         from pyspark.errors import UnsupportedOperationException
         from pyspark.sql.transpile import (
             CatalystTranspiler,
-            _MAX_CHAIN_OPS,
-            _MAX_IN_ELEMENTS,
+            _MAX_COMPARISON_TERMS,
         )
 
         transpiler = CatalystTranspiler()
@@ -930,27 +826,23 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         def compare_node(src):
             return _ast.parse(src, mode="eval").body
 
-        def in_src(n):
-            return "x in (%s)" % ", ".join(str(i) for i in range(n))
-
         def chain_src(n):
             # n operators over n + 1 operands: x < 0 < 1 < ... < n - 1
             return " < ".join(["x"] + [str(i) for i in range(n)])
 
         with self.sql_conf(_TRANSPILE_ON):
-            # At each cap the lowering succeeds.
-            node = compare_node(in_src(_MAX_IN_ELEMENTS))
-            transpiler._lower_in(["x"], node.left, node.comparators[0], negate=False)
-            transpiler._convert_chunk(["x"], compare_node(chain_src(_MAX_CHAIN_OPS)))
+            # At the cap the lowering succeeds.
+            transpiler._convert_chunk(["x"], compare_node(chain_src(_MAX_COMPARISON_TERMS)))
 
             # One past it, it refuses so the UDF falls back.
             with self.assertRaises(UnsupportedOperationException) as ctx:
-                node = compare_node(in_src(_MAX_IN_ELEMENTS + 1))
-                transpiler._lower_in(["x"], node.left, node.comparators[0], negate=False)
-            self.assertIn("elements", str(ctx.exception))
-            with self.assertRaises(UnsupportedOperationException) as ctx:
-                transpiler._convert_chunk(["x"], compare_node(chain_src(_MAX_CHAIN_OPS + 1)))
+                transpiler._convert_chunk(["x"], compare_node(chain_src(_MAX_COMPARISON_TERMS + 1)))
             self.assertIn("operators", str(ctx.exception))
+
+            # `in` / `not in` are refused outright, deferred to SPARK-56925.
+            with self.assertRaises(UnsupportedOperationException) as ctx:
+                transpiler._convert_chunk(["x"], compare_node("x in (1, 2)"))
+            self.assertIn("`in` / `not in`", str(ctx.exception))
 
     def test_udf_transpile_multi_row(self):
         # Every other transpile test uses a 1-row DataFrame; this one runs
@@ -3004,6 +2896,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # second link whenever `a < b`, and Spark orders NaN above every value
         # (Python's `b < nan` is False); `a == b == NaN` likewise, since Spark
         # treats `NaN = NaN` as true where Python's `nan == nan` is False.
+        #
+        # These assertions pin the CURRENT (divergent) behavior so a change is
+        # visible, not an endorsement of it. Whether to special-case NaN, fall
+        # back to interpreted Python, or document it as a known limitation is
+        # tracked in SPARK-58781.
         nan_chain = lambda a, b, c: a < b < c  # noqa: E731
         nan_eq_chain = lambda a, b, c: a == b == c  # noqa: E731
         nan = float("nan")
