@@ -40,10 +40,17 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
  * @param alwaysInline if true, inline all CTEs in the query plan.
  * @param keepDanglingRelations if true, dangling CTE relations will be kept in the original
  *                              `WithCTE` node.
+ * @param isAnalysis if true, this rule runs during analysis (e.g. from `CheckAnalysis`), where
+ *                   the plan may be a subplan that references `CTERelationDef`s owned by a
+ *                   surrounding scope; such out-of-scope references are tolerated and left for
+ *                   the owning scope to resolve. If false (the optimizer), the plan is complete,
+ *                   so a `CTERelationRef` with no definition in the plan indicates corruption and
+ *                   raises an error rather than being silently dropped.
  */
 case class InlineCTE(
     alwaysInline: Boolean = false,
-    keepDanglingRelations: Boolean = false) extends Rule[LogicalPlan] {
+    keepDanglingRelations: Boolean = false,
+    isAnalysis: Boolean = true) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
@@ -148,7 +155,7 @@ case class InlineCTE(
           buildCTEMap(child, cteMap, outerCTEId)
         }
 
-      case ref: CTERelationRef =>
+      case ref: CTERelationRef if cteMap.contains(ref.cteId) =>
         cteMap(ref.cteId) = cteMap(ref.cteId).withRefCountIncreased(1)
 
         // The `outerCTEId` CTE definition can either reference `cteId` definition if `cteId` is in
@@ -159,6 +166,21 @@ case class InlineCTE(
         // will remove the references of the first contains relation.
         outerCTEId.foreach { cteId =>
           cteMap(cteId).increaseOutgoingRefCount(ref.cteId, 1)
+        }
+
+      case ref: CTERelationRef =>
+        // The referenced CTE definition is not present in this plan. During analysis
+        // (`isAnalysis` = true) this legitimately happens when a check runs on a subplan that
+        // contains the reference but not its enclosing `WithCTE` -- e.g. `ResolveSQLTableFunctions`
+        // calls `checkAnalysis` (which runs `InlineCTE`) on a resolved SQL table function whose
+        // argument is a scalar subquery referencing an outer CTE. The reference is resolved by the
+        // scope that owns the definition, so there is nothing to count here. In the optimizer
+        // (`isAnalysis` = false) the plan is complete, so a missing definition indicates
+        // corruption -- fail loudly rather than silently dropping the reference.
+        if (!isAnalysis) {
+          throw SparkException.internalError(
+            "No CTERelationDef found for CTERelationRef with id " +
+              s"${ref.cteId} while building the CTE map.")
         }
 
       case _ =>
@@ -228,6 +250,17 @@ case class InlineCTE(
           // Retain the not-inlined CTE relations in place.
           WithCTE(inlined, notInlined)
         }
+
+      case ref: CTERelationRef if !cteMap.contains(ref.cteId) =>
+        // Out-of-scope reference whose definition is not in this plan (mirrors the guard in
+        // `buildCTEMap`). During analysis it is left unchanged for the scope that owns the
+        // definition; in the optimizer a missing definition is corruption.
+        if (!isAnalysis) {
+          throw SparkException.internalError(
+            "No CTERelationDef found for CTERelationRef with id " +
+              s"${ref.cteId} while inlining CTEs.")
+        }
+        ref
 
       case ref: CTERelationRef =>
         val refInfo = cteMap(ref.cteId)
