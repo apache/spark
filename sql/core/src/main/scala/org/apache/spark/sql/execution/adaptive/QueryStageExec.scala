@@ -283,7 +283,8 @@ case class BroadcastQueryStageExec(
  */
 case class TableCacheQueryStageExec(
     override val id: Int,
-    override val plan: SparkPlan) extends QueryStageExec {
+    override val plan: SparkPlan,
+    _canonicalized: SparkPlan) extends QueryStageExec {
 
   @transient val inMemoryTableScan = plan match {
     case i: InMemoryTableScanLike => i
@@ -306,6 +307,8 @@ case class TableCacheQueryStageExec(
       )
     }
   }
+
+  override def doCanonicalize(): SparkPlan = _canonicalized
 
   override protected def doMaterialize(): Future[Any] = future
 
