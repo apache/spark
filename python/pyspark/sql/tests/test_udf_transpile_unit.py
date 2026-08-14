@@ -2003,16 +2003,61 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             spec.loader.exec_module(module)
             _parse_file_lambdas.cache_clear()
             # Attribute CALL on an imported module: does not verify (the gap).
+            reasons = []
             self.assertIsNone(
-                _get_function_from_ast(module.calls_import),
+                _get_function_from_ast(module.calls_import, reasons),
                 "if this now resolves, the co_code context-sensitivity gap is "
                 "fixed -- delete this test and remove the caveat in "
                 "_code_signature's docstring",
             )
+            # The diagnostic must name BOTH possible causes. Until the gap is
+            # fixed, a user hitting it would otherwise be sent looking for a
+            # stale file, which is the wrong investigation entirely.
+            self.assertEqual(1, len(reasons))
+            self.assertIn("does not match the compiled code", reasons[0])
+            self.assertIn("changed since it was imported", reasons[0])
+            self.assertIn("module-level attribute", reasons[0])
             # Attribute READ, and no import at all, both verify normally --
             # showing the gap is specific to the call form, not to imports.
             self.assertIsNotNone(_get_function_from_ast(module.reads_import))
             self.assertIsNotNone(_get_function_from_ast(module.no_import))
+
+    def test_udf_transpile_resolution_failures_are_distinguished(self):
+        # Every distinct way lambda resolution can fail used to collapse into one
+        # string ("Error extracting function body from ast"), which told a user
+        # nothing -- an unsupported lambda and an entirely unavailable mechanism
+        # read identically. Each cause now reports itself.
+        import importlib.util
+        import os
+        import tempfile
+
+        from pyspark.sql.transpile import _get_function_from_ast, _parse_file_lambdas
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "spark_58650_moved.py")
+            with open(path, "w") as f:
+                f.write("g = lambda x: x + 1\n")
+            spec = importlib.util.spec_from_file_location("spark_58650_moved", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            # Move the lambda so nothing sits at the line the code object reports.
+            with open(path, "w") as f:
+                f.write("\n\n\ng = lambda x: x + 1\n")
+            _parse_file_lambdas.cache_clear()
+            moved_reasons = []
+            self.assertIsNone(_get_function_from_ast(module.g, moved_reasons))
+            self.assertIn("no lambda found at", moved_reasons[0])
+            self.assertIn("changed since it was imported", moved_reasons[0])
+
+        # A callable with no retrievable source reports that specifically rather
+        # than sharing the lambda path's message.
+        import functools
+
+        partial_reasons = []
+        self.assertIsNone(
+            _get_function_from_ast(functools.partial(lambda a, b: a + b, 1), partial_reasons)
+        )
+        self.assertIn("no parseable source", partial_reasons[0])
 
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
