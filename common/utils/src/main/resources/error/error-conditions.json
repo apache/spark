@@ -7798,6 +7798,11 @@
         "message" : [
           "The following session configuration(s) are incompatible with Real-Time Mode: <invalidReasons>. Update or remove them and restart the query."
         ]
+      },
+      "STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming queries in real-time mode cannot include stateful operators (e.g. aggregate, deduplicate, transformWithState) before a union. Please restructure your query to apply the union before any stateful operations."
+        ]
       }
     },
     "sqlState" : "0A000"

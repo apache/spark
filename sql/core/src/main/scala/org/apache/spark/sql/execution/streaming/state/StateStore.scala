@@ -68,6 +68,34 @@ class StateStoreIterator[A](
   override def close(): Unit = onClose()
 }
 
+/**
+ * An iterator that can be refreshed and repositioned instead of recreated for every scan.
+ */
+private[sql] abstract class ReusableIterator[A] extends Iterator[A] with Closeable {
+  /** Refresh this iterator and seek to the encoded prefix row. */
+  def refreshAndSeekToPrefix(prefixRow: UnsafeRow): Unit
+
+  override def map[B](f: A => B): ReusableIterator[B] = {
+    val self = this
+    new ReusableIterator[B] {
+      override def refreshAndSeekToPrefix(prefixRow: UnsafeRow): Unit =
+        self.refreshAndSeekToPrefix(prefixRow)
+
+      override def hasNext: Boolean = self.hasNext
+
+      override def next(): B = f(self.next())
+
+      override def close(): Unit = self.close()
+    }
+  }
+}
+
+/** State stores that can return an iterator whose native resources are reused across scans. */
+private[sql] trait SupportsReusableIterator {
+  def reusableIterator(
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): ReusableIterator[UnsafeRowPair]
+}
+
 sealed trait StateStoreEncoding {
   override def toString: String = this match {
     case StateStoreEncoding.UnsafeRow => "unsaferow"

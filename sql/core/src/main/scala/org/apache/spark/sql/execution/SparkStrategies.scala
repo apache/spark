@@ -87,6 +87,19 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Whether this plan reads a streaming source in Real-Time Mode, which is the case when the
+   * relation carries a real-time mode duration -- the same signal that decides whether to plan
+   * a [[org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec]] for it.
+   */
+  private def isRealTimeMode(plan: LogicalPlan): Boolean = {
+    plan.collectLeaves().exists {
+      case s: StreamingDataSourceV2ScanRelation =>
+        s.relation.realTimeModeDuration.isDefined
+      case _ => false
+    }
+  }
+
+  /**
    * Plans special cases of limit operators.
    */
   object SpecialLimits extends Strategy {
@@ -560,20 +573,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
-
-    /**
-     * Whether this plan reads a streaming source in Real-Time Mode, which is the case when the
-     * relation carries a real-time mode duration -- the same signal that decides whether to plan
-     * a [[org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec]] for it.
-     */
-    private def isRealTimeMode(plan: LogicalPlan): Boolean = {
-      plan.collectLeaves().exists {
-        case s: StreamingDataSourceV2ScanRelation =>
-          s.relation.realTimeModeDuration.isDefined
-        case _ => false
-      }
-    }
-
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
@@ -928,6 +927,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           eventTimeWatermarkForEviction = None,
           planLater(child),
           isStreaming = true,
+          isRealTimeMode = isRealTimeMode(plan),
           hasInitialState,
           initialStateGroupingAttrs,
           initialStateDataAttrs,
