@@ -900,34 +900,35 @@ class DFGoldenTestMixin:
         # list, so that its setUpClass body runs once that class has created the
         # session.  Checking here rather than when the class is declared keeps
         # legitimate chains -- a subclass with a setUpClass of its own -- working.
-        assert "spark" in vars(cls), (
+        assert hasattr(cls, "spark"), (
             "{}: no session was created; list DFGoldenTestMixin before the "
             "session-providing test class".format(cls.__name__)
         )
-        try:
-            cls._golden_session = cls.spark.newSession()
-            # Golden files are generated with ANSI mode on, matching the SQL
-            # golden tests.  The session is discarded with the class, so there
-            # is nothing to restore.
-            cls._golden_session.conf.set("spark.sql.ansi.enabled", "true")
-            cls.setup_session(cls._golden_session)
-        except BaseException:
-            # tearDownClass does not run when setUpClass raises, and leaving the
-            # session behind would hang the test process at exit.
-            cls._close_golden_session()
-            super().tearDownClass()
-            raise
+        # Registered before the session exists, so the session below is released
+        # even when preparing it fails: unittest skips tearDownClass when
+        # setUpClass raises, but class cleanups run either way, and an open
+        # Connect client would hang the test process at exit.
+        cls.addClassCleanup(cls._close_golden_session)
+        cls._golden_session = cls.spark.newSession()
+        # Golden files are generated with ANSI mode on, matching the SQL golden
+        # tests.  The session is discarded with the class, so there is nothing
+        # to restore.
+        cls._golden_session.conf.set("spark.sql.ansi.enabled", "true")
+        cls.setup_session(cls._golden_session)
 
     @classmethod
     def tearDownClass(cls):
+        # Release before the session-providing class stops its own session:
+        # under SPARK_LOCAL_REMOTE that takes the local Connect server down with
+        # it, and the class cleanup registered in setUpClass runs only after
+        # tearDownClass, so releasing from there would retry against a dead
+        # server.  It stays the path for a failed setUpClass, and no-ops here.
+        cls._close_golden_session()
         try:
             if cls._golden_regenerating and cls.case_names():
                 cls._write_golden_file()
         finally:
-            try:
-                cls._close_golden_session()
-            finally:
-                super().tearDownClass()
+            super().tearDownClass()
 
     @classmethod
     def _close_golden_session(cls):

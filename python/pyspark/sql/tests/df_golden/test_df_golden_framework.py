@@ -535,6 +535,84 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
         self.assertEqual(Derived.case_names(), ["case"])
 
+    # -- session lifecycle -------------------------------------------------
+
+    def _fake_golden_class(self, fail_setup=False):
+        """
+        Return a golden test class over a fake session, and the list its client
+        records ``release``/``close`` calls in.
+
+        The caller drives the class the way a test runner does: ``setUpClass``,
+        then ``tearDownClass`` (which a runner skips when ``setUpClass`` raises),
+        then ``doClassCleanups``.
+        """
+        calls = []
+
+        class FakeClient:
+            def release_session(self):
+                calls.append("release")
+
+            def close(self):
+                calls.append("close")
+
+        class FakeConf:
+            def set(self, key, value):
+                pass
+
+        class FakeSession:
+            client = FakeClient()
+            conf = FakeConf()
+
+        class FakeProviderSession:
+            def newSession(self):
+                return FakeSession()
+
+        golden = self._write("--! name\nc\n--! expected_output_schema\nx\n!-- end\n")
+
+        class Cases(DFGoldenTestMixin, unittest.TestCase):
+            spark = FakeProviderSession()
+
+            @classmethod
+            def golden_file_path(cls):
+                return golden
+
+            @classmethod
+            def setup_session(cls, spark):
+                if fail_setup:
+                    raise RuntimeError("setup_session failed")
+
+            def _test_c(self, spark):
+                pass
+
+        # A runner resets the class cleanups before calling setUpClass.
+        Cases._class_cleanups = []
+        # The class runs its checking path; an ambient SPARK_GENERATE_GOLDEN_FILES
+        # would send teardown down the regeneration path, writing the file instead.
+        generating = os.environ.pop("SPARK_GENERATE_GOLDEN_FILES", None)
+        if generating is not None:
+            self.addCleanup(os.environ.update, {"SPARK_GENERATE_GOLDEN_FILES": generating})
+        return Cases, calls
+
+    def test_session_is_released_when_set_up_class_fails(self):
+        # A runner skips tearDownClass when setUpClass raises, so the session is
+        # released from a class cleanup, which runs in both paths.
+        cases, calls = self._fake_golden_class(fail_setup=True)
+        with self.assertRaisesRegex(RuntimeError, "setup_session failed"):
+            cases.setUpClass()
+        cases.doClassCleanups()
+        self.assertEqual(calls, ["release", "close"])
+
+    def test_session_is_released_in_tear_down_class(self):
+        # Released there rather than by the class cleanup, which runs only once
+        # the session-providing class has stopped the session it was made from.
+        cases, calls = self._fake_golden_class()
+        cases.setUpClass()
+        cases.tearDownClass()
+        self.assertEqual(calls, ["release", "close"])
+        # The cleanup still runs afterwards and finds nothing left to release.
+        cases.doClassCleanups()
+        self.assertEqual(calls, ["release", "close"])
+
     # -- golden file location ---------------------------------------------
 
     def test_golden_file_mirrors_the_input_module_under_results(self):
