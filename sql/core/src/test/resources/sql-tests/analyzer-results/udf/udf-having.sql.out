@@ -22,10 +22,10 @@ CreateViewCommand `hav`, select * from values
 SELECT udf(k) AS k, udf(sum(v)) FROM hav GROUP BY k HAVING udf(sum(v)) > 2
 -- !query analysis
 Filter (udf(sum(v))#xL > cast(2 as bigint))
-+- Aggregate [k#x], [cast(udf(cast(k#x as string)) as string) AS k#x, cast(udf(cast(sum(v#x) as string)) as bigint) AS udf(sum(v))#xL]
++- Aggregate [k#x], [cast(udf(cast(k#x as string)) as string collate UTF8_BINARY) AS k#x, cast(udf(cast(sum(v#x) as string)) as bigint) AS udf(sum(v))#xL]
    +- SubqueryAlias hav
       +- View (`hav`, [k#x, v#x])
-         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias hav
                   +- LocalRelation [k#x, v#x]
@@ -36,10 +36,10 @@ SELECT udf(count(udf(k))) FROM hav GROUP BY v + 1 HAVING v + 1 = udf(2)
 -- !query analysis
 Project [udf(count(udf(k)))#xL]
 +- Filter ((v + 1)#x = cast(udf(cast(2 as string)) as int))
-   +- Aggregate [(v#x + 1)], [cast(udf(cast(count(cast(udf(cast(k#x as string)) as string)) as string)) as bigint) AS udf(count(udf(k)))#xL, (v#x + 1) AS (v + 1)#x]
+   +- Aggregate [(v#x + 1)], [cast(udf(cast(count(cast(udf(cast(k#x as string)) as string collate UTF8_BINARY)) as string)) as bigint) AS udf(count(udf(k)))#xL, (v#x + 1) AS (v + 1)#x]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -56,7 +56,7 @@ Project [udf(min(v))#x]
             +- Filter (v#x > 0)
                +- SubqueryAlias hav
                   +- View (`hav`, [k#x, v#x])
-                     +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+                     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
                         +- Project [k#x, v#x]
                            +- SubqueryAlias hav
                               +- LocalRelation [k#x, v#x]

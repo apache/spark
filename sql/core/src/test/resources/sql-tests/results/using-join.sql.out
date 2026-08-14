@@ -27,7 +27,7 @@ struct<>
 -- !query
 SELECT * FROM nt1 left outer join nt2 using (k)
 -- !query schema
-struct<k:string,v1:int,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,v2:int>
 -- !query output
 one	1	1
 one	1	5
@@ -38,7 +38,7 @@ two	2	22
 -- !query
 SELECT k FROM nt1 left outer join nt2 using (k)
 -- !query schema
-struct<k:string>
+struct<k:string collate UTF8_BINARY>
 -- !query output
 one
 one
@@ -49,7 +49,7 @@ two
 -- !query
 SELECT nt1.*, nt2.* FROM nt1 left outer join nt2 using (k)
 -- !query schema
-struct<k:string,v1:int,k:string,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,k:string collate UTF8_BINARY,v2:int>
 -- !query output
 one	1	one	1
 one	1	one	5
@@ -60,7 +60,7 @@ two	2	two	22
 -- !query
 SELECT nt1.k, nt2.k FROM nt1 left outer join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 one	one
 one	one
@@ -71,7 +71,7 @@ two	two
 -- !query
 SELECT k FROM (SELECT nt2.k FROM nt1 left outer join nt2 using (k))
 -- !query schema
-struct<k:string>
+struct<k:string collate UTF8_BINARY>
 -- !query output
 NULL
 one
@@ -82,7 +82,7 @@ two
 -- !query
 SELECT nt2.k AS key FROM nt1 left outer join nt2 using (k) ORDER BY key
 -- !query schema
-struct<key:string>
+struct<key:string collate UTF8_BINARY>
 -- !query output
 NULL
 one
@@ -93,7 +93,7 @@ two
 -- !query
 SELECT nt1.k, nt2.k FROM nt1 left outer join nt2 using (k) ORDER BY nt2.k
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 three	NULL
 one	one
@@ -104,7 +104,7 @@ two	two
 -- !query
 SELECT k, nt1.k FROM nt1 left outer join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 one	one
 one	one
@@ -115,7 +115,7 @@ two	two
 -- !query
 SELECT k, nt2.k FROM nt1 left outer join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 one	one
 one	one
@@ -126,7 +126,7 @@ two	two
 -- !query
 SELECT * FROM nt1 left semi join nt2 using (k)
 -- !query schema
-struct<k:string,v1:int>
+struct<k:string collate UTF8_BINARY,v1:int>
 -- !query output
 one	1
 two	2
@@ -135,7 +135,7 @@ two	2
 -- !query
 SELECT k FROM nt1 left semi join nt2 using (k)
 -- !query schema
-struct<k:string>
+struct<k:string collate UTF8_BINARY>
 -- !query output
 one
 two
@@ -144,7 +144,7 @@ two
 -- !query
 SELECT nt1.* FROM nt1 left semi join nt2 using (k)
 -- !query schema
-struct<k:string,v1:int>
+struct<k:string collate UTF8_BINARY,v1:int>
 -- !query output
 one	1
 two	2
@@ -153,7 +153,7 @@ two	2
 -- !query
 SELECT nt1.k FROM nt1 left semi join nt2 using (k)
 -- !query schema
-struct<k:string>
+struct<k:string collate UTF8_BINARY>
 -- !query output
 one
 two
@@ -162,7 +162,7 @@ two
 -- !query
 SELECT k, nt1.k FROM nt1 left semi join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 one	one
 two	two
@@ -171,7 +171,7 @@ two	two
 -- !query
 SELECT * FROM nt1 right outer join nt2 using (k)
 -- !query schema
-struct<k:string,v1:int,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,v2:int>
 -- !query output
 four	NULL	4
 one	1	1
@@ -182,7 +182,7 @@ two	2	22
 -- !query
 SELECT k FROM nt1 right outer join nt2 using (k)
 -- !query schema
-struct<k:string>
+struct<k:string collate UTF8_BINARY>
 -- !query output
 four
 one
@@ -193,7 +193,7 @@ two
 -- !query
 SELECT nt1.*, nt2.* FROM nt1 right outer join nt2 using (k)
 -- !query schema
-struct<k:string,v1:int,k:string,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,k:string collate UTF8_BINARY,v2:int>
 -- !query output
 NULL	NULL	four	4
 one	1	one	1
@@ -204,7 +204,7 @@ two	2	two	22
 -- !query
 SELECT nt1.k, nt2.k FROM nt1 right outer join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 NULL	four
 one	one
@@ -215,7 +215,7 @@ two	two
 -- !query
 SELECT k FROM (SELECT nt1.k FROM nt1 right outer join nt2 using (k))
 -- !query schema
-struct<k:string>
+struct<k:string collate UTF8_BINARY>
 -- !query output
 NULL
 one
@@ -226,7 +226,7 @@ two
 -- !query
 SELECT nt1.k AS key FROM nt1 right outer join nt2 using (k) ORDER BY key
 -- !query schema
-struct<key:string>
+struct<key:string collate UTF8_BINARY>
 -- !query output
 NULL
 one
@@ -237,7 +237,7 @@ two
 -- !query
 SELECT k, nt1.k FROM nt1 right outer join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 four	NULL
 one	one
@@ -248,7 +248,7 @@ two	two
 -- !query
 SELECT k, nt2.k FROM nt1 right outer join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 four	four
 one	one
@@ -259,7 +259,7 @@ two	two
 -- !query
 SELECT * FROM nt1 full outer join nt2 using (k)
 -- !query schema
-struct<k:string,v1:int,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,v2:int>
 -- !query output
 four	NULL	4
 one	1	1
@@ -271,7 +271,7 @@ two	2	22
 -- !query
 SELECT k FROM nt1 full outer join nt2 using (k)
 -- !query schema
-struct<k:string>
+struct<k:string collate UTF8_BINARY>
 -- !query output
 four
 one
@@ -283,7 +283,7 @@ two
 -- !query
 SELECT nt1.*, nt2.* FROM nt1 full outer join nt2 using (k)
 -- !query schema
-struct<k:string,v1:int,k:string,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,k:string collate UTF8_BINARY,v2:int>
 -- !query output
 NULL	NULL	four	4
 one	1	one	1
@@ -295,7 +295,7 @@ two	2	two	22
 -- !query
 SELECT nt1.k, nt2.k FROM nt1 full outer join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 NULL	four
 one	one
@@ -307,7 +307,7 @@ two	two
 -- !query
 SELECT k FROM (SELECT nt2.k FROM nt1 full outer join nt2 using (k))
 -- !query schema
-struct<k:string>
+struct<k:string collate UTF8_BINARY>
 -- !query output
 NULL
 four
@@ -319,7 +319,7 @@ two
 -- !query
 SELECT nt2.k AS key FROM nt1 full outer join nt2 using (k) ORDER BY key
 -- !query schema
-struct<key:string>
+struct<key:string collate UTF8_BINARY>
 -- !query output
 NULL
 four
@@ -331,7 +331,7 @@ two
 -- !query
 SELECT k, nt1.k FROM nt1 full outer join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 four	NULL
 one	one
@@ -343,7 +343,7 @@ two	two
 -- !query
 SELECT k, nt2.k FROM nt1 full outer join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 four	four
 one	one
@@ -355,7 +355,7 @@ two	two
 -- !query
 SELECT * FROM nt1 full outer join nt2 using (k)
 -- !query schema
-struct<k:string,v1:int,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,v2:int>
 -- !query output
 four	NULL	4
 one	1	1
@@ -367,7 +367,7 @@ two	2	22
 -- !query
 SELECT k FROM nt1 inner join nt2 using (k)
 -- !query schema
-struct<k:string>
+struct<k:string collate UTF8_BINARY>
 -- !query output
 one
 one
@@ -377,7 +377,7 @@ two
 -- !query
 SELECT nt1.*, nt2.* FROM nt1 inner join nt2 using (k)
 -- !query schema
-struct<k:string,v1:int,k:string,v2:int>
+struct<k:string collate UTF8_BINARY,v1:int,k:string collate UTF8_BINARY,v2:int>
 -- !query output
 one	1	one	1
 one	1	one	5
@@ -387,7 +387,7 @@ two	2	two	22
 -- !query
 SELECT nt1.k, nt2.k FROM nt1 inner join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 one	one
 one	one
@@ -397,7 +397,7 @@ two	two
 -- !query
 SELECT k FROM (SELECT nt2.k FROM nt1 inner join nt2 using (k))
 -- !query schema
-struct<k:string>
+struct<k:string collate UTF8_BINARY>
 -- !query output
 one
 one
@@ -407,7 +407,7 @@ two
 -- !query
 SELECT nt2.k AS key FROM nt1 inner join nt2 using (k) ORDER BY key
 -- !query schema
-struct<key:string>
+struct<key:string collate UTF8_BINARY>
 -- !query output
 one
 one
@@ -417,7 +417,7 @@ two
 -- !query
 SELECT k, nt1.k FROM nt1 inner join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 one	one
 one	one
@@ -427,7 +427,7 @@ two	two
 -- !query
 SELECT k, nt2.k FROM nt1 inner join nt2 using (k)
 -- !query schema
-struct<k:string,k:string>
+struct<k:string collate UTF8_BINARY,k:string collate UTF8_BINARY>
 -- !query output
 one	one
 one	one

@@ -196,12 +196,12 @@ Sort [req_ts#x ASC NULLS FIRST, seq#x ASC NULLS FIRST], true
       :- SubqueryAlias r
       :  +- SubqueryAlias requests
       :     +- View (`requests`, [req_ts#x, seq#x, service#x])
-      :        +- Project [cast(col1#x as timestamp) AS req_ts#x, cast(col2#x as int) AS seq#x, cast(col3#x as string) AS service#x]
+      :        +- Project [cast(col1#x as timestamp) AS req_ts#x, cast(col2#x as int) AS seq#x, cast(col3#x as string collate UTF8_BINARY) AS service#x]
       :           +- LocalRelation [col1#x, col2#x, col3#x]
       +- SubqueryAlias d
          +- SubqueryAlias deploys
             +- View (`deploys`, [deploy_ts#x, seq#x, service#x, version#x])
-               +- Project [cast(col1#x as timestamp) AS deploy_ts#x, cast(col2#x as int) AS seq#x, cast(col3#x as string) AS service#x, cast(col4#x as string) AS version#x]
+               +- Project [cast(col1#x as timestamp) AS deploy_ts#x, cast(col2#x as int) AS seq#x, cast(col3#x as string collate UTF8_BINARY) AS service#x, cast(col4#x as string collate UTF8_BINARY) AS version#x]
                   +- LocalRelation [col1#x, col2#x, col3#x, col4#x]
 
 

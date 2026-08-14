@@ -15,7 +15,7 @@ struct<>
 -- !query
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2
 -- !query schema
-struct<k:string,sum(v):bigint>
+struct<k:string collate UTF8_BINARY,sum(v):bigint>
 -- !query output
 one	6
 three	3
@@ -139,7 +139,7 @@ struct<c1:int>
 -- !query
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v)
 -- !query schema
-struct<k:string,sum(v):bigint>
+struct<k:string collate UTF8_BINARY,sum(v):bigint>
 -- !query output
 three	3
 one	6
@@ -148,7 +148,7 @@ one	6
 -- !query
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY avg(v)
 -- !query schema
-struct<k:string,sum(v):bigint>
+struct<k:string collate UTF8_BINARY,sum(v):bigint>
 -- !query output
 one	6
 three	3

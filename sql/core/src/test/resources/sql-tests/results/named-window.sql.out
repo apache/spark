@@ -53,7 +53,7 @@ FROM nation
 WINDOW w AS (ORDER BY n_nationkey)
 ORDER BY n_nationkey
 -- !query schema
-struct<n_nationkey:int,n_name:string,ws:bigint>
+struct<n_nationkey:int,n_name:string collate UTF8_BINARY,ws:bigint>
 -- !query output
 0	ALGERIA	0
 1	ARGENTINA	1
@@ -125,7 +125,7 @@ FROM nation
 WINDOW w AS (PARTITION BY n_regionkey ORDER BY n_nationkey)
 ORDER BY n_regionkey, n_nationkey
 -- !query schema
-struct<n_nationkey:int,n_name:string,total:bigint,rnk:int>
+struct<n_nationkey:int,n_name:string collate UTF8_BINARY,total:bigint,rnk:int>
 -- !query output
 0	ALGERIA	0	1
 5	ETHIOPIA	5	2
@@ -368,7 +368,7 @@ WINDOW
   w2 AS (ORDER BY n_name)
 ORDER BY n_regionkey, n_nationkey
 -- !query schema
-struct<n_nationkey:int,n_name:string,rnk:int>
+struct<n_nationkey:int,n_name:string collate UTF8_BINARY,rnk:int>
 -- !query output
 0	ALGERIA	1
 5	ETHIOPIA	2
@@ -647,7 +647,7 @@ FROM nation n JOIN region r ON n.n_regionkey = r.r_regionkey
 WINDOW w AS (PARTITION BY n.n_regionkey ORDER BY n.n_nationkey)
 ORDER BY n.n_regionkey, n.n_nationkey
 -- !query schema
-struct<n_regionkey:int,n_nationkey:int,n_name:string,regional_sum:bigint>
+struct<n_regionkey:int,n_nationkey:int,n_name:string collate UTF8_BINARY,regional_sum:bigint>
 -- !query output
 0	0	ALGERIA	0
 0	5	ETHIOPIA	5
@@ -684,7 +684,7 @@ FROM nation JOIN region ON n_regionkey = r_regionkey
 WINDOW w AS (PARTITION BY r_name ORDER BY n_nationkey)
 ORDER BY n_nationkey
 -- !query schema
-struct<n_nationkey:int,n_name:string,r_name:string,cnt:bigint,rnk:int>
+struct<n_nationkey:int,n_name:string collate UTF8_BINARY,r_name:string collate UTF8_BINARY,cnt:bigint,rnk:int>
 -- !query output
 0	ALGERIA	AFRICA	1	1
 1	ARGENTINA	AMERICA	1	1

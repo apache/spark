@@ -214,7 +214,7 @@ struct<unique1:int,string4:string>
 -- !query
 SELECT onek2.* FROM onek2 WHERE onek2.unique1 < 10
 -- !query schema
-struct<unique1:int,unique2:int,two:int,four:int,ten:int,twenty:int,hundred:int,thousand:int,twothousand:int,fivethous:int,tenthous:int,odd:int,even:int,stringu1:string,stringu2:string,string4:string>
+struct<unique1:int,unique2:int,two:int,four:int,ten:int,twenty:int,hundred:int,thousand:int,twothousand:int,fivethous:int,tenthous:int,odd:int,even:int,stringu1:string collate UTF8_BINARY,stringu2:string collate UTF8_BINARY,string4:string collate UTF8_BINARY>
 -- !query output
 0	998	0	0	0	0	0	0	0	0	0	0	1	AAAAAA	KMBAAA	OOOOxx
 1	214	1	1	1	1	1	1	1	1	1	2	3	BAAAAA	GIAAAA	OOOOxx
@@ -233,7 +233,7 @@ SELECT onek2.unique1, onek2.stringu1 FROM onek2
     WHERE onek2.unique1 < 20
     ORDER BY unique1 DESC
 -- !query schema
-struct<unique1:int,stringu1:string>
+struct<unique1:int,stringu1:string collate UTF8_BINARY>
 -- !query output
 19	TAAAAA
 18	SAAAAA
@@ -261,7 +261,7 @@ struct<unique1:int,stringu1:string>
 SELECT onek2.unique1, onek2.stringu1 FROM onek2
    WHERE onek2.unique1 > 980
 -- !query schema
-struct<unique1:int,stringu1:string>
+struct<unique1:int,stringu1:string collate UTF8_BINARY>
 -- !query output
 981	TLAAAA
 982	ULAAAA
@@ -440,7 +440,7 @@ NULL
 -- !query
 select * from onek2 where unique2 = 11 and stringu1 = 'ATAAAA'
 -- !query schema
-struct<unique1:int,unique2:int,two:int,four:int,ten:int,twenty:int,hundred:int,thousand:int,twothousand:int,fivethous:int,tenthous:int,odd:int,even:int,stringu1:string,stringu2:string,string4:string>
+struct<unique1:int,unique2:int,two:int,four:int,ten:int,twenty:int,hundred:int,thousand:int,twothousand:int,fivethous:int,tenthous:int,odd:int,even:int,stringu1:string collate UTF8_BINARY,stringu2:string collate UTF8_BINARY,string4:string collate UTF8_BINARY>
 -- !query output
 494	11	0	2	4	14	4	94	94	494	494	8	9	ATAAAA	LAAAAA	VVVVxx
 
@@ -456,7 +456,7 @@ struct<unique2:int>
 -- !query
 select * from onek2 where unique2 = 11 and stringu1 < 'B'
 -- !query schema
-struct<unique1:int,unique2:int,two:int,four:int,ten:int,twenty:int,hundred:int,thousand:int,twothousand:int,fivethous:int,tenthous:int,odd:int,even:int,stringu1:string,stringu2:string,string4:string>
+struct<unique1:int,unique2:int,two:int,four:int,ten:int,twenty:int,hundred:int,thousand:int,twothousand:int,fivethous:int,tenthous:int,odd:int,even:int,stringu1:string collate UTF8_BINARY,stringu2:string collate UTF8_BINARY,string4:string collate UTF8_BINARY>
 -- !query output
 494	11	0	2	4	14	4	94	94	494	494	8	9	ATAAAA	LAAAAA	VVVVxx
 

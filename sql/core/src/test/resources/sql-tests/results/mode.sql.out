@@ -28,7 +28,7 @@ struct<>
 -- !query
 SELECT mode(department), mode(salary) FROM basic_pays
 -- !query schema
-struct<mode(department):string,mode(salary):int>
+struct<mode(department):string collate UTF8_BINARY,mode(salary):int>
 -- !query output
 Accounting	10563
 
@@ -36,7 +36,7 @@ Accounting	10563
 -- !query
 SELECT department, mode(salary) FROM basic_pays GROUP BY department ORDER BY department
 -- !query schema
-struct<department:string,mode(salary):int>
+struct<department:string collate UTF8_BINARY,mode(salary):int>
 -- !query output
 Accounting	6627
 IT	5186
@@ -241,7 +241,7 @@ FROM basic_pays
 GROUP BY department
 ORDER BY department
 -- !query schema
-struct<department:string,mode() WITHIN GROUP (ORDER BY salary DESC):int,mode() WITHIN GROUP (ORDER BY salary DESC) FILTER (WHERE (salary > 10000)):int>
+struct<department:string collate UTF8_BINARY,mode() WITHIN GROUP (ORDER BY salary DESC):int,mode() WITHIN GROUP (ORDER BY salary DESC) FILTER (WHERE (salary > 10000)):int>
 -- !query output
 Accounting	6627	11472
 IT	5186	NULL
@@ -258,7 +258,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
+struct<employee_name:string collate UTF8_BINARY,department:string collate UTF8_BINARY,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
 -- !query output
 Leslie Thompson	IT	5186	5186
 Anthony Bow	Accounting	6627	6627
@@ -288,7 +288,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<employee_name:string collate UTF8_BINARY,department:string collate UTF8_BINARY,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
 -- !query output
 Leslie Thompson	IT	5186	5186
 Anthony Bow	Accounting	6627	6627
@@ -318,7 +318,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):int>
+struct<employee_name:string collate UTF8_BINARY,department:string collate UTF8_BINARY,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):int>
 -- !query output
 Leslie Thompson	IT	5186	5186
 Anthony Bow	Accounting	6627	6627
@@ -350,7 +350,7 @@ WHERE salary > 8900
 WINDOW w AS (PARTITION BY department)
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
+struct<employee_name:string collate UTF8_BINARY,department:string collate UTF8_BINARY,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
 -- !query output
 Jeff Firrelli	Accounting	8992	8992
 Julie Firrelli	Sales	9181	9181

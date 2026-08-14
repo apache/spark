@@ -22,7 +22,7 @@ FROM dealer
 QUALIFY rank = 1
 ORDER BY car_model, city
 -- !query schema
-struct<city:string,car_model:string,rank:int>
+struct<city:string collate UTF8_BINARY,car_model:string collate UTF8_BINARY,rank:int>
 -- !query output
 San Jose	Honda Accord	1
 Dublin	Honda CRV	1
@@ -35,7 +35,7 @@ FROM dealer
 QUALIFY RANK() OVER (PARTITION BY car_model ORDER BY quantity) = 1
 ORDER BY car_model, city
 -- !query schema
-struct<city:string,car_model:string>
+struct<city:string collate UTF8_BINARY,car_model:string collate UTF8_BINARY>
 -- !query output
 San Jose	Honda Accord
 Dublin	Honda CRV

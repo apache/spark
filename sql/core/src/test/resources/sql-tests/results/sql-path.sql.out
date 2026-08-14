@@ -790,7 +790,7 @@ struct<>
 -- !query
 SELECT cs, cp FROM sql_path_views_a.v_ctx
 -- !query schema
-struct<cs:string,cp:string>
+struct<cs:string collate UTF8_BINARY,cp:string collate UTF8_BINARY>
 -- !query output
 sql_path_views_b	system.builtin,system.session,spark_catalog.sql_path_views_b
 

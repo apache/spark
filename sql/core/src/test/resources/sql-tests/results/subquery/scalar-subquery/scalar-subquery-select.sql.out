@@ -83,7 +83,7 @@ WHERE    t1c IN (SELECT   (SELECT min(t3c) FROM t3)
                  HAVING   count(*) > 1)
 GROUP BY t1a
 -- !query schema
-struct<t1a:string,count(1):bigint>
+struct<t1a:string collate UTF8_BINARY,count(1):bigint>
 -- !query output
 val1a	2
 
@@ -131,7 +131,7 @@ FROM   (SELECT t1a, (SELECT min(t3d) FROM t3) min_t3d
 ON     q1.t1a = q2.t2a
 AND    q1.min_t3d < q2.avg_t3d
 -- !query schema
-struct<t1a:string,t2a:string,min_t3d:bigint,avg_t3d:double>
+struct<t1a:string collate UTF8_BINARY,t2a:string collate UTF8_BINARY,min_t3d:bigint,avg_t3d:double>
 -- !query output
 NULL	val2a	NULL	200.83333333333334
 val1c	val1c	10	200.83333333333334
@@ -180,7 +180,7 @@ WHERE  NOT EXISTS (SELECT (SELECT max(t2b)
                                  WHERE  t2c = t3c)
                    AND    t3a = t1a)
 -- !query schema
-struct<t1a:string,t1b:smallint>
+struct<t1a:string collate UTF8_BINARY,t1b:smallint>
 -- !query output
 val1a	16
 val1a	16
@@ -205,7 +205,7 @@ SELECT t1a,
     (SELECT hex(count_min_sketch(t2d, 0.5d, 0.5d, 1)) FROM t2 WHERE t2a = t1a) collect_set_t2
 FROM t1
 -- !query schema
-struct<t1a:string,count_t2:bigint,count_if_t2:bigint,approx_count_distinct_t2:bigint,collect_list_t2:array<bigint>,collect_set_t2:array<bigint>,collect_set_t2:string>
+struct<t1a:string collate UTF8_BINARY,count_t2:bigint,count_if_t2:bigint,approx_count_distinct_t2:bigint,collect_list_t2:array<bigint>,collect_set_t2:array<bigint>,collect_set_t2:string>
 -- !query output
 val1a	0	0	0	[]	[]	0000000100000000000000000000000100000004000000005D8D6AB90000000000000000000000000000000000000000000000000000000000000000
 val1a	0	0	0	[]	[]	0000000100000000000000000000000100000004000000005D8D6AB90000000000000000000000000000000000000000000000000000000000000000
@@ -300,7 +300,7 @@ NULL	NULL
 -- !query
 SELECT t1a, (SELECT SUM(t2b) FROM t2 JOIN (SELECT t1a AS a) ON t2a = a) FROM t1
 -- !query schema
-struct<t1a:string,scalarsubquery(t1a):bigint>
+struct<t1a:string collate UTF8_BINARY,scalarsubquery(t1a):bigint>
 -- !query output
 val1a	NULL
 val1a	NULL
@@ -486,7 +486,7 @@ WHERE students.id = exams.sid
         WHERE students.id = exams.sid
            OR (exams.curriculum = students.major AND students.year > exams.date))
 -- !query schema
-struct<name:string,course:string>
+struct<name:string collate UTF8_BINARY,course:string collate UTF8_BINARY>
 -- !query output
 A	C1
 

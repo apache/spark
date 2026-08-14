@@ -21,7 +21,7 @@ FROM   (SELECT udf(c1) as c1, udf(c2) as c2 FROM t1
         UNION ALL
         SELECT udf(c1) as c1, udf(c2) as c2 FROM t1)
 -- !query schema
-struct<c1:int,c2:string>
+struct<c1:int,c2:string collate UTF8_BINARY>
 -- !query output
 1	a
 1	a

@@ -35,7 +35,7 @@ SELECT ID, STRUCT(ST.*) NST FROM tbl_x
 Project [ID#x, struct(C, ST#x.C, D, ST#x.D) AS NST#x]
 +- SubqueryAlias tbl_x
    +- View (`tbl_x`, [ID#x, ST#x])
-      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string,D:string>) AS ST#x]
+      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string collate UTF8_BINARY,D:string collate UTF8_BINARY>) AS ST#x]
          +- SubqueryAlias T
             +- LocalRelation [ID#x, ST#x]
 
@@ -46,7 +46,7 @@ SELECT ID, STRUCT(ST.*,CAST(ID AS STRING) AS E) NST FROM tbl_x
 Project [ID#x, struct(C, ST#x.C, D, ST#x.D, E, cast(ID#x as string)) AS NST#x]
 +- SubqueryAlias tbl_x
    +- View (`tbl_x`, [ID#x, ST#x])
-      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string,D:string>) AS ST#x]
+      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string collate UTF8_BINARY,D:string collate UTF8_BINARY>) AS ST#x]
          +- SubqueryAlias T
             +- LocalRelation [ID#x, ST#x]
 
@@ -57,7 +57,7 @@ SELECT ID, STRUCT(CAST(ID AS STRING) AS AA, ST.*) NST FROM tbl_x
 Project [ID#x, struct(AA, cast(ID#x as string), C, ST#x.C, D, ST#x.D) AS NST#x]
 +- SubqueryAlias tbl_x
    +- View (`tbl_x`, [ID#x, ST#x])
-      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string,D:string>) AS ST#x]
+      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string collate UTF8_BINARY,D:string collate UTF8_BINARY>) AS ST#x]
          +- SubqueryAlias T
             +- LocalRelation [ID#x, ST#x]
 
@@ -68,7 +68,7 @@ SELECT ID, STRUCT(ST.*).C NST FROM tbl_x
 Project [ID#x, struct(C, ST#x.C, D, ST#x.D).C AS NST#x]
 +- SubqueryAlias tbl_x
    +- View (`tbl_x`, [ID#x, ST#x])
-      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string,D:string>) AS ST#x]
+      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string collate UTF8_BINARY,D:string collate UTF8_BINARY>) AS ST#x]
          +- SubqueryAlias T
             +- LocalRelation [ID#x, ST#x]
 
@@ -79,7 +79,7 @@ SELECT ID, STRUCT(ST.C, ST.D).D NST FROM tbl_x
 Project [ID#x, struct(C, ST#x.C, D, ST#x.D).D AS NST#x]
 +- SubqueryAlias tbl_x
    +- View (`tbl_x`, [ID#x, ST#x])
-      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string,D:string>) AS ST#x]
+      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string collate UTF8_BINARY,D:string collate UTF8_BINARY>) AS ST#x]
          +- SubqueryAlias T
             +- LocalRelation [ID#x, ST#x]
 
@@ -90,7 +90,7 @@ SELECT ID, STRUCT(ST.C as STC, ST.D as STD).STD FROM tbl_x
 Project [ID#x, struct(STC, ST#x.C, STD, ST#x.D).STD AS struct(ST.C AS STC, ST.D AS STD).STD#x]
 +- SubqueryAlias tbl_x
    +- View (`tbl_x`, [ID#x, ST#x])
-      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string,D:string>) AS ST#x]
+      +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string collate UTF8_BINARY,D:string collate UTF8_BINARY>) AS ST#x]
          +- SubqueryAlias T
             +- LocalRelation [ID#x, ST#x]
 

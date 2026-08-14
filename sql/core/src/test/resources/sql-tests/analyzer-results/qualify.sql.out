@@ -40,7 +40,7 @@ Sort [car_model#x ASC NULLS FIRST, city#x ASC NULLS FIRST], true
             +- Project [city#x, car_model#x, quantity#x]
                +- SubqueryAlias dealer
                   +- View (`dealer`, [id#x, city#x, car_model#x, quantity#x])
-                     +- Project [cast(id#x as int) AS id#x, cast(city#x as string) AS city#x, cast(car_model#x as string) AS car_model#x, cast(quantity#x as int) AS quantity#x]
+                     +- Project [cast(id#x as int) AS id#x, cast(city#x as string collate UTF8_BINARY) AS city#x, cast(car_model#x as string collate UTF8_BINARY) AS car_model#x, cast(quantity#x as int) AS quantity#x]
                         +- Project [id#x, city#x, car_model#x, quantity#x]
                            +- SubqueryAlias dealer
                               +- LocalRelation [id#x, city#x, car_model#x, quantity#x]
@@ -62,7 +62,7 @@ Sort [car_model#x ASC NULLS FIRST, city#x ASC NULLS FIRST], true
                   +- Project [city#x, car_model#x, quantity#x]
                      +- SubqueryAlias dealer
                         +- View (`dealer`, [id#x, city#x, car_model#x, quantity#x])
-                           +- Project [cast(id#x as int) AS id#x, cast(city#x as string) AS city#x, cast(car_model#x as string) AS car_model#x, cast(quantity#x as int) AS quantity#x]
+                           +- Project [cast(id#x as int) AS id#x, cast(city#x as string collate UTF8_BINARY) AS city#x, cast(car_model#x as string collate UTF8_BINARY) AS car_model#x, cast(quantity#x as int) AS quantity#x]
                               +- Project [id#x, city#x, car_model#x, quantity#x]
                                  +- SubqueryAlias dealer
                                     +- LocalRelation [id#x, city#x, car_model#x, quantity#x]

@@ -1554,7 +1554,7 @@ struct<c1:int,x:int,y:string>
 -- !query
 SELECT * FROM array_struct JOIN LATERAL INLINE(arr)
 -- !query schema
-struct<id:int,arr:array<struct<col1:int,col2:string>>,col1:int,col2:string>
+struct<id:int,arr:array<struct<col1:int,col2:string collate UTF8_BINARY>>,col1:int,col2:string collate UTF8_BINARY>
 -- !query output
 1	[{"col1":1,"col2":"a"},{"col1":2,"col2":"b"}]	1	a
 1	[{"col1":1,"col2":"a"},{"col1":2,"col2":"b"}]	2	b
@@ -1564,7 +1564,7 @@ struct<id:int,arr:array<struct<col1:int,col2:string>>,col1:int,col2:string>
 -- !query
 SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k
 -- !query schema
-struct<id:int,arr:array<struct<col1:int,col2:string>>,k:int,v:string>
+struct<id:int,arr:array<struct<col1:int,col2:string collate UTF8_BINARY>>,k:int,v:string collate UTF8_BINARY>
 -- !query output
 1	[{"col1":1,"col2":"a"},{"col1":2,"col2":"b"}]	1	a
 2	[]	NULL	NULL
@@ -1574,7 +1574,7 @@ struct<id:int,arr:array<struct<col1:int,col2:string>>,k:int,v:string>
 -- !query
 SELECT * FROM array_struct JOIN LATERAL INLINE_OUTER(arr)
 -- !query schema
-struct<id:int,arr:array<struct<col1:int,col2:string>>,col1:int,col2:string>
+struct<id:int,arr:array<struct<col1:int,col2:string collate UTF8_BINARY>>,col1:int,col2:string collate UTF8_BINARY>
 -- !query output
 1	[{"col1":1,"col2":"a"},{"col1":2,"col2":"b"}]	1	a
 1	[{"col1":1,"col2":"a"},{"col1":2,"col2":"b"}]	2	b
@@ -1689,7 +1689,7 @@ struct<>
 -- !query
 SELECT t1.key, t2.* FROM json_table t1, LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2
 -- !query schema
-struct<key:string,c0:string,c1:string,c2:string,c3:string,c4:string>
+struct<key:string collate UTF8_BINARY,c0:string collate UTF8_BINARY,c1:string collate UTF8_BINARY,c2:string collate UTF8_BINARY,c3:string collate UTF8_BINARY,c4:string collate UTF8_BINARY>
 -- !query output
 1	1	2	3	NULL	5.23
 2	1	2	3	4.01	NULL
@@ -1702,7 +1702,7 @@ struct<key:string,c0:string,c1:string,c2:string,c3:string,c4:string>
 -- !query
 SELECT t1.key, t2.* FROM json_table t1, LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2 WHERE t2.c0 IS NOT NULL
 -- !query schema
-struct<key:string,c0:string,c1:string,c2:string,c3:string,c4:string>
+struct<key:string collate UTF8_BINARY,c0:string collate UTF8_BINARY,c1:string collate UTF8_BINARY,c2:string collate UTF8_BINARY,c3:string collate UTF8_BINARY,c4:string collate UTF8_BINARY>
 -- !query output
 1	1	2	3	NULL	5.23
 2	1	2	3	4.01	NULL
@@ -1714,7 +1714,7 @@ SELECT t1.key, t2.* FROM json_table t1
   JOIN LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2(f1, f2, f3, f4, f5)
   ON t1.key = t2.f1
 -- !query schema
-struct<key:string,f1:string,f2:string,f3:string,f4:string,f5:string>
+struct<key:string collate UTF8_BINARY,f1:string collate UTF8_BINARY,f2:string collate UTF8_BINARY,f3:string collate UTF8_BINARY,f4:string collate UTF8_BINARY,f5:string collate UTF8_BINARY>
 -- !query output
 1	1	2	3	NULL	5.23
 3	3	2	3	4	5.01
@@ -1725,7 +1725,7 @@ SELECT t1.key, t2.* FROM json_table t1
   LEFT JOIN LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2(f1, f2, f3, f4, f5)
   ON t1.key = t2.f1
 -- !query schema
-struct<key:string,f1:string,f2:string,f3:string,f4:string,f5:string>
+struct<key:string collate UTF8_BINARY,f1:string collate UTF8_BINARY,f2:string collate UTF8_BINARY,f3:string collate UTF8_BINARY,f4:string collate UTF8_BINARY,f5:string collate UTF8_BINARY>
 -- !query output
 1	1	2	3	NULL	5.23
 2	NULL	NULL	NULL	NULL	NULL

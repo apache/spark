@@ -94,7 +94,7 @@ Project [a#x, tag#x]
 +- Join Inner, ((a#x = a#x) AND (tag#x = tag#x))
    :- SubqueryAlias ta
    :  +- View (`ta`, [a#x, tag#x])
-   :     +- Project [cast(a#x as int) AS a#x, cast(tag#x as string) AS tag#x]
+   :     +- Project [cast(a#x as int) AS a#x, cast(tag#x as string collate UTF8_BINARY) AS tag#x]
    :        +- Union false, false
    :           :- Project [cast(udf(cast(a#x as string)) as int) AS a#x, cast(udf(cast(a as string)) as string) AS tag#x]
    :           :  +- SubqueryAlias t1
@@ -112,7 +112,7 @@ Project [a#x, tag#x]
    :                             +- LocalRelation [a#x]
    +- SubqueryAlias tb
       +- View (`tb`, [a#x, tag#x])
-         +- Project [cast(a#x as int) AS a#x, cast(tag#x as string) AS tag#x]
+         +- Project [cast(a#x as int) AS a#x, cast(tag#x as string collate UTF8_BINARY) AS tag#x]
             +- Union false, false
                :- Project [cast(udf(cast(a#x as string)) as int) AS a#x, cast(udf(cast(a as string)) as string) AS tag#x]
                :  +- SubqueryAlias t3

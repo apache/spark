@@ -1915,7 +1915,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"STRING\"",
+    "right" : "\"STRING COLLATE UTF8_BINARY\"",
     "sqlExpr" : "\"(INTERVAL '2' YEAR + str)\""
   },
   "queryContext" : [ {
@@ -1939,7 +1939,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"STRING\"",
+    "right" : "\"STRING COLLATE UTF8_BINARY\"",
     "sqlExpr" : "\"(INTERVAL '2' YEAR - str)\""
   },
   "queryContext" : [ {
@@ -1955,7 +1955,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select str - interval '4 22:12' day to minute from interval_view
 -- !query schema
-struct<str - INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<str - INTERVAL '4 22:12' DAY TO MINUTE:string collate UTF8_BINARY>
 -- !query output
 NULL
 
@@ -1963,7 +1963,7 @@ NULL
 -- !query
 select str + interval '4 22:12' day to minute from interval_view
 -- !query schema
-struct<str + INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<str + INTERVAL '4 22:12' DAY TO MINUTE:string collate UTF8_BINARY>
 -- !query output
 NULL
 

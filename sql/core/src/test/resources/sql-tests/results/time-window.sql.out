@@ -22,7 +22,7 @@ FROM ts_data
 GROUP BY a, window(ts, '5 minutes') WITH ROLLUP
 ORDER BY a, start
 -- !query schema
-struct<a:string,start:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,start:timestamp,cnt:bigint>
 -- !query output
 NULL	NULL	4
 A1	NULL	3
@@ -41,7 +41,7 @@ FROM ts_data
 GROUP BY a, window(ts, '5 minutes') WITH CUBE
 ORDER BY a, start
 -- !query schema
-struct<a:string,start:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,start:timestamp,cnt:bigint>
 -- !query output
 NULL	NULL	4
 NULL	2021-01-01 00:00:00	3
@@ -62,7 +62,7 @@ FROM ts_data
 GROUP BY GROUPING SETS ((a, window(ts, '5 minutes')), (a))
 ORDER BY a, start
 -- !query schema
-struct<a:string,start:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,start:timestamp,cnt:bigint>
 -- !query output
 A1	NULL	3
 A1	2021-01-01 00:00:00	2
@@ -110,7 +110,7 @@ SELECT * FROM (
 ) sub
 ORDER BY a, ws
 -- !query schema
-struct<a:string,ws:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,ws:timestamp,cnt:bigint>
 -- !query output
 A1	2021-01-01 00:00:00	2
 A1	2021-01-01 00:05:00	1
@@ -161,7 +161,7 @@ FROM ts_data
 GROUP BY a, window(ts, '5 minutes', '1 minute') WITH ROLLUP
 ORDER BY a, start
 -- !query schema
-struct<a:string,start:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,start:timestamp,cnt:bigint>
 -- !query output
 NULL	NULL	20
 A1	NULL	15
@@ -193,7 +193,7 @@ FROM ts_data
 GROUP BY a, window(ts, '5 minutes', '1 minute') WITH CUBE
 ORDER BY a, start
 -- !query schema
-struct<a:string,start:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,start:timestamp,cnt:bigint>
 -- !query output
 NULL	NULL	20
 NULL	2020-12-31 23:56:00	1
@@ -236,7 +236,7 @@ FROM ts_data
 GROUP BY GROUPING SETS ((a, window(ts, '5 minutes', '1 minute')), (a))
 ORDER BY a, start
 -- !query schema
-struct<a:string,start:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,start:timestamp,cnt:bigint>
 -- !query output
 A1	NULL	15
 A1	2020-12-31 23:56:00	1
@@ -317,7 +317,7 @@ SELECT * FROM (
 ) sub
 ORDER BY a, ws
 -- !query schema
-struct<a:string,ws:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,ws:timestamp,cnt:bigint>
 -- !query output
 A1	2020-12-31 23:56:00	1
 A1	2020-12-31 23:57:00	1
@@ -484,7 +484,7 @@ SELECT * FROM (
 ) sub
 ORDER BY a, ws
 -- !query schema
-struct<a:string,ws:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,ws:timestamp,cnt:bigint>
 -- !query output
 A1	2021-01-01 00:00:00	3
 A2	2021-01-01 00:01:00	1
@@ -531,7 +531,7 @@ FROM ts_data
 GROUP BY a, window(ts, '5 minutes')
 ORDER BY a, start
 -- !query schema
-struct<a:string,start:timestamp,end:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,start:timestamp,end:timestamp,cnt:bigint>
 -- !query output
 A1	2021-01-01 00:00:00	2021-01-01 00:05:00	2
 A1	2021-01-01 00:05:00	2021-01-01 00:10:00	1
@@ -926,7 +926,7 @@ SELECT * FROM (
 ) sub
 ORDER BY a, start
 -- !query schema
-struct<a:string,start:timestamp,end:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,start:timestamp,end:timestamp,cnt:bigint>
 -- !query output
 A1	2021-01-01 00:00:00	2021-01-01 00:05:00	2
 A1	2021-01-01 00:05:00	2021-01-01 00:10:00	1
@@ -1632,7 +1632,7 @@ FROM ts_data
 GROUP BY a, session_window(ts, '5 minutes')
 ORDER BY a, start
 -- !query schema
-struct<a:string,start:timestamp,end:timestamp,cnt:bigint>
+struct<a:string collate UTF8_BINARY,start:timestamp,end:timestamp,cnt:bigint>
 -- !query output
 A1	2021-01-01 00:00:00	2021-01-01 00:11:00	3
 A2	2021-01-01 00:01:00	2021-01-01 00:06:00	1

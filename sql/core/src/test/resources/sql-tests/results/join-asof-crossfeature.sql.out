@@ -34,7 +34,7 @@ ASOF JOIN quotes q2
 WHERE t.symbol = 'AAPL'
 ORDER BY t.trade_time
 -- !query schema
-struct<symbol:string,bid_price:decimal(5,2),earlier_bid:decimal(5,2)>
+struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2),earlier_bid:decimal(5,2)>
 -- !query output
 AAPL	180.20	180.15
 
@@ -48,7 +48,7 @@ INNER JOIN VALUES ('AAPL', 'Tech'), ('MSFT', 'Tech') AS s(symbol, sector)
   ON t.symbol = s.symbol
 ORDER BY t.trade_time
 -- !query schema
-struct<symbol:string,bid_price:decimal(5,2),sector:string>
+struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2),sector:string>
 -- !query output
 AAPL	180.10	Tech
 AAPL	180.20	Tech
@@ -64,7 +64,7 @@ LEFT JOIN VALUES ('AAPL', 'Tech'), ('MSFT', 'Tech') AS s(symbol, sector)
   ON t.symbol = s.symbol
 ORDER BY t.trade_time
 -- !query schema
-struct<symbol:string,bid_price:decimal(5,2),sector:string>
+struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2),sector:string>
 -- !query output
 AAPL	180.10	Tech
 AAPL	180.20	Tech
@@ -83,7 +83,7 @@ FROM trades t ASOF JOIN (
   ON t.symbol = qs.symbol
 ORDER BY t.trade_time
 -- !query schema
-struct<symbol:string,bid_price:decimal(5,2),sector:string>
+struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2),sector:string>
 -- !query output
 AAPL	180.10	Tech
 AAPL	180.20	Tech
@@ -101,7 +101,7 @@ FROM (
 UNPIVOT (val FOR metric IN (bid_price, quantity))
 ORDER BY symbol, metric
 -- !query schema
-struct<symbol:string,metric:string,val:decimal(12,2)>
+struct<symbol:string collate UTF8_BINARY,metric:string,val:decimal(12,2)>
 -- !query output
 AAPL	bid_price	180.10
 AAPL	bid_price	180.20
@@ -119,7 +119,7 @@ FROM trades t ASOF JOIN quotes q
 LATERAL (SELECT q.bid_price * 2 AS doubled) l
 ORDER BY t.trade_time
 -- !query schema
-struct<trade_time:timestamp,symbol:string,doubled:decimal(7,2)>
+struct<trade_time:timestamp,symbol:string collate UTF8_BINARY,doubled:decimal(7,2)>
 -- !query output
 2026-06-29 10:00:05	AAPL	360.20
 2026-06-29 10:00:11	AAPL	360.40
@@ -173,7 +173,7 @@ FROM (SELECT * FROM trades WHERE quantity > 50) t ASOF JOIN
   ON t.symbol = q.symbol
 ORDER BY t.trade_time
 -- !query schema
-struct<symbol:string,bid_price:decimal(5,2)>
+struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
 -- !query output
 AAPL	180.10
 AAPL	180.20
@@ -193,7 +193,7 @@ FROM first_match fm ASOF JOIN
   MATCH_CONDITION (fm.trade_time >= e.ts)
 ORDER BY fm.trade_time
 -- !query schema
-struct<symbol:string,bid_price:decimal(5,2),extra_val:decimal(2,1)>
+struct<symbol:string collate UTF8_BINARY,bid_price:decimal(5,2),extra_val:decimal(2,1)>
 -- !query output
 AAPL	180.10	1.0
 AAPL	180.20	2.0

@@ -442,7 +442,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputExpr" : "\"xmlField\"",
     "inputName" : "`xml`",
-    "inputType" : "\"STRING\"",
+    "inputType" : "\"STRING COLLATE UTF8_BINARY\"",
     "sqlExpr" : "\"schema_of_xml(xmlField)\""
   },
   "queryContext" : [ {

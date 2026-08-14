@@ -650,7 +650,7 @@ Sort [name#x ASC NULLS FIRST], true
 +- Project [id#x, parent_department#x, name#x]
    +- SubqueryAlias vsubdepartment
       +- View (`vsubdepartment`, [id#x, parent_department#x, name#x])
-         +- Project [cast(id#x as int) AS id#x, cast(parent_department#x as int) AS parent_department#x, cast(name#x as string) AS name#x]
+         +- Project [cast(id#x as int) AS id#x, cast(parent_department#x as int) AS parent_department#x, cast(name#x as string collate UTF8_BINARY) AS name#x]
             +- WithCTE
                :- CTERelationDef xxxx, false
                :  +- SubqueryAlias subdepartment

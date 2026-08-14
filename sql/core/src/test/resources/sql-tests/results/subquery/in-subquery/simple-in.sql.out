@@ -66,7 +66,7 @@ FROM   t1
 WHERE  t1a IN (SELECT t2a
                FROM   t2)
 -- !query schema
-struct<t1a:string,t1b:int,t1c:int,t1d:int,t1e:decimal(3,1),t1f:decimal(3,1),t1g:decimal(5,1),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1d:int,t1e:decimal(3,1),t1f:decimal(3,1),t1g:decimal(5,1),t1h:timestamp,t1i:date>
 -- !query output
 t1b	8	16	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
 t1c	8	16	19	17.0	25.0	2600.0	2014-05-04 01:02:00.001	2014-05-05
@@ -82,7 +82,7 @@ WHERE  t1b IN (SELECT t2b
                FROM   t2
                WHERE  t1a = t2a)
 -- !query schema
-struct<t1a:string,t1b:int,t1c:int,t1d:int,t1e:decimal(3,1),t1f:decimal(3,1),t1g:decimal(5,1),t1h:timestamp,t1i:date>
+struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1d:int,t1e:decimal(3,1),t1f:decimal(3,1),t1g:decimal(5,1),t1h:timestamp,t1i:date>
 -- !query output
 t1b	8	16	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
 
@@ -95,7 +95,7 @@ WHERE  t1c IN (SELECT t2b
                FROM   t2
                WHERE  t1a != t2a)
 -- !query schema
-struct<t1a:string,t1b:int>
+struct<t1a:string collate UTF8_BINARY,t1b:int>
 -- !query output
 t1a	16
 t1a	16
@@ -112,7 +112,7 @@ WHERE  t1c IN (SELECT t2b
                WHERE  t1a = t2a
                        OR t1b > t2b)
 -- !query schema
-struct<t1a:string,t1b:int>
+struct<t1a:string collate UTF8_BINARY,t1b:int>
 -- !query output
 t1a	16
 t1a	16
@@ -128,7 +128,7 @@ WHERE  t1c IN (SELECT t2b
                               FROM   t3
                               WHERE  t2c = t3c))
 -- !query schema
-struct<t1a:string,t1b:int>
+struct<t1a:string collate UTF8_BINARY,t1b:int>
 -- !query output
 t1a	6
 t1a	6
@@ -145,7 +145,7 @@ WHERE  t1c IN (SELECT t2b
                               WHERE  t2c = t3c
                                      AND t2b IS NOT NULL))
 -- !query schema
-struct<t1a:string,t1b:int>
+struct<t1a:string collate UTF8_BINARY,t1b:int>
 -- !query output
 t1a	6
 t1a	6
@@ -159,7 +159,7 @@ FROM   t1
 WHERE  t1a NOT IN (SELECT t2a
                    FROM   t2)
 -- !query schema
-struct<t1a:string,t1b:int,t1h:timestamp>
+struct<t1a:string collate UTF8_BINARY,t1b:int,t1h:timestamp>
 -- !query output
 t1a	16	2014-06-04 01:02:00.001
 t1a	16	2014-07-04 01:01:00

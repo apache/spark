@@ -169,7 +169,7 @@ Project [a#x, b#x, c#x, d#x]
          :- SubqueryAlias s1
          :  +- SubqueryAlias src1
          :     +- View (`src1`, [id#x, v1#x])
-         :        +- Project [cast(id#x as int) AS id#x, cast(v1#x as string) AS v1#x]
+         :        +- Project [cast(id#x as int) AS id#x, cast(v1#x as string collate UTF8_BINARY) AS v1#x]
          :           +- Project [id#x, v1#x]
          :              +- SubqueryAlias src1
          :                 +- LocalRelation [id#x, v1#x]
@@ -192,7 +192,7 @@ Project [a#x, b#x, c#x, d#x]
          :- SubqueryAlias s1
          :  +- SubqueryAlias src1
          :     +- View (`src1`, [id#x, v1#x])
-         :        +- Project [cast(id#x as int) AS id#x, cast(v1#x as string) AS v1#x]
+         :        +- Project [cast(id#x as int) AS id#x, cast(v1#x as string collate UTF8_BINARY) AS v1#x]
          :           +- Project [id#x, v1#x]
          :              +- SubqueryAlias src1
          :                 +- LocalRelation [id#x, v1#x]

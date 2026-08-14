@@ -26,7 +26,7 @@ struct<>
 -- !query
 SELECT * FROM tbl_view
 -- !query schema
-struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
+struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 20	name2	{"f1":2,"s2":{"f2":202,"f3":"b"}}
@@ -40,7 +40,7 @@ struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query
 SELECT * EXCEPT (id) FROM tbl_view
 -- !query schema
-struct<name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
+struct<name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
 -- !query output
 name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 name2	{"f1":2,"s2":{"f2":202,"f3":"b"}}
@@ -54,7 +54,7 @@ name7	{"f1":7,"s2":{"f2":707,"f3":"g"}}
 -- !query
 SELECT * EXCEPT (name) FROM tbl_view
 -- !query schema
-struct<id:int,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
+struct<id:int,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
 -- !query output
 10	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 20	{"f1":2,"s2":{"f2":202,"f3":"b"}}
@@ -68,7 +68,7 @@ struct<id:int,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query
 SELECT * EXCEPT (data) FROM tbl_view
 -- !query schema
-struct<id:int,name:string>
+struct<id:int,name:string collate UTF8_BINARY>
 -- !query output
 10	name1
 20	name2
@@ -82,7 +82,7 @@ struct<id:int,name:string>
 -- !query
 SELECT * EXCEPT (data.f1) FROM tbl_view
 -- !query schema
-struct<id:int,name:string,data:struct<s2:struct<f2:int,f3:string>>>
+struct<id:int,name:string collate UTF8_BINARY,data:struct<s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
 -- !query output
 10	name1	{"s2":{"f2":101,"f3":"a"}}
 20	name2	{"s2":{"f2":202,"f3":"b"}}
@@ -96,7 +96,7 @@ struct<id:int,name:string,data:struct<s2:struct<f2:int,f3:string>>>
 -- !query
 SELECT * EXCEPT (data.s2) FROM tbl_view
 -- !query schema
-struct<id:int,name:string,data:struct<f1:int>>
+struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int>>
 -- !query output
 10	name1	{"f1":1}
 20	name2	{"f1":2}
@@ -110,7 +110,7 @@ struct<id:int,name:string,data:struct<f1:int>>
 -- !query
 SELECT * EXCEPT (data.s2.f2) FROM tbl_view
 -- !query schema
-struct<id:int,name:string,data:struct<f1:int,s2:struct<f3:string>>>
+struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f3:string collate UTF8_BINARY>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f3":"a"}}
 20	name2	{"f1":2,"s2":{"f3":"b"}}
@@ -124,7 +124,7 @@ struct<id:int,name:string,data:struct<f1:int,s2:struct<f3:string>>>
 -- !query
 SELECT * EXCEPT (data.f1, data.s2) FROM tbl_view
 -- !query schema
-struct<id:int,name:string,data:struct<>>
+struct<id:int,name:string collate UTF8_BINARY,data:struct<>>
 -- !query output
 10	name1	{}
 20	name2	{}
@@ -154,7 +154,7 @@ struct<a_b_c:int>
 -- !query
 SELECT tbl_view.* EXCEPT (name) FROM tbl_view
 -- !query schema
-struct<id:int,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
+struct<id:int,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
 -- !query output
 10	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 20	{"f1":2,"s2":{"f2":202,"f3":"b"}}
@@ -213,7 +213,7 @@ struct<f1:int>
 -- !query
 SELECT data.* EXCEPT (s2.f2) FROM tbl_view
 -- !query schema
-struct<f1:int,s2:struct<f3:string>>
+struct<f1:int,s2:struct<f3:string collate UTF8_BINARY>>
 -- !query output
 1	{"f3":"a"}
 2	{"f3":"b"}
@@ -227,7 +227,7 @@ struct<f1:int,s2:struct<f3:string>>
 -- !query
 SELECT data.s2.* EXCEPT (f2) FROM tbl_view
 -- !query schema
-struct<f3:string>
+struct<f3:string collate UTF8_BINARY>
 -- !query output
 a
 b

@@ -94,7 +94,7 @@ Sort [n_nationkey#x ASC NULLS FIRST], true
          +- Project [n_nationkey#x, n_name#x]
             +- SubqueryAlias nation
                +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                  +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                  +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                      +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                         +- SubqueryAlias nation
                            +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -113,7 +113,7 @@ Sort [n_regionkey#x ASC NULLS FIRST, n_nationkey#x ASC NULLS FIRST], true
          +- Project [n_regionkey#x, n_nationkey#x]
             +- SubqueryAlias nation
                +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                  +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                  +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                      +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                         +- SubqueryAlias nation
                            +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -135,7 +135,7 @@ Project [n_nationkey#x, n_name#x, total#xL, rnk#x]
             +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                +- SubqueryAlias nation
                   +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                     +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                     +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                         +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                            +- SubqueryAlias nation
                               +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -159,7 +159,7 @@ Sort [n_nationkey#x ASC NULLS FIRST], true
             +- Project [n_regionkey#x, n_nationkey#x]
                +- SubqueryAlias nation
                   +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                     +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                     +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                         +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                            +- SubqueryAlias nation
                               +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -178,7 +178,7 @@ Sort [n_nationkey#x ASC NULLS FIRST], true
          +- Project [n_nationkey#x]
             +- SubqueryAlias nation
                +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                  +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                  +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                      +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                         +- SubqueryAlias nation
                            +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -197,7 +197,7 @@ Sort [n_nationkey#x ASC NULLS FIRST], true
          +- Project [n_nationkey#x]
             +- SubqueryAlias nation
                +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                  +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                  +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                      +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                         +- SubqueryAlias nation
                            +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -218,7 +218,7 @@ Sort [n_nationkey#x ASC NULLS FIRST], true
          +- Project [n_nationkey#x]
             +- SubqueryAlias nation
                +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                  +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                  +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                      +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                         +- SubqueryAlias nation
                            +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -294,7 +294,7 @@ Project [n_nationkey#x, n_name#x, rnk#x]
             +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                +- SubqueryAlias nation
                   +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                     +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                     +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                         +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                            +- SubqueryAlias nation
                               +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -318,7 +318,7 @@ WithCTE
 :              +- Project [n_nationkey#x]
 :                 +- SubqueryAlias nation
 :                    +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-:                       +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+:                       +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
 :                          +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
 :                             +- SubqueryAlias nation
 :                                +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -345,7 +345,7 @@ Sort [n_nationkey#x ASC NULLS FIRST], true
                +- Project [n_nationkey#x]
                   +- SubqueryAlias nation
                      +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                        +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                        +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                            +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                               +- SubqueryAlias nation
                                  +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -372,7 +372,7 @@ Sort [n_nationkey#x ASC NULLS FIRST], true
                      +- Project [n_nationkey#x]
                         +- SubqueryAlias nation
                            +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                              +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                              +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                                  +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                                     +- SubqueryAlias nation
                                        +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -400,7 +400,7 @@ Sort [n_regionkey#x ASC NULLS FIRST, n_nationkey#x ASC NULLS FIRST], true
                         +- Project [n_nationkey#x, n_regionkey#x]
                            +- SubqueryAlias nation
                               +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                                 +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                                 +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                                     +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                                        +- SubqueryAlias nation
                                           +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -437,7 +437,7 @@ Project [s#xL]
             +- Project [n_nationkey#x]
                +- SubqueryAlias nation
                   +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-                     +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+                     +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                         +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                            +- SubqueryAlias nation
                               +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -491,14 +491,14 @@ Sort [n_regionkey#x ASC NULLS FIRST, n_nationkey#x ASC NULLS FIRST], true
                :- SubqueryAlias n
                :  +- SubqueryAlias nation
                :     +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-               :        +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+               :        +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                :           +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                :              +- SubqueryAlias nation
                :                 +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
                +- SubqueryAlias r
                   +- SubqueryAlias region
                      +- View (`region`, [r_regionkey#x, r_name#x])
-                        +- Project [cast(r_regionkey#x as int) AS r_regionkey#x, cast(r_name#x as string) AS r_name#x]
+                        +- Project [cast(r_regionkey#x as int) AS r_regionkey#x, cast(r_name#x as string collate UTF8_BINARY) AS r_name#x]
                            +- Project [r_regionkey#x, r_name#x]
                               +- SubqueryAlias region
                                  +- LocalRelation [r_regionkey#x, r_name#x]
@@ -520,13 +520,13 @@ Sort [n_nationkey#x ASC NULLS FIRST], true
             +- Join Inner, (n_regionkey#x = r_regionkey#x)
                :- SubqueryAlias nation
                :  +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-               :     +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+               :     +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
                :        +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
                :           +- SubqueryAlias nation
                :              +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
                +- SubqueryAlias region
                   +- View (`region`, [r_regionkey#x, r_name#x])
-                     +- Project [cast(r_regionkey#x as int) AS r_regionkey#x, cast(r_name#x as string) AS r_name#x]
+                     +- Project [cast(r_regionkey#x as int) AS r_regionkey#x, cast(r_name#x as string collate UTF8_BINARY) AS r_name#x]
                         +- Project [r_regionkey#x, r_name#x]
                            +- SubqueryAlias region
                               +- LocalRelation [r_regionkey#x, r_name#x]
@@ -550,7 +550,7 @@ Sort [n_nationkey#x ASC NULLS FIRST, s#xL ASC NULLS FIRST], true
    :        +- Project [n_nationkey#x]
    :           +- SubqueryAlias nation
    :              +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-   :                 +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+   :                 +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
    :                    +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
    :                       +- SubqueryAlias nation
    :                          +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -560,7 +560,7 @@ Sort [n_nationkey#x ASC NULLS FIRST, s#xL ASC NULLS FIRST], true
             +- Project [r_regionkey#x]
                +- SubqueryAlias region
                   +- View (`region`, [r_regionkey#x, r_name#x])
-                     +- Project [cast(r_regionkey#x as int) AS r_regionkey#x, cast(r_name#x as string) AS r_name#x]
+                     +- Project [cast(r_regionkey#x as int) AS r_regionkey#x, cast(r_name#x as string collate UTF8_BINARY) AS r_name#x]
                         +- Project [r_regionkey#x, r_name#x]
                            +- SubqueryAlias region
                               +- LocalRelation [r_regionkey#x, r_name#x]
@@ -583,7 +583,7 @@ Sort [n_nationkey#x ASC NULLS FIRST, rk#x ASC NULLS FIRST], true
    :        +- Project [n_nationkey#x]
    :           +- SubqueryAlias nation
    :              +- View (`nation`, [n_nationkey#x, n_name#x, n_regionkey#x])
-   :                 +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
+   :                 +- Project [cast(n_nationkey#x as int) AS n_nationkey#x, cast(n_name#x as string collate UTF8_BINARY) AS n_name#x, cast(n_regionkey#x as int) AS n_regionkey#x]
    :                    +- Project [n_nationkey#x, n_name#x, n_regionkey#x]
    :                       +- SubqueryAlias nation
    :                          +- LocalRelation [n_nationkey#x, n_name#x, n_regionkey#x]
@@ -593,7 +593,7 @@ Sort [n_nationkey#x ASC NULLS FIRST, rk#x ASC NULLS FIRST], true
             +- Project [r_regionkey#x]
                +- SubqueryAlias region
                   +- View (`region`, [r_regionkey#x, r_name#x])
-                     +- Project [cast(r_regionkey#x as int) AS r_regionkey#x, cast(r_name#x as string) AS r_name#x]
+                     +- Project [cast(r_regionkey#x as int) AS r_regionkey#x, cast(r_name#x as string collate UTF8_BINARY) AS r_name#x]
                         +- Project [r_regionkey#x, r_name#x]
                            +- SubqueryAlias region
                               +- LocalRelation [r_regionkey#x, r_name#x]

@@ -253,7 +253,7 @@ Project [c0#x, c1#x, c2#x]
 +- Generate json_tuple(jsonField#x, b, cast(null as string), a#x), false, [c0#x, c1#x, c2#x]
    +- SubqueryAlias jsontable
       +- View (`jsonTable`, [jsonField#x, a#x])
-         +- Project [cast(col1#x as string) AS jsonField#x, cast(col2#x as string) AS a#x]
+         +- Project [cast(col1#x as string collate UTF8_BINARY) AS jsonField#x, cast(col2#x as string collate UTF8_BINARY) AS a#x]
             +- Project [col1#x, col2#x]
                +- LocalRelation [col1#x, col2#x]
 
@@ -488,7 +488,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputExpr" : "\"jsonField\"",
     "inputName" : "`json`",
-    "inputType" : "\"STRING\"",
+    "inputType" : "\"STRING COLLATE UTF8_BINARY\"",
     "sqlExpr" : "\"schema_of_json(jsonField)\""
   },
   "queryContext" : [ {

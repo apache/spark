@@ -70,7 +70,7 @@ FROM trades t ASOF JOIN quotes q
   ON t.symbol = q.symbol
 ORDER BY t.trade_time, t.symbol
 -- !query schema
-struct<trade_time:timestamp,symbol:string,bid_price:decimal(5,2)>
+struct<trade_time:timestamp,symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
 -- !query output
 2026-06-29 10:00:05	AAPL	180.10
 2026-06-29 10:00:11	AAPL	180.20
@@ -84,7 +84,7 @@ FROM trades t INNER ASOF JOIN quotes q
   ON t.symbol = q.symbol
 ORDER BY t.trade_time, t.symbol
 -- !query schema
-struct<trade_time:timestamp,symbol:string,bid_price:decimal(5,2)>
+struct<trade_time:timestamp,symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
 -- !query output
 2026-06-29 10:00:05	AAPL	180.10
 2026-06-29 10:00:11	AAPL	180.20
@@ -98,7 +98,7 @@ FROM trades t LEFT ASOF JOIN quotes q
   ON t.symbol = q.symbol
 ORDER BY t.trade_time, t.symbol
 -- !query schema
-struct<trade_time:timestamp,symbol:string,bid_price:decimal(5,2)>
+struct<trade_time:timestamp,symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
 -- !query output
 2026-06-29 09:59:59	GOOG	NULL
 2026-06-29 10:00:05	AAPL	180.10
@@ -124,7 +124,7 @@ FROM trades ASOF JOIN quotes
   USING (symbol)
 ORDER BY trade_time, symbol
 -- !query schema
-struct<trade_time:timestamp,symbol:string,bid_price:decimal(5,2)>
+struct<trade_time:timestamp,symbol:string collate UTF8_BINARY,bid_price:decimal(5,2)>
 -- !query output
 2026-06-29 10:00:05	AAPL	180.10
 2026-06-29 10:00:11	AAPL	180.20
@@ -182,7 +182,7 @@ FROM requests r ASOF JOIN deploys d
   ON r.service = d.service
 ORDER BY r.req_ts, r.seq
 -- !query schema
-struct<req_ts:timestamp,seq:int,version:string>
+struct<req_ts:timestamp,seq:int,version:string collate UTF8_BINARY>
 -- !query output
 2026-06-29 10:00:00	5	v1.1
 2026-06-29 10:03:00	1	v1.1

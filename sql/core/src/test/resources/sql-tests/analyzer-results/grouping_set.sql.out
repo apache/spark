@@ -24,7 +24,7 @@ Aggregate [a#x, b#x, c#x, spark_grouping_id#xL], [a#x, b#x, c#x, count(d#x) AS c
    +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x]
       +- SubqueryAlias grouping
          +- View (`grouping`, [a#x, b#x, c#x, d#x])
-            +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
+            +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x, cast(c#x as string collate UTF8_BINARY) AS c#x, cast(d#x as int) AS d#x]
                +- Project [a#x, b#x, c#x, d#x]
                   +- SubqueryAlias grouping
                      +- LocalRelation [a#x, b#x, c#x, d#x]
@@ -38,7 +38,7 @@ Aggregate [a#x, b#x, c#x, spark_grouping_id#xL], [a#x, b#x, c#x, count(d#x) AS c
    +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x]
       +- SubqueryAlias grouping
          +- View (`grouping`, [a#x, b#x, c#x, d#x])
-            +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
+            +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x, cast(c#x as string collate UTF8_BINARY) AS c#x, cast(d#x as int) AS d#x]
                +- Project [a#x, b#x, c#x, d#x]
                   +- SubqueryAlias grouping
                      +- LocalRelation [a#x, b#x, c#x, d#x]
@@ -52,7 +52,7 @@ Aggregate [a#x, b#x, c#x, spark_grouping_id#xL], [a#x, b#x, c#x, count(d#x) AS c
    +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x]
       +- SubqueryAlias grouping
          +- View (`grouping`, [a#x, b#x, c#x, d#x])
-            +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
+            +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x, cast(c#x as string collate UTF8_BINARY) AS c#x, cast(d#x as int) AS d#x]
                +- Project [a#x, b#x, c#x, d#x]
                   +- SubqueryAlias grouping
                      +- LocalRelation [a#x, b#x, c#x, d#x]
@@ -66,7 +66,7 @@ Aggregate [a#x, b#x, c#x, d#x, spark_grouping_id#xL], [a#x, b#x, c#x, d#x]
    +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x, d#x AS d#x]
       +- SubqueryAlias grouping
          +- View (`grouping`, [a#x, b#x, c#x, d#x])
-            +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
+            +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x, cast(c#x as string collate UTF8_BINARY) AS c#x, cast(d#x as int) AS d#x]
                +- Project [a#x, b#x, c#x, d#x]
                   +- SubqueryAlias grouping
                      +- LocalRelation [a#x, b#x, c#x, d#x]
@@ -82,7 +82,7 @@ Project [a#x, b#x]
          +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, (d#x + 1) AS (d + 1)#x]
             +- SubqueryAlias grouping
                +- View (`grouping`, [a#x, b#x, c#x, d#x])
-                  +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
+                  +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x, cast(c#x as string collate UTF8_BINARY) AS c#x, cast(d#x as int) AS d#x]
                      +- Project [a#x, b#x, c#x, d#x]
                         +- SubqueryAlias grouping
                            +- LocalRelation [a#x, b#x, c#x, d#x]
@@ -544,7 +544,7 @@ Aggregate [a#x, b#x, c#x, spark_grouping_id#xL], [CASE WHEN isnull(a#x) THEN cou
    +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x]
       +- SubqueryAlias grouping
          +- View (`grouping`, [a#x, b#x, c#x, d#x])
-            +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
+            +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(b#x as string collate UTF8_BINARY) AS b#x, cast(c#x as string collate UTF8_BINARY) AS c#x, cast(d#x as int) AS d#x]
                +- Project [a#x, b#x, c#x, d#x]
                   +- SubqueryAlias grouping
                      +- LocalRelation [a#x, b#x, c#x, d#x]

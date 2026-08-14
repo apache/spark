@@ -13,7 +13,7 @@ select cast(a as byte) from t
 Project [cast(a#x as tinyint) AS a#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -24,7 +24,7 @@ select cast(a as short) from t
 Project [cast(a#x as smallint) AS a#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -35,7 +35,7 @@ select cast(a as int) from t
 Project [cast(a#x as int) AS a#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -46,7 +46,7 @@ select cast(a as long) from t
 Project [cast(a#x as bigint) AS a#xL]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -57,7 +57,7 @@ select cast(a as float) from t
 Project [cast(a#x as float) AS a#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -68,7 +68,7 @@ select cast(a as double) from t
 Project [cast(a#x as double) AS a#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -79,7 +79,7 @@ select cast(a as decimal) from t
 Project [cast(a#x as decimal(10,0)) AS a#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -90,7 +90,7 @@ select cast(a as boolean) from t
 Project [cast(a#x as boolean) AS a#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -101,7 +101,7 @@ select cast(a as timestamp) from t
 Project [cast(a#x as timestamp) AS a#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -112,7 +112,7 @@ select cast(a as date) from t
 Project [cast(a#x as date) AS a#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -123,7 +123,7 @@ select cast(a as binary) from t
 Project [cast(a#x as binary) AS a#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -137,7 +137,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"a\"",
-    "srcType" : "\"STRING\"",
+    "srcType" : "\"STRING COLLATE UTF8_BINARY\"",
     "targetType" : "\"ARRAY<STRING>\""
   },
   "queryContext" : [ {
@@ -159,7 +159,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"a\"",
-    "srcType" : "\"STRING\"",
+    "srcType" : "\"STRING COLLATE UTF8_BINARY\"",
     "targetType" : "\"STRUCT<s: STRING>\""
   },
   "queryContext" : [ {
@@ -181,7 +181,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"a\"",
-    "srcType" : "\"STRING\"",
+    "srcType" : "\"STRING COLLATE UTF8_BINARY\"",
     "targetType" : "\"MAP<STRING, STRING>\""
   },
   "queryContext" : [ {
@@ -200,7 +200,7 @@ select to_timestamp(a) from t
 Project [to_timestamp(a#x, None, TimestampType, Some(America/Los_Angeles), true) AS to_timestamp(a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -211,7 +211,7 @@ select to_timestamp('2018-01-01', a) from t
 Project [to_timestamp(2018-01-01, Some(a#x), TimestampType, Some(America/Los_Angeles), true) AS to_timestamp(2018-01-01, a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -222,7 +222,7 @@ select to_unix_timestamp(a) from t
 Project [to_unix_timestamp(a#x, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS to_unix_timestamp(a, yyyy-MM-dd HH:mm:ss)#xL]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -233,7 +233,7 @@ select to_unix_timestamp('2018-01-01', a) from t
 Project [to_unix_timestamp(2018-01-01, a#x, Some(America/Los_Angeles), true) AS to_unix_timestamp(2018-01-01, a)#xL]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -244,7 +244,7 @@ select unix_timestamp(a) from t
 Project [unix_timestamp(a#x, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(a, yyyy-MM-dd HH:mm:ss)#xL]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -255,7 +255,7 @@ select unix_timestamp('2018-01-01', a) from t
 Project [unix_timestamp(2018-01-01, a#x, Some(America/Los_Angeles), true) AS unix_timestamp(2018-01-01, a)#xL]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -266,7 +266,7 @@ select from_unixtime(a) from t
 Project [from_unixtime(cast(a#x as bigint), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles)) AS from_unixtime(a, yyyy-MM-dd HH:mm:ss)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -277,7 +277,7 @@ select from_unixtime('2018-01-01', a) from t
 Project [from_unixtime(cast(2018-01-01 as bigint), a#x, Some(America/Los_Angeles)) AS from_unixtime(2018-01-01, a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -288,7 +288,7 @@ select next_day(a, 'MO') from t
 Project [next_day(cast(a#x as date), MO, true) AS next_day(a, MO)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -299,7 +299,7 @@ select next_day('2018-01-01', a) from t
 Project [next_day(cast(2018-01-01 as date), a#x, true) AS next_day(2018-01-01, a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -310,7 +310,7 @@ select trunc(a, 'MM') from t
 Project [trunc(cast(a#x as date), MM) AS trunc(a, MM)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -321,7 +321,7 @@ select trunc('2018-01-01', a) from t
 Project [trunc(cast(2018-01-01 as date), a#x) AS trunc(2018-01-01, a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -339,7 +339,7 @@ select sha2(a, a) from t
 Project [sha2(cast(a#x as binary), cast(a#x as int)) AS sha2(a, a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -350,7 +350,7 @@ select get_json_object(a, a) from t
 Project [get_json_object(a#x, a#x) AS get_json_object(a, a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation
 
@@ -362,7 +362,7 @@ Project [c0#x]
 +- Generate json_tuple(a#x, a#x), false, [c0#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x])
-         +- Project [cast(a#x as string) AS a#x]
+         +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
             +- Project [aa AS a#x]
                +- OneRowRelation
 
@@ -373,6 +373,6 @@ select from_json(a, 'a INT') from t
 Project [from_json(StructField(a,IntegerType,true), a#x, Some(America/Los_Angeles), false) AS from_json(a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
-      +- Project [cast(a#x as string) AS a#x]
+      +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x]
          +- Project [aa AS a#x]
             +- OneRowRelation

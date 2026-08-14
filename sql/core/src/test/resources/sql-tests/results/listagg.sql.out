@@ -50,7 +50,7 @@ NULL	NULL	NULL	NULL	NULL
 -- !query
 SELECT listagg(col2) FROM df WHERE 1 != 1
 -- !query schema
-struct<listagg(col2, NULL):string>
+struct<listagg(col2, NULL):string collate UTF8_BINARY>
 -- !query output
 NULL
 
@@ -84,7 +84,7 @@ struct<len(col):int,regexp_count(col, a):int,regexp_count(col, b):int>
 -- !query
 SELECT listagg(col1) WITHIN GROUP (ORDER BY col1) FROM df
 -- !query schema
-struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST):string>
+struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST):string collate UTF8_BINARY>
 -- !query output
 aabb
 
@@ -92,7 +92,7 @@ aabb
 -- !query
 SELECT listagg(col1) WITHIN GROUP (ORDER BY col1 DESC) FROM df
 -- !query schema
-struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 DESC NULLS LAST):string>
+struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 DESC NULLS LAST):string collate UTF8_BINARY>
 -- !query output
 bbaa
 
@@ -100,7 +100,7 @@ bbaa
 -- !query
 SELECT listagg(col1) WITHIN GROUP (ORDER BY col1 DESC) OVER (PARTITION BY col2) FROM df
 -- !query schema
-struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 DESC NULLS LAST) OVER (PARTITION BY col2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):string>
+struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 DESC NULLS LAST) OVER (PARTITION BY col2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):string collate UTF8_BINARY>
 -- !query output
 NULL
 a
@@ -112,7 +112,7 @@ ba
 -- !query
 SELECT listagg(col1) WITHIN GROUP (ORDER BY col2) FROM df
 -- !query schema
-struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col2 ASC NULLS FIRST):string>
+struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col2 ASC NULLS FIRST):string collate UTF8_BINARY>
 -- !query output
 aabb
 
@@ -136,7 +136,7 @@ truefalse
 -- !query
 SELECT listagg(col1, '|') WITHIN GROUP (ORDER BY col2 DESC) FROM df
 -- !query schema
-struct<listagg(col1, |) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST):string>
+struct<listagg(col1, |) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST):string collate UTF8_BINARY>
 -- !query output
 b|a|b|a
 
@@ -144,7 +144,7 @@ b|a|b|a
 -- !query
 SELECT listagg(col1) WITHIN GROUP (ORDER BY col2 DESC, col1 ASC) FROM df
 -- !query schema
-struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST, col1 ASC NULLS FIRST):string>
+struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST, col1 ASC NULLS FIRST):string collate UTF8_BINARY>
 -- !query output
 baba
 
@@ -152,7 +152,7 @@ baba
 -- !query
 SELECT listagg(col1) WITHIN GROUP (ORDER BY col2 DESC, col1 DESC) FROM df
 -- !query schema
-struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST, col1 DESC NULLS LAST):string>
+struct<listagg(col1, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST, col1 DESC NULLS LAST):string collate UTF8_BINARY>
 -- !query output
 bbaa
 
@@ -389,7 +389,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputExpr" : "\"col1\"",
     "inputName" : "`delimiter`",
-    "inputType" : "\"STRING\"",
+    "inputType" : "\"STRING COLLATE UTF8_BINARY\"",
     "sqlExpr" : "\"listagg(col2, col1)\""
   },
   "queryContext" : [ {
@@ -405,7 +405,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT listagg(col1) OVER (ORDER BY col1) FROM df
 -- !query schema
-struct<listagg(col1, NULL) OVER (ORDER BY col1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string>
+struct<listagg(col1, NULL) OVER (ORDER BY col1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string collate UTF8_BINARY>
 -- !query output
 NULL
 aa

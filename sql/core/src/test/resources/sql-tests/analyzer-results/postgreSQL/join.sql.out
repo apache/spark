@@ -1761,7 +1761,7 @@ Project [f1#x]
                   :- SubqueryAlias b
                   :  +- SubqueryAlias tt3
                   :     +- View (`tt3`, [f1#x, f2#x])
-                  :        +- Project [cast(f1#x as int) AS f1#x, cast(f2#x as string) AS f2#x]
+                  :        +- Project [cast(f1#x as int) AS f1#x, cast(f2#x as string collate UTF8_BINARY) AS f2#x]
                   :           +- Project [f1#x, f2#x]
                   :              +- SubqueryAlias v
                   :                 +- Project [id#x AS f1#x, repeat(xyzzy, 100)#x AS f2#x]
@@ -1771,7 +1771,7 @@ Project [f1#x]
                   +- SubqueryAlias c
                      +- SubqueryAlias tt3
                         +- View (`tt3`, [f1#x, f2#x])
-                           +- Project [cast(f1#x as int) AS f1#x, cast(f2#x as string) AS f2#x]
+                           +- Project [cast(f1#x as int) AS f1#x, cast(f2#x as string collate UTF8_BINARY) AS f2#x]
                               +- Project [f1#x, f2#x]
                                  +- SubqueryAlias v
                                     +- Project [id#x AS f1#x, repeat(xyzzy, 100)#x AS f2#x]
@@ -2004,7 +2004,7 @@ Project [f2#x, f3#x, f1#x, junk#x]
       :        +- Relation [f3#x] parquet
       +- SubqueryAlias zv1
          +- View (`zv1`, [f1#x, junk#x])
-            +- Project [cast(f1#x as int) AS f1#x, cast(junk#x as string) AS junk#x]
+            +- Project [cast(f1#x as int) AS f1#x, cast(junk#x as string collate UTF8_BINARY) AS junk#x]
                +- Project [f1#x, dummy AS junk#x]
                   +- SubqueryAlias zt1
                      +- View (`zt1`, [f1#x])
@@ -2197,7 +2197,7 @@ Sort [name#x ASC NULLS FIRST], true
    +- Join LeftOuter, (a#x = code#x)
       :- SubqueryAlias c
       :  +- View (`c`, [name#x, a#x])
-      :     +- Project [cast(name#x as string) AS name#x, cast(a#x as string) AS a#x]
+      :     +- Project [cast(name#x as string collate UTF8_BINARY) AS name#x, cast(a#x as string collate UTF8_BINARY) AS a#x]
       :        +- Project [name#x, a#x]
       :           +- SubqueryAlias v
       :              +- Project [col1#x AS name#x, col2#x AS a#x]
@@ -2207,7 +2207,7 @@ Sort [name#x ASC NULLS FIRST], true
             +- Join LeftOuter, (code#x = a#x)
                :- SubqueryAlias a
                :  +- View (`a`, [code#x])
-               :     +- Project [cast(code#x as string) AS code#x]
+               :     +- Project [cast(code#x as string collate UTF8_BINARY) AS code#x]
                :        +- Project [code#x]
                :           +- SubqueryAlias v
                :              +- Project [col1#x AS code#x]
@@ -2216,7 +2216,7 @@ Sort [name#x ASC NULLS FIRST], true
                   +- Aggregate [a#x], [count(1) AS cnt#xL, a#x]
                      +- SubqueryAlias b
                         +- View (`b`, [a#x, num#x])
-                           +- Project [cast(a#x as string) AS a#x, cast(num#x as int) AS num#x]
+                           +- Project [cast(a#x as string collate UTF8_BINARY) AS a#x, cast(num#x as int) AS num#x]
                               +- Project [a#x, num#x]
                                  +- SubqueryAlias v
                                     +- Project [col1#x AS a#x, col2#x AS num#x]
@@ -2647,7 +2647,7 @@ Project [f1#x, q1#xL, q2#xL, f1#x, f1#x]
    :  :  :- SubqueryAlias t1
    :  :  :  +- SubqueryAlias text_tbl
    :  :  :     +- View (`TEXT_TBL`, [f1#x])
-   :  :  :        +- Project [cast(f1#x as string) AS f1#x]
+   :  :  :        +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
    :  :  :           +- Project [f1#x]
    :  :  :              +- SubqueryAlias v
    :  :  :                 +- Project [col1#x AS f1#x]
@@ -2663,7 +2663,7 @@ Project [f1#x, q1#xL, q2#xL, f1#x, f1#x]
    :  +- SubqueryAlias t2
    :     +- SubqueryAlias text_tbl
    :        +- View (`TEXT_TBL`, [f1#x])
-   :           +- Project [cast(f1#x as string) AS f1#x]
+   :           +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
    :              +- Project [f1#x]
    :                 +- SubqueryAlias v
    :                    +- Project [col1#x AS f1#x]
@@ -2696,7 +2696,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x]
       :              +- SubqueryAlias t2
       :                 +- SubqueryAlias text_tbl
       :                    +- View (`TEXT_TBL`, [f1#x])
-      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                       +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
       :                          +- Project [f1#x]
       :                             +- SubqueryAlias v
       :                                +- Project [col1#x AS f1#x]
@@ -2705,7 +2705,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x]
          :- SubqueryAlias t1
          :  +- SubqueryAlias text_tbl
          :     +- View (`TEXT_TBL`, [f1#x])
-         :        +- Project [cast(f1#x as string) AS f1#x]
+         :        +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
          :           +- Project [f1#x]
          :              +- SubqueryAlias v
          :                 +- Project [col1#x AS f1#x]
@@ -2738,7 +2738,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x]
       :              +- SubqueryAlias t2
       :                 +- SubqueryAlias text_tbl
       :                    +- View (`TEXT_TBL`, [f1#x])
-      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                       +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
       :                          +- Project [f1#x]
       :                             +- SubqueryAlias v
       :                                +- Project [col1#x AS f1#x]
@@ -2747,7 +2747,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x]
          :- SubqueryAlias t1
          :  +- SubqueryAlias text_tbl
          :     +- View (`TEXT_TBL`, [f1#x])
-         :        +- Project [cast(f1#x as string) AS f1#x]
+         :        +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
          :           +- Project [f1#x]
          :              +- SubqueryAlias v
          :                 +- Project [col1#x AS f1#x]
@@ -2781,7 +2781,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x, q1#xL, f1#x]
       :              +- SubqueryAlias t3
       :                 +- SubqueryAlias text_tbl
       :                    +- View (`TEXT_TBL`, [f1#x])
-      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                       +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
       :                          +- Project [f1#x]
       :                             +- SubqueryAlias v
       :                                +- Project [col1#x AS f1#x]
@@ -2794,7 +2794,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x, q1#xL, f1#x]
          :              +- SubqueryAlias t2
          :                 +- SubqueryAlias text_tbl
          :                    +- View (`TEXT_TBL`, [f1#x])
-         :                       +- Project [cast(f1#x as string) AS f1#x]
+         :                       +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
          :                          +- Project [f1#x]
          :                             +- SubqueryAlias v
          :                                +- Project [col1#x AS f1#x]
@@ -2803,7 +2803,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x, q1#xL, f1#x]
             :- SubqueryAlias t1
             :  +- SubqueryAlias text_tbl
             :     +- View (`TEXT_TBL`, [f1#x])
-            :        +- Project [cast(f1#x as string) AS f1#x]
+            :        +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
             :           +- Project [f1#x]
             :              +- SubqueryAlias v
             :                 +- Project [col1#x AS f1#x]
@@ -2837,7 +2837,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x, q1#xL, f1#x]
       :              +- SubqueryAlias t3
       :                 +- SubqueryAlias text_tbl
       :                    +- View (`TEXT_TBL`, [f1#x])
-      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                       +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
       :                          +- Project [f1#x]
       :                             +- SubqueryAlias v
       :                                +- Project [col1#x AS f1#x]
@@ -2850,7 +2850,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x, q1#xL, f1#x]
          :              +- SubqueryAlias t2
          :                 +- SubqueryAlias text_tbl
          :                    +- View (`TEXT_TBL`, [f1#x])
-         :                       +- Project [cast(f1#x as string) AS f1#x]
+         :                       +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
          :                          +- Project [f1#x]
          :                             +- SubqueryAlias v
          :                                +- Project [col1#x AS f1#x]
@@ -2859,7 +2859,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x, q1#xL, f1#x]
             :- SubqueryAlias t1
             :  +- SubqueryAlias text_tbl
             :     +- View (`TEXT_TBL`, [f1#x])
-            :        +- Project [cast(f1#x as string) AS f1#x]
+            :        +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
             :           +- Project [f1#x]
             :              +- SubqueryAlias v
             :                 +- Project [col1#x AS f1#x]
@@ -2893,7 +2893,7 @@ Project [1 AS 1#x]
       :              +- SubqueryAlias tt5
       :                 +- SubqueryAlias text_tbl
       :                    +- View (`TEXT_TBL`, [f1#x])
-      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                       +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
       :                          +- Project [f1#x]
       :                             +- SubqueryAlias v
       :                                +- Project [col1#x AS f1#x]
@@ -2904,7 +2904,7 @@ Project [1 AS 1#x]
          :  :  :- SubqueryAlias tt1
          :  :  :  +- SubqueryAlias text_tbl
          :  :  :     +- View (`TEXT_TBL`, [f1#x])
-         :  :  :        +- Project [cast(f1#x as string) AS f1#x]
+         :  :  :        +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
          :  :  :           +- Project [f1#x]
          :  :  :              +- SubqueryAlias v
          :  :  :                 +- Project [col1#x AS f1#x]
@@ -2912,7 +2912,7 @@ Project [1 AS 1#x]
          :  :  +- SubqueryAlias tt2
          :  :     +- SubqueryAlias text_tbl
          :  :        +- View (`TEXT_TBL`, [f1#x])
-         :  :           +- Project [cast(f1#x as string) AS f1#x]
+         :  :           +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
          :  :              +- Project [f1#x]
          :  :                 +- SubqueryAlias v
          :  :                    +- Project [col1#x AS f1#x]
@@ -2920,7 +2920,7 @@ Project [1 AS 1#x]
          :  +- SubqueryAlias tt3
          :     +- SubqueryAlias text_tbl
          :        +- View (`TEXT_TBL`, [f1#x])
-         :           +- Project [cast(f1#x as string) AS f1#x]
+         :           +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
          :              +- Project [f1#x]
          :                 +- SubqueryAlias v
          :                    +- Project [col1#x AS f1#x]
@@ -2928,7 +2928,7 @@ Project [1 AS 1#x]
          +- SubqueryAlias tt4
             +- SubqueryAlias text_tbl
                +- View (`TEXT_TBL`, [f1#x])
-                  +- Project [cast(f1#x as string) AS f1#x]
+                  +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
                      +- Project [f1#x]
                         +- SubqueryAlias v
                            +- Project [col1#x AS f1#x]
@@ -2954,7 +2954,7 @@ Project [1 AS 1#x]
       :              +- SubqueryAlias tt5
       :                 +- SubqueryAlias text_tbl
       :                    +- View (`TEXT_TBL`, [f1#x])
-      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                       +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
       :                          +- Project [f1#x]
       :                             +- SubqueryAlias v
       :                                +- Project [col1#x AS f1#x]
@@ -2965,7 +2965,7 @@ Project [1 AS 1#x]
          :  :  :- SubqueryAlias tt1
          :  :  :  +- SubqueryAlias text_tbl
          :  :  :     +- View (`TEXT_TBL`, [f1#x])
-         :  :  :        +- Project [cast(f1#x as string) AS f1#x]
+         :  :  :        +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
          :  :  :           +- Project [f1#x]
          :  :  :              +- SubqueryAlias v
          :  :  :                 +- Project [col1#x AS f1#x]
@@ -2973,7 +2973,7 @@ Project [1 AS 1#x]
          :  :  +- SubqueryAlias tt2
          :  :     +- SubqueryAlias text_tbl
          :  :        +- View (`TEXT_TBL`, [f1#x])
-         :  :           +- Project [cast(f1#x as string) AS f1#x]
+         :  :           +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
          :  :              +- Project [f1#x]
          :  :                 +- SubqueryAlias v
          :  :                    +- Project [col1#x AS f1#x]
@@ -2981,7 +2981,7 @@ Project [1 AS 1#x]
          :  +- SubqueryAlias tt3
          :     +- SubqueryAlias text_tbl
          :        +- View (`TEXT_TBL`, [f1#x])
-         :           +- Project [cast(f1#x as string) AS f1#x]
+         :           +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
          :              +- Project [f1#x]
          :                 +- SubqueryAlias v
          :                    +- Project [col1#x AS f1#x]
@@ -2989,7 +2989,7 @@ Project [1 AS 1#x]
          +- SubqueryAlias tt4
             +- SubqueryAlias text_tbl
                +- View (`TEXT_TBL`, [f1#x])
-                  +- Project [cast(f1#x as string) AS f1#x]
+                  +- Project [cast(f1#x as string collate UTF8_BINARY) AS f1#x]
                      +- Project [f1#x]
                         +- SubqueryAlias v
                            +- Project [col1#x AS f1#x]

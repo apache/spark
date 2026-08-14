@@ -303,7 +303,7 @@ Project [value1#x, value2#x, b#x, A#x, c#x, d#x]
       :- SubqueryAlias p
       :  +- SubqueryAlias testdata
       :     +- View (`testData`, [key#x, value1#x, value2#x])
-      :        +- Project [cast(key#x as int) AS key#x, cast(value1#x as string) AS value1#x, cast(value2#x as string) AS value2#x]
+      :        +- Project [cast(key#x as int) AS key#x, cast(value1#x as string collate UTF8_BINARY) AS value1#x, cast(value2#x as string collate UTF8_BINARY) AS value2#x]
       :           +- Project [key#x, value1#x, value2#x]
       :              +- SubqueryAlias testData
       :                 +- LocalRelation [key#x, value1#x, value2#x]
@@ -324,7 +324,7 @@ Project [value1#x, value2#x, b#x, A#x, c#x, d#x]
       :- SubqueryAlias p
       :  +- SubqueryAlias testdata
       :     +- View (`testData`, [key#x, value1#x, value2#x])
-      :        +- Project [cast(key#x as int) AS key#x, cast(value1#x as string) AS value1#x, cast(value2#x as string) AS value2#x]
+      :        +- Project [cast(key#x as int) AS key#x, cast(value1#x as string collate UTF8_BINARY) AS value1#x, cast(value2#x as string collate UTF8_BINARY) AS value2#x]
       :           +- Project [key#x, value1#x, value2#x]
       :              +- SubqueryAlias testData
       :                 +- LocalRelation [key#x, value1#x, value2#x]
