@@ -1643,7 +1643,7 @@ table courseSales
      for y in (2012 as firstYear, 2013 as secondYear)
    )
 -- !query schema
-struct<c:string collate UTF8_BINARY,firstYear_s:bigint,firstYear_a:double,secondYear_s:bigint,secondYear_a:double>
+struct<c:string,firstYear_s:bigint,firstYear_a:double,secondYear_s:bigint,secondYear_a:double>
 -- !query output
 Java	20000	20000.0	30000	30000.0
 dotNET	15000	7500.0	48000	48000.0
@@ -1685,7 +1685,7 @@ table courseEarnings
      earningsYear for `year` in (`2012`, `2013`, `2014`)
    )
 -- !query schema
-struct<course:string collate UTF8_BINARY,year:string,earningsYear:int>
+struct<course:string,year:string,earningsYear:int>
 -- !query output
 Java	2012	20000
 Java	2013	30000
@@ -1700,7 +1700,7 @@ table courseEarnings
      earningsYear for `year` in (`2012`, `2013`, `2014`)
    )
 -- !query schema
-struct<course:string collate UTF8_BINARY,year:string,earningsYear:int>
+struct<course:string,year:string,earningsYear:int>
 -- !query output
 Java	2012	20000
 Java	2013	30000
@@ -1719,7 +1719,7 @@ table courseEarningsAndSales
        (earnings2014, sales2014) as `2014`)
    )
 -- !query schema
-struct<course:string collate UTF8_BINARY,year:string,earnings:int,sales:int>
+struct<course:string,year:string,earnings:int,sales:int>
 -- !query output
 Java	2012	20000	1
 Java	2013	30000	2
@@ -2319,7 +2319,7 @@ table natural_join_test_t1
 |> natural join natural_join_test_t2
 |> where k = "one"
 -- !query schema
-struct<k:string collate UTF8_BINARY,v1:int,v2:int>
+struct<k:string,v1:int,v2:int>
 -- !query output
 one	1	1
 one	1	5
@@ -2330,7 +2330,7 @@ table natural_join_test_t1
 |> natural join natural_join_test_t2 nt2
 |> select natural_join_test_t1.*
 -- !query schema
-struct<k:string collate UTF8_BINARY,v1:int>
+struct<k:string,v1:int>
 -- !query output
 one	1
 one	1
@@ -2343,7 +2343,7 @@ table natural_join_test_t1
 |> natural join natural_join_test_t3 nt3
 |> select natural_join_test_t1.*, nt2.*, nt3.*
 -- !query schema
-struct<k:string collate UTF8_BINARY,v1:int,k:string collate UTF8_BINARY,v2:int,k:string collate UTF8_BINARY,v3:int>
+struct<k:string,v1:int,k:string,v2:int,k:string,v3:int>
 -- !query output
 one	1	one	1	one	4
 one	1	one	1	one	6
@@ -3436,7 +3436,7 @@ table windowTestData
 |> select cate, sum(val) over w
    window w as (partition by cate order by val)
 -- !query schema
-struct<cate:string collate UTF8_BINARY,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
 -- !query output
 NULL	3
 NULL	NULL
@@ -3454,7 +3454,7 @@ table windowTestData
 |> select cate, sum(val) over w
    window w as (order by val_timestamp range between unbounded preceding and current row)
 -- !query schema
-struct<cate:string collate UTF8_BINARY,sum(val) OVER (ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+struct<cate:string,sum(val) OVER (ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
 -- !query output
 NULL	5
 NULL	NULL
@@ -3472,7 +3472,7 @@ table windowTestData
 |> select cate, val
     window w as (partition by cate order by val)
 -- !query schema
-struct<cate:string collate UTF8_BINARY,val:int>
+struct<cate:string,val:int>
 -- !query output
 NULL	3
 NULL	NULL
@@ -3492,7 +3492,7 @@ table windowTestData
 |> select cate, val, sum_val, first_value(cate) over w
    window w as (order by val)
 -- !query schema
-struct<cate:string collate UTF8_BINARY,val:int,sum_val:bigint,first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string collate UTF8_BINARY>
+struct<cate:string,val:int,sum_val:bigint,first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string>
 -- !query output
 NULL	3	3	a
 NULL	NULL	3	a
@@ -3510,7 +3510,7 @@ table windowTestData
 |> select cate, val, sum(val) over w1, first_value(cate) over w2
    window w1 as (partition by cate), w2 as (order by val)
 -- !query schema
-struct<cate:string collate UTF8_BINARY,val:int,sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string collate UTF8_BINARY>
+struct<cate:string,val:int,sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string>
 -- !query output
 NULL	3	3	a
 NULL	NULL	3	a
@@ -3576,7 +3576,7 @@ table windowTestData
 |> select cate, sum(val) over val
    window val as (partition by cate order by val)
 -- !query schema
-struct<cate:string collate UTF8_BINARY,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
 -- !query output
 NULL	3
 NULL	NULL
@@ -4258,7 +4258,7 @@ table windowTestData
 | select cate, sum(val) over w
   window w as (partition by cate order by val)
 -- !query schema
-struct<cate:string collate UTF8_BINARY,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
 -- !query output
 NULL	3
 NULL	NULL

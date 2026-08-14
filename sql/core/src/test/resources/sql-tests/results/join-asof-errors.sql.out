@@ -325,7 +325,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "type1" : "\"TIMESTAMP\"",
-    "type2" : "\"STRING COLLATE UTF8_BINARY\""
+    "type2" : "\"STRING\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -509,7 +509,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "conditionType" : "\"STRING COLLATE UTF8_BINARY\"",
+    "conditionType" : "\"STRING\"",
     "joinCondition" : "\"symbol\""
   },
   "queryContext" : [ {

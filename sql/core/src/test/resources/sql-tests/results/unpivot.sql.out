@@ -16,7 +16,7 @@ UNPIVOT (
   earningsYear FOR year IN (`2012`, `2013`, `2014`)
 )
 -- !query schema
-struct<course:string collate UTF8_BINARY,year:string,earningsYear:int>
+struct<course:string,year:string,earningsYear:int>
 -- !query output
 Java	2012	20000
 Java	2013	30000
@@ -31,7 +31,7 @@ UNPIVOT INCLUDE NULLS (
   earningsYear FOR year IN (`2012`, `2013`, `2014`)
 )
 -- !query schema
-struct<course:string collate UTF8_BINARY,year:string,earningsYear:int>
+struct<course:string,year:string,earningsYear:int>
 -- !query output
 Java	2012	20000
 Java	2013	30000
@@ -47,7 +47,7 @@ UNPIVOT (
   earningsYear FOR year IN (`2012` as `twenty-twelve`, `2013` as `twenty-thirteen`, `2014` as `twenty-fourteen`)
 )
 -- !query schema
-struct<course:string collate UTF8_BINARY,year:string,earningsYear:int>
+struct<course:string,year:string,earningsYear:int>
 -- !query output
 Java	twenty-thirteen	30000
 Java	twenty-twelve	20000
@@ -73,7 +73,7 @@ UNPIVOT (
   (earnings, sales) FOR year IN ((earnings2012, sales2012), (earnings2013, sales2013), (earnings2014, sales2014))
 )
 -- !query schema
-struct<course:string collate UTF8_BINARY,year:string,earnings:int,sales:int>
+struct<course:string,year:string,earnings:int,sales:int>
 -- !query output
 Java	earnings2012_sales2012	20000	1
 Java	earnings2013_sales2013	30000	2
@@ -88,7 +88,7 @@ UNPIVOT INCLUDE NULLS (
   (earnings, sales) FOR year IN ((earnings2012, sales2012), (earnings2013, sales2013), (earnings2014, sales2014))
 )
 -- !query schema
-struct<course:string collate UTF8_BINARY,year:string,earnings:int,sales:int>
+struct<course:string,year:string,earnings:int,sales:int>
 -- !query output
 Java	earnings2012_sales2012	20000	1
 Java	earnings2013_sales2013	30000	2
@@ -104,7 +104,7 @@ UNPIVOT (
   (earnings, sales) FOR year IN ((earnings2012, sales2012) as `2012`, (earnings2013, sales2013) as `2013`, (earnings2014, sales2014) as `2014`)
 )
 -- !query schema
-struct<course:string collate UTF8_BINARY,year:string,earnings:int,sales:int>
+struct<course:string,year:string,earnings:int,sales:int>
 -- !query output
 Java	2012	20000	1
 Java	2013	30000	2

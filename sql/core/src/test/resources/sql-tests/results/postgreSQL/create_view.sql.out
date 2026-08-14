@@ -1136,7 +1136,7 @@ struct<>
 -- !query
 SELECT * FROM tt1
 -- !query schema
-struct<a:string collate UTF8_BINARY,b:string collate UTF8_BINARY,c:decimal(12,2),d:string collate UTF8_BINARY>
+struct<a:string,b:string,c:decimal(12,2),d:string>
 -- !query output
 0123456789	abc	42.12	abc
 abc	0123456789	42.00	abcd

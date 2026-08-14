@@ -112,7 +112,7 @@ SELECT id, x, y, ord
 FROM nested, LATERAL UNNEST(xs, ys) WITH ORDINALITY AS t(x, y, ord)
 ORDER BY id, ord
 -- !query schema
-struct<id:int,x:int,y:string collate UTF8_BINARY,ord:bigint>
+struct<id:int,x:int,y:string,ord:bigint>
 -- !query output
 1	10	a	1
 1	20	b	2

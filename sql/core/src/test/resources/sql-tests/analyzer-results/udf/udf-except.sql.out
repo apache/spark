@@ -43,17 +43,17 @@ CreateViewCommand `t2`, select * from values
 SELECT udf(k), udf(v) FROM t1 EXCEPT SELECT udf(k), udf(v) FROM t2
 -- !query analysis
 Except false
-:- Project [cast(udf(cast(k#x as string)) as string collate UTF8_BINARY) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
+:- Project [cast(udf(cast(k#x as string)) as string) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :  +- SubqueryAlias t1
 :     +- View (`t1`, [k#x, v#x])
-:        +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+:        +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias t1
 :                 +- LocalRelation [k#x, v#x]
-+- Project [cast(udf(cast(k#x as string)) as string collate UTF8_BINARY) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
++- Project [cast(udf(cast(k#x as string)) as string) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
    +- SubqueryAlias t2
       +- View (`t2`, [k#x, v#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias t2
                   +- LocalRelation [k#x, v#x]
@@ -66,7 +66,7 @@ Except false
 :- Project [k#x, v#x]
 :  +- SubqueryAlias t1
 :     +- View (`t1`, [k#x, v#x])
-:        +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+:        +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias t1
 :                 +- LocalRelation [k#x, v#x]
@@ -74,7 +74,7 @@ Except false
    +- Filter (NOT (cast(udf(cast(v#x as string)) as int) = 1) AND NOT (v#x = cast(udf(cast(2 as string)) as int)))
       +- SubqueryAlias t1
          +- View (`t1`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias t1
                      +- LocalRelation [k#x, v#x]
@@ -88,7 +88,7 @@ Except false
 :  +- Filter (NOT (cast(udf(cast(v#x as string)) as int) = 1) AND NOT (v#x = cast(udf(cast(22 as string)) as int)))
 :     +- SubqueryAlias t1
 :        +- View (`t1`, [k#x, v#x])
-:           +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+:           +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias t1
 :                    +- LocalRelation [k#x, v#x]
@@ -96,7 +96,7 @@ Except false
    +- Filter (NOT (cast(udf(cast(v#x as string)) as int) = 2) AND (v#x >= cast(udf(cast(3 as string)) as int)))
       +- SubqueryAlias t1
          +- View (`t1`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias t1
                      +- LocalRelation [k#x, v#x]
@@ -113,13 +113,13 @@ Except false
 :     +- Join Inner
 :        :- SubqueryAlias t1
 :        :  +- View (`t1`, [k#x, v#x])
-:        :     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+:        :     +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :        :        +- Project [k#x, v#x]
 :        :           +- SubqueryAlias t1
 :        :              +- LocalRelation [k#x, v#x]
 :        +- SubqueryAlias t2
 :           +- View (`t2`, [k#x, v#x])
-:              +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+:              +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :                 +- Project [k#x, v#x]
 :                    +- SubqueryAlias t2
 :                       +- LocalRelation [k#x, v#x]
@@ -128,13 +128,13 @@ Except false
       +- Join Inner
          :- SubqueryAlias t1
          :  +- View (`t1`, [k#x, v#x])
-         :     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+         :     +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
          :        +- Project [k#x, v#x]
          :           +- SubqueryAlias t1
          :              +- LocalRelation [k#x, v#x]
          +- SubqueryAlias t2
             +- View (`t2`, [k#x, v#x])
-               +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias t2
                         +- LocalRelation [k#x, v#x]
@@ -148,14 +148,14 @@ Except false
 :  +- Filter ((v#x >= cast(udf(cast(1 as string)) as int)) AND NOT (cast(udf(cast(v#x as string)) as int) = 22))
 :     +- SubqueryAlias t2
 :        +- View (`t2`, [k#x, v#x])
-:           +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+:           +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias t2
 :                    +- LocalRelation [k#x, v#x]
 +- Project [k#x, v#x]
    +- SubqueryAlias t1
       +- View (`t1`, [k#x, v#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias t1
                   +- LocalRelation [k#x, v#x]
@@ -168,32 +168,32 @@ SELECT (SELECT udf(min(k)) FROM t2) abs_min_t2 FROM t1 WHERE  t1.k = udf('one')
 -- !query analysis
 Except false
 :- Project [scalar-subquery#x [k#x] AS min_t2#x]
-:  :  +- Aggregate [min(cast(udf(cast(k#x as string)) as string collate UTF8_BINARY)) AS min(udf(k))#x]
+:  :  +- Aggregate [min(cast(udf(cast(k#x as string)) as string)) AS min(udf(k))#x]
 :  :     +- Filter (k#x = outer(k#x))
 :  :        +- SubqueryAlias t2
 :  :           +- View (`t2`, [k#x, v#x])
-:  :              +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+:  :              +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :  :                 +- Project [k#x, v#x]
 :  :                    +- SubqueryAlias t2
 :  :                       +- LocalRelation [k#x, v#x]
 :  +- SubqueryAlias t1
 :     +- View (`t1`, [k#x, v#x])
-:        +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+:        +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias t1
 :                 +- LocalRelation [k#x, v#x]
 +- Project [scalar-subquery#x [] AS abs_min_t2#x]
-   :  +- Aggregate [cast(udf(cast(min(k#x) as string)) as string collate UTF8_BINARY) AS udf(min(k))#x]
+   :  +- Aggregate [cast(udf(cast(min(k#x) as string)) as string) AS udf(min(k))#x]
    :     +- SubqueryAlias t2
    :        +- View (`t2`, [k#x, v#x])
-   :           +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+   :           +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
    :              +- Project [k#x, v#x]
    :                 +- SubqueryAlias t2
    :                    +- LocalRelation [k#x, v#x]
    +- Filter (k#x = cast(udf(cast(one as string)) as string))
       +- SubqueryAlias t1
          +- View (`t1`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias t1
                      +- LocalRelation [k#x, v#x]
@@ -216,16 +216,16 @@ Except false
 :- Project [k#x]
 :  +- Filter (v#x <= scalar-subquery#x [k#x])
 :     :  +- Aggregate [cast(udf(cast(max(cast(udf(cast(v#x as string)) as int)) as string)) as int) AS udf(max(udf(v)))#x]
-:     :     +- Filter (cast(udf(cast(k#x as string)) as string collate UTF8_BINARY) = cast(udf(cast(outer(k#x) as string)) as string collate UTF8_BINARY))
+:     :     +- Filter (cast(udf(cast(k#x as string)) as string) = cast(udf(cast(outer(k#x) as string)) as string))
 :     :        +- SubqueryAlias t2
 :     :           +- View (`t2`, [k#x, v#x])
-:     :              +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+:     :              +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :     :                 +- Project [k#x, v#x]
 :     :                    +- SubqueryAlias t2
 :     :                       +- LocalRelation [k#x, v#x]
 :     +- SubqueryAlias t1
 :        +- View (`t1`, [k#x, v#x])
-:           +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+:           +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias t1
 :                    +- LocalRelation [k#x, v#x]
@@ -235,13 +235,13 @@ Except false
       :     +- Filter (k#x = outer(k#x))
       :        +- SubqueryAlias t2
       :           +- View (`t2`, [k#x, v#x])
-      :              +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+      :              +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
       :                 +- Project [k#x, v#x]
       :                    +- SubqueryAlias t2
       :                       +- LocalRelation [k#x, v#x]
       +- SubqueryAlias t1
          +- View (`t1`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias t1
                      +- LocalRelation [k#x, v#x]

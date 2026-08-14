@@ -30,7 +30,7 @@ struct<ST:struct<A:string,B:string>>
 -- !query
 SELECT ID, STRUCT(ST.*) NST FROM tbl_x
 -- !query schema
-struct<ID:int,NST:struct<C:string collate UTF8_BINARY,D:string collate UTF8_BINARY>>
+struct<ID:int,NST:struct<C:string,D:string>>
 -- !query output
 1	{"C":"gamma","D":"delta"}
 2	{"C":"epsilon","D":"eta"}
@@ -40,7 +40,7 @@ struct<ID:int,NST:struct<C:string collate UTF8_BINARY,D:string collate UTF8_BINA
 -- !query
 SELECT ID, STRUCT(ST.*,CAST(ID AS STRING) AS E) NST FROM tbl_x
 -- !query schema
-struct<ID:int,NST:struct<C:string collate UTF8_BINARY,D:string collate UTF8_BINARY,E:string>>
+struct<ID:int,NST:struct<C:string,D:string,E:string>>
 -- !query output
 1	{"C":"gamma","D":"delta","E":"1"}
 2	{"C":"epsilon","D":"eta","E":"2"}
@@ -50,7 +50,7 @@ struct<ID:int,NST:struct<C:string collate UTF8_BINARY,D:string collate UTF8_BINA
 -- !query
 SELECT ID, STRUCT(CAST(ID AS STRING) AS AA, ST.*) NST FROM tbl_x
 -- !query schema
-struct<ID:int,NST:struct<AA:string,C:string collate UTF8_BINARY,D:string collate UTF8_BINARY>>
+struct<ID:int,NST:struct<AA:string,C:string,D:string>>
 -- !query output
 1	{"AA":"1","C":"gamma","D":"delta"}
 2	{"AA":"2","C":"epsilon","D":"eta"}
@@ -60,7 +60,7 @@ struct<ID:int,NST:struct<AA:string,C:string collate UTF8_BINARY,D:string collate
 -- !query
 SELECT ID, STRUCT(ST.*).C NST FROM tbl_x
 -- !query schema
-struct<ID:int,NST:string collate UTF8_BINARY>
+struct<ID:int,NST:string>
 -- !query output
 1	gamma
 2	epsilon
@@ -70,7 +70,7 @@ struct<ID:int,NST:string collate UTF8_BINARY>
 -- !query
 SELECT ID, STRUCT(ST.C, ST.D).D NST FROM tbl_x
 -- !query schema
-struct<ID:int,NST:string collate UTF8_BINARY>
+struct<ID:int,NST:string>
 -- !query output
 1	delta
 2	eta
@@ -80,7 +80,7 @@ struct<ID:int,NST:string collate UTF8_BINARY>
 -- !query
 SELECT ID, STRUCT(ST.C as STC, ST.D as STD).STD FROM tbl_x
 -- !query schema
-struct<ID:int,struct(ST.C AS STC, ST.D AS STD).STD:string collate UTF8_BINARY>
+struct<ID:int,struct(ST.C AS STC, ST.D AS STD).STD:string>
 -- !query output
 1	delta
 2	eta

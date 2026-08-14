@@ -122,7 +122,7 @@ SELECT COUNT(id) FILTER (WHERE hiredate = to_date('2001-01-01 00:00:00')) FROM e
 Aggregate [count(id#x) FILTER (WHERE (hiredate#x = to_date(2001-01-01 00:00:00, None, Some(America/Los_Angeles), true))) AS count(id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00)))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -134,7 +134,7 @@ SELECT COUNT(id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00")) F
 Aggregate [count(id#x) FILTER (WHERE (cast(hiredate#x as timestamp) = to_timestamp(2001-01-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), true))) AS count(id) FILTER (WHERE (hiredate = to_timestamp(2001-01-01 00:00:00)))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -146,7 +146,7 @@ SELECT COUNT(id) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd") = "2001-01-01
 Aggregate [count(id#x) FILTER (WHERE (date_format(cast(hiredate#x as timestamp), yyyy-MM-dd, Some(America/Los_Angeles)) = 2001-01-01)) AS count(id) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd) = 2001-01-01))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -158,7 +158,7 @@ SELECT COUNT(DISTINCT id) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:
 Aggregate [count(distinct id#x) FILTER (WHERE (date_format(cast(hiredate#x as timestamp), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles)) = 2001-01-01 00:00:00)) AS count(DISTINCT id) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) = 2001-01-01 00:00:00))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -170,7 +170,7 @@ SELECT COUNT(DISTINCT id), COUNT(DISTINCT id) FILTER (WHERE date_format(hiredate
 Aggregate [count(distinct id#x) AS count(DISTINCT id)#xL, count(distinct id#x) FILTER (WHERE (date_format(cast(hiredate#x as timestamp), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles)) = 2001-01-01 00:00:00)) AS count(DISTINCT id) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) = 2001-01-01 00:00:00))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -182,7 +182,7 @@ SELECT COUNT(DISTINCT id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:0
 Aggregate [count(distinct id#x) FILTER (WHERE (cast(hiredate#x as timestamp) = to_timestamp(2001-01-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), true))) AS count(DISTINCT id) FILTER (WHERE (hiredate = to_timestamp(2001-01-01 00:00:00)))#xL, count(distinct id#x) FILTER (WHERE (hiredate#x = to_date(2001-01-01 00:00:00, None, Some(America/Los_Angeles), true))) AS count(DISTINCT id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00)))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -212,7 +212,7 @@ SELECT COUNT(DISTINCT id) FILTER (WHERE true) FROM emp
 Aggregate [count(distinct id#x) FILTER (WHERE true) AS count(DISTINCT id) FILTER (WHERE true)#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -224,7 +224,7 @@ SELECT COUNT(DISTINCT id) FILTER (WHERE false) FROM emp
 Aggregate [count(distinct id#x) FILTER (WHERE false) AS count(DISTINCT id) FILTER (WHERE false)#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -236,7 +236,7 @@ SELECT COUNT(DISTINCT 2), COUNT(DISTINCT 2,3) FILTER (WHERE dept_id = 40) FROM e
 Aggregate [count(distinct 2) AS count(DISTINCT 2)#xL, count(distinct 2, 3) FILTER (WHERE (dept_id#x = 40)) AS count(DISTINCT 2, 3) FILTER (WHERE (dept_id = 40))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -248,7 +248,7 @@ SELECT COUNT(DISTINCT 2), COUNT(DISTINCT 3,2) FILTER (WHERE dept_id = 40) FROM e
 Aggregate [count(distinct 2) AS count(DISTINCT 2)#xL, count(distinct 3, 2) FILTER (WHERE (dept_id#x = 40)) AS count(DISTINCT 3, 2) FILTER (WHERE (dept_id = 40))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -260,7 +260,7 @@ SELECT COUNT(DISTINCT 2), COUNT(DISTINCT 2,3) FILTER (WHERE dept_id > 0) FROM em
 Aggregate [count(distinct 2) AS count(DISTINCT 2)#xL, count(distinct 2, 3) FILTER (WHERE (dept_id#x > 0)) AS count(DISTINCT 2, 3) FILTER (WHERE (dept_id > 0))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -272,7 +272,7 @@ SELECT COUNT(DISTINCT 2), COUNT(DISTINCT 3,2) FILTER (WHERE dept_id > 0) FROM em
 Aggregate [count(distinct 2) AS count(DISTINCT 2)#xL, count(distinct 3, 2) FILTER (WHERE (dept_id#x > 0)) AS count(DISTINCT 3, 2) FILTER (WHERE (dept_id > 0))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -284,7 +284,7 @@ SELECT COUNT(DISTINCT id), COUNT(DISTINCT 2,3) FILTER (WHERE dept_id = 40) FROM 
 Aggregate [count(distinct id#x) AS count(DISTINCT id)#xL, count(distinct 2, 3) FILTER (WHERE (dept_id#x = 40)) AS count(DISTINCT 2, 3) FILTER (WHERE (dept_id = 40))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -296,7 +296,7 @@ SELECT COUNT(DISTINCT id), COUNT(DISTINCT 3,2) FILTER (WHERE dept_id = 40) FROM 
 Aggregate [count(distinct id#x) AS count(DISTINCT id)#xL, count(distinct 3, 2) FILTER (WHERE (dept_id#x = 40)) AS count(DISTINCT 3, 2) FILTER (WHERE (dept_id = 40))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -308,7 +308,7 @@ SELECT COUNT(DISTINCT id), COUNT(DISTINCT 2,3) FILTER (WHERE dept_id > 0) FROM e
 Aggregate [count(distinct id#x) AS count(DISTINCT id)#xL, count(distinct 2, 3) FILTER (WHERE (dept_id#x > 0)) AS count(DISTINCT 2, 3) FILTER (WHERE (dept_id > 0))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -320,7 +320,7 @@ SELECT COUNT(DISTINCT id), COUNT(DISTINCT 3,2) FILTER (WHERE dept_id > 0) FROM e
 Aggregate [count(distinct id#x) AS count(DISTINCT id)#xL, count(distinct 3, 2) FILTER (WHERE (dept_id#x > 0)) AS count(DISTINCT 3, 2) FILTER (WHERE (dept_id > 0))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -376,7 +376,7 @@ SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > to_date("2003-01-01")) FROM
 Aggregate [dept_id#x], [dept_id#x, sum(salary#x) FILTER (WHERE (hiredate#x > to_date(2003-01-01, None, Some(America/Los_Angeles), true))) AS sum(salary) FILTER (WHERE (hiredate > to_date(2003-01-01)))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -388,7 +388,7 @@ SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > to_timestamp("2003-01-01 00
 Aggregate [dept_id#x], [dept_id#x, sum(salary#x) FILTER (WHERE (cast(hiredate#x as timestamp) > to_timestamp(2003-01-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), true))) AS sum(salary) FILTER (WHERE (hiredate > to_timestamp(2003-01-01 00:00:00)))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -400,7 +400,7 @@ SELECT dept_id, SUM(salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd") > 
 Aggregate [dept_id#x], [dept_id#x, sum(salary#x) FILTER (WHERE (date_format(cast(hiredate#x as timestamp), yyyy-MM-dd, Some(America/Los_Angeles)) > 2003-01-01)) AS sum(salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd) > 2003-01-01))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -412,7 +412,7 @@ SELECT dept_id, SUM(DISTINCT salary) FILTER (WHERE date_format(hiredate, "yyyy-M
 Aggregate [dept_id#x], [dept_id#x, sum(distinct salary#x) FILTER (WHERE (date_format(cast(hiredate#x as timestamp), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles)) > 2001-01-01 00:00:00)) AS sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -424,7 +424,7 @@ SELECT dept_id, SUM(DISTINCT salary), SUM(DISTINCT salary) FILTER (WHERE date_fo
 Aggregate [dept_id#x], [dept_id#x, sum(distinct salary#x) AS sum(DISTINCT salary)#x, sum(distinct salary#x) FILTER (WHERE (date_format(cast(hiredate#x as timestamp), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles)) > 2001-01-01 00:00:00)) AS sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -442,7 +442,7 @@ SELECT dept_id, COUNT(id), SUM(DISTINCT salary), SUM(DISTINCT salary) FILTER (WH
 Aggregate [dept_id#x], [dept_id#x, count(id#x) AS count(id)#xL, sum(distinct salary#x) AS sum(DISTINCT salary)#x, sum(distinct salary#x) FILTER (WHERE (date_format(cast(hiredate#x as timestamp), yyyy-MM-dd, Some(America/Los_Angeles)) > 2001-01-01)) AS sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd) > 2001-01-01))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -484,7 +484,7 @@ SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= to_date("2003-01-01")) FROM 
 Aggregate [foo], [foo AS foo#x, sum(salary#x) FILTER (WHERE (hiredate#x >= to_date(2003-01-01, None, Some(America/Los_Angeles), true))) AS sum(salary) FILTER (WHERE (hiredate >= to_date(2003-01-01)))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -496,7 +496,7 @@ SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= to_timestamp("2003-01-01")) 
 Aggregate [foo], [foo AS foo#x, sum(salary#x) FILTER (WHERE (cast(hiredate#x as timestamp) >= to_timestamp(2003-01-01, None, TimestampType, Some(America/Los_Angeles), true))) AS sum(salary) FILTER (WHERE (hiredate >= to_timestamp(2003-01-01)))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -508,7 +508,7 @@ select dept_id, count(distinct emp_name), count(distinct hiredate), sum(salary),
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) AS count(DISTINCT emp_name)#xL, count(distinct hiredate#x) AS count(DISTINCT hiredate)#xL, sum(salary#x) AS sum(salary)#x, sum(salary#x) FILTER (WHERE (id#x > 200)) AS sum(salary) FILTER (WHERE (id > 200))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -520,7 +520,7 @@ select dept_id, count(distinct emp_name), count(distinct hiredate), sum(salary),
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) AS count(DISTINCT emp_name)#xL, count(distinct hiredate#x) AS count(DISTINCT hiredate)#xL, sum(salary#x) AS sum(salary)#x, sum(salary#x) FILTER (WHERE ((id#x + dept_id#x) > 500)) AS sum(salary) FILTER (WHERE ((id + dept_id) > 500))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -532,7 +532,7 @@ select dept_id, count(distinct emp_name), count(distinct hiredate), sum(salary) 
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) AS count(DISTINCT emp_name)#xL, count(distinct hiredate#x) AS count(DISTINCT hiredate)#xL, sum(salary#x) FILTER (WHERE (salary#x < 400.0)) AS sum(salary) FILTER (WHERE (salary < 400.0))#x, sum(salary#x) FILTER (WHERE (id#x > 200)) AS sum(salary) FILTER (WHERE (id > 200))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -544,7 +544,7 @@ select dept_id, count(distinct emp_name), count(distinct hiredate), sum(salary) 
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) AS count(DISTINCT emp_name)#xL, count(distinct hiredate#x) AS count(DISTINCT hiredate)#xL, sum(salary#x) FILTER (WHERE (salary#x < 400.0)) AS sum(salary) FILTER (WHERE (salary < 400.0))#x, sum(salary#x) FILTER (WHERE ((id#x + dept_id#x) > 500)) AS sum(salary) FILTER (WHERE ((id + dept_id) > 500))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -556,7 +556,7 @@ select dept_id, count(distinct emp_name) filter (where id > 200), sum(salary) fr
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) FILTER (WHERE (id#x > 200)) AS count(DISTINCT emp_name) FILTER (WHERE (id > 200))#xL, sum(salary#x) AS sum(salary)#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -568,7 +568,7 @@ select dept_id, count(distinct emp_name) filter (where id + dept_id > 500), sum(
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) FILTER (WHERE ((id#x + dept_id#x) > 500)) AS count(DISTINCT emp_name) FILTER (WHERE ((id + dept_id) > 500))#xL, sum(salary#x) AS sum(salary)#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -580,7 +580,7 @@ select dept_id, count(distinct emp_name), count(distinct emp_name) filter (where
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) AS count(DISTINCT emp_name)#xL, count(distinct emp_name#x) FILTER (WHERE (id#x > 200)) AS count(DISTINCT emp_name) FILTER (WHERE (id > 200))#xL, sum(salary#x) AS sum(salary)#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -592,7 +592,7 @@ select dept_id, count(distinct emp_name), count(distinct emp_name) filter (where
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) AS count(DISTINCT emp_name)#xL, count(distinct emp_name#x) FILTER (WHERE ((id#x + dept_id#x) > 500)) AS count(DISTINCT emp_name) FILTER (WHERE ((id + dept_id) > 500))#xL, sum(salary#x) AS sum(salary)#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -604,7 +604,7 @@ select dept_id, count(distinct emp_name), count(distinct emp_name) filter (where
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) AS count(DISTINCT emp_name)#xL, count(distinct emp_name#x) FILTER (WHERE (id#x > 200)) AS count(DISTINCT emp_name) FILTER (WHERE (id > 200))#xL, sum(salary#x) AS sum(salary)#x, sum(salary#x) FILTER (WHERE (id#x > 200)) AS sum(salary) FILTER (WHERE (id > 200))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -616,7 +616,7 @@ select dept_id, count(distinct emp_name), count(distinct emp_name) filter (where
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) AS count(DISTINCT emp_name)#xL, count(distinct emp_name#x) FILTER (WHERE ((id#x + dept_id#x) > 500)) AS count(DISTINCT emp_name) FILTER (WHERE ((id + dept_id) > 500))#xL, sum(salary#x) AS sum(salary)#x, sum(salary#x) FILTER (WHERE (id#x > 200)) AS sum(salary) FILTER (WHERE (id > 200))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -628,7 +628,7 @@ select dept_id, count(distinct emp_name) filter (where id > 200), count(distinct
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) FILTER (WHERE (id#x > 200)) AS count(DISTINCT emp_name) FILTER (WHERE (id > 200))#xL, count(distinct hiredate#x) AS count(DISTINCT hiredate)#xL, sum(salary#x) AS sum(salary)#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -658,7 +658,7 @@ select dept_id, count(distinct emp_name) filter (where id > 200), count(distinct
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x) FILTER (WHERE (id#x > 200)) AS count(DISTINCT emp_name) FILTER (WHERE (id > 200))#xL, count(distinct emp_name#x) AS count(DISTINCT emp_name)#xL, sum(salary#x) AS sum(salary)#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -676,7 +676,7 @@ select dept_id, sum(distinct (id + dept_id)) filter (where id > 200), count(dist
 Aggregate [dept_id#x], [dept_id#x, sum(distinct (id#x + dept_id#x)) FILTER (WHERE (id#x > 200)) AS sum(DISTINCT (id + dept_id)) FILTER (WHERE (id > 200))#xL, count(distinct hiredate#x) AS count(DISTINCT hiredate)#xL, sum(salary#x) AS sum(salary)#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -700,7 +700,7 @@ select dept_id, count(distinct emp_name, hiredate) filter (where id > 200), sum(
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x, hiredate#x) FILTER (WHERE (id#x > 200)) AS count(DISTINCT emp_name, hiredate) FILTER (WHERE (id > 200))#xL, sum(salary#x) AS sum(salary)#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -712,7 +712,7 @@ select dept_id, count(distinct emp_name, hiredate) filter (where id > 0), sum(sa
 Aggregate [dept_id#x], [dept_id#x, count(distinct emp_name#x, hiredate#x) FILTER (WHERE (id#x > 0)) AS count(DISTINCT emp_name, hiredate) FILTER (WHERE (id > 0))#xL, sum(salary#x) AS sum(salary)#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -724,7 +724,7 @@ select dept_id, count(distinct 1), count(distinct 1) filter (where id > 200), su
 Aggregate [dept_id#x], [dept_id#x, count(distinct 1) AS count(DISTINCT 1)#xL, count(distinct 1) FILTER (WHERE (id#x > 200)) AS count(DISTINCT 1) FILTER (WHERE (id > 200))#xL, sum(salary#x) AS sum(salary)#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -828,7 +828,7 @@ Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x)
 :     +- OneRowRelation
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -847,13 +847,13 @@ Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x)
 :        +- Project [dept_id#x]
 :           +- SubqueryAlias dept
 :              +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-:                 +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string collate UTF8_BINARY) AS dept_name#x, cast(state#x as string collate UTF8_BINARY) AS state#x]
+:                 +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
 :                    +- Project [dept_id#x, dept_name#x, state#x]
 :                       +- SubqueryAlias DEPT
 :                          +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -873,13 +873,13 @@ Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x)
 :     +- Filter (dept_id#x = outer(dept_id#x))
 :        +- SubqueryAlias dept
 :           +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string collate UTF8_BINARY) AS dept_name#x, cast(state#x as string collate UTF8_BINARY) AS state#x]
+:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
 :                 +- Project [dept_id#x, dept_name#x, state#x]
 :                    +- SubqueryAlias DEPT
 :                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -899,13 +899,13 @@ Aggregate [dept_id#x], [dept_id#x, sum(salary#x) AS sum(salary)#x, sum(salary#x)
 :     +- Filter (dept_id#x = outer(dept_id#x))
 :        +- SubqueryAlias dept
 :           +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string collate UTF8_BINARY) AS dept_name#x, cast(state#x as string collate UTF8_BINARY) AS state#x]
+:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
 :                 +- Project [dept_id#x, dept_name#x, state#x]
 :                    +- SubqueryAlias DEPT
 :                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -924,13 +924,13 @@ Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x)
 :     +- Project [dept_id#x]
 :        +- SubqueryAlias dept
 :           +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string collate UTF8_BINARY) AS dept_name#x, cast(state#x as string collate UTF8_BINARY) AS state#x]
+:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
 :                 +- Project [dept_id#x, dept_name#x, state#x]
 :                    +- SubqueryAlias DEPT
 :                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -949,13 +949,13 @@ Aggregate [dept_id#x], [dept_id#x, sum(salary#x) AS sum(salary)#x, sum(salary#x)
 :     +- Project [dept_id#x]
 :        +- SubqueryAlias dept
 :           +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
-:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string collate UTF8_BINARY) AS dept_name#x, cast(state#x as string collate UTF8_BINARY) AS state#x]
+:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
 :                 +- Project [dept_id#x, dept_name#x, state#x]
 :                    +- SubqueryAlias DEPT
 :                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string collate UTF8_BINARY) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
          +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
             +- SubqueryAlias EMP
                +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]

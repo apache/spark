@@ -14,7 +14,7 @@ struct<>
 -- !query
 SELECT company FROM like_any_table WHERE company LIKE ANY ('%oo%', '%in', 'fa%')
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 facebook
 google
@@ -24,7 +24,7 @@ linkedin
 -- !query
 SELECT company FROM like_any_table WHERE company LIKE ANY ('microsoft', '%yoo%')
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 
 
@@ -42,7 +42,7 @@ select
     END AS mix
 FROM like_any_table
 -- !query schema
-struct<company:string collate UTF8_BINARY,is_available:string,mix:string>
+struct<company:string,is_available:string,mix:string>
 -- !query output
 facebook	Y	Y
 google	Y	Y
@@ -52,7 +52,7 @@ linkedin	Y	Y
 -- !query
 SELECT company FROM like_any_table WHERE company LIKE ANY ('%zz%', pat)
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 facebook
 google
@@ -62,7 +62,7 @@ linkedin
 -- !query
 SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('%oo%', '%in', 'fa%')
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 facebook
 google
@@ -72,7 +72,7 @@ linkedin
 -- !query
 SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('microsoft', '%yoo%')
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 facebook
 google
@@ -82,7 +82,7 @@ linkedin
 -- !query
 SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('%oo%', 'fa%')
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 google
 linkedin
@@ -91,7 +91,7 @@ linkedin
 -- !query
 SELECT company FROM like_any_table WHERE NOT company LIKE ANY ('%oo%', 'fa%')
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 linkedin
 
@@ -99,7 +99,7 @@ linkedin
 -- !query
 SELECT company FROM like_any_table WHERE company LIKE ANY ('%oo%', NULL)
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 facebook
 google
@@ -108,7 +108,7 @@ google
 -- !query
 SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('%oo%', NULL)
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 linkedin
 
@@ -116,7 +116,7 @@ linkedin
 -- !query
 SELECT company FROM like_any_table WHERE company LIKE ANY (NULL, NULL)
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 
 
@@ -124,7 +124,7 @@ struct<company:string collate UTF8_BINARY>
 -- !query
 SELECT company FROM like_any_table WHERE company NOT LIKE ANY (NULL, NULL)
 -- !query schema
-struct<company:string collate UTF8_BINARY>
+struct<company:string>
 -- !query output
 
 

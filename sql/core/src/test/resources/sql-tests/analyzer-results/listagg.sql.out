@@ -29,7 +29,7 @@ WithCTE
 :        +- Aggregate [col1#x], [listagg(col2#x, null, 0, 0) AS listagg(col2, NULL)#x]
 :           +- SubqueryAlias df
 :              +- View (`df`, [col1#x, col2#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
 :                    +- Project [col1#x, col2#x]
 :                       +- SubqueryAlias __auto_generated_subquery_name
 :                          +- LocalRelation [col1#x, col2#x]
@@ -48,7 +48,7 @@ WithCTE
 :        +- Aggregate [col1#x], [string_agg(col2#x, null, 0, 0) AS string_agg(col2, NULL)#x]
 :           +- SubqueryAlias df
 :              +- View (`df`, [col1#x, col2#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
 :                    +- Project [col1#x, col2#x]
 :                       +- SubqueryAlias __auto_generated_subquery_name
 :                          +- LocalRelation [col1#x, col2#x]
@@ -67,7 +67,7 @@ WithCTE
 :        +- Aggregate [col1#x], [listagg(col2#x, null, 0, 0) AS listagg(col2, NULL)#x]
 :           +- SubqueryAlias df
 :              +- View (`df`, [col1#x, col2#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
 :                    +- Project [col1#x, col2#x]
 :                       +- SubqueryAlias __auto_generated_subquery_name
 :                          +- LocalRelation [col1#x, col2#x]
@@ -83,7 +83,7 @@ Aggregate [listagg(col2#x, null, 0, 0) AS listagg(col2, NULL)#x]
 +- Filter NOT (1 = 1)
    +- SubqueryAlias df
       +- View (`df`, [col1#x, col2#x])
-         +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+         +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
             +- Project [col1#x, col2#x]
                +- SubqueryAlias __auto_generated_subquery_name
                   +- LocalRelation [col1#x, col2#x]
@@ -99,7 +99,7 @@ WithCTE
 :        +- Aggregate [col1#x], [listagg(col2#x, |, 0, 0) AS listagg(col2, |)#x]
 :           +- SubqueryAlias df
 :              +- View (`df`, [col1#x, col2#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
 :                    +- Project [col1#x, col2#x]
 :                       +- SubqueryAlias __auto_generated_subquery_name
 :                          +- LocalRelation [col1#x, col2#x]
@@ -118,7 +118,7 @@ WithCTE
 :        +- Aggregate [listagg(col1#x, null, 0, 0) AS listagg(col1, NULL)#x]
 :           +- SubqueryAlias df
 :              +- View (`df`, [col1#x, col2#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
 :                    +- Project [col1#x, col2#x]
 :                       +- SubqueryAlias __auto_generated_subquery_name
 :                          +- LocalRelation [col1#x, col2#x]
@@ -137,7 +137,7 @@ WithCTE
 :        +- Aggregate [listagg(distinct col1#x, null, 0, 0) AS listagg(DISTINCT col1, NULL)#x]
 :           +- SubqueryAlias df
 :              +- View (`df`, [col1#x, col2#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
 :                    +- Project [col1#x, col2#x]
 :                       +- SubqueryAlias __auto_generated_subquery_name
 :                          +- LocalRelation [col1#x, col2#x]
@@ -152,7 +152,7 @@ SELECT listagg(col1) WITHIN GROUP (ORDER BY col1) FROM df
 Aggregate [listagg(col1#x, null, col1#x ASC NULLS FIRST, 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST)#x]
 +- SubqueryAlias df
    +- View (`df`, [col1#x, col2#x])
-      +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+      +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
          +- Project [col1#x, col2#x]
             +- SubqueryAlias __auto_generated_subquery_name
                +- LocalRelation [col1#x, col2#x]
@@ -164,7 +164,7 @@ SELECT listagg(col1) WITHIN GROUP (ORDER BY col1 DESC) FROM df
 Aggregate [listagg(col1#x, null, col1#x DESC NULLS LAST, 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 DESC NULLS LAST)#x]
 +- SubqueryAlias df
    +- View (`df`, [col1#x, col2#x])
-      +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+      +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
          +- Project [col1#x, col2#x]
             +- SubqueryAlias __auto_generated_subquery_name
                +- LocalRelation [col1#x, col2#x]
@@ -179,7 +179,7 @@ Project [listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 DESC NULLS LAST) OVER (
       +- Project [col1#x, col2#x]
          +- SubqueryAlias df
             +- View (`df`, [col1#x, col2#x])
-               +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+               +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
                   +- Project [col1#x, col2#x]
                      +- SubqueryAlias __auto_generated_subquery_name
                         +- LocalRelation [col1#x, col2#x]
@@ -191,7 +191,7 @@ SELECT listagg(col1) WITHIN GROUP (ORDER BY col2) FROM df
 Aggregate [listagg(col1#x, null, col2#x ASC NULLS FIRST, 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY col2 ASC NULLS FIRST)#x]
 +- SubqueryAlias df
    +- View (`df`, [col1#x, col2#x])
-      +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+      +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
          +- Project [col1#x, col2#x]
             +- SubqueryAlias __auto_generated_subquery_name
                +- LocalRelation [col1#x, col2#x]
@@ -207,7 +207,7 @@ WithCTE
 :        +- Aggregate [listagg(col1#x, null, col2#x DESC NULLS LAST, 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST)#x]
 :           +- SubqueryAlias df
 :              +- View (`df`, [col1#x, col2#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
 :                    +- Project [col1#x, col2#x]
 :                       +- SubqueryAlias __auto_generated_subquery_name
 :                          +- LocalRelation [col1#x, col2#x]
@@ -226,7 +226,7 @@ WithCTE
 :        +- Aggregate [listagg(col1#x, |, col2#x DESC NULLS LAST, 0, 0) AS listagg(col1, |) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST)#x]
 :           +- SubqueryAlias df
 :              +- View (`df`, [col1#x, col2#x])
-:                 +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
 :                    +- Project [col1#x, col2#x]
 :                       +- SubqueryAlias __auto_generated_subquery_name
 :                          +- LocalRelation [col1#x, col2#x]
@@ -241,7 +241,7 @@ SELECT listagg(col1, '|') WITHIN GROUP (ORDER BY col2 DESC) FROM df
 Aggregate [listagg(col1#x, |, col2#x DESC NULLS LAST, 0, 0) AS listagg(col1, |) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST)#x]
 +- SubqueryAlias df
    +- View (`df`, [col1#x, col2#x])
-      +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+      +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
          +- Project [col1#x, col2#x]
             +- SubqueryAlias __auto_generated_subquery_name
                +- LocalRelation [col1#x, col2#x]
@@ -253,7 +253,7 @@ SELECT listagg(col1) WITHIN GROUP (ORDER BY col2 DESC, col1 ASC) FROM df
 Aggregate [listagg(col1#x, null, col2#x DESC NULLS LAST, col1#x ASC NULLS FIRST, 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST, col1 ASC NULLS FIRST)#x]
 +- SubqueryAlias df
    +- View (`df`, [col1#x, col2#x])
-      +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+      +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
          +- Project [col1#x, col2#x]
             +- SubqueryAlias __auto_generated_subquery_name
                +- LocalRelation [col1#x, col2#x]
@@ -265,7 +265,7 @@ SELECT listagg(col1) WITHIN GROUP (ORDER BY col2 DESC, col1 DESC) FROM df
 Aggregate [listagg(col1#x, null, col2#x DESC NULLS LAST, col1#x DESC NULLS LAST, 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST, col1 DESC NULLS LAST)#x]
 +- SubqueryAlias df
    +- View (`df`, [col1#x, col2#x])
-      +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+      +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
          +- Project [col1#x, col2#x]
             +- SubqueryAlias __auto_generated_subquery_name
                +- LocalRelation [col1#x, col2#x]
@@ -541,7 +541,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputExpr" : "\"col1\"",
     "inputName" : "`delimiter`",
-    "inputType" : "\"STRING COLLATE UTF8_BINARY\"",
+    "inputType" : "\"STRING\"",
     "sqlExpr" : "\"listagg(col2, col1)\""
   },
   "queryContext" : [ {
@@ -563,7 +563,7 @@ Project [listagg(col1, NULL) OVER (ORDER BY col1 ASC NULLS FIRST RANGE BETWEEN U
       +- Project [col1#x]
          +- SubqueryAlias df
             +- View (`df`, [col1#x, col2#x])
-               +- Project [cast(col1#x as string collate UTF8_BINARY) AS col1#x, cast(col2#x as string collate UTF8_BINARY) AS col2#x]
+               +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
                   +- Project [col1#x, col2#x]
                      +- SubqueryAlias __auto_generated_subquery_name
                         +- LocalRelation [col1#x, col2#x]

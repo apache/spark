@@ -68,7 +68,7 @@ WHERE  t1a IN (SELECT t2a
                FROM   t2)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,avg(t1b):double>
+struct<t1a:string,avg(t1b):double>
 -- !query output
 t1b	8.0
 t1c	8.0
@@ -85,7 +85,7 @@ WHERE  t1b IN (SELECT t2b
 GROUP  BY t1a,
           t1d
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,max(t1b):int>
+struct<t1a:string,max(t1b):int>
 -- !query output
 t1b	8
 
@@ -100,7 +100,7 @@ WHERE  t1c IN (SELECT t2c
 GROUP  BY t1a,
           t1b
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int>
+struct<t1a:string,t1b:int>
 -- !query output
 t1b	8
 t1c	8
@@ -119,7 +119,7 @@ WHERE  t1c IN (SELECT t2c
 GROUP  BY t1a,
           t1c
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,sum(DISTINCT t1b):bigint>
+struct<t1a:string,sum(DISTINCT t1b):bigint>
 -- !query output
 t1b	8
 t1c	8
@@ -138,7 +138,7 @@ WHERE  t1c IN (SELECT t2c
 GROUP  BY t1a,
           t1c
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,sum(DISTINCT t1b):bigint>
+struct<t1a:string,sum(DISTINCT t1b):bigint>
 -- !query output
 t1b	8
 
@@ -154,7 +154,7 @@ GROUP  BY t1a,
           t1c
 HAVING t1a = 't1b'
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,count(DISTINCT t1b):bigint>
+struct<t1a:string,count(DISTINCT t1b):bigint>
 -- !query output
 t1b	1
 
@@ -166,7 +166,7 @@ WHERE  t1b IN (SELECT Max(t2b)
                FROM   t2
                GROUP  BY t2a)
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int,t1c:int,t1d:int,t1e:decimal(3,1),t1f:decimal(3,1),t1g:decimal(5,1),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:int,t1c:int,t1d:int,t1e:decimal(3,1),t1f:decimal(3,1),t1g:decimal(5,1),t1h:timestamp,t1i:date>
 -- !query output
 t1a	6	8	10	15.0	20.0	2000.0	2014-04-04 01:00:00	2014-04-04
 t1a	6	8	10	15.0	20.0	2000.0	2014-04-04 01:02:00.001	2014-04-04
@@ -189,7 +189,7 @@ FROM   (SELECT t2a,
         GROUP  BY t2a,
                   t2b) t2
 -- !query schema
-struct<t2a:string collate UTF8_BINARY,t2b:int>
+struct<t2a:string,t2b:int>
 -- !query output
 t1b	8
 
@@ -219,7 +219,7 @@ WHERE  t1c IN (SELECT Max(t2c)
                          t2c
                HAVING t2c > 8)
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int>
+struct<t1a:string,t1b:int>
 -- !query output
 t1b	8
 t1c	8
@@ -237,7 +237,7 @@ WHERE  t1c IN (SELECT t2c
                               GROUP  BY t3b)
                GROUP  BY t2c)
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,t1b:int>
+struct<t1a:string,t1b:int>
 -- !query output
 t1a	16
 t1a	16
@@ -257,7 +257,7 @@ WHERE  t1c IN (SELECT Min(t2c)
                GROUP  BY t2a)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,min(t1b):int>
+struct<t1a:string,min(t1b):int>
 -- !query output
 t1b	8
 t1c	8
@@ -277,7 +277,7 @@ WHERE  t1c IN (SELECT Min(t2c)
 GROUP  BY t1a,
           t1d
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,min(t1b):int>
+struct<t1a:string,min(t1b):int>
 -- !query output
 t1b	8
 t1c	8
@@ -299,7 +299,7 @@ WHERE  t1c IN (SELECT Min(t2c)
                    GROUP  BY t3d)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,min(t1b):int>
+struct<t1a:string,min(t1b):int>
 -- !query output
 t1b	8
 t1c	8
@@ -319,7 +319,7 @@ WHERE  t1c IN (SELECT Min(t2c)
                    GROUP  BY t3d)
 GROUP  BY t1a
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,min(t1b):int>
+struct<t1a:string,min(t1b):int>
 -- !query output
 t1a	16
 t1b	8
@@ -344,7 +344,7 @@ WHERE  t1c IN (SELECT Min(t2c)
 GROUP  BY t1a
 HAVING Min(t1b) IS NOT NULL
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,min(t1b):int>
+struct<t1a:string,min(t1b):int>
 -- !query output
 t1a	16
 t1b	8
@@ -357,7 +357,7 @@ from t1
 where t1f IN (SELECT RANK() OVER (partition by t3c  order by t2b) as s
                              FROM t2, t3 where t2.t2c = t3.t3c and t2.t2a < t1.t1a)
 -- !query schema
-struct<t1a:string collate UTF8_BINARY>
+struct<t1a:string>
 -- !query output
 t1d
 t1d
@@ -374,7 +374,7 @@ SELECT
 FROM t1
 GROUP BY t1.t1a ORDER BY t1.t1a
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,v1:boolean>
+struct<t1a:string,v1:boolean>
 -- !query output
 t1a	false
 t1b	true
@@ -401,7 +401,7 @@ SELECT
     FROM (SELECT t1.t1a FROM t1 WHERE t1.t1a IN (SELECT t2a FROM t2)) AS agg_results
 GROUP BY agg_results.t1a ORDER BY agg_results.t1a
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,count(1):bigint>
+struct<t1a:string,count(1):bigint>
 -- !query output
 t1b	1
 t1c	1
@@ -419,7 +419,7 @@ FROM t1
 GROUP BY t1.t1a
 ORDER BY t1.t1a
 -- !query schema
-struct<t1a:string collate UTF8_BINARY,v1:int>
+struct<t1a:string,v1:int>
 -- !query output
 t1a	-10
 t1b	10

@@ -50,7 +50,7 @@ SELECT mode(department), mode(salary) FROM basic_pays
 Aggregate [mode(department#x, 0, 0, None) AS mode(department)#x, mode(salary#x, 0, 0, None) AS mode(salary)#x]
 +- SubqueryAlias basic_pays
    +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-      +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+      +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
                +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -63,7 +63,7 @@ Sort [department#x ASC NULLS FIRST], true
 +- Aggregate [department#x], [department#x, mode(salary#x, 0, 0, None) AS mode(salary)#x]
    +- SubqueryAlias basic_pays
       +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-         +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+         +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
             +- Project [employee_name#x, department#x, salary#x]
                +- SubqueryAlias basic_pays
                   +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -226,7 +226,7 @@ Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY sal
 +- Filter (salary#x > 20000)
    +- SubqueryAlias basic_pays
       +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-         +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+         +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
             +- Project [employee_name#x, department#x, salary#x]
                +- SubqueryAlias basic_pays
                   +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -241,7 +241,7 @@ FROM basic_pays
 Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY salary)#x]
 +- SubqueryAlias basic_pays
    +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-      +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+      +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
                +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -256,7 +256,7 @@ FROM basic_pays
 Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(true)) FILTER (WHERE (salary#x > 10000)) AS mode() WITHIN GROUP (ORDER BY salary DESC) FILTER (WHERE (salary > 10000))#x]
 +- SubqueryAlias basic_pays
    +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-      +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+      +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
                +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -275,7 +275,7 @@ Sort [department#x ASC NULLS FIRST], true
 +- Aggregate [department#x], [department#x, mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(true)) FILTER (WHERE (salary#x > 10000)) AS mode() WITHIN GROUP (ORDER BY salary DESC) FILTER (WHERE (salary > 10000))#x]
    +- SubqueryAlias basic_pays
       +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-         +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+         +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
             +- Project [employee_name#x, department#x, salary#x]
                +- SubqueryAlias basic_pays
                   +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -297,7 +297,7 @@ Sort [salary#x ASC NULLS FIRST], true
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -319,7 +319,7 @@ Sort [salary#x ASC NULLS FIRST], true
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -341,7 +341,7 @@ Sort [salary#x ASC NULLS FIRST], true
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                  +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
                            +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -366,7 +366,7 @@ Sort [salary#x ASC NULLS FIRST], true
             +- Filter (salary#x > 8900)
                +- SubqueryAlias basic_pays
                   +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
-                     +- Project [cast(employee_name#x as string collate UTF8_BINARY) AS employee_name#x, cast(department#x as string collate UTF8_BINARY) AS department#x, cast(salary#x as int) AS salary#x]
+                     +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                         +- Project [employee_name#x, department#x, salary#x]
                            +- SubqueryAlias basic_pays
                               +- LocalRelation [employee_name#x, department#x, salary#x]

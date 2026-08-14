@@ -24,7 +24,7 @@ Project [company#x]
 +- Filter likeany(company#x, %oo%, %in, fa%)
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -38,7 +38,7 @@ Project [company#x]
 +- Filter likeany(company#x, microsoft, %yoo%)
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -61,7 +61,7 @@ FROM like_any_table
 Project [company#x, CASE WHEN likeany(company#x, %oo%, %in, fa%) THEN Y ELSE N END AS is_available#x, CASE WHEN (likeany(company#x, %oo%, fa%) OR likeany(company#x, %in, ms%)) THEN Y ELSE N END AS mix#x]
 +- SubqueryAlias like_any_table
    +- View (`like_any_table`, [company#x, pat#x])
-      +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+      +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
          +- Project [company#x, pat#x]
             +- SubqueryAlias t1
                +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -75,7 +75,7 @@ Project [company#x]
 +- Filter (company#x LIKE %zz% OR company#x LIKE pat#x)
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -89,7 +89,7 @@ Project [company#x]
 +- Filter notlikeany(company#x, %oo%, %in, fa%)
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -103,7 +103,7 @@ Project [company#x]
 +- Filter notlikeany(company#x, microsoft, %yoo%)
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -117,7 +117,7 @@ Project [company#x]
 +- Filter notlikeany(company#x, %oo%, fa%)
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -131,7 +131,7 @@ Project [company#x]
 +- Filter NOT likeany(company#x, %oo%, fa%)
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -145,7 +145,7 @@ Project [company#x]
 +- Filter (company#x LIKE %oo% OR company#x LIKE cast(null as string))
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -159,7 +159,7 @@ Project [company#x]
 +- Filter (NOT company#x LIKE %oo% OR NOT company#x LIKE cast(null as string))
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -173,7 +173,7 @@ Project [company#x]
 +- Filter (company#x LIKE cast(null as string) OR company#x LIKE cast(null as string))
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -187,7 +187,7 @@ Project [company#x]
 +- Filter (NOT company#x LIKE cast(null as string) OR NOT company#x LIKE cast(null as string))
    +- SubqueryAlias like_any_table
       +- View (`like_any_table`, [company#x, pat#x])
-         +- Project [cast(company#x as string collate UTF8_BINARY) AS company#x, cast(pat#x as string collate UTF8_BINARY) AS pat#x]
+         +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
                   +- Project [col1#x AS company#x, col2#x AS pat#x]

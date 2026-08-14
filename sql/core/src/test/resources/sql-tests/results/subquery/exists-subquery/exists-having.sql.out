@@ -75,7 +75,7 @@ WHERE  EXISTS (SELECT dept_id,
                               FROM   bonus 
                               WHERE bonus_amt < Min(emp.salary)))
 -- !query schema
-struct<dept_id:int,dept_name:string collate UTF8_BINARY,state:string collate UTF8_BINARY>
+struct<dept_id:int,dept_name:string,state:string>
 -- !query output
 10	dept 1	CA
 20	dept 2	NY
@@ -119,7 +119,7 @@ WHERE  EXISTS (SELECT dept_id,
                                 FROM   bonus 
                                 WHERE  bonus_amt > Min(emp.salary)))
 -- !query schema
-struct<dept_id:int,dept_name:string collate UTF8_BINARY,state:string collate UTF8_BINARY>
+struct<dept_id:int,dept_name:string,state:string>
 -- !query output
 10	dept 1	CA
 20	dept 2	NY
@@ -142,6 +142,6 @@ WHERE  EXISTS (SELECT dept_id,
                               WHERE  ( bonus_amt > min(emp.salary) 
                                        AND count(emp.dept_id) > 1 )))
 -- !query schema
-struct<dept_id:int,dept_name:string collate UTF8_BINARY,state:string collate UTF8_BINARY>
+struct<dept_id:int,dept_name:string,state:string>
 -- !query output
 10	dept 1	CA

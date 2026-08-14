@@ -180,9 +180,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "leftType" : "\"DOUBLE\", \"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_BINARY\"",
-    "mismatchedColumns" : "(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string collate UTF8_BINARY, t5.t5c:bigint)",
-    "rightType" : "\"TIMESTAMP\", \"STRING COLLATE UTF8_BINARY\", \"BIGINT\"",
+    "leftType" : "\"DOUBLE\", \"STRING\", \"STRING\"",
+    "mismatchedColumns" : "(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)",
+    "rightType" : "\"TIMESTAMP\", \"STRING\", \"BIGINT\"",
     "sqlExpr" : "\"(named_struct('t4a', t4a, 't4b', t4b, 't4c', t4c) IN (listquery()))\""
   },
   "queryContext" : [ {

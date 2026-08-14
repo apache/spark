@@ -945,7 +945,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"str\"",
-    "inputType" : "\"STRING COLLATE UTF8_BINARY\"",
+    "inputType" : "\"STRING\"",
     "paramIndex" : "first",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"(str - TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
@@ -969,7 +969,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"str\"",
-    "inputType" : "\"STRING COLLATE UTF8_BINARY\"",
+    "inputType" : "\"STRING\"",
     "paramIndex" : "second",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' - str)\""

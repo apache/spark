@@ -155,7 +155,7 @@ WHERE EXISTS (SELECT max(dept.dept_id) a
                    LIMIT 2
                    OFFSET 1)
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY>
+struct<emp_name:string>
 -- !query output
 
 
@@ -171,7 +171,7 @@ JOIN LATERAL (SELECT max(dept.dept_id) a
                    LIMIT 2
                    OFFSET 1)
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY>
+struct<emp_name:string>
 -- !query output
 
 
@@ -186,7 +186,7 @@ WHERE EXISTS (SELECT max(dept.dept_id) a
                    ORDER  BY state
                    OFFSET 1)
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY>
+struct<emp_name:string>
 -- !query output
 
 
@@ -201,7 +201,7 @@ JOIN LATERAL (SELECT max(dept.dept_id) a
                    ORDER  BY state
                    OFFSET 1)
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY>
+struct<emp_name:string>
 -- !query output
 
 

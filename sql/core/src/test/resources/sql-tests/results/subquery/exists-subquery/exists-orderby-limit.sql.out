@@ -55,7 +55,7 @@ WHERE  EXISTS (SELECT dept.dept_id
                ORDER  BY state) 
 ORDER  BY hiredate
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 300	emp 3	2002-01-01	300.00	20
 200	emp 2	2003-01-01	200.00	10
@@ -95,7 +95,7 @@ WHERE  EXISTS (SELECT dept.dept_id
                LIMIT 1)
 ORDER  BY hiredate
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 300	emp 3	2002-01-01	300.00	20
 200	emp 2	2003-01-01	200.00	10
@@ -115,7 +115,7 @@ WHERE  EXISTS (SELECT dept.dept_id
                LIMIT 0)
 ORDER  BY hiredate
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 
 
@@ -129,7 +129,7 @@ WHERE  NOT EXISTS (SELECT dept.dept_id
                    ORDER  BY state) 
 ORDER  BY hiredate
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 500	emp 5	2001-01-01	400.00	NULL
 600	emp 6 - no dept	2001-01-01	400.00	100
@@ -145,7 +145,7 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id) a
                    GROUP  BY state 
                    ORDER  BY state)
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY>
+struct<emp_name:string>
 -- !query output
 emp 5
 emp 6 - no dept
@@ -176,7 +176,7 @@ WHERE  NOT EXISTS (SELECT dept.dept_id
                    LIMIT 1)
 ORDER  BY hiredate
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 500	emp 5	2001-01-01	400.00	NULL
 600	emp 6 - no dept	2001-01-01	400.00	100
@@ -193,7 +193,7 @@ WHERE  NOT EXISTS (SELECT dept.dept_id
                    LIMIT 0)
 ORDER  BY hiredate
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 500	emp 5	2001-01-01	400.00	NULL
 600	emp 6 - no dept	2001-01-01	400.00	100
@@ -214,7 +214,7 @@ WHERE  EXISTS (SELECT dept.dept_name
                WHERE  dept.dept_id > 10 
                LIMIT  1)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -235,7 +235,7 @@ WHERE  EXISTS (SELECT max(dept.dept_id)
                GROUP  BY state 
                LIMIT  1)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -256,7 +256,7 @@ WHERE  NOT EXISTS (SELECT dept.dept_name
                    WHERE  dept.dept_id > 100 
                    LIMIT  1)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -278,7 +278,7 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id)
                    GROUP  BY state 
                    LIMIT  1)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -302,7 +302,7 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id) a
                    LIMIT 2
                    OFFSET 1)
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY>
+struct<emp_name:string>
 -- !query output
 emp 1
 emp 1
@@ -324,7 +324,7 @@ WHERE  EXISTS (SELECT dept.dept_name
                LIMIT  1
                OFFSET 2)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -345,7 +345,7 @@ WHERE  EXISTS (SELECT dept.dept_name
                WHERE  dept.dept_id > emp.dept_id
                LIMIT  1)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -363,7 +363,7 @@ WHERE  EXISTS (SELECT max(dept.dept_id)
                LIMIT  1
                OFFSET 2)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -385,7 +385,7 @@ WHERE  EXISTS (SELECT max(dept.dept_id)
                GROUP  BY state
                LIMIT  1)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -405,7 +405,7 @@ WHERE  EXISTS (SELECT max(dept.dept_id)
                WHERE  emp.salary > 200
                LIMIT  1)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -427,7 +427,7 @@ WHERE  EXISTS (SELECT state, max(dept.dept_name)
                GROUP BY state
                LIMIT  1)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 300	emp 3	2002-01-01	300.00	20
 400	emp 4	2005-01-01	400.00	30
@@ -445,7 +445,7 @@ WHERE  NOT EXISTS (SELECT dept.dept_name
                    LIMIT  1
                    OFFSET 2)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -468,7 +468,7 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id)
                    LIMIT  1
                    OFFSET 2)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -490,7 +490,7 @@ WHERE  EXISTS (SELECT dept.dept_name
                LIMIT  1
                OFFSET 2)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -510,7 +510,7 @@ WHERE  EXISTS (SELECT dept.dept_name
                WHERE  dept.dept_id > 10
                OFFSET 2)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -531,7 +531,7 @@ WHERE  EXISTS (SELECT max(dept.dept_id)
                GROUP  BY state
                OFFSET 2)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -552,7 +552,7 @@ WHERE  NOT EXISTS (SELECT dept.dept_name
                    WHERE  dept.dept_id > 100
                    OFFSET 2)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10
@@ -574,7 +574,7 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id)
                    GROUP  BY state
                    OFFSET 2)
 -- !query schema
-struct<id:int,emp_name:string collate UTF8_BINARY,hiredate:date,salary:decimal(5,2),dept_id:int>
+struct<id:int,emp_name:string,hiredate:date,salary:decimal(5,2),dept_id:int>
 -- !query output
 100	emp 1	2005-01-01	100.00	10
 100	emp 1	2005-01-01	100.00	10

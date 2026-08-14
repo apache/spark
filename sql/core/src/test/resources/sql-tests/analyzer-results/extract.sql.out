@@ -13,7 +13,7 @@ select extract(year from c), extract(year from ntz), extract(year from i) from t
 Project [extract(year, c#x) AS extract(year FROM c)#x, extract(year, ntz#x) AS extract(year FROM ntz)#x, extract(year, i#x) AS extract(year FROM i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -24,7 +24,7 @@ select extract(y from c), extract(y from ntz), extract(y from i) from t
 Project [extract(y, c#x) AS extract(y FROM c)#x, extract(y, ntz#x) AS extract(y FROM ntz)#x, extract(y, i#x) AS extract(y FROM i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -35,7 +35,7 @@ select extract(years from c), extract(years from ntz), extract(years from i) fro
 Project [extract(years, c#x) AS extract(years FROM c)#x, extract(years, ntz#x) AS extract(years FROM ntz)#x, extract(years, i#x) AS extract(years FROM i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -46,7 +46,7 @@ select extract(yr from c), extract(yr from ntz), extract(yr from i) from t
 Project [extract(yr, c#x) AS extract(yr FROM c)#x, extract(yr, ntz#x) AS extract(yr FROM ntz)#x, extract(yr, i#x) AS extract(yr FROM i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -57,7 +57,7 @@ select extract(yrs from c), extract(yrs from ntz), extract(yrs from i) from t
 Project [extract(yrs, c#x) AS extract(yrs FROM c)#x, extract(yrs, ntz#x) AS extract(yrs FROM ntz)#x, extract(yrs, i#x) AS extract(yrs FROM i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -68,7 +68,7 @@ select extract(yearofweek from c), extract(yearofweek from ntz) from t
 Project [extract(yearofweek, c#x) AS extract(yearofweek FROM c)#x, extract(yearofweek, ntz#x) AS extract(yearofweek FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -79,7 +79,7 @@ select extract(quarter from c), extract(quarter from ntz) from t
 Project [extract(quarter, c#x) AS extract(quarter FROM c)#x, extract(quarter, ntz#x) AS extract(quarter FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -90,7 +90,7 @@ select extract(qtr from c), extract(qtr from ntz) from t
 Project [extract(qtr, c#x) AS extract(qtr FROM c)#x, extract(qtr, ntz#x) AS extract(qtr FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -101,7 +101,7 @@ select extract(month from c), extract(month from ntz), extract(month from i) fro
 Project [extract(month, c#x) AS extract(month FROM c)#x, extract(month, ntz#x) AS extract(month FROM ntz)#x, extract(month, i#x) AS extract(month FROM i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -112,7 +112,7 @@ select extract(mon from c), extract(mon from ntz), extract(mon from i) from t
 Project [extract(mon, c#x) AS extract(mon FROM c)#x, extract(mon, ntz#x) AS extract(mon FROM ntz)#x, extract(mon, i#x) AS extract(mon FROM i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -123,7 +123,7 @@ select extract(mons from c), extract(mons from ntz), extract(mons from i) from t
 Project [extract(mons, c#x) AS extract(mons FROM c)#x, extract(mons, ntz#x) AS extract(mons FROM ntz)#x, extract(mons, i#x) AS extract(mons FROM i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -134,7 +134,7 @@ select extract(months from c), extract(months from ntz), extract(months from i) 
 Project [extract(months, c#x) AS extract(months FROM c)#x, extract(months, ntz#x) AS extract(months FROM ntz)#x, extract(months, i#x) AS extract(months FROM i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -145,7 +145,7 @@ select extract(week from c), extract(week from ntz) from t
 Project [extract(week, c#x) AS extract(week FROM c)#x, extract(week, ntz#x) AS extract(week FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -156,7 +156,7 @@ select extract(w from c), extract(w from ntz) from t
 Project [extract(w, c#x) AS extract(w FROM c)#x, extract(w, ntz#x) AS extract(w FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -167,7 +167,7 @@ select extract(weeks from c), extract(weeks from ntz) from t
 Project [extract(weeks, c#x) AS extract(weeks FROM c)#x, extract(weeks, ntz#x) AS extract(weeks FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -178,7 +178,7 @@ select extract(day from c), extract(day from ntz), extract(day from j) from t
 Project [extract(day, c#x) AS extract(day FROM c)#x, extract(day, ntz#x) AS extract(day FROM ntz)#x, extract(day, j#x) AS extract(day FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -189,7 +189,7 @@ select extract(d from c), extract(d from ntz), extract(d from j) from t
 Project [extract(d, c#x) AS extract(d FROM c)#x, extract(d, ntz#x) AS extract(d FROM ntz)#x, extract(d, j#x) AS extract(d FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -200,7 +200,7 @@ select extract(days from c), extract(days from ntz), extract(days from j) from t
 Project [extract(days, c#x) AS extract(days FROM c)#x, extract(days, ntz#x) AS extract(days FROM ntz)#x, extract(days, j#x) AS extract(days FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -211,7 +211,7 @@ select extract(dayofweek from c), extract(dayofweek from ntz) from t
 Project [extract(dayofweek, c#x) AS extract(dayofweek FROM c)#x, extract(dayofweek, ntz#x) AS extract(dayofweek FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -222,7 +222,7 @@ select extract(dow from c), extract(dow from ntz) from t
 Project [extract(dow, c#x) AS extract(dow FROM c)#x, extract(dow, ntz#x) AS extract(dow FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -233,7 +233,7 @@ select extract(dayofweek_iso from c), extract(dayofweek_iso from ntz) from t
 Project [extract(dayofweek_iso, c#x) AS extract(dayofweek_iso FROM c)#x, extract(dayofweek_iso, ntz#x) AS extract(dayofweek_iso FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -244,7 +244,7 @@ select extract(dow_iso from c), extract(dow_iso from ntz) from t
 Project [extract(dow_iso, c#x) AS extract(dow_iso FROM c)#x, extract(dow_iso, ntz#x) AS extract(dow_iso FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -255,7 +255,7 @@ select extract(doy from c), extract(doy from ntz) from t
 Project [extract(doy, c#x) AS extract(doy FROM c)#x, extract(doy, ntz#x) AS extract(doy FROM ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -266,7 +266,7 @@ select extract(hour from c), extract(hour from ntz), extract(hour from j) from t
 Project [extract(hour, c#x) AS extract(hour FROM c)#x, extract(hour, ntz#x) AS extract(hour FROM ntz)#x, extract(hour, j#x) AS extract(hour FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -277,7 +277,7 @@ select extract(h from c), extract(h from ntz), extract(h from j) from t
 Project [extract(h, c#x) AS extract(h FROM c)#x, extract(h, ntz#x) AS extract(h FROM ntz)#x, extract(h, j#x) AS extract(h FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -288,7 +288,7 @@ select extract(hours from c), extract(hours from ntz), extract(hours from j) fro
 Project [extract(hours, c#x) AS extract(hours FROM c)#x, extract(hours, ntz#x) AS extract(hours FROM ntz)#x, extract(hours, j#x) AS extract(hours FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -299,7 +299,7 @@ select extract(hr from c), extract(hr from ntz), extract(hr from j) from t
 Project [extract(hr, c#x) AS extract(hr FROM c)#x, extract(hr, ntz#x) AS extract(hr FROM ntz)#x, extract(hr, j#x) AS extract(hr FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -310,7 +310,7 @@ select extract(hrs from c), extract(hrs from ntz), extract(hrs from j) from t
 Project [extract(hrs, c#x) AS extract(hrs FROM c)#x, extract(hrs, ntz#x) AS extract(hrs FROM ntz)#x, extract(hrs, j#x) AS extract(hrs FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -321,7 +321,7 @@ select extract(minute from c), extract(minute from ntz), extract(minute from j) 
 Project [extract(minute, c#x) AS extract(minute FROM c)#x, extract(minute, ntz#x) AS extract(minute FROM ntz)#x, extract(minute, j#x) AS extract(minute FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -332,7 +332,7 @@ select extract(m from c), extract(m from ntz), extract(m from j) from t
 Project [extract(m, c#x) AS extract(m FROM c)#x, extract(m, ntz#x) AS extract(m FROM ntz)#x, extract(m, j#x) AS extract(m FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -343,7 +343,7 @@ select extract(min from c), extract(min from ntz), extract(min from j) from t
 Project [extract(min, c#x) AS extract(min FROM c)#x, extract(min, ntz#x) AS extract(min FROM ntz)#x, extract(min, j#x) AS extract(min FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -354,7 +354,7 @@ select extract(mins from c), extract(mins from ntz), extract(mins from j) from t
 Project [extract(mins, c#x) AS extract(mins FROM c)#x, extract(mins, ntz#x) AS extract(mins FROM ntz)#x, extract(mins, j#x) AS extract(mins FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -365,7 +365,7 @@ select extract(minutes from c), extract(minutes from ntz), extract(minutes from 
 Project [extract(minutes, c#x) AS extract(minutes FROM c)#x, extract(minutes, ntz#x) AS extract(minutes FROM ntz)#x, extract(minutes, j#x) AS extract(minutes FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -376,7 +376,7 @@ select extract(second from c), extract(second from ntz), extract(second from j) 
 Project [extract(second, c#x) AS extract(second FROM c)#x, extract(second, ntz#x) AS extract(second FROM ntz)#x, extract(second, j#x) AS extract(second FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -387,7 +387,7 @@ select extract(s from c), extract(s from ntz), extract(s from j) from t
 Project [extract(s, c#x) AS extract(s FROM c)#x, extract(s, ntz#x) AS extract(s FROM ntz)#x, extract(s, j#x) AS extract(s FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -398,7 +398,7 @@ select extract(sec from c), extract(sec from ntz), extract(sec from j) from t
 Project [extract(sec, c#x) AS extract(sec FROM c)#x, extract(sec, ntz#x) AS extract(sec FROM ntz)#x, extract(sec, j#x) AS extract(sec FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -409,7 +409,7 @@ select extract(seconds from c), extract(seconds from ntz), extract(seconds from 
 Project [extract(seconds, c#x) AS extract(seconds FROM c)#x, extract(seconds, ntz#x) AS extract(seconds FROM ntz)#x, extract(seconds, j#x) AS extract(seconds FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -420,7 +420,7 @@ select extract(secs from c), extract(secs from ntz), extract(secs from j) from t
 Project [extract(secs, c#x) AS extract(secs FROM c)#x, extract(secs, ntz#x) AS extract(secs FROM ntz)#x, extract(secs, j#x) AS extract(secs FROM j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -494,7 +494,7 @@ select date_part('year', c), date_part('year', ntz), date_part('year', i) from t
 Project [date_part(year, c#x) AS date_part(year, c)#x, date_part(year, ntz#x) AS date_part(year, ntz)#x, date_part(year, i#x) AS date_part(year, i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -505,7 +505,7 @@ select date_part('y', c), date_part('y', ntz), date_part('y', i) from t
 Project [date_part(y, c#x) AS date_part(y, c)#x, date_part(y, ntz#x) AS date_part(y, ntz)#x, date_part(y, i#x) AS date_part(y, i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -516,7 +516,7 @@ select date_part('years', c), date_part('years', ntz), date_part('years', i) fro
 Project [date_part(years, c#x) AS date_part(years, c)#x, date_part(years, ntz#x) AS date_part(years, ntz)#x, date_part(years, i#x) AS date_part(years, i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -527,7 +527,7 @@ select date_part('yr', c), date_part('yr', ntz), date_part('yr', i) from t
 Project [date_part(yr, c#x) AS date_part(yr, c)#x, date_part(yr, ntz#x) AS date_part(yr, ntz)#x, date_part(yr, i#x) AS date_part(yr, i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -538,7 +538,7 @@ select date_part('yrs', c), date_part('yrs', ntz), date_part('yrs', i) from t
 Project [date_part(yrs, c#x) AS date_part(yrs, c)#x, date_part(yrs, ntz#x) AS date_part(yrs, ntz)#x, date_part(yrs, i#x) AS date_part(yrs, i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -549,7 +549,7 @@ select date_part('yearofweek', c), date_part('yearofweek', ntz) from t
 Project [date_part(yearofweek, c#x) AS date_part(yearofweek, c)#x, date_part(yearofweek, ntz#x) AS date_part(yearofweek, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -560,7 +560,7 @@ select date_part('quarter', c), date_part('quarter', ntz) from t
 Project [date_part(quarter, c#x) AS date_part(quarter, c)#x, date_part(quarter, ntz#x) AS date_part(quarter, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -571,7 +571,7 @@ select date_part('qtr', c), date_part('qtr', ntz) from t
 Project [date_part(qtr, c#x) AS date_part(qtr, c)#x, date_part(qtr, ntz#x) AS date_part(qtr, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -582,7 +582,7 @@ select date_part('month', c), date_part('month', ntz), date_part('month', i) fro
 Project [date_part(month, c#x) AS date_part(month, c)#x, date_part(month, ntz#x) AS date_part(month, ntz)#x, date_part(month, i#x) AS date_part(month, i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -593,7 +593,7 @@ select date_part('mon', c), date_part('mon', ntz), date_part('mon', i) from t
 Project [date_part(mon, c#x) AS date_part(mon, c)#x, date_part(mon, ntz#x) AS date_part(mon, ntz)#x, date_part(mon, i#x) AS date_part(mon, i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -604,7 +604,7 @@ select date_part('mons', c), date_part('mons', ntz), date_part('mons', i) from t
 Project [date_part(mons, c#x) AS date_part(mons, c)#x, date_part(mons, ntz#x) AS date_part(mons, ntz)#x, date_part(mons, i#x) AS date_part(mons, i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -615,7 +615,7 @@ select date_part('months', c), date_part('months', ntz), date_part('months', i) 
 Project [date_part(months, c#x) AS date_part(months, c)#x, date_part(months, ntz#x) AS date_part(months, ntz)#x, date_part(months, i#x) AS date_part(months, i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -626,7 +626,7 @@ select date_part('week', c), date_part('week', ntz) from t
 Project [date_part(week, c#x) AS date_part(week, c)#x, date_part(week, ntz#x) AS date_part(week, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -637,7 +637,7 @@ select date_part('w', c), date_part('w', ntz) from t
 Project [date_part(w, c#x) AS date_part(w, c)#x, date_part(w, ntz#x) AS date_part(w, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -648,7 +648,7 @@ select date_part('weeks', c), date_part('weeks', ntz) from t
 Project [date_part(weeks, c#x) AS date_part(weeks, c)#x, date_part(weeks, ntz#x) AS date_part(weeks, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -659,7 +659,7 @@ select date_part('day', c), date_part('day', ntz), date_part('day', j) from t
 Project [date_part(day, c#x) AS date_part(day, c)#x, date_part(day, ntz#x) AS date_part(day, ntz)#x, date_part(day, j#x) AS date_part(day, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -670,7 +670,7 @@ select date_part('d', c), date_part('d', ntz), date_part('d', j) from t
 Project [date_part(d, c#x) AS date_part(d, c)#x, date_part(d, ntz#x) AS date_part(d, ntz)#x, date_part(d, j#x) AS date_part(d, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -681,7 +681,7 @@ select date_part('days', c), date_part('days', ntz), date_part('days', j) from t
 Project [date_part(days, c#x) AS date_part(days, c)#x, date_part(days, ntz#x) AS date_part(days, ntz)#x, date_part(days, j#x) AS date_part(days, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -692,7 +692,7 @@ select date_part('dayofweek', c), date_part('dayofweek', ntz) from t
 Project [date_part(dayofweek, c#x) AS date_part(dayofweek, c)#x, date_part(dayofweek, ntz#x) AS date_part(dayofweek, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -703,7 +703,7 @@ select date_part('dow', c), date_part('dow', ntz) from t
 Project [date_part(dow, c#x) AS date_part(dow, c)#x, date_part(dow, ntz#x) AS date_part(dow, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -714,7 +714,7 @@ select date_part('dayofweek_iso', c), date_part('dayofweek_iso', ntz) from t
 Project [date_part(dayofweek_iso, c#x) AS date_part(dayofweek_iso, c)#x, date_part(dayofweek_iso, ntz#x) AS date_part(dayofweek_iso, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -725,7 +725,7 @@ select date_part('dow_iso', c), date_part('dow_iso', ntz) from t
 Project [date_part(dow_iso, c#x) AS date_part(dow_iso, c)#x, date_part(dow_iso, ntz#x) AS date_part(dow_iso, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -736,7 +736,7 @@ select date_part('doy', c), date_part('doy', ntz) from t
 Project [date_part(doy, c#x) AS date_part(doy, c)#x, date_part(doy, ntz#x) AS date_part(doy, ntz)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -747,7 +747,7 @@ select date_part('hour', c), date_part('hour', ntz), date_part('hour', j) from t
 Project [date_part(hour, c#x) AS date_part(hour, c)#x, date_part(hour, ntz#x) AS date_part(hour, ntz)#x, date_part(hour, j#x) AS date_part(hour, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -758,7 +758,7 @@ select date_part('h', c), date_part('h', ntz), date_part('h', j) from t
 Project [date_part(h, c#x) AS date_part(h, c)#x, date_part(h, ntz#x) AS date_part(h, ntz)#x, date_part(h, j#x) AS date_part(h, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -769,7 +769,7 @@ select date_part('hours', c), date_part('hours', ntz), date_part('hours', j) fro
 Project [date_part(hours, c#x) AS date_part(hours, c)#x, date_part(hours, ntz#x) AS date_part(hours, ntz)#x, date_part(hours, j#x) AS date_part(hours, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -780,7 +780,7 @@ select date_part('hr', c), date_part('hr', ntz), date_part('hr', j) from t
 Project [date_part(hr, c#x) AS date_part(hr, c)#x, date_part(hr, ntz#x) AS date_part(hr, ntz)#x, date_part(hr, j#x) AS date_part(hr, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -791,7 +791,7 @@ select date_part('hrs', c), date_part('hrs', ntz), date_part('hrs', j) from t
 Project [date_part(hrs, c#x) AS date_part(hrs, c)#x, date_part(hrs, ntz#x) AS date_part(hrs, ntz)#x, date_part(hrs, j#x) AS date_part(hrs, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -802,7 +802,7 @@ select date_part('minute', c), date_part('minute', ntz), date_part('minute', j) 
 Project [date_part(minute, c#x) AS date_part(minute, c)#x, date_part(minute, ntz#x) AS date_part(minute, ntz)#x, date_part(minute, j#x) AS date_part(minute, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -813,7 +813,7 @@ select date_part('m', c), date_part('m', ntz), date_part('m', j) from t
 Project [date_part(m, c#x) AS date_part(m, c)#x, date_part(m, ntz#x) AS date_part(m, ntz)#x, date_part(m, j#x) AS date_part(m, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -824,7 +824,7 @@ select date_part('min', c), date_part('min', ntz), date_part('min', j) from t
 Project [date_part(min, c#x) AS date_part(min, c)#x, date_part(min, ntz#x) AS date_part(min, ntz)#x, date_part(min, j#x) AS date_part(min, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -835,7 +835,7 @@ select date_part('mins', c), date_part('mins', ntz), date_part('mins', j) from t
 Project [date_part(mins, c#x) AS date_part(mins, c)#x, date_part(mins, ntz#x) AS date_part(mins, ntz)#x, date_part(mins, j#x) AS date_part(mins, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -846,7 +846,7 @@ select date_part('minutes', c), date_part('minutes', ntz), date_part('minutes', 
 Project [date_part(minutes, c#x) AS date_part(minutes, c)#x, date_part(minutes, ntz#x) AS date_part(minutes, ntz)#x, date_part(minutes, j#x) AS date_part(minutes, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -857,7 +857,7 @@ select date_part('second', c), date_part('second', ntz), date_part('second', j) 
 Project [date_part(second, c#x) AS date_part(second, c)#x, date_part(second, ntz#x) AS date_part(second, ntz)#x, date_part(second, j#x) AS date_part(second, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -868,7 +868,7 @@ select date_part('s', c), date_part('s', ntz), date_part('s', j) from t
 Project [date_part(s, c#x) AS date_part(s, c)#x, date_part(s, ntz#x) AS date_part(s, ntz)#x, date_part(s, j#x) AS date_part(s, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -879,7 +879,7 @@ select date_part('sec', c), date_part('sec', ntz), date_part('sec', j) from t
 Project [date_part(sec, c#x) AS date_part(sec, c)#x, date_part(sec, ntz#x) AS date_part(sec, ntz)#x, date_part(sec, j#x) AS date_part(sec, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -890,7 +890,7 @@ select date_part('seconds', c), date_part('seconds', ntz), date_part('seconds', 
 Project [date_part(seconds, c#x) AS date_part(seconds, c)#x, date_part(seconds, ntz#x) AS date_part(seconds, ntz)#x, date_part(seconds, j#x) AS date_part(seconds, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -901,7 +901,7 @@ select date_part('secs', c), date_part('secs', ntz), date_part('secs', j) from t
 Project [date_part(secs, c#x) AS date_part(secs, c)#x, date_part(secs, ntz#x) AS date_part(secs, ntz)#x, date_part(secs, j#x) AS date_part(secs, j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -955,7 +955,7 @@ select date_part(null, c) from t
 Project [date_part(null, c#x) AS date_part(NULL, c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -988,7 +988,7 @@ select date_part(null, i) from t
 Project [date_part(null, i#x) AS date_part(NULL, i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -999,7 +999,7 @@ select extract('year', c) from t
 Project [extract(year, c#x) AS extract(year FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1010,7 +1010,7 @@ select extract('quarter', c) from t
 Project [extract(quarter, c#x) AS extract(quarter FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1021,7 +1021,7 @@ select extract('month', c) from t
 Project [extract(month, c#x) AS extract(month FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1032,7 +1032,7 @@ select extract('week', c) from t
 Project [extract(week, c#x) AS extract(week FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1043,7 +1043,7 @@ select extract('day', c) from t
 Project [extract(day, c#x) AS extract(day FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1054,7 +1054,7 @@ select extract('days', c) from t
 Project [extract(days, c#x) AS extract(days FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1065,7 +1065,7 @@ select extract('dayofweek', c) from t
 Project [extract(dayofweek, c#x) AS extract(dayofweek FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1076,7 +1076,7 @@ select extract('dow', c) from t
 Project [extract(dow, c#x) AS extract(dow FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1087,7 +1087,7 @@ select extract('doy', c) from t
 Project [extract(doy, c#x) AS extract(doy FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1098,7 +1098,7 @@ select extract('hour', c) from t
 Project [extract(hour, c#x) AS extract(hour FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1109,7 +1109,7 @@ select extract('minute', c) from t
 Project [extract(minute, c#x) AS extract(minute FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1120,7 +1120,7 @@ select extract('second', c) from t
 Project [extract(second, c#x) AS extract(second FROM c)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1128,10 +1128,10 @@ Project [extract(second, c#x) AS extract(second FROM c)#x]
 -- !query
 select c - j from t
 -- !query analysis
-Project [cast(c#x - j#x as string collate UTF8_BINARY) AS c - j#x]
+Project [cast(c#x - j#x as string) AS c - j#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1139,10 +1139,10 @@ Project [cast(c#x - j#x as string collate UTF8_BINARY) AS c - j#x]
 -- !query
 select day(c - j) from t
 -- !query analysis
-Project [day(cast(cast(c#x - j#x as string collate UTF8_BINARY) as date)) AS day(c - j)#x]
+Project [day(cast(cast(c#x - j#x as string) as date)) AS day(c - j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1150,10 +1150,10 @@ Project [day(cast(cast(c#x - j#x as string collate UTF8_BINARY) as date)) AS day
 -- !query
 select extract(day from c - j) from t
 -- !query analysis
-Project [extract(day, cast(c#x - j#x as string collate UTF8_BINARY)) AS extract(day FROM c - j)#x]
+Project [extract(day, cast(c#x - j#x as string)) AS extract(day FROM c - j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1164,7 +1164,7 @@ select extract(month from to_timestamp(c) - i) from t
 Project [extract(month, to_timestamp(c#x, None, TimestampType, Some(America/Los_Angeles), true) - i#x) AS extract(month FROM to_timestamp(c) - i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1175,7 +1175,7 @@ select extract(second from to_timestamp(c) - j) from t
 Project [extract(second, cast(to_timestamp(c#x, None, TimestampType, Some(America/Los_Angeles), true) - j#x as timestamp)) AS extract(second FROM to_timestamp(c) - j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 
@@ -1431,7 +1431,7 @@ select datepart('year', c), datepart('year', ntz), datepart('year', i) from t
 Project [datepart(year, c#x) AS datepart(year FROM c)#x, datepart(year, ntz#x) AS datepart(year FROM ntz)#x, datepart(year, i#x) AS datepart(year FROM i)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x, ntz#x, i#x, j#x])
-      +- Project [cast(c#x as string collate UTF8_BINARY) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
+      +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
          +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), true) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
             +- OneRowRelation
 

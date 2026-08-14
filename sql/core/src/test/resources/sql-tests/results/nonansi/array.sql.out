@@ -13,7 +13,7 @@ struct<>
 -- !query
 select * from data
 -- !query schema
-struct<a:string collate UTF8_BINARY,b:array<int>,c:array<array<int>>>
+struct<a:string,b:array<int>,c:array<array<int>>>
 -- !query output
 one	[11,12,13]	[[111,112,113],[121,122,123]]
 two	[21,22,23]	[[211,212,213],[221,222,223]]
@@ -22,7 +22,7 @@ two	[21,22,23]	[[211,212,213],[221,222,223]]
 -- !query
 select a, b[0], b[0] + b[1] from data
 -- !query schema
-struct<a:string collate UTF8_BINARY,b[0]:int,(b[0] + b[1]):int>
+struct<a:string,b[0]:int,(b[0] + b[1]):int>
 -- !query output
 one	11	23
 two	21	43
@@ -31,7 +31,7 @@ two	21	43
 -- !query
 select a, c[0][0] + c[0][0 + 1] from data
 -- !query schema
-struct<a:string collate UTF8_BINARY,(c[0][0] + c[0][(0 + 1)]):int>
+struct<a:string,(c[0][0] + c[0][(0 + 1)]):int>
 -- !query output
 one	223
 two	423

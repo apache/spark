@@ -25,7 +25,7 @@ Filter (sum(v)#xL > cast(2 as bigint))
 +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL]
    +- SubqueryAlias hav
       +- View (`hav`, [k#x, v#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias hav
                   +- LocalRelation [k#x, v#x]
@@ -39,7 +39,7 @@ Project [count(k)#xL]
    +- Aggregate [(v#x + 1)], [count(k#x) AS count(k)#xL, (v#x + 1) AS (v + 1)#x]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -78,7 +78,7 @@ Project [min(v)#x]
             +- Filter (v#x > 0)
                +- SubqueryAlias hav
                   +- View (`hav`, [k#x, v#x])
-                     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+                     +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                         +- Project [k#x, v#x]
                            +- SubqueryAlias hav
                               +- LocalRelation [k#x, v#x]
@@ -189,7 +189,7 @@ Sort [sum(v)#xL ASC NULLS FIRST], true
    +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -204,7 +204,7 @@ Project [k#x, sum(v)#xL]
       +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL, avg(v#x) AS avg(v)#x]
          +- SubqueryAlias hav
             +- View (`hav`, [k#x, v#x])
-               +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias hav
                         +- LocalRelation [k#x, v#x]
@@ -218,7 +218,7 @@ Project [sum(v)#xL]
    +- Aggregate [sum(v#x) AS sum(v)#xL, avg(try_add(tempresolvedcolumn(v#x, v, false), 1)) AS avg(try_add(v, 1))#x]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -232,7 +232,7 @@ Project [sum(v)#xL]
    +- Aggregate [sum(v#x) AS sum(v)#xL, sum(try_add(tempresolvedcolumn(v#x, v, false), 1)) AS sum(try_add(v, 1))#xL]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -246,7 +246,7 @@ Project [sum(v)#xL]
    +- Aggregate [sum(v#x) AS sum(v)#xL, sum(ifnull(tempresolvedcolumn(v#x, v, false), 1)) AS sum(ifnull(v, 1))#xL]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -260,7 +260,7 @@ Project [sum(v)#xL]
    +- Aggregate [sum(v#x) AS sum(v)#xL, sum(ifnull(tempresolvedcolumn(v#x, v, false), 1)) AS sum(ifnull(v, 1))#xL]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -274,7 +274,7 @@ Project [sum(v)#xL]
    +- Aggregate [v#x], [sum(v#x) AS sum(v)#xL, sum(ifnull(tempresolvedcolumn(v#x, v, false), 1)) AS sum(ifnull(v, 1))#xL]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -288,7 +288,7 @@ Project [(v + 1)#x]
    +- Aggregate [(v#x + 1)], [(v#x + 1) AS (v + 1)#x, avg(try_add(tempresolvedcolumn(v#x, v, false), 1)) AS avg(try_add(v, 1))#x]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -302,7 +302,7 @@ Project [(v + 1)#x]
    +- Aggregate [(v#x + 1)], [(v#x + 1) AS (v + 1)#x, avg((try_add(tempresolvedcolumn(v#x, v, false), 1) + 1)) AS avg((try_add(v, 1) + 1))#x]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -316,7 +316,7 @@ Project [sum(v)#xL]
    +- Aggregate [(ifnull(v#x, 1) + 1)], [sum(v#x) AS sum(v)#xL, (ifnull(tempresolvedcolumn(v#x, v, false), 1) + 1) AS (ifnull(v, 1) + 1)#x]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
@@ -369,7 +369,7 @@ Filter cast((sum(v) + 1)#xL as boolean)
 +- Aggregate [(sum(v#x) + cast(1 as bigint)) AS (sum(v) + 1)#xL]
    +- SubqueryAlias hav
       +- View (`hav`, [k#x, v#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias hav
                   +- LocalRelation [k#x, v#x]
@@ -382,7 +382,7 @@ Filter cast((1 + sum(v))#xL as boolean)
 +- Aggregate [(cast(1 as bigint) + sum(v#x)) AS (1 + sum(v))#xL]
    +- SubqueryAlias hav
       +- View (`hav`, [k#x, v#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias hav
                   +- LocalRelation [k#x, v#x]
@@ -395,7 +395,7 @@ Filter cast((sum(v) + 1)#xL as boolean)
 +- Aggregate [(sum(v#x) + cast(1 as bigint)) AS (sum(v) + 1)#xL]
    +- SubqueryAlias hav
       +- View (`hav`, [k#x, v#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias hav
                   +- LocalRelation [k#x, v#x]
@@ -408,7 +408,7 @@ Filter cast((max(v) + sum(v))#xL as boolean)
 +- Aggregate [(cast(max(v#x) as bigint) + sum(v#x)) AS (max(v) + sum(v))#xL]
    +- SubqueryAlias hav
       +- View (`hav`, [k#x, v#x])
-         +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias hav
                   +- LocalRelation [k#x, v#x]
@@ -422,7 +422,7 @@ Project [((sum(v) + 1) + min(v))#xL]
    +- Aggregate [((sum(v#x) + cast(1 as bigint)) + cast(min(v#x) as bigint)) AS ((sum(v) + 1) + min(v))#xL, min(v#x) AS min(v)#x, sum(v#x) AS sum(v)#xL]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
-            +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]

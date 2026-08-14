@@ -1705,7 +1705,7 @@ Project [year#x, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)
       +- Project [year#x, course#x, earnings#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -1725,7 +1725,7 @@ Project [c#x, __pivot_sum(e) AS s AS `sum(e) AS s`#x[0] AS firstYear_s#xL, __piv
       +- Project [year#x AS y#x, course#x AS c#x, earnings#x AS e#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
-               +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
                         +- LocalRelation [course#x, year#x, earnings#x]
@@ -1740,18 +1740,18 @@ join yearsWithComplexTypes on `year` = y
      for (y, course) in ((2012, 'dotNET'), (2013, 'Java'))
    )
 -- !query analysis
-Aggregate [year#x], [year#x, max(if ((named_struct(y, y#x, course, course#x) <=> cast(named_struct(col1, 2012, col2, dotNET) as struct<y:int,course:string collate UTF8_BINARY>))) a#x else cast(null as array<int>)) AS {2012, dotNET}#x, max(if ((named_struct(y, y#x, course, course#x) <=> cast(named_struct(col1, 2013, col2, Java) as struct<y:int,course:string collate UTF8_BINARY>))) a#x else cast(null as array<int>)) AS {2013, Java}#x]
+Aggregate [year#x], [year#x, max(if ((named_struct(y, y#x, course, course#x) <=> cast(named_struct(col1, 2012, col2, dotNET) as struct<y:int,course:string>))) a#x else cast(null as array<int>)) AS {2012, dotNET}#x, max(if ((named_struct(y, y#x, course, course#x) <=> cast(named_struct(col1, 2013, col2, Java) as struct<y:int,course:string>))) a#x else cast(null as array<int>)) AS {2013, Java}#x]
 +- Project [course#x, year#x, y#x, a#x]
    +- Join Inner, (year#x = y#x)
       :- SubqueryAlias coursesales
       :  +- View (`courseSales`, [course#x, year#x, earnings#x])
-      :     +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+      :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
       :        +- Project [course#x, year#x, earnings#x]
       :           +- SubqueryAlias courseSales
       :              +- LocalRelation [course#x, year#x, earnings#x]
       +- SubqueryAlias yearswithcomplextypes
          +- View (`yearsWithComplexTypes`, [y#x, a#x, m#x, s#x])
-            +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string collate UTF8_BINARY,int>) AS m#x, cast(s#x as struct<col1:int,col2:string collate UTF8_BINARY>) AS s#x]
+            +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string,int>) AS m#x, cast(s#x as struct<col1:int,col2:string>) AS s#x]
                +- Project [y#x, a#x, m#x, s#x]
                   +- SubqueryAlias yearsWithComplexTypes
                      +- LocalRelation [y#x, a#x, m#x, s#x]
@@ -1773,13 +1773,13 @@ Project [year#x, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)
          +- Join Inner, (year#x = y#x)
             :- SubqueryAlias coursesales
             :  +- View (`courseSales`, [course#x, year#x, earnings#x])
-            :     +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+            :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
             :        +- Project [course#x, year#x, earnings#x]
             :           +- SubqueryAlias courseSales
             :              +- LocalRelation [course#x, year#x, earnings#x]
             +- SubqueryAlias yearswithcomplextypes
                +- View (`yearsWithComplexTypes`, [y#x, a#x, m#x, s#x])
-                  +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string collate UTF8_BINARY,int>) AS m#x, cast(s#x as struct<col1:int,col2:string collate UTF8_BINARY>) AS s#x]
+                  +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string,int>) AS m#x, cast(s#x as struct<col1:int,col2:string>) AS s#x]
                      +- Project [y#x, a#x, m#x, s#x]
                         +- SubqueryAlias yearsWithComplexTypes
                            +- LocalRelation [y#x, a#x, m#x, s#x]
@@ -1795,7 +1795,7 @@ Filter isnotnull(coalesce(earningsYear#x))
 +- Expand [[course#x, 2012, 2012#x], [course#x, 2013, 2013#x], [course#x, 2014, 2014#x]], [course#x, year#x, earningsYear#x]
    +- SubqueryAlias courseearnings
       +- View (`courseEarnings`, [course#x, 2012#x, 2013#x, 2014#x])
-         +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(2012#x as int) AS 2012#x, cast(2013#x as int) AS 2013#x, cast(2014#x as int) AS 2014#x]
+         +- Project [cast(course#x as string) AS course#x, cast(2012#x as int) AS 2012#x, cast(2013#x as int) AS 2013#x, cast(2014#x as int) AS 2014#x]
             +- Project [course#x, 2012#x, 2013#x, 2014#x]
                +- SubqueryAlias courseEarnings
                   +- LocalRelation [course#x, 2012#x, 2013#x, 2014#x]
@@ -1810,7 +1810,7 @@ table courseEarnings
 Expand [[course#x, 2012, 2012#x], [course#x, 2013, 2013#x], [course#x, 2014, 2014#x]], [course#x, year#x, earningsYear#x]
 +- SubqueryAlias courseearnings
    +- View (`courseEarnings`, [course#x, 2012#x, 2013#x, 2014#x])
-      +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(2012#x as int) AS 2012#x, cast(2013#x as int) AS 2013#x, cast(2014#x as int) AS 2014#x]
+      +- Project [cast(course#x as string) AS course#x, cast(2012#x as int) AS 2012#x, cast(2013#x as int) AS 2013#x, cast(2014#x as int) AS 2014#x]
          +- Project [course#x, 2012#x, 2013#x, 2014#x]
             +- SubqueryAlias courseEarnings
                +- LocalRelation [course#x, 2012#x, 2013#x, 2014#x]
@@ -1828,7 +1828,7 @@ table courseEarningsAndSales
 Expand [[course#x, 2012, earnings2012#x, sales2012#x], [course#x, 2013, earnings2013#x, sales2013#x], [course#x, 2014, earnings2014#x, sales2014#x]], [course#x, year#x, earnings#x, sales#x]
 +- SubqueryAlias courseearningsandsales
    +- View (`courseEarningsAndSales`, [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x])
-      +- Project [cast(course#x as string collate UTF8_BINARY) AS course#x, cast(earnings2012#x as int) AS earnings2012#x, cast(sales2012#x as int) AS sales2012#x, cast(earnings2013#x as int) AS earnings2013#x, cast(sales2013#x as int) AS sales2013#x, cast(earnings2014#x as int) AS earnings2014#x, cast(sales2014#x as int) AS sales2014#x]
+      +- Project [cast(course#x as string) AS course#x, cast(earnings2012#x as int) AS earnings2012#x, cast(sales2012#x as int) AS sales2012#x, cast(earnings2013#x as int) AS earnings2013#x, cast(sales2013#x as int) AS sales2013#x, cast(earnings2014#x as int) AS earnings2014#x, cast(sales2014#x as int) AS sales2014#x]
          +- Project [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x]
             +- SubqueryAlias courseEarningsAndSales
                +- LocalRelation [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x]
@@ -2648,13 +2648,13 @@ Filter (k#x = one)
       +- Join Inner, (k#x = k#x)
          :- SubqueryAlias natural_join_test_t1
          :  +- View (`natural_join_test_t1`, [k#x, v1#x])
-         :     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+         :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
          :        +- Project [k#x, v1#x]
          :           +- SubqueryAlias natural_join_test_t1
          :              +- LocalRelation [k#x, v1#x]
          +- SubqueryAlias natural_join_test_t2
             +- View (`natural_join_test_t2`, [k#x, v2#x])
-               +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v2#x as int) AS v2#x]
+               +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                   +- Project [k#x, v2#x]
                      +- SubqueryAlias natural_join_test_t2
                         +- LocalRelation [k#x, v2#x]
@@ -2670,14 +2670,14 @@ Project [k#x, v1#x]
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias natural_join_test_t1
       :  +- View (`natural_join_test_t1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias natural_join_test_t1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
          +- SubqueryAlias natural_join_test_t2
             +- View (`natural_join_test_t2`, [k#x, v2#x])
-               +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v2#x as int) AS v2#x]
+               +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                   +- Project [k#x, v2#x]
                      +- SubqueryAlias natural_join_test_t2
                         +- LocalRelation [k#x, v2#x]
@@ -2696,21 +2696,21 @@ Project [k#x, v1#x, k#x, v2#x, k#x, v3#x]
       :  +- Join Inner, (k#x = k#x)
       :     :- SubqueryAlias natural_join_test_t1
       :     :  +- View (`natural_join_test_t1`, [k#x, v1#x])
-      :     :     +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v1#x as int) AS v1#x]
+      :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :     :        +- Project [k#x, v1#x]
       :     :           +- SubqueryAlias natural_join_test_t1
       :     :              +- LocalRelation [k#x, v1#x]
       :     +- SubqueryAlias nt2
       :        +- SubqueryAlias natural_join_test_t2
       :           +- View (`natural_join_test_t2`, [k#x, v2#x])
-      :              +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v2#x as int) AS v2#x]
+      :              +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
       :                 +- Project [k#x, v2#x]
       :                    +- SubqueryAlias natural_join_test_t2
       :                       +- LocalRelation [k#x, v2#x]
       +- SubqueryAlias nt3
          +- SubqueryAlias natural_join_test_t3
             +- View (`natural_join_test_t3`, [k#x, v3#x])
-               +- Project [cast(k#x as string collate UTF8_BINARY) AS k#x, cast(v3#x as int) AS v3#x]
+               +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
                   +- Project [k#x, v3#x]
                      +- SubqueryAlias natural_join_test_t3
                         +- LocalRelation [k#x, v3#x]
@@ -3797,7 +3797,7 @@ Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST R
       +- Project [cate#x, val#x]
          +- SubqueryAlias windowtestdata
             +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                   +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                      +- SubqueryAlias testData
                         +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -3814,7 +3814,7 @@ Project [cate#x, sum(val) OVER (ORDER BY val_timestamp ASC NULLS FIRST RANGE BET
       +- Project [cate#x, val#x, val_timestamp#x]
          +- SubqueryAlias windowtestdata
             +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                   +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                      +- SubqueryAlias testData
                         +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -3828,7 +3828,7 @@ table windowTestData
 Project [cate#x, val#x]
 +- SubqueryAlias windowtestdata
    +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
          +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
             +- SubqueryAlias testData
                +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -3851,7 +3851,7 @@ Project [cate#x, val#x, sum_val#xL, first_value(cate) OVER (ORDER BY val ASC NUL
                   +- Project [cate#x, val#x]
                      +- SubqueryAlias windowtestdata
                         +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                           +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                           +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                               +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                                  +- SubqueryAlias testData
                                     +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -3869,7 +3869,7 @@ Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED 
          +- Project [cate#x, val#x]
             +- SubqueryAlias windowtestdata
                +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
                            +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -3942,7 +3942,7 @@ Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST R
       +- Project [cate#x, val#x]
          +- SubqueryAlias windowtestdata
             +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                   +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                      +- SubqueryAlias testData
                         +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -4769,7 +4769,7 @@ Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST R
       +- Project [cate#x, val#x]
          +- SubqueryAlias windowtestdata
             +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
-               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string collate UTF8_BINARY) AS cate#x]
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                   +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                      +- SubqueryAlias testData
                         +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]

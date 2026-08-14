@@ -234,7 +234,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputExpr" : "\"csvField\"",
     "inputName" : "`csv`",
-    "inputType" : "\"STRING COLLATE UTF8_BINARY\"",
+    "inputType" : "\"STRING\"",
     "sqlExpr" : "\"schema_of_csv(csvField)\""
   },
   "queryContext" : [ {

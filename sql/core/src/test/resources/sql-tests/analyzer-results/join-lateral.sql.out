@@ -2548,7 +2548,7 @@ Project [id#x, arr#x, col1#x, col2#x]
    :     +- OneRowRelation
    +- SubqueryAlias array_struct
       +- View (`array_struct`, [id#x, arr#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as array<struct<col1:int,col2:string collate UTF8_BINARY>>) AS arr#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as array<struct<col1:int,col2:string>>) AS arr#x]
             +- LocalRelation [col1#x, col2#x]
 
 
@@ -2563,7 +2563,7 @@ Project [id#x, arr#x, k#x, v#x]
    :           +- OneRowRelation
    +- SubqueryAlias array_struct
       +- View (`array_struct`, [id#x, arr#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as array<struct<col1:int,col2:string collate UTF8_BINARY>>) AS arr#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as array<struct<col1:int,col2:string>>) AS arr#x]
             +- LocalRelation [col1#x, col2#x]
 
 
@@ -2576,7 +2576,7 @@ Project [id#x, arr#x, col1#x, col2#x]
    :     +- OneRowRelation
    +- SubqueryAlias array_struct
       +- View (`array_struct`, [id#x, arr#x])
-         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as array<struct<col1:int,col2:string collate UTF8_BINARY>>) AS arr#x]
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as array<struct<col1:int,col2:string>>) AS arr#x]
             +- LocalRelation [col1#x, col2#x]
 
 
@@ -2729,7 +2729,7 @@ Project [key#x, c0#x, c1#x, c2#x, c3#x, c4#x]
    +- SubqueryAlias t1
       +- SubqueryAlias json_table
          +- View (`json_table`, [key#x, jstring#x])
-            +- Project [cast(col1#x as string collate UTF8_BINARY) AS key#x, cast(col2#x as string collate UTF8_BINARY) AS jstring#x]
+            +- Project [cast(col1#x as string) AS key#x, cast(col2#x as string) AS jstring#x]
                +- LocalRelation [col1#x, col2#x]
 
 
@@ -2745,7 +2745,7 @@ Project [key#x, c0#x, c1#x, c2#x, c3#x, c4#x]
       +- SubqueryAlias t1
          +- SubqueryAlias json_table
             +- View (`json_table`, [key#x, jstring#x])
-               +- Project [cast(col1#x as string collate UTF8_BINARY) AS key#x, cast(col2#x as string collate UTF8_BINARY) AS jstring#x]
+               +- Project [cast(col1#x as string) AS key#x, cast(col2#x as string) AS jstring#x]
                   +- LocalRelation [col1#x, col2#x]
 
 
@@ -2763,7 +2763,7 @@ Project [key#x, f1#x, f2#x, f3#x, f4#x, f5#x]
    +- SubqueryAlias t1
       +- SubqueryAlias json_table
          +- View (`json_table`, [key#x, jstring#x])
-            +- Project [cast(col1#x as string collate UTF8_BINARY) AS key#x, cast(col2#x as string collate UTF8_BINARY) AS jstring#x]
+            +- Project [cast(col1#x as string) AS key#x, cast(col2#x as string) AS jstring#x]
                +- LocalRelation [col1#x, col2#x]
 
 
@@ -2781,7 +2781,7 @@ Project [key#x, f1#x, f2#x, f3#x, f4#x, f5#x]
    +- SubqueryAlias t1
       +- SubqueryAlias json_table
          +- View (`json_table`, [key#x, jstring#x])
-            +- Project [cast(col1#x as string collate UTF8_BINARY) AS key#x, cast(col2#x as string collate UTF8_BINARY) AS jstring#x]
+            +- Project [cast(col1#x as string) AS key#x, cast(col2#x as string) AS jstring#x]
                +- LocalRelation [col1#x, col2#x]
 
 

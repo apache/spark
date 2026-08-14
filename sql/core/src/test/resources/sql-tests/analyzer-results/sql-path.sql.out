@@ -686,7 +686,7 @@ SELECT cs, cp FROM sql_path_views_a.v_ctx
 Project [cs#x, cp#x]
 +- SubqueryAlias spark_catalog.sql_path_views_a.v_ctx
    +- View (`spark_catalog`.`sql_path_views_a`.`v_ctx`, [cs#x, cp#x])
-      +- Project [cast(cs#x as string collate UTF8_BINARY) AS cs#x, cast(cp#x as string collate UTF8_BINARY) AS cp#x]
+      +- Project [cast(cs#x as string) AS cs#x, cast(cp#x as string) AS cp#x]
          +- Project [current_schema() AS cs#x, current_path() AS cp#x]
             +- OneRowRelation
 

@@ -58,7 +58,7 @@ struct<>
 -- !query
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view_tmp'
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY>
+struct<id:int,name:string>
 -- !query output
 10	name1
 20	name2
@@ -80,7 +80,7 @@ struct<>
 -- !query
 EXECUTE IMMEDIATE sql_string
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 
@@ -88,7 +88,7 @@ struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:in
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = \'name1\''
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 
@@ -120,7 +120,7 @@ struct<>
 -- !query
 EXECUTE IMMEDIATE sql_string USING 'name1', 'name3'
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 30	name3	{"f1":3,"s2":{"f2":303,"f3":"c"}}
@@ -129,7 +129,7 @@ struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:in
 -- !query
 EXECUTE IMMEDIATE sql_string USING a, 'name2'
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 20	name2	{"f1":2,"s2":{"f2":202,"f3":"b"}}
@@ -138,7 +138,7 @@ struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:in
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING 'name1', 'name3'
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 30	name3	{"f1":3,"s2":{"f2":303,"f3":"c"}}
@@ -147,7 +147,7 @@ struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:in
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING a, 'name2'
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 20	name2	{"f1":2,"s2":{"f2":202,"f3":"b"}}
@@ -156,7 +156,7 @@ struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:in
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, 'name2')
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 20	name2	{"f1":2,"s2":{"f2":202,"f3":"b"}}
@@ -205,7 +205,7 @@ struct<>
 -- !query
 EXECUTE IMMEDIATE sql_string USING 40 as second, 'name7' as first
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 40	name4	{"f1":4,"s2":{"f2":404,"f3":"d"}}
 70	name7	{"f1":7,"s2":{"f2":707,"f3":"g"}}
@@ -214,7 +214,7 @@ struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:in
 -- !query
 EXECUTE IMMEDIATE sql_string USING b as second, 'name7' as first
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 40	name4	{"f1":4,"s2":{"f2":404,"f3":"d"}}
 70	name7	{"f1":7,"s2":{"f2":707,"f3":"g"}}
@@ -223,7 +223,7 @@ struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:in
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first or id = :second' USING 40 as second, 'name7' as first
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 40	name4	{"f1":4,"s2":{"f2":404,"f3":"d"}}
 70	name7	{"f1":7,"s2":{"f2":707,"f3":"g"}}
@@ -232,7 +232,7 @@ struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:in
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first or id = :second' USING 'name7' as first, b as second
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 40	name4	{"f1":4,"s2":{"f2":404,"f3":"d"}}
 70	name7	{"f1":7,"s2":{"f2":707,"f3":"g"}}
@@ -241,7 +241,7 @@ struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:in
 -- !query
 EXECUTE IMMEDIATE 'SELECT tbl_view.*, :first as p FROM tbl_view WHERE name = :first' USING 'name7' as first
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>,p:string>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>,p:string>
 -- !query output
 70	name7	{"f1":7,"s2":{"f2":707,"f3":"g"}}	name7
 
@@ -345,7 +345,7 @@ struct<b:int,a:string>
 -- !query
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where id = ? AND name = ?' USING b as first, a
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 
@@ -589,7 +589,7 @@ struct<>
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING CONCAT(a , "me1") as first
 -- !query schema
-struct<id:int,name:string collate UTF8_BINARY,data:struct<f1:int,s2:struct<f2:int,f3:string collate UTF8_BINARY>>>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
 10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 

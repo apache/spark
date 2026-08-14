@@ -16,7 +16,7 @@ struct<>
 -- !query
 SELECT max_by(name, score, 3) FROM basic_data
 -- !query schema
-struct<max_by(name, score, 3):array<string collate UTF8_BINARY>>
+struct<max_by(name, score, 3):array<string>>
 -- !query output
 ["Dave","Bob","Eve"]
 
@@ -24,7 +24,7 @@ struct<max_by(name, score, 3):array<string collate UTF8_BINARY>>
 -- !query
 SELECT min_by(name, score, 3) FROM basic_data
 -- !query schema
-struct<min_by(name, score, 3):array<string collate UTF8_BINARY>>
+struct<min_by(name, score, 3):array<string>>
 -- !query output
 ["Carol","Alice","Eve"]
 
@@ -32,7 +32,7 @@ struct<min_by(name, score, 3):array<string collate UTF8_BINARY>>
 -- !query
 SELECT max_by(name, score, 1) FROM basic_data
 -- !query schema
-struct<max_by(name, score, 1):array<string collate UTF8_BINARY>>
+struct<max_by(name, score, 1):array<string>>
 -- !query output
 ["Dave"]
 
@@ -40,7 +40,7 @@ struct<max_by(name, score, 1):array<string collate UTF8_BINARY>>
 -- !query
 SELECT min_by(name, score, 1) FROM basic_data
 -- !query schema
-struct<min_by(name, score, 1):array<string collate UTF8_BINARY>>
+struct<min_by(name, score, 1):array<string>>
 -- !query output
 ["Carol"]
 
@@ -48,7 +48,7 @@ struct<min_by(name, score, 1):array<string collate UTF8_BINARY>>
 -- !query
 SELECT max_by(name, score, 10) FROM basic_data
 -- !query schema
-struct<max_by(name, score, 10):array<string collate UTF8_BINARY>>
+struct<max_by(name, score, 10):array<string>>
 -- !query output
 ["Dave","Bob","Eve","Alice","Carol"]
 
@@ -56,7 +56,7 @@ struct<max_by(name, score, 10):array<string collate UTF8_BINARY>>
 -- !query
 SELECT min_by(name, score, 10) FROM basic_data
 -- !query schema
-struct<min_by(name, score, 10):array<string collate UTF8_BINARY>>
+struct<min_by(name, score, 10):array<string>>
 -- !query output
 ["Carol","Alice","Eve","Bob","Dave"]
 
@@ -79,7 +79,7 @@ struct<>
 -- !query
 SELECT dept, max_by(emp, salary, 2) FROM dept_data GROUP BY dept ORDER BY dept
 -- !query schema
-struct<dept:string collate UTF8_BINARY,max_by(emp, salary, 2):array<string collate UTF8_BINARY>>
+struct<dept:string,max_by(emp, salary, 2):array<string>>
 -- !query output
 Eng	["Alice","Carol"]
 Sales	["Frank","Dave"]
@@ -88,7 +88,7 @@ Sales	["Frank","Dave"]
 -- !query
 SELECT dept, min_by(emp, salary, 2) FROM dept_data GROUP BY dept ORDER BY dept
 -- !query schema
-struct<dept:string collate UTF8_BINARY,min_by(emp, salary, 2):array<string collate UTF8_BINARY>>
+struct<dept:string,min_by(emp, salary, 2):array<string>>
 -- !query output
 Eng	["Bob","Carol"]
 Sales	["Eve","Dave"]
@@ -110,7 +110,7 @@ struct<>
 -- !query
 SELECT max_by(x, y, 2) FROM null_data
 -- !query schema
-struct<max_by(x, y, 2):array<string collate UTF8_BINARY>>
+struct<max_by(x, y, 2):array<string>>
 -- !query output
 ["c","d"]
 
@@ -118,7 +118,7 @@ struct<max_by(x, y, 2):array<string collate UTF8_BINARY>>
 -- !query
 SELECT min_by(x, y, 2) FROM null_data
 -- !query schema
-struct<min_by(x, y, 2):array<string collate UTF8_BINARY>>
+struct<min_by(x, y, 2):array<string>>
 -- !query output
 ["a","d"]
 
@@ -138,7 +138,7 @@ struct<>
 -- !query
 SELECT max_by(x, y, 2) FROM null_value_data
 -- !query schema
-struct<max_by(x, y, 2):array<string collate UTF8_BINARY>>
+struct<max_by(x, y, 2):array<string>>
 -- !query output
 ["c","b"]
 
@@ -146,7 +146,7 @@ struct<max_by(x, y, 2):array<string collate UTF8_BINARY>>
 -- !query
 SELECT min_by(x, y, 2) FROM null_value_data
 -- !query schema
-struct<min_by(x, y, 2):array<string collate UTF8_BINARY>>
+struct<min_by(x, y, 2):array<string>>
 -- !query output
 [null,"b"]
 
@@ -166,7 +166,7 @@ struct<>
 -- !query
 SELECT max_by(name, score, 2) FROM typed_data
 -- !query schema
-struct<max_by(name, score, 2):array<string collate UTF8_BINARY>>
+struct<max_by(name, score, 2):array<string>>
 -- !query output
 ["b","a"]
 
@@ -174,7 +174,7 @@ struct<max_by(name, score, 2):array<string collate UTF8_BINARY>>
 -- !query
 SELECT min_by(name, score, 2) FROM typed_data
 -- !query schema
-struct<min_by(name, score, 2):array<string collate UTF8_BINARY>>
+struct<min_by(name, score, 2):array<string>>
 -- !query output
 ["c","a"]
 
@@ -194,7 +194,7 @@ struct<>
 -- !query
 SELECT max_by(event, event_date, 2) FROM date_data
 -- !query schema
-struct<max_by(event, event_date, 2):array<string collate UTF8_BINARY>>
+struct<max_by(event, event_date, 2):array<string>>
 -- !query output
 ["event2","event3"]
 
@@ -202,7 +202,7 @@ struct<max_by(event, event_date, 2):array<string collate UTF8_BINARY>>
 -- !query
 SELECT min_by(event, event_date, 2) FROM date_data
 -- !query schema
-struct<min_by(event, event_date, 2):array<string collate UTF8_BINARY>>
+struct<min_by(event, event_date, 2):array<string>>
 -- !query output
 ["event1","event3"]
 
@@ -214,7 +214,7 @@ SELECT dept, emp, salary,
 FROM dept_data
 ORDER BY dept, emp
 -- !query schema
-struct<dept:string collate UTF8_BINARY,emp:string collate UTF8_BINARY,salary:int,top2:array<string collate UTF8_BINARY>,bottom2:array<string collate UTF8_BINARY>>
+struct<dept:string,emp:string,salary:int,top2:array<string>,bottom2:array<string>>
 -- !query output
 Eng	Alice	120000	["Alice","Carol"]	["Bob","Carol"]
 Eng	Bob	95000	["Alice","Carol"]	["Bob","Carol"]

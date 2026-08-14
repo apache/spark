@@ -55,7 +55,7 @@ SELECT
             AND dept.dept_id < 30)
 FROM   emp
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,exists():boolean>
+struct<emp_name:string,exists():boolean>
 -- !query output
 emp 1	true
 emp 1	true
@@ -76,7 +76,7 @@ SELECT
           WHERE  emp.dept_id = dept.dept_id)
 FROM   emp
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,exists(dept_id):boolean>
+struct<emp_name:string,exists(dept_id):boolean>
 -- !query output
 emp 1	true
 emp 1	true
@@ -216,7 +216,7 @@ SELECT
                                              AND dept.dept_id < 30))
 FROM   emp
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,sum(salary) OVER (PARTITION BY exists() ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):decimal(15,2)>
+struct<emp_name:string,sum(salary) OVER (PARTITION BY exists() ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):decimal(15,2)>
 -- !query output
 emp 1	2450.00
 emp 1	2450.00
@@ -237,7 +237,7 @@ SELECT
                                            WHERE  emp.dept_id = dept.dept_id))
 FROM   emp
 -- !query schema
-struct<emp_name:string collate UTF8_BINARY,sum(salary) OVER (PARTITION BY exists(dept_id) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):decimal(15,2)>
+struct<emp_name:string,sum(salary) OVER (PARTITION BY exists(dept_id) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):decimal(15,2)>
 -- !query output
 emp 1	1250.00
 emp 1	1250.00
