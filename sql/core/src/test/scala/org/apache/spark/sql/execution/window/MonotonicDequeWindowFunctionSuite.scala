@@ -202,7 +202,7 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
       df.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
   }
 
-  // Finding 3: verify strict inequality preserves first-of-equals behavior
+  // Verify strict inequality preserves first-of-equals behavior
   // under collated strings and signed zero.
 
   test("SPARK-58201: MIN/MAX on collated strings (UTF8_LCASE) preserves first-of-equals") {
@@ -238,7 +238,7 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
     checkEquivalence(() => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)))
   }
 
-  // Finding 6: spill coverage - lower thresholds to force ExternalAppendOnlyUnsafeRowArray
+  // Spill coverage: lower thresholds to force ExternalAppendOnlyUnsafeRowArray
   // to use its SpillableArrayIterator, which recycles a single UnsafeRow.
 
   test("SPARK-58201: Moving rows frame: MIN/MAX on reference types (String) with spill") {
@@ -278,35 +278,36 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  // Finding 18: lowerBound-advances-without-admitting branch (both bounds on FOLLOWING side).
+  // Both-FOLLOWING frame: lowerBound-advances-without-admitting branch
+  // (both bounds on the FOLLOWING side).
   test("SPARK-58201: both-FOLLOWING rows frame exercises lowerBound-advances branch") {
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(2, 4)
     checkEquivalence(() =>
       baseDF.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
   }
 
-  // Finding 18: wide ascending data forces MinMaxDeque.expand() (ring-buffer grow path).
+  // Wide ascending data forces MinMaxDeque.expand() (ring-buffer grow path).
   test("SPARK-58201: wide window on ascending data forces ring-buffer expand") {
     val df = spark.range(0, 300).selectExpr("id", "1 AS pk", "CAST(id AS INT) AS v")
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-70, 0)
     checkEquivalence(() => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)))
   }
 
-  // Finding 18: both-PRECEDING frame -- first rows have an empty window.
+  // Both-PRECEDING frame: first rows have an empty window.
   test("SPARK-58201: both-PRECEDING rows frame (empty window for first rows)") {
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-4, -2)
     checkEquivalence(() =>
       baseDF.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
   }
 
-  // Finding 18: wide random data, exercises normal sliding path at scale.
+  // Wide random data: exercises the normal sliding path at scale.
   test("SPARK-58201: wide random rows frame") {
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-60, 40)
     checkEquivalence(() =>
       baseDF.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
   }
 
-  // Finding 18: range frame on tied order key.
+  // Range frame on tied order key.
   test("SPARK-58201: range frame on tied order key") {
     val df = baseDF.selectExpr("id", "pk", "CAST(id / 3 AS INT) AS ord", "v_int")
     val winSpec = Window.partitionBy($"pk").orderBy($"ord").rangeBetween(1, 3)
@@ -314,9 +315,9 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
       df.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
   }
 
-  // Finding 7 + 18: DECIMAL and BINARY types -- UnsafeRow.getDecimal/getBinary allocate fresh
-  // objects per call (after ExtractWindowExpressions hoists args into the Project below), so
-  // the deque never holds a stale reference regardless of the isPrimitive branch.
+  // DECIMAL and BINARY types: UnsafeRow.getDecimal/getBinary allocate fresh objects
+  // per call, so InternalRow.copyValue is safe for all reference types. Low spill
+  // thresholds verify correctness when the UnsafeRow backing store is recycled.
   test("SPARK-58201: MIN/MAX on DECIMAL and BINARY types with spill") {
     val df = spark
       .range(0, 60)

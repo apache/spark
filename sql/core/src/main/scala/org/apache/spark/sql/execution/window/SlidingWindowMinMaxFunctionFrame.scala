@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types._
 
 /**
  * An optimized sliding window frame that calculates min and/or max aggregate functions using
@@ -92,7 +91,6 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     new MinMaxDeque(
       isMin,
       BindReferences.bindReference(child, inputSchema),
-      child.dataType,
       TypeUtils.getInterpretedOrdering(child.dataType))
   }
 
@@ -162,7 +160,6 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
   private class MinMaxDeque(
       isMin: Boolean,
       boundChild: Expression,
-      dataType: DataType,
       ordering: Ordering[Any]) {
 
     private var capacity = 16
@@ -236,9 +233,9 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     }
 
     // ExtractWindowExpressions hoists window aggregate arguments into the Project below,
-    // so `boundChild` is a BoundReference over an UnsafeRow. Thus getBinary/getDecimal
-    // allocate a fresh object per call, and we only need InternalRow.copyValue for the
-    // remaining reference types (String, Struct, Array, Map).
+    // so `boundChild` is a BoundReference over an UnsafeRow. `InternalRow.copyValue` handles
+    // all reference types (String, Struct, Array, Map, Binary, Decimal) defensively, ensuring
+    // the deque never holds a stale reference when the source UnsafeRow is recycled on spill.
     private def evaluateAndCopy(row: InternalRow): Any = {
       val value = boundChild.eval(row)
       if (value == null) null else InternalRow.copyValue(value)
