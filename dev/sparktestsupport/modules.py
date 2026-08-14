@@ -410,21 +410,6 @@ streaming_kinesis_asl = Module(
 )
 
 
-credential_aws = Module(
-    name="credential-aws",
-    dependencies=[tags, core],
-    source_file_regexes=[
-        "connector/credential-aws/",
-    ],
-    build_profile_flags=[
-        "-Pcredential-aws",
-    ],
-    sbt_test_goals=[
-        "credential-aws/test",
-    ],
-)
-
-
 streaming_kafka_0_10 = Module(
     name="streaming-kafka-0-10",
     dependencies=[streaming, core],
