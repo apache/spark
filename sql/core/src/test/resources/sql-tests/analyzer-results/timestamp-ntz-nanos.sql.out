@@ -734,6 +734,21 @@ Aggregate [max_by(v#x, k#x) AS max_by(v, k)#x, min_by(v#x, k#x) AS min_by(v, k)#
 
 
 -- !query
+SELECT DISTINCT c FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+  ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Distinct
+   +- Project [c#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c#x]
+
+
+-- !query
 SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
 Project [unix_nanos(2020-01-01 13:24:35.123456789) AS unix_nanos(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
