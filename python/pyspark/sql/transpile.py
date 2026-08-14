@@ -1222,7 +1222,9 @@ def _file_lambda_candidates(target: CodeType) -> List[ast.Lambda]:
     return list(_parse_file_lambdas(target.co_filename, stat.st_mtime_ns, stat.st_size))
 
 
-def _resolve_lambda(target: CodeType, candidates: List[ast.Lambda]) -> Optional[ast.Lambda]:
+def _resolve_lambda(
+    target: CodeType, candidates: List[ast.Lambda], errors: Optional[List[str]] = None
+) -> Optional[ast.Lambda]:
     """Pick the lambda node that ``target`` (a ``func.__code__``) was compiled from.
 
     Two steps, LOCATE then CONFIRM:
@@ -1241,9 +1243,30 @@ def _resolve_lambda(target: CodeType, candidates: List[ast.Lambda]) -> Optional[
 
     Returns ``None`` unless exactly one candidate both encloses the extent and
     verifies, which the caller turns into a fall back to interpreted Python.
+
+    On failure a specific reason is appended to ``errors`` when one is given.
+    The reasons are distinguished HERE, where the decision is made, rather than
+    re-derived by the caller: the four ways this can fail are not
+    interchangeable, and collapsing them into one message ("cannot transpile")
+    leaves a user with no way to tell an unsupported lambda from a whole
+    mechanism being unavailable.
     """
     extent = _instruction_extent(target)
     if extent is None:
+        if errors is not None:
+            errors.append(
+                "the lambda's code object carries no source positions, so it cannot be "
+                "located -- this interpreter or its .pyc files were built with "
+                "-X no_debug_ranges / PYTHONNODEBUGRANGES=1, which disables lambda "
+                "transpilation entirely (clear __pycache__ after unsetting it)"
+            )
+        return None
+    if not candidates:
+        if errors is not None:
+            errors.append(
+                f"no readable source for {target.co_filename!r}, so the lambda cannot "
+                "be located (a REPL definition, or a module with no retrievable source)"
+            )
         return None
     # Cheap narrowing first: a lambda's code object starts on the line its
     # ``lambda`` keyword is on (verified across 3.11-3.13 for every shape,
@@ -1255,10 +1278,34 @@ def _resolve_lambda(target: CodeType, candidates: List[ast.Lambda]) -> Optional[
         if node.lineno == target.co_firstlineno and _node_encloses(node, extent)
     ]
     if not located:
+        if errors is not None:
+            errors.append(
+                f"no lambda found at {target.co_filename}:{target.co_firstlineno}, where "
+                "this one reports being defined -- the source has probably changed since "
+                "it was imported"
+            )
         return None
     target_signature = _code_signature(target)
     verified = [node for node in located if _verifies(node, target, target_signature)]
-    return verified[0] if len(verified) == 1 else None
+    if len(verified) == 1:
+        return verified[0]
+    if errors is not None:
+        if not verified:
+            errors.append(
+                f"the source at {target.co_filename}:{target.co_firstlineno} does not "
+                "match the compiled code, so it is not safe to lower. Either the source "
+                "has changed since it was imported, OR the lambda calls a module-level "
+                "attribute (e.g. `F.year(c)` after `import pyspark.sql.functions as F`), "
+                "which the bytecode comparison cannot yet reproduce -- see "
+                "``_code_signature``"
+            )
+        else:
+            errors.append(
+                f"more than one lambda at {target.co_filename}:"
+                f"{target.co_firstlineno} matches the compiled code, so which one is "
+                "meant is ambiguous"
+            )
+    return None
 
 
 def _call_dunder(func: Optional[Callable]) -> Any:
@@ -1336,7 +1383,9 @@ def _lambda_to_function_def(node: ast.Lambda) -> ast.FunctionDef:
     return fn
 
 
-def _get_function_from_ast(func: Optional[Callable]) -> ast.FunctionDef | None:
+def _get_function_from_ast(
+    func: Optional[Callable], errors: Optional[List[str]] = None
+) -> ast.FunctionDef | None:
     """
     Extract a :class:`ast.FunctionDef` node for the callable ``func``.
 
@@ -1360,11 +1409,13 @@ def _get_function_from_ast(func: Optional[Callable]) -> ast.FunctionDef | None:
     which is why lambdas are located by position instead and do not pay for it.
 
     Returns ``None`` when no single function can be identified, which the caller
-    turns into a fall back to interpreted Python.
+    turns into a fall back to interpreted Python. A specific reason is appended
+    to ``errors`` when one is given, so the user's warning names the actual cause
+    instead of a single catch-all.
     """
     target = _target_code(func)
     if target is not None and target.co_name == "<lambda>":
-        resolved = _resolve_lambda(target, _file_lambda_candidates(target))
+        resolved = _resolve_lambda(target, _file_lambda_candidates(target), errors)
         return _lambda_to_function_def(resolved) if resolved is not None else None
 
     # Structural path: a ``def`` or a callable instance's ``def __call__``. A
@@ -1374,10 +1425,20 @@ def _get_function_from_ast(func: Optional[Callable]) -> ast.FunctionDef | None:
         return None
     body = _get_src_ast_from_func(func)
     if body is None or not hasattr(body, "body") or not body.body:
+        if errors is not None:
+            errors.append(
+                "no parseable source for the callable, so its body cannot be extracted "
+                "(a REPL definition, a builtin, or functools.partial)"
+            )
         return None
     stmt = body.body[0]
     if isinstance(stmt, ast.FunctionDef):
         return stmt
+    if errors is not None:
+        errors.append(
+            "the visible source's first statement is not a function definition, so the "
+            f"body cannot be extracted (got {type(stmt).__name__})"
+        )
     return None
 
 
@@ -1448,10 +1509,18 @@ def _transpile_func(
             )
         # ``_get_function_from_ast`` reads source itself, and only on the
         # structural (``def`` / callable-class) path -- a lambda is located by
-        # position and never pays for ``inspect.getsource``.
-        function_ast = _get_function_from_ast(func)
+        # position and never pays for ``inspect.getsource``. It reports WHY it
+        # could not identify the body, so the user's warning names the actual
+        # cause rather than one catch-all string.
+        extraction_errors: List[str] = []
+        function_ast = _get_function_from_ast(func, extraction_errors)
         if function_ast is None:
-            return ([], ["Error extracting function body from ast, cannot transpile"], [], [])
+            return (
+                [],
+                extraction_errors or ["Error extracting function body from ast, cannot transpile"],
+                [],
+                [],
+            )
         # Default, variadic (``*args`` / ``**kwargs``), keyword-only, and
         # positional-only parameters can't be represented by the positional
         # ``_udf_param_N`` placeholder scheme: a call site may omit a
