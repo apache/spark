@@ -545,9 +545,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     ) -> SeriesOrIndex:
         from pyspark.pandas import numpy_compat
 
-        # Try dunder methods first.
-        result = numpy_compat.maybe_dispatch_ufunc_to_dunder_op(
-            self, ufunc, method, *inputs, **kwargs
+        # Try dunder methods first. A multi-output ufunc (for example np.modf) yields a
+        # tuple of results rather than a single Series or Index, so `result` must admit it.
+        result: Union[IndexOpsMixin, Tuple[IndexOpsMixin, ...]] = (
+            numpy_compat.maybe_dispatch_ufunc_to_dunder_op(self, ufunc, method, *inputs, **kwargs)
         )
 
         # After that, we try with PySpark APIs.
