@@ -103,6 +103,28 @@ public interface CredentialProvider extends AutoCloseable {
   }
 
   /**
+   * Returns additional Spark configuration properties that should be set when this
+   * provider is active.
+   * <p>
+   * The credential management layer applies these entries to {@code SparkConf} after
+   * successful startup, only if the user has not already set them explicitly. This
+   * allows provider modules to declare executor-side wiring (e.g., the Hadoop
+   * credentials provider class for a particular filesystem scheme) without requiring
+   * core to have vendor-specific knowledge.
+   * <p>
+   * Keys must include the {@code spark.hadoop.} prefix if they target Hadoop
+   * configuration on executors (propagated via {@code SparkAppConfig}).
+   * <p>
+   * The default implementation returns an empty map (no additional properties).
+   *
+   * @return an unmodifiable map of property key-value pairs (never null)
+   * @since 4.4.0
+   */
+  default Map<String, String> additionalSparkProperties() {
+    return Map.of();
+  }
+
+  /**
    * Releases any resources held by this provider (e.g., HTTP clients, connection pools).
    * <p>
    * Called by the credential management layer during shutdown. The default implementation

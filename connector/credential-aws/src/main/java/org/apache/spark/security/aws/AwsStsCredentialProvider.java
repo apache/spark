@@ -414,6 +414,13 @@ public class AwsStsCredentialProvider implements CredentialProvider {
     return Duration.ofMinutes(15);
   }
 
+  @Override
+  public Map<String, String> additionalSparkProperties() {
+    return Map.of(
+        "spark.hadoop.fs.s3a.aws.credentials.provider",
+        "org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider");
+  }
+
   /**
    * Walks the cause chain of the given throwable and checks whether the raw token
    * appears in any layer's message. Used to decide whether the original exception

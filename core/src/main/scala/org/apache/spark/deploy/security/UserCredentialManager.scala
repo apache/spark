@@ -131,6 +131,22 @@ private[spark] class UserCredentialManager(
 
     logInfo(log"Credential acquisition successful. Next renewal in " +
       log"${MDC(LogKeys.TIME_UNITS, UIUtils.formatDuration(renewalDelay))}.")
+
+    // Apply additional Spark properties declared by active providers.
+    // This allows provider modules to wire executor-side configuration
+    // (e.g., fs.s3a.aws.credentials.provider) without core having
+    // vendor-specific knowledge. Properties are only set if the user
+    // has not already configured them explicitly.
+    CredentialProviderLoader.discoverAllProviders().forEach { provider =>
+      provider.additionalSparkProperties().forEach { (key, value) =>
+        if (!sparkConf.contains(key)) {
+          sparkConf.set(key, value)
+          logInfo(log"Auto-configured ${MDC(LogKeys.CONFIG, key)} from " +
+            log"${MDC(LogKeys.CLASS_NAME, provider.getClass.getName)}")
+        }
+      }
+    }
+
     (version, serialized)
   }
 
