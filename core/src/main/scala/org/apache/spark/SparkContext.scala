@@ -232,7 +232,9 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _eventLogger: Option[EventLoggingListener] = None
   private var _driverLogger: Option[DriverLogger] = None
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
-  private var _cleaner: Option[ContextCleaner] = None
+  // @volatile because the TTL cleaner threads read it from their reap closures, and it is assigned
+  // after those closures are published.
+  @volatile private var _cleaner: Option[ContextCleaner] = None
   private var _listenerBusStarted: Boolean = false
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
@@ -317,8 +319,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Ids of locally checkpointed RDDs, which the RDD TTL cleaner must never reap: a local checkpoint
   // truncates lineage, so the cache blocks are the only copy of the data. Tracked separately
-  // because the cleaner runs on its own thread and RDD.checkpointData is not volatile, and because
-  // persistentRdds loses the RDD once it is unpersisted.
+  // because the cleaner runs on its own thread and RDD.checkpointData is not volatile.
   private[spark] val locallyCheckpointedRddIds = ConcurrentHashMap.newKeySet[Int]()
 
   def statusTracker: SparkStatusTracker = _statusTracker
@@ -656,21 +657,24 @@ class SparkContext(config: SparkConf) extends Logging {
     // (ShuffleDriverComponents, the ContextCleaner and this SparkContext) exist.
     _env.mapOutputTracker match {
       case mapOutputTrackerMaster: MapOutputTrackerMaster =>
-        mapOutputTrackerMaster.shuffleFileRemover = Some { shuffleId =>
+        mapOutputTrackerMaster.shuffleFileRemover = { shuffleId =>
           // Mirrors the tail of ContextCleaner.doCleanupShuffle: delete the files, then notify the
           // listeners so shuffle-tracking dynamic allocation can release an executor that only held
           // this shuffle.
-          _shuffleDriverComponents.removeShuffle(shuffleId, false)
+          _shuffleDriverComponents.removeShuffle(
+            shuffleId, _conf.get(CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE))
           _cleaner.foreach(_.notifyShuffleCleaned(shuffleId))
         }
       case _ =>
     }
     _env.blockManagerMasterEndpoint.foreach { endpoint =>
       endpoint.rddReapable = rddId => !locallyCheckpointedRddIds.contains(rddId)
-      // Reap through the same entry point the GC-driven cleanup uses. Note it frees the blocks
-      // without resetting the RDD's storage level (the cleaner only has an id), so a later action
-      // re-caches it. unpersistRDD is the fallback when reference tracking is off.
-      endpoint.rddReaper = Some { rddId =>
+      // Reap through the same entry point the GC-driven cleanup uses; unpersistRDD is the fallback
+      // when reference tracking is off. Both free the blocks without resetting the RDD's storage
+      // level (the cleaner only has an id), so a later action re-caches it -- but both also drop
+      // the RDD from persistentRdds, and RDD.persist only re-registers on the way out of
+      // StorageLevel.NONE, so a reaped RDD stops appearing in getPersistentRDDs.
+      endpoint.rddReaper = { rddId =>
         _cleaner match {
           case Some(contextCleaner) => contextCleaner.doCleanupRDD(rddId, blocking = false)
           case None => unpersistRDD(rddId, blocking = false)
@@ -2372,6 +2376,19 @@ class SparkContext(config: SparkConf) extends Logging {
       ShutdownHookManager.removeShutdownHook(_shutdownHookRef)
     }
 
+    // Before the ContextCleaner, the listener bus and the shuffle driver components below, all of
+    // which a reap in flight would use. Their own owners (SparkEnv, the endpoint's onStop) stop
+    // them too, but not until the very end of the teardown.
+    if (_env != null) {
+      Utils.tryLogNonFatalError {
+        _env.blockManagerMasterEndpoint.foreach(_.ttlCleaner.foreach(_.stop()))
+        _env.mapOutputTracker match {
+          case mapOutputTrackerMaster: MapOutputTrackerMaster =>
+            mapOutputTrackerMaster.ttlCleaner.foreach(_.stop())
+          case _ =>
+        }
+      }
+    }
     if (listenerBus != null) {
       Utils.tryLogNonFatalError {
         postApplicationEnd(exitCode)

@@ -2195,6 +2195,27 @@ package object config {
       .version("4.2.0")
       .fallbackConf(Network.NETWORK_TIMEOUT)
 
+  private[spark] val CLEANER_TTL_RDD =
+    ConfigBuilder("spark.cleaner.ttl.rdd")
+      .doc("Add a TTL for RDD cache blocks (broadcast blocks are not TTL-cleaned; shuffle blocks " +
+        "use spark.cleaner.ttl.shuffle). By default blocks are only removed after GC on the " +
+        "driver, which will not happen for DataFrames or RDDs at the global scope. Must be set " +
+        "before starting the SparkContext.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "The RDD block TTL must be positive.")
+      .createOptional
+
+  private[spark] val CLEANER_TTL_SHUFFLE =
+    ConfigBuilder("spark.cleaner.ttl.shuffle")
+      .doc("Add a TTL for shuffle blocks. By default blocks are only removed after GC on the " +
+        "driver, which will not happen for DataFrames or RDDs at the global scope. Must be set " +
+        "before starting the SparkContext.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "The shuffle block TTL must be positive.")
+      .createOptional
+
   private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
     ConfigBuilder("spark.executor.logs.rolling.strategy")
       .version("1.1.0")
@@ -3262,25 +3283,4 @@ package object config {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
-
-  private[spark] val SPARK_TTL_RDD_CLEANER =
-    ConfigBuilder("spark.cleaner.ttl.rdd")
-      .doc("Add a TTL for RDD cache blocks (broadcast blocks are not TTL-cleaned; shuffle blocks " +
-        "use spark.cleaner.ttl.shuffle). By default blocks are only removed after GC on the " +
-        "driver, which will not happen for DataFrames or RDDs at the global scope. Must be set " +
-        "before starting the SparkContext.")
-      .version("4.4.0")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(_ > 0, "The RDD block TTL must be positive.")
-      .createOptional
-
-  private[spark] val SPARK_TTL_SHUFFLE_BLOCK_CLEANER =
-    ConfigBuilder("spark.cleaner.ttl.shuffle")
-      .doc("Add a TTL for shuffle blocks. By default blocks are only removed after GC on the " +
-        "driver, which will not happen for DataFrames or RDDs at the global scope. Must be set " +
-        "before starting the SparkContext.")
-      .version("4.4.0")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(_ > 0, "The shuffle block TTL must be positive.")
-      .createOptional
 }

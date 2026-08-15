@@ -2276,8 +2276,9 @@ Apart from these, the following properties are also available, and may be useful
     blocks use <code>spark.cleaner.ttl.shuffle</code>. An access is only recorded when the driver
     resolves the block's locations, so set this comfortably longer than both the longest gap between
     uses and the longest stage runtime, or the RDD will be removed and recomputed. Removal frees the
-    blocks but does not un-persist the RDD, so a later action re-caches it. Locally checkpointed RDDs
-    are never removed. Must be set before the SparkContext is created.
+    blocks but does not reset the RDD's storage level, so a later action re-caches it; the RDD does
+    stop appearing in <code>SparkContext.getPersistentRDDs</code>. Locally checkpointed RDDs are
+    never removed. Must be set before the SparkContext is created.
   </td>
   <td>4.4.0</td>
 </tr>
@@ -2290,10 +2291,9 @@ Apart from these, the following properties are also available, and may be useful
     removed once the shuffle dependency is garbage collected on the driver. An access is only recorded
     when a map task registers output or the driver serves map output locations, and executors cache
     those locations, so set this comfortably longer than both the longest gap between uses and the
-    longest stage runtime. Removing a shuffle that is still needed fails its readers and recomputes
-    the map stage; if that repeats it exhausts
-    <code>spark.stage.maxConsecutiveAttempts</code> and fails the job.
-    Must be set before the SparkContext is created.
+    longest stage runtime. Removing a shuffle that a running job still needs fails that job: its
+    readers get a fetch failure, and the map stage cannot re-register its output, so the stage is
+    aborted rather than recomputed. Must be set before the SparkContext is created.
   </td>
   <td>4.4.0</td>
 </tr>
