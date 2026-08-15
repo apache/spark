@@ -45,17 +45,13 @@ sealed abstract class BlockId {
     (isInstanceOf[ShuffleBlockId] || isInstanceOf[ShuffleBlockBatchId] ||
      isInstanceOf[ShuffleDataBlockId] || isInstanceOf[ShuffleIndexBlockId])
   }
-  // Gate on the ShuffleId trait itself rather than the narrower isShuffle (which covers only the
-  // four plain shuffle block ids), so chunk / push / merged shuffle ids -- which also mix in
-  // ShuffleId -- are recognized here too.
-  def asShuffleId: Option[ShuffleId] =
-    if (isInstanceOf[ShuffleId]) Some(asInstanceOf[ShuffleId]) else None
   def isShuffleChunk: Boolean = isInstanceOf[ShuffleBlockChunkId]
   def isBroadcast: Boolean = isInstanceOf[BroadcastBlockId]
 
   override def toString: String = name
 }
 
+/** Mixed into every block id that belongs to a shuffle, so its shuffle can be found generically. */
 @DeveloperApi
 trait ShuffleId {
   def shuffleId: Int
