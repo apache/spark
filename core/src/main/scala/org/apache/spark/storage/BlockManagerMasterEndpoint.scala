@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.IOException
 import java.util.{HashMap => JHashMap}
-import java.util.concurrent.{ConcurrentHashMap, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future, TimeoutException}
@@ -121,28 +121,28 @@ class BlockManagerMasterEndpoint(
     ExecutionContext.fromExecutorService(askThreadPool)
 
   // Read once: updateBlockAtime is on the hot path of block location lookups.
-  private val rddTtl: Option[Long] = conf.get(config.SPARK_TTL_RDD_CLEANER)
-  private val anyTtlEnabled: Boolean =
-    rddTtl.isDefined || conf.get(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined
+  private val rddTtl: Option[Long] = conf.get(config.CLEANER_TTL_RDD)
 
   // Veto consulted before the TTL cleaner reaps an RDD. Wired by SparkContext to refuse
   // locally-checkpointed RDDs, whose cache blocks are the only copy of their data. Defaults to
-  // allowing everything, for tests that construct the endpoint directly.
-  @volatile private[spark] var rddReapable: Int => Boolean = _ => true
+  // refusing everything: reaping one of those loses data, so an unwired cleaner must reap nothing.
+  @volatile private[spark] var rddReapable: Int => Boolean = _ => false
 
-  // How the TTL cleaner reaps an RDD; wired by SparkContext to ContextCleaner.doCleanupRDD so the
-  // reap also keeps persistentRdds and the Storage UI accurate. See onStart for the unwired
-  // fallback.
-  @volatile private[spark] var rddReaper: Option[Int => Unit] = None
+  // How the TTL cleaner reaps an RDD; wired by SparkContext to ContextCleaner.doCleanupRDD, which
+  // removes the blocks and runs the CleanerListener fan-out. Never called while unwired, since
+  // rddReapable refuses everything until SparkContext wires both.
+  @volatile private[spark] var rddReaper: Int => Unit = _ => ()
 
-  // Created here so onStop can shut it down, but only started in onStart: the cleaner reaps through
-  // self.ask(RemoveRdd(...)), and self is not valid until the endpoint is registered.
-  private[spark] val cleanerThreadpool: Option[ThreadPoolExecutor] = {
-    if (rddTtl.isDefined) {
-      Some(ThreadUtils.newDaemonFixedThreadPool(1, "rdd-ttl-cleaner"))
-    } else {
-      None
-    }
+  // Started in onStart rather than here, once the endpoint is live and SparkContext has had its
+  // chance to wire the two hooks above. Both are read through a lambda for that reason: the vars
+  // are assigned after this cleaner is built.
+  private[spark] val ttlCleaner: Option[BlockTtlCleaner] = rddTtl.map { ttl =>
+    new BlockTtlCleaner(
+      name = "RDD",
+      ttlMillis = ttl,
+      accessTimes = rddAccessTime,
+      shouldReap = rddId => rddReapable(rddId),
+      reap = rddId => rddReaper(rddId))
   }
 
   private val topologyMapper = {
@@ -300,21 +300,17 @@ class BlockManagerMasterEndpoint(
       context.reply(updateRDDBlockVisibility(taskId, visible))
   }
 
-  // Only RDD cache and shuffle blocks are TTL-tracked; broadcast and the rest are not.
+  // Only RDD cache blocks are TTL-tracked here; shuffle atimes are the map output tracker's job,
+  // and broadcast blocks are not TTL-cleaned at all.
   private def updateBlockAtime(blockId: BlockId): Unit = {
     // This is on the dispatcher thread for every block location lookup (O(partitions) per stage via
-    // DAGScheduler.getCacheLocs) and both TTLs are unset by default, so do no work when they are.
-    if (anyTtlEnabled) {
+    // DAGScheduler.getCacheLocs), so do no work when the TTL is unset, which is the default.
+    if (rddTtl.isDefined) {
       blockId match {
-        case rddBlockId: RDDBlockId =>
-          // Only stamp a block we actually track: a lookup of an absent block would otherwise leave
-          // a phantom atime, and one TTL later a pointless cluster-wide RemoveRdd.
-          if (rddTtl.isDefined && blockLocations.containsKey(blockId)) {
-            rddAccessTime.put(rddBlockId.rddId, System.currentTimeMillis())
-          }
-        // The tracker guards on its own TTL config.
-        case shuffleBlockId: ShuffleId =>
-          mapOutputTracker.updateShuffleAtime(shuffleBlockId.shuffleId)
+        // Only stamp a block we actually track: a lookup of an absent block would otherwise leave a
+        // phantom atime, and one TTL later a pointless cluster-wide RemoveRdd.
+        case rddBlockId: RDDBlockId if blockLocations.containsKey(blockId) =>
+          rddAccessTime.put(rddBlockId.rddId, System.currentTimeMillis())
         case _ =>
       }
     }
@@ -1190,32 +1186,15 @@ class BlockManagerMasterEndpoint(
     }
   }
 
-  override def onStart(): Unit = {
-    // Only safe now that the endpoint is registered: the cleaner reaps via RemoveRdd on self, so
-    // blockLocations et al. stay confined to the dispatcher thread (the
-    // IsolatedThreadSafeRpcEndpoint invariant), and self is not valid before onStart.
-    cleanerThreadpool.foreach { pool =>
-      pool.execute(new BlockTtlCleaner(
-        name = "RDD",
-        ttlMillis = rddTtl.get,
-        accessTimes = rddAccessTime,
-        // Both hooks are read through a lambda because SparkContext wires them after onStart.
-        shouldReap = rddId => rddReapable(rddId),
-        reap = rddId => rddReaper match {
-          case Some(reaper) => reaper(rddId)
-          // Unwired fallback: observe the removal future the way BlockManagerMaster.removeRdd does,
-          // so a failure on some executor is not silently dropped.
-          case None =>
-            self.askSync[Future[Seq[Int]]](RemoveRdd(rddId)).failed.foreach { e =>
-              logWarning(log"Failed to remove RDD ${MDC(RDD_ID, rddId)} in the TTL cleaner", e)
-            }(ThreadUtils.sameThread)
-        }))
-    }
-  }
+  // The reap itself stays off this thread but its removal does not: rddReaper routes through
+  // BlockManagerMaster.removeRdd, i.e. a RemoveRdd message back to this endpoint, so blockLocations
+  // and friends are still only touched by the dispatcher (the IsolatedThreadSafeRpcEndpoint
+  // invariant).
+  override def onStart(): Unit = ttlCleaner.foreach(_.start())
 
   override def onStop(): Unit = {
     askThreadPool.shutdownNow()
-    cleanerThreadpool.foreach(_.shutdownNow())
+    ttlCleaner.foreach(_.stop())
   }
 }
 

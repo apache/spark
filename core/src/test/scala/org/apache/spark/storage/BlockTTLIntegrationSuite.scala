@@ -38,8 +38,8 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext with
     val conf = new SparkConf()
       .setAppName(getClass.getSimpleName)
       .setMaster("local-cluster[2, 1, 1024]")
-    rddTTL.foreach(ttl => conf.set(config.SPARK_TTL_RDD_CLEANER, ttl))
-    shuffleTTL.foreach(ttl => conf.set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, ttl))
+    rddTTL.foreach(ttl => conf.set(config.CLEANER_TTL_RDD, ttl))
+    shuffleTTL.foreach(ttl => conf.set(config.CLEANER_TTL_SHUFFLE, ttl))
     sc = new SparkContext(conf)
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
   }
@@ -50,18 +50,26 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext with
   private def tracker: MapOutputTrackerMaster =
     sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 
-  test("shuffle blocks are tracked and removed after the TTL") {
+  test("a shuffle's map output is reclaimed after the TTL") {
     startCluster(Some(blockTTL), Some(blockTTL))
     assert(endpoint.rddAccessTime.isEmpty)
     assert(tracker.shuffleAccessTime.isEmpty)
-    assert(tracker.cleanerThreadpool.isDefined)
+    assert(tracker.ttlCleaner.isDefined)
     sc.parallelize(1.to(100)).groupBy(_ % 10).count()
-    eventually { assert(!tracker.shuffleAccessTime.isEmpty) }
+    val shuffleId = tracker.shuffleStatuses.keys.head
+    val epochBefore = tracker.getEpoch
+    eventually { assert(tracker.shuffleAccessTime.containsKey(shuffleId)) }
     // An uncached shuffle is tracked by the map output tracker only, never as an RDD.
     assert(endpoint.rddAccessTime.isEmpty)
+    assert(tracker.shuffleStatuses.get(shuffleId).exists(_.numAvailableMapOutputs > 0))
+    // Assert on the map output itself, not just on the tracking map: the cleaner drops the atime
+    // *before* it reaps, so an atime assertion alone passes even with the reap wiring removed.
     eventually {
-      assert(tracker.shuffleAccessTime.isEmpty,
-        s"the shuffle should be gone ${blockTTL}ms after its last access")
+      assert(!tracker.shuffleStatuses.get(shuffleId).exists(_.numAvailableMapOutputs > 0),
+        s"the shuffle's map output should be gone ${blockTTL}ms after its last access")
+      assert(tracker.getEpoch > epochBefore,
+        "the reap must bump the epoch, or executors keep fetching the files it deleted")
+      assert(tracker.shuffleAccessTime.isEmpty)
     }
   }
 
