@@ -17,19 +17,21 @@
 
 import unittest
 
-from pyspark.testing.connectutils import should_test_connect
-
-if should_test_connect:
-    from pyspark import sql
-    from pyspark.sql.connect.udf import UserDefinedFunction
-
-    sql.udf.UserDefinedFunction = UserDefinedFunction
-
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
+    @classmethod
+    def setUpClass(cls):
+        # test_udf uses UserDefinedFunction so we need to monkeypatch it
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        import pyspark.sql.tests.test_udf
+
+        pyspark.sql.tests.test_udf.UserDefinedFunction = UserDefinedFunction
+
+        super().setUpClass()
+
     @unittest.skip("Spark Connect does not support mapPartitions() but the test depends on it.")
     def test_worker_original_stdin_closed(self):
         super().test_worker_original_stdin_closed()
