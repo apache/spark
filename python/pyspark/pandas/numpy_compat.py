@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Callable, no_type_check
+from typing import Any, Callable, Tuple, Union, no_type_check
 
 import numpy as np
 
@@ -272,7 +272,6 @@ binary_np_spark_mappings = {
     ),
     "maximum": F.greatest,
     "minimum": F.least,
-    "modf": pandas_udf(lambda s1, s2: np.modf(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "nextafter": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.nextafter(s1, s2), DoubleType()
     ),
@@ -281,6 +280,32 @@ binary_np_spark_mappings = {
     "right_shift": lambda c1, c2: F.when(
         (c2 < 0) | (c2 >= 64), F.call_function("shiftright", c1, F.lit(63))
     ).otherwise(F.call_function("shiftright", c1, c2)),
+}
+
+
+def _modf_fractional_func(c: Column) -> Column:
+    c_double = c.cast("double")
+    # signum * (abs % 1) keeps the fractional magnitude with the sign of the input,
+    # including the signed zero of a whole number (for example -2.0 -> -0.0), the same
+    # way the "trunc" mapping (reused below for the integral part) relies on signum.
+    fractional = F.signum(c_double) * (F.abs(c_double) % F.lit(1.0))
+    return (
+        F.when(c.isNull() | F.isnan(c_double), c_double)
+        # +-inf has no fractional part; numpy returns a zero with the input's sign.
+        .when(c_double == float("inf"), F.lit(0.0))
+        .when(c_double == float("-inf"), F.lit(-0.0))
+        .otherwise(fractional)
+    )
+
+
+# Multi-output ufuncs (nout > 1) cannot be realized by a single Column->Column entry
+# in the tables above, since the dispatch turns one such function into one Series. Each
+# entry here is a tuple of one Column->Column function per output, applied independently
+# and returned as a tuple that numpy's __array_ufunc__ protocol unpacks (for example
+# `fractional, integral = np.modf(series)`).
+multi_output_np_spark_mappings = {
+    # np.modf(x) -> (fractional part, integral part); the integral part is exactly trunc.
+    "modf": (_modf_fractional_func, unary_np_spark_mappings["trunc"]),
 }
 
 
@@ -354,10 +379,21 @@ def maybe_dispatch_ufunc_to_dunder_op(
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_spark_func(
     ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-) -> IndexOpsMixin:
+) -> Union[IndexOpsMixin, Tuple[IndexOpsMixin, ...]]:
     from pyspark.pandas.base import column_op
 
     op_name = ufunc.__name__
+
+    if (
+        method == "__call__"
+        and op_name in multi_output_np_spark_mappings
+        and kwargs.get("out") is None
+    ):
+        # These ufuncs are unary in their input, so the single input is always a Series
+        # that column_op unwraps to a Column -- no literal wrapping needed. Build one
+        # Series per output and return them as a tuple (see the mapping's docstring).
+        output_funcs = multi_output_np_spark_mappings[op_name]
+        return tuple(column_op(f)(*inputs) for f in output_funcs)
 
     if (
         method == "__call__"
