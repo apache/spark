@@ -265,9 +265,13 @@ if _have_hypothesis:
 #
 # Where a template annotates its parameters, that is to pin the input category:
 # an untyped parameter emits both a numeric and a string variant, and these
-# tests bind Long columns, so the string one is dead weight. It buys plan size,
-# not wall clock. The strategies still generate ``None`` -- an annotation pins
-# the category, not nullability.
+# tests bind Long columns, so the string one is dead weight (measured: 1 option
+# emitted instead of 2). It buys plan size, not wall clock -- measured 73s
+# untyped vs 76s typed over these five tests at 15 examples, because the cost is
+# the two Spark jobs ``_run`` executes per example against a fresh one-row
+# DataFrame. Batching rows per example is the lever that would matter. The
+# strategies still generate ``None`` -- an annotation pins the category, not
+# nullability.
 
 
 def plus_four(x):
