@@ -1038,23 +1038,16 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     plan.transformDownWithSubqueriesAndPruning(
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
       case p =>
-        val substituted = p.mapExpressions { e =>
-          if (e.containsPattern(TRANSPILED_PYTHON_UDF)) {
-            applyExpr(e, parentIsUdf = false)
-          } else {
-            e
-          }
+        val substituted = p.mapExpressions {
+          case e if e.containsPattern(TRANSPILED_PYTHON_UDF) => applyExpr(e, parentIsUdf = false)
+          case e => e
         }
-        // Pre-evaluate all of the used non-literal inputs to the TranspiledPythonUDF
-        // so that we can avoid duplicate evaluations of expensive or non-deterministic
-        // operations.
+        // Give each argument the substituted options use a single evaluation per row.
         PreEvaluateTranspiledUDFInputs(substituted)
     }
   }
 
-  def applyExpr(
-      expression: Expression,
-      parentIsUdf: Boolean = false): Expression = {
+  def applyExpr(expression: Expression, parentIsUdf: Boolean = false): Expression = {
     expression match {
       case s: TranspiledPythonUDF =>
         // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
@@ -1071,37 +1064,30 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
           s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
         } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
-          // Walk the full list of transpiled options and pick the first one,
-          // falling back to the original Python UDF if none are available.
-          // Options whose declared input-type categories don't match the bound
-          // column types are already pruned during analysis by
-          // ResolveTranspiledPythonUDFOptions, so any option that reaches here is
-          // safe to use. If you're plugging in your own transpilation, please add
-          // a separate ConvertToX so you can choose your desired transpiled nodes
-          // -- and call PreEvaluateTranspiledUDFInputs from it as this rule does,
-          // or your options will evaluate a repeated argument once per use.
-          // NOTE: the substituted option is used as-is, with no cast back to the
-          // UDF's declared return type. The built-in transpiler guarantees each
-          // option's dataType already matches; a custom transpiler MUST do the
-          // same (or insert its own Cast), or it will silently change the output
-          // schema.
+          // Take the first option, or fall back to the Python UDF. Options whose declared input
+          // types don't match the bound columns were already pruned by
+          // ResolveTranspiledPythonUDFOptions, so anything reaching here is safe to use -- as-is,
+          // with no cast back to the UDF's return type. A custom transpiler plugging in its own
+          // ConvertToX MUST match that type itself (or insert a Cast), or it silently changes the
+          // output schema, and MUST call PreEvaluateTranspiledUDFInputs as this rule does, or its
+          // options evaluate a repeated argument once per use.
           s.transpiledOptions.headOption match {
             case None =>
-              s.pythonUDFExpr.mapChildren(
-                applyExpr(_, parentIsUdf = true))
+              s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
             case Some(catalystExpr) =>
-              // Recurse on the option itself
+              // On the option itself, not its children: its root can be a substituted argument that
+              // is a transpiled call, and recursing past it would leave that Unevaluable.
               applyExpr(catalystExpr, parentIsUdf = false)
           }
         } else {
           // We should avoid converting a UDF node where that could break pipelining.
           // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
-          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true, inPredicate = inPredicate))
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
         }
       case _ =>
-        // Not a TranspiledPythonUDF: recurse down.
-        expression.mapChildren(
-          applyExpr(_, parentIsUdf = isScalarPythonUDF(expression)))
+        // Not a TranspiledPythonUDF: recurse, telling each child whether a Python UDF encloses it.
+        // That is what keeps a transpilable UDF between two Python UDFs on the Python path.
+        expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression)))
     }
   }
 }

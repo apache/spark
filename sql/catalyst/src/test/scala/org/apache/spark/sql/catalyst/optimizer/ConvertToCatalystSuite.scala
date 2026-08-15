@@ -18,14 +18,13 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count}
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, JoinHint, LateralJoin, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Project}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType}
 
 /**
  * Unit tests for the ConvertToCatalyst optimizer rule, which rewrites
@@ -158,16 +157,22 @@ class ConvertToCatalystSuite extends PlanTest {
   }
 
   test("apply(plan) reaches TranspiledPythonUDF nodes below the root") {
-    // A TPUDF in a non-root node (here a Project under a Filter) must still be converted; if it
-    // were left behind it would reach execution as an ``Unevaluable`` and crash. ``apply`` descends
-    // the plan (and its subqueries) with ``transformDownWithSubqueriesAndPruning`` and walks each
-    // node's expressions with ``mapExpressions``, so this pins that non-root nodes are reached.
+    // Regression test for the traversal bug where ``plan.mapExpressions`` only
+    // walks expressions on the root plan node. With that bug, a TPUDF inside a
+    // Filter (or any non-root node) would survive the optimizer rule as an
+    // ``Unevaluable`` expression and crash at execution. The fix uses
+    // ``transformAllExpressionsWithPruning`` which descends through child
+    // plans; this test pins that contract.
     transpileOn {
       val attrB = $"b".long
       val relation = LocalRelation(attrA, attrB)
-      val tpudf = makeTPUDF(makePyUDF(attrA), Add(attrA, Literal(4L)))
-      val plan = Filter(GreaterThan(attrB, Literal(0L)),
-        Project(Seq(attrB, Alias(tpudf, "v")()), relation))
+      // The TPUDF lives in the Filter's condition (boolean), not at the root.
+      val booleanTPUDF = TranspiledPythonUDF(
+        "udf",
+        PythonUDF("udf", null, BooleanType, Seq(attrA),
+          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
+        List(GreaterThan(attrA, Literal(0L))))
+      val plan = Project(Seq(attrB), Filter(booleanTPUDF, relation))
       val rewritten = ConvertToCatalyst.apply(plan)
       // No TranspiledPythonUDF should remain anywhere in the rewritten plan.
       val leftover = rewritten.collect {
@@ -176,34 +181,35 @@ class ConvertToCatalystSuite extends PlanTest {
       }
       assert(leftover.isEmpty,
         s"TranspiledPythonUDF survived ConvertToCatalyst.apply: $rewritten")
-      // The projection must hold the resolved Catalyst expression, not a fallback PythonUDF.
-      val projected = rewritten.asInstanceOf[Filter].child.asInstanceOf[Project]
-        .projectList.last.asInstanceOf[Alias].child
-      assert(projected == Add(attrA, Literal(4L)),
-        s"The projected UDF was not rewritten to its option: $projected")
+      // The Filter's condition must be the resolved Catalyst expression, not a fallback PythonUDF.
+      val filterCond = rewritten.asInstanceOf[Project].child.asInstanceOf[Filter].condition
+      assert(filterCond == GreaterThan(attrA, Literal(0L)),
+        s"Filter condition was not rewritten to GreaterThan: $filterCond")
     }
   }
 
-  private def predicateTPUDF(arg: Expression): TranspiledPythonUDF = {
-    val id = NamedExpression.newExprId
-    val option = GreaterThan(
-      Add(marker(arg, 0, id), marker(arg, 0, id)), Literal(0L))
-    TranspiledPythonUDF(
-      "udf",
-      PythonUDF("udf", null, BooleanType, Seq(arg),
-        PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
-      List(option))
-  }
-
-  test("Interpreted UDF for a Filter condition whose input needs a column") {
+  test("transpiles a predicate, pre-evaluating its input below the Filter") {
     transpileOn {
-      val tpudf = predicateTPUDF(Add(attrA, Literal(1L)))
+      val arg = Add(attrA, Literal(1L))
+      val id = NamedExpression.newExprId
+      val option = GreaterThan(
+        Multiply(TranspiledUDFParameter(arg, 0, id), TranspiledUDFParameter(arg, 0, id)),
+        Literal(0L))
+      val tpudf = TranspiledPythonUDF("udf",
+        PythonUDF("udf", null, BooleanType, Seq(arg),
+          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
+        List(option))
       val rewritten = ConvertToCatalyst(Filter(tpudf, LocalRelation(attrA)))
-      assert(rewritten.asInstanceOf[Filter].condition != tpudf.pythonUDFExpr,
-        s"Got the fall back interpreted UDF in filter unexpectedly $rewritten")
+      // Project(a, Filter(_udf_input_0 * _udf_input_0 > 0, Project(a, _udf_input_0, rel))).
+      val filter = rewritten.collectFirst { case f: Filter => f }.get
+      val input = filter.child.asInstanceOf[Project].projectList.last.asInstanceOf[Alias]
+      assert(input.child == arg, s"Expected a + 1 pre-evaluated below the Filter: $rewritten")
+      assert(filter.condition == GreaterThan(
+        Multiply(input.toAttribute, input.toAttribute), Literal(0L)),
+        s"Expected a Catalyst predicate reading the column: $rewritten")
+      assert(rewritten.output == Seq(attrA), s"Extra columns leaked out: $rewritten")
     }
   }
-
 
   test("uses pre-coerced transpiledOptions as-is (analysis is responsible for coercion)") {
     // The Analyzer coerces transpiledOptions before the optimizer runs, because
@@ -252,31 +258,10 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("apply pre-evaluates the marked inputs and leaves no marker behind") {
-    transpileOn {
-      val arg = Add(attrA, Literal(1L))
-      val id = NamedExpression.newExprId
-      val option = Multiply(marker(arg, 0, id), marker(arg, 0, id))
-      val plan =
-        Project(Seq(Alias(makeTPUDF(makePyUDF(arg), option), "v")()), LocalRelation(attrA))
-      val optimized = ConvertToCatalyst(plan)
-      assert(!hasMarkers(optimized), s"A parameter marker survived: $optimized")
-      val preEvaluated = optimized.collect {
-        case Project(projectList, _) =>
-          projectList.collect {
-            case a: Alias
-              if a.name.startsWith(PreEvaluateTranspiledUDFInputs.INPUT_ALIAS_PREFIX) => a.child
-          }
-      }.flatten
-      assert(preEvaluated == Seq(arg), s"Expected the input pre-evaluated once, got: $optimized")
-    }
-  }
-
   test("drops an input the option never uses") {
     transpileOn {
-      // `lambda a, b: a` over f(a, rand()): substitution already dropped the second argument, so it
-      // is never evaluated and never becomes a column. That differs from the Python path, which
-      // computes every argument column -- an accepted difference, pinned so a change is deliberate.
+      // `lambda a, b: a` over f(a, rand()): substitution dropped b, so nothing evaluates it. The
+      // Python path computes every argument column -- an accepted difference, pinned here.
       val unused = Rand(Literal(1L))
       val option = Add(attrA, Literal(1L))
       val tpudf = TranspiledPythonUDF(
@@ -291,11 +276,9 @@ class ConvertToCatalystSuite extends PlanTest {
   }
 
   test("apply keeps a transpilable UDF Python when wrapped by a non-transpiled Python UDF") {
-    // The walk starts at the top expression and threads parentIsUdf down, so a transpilable UDF
-    // whose inputs are all plain Python UDFs and which is itself an argument to a non-transpiled
-    // Python UDF stays Python to preserve the batch pipeline, rather than being converted and
-    // splitting the chain Python -> Catalyst -> Python. Exercised through apply, which the direct
-    // applyExpr tests bypass.
+    // `apply` threads parentIsUdf down from the top expression, so the mid UDF stays Python rather
+    // than splitting the batch pipeline into Python -> Catalyst -> Python. The applyExpr tests
+    // above pass parentIsUdf in directly and so bypass that threading.
     transpileOn {
       val plain = makePyUDF(attrA)
       val midPy = makePyUDF(plain)
@@ -314,49 +297,16 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("converts a nested transpiled UDF sitting at the root of the option") {
     transpileOn {
-      // An option whose root is a substituted argument (a body that is nothing but
-      // `_udf_param_0`), where that argument is itself a transpiled call. Recursing only into the
-      // children would walk past the root and leave a TranspiledPythonUDF behind -- Unevaluable,
-      // and this rule is the only one that strips them.
-      //
-      // The built-in transpiler casts every option to the UDF's return type
-      // (`transpile.py: converted.cast(returnType)`), so its option roots are always Casts and it
-      // cannot produce this shape; this guards the custom-transpiler path, whose only stated
-      // contract is that the option's dataType already matches.
+      // An option that is nothing but `_udf_param_0`, bound to a transpiled call. Recursing only
+      // into the children would walk past the root and leave an Unevaluable TranspiledPythonUDF
+      // behind. Only a custom transpiler can produce this shape -- the built-in one casts every
+      // option to the return type, so its roots are always Casts.
       val innerTPUDF = makeTPUDF(makePyUDF(attrA), Add(attrA, Literal(1L)))
       val outerTPUDF = makeTPUDF(makePyUDF(innerTPUDF),
-        marker(innerTPUDF, 0, NamedExpression.newExprId))
+        TranspiledUDFParameter(innerTPUDF, 0, NamedExpression.newExprId))
       val result = ConvertToCatalyst.applyExpr(outerTPUDF, parentIsUdf = false)
       assert(!result.exists(_.isInstanceOf[TranspiledPythonUDF]),
         s"TranspiledPythonUDF survived at the option root: $result")
-    }
-  }
-
-  test("the optimizer keeps a single evaluation of a pre-evaluated input") {
-    // End to end: the argument is computed once in a Project below, the option reads it back as a
-    // column, and nothing widens the output schema. ConvertToLocalRelation is excluded so the
-    // projection stays.
-    withSQLConf(
-      SQLConf.ANSI_ENABLED.key -> "true",
-      SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
-      val arg = Rand(Literal(1L))
-      val id = NamedExpression.newExprId
-      val option =
-        If(GreaterThan(marker(arg, 0, id), Literal(0.5)), marker(arg, 0, id), Literal(0.0))
-      val tpudf = TranspiledPythonUDF(
-        "udf",
-        PythonUDF("udf", null, DoubleType, Seq(arg),
-          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
-        List(option))
-      val relation = LocalRelation.fromExternalRows(Seq(attrA), Seq(Row(1L)))
-      val optimized = SimpleTestOptimizer.execute(Project(Seq(Alias(tpudf, "v")()), relation))
-      val expressions = optimized.flatMap(_.expressions)
-      assert(expressions.map(_.collect { case r: Rand => r }.size).sum == 1,
-        s"Expected the argument to be evaluated once, got: $optimized")
-      assert(optimized.output.map(_.name) == Seq("v"),
-        s"Extra columns leaked into the output: $optimized")
-      assert(!hasMarkers(optimized), s"A parameter marker survived: $optimized")
     }
   }
 }

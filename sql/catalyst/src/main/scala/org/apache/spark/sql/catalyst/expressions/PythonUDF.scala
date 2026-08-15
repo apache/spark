@@ -237,37 +237,34 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
 
 /**
  * Marks a subtree of a transpiled option as the argument spliced in for the UDF's `index`th
- * parameter, so that `PreEvaluateTranspiledUDFInputs` can hint on a single evaluation per row.
+ * parameter, so that `PreEvaluateTranspiledUDFInputs` can give it one evaluation per row.
  *
  * `UserDefinedPythonFunction`'s builder resolves the `_udf_param_N` placeholders at
- * call-construction time, which erases which copy came from which parameter -- and two parameters
- * can be bound to structurally equal arguments, so counting copies cannot recover it.
+ * call-construction time, and the marker is what survives that: the resolved copies are just
+ * argument expressions, indistinguishable from the rest of the option's body.
  *
- * `id` is what ties the copies of one parameter of one call together: every copy the builder
- * splices in for that parameter carries the same id, and no other parameter or call shares it.
- * Structural equality is not enough for non-deterministic inputs,
+ * `id` ties one parameter's copies together -- every copy the builder splices in for it carries the
+ * same id, and no other parameter or call shares it. The rewrite needs that for a nondeterministic
+ * argument, where structural equality would not do: an argument whose seed was still unresolved
  * (`expr("rand()")`, or SQL text) is reseeded per copy by `ResolveRandomSeed`, because substitution
- * runs first and analysis then rewrites each copy on its own. `index` is diagnostic only: the
- * rewrite keys off `id`, but the index is what a reader of an `explain` output needs to tie the
- * marker back to a `_udf_param_N` in the transpiled body.
+ * runs before analysis.
  *
- * A [[TaggingExpression]], so it is transparent: it evaluates as its child and a stray one is
- * harmless (though it would mean a silently repeated evaluation, which is the whole point of the
- * marker, so the rewrite asserts it strips them all).
+ * A [[TaggingExpression]], so it is transparent: it evaluates as its child, and a stray one costs a
+ * repeated evaluation rather than a wrong answer.
  */
 case class TranspiledUDFParameter(child: Expression, index: Int, id: ExprId)
   extends TaggingExpression {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_UDF_PARAMETER)
 
-  // `id` distinguishes copies of one parameter from another parameter's, which is bookkeeping for
-  // the rewrite rather than part of the value, so canonicalize it away like PythonUDF's resultId.
+  // `id` is bookkeeping for the rewrite rather than part of the value, so canonicalize it away like
+  // PythonUDF's resultId. `index` stays: it is what ties a marker in an `explain` back to a
+  // `_udf_param_N` in the transpiled body.
   override lazy val canonicalized: Expression = copy(id = ExprId(-1), child = child.canonicalized)
 
-  // Markers exist from call construction until the first optimizer batch, so they show up in every
-  // analyzed-plan string, `explain(extended)` and any analysis error carrying the option. Print the
-  // id's number the way every other exprId-carrying node does rather than the full ExprId, whose
-  // per-JVM UUID is both noise and different on every run.
+  // Markers live in the plan from call construction to the first optimizer batch, so they show up
+  // in analyzed-plan strings and analysis errors. Print the id's number, not the full ExprId,
+  // whose per-JVM UUID would differ on every run.
   override def stringArgs: Iterator[Any] = Iterator(child, index, id.id)
 
   override protected def withNewChildInternal(newChild: Expression): TranspiledUDFParameter =
