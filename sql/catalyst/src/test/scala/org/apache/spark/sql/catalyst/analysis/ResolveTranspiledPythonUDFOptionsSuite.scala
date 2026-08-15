@@ -94,21 +94,18 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
   }
 
   test("empties the options when an argument is non-deterministic") {
-    // EXPECTED TO FAIL until the companion fix to this rule lands. Deliberately
-    // red: it pins a real wrong-results bug rather than tolerating it silently.
-    // Do not ignore or cancel it.
+    // RED UNTIL the companion fix to this rule lands -- deliberately, to pin a
+    // real wrong-results bug rather than tolerate it silently. Do not ignore it.
     //
     // The builder substitutes the argument expression at EVERY `_udf_param_N`
     // occurrence, so a non-deterministic argument becomes several independent
     // expressions with independent state. Since `and` / `or` and chained
     // comparisons evaluate later copies only on rows where earlier links held,
-    // the copies desynchronize and stop describing the same value. The rule must
-    // drop every option so ConvertToCatalyst falls back to the Python UDF, which
-    // evaluates each argument exactly once per row.
-    //
-    // This must be checked here rather than in the builder: at call-construction
-    // time `rand(7)` is still an `UnresolvedFunction` whose `deterministic`
-    // derives from its `Literal` seed and so reports true.
+    // the copies desynchronize. The rule must drop every option so
+    // ConvertToCatalyst falls back to the Python UDF, which evaluates each
+    // argument exactly once per row. It has to be checked here rather than in the
+    // builder: at call-construction time `rand(7)` is still an
+    // `UnresolvedFunction` and reports deterministic = true.
     val a = $"a".double
     val arg = Multiply(Rand(Literal(7L)), Literal(100.0))
     assert(!arg.deterministic, "the fixture argument must be non-deterministic")
@@ -120,8 +117,8 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
   }
 
   test("keeps options when the argument is deterministic (control for the check above)") {
-    // Same shape as the non-deterministic case, but with a plain column argument, so
-    // the non-determinism guard must not fire and normal category matching applies.
+    // Same shape as the non-deterministic case but with a plain column argument, so
+    // the guard must not fire and normal category matching applies.
     val a = $"a".double
     val opt = GreaterThan(a, Literal(50.0))
     val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(opt), List(List("numeric")))

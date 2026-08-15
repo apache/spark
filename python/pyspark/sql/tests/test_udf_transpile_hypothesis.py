@@ -206,13 +206,9 @@ if _have_hypothesis:
         (1, -_LONG_BOUND),
     )
 
-    # Triple edges for the chained-comparison tests. The eight NULL
-    # combinations are the point: a chain short-circuits, so whether a NULL
-    # operand's raise guard is reached depends on the earlier links. The
-    # ordering chains raise in pure Python on any NULL they reach (covered by
-    # ``_run``'s "both raised" equivalence), while ``x == y == z`` has a
-    # defined answer for every combination because Python's ``==`` never
-    # raises on None.
+    # Triple edges for the chained-comparison tests. The NULL patterns are the
+    # point: a chain short-circuits, so whether a NULL operand's raise guard is
+    # reached depends on the earlier links.
     _LONG_TRIPLE_EDGES = (
         (None, None, None),
         (None, None, 0),
@@ -243,19 +239,13 @@ if _have_hypothesis:
     def _seed_tuple_examples(tuples, keys=("x", "y", "z")):
         """Stack one ``@example`` decorator per seed tuple, zipped onto ``keys``.
 
-        The arity check is load-bearing: ``zip`` stops at the shorter argument,
-        so a seed tuple whose length does not match ``keys`` would silently
-        register an ``@example`` for a different input than intended and quietly
-        shrink the seeded NULL-combination coverage. Fail loudly instead.
+        The arity assert matters: ``zip`` stops at the shorter argument, so a
+        mismatched seed tuple would quietly seed a different input than intended.
         """
 
         def wrapper(method):
             for values in reversed(tuples):
-                if len(values) != len(keys):
-                    raise ValueError(
-                        f"seed tuple {values!r} has {len(values)} value(s) but "
-                        f"{len(keys)} key(s) {keys!r}"
-                    )
+                assert len(values) == len(keys), f"seed {values!r} does not fit {keys!r}"
                 method = example(**dict(zip(keys, values)))(method)
             return method
 
@@ -272,6 +262,12 @@ if _have_hypothesis:
 # (the transpiler reads source via inspection). They are deliberately written
 # the way a user would: idiomatic Python, including ``if x is not None``
 # guards and bare ``if x:`` truthiness checks.
+#
+# Where a template annotates its parameters, that is to pin the input category:
+# an untyped parameter emits both a numeric and a string variant, and these
+# tests bind Long columns, so the string one is dead weight. It buys plan size,
+# not wall clock. The strategies still generate ``None`` -- an annotation pins
+# the category, not nullability.
 
 
 def plus_four(x):
@@ -386,27 +382,9 @@ def neq_pair(x, y):
 
 def chained_bounds(x: int) -> bool:
     # Single-parameter chained comparison: ``ast.Compare`` with two ops, which
-    # Python evaluates as ``(0 < x) and (x < 10)`` with ``x`` evaluated once.
-    # No None guard, so a NULL input reaches the first link's raise guard --
-    # matching Python's TypeError -- and ``_run``'s "both raised" equivalence
-    # covers it.
-    #
-    # The parameters here and in the chains below are ANNOTATED deliberately.
-    # An untyped parameter is transpiled as both numeric and string, so the
-    # option matrix carries variants these tests can never use: they bind Long
-    # columns, so only the all-numeric variant can match. Pinning the category
-    # emits one option instead of two (measured: 1 vs 2 -- ``_param_category_
-    # combos`` already collapses three untyped params to all-numeric plus
-    # all-string rather than 2**3).
-    #
-    # This costs no coverage, but do not expect it to speed the suite up: the
-    # per-example cost is dominated by the two Spark jobs ``_run`` executes
-    # against a fresh one-row DataFrame, not by transpilation. Measured over
-    # these five tests at 15 examples: 73s untyped vs 76s typed, i.e. no
-    # improvement. Batching rows per example is the lever that would matter.
-    #
-    # The strategies still generate ``None``; the annotation pins the category,
-    # not nullability.
+    # Python evaluates as ``(0 < x) and (x < 10)`` with ``x`` evaluated once. No
+    # None guard, so a NULL input reaches the first link's raise guard, matching
+    # Python's TypeError; ``_run``'s "both raised" equivalence covers that.
     return 0 < x < 10
 
 
@@ -418,24 +396,16 @@ def chained_lt(x: int, y: int, z: int) -> bool:
     return x < y < z
 
 
-def chained_ge(x: int, y: int, z: int) -> bool:
-    # Reversed-direction chain, so the short-circuit fires on a different set
-    # of rows than ``chained_lt``.
-    return x >= y >= z
-
-
 def chained_eq(x: int, y: int, z: int) -> bool:
-    # ``x == y == z`` -- equality never raises in Python, so every one of the
-    # eight NULL combinations has a defined boolean answer that the
-    # four-branch ``_lower_eq`` per link plus the short-circuit fold must
-    # reproduce exactly. This is the strongest NULL-semantics probe of the
-    # chained lowering.
+    # Equality never raises in Python, so every NULL pattern has a defined
+    # answer -- the strongest NULL probe of the chained lowering, with no "both
+    # raised" escape hatch to hide a divergence.
     return x == y == z
 
 
 def mixed_chain(x: int, y: int, z: int) -> bool:
-    # Mixed operators in one chain (``ast.LtE`` then ``ast.Gt``), so the two
-    # links go through different lowering helpers.
+    # Mixed operators in one chain (``ast.LtE`` then ``ast.Gt``), so the links
+    # disagree on direction and short-circuit on different rows again.
     return x <= y > z
 
 
@@ -536,9 +506,9 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                 interpreted_value = _SENTINEL_RAISED
                 interpreted_error = e
 
-        # If the transpiled path raises an exception we also need the interpreted path to raise one,
-        # however if the Python code (that in the interpreted path) raises an exception, the transpiled
-        # path may return a valid value.
+        # Asymmetric on purpose. If the transpiled path raises, the interpreted path
+        # must raise too -- that is the dangerous direction. The reverse is allowed:
+        # interpreted Python may raise where the transpiled form returns a value.
         if transpiled_error is not None:
             self.assertIsNotNone(
                 interpreted_error,
@@ -772,14 +742,11 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
 
         # ---- Chained comparisons ----------------------------------------
         #
-        # Python's ``a OP b OP c`` short-circuits: when the first link is falsy
-        # the second is never evaluated, so a NULL operand it would have
-        # touched must not raise. ``_run`` catches the dangerous direction of a
-        # regression here -- if the transpiled form raises where interpreted
-        # Python does not, ``_run`` asserts on it. (The reverse direction,
-        # Python raising where the transpiled form returns a value, is
-        # tolerated by ``_run``, so it is pinned by explicit assertions in
-        # test_udf_transpile_unit.py instead.)
+        # Python's ``a OP b OP c`` short-circuits, so a NULL operand the second
+        # link would have touched must not raise. ``_run`` catches the dangerous
+        # direction: the transpiled form raising where interpreted Python does
+        # not. It tolerates the reverse, which test_udf_transpile_unit.py pins
+        # explicitly instead.
 
         @_hyp_settings
         @given(value=_long_strategy)
@@ -802,20 +769,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @_hyp_settings
         @given(x=_long_strategy, y=_long_strategy, z=_long_strategy)
         @_seed_tuple_examples(_LONG_TRIPLE_EDGES)
-        def test_chained_ge_matches_python(self, x, y, z):
-            df = self._three_long_arg_df(x, y, z)
-            transpiled, interpreted = self._run(chained_ge, BooleanType(), df, "a", "b", "c")
-            self.assertEqual(
-                transpiled, interpreted, f"chained_ge mismatch on ({x!r}, {y!r}, {z!r})"
-            )
-
-        @_hyp_settings
-        @given(x=_long_strategy, y=_long_strategy, z=_long_strategy)
-        @_seed_tuple_examples(_LONG_TRIPLE_EDGES)
         def test_chained_eq_matches_python(self, x, y, z):
-            # Equality never raises in Python, so every NULL combination has a
-            # defined boolean answer on both sides -- no "both raised"
-            # escape hatch can mask a divergence here.
             df = self._three_long_arg_df(x, y, z)
             transpiled, interpreted = self._run(chained_eq, BooleanType(), df, "a", "b", "c")
             self.assertEqual(
@@ -831,8 +785,6 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             self.assertEqual(
                 transpiled, interpreted, f"mixed_chain mismatch on ({x!r}, {y!r}, {z!r})"
             )
-
-        # ---- `in` / `not in` ---------------------------------------------
 
 
 class UDFTranspileHypothesisGatingTests(unittest.TestCase):
