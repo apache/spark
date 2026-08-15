@@ -315,17 +315,11 @@ class SparkContext(config: SparkConf) extends Logging {
     map.asScala
   }
 
-  // Ids of RDDs that have been locally checkpointed. A local checkpoint truncates lineage, so its
-  // cache blocks are the only copy of the data and the RDD-cache TTL cleaner must never reap it.
-  // Kept here rather than derived from the live RDD because the cleaner runs on its own thread:
-  // this set gives it a safely-published answer, whereas RDD.checkpointData is not volatile. Not
-  // derived from `persistentRdds` either, since unpersisting drops that entry permanently
-  // (RDD.persist only registers on the first transition out of StorageLevel.NONE).
+  // Ids of locally checkpointed RDDs, which the RDD TTL cleaner must never reap: a local checkpoint
+  // truncates lineage, so the cache blocks are the only copy of the data. Tracked separately
+  // because the cleaner runs on its own thread and RDD.checkpointData is not volatile, and because
+  // persistentRdds loses the RDD once it is unpersisted.
   private[spark] val locallyCheckpointedRddIds = ConcurrentHashMap.newKeySet[Int]()
-
-  private[spark] def registerLocallyCheckpointedRdd(rddId: Int): Unit = {
-    locallyCheckpointedRddIds.add(rddId)
-  }
 
   def statusTracker: SparkStatusTracker = _statusTracker
 
@@ -658,34 +652,24 @@ class SparkContext(config: SparkConf) extends Logging {
       _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
     }
 
-    // Wire the TTL cleaners, which live in SparkEnv components created before the pieces they need
-    // exist (ShuffleDriverComponents, the ContextCleaner's listeners, and this SparkContext).
-    // Without this wiring a reap still frees blocks, but reclaims no executor disk for shuffles and
-    // leaves the unpersist bookkeeping stale.
+    // Wire up the TTL cleaners: they live in SparkEnv components built before the pieces they need
+    // (ShuffleDriverComponents, the ContextCleaner and this SparkContext) exist.
     _env.mapOutputTracker match {
       case mapOutputTrackerMaster: MapOutputTrackerMaster =>
         mapOutputTrackerMaster.shuffleFileRemover = Some { shuffleId =>
-          // Reclaim the on-disk blocks on executors/ESS, then tell the CleanerListeners, which is
-          // what lets dynamic allocation's shuffle tracking release an executor that only held this
-          // shuffle. Mirrors the tail of ContextCleaner.doCleanupShuffle.
+          // Mirrors the tail of ContextCleaner.doCleanupShuffle: delete the files, then notify the
+          // listeners so shuffle-tracking dynamic allocation can release an executor that only held
+          // this shuffle.
           _shuffleDriverComponents.removeShuffle(shuffleId, false)
           _cleaner.foreach(_.notifyShuffleCleaned(shuffleId))
         }
       case _ =>
     }
     _env.blockManagerMasterEndpoint.foreach { endpoint =>
-      // Never TTL-reap a locally-checkpointed RDD: localCheckpoint truncates lineage, so its cache
-      // blocks are the only copy of the data and losing them is unrecoverable. Read from the
-      // dedicated id set, not from persistentRdds: the reap below unpersists, which drops the
-      // persistentRdds entry permanently (RDD.persist only registers on the first transition out of
-      // StorageLevel.NONE), so a persistentRdds-based gate would stop protecting the RDD after the
-      // first reap.
       endpoint.rddReapable = rddId => !locallyCheckpointedRddIds.contains(rddId)
-      // Reap through ContextCleaner.doCleanupRDD, the same entry point the GC-driven cleanup uses,
-      // rather than re-implementing it: it unpersists the RDD's blocks and notifies the
-      // CleanerListeners. Note this frees the blocks but does not reset the RDD's storage level
-      // (the cleaner only has an id), so a later action re-caches it.
-      // Falls back to unpersistRDD when reference tracking is disabled and there is no cleaner.
+      // Reap through the same entry point the GC-driven cleanup uses. Note it frees the blocks
+      // without resetting the RDD's storage level (the cleaner only has an id), so a later action
+      // re-caches it. unpersistRDD is the fallback when reference tracking is off.
       endpoint.rddReaper = Some { rddId =>
         _cleaner match {
           case Some(contextCleaner) => contextCleaner.doCleanupRDD(rddId, blocking = false)

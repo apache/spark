@@ -25,23 +25,15 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 
 /**
- * Shared periodic TTL sweep for a block/shuffle access-time map. Finds ids whose recorded access
- * time is older than `ttlMillis`, reaps them, and sleeps until the next possible expiry. Used by
- * both the RDD-cache TTL cleaner (in `BlockManagerMasterEndpoint`) and the shuffle TTL cleaner (in
- * `MapOutputTrackerMaster`); they differ only in the map, the `shouldReap` gate, and the `reap`
- * action, so the loop lives here once.
+ * Periodic TTL sweep over an id -> last-access-time map: reaps every id idle for longer than
+ * `ttlMillis`, then sleeps until the next one can expire. Shared by the RDD-cache TTL cleaner
+ * (`BlockManagerMasterEndpoint`) and the shuffle TTL cleaner (`MapOutputTrackerMaster`), which
+ * differ only in the map, the `shouldReap` veto and the `reap` action. Runs until its owner
+ * interrupts it via `shutdownNow`.
  *
- * The runnable loops until interrupted (its owner interrupts it via `shutdownNow` on stop).
- *
- * @param name        label used in log messages (e.g. "RDD" / "shuffle")
- * @param ttlMillis   the TTL; only constructed when the corresponding config is set
- * @param accessTimes id -> last-access-time (millis). Must be a `ConcurrentHashMap`: this sweep
- *                    iterates it (weakly consistent) while other threads `put` to it, and plain
- *                    HashMap structural mutation from multiple threads can corrupt the map.
- * @param shouldReap  gate checked before removal; return false to leave an id tracked this pass
- *                    (e.g. a shuffle that has not produced output yet has nothing to reclaim, and
- *                    removing its state would break a later registration).
- * @param reap        performs the actual removal for an id whose atime was still stale.
+ * `accessTimes` must be concurrent: this thread iterates and removes from it while others put.
+ * `shouldReap` returning false leaves the id tracked for the next pass (e.g. a shuffle that has
+ * not produced output yet has nothing to reclaim).
  */
 private[spark] class BlockTtlCleaner(
     name: String,
@@ -53,44 +45,30 @@ private[spark] class BlockTtlCleaner(
   override def run(): Unit = {
     try {
       while (!Thread.currentThread().isInterrupted) {
-        val maxAge = System.currentTimeMillis() - ttlMillis
-        // Track the oldest still-live atime so we can sleep until the next possible expiry.
-        var oldest = System.currentTimeMillis()
-        val toBeRemoved = accessTimes.asScala.toList.flatMap { case (id, atime) =>
-          if (atime < maxAge) {
-            Some((id, atime))
+        val now = System.currentTimeMillis()
+        // Oldest live atime, so we can sleep until the next possible expiry.
+        var oldestLive = now
+        accessTimes.asScala.foreach { case (id, atime) =>
+          if (atime >= now - ttlMillis) {
+            oldestLive = math.min(oldestLive, atime)
           } else {
-            if (atime < oldest) {
-              oldest = atime
+            try {
+              // remove(k, v) fails if the atime moved since we read it: the id is back in use.
+              if (shouldReap(id) && accessTimes.remove(id, atime)) {
+                reap(id)
+              }
+            } catch {
+              // Warn, not debug: reclaiming space is this loop's whole job, and the id is already
+              // untracked so the reap is never retried.
+              case NonFatal(e) => logWarning(s"Error reaping $id in the $name TTL cleaner", e)
             }
-            None
           }
         }
-        toBeRemoved.foreach { case (id, atime) =>
-          try {
-            // `shouldReap` is checked before the removal so a skipped id stays tracked (its atime
-            // is unchanged). `remove(key, value)` only succeeds if the atime is unchanged since the
-            // snapshot, so a concurrent access in the window leaves the entry: it is back in use.
-            if (shouldReap(id) && accessTimes.remove(id, atime)) {
-              reap(id)
-            }
-          } catch {
-            // Warn, not debug: this loop's whole value is reclaiming space, so a reap that always
-            // fails (e.g. an unwired remover, or an RPC failure) must not be invisible at the
-            // default log level. The id has already been dropped from `accessTimes`, so it is not
-            // retried -- a persistent failure means that id is simply never reclaimed.
-            case NonFatal(e) =>
-              logWarning(s"Error reaping $id in the $name TTL cleaner", e)
-          }
-        }
-        // Wait until the next possible element to be removed.
-        val delay = math.max((oldest + ttlMillis) - System.currentTimeMillis(), 100)
-        Thread.sleep(delay)
+        Thread.sleep(math.max(oldestLive + ttlMillis - System.currentTimeMillis(), 100))
       }
-      logInfo(s"$name TTL cleaner thread interrupted, exiting.")
     } catch {
-      case _: InterruptedException =>
-        logInfo(s"$name TTL cleaner thread interrupted, exiting.")
+      case _: InterruptedException => // Shutdown; fall through and exit.
     }
+    logInfo(s"$name TTL cleaner exiting.")
   }
 }

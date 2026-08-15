@@ -2272,13 +2272,12 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     If set, RDD cache blocks that have not been accessed for this duration are removed. By default
     cached blocks are only removed once the RDD is garbage collected on the driver, which does not
-    happen for a DataFrame or RDD held at global scope. Broadcast and other block types are not
-    covered; shuffle blocks use <code>spark.cleaner.ttl.shuffle</code>. An access is recorded when the
-    driver resolves the block's locations, so an RDD read only from executor-local caches within a
-    single long job may not appear to be in use: set this comfortably longer than the longest gap
-    between uses and the longest stage runtime, or the RDD will be removed and recomputed. Removal
-    frees the blocks but does not un-persist the RDD, so a later action re-caches it. Locally
-    checkpointed RDDs are never removed. Must be set before the SparkContext is created.
+    happen for a DataFrame or RDD held at global scope. Broadcast blocks are not covered; shuffle
+    blocks use <code>spark.cleaner.ttl.shuffle</code>. An access is only recorded when the driver
+    resolves the block's locations, so set this comfortably longer than both the longest gap between
+    uses and the longest stage runtime, or the RDD will be removed and recomputed. Removal frees the
+    blocks but does not un-persist the RDD, so a later action re-caches it. Locally checkpointed RDDs
+    are never removed. Must be set before the SparkContext is created.
   </td>
   <td>4.4.0</td>
 </tr>
@@ -2288,12 +2287,12 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     If set, shuffles that have not been accessed for this duration have their map output removed from
     the driver and their shuffle files deleted on the executors. By default shuffle data is only
-    removed once the shuffle dependency is garbage collected on the driver. An access is recorded when
-    a map task registers output or the driver serves map output locations; executors cache those
-    locations for an epoch, so a shuffle that is actively being read may not appear to be in use.
-    Set this comfortably longer than the longest gap between uses and the longest stage runtime:
-    removing a shuffle that is still needed makes its readers fail and the map stage recompute, and
-    if that repeats it will exhaust <code>spark.stage.maxConsecutiveAttempts</code> and fail the job.
+    removed once the shuffle dependency is garbage collected on the driver. An access is only recorded
+    when a map task registers output or the driver serves map output locations, and executors cache
+    those locations, so set this comfortably longer than both the longest gap between uses and the
+    longest stage runtime. Removing a shuffle that is still needed fails its readers and recomputes
+    the map stage; if that repeats it exhausts
+    <code>spark.stage.maxConsecutiveAttempts</code> and fails the job.
     Must be set before the SparkContext is created.
   </td>
   <td>4.4.0</td>
