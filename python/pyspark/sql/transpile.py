@@ -151,9 +151,12 @@ if TYPE_CHECKING:
 
 # The most operators we will lower in one chained comparison (64 operators over
 # 65 operands); longer chains fall back to interpreted Python. Each interior
-# operand's subtree is emitted once per adjacent pair, and again per
-# input-category variant, so this bounds plan growth -- generously, next to real
-# code like ``0 <= x <= 100``.
+# operand is lowered once per adjacent pair, so growth is linear in the operator
+# count, and only two options can survive: every adjacent pair must share a
+# category, which leaves the all-numeric and all-string variants as the only ones
+# that lower at all. Measured at the cap over three untyped params: 2 options,
+# one `raise_error` guard per operator, ~17 KB of expression per option. Generous
+# next to real code like ``0 <= x <= 100``.
 #
 # This is a stopgap, not the intended design. An operator count does not measure
 # what actually matters, the size of the emitted tree, and a cap per syntax form
