@@ -67,7 +67,12 @@ case class BatchScanExec(
     }
 
     if (dataSourceFilters.nonEmpty) {
-      val originalPartitioning = outputPartitioning
+      // The partitions reported by the data source after filtering are compared below by their
+      // full partition keys, so the partitioning they are compared against must not be the
+      // projected one: `outputPartitioning` projects the partition keys down to the join keys and
+      // replaces the partition values with the common ones of the join when SPJ params were pushed
+      // down. Projecting and re-grouping the filtered partitions happens later, in `inputRDD`.
+      val originalPartitioning = super.outputPartitioning
 
       // the cast is safe as runtime filters are only assigned if the scan can be filtered
       val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
