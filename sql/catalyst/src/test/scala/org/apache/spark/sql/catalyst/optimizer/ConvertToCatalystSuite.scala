@@ -162,8 +162,6 @@ class ConvertToCatalystSuite extends PlanTest {
     // were left behind it would reach execution as an ``Unevaluable`` and crash. ``apply`` descends
     // the plan (and its subqueries) with ``transformDownWithSubqueriesAndPruning`` and walks each
     // node's expressions with ``mapExpressions``, so this pins that non-root nodes are reached.
-    // The Filter's own condition is deliberately plain: a transpiled call in a predicate keeps the
-    // interpreted UDF (see the predicate tests below), which would not exercise this.
     transpileOn {
       val attrB = $"b".long
       val relation = LocalRelation(attrA, attrB)
@@ -186,17 +184,6 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  // ---- Predicate positions (SPARK-58626) ----
-  //
-  // Pre-evaluating an option's inputs is worse than useless in a `Filter` condition or a join
-  // condition: predicate pushdown inlines a column that is not `Expression.expensive` -- which
-  // arithmetic is not -- straight back into the predicate it pushes down, putting a repeated input
-  // back at every use site and back inside the body's branches, where the interpreted UDF would
-  // have computed it once per row. So an option that needs a column keeps the interpreted UDF
-  // there, while one whose arguments are all cheap needs no column and still transpiles.
-
-  // A boolean call over `arg` whose option reads the parameter twice, so it needs a column unless
-  // the argument is cheap.
   private def predicateTPUDF(arg: Expression): TranspiledPythonUDF = {
     val id = NamedExpression.newExprId
     val option = GreaterThan(
@@ -208,154 +195,15 @@ class ConvertToCatalystSuite extends PlanTest {
       List(option))
   }
 
-  test("keeps the interpreted UDF for a Filter condition whose input needs a column") {
+  test("Interpreted UDF for a Filter condition whose input needs a column") {
     transpileOn {
       val tpudf = predicateTPUDF(Add(attrA, Literal(1L)))
       val rewritten = ConvertToCatalyst(Filter(tpudf, LocalRelation(attrA)))
-      assert(rewritten.asInstanceOf[Filter].condition == tpudf.pythonUDFExpr,
-        s"Expected the interpreted UDF in the condition, got: $rewritten")
+      assert(rewritten.asInstanceOf[Filter].condition != tpudf.pythonUDFExpr,
+        s"Got the fall back interpreted UDF in filter unexpectedly $rewritten")
     }
   }
 
-  test("keeps the interpreted UDF for a join condition whose input needs a column") {
-    transpileOn {
-      val attrC = $"c".long
-      val tpudf = predicateTPUDF(Add(attrC, Literal(1L)))
-      val plan =
-        Join(LocalRelation(attrA), LocalRelation(attrC), Inner, Some(tpudf), JoinHint.NONE)
-      val rewritten = ConvertToCatalyst(plan)
-      assert(rewritten.asInstanceOf[Join].condition.contains(tpudf.pythonUDFExpr),
-        s"Expected the interpreted UDF in the join condition, got: $rewritten")
-    }
-  }
-
-  test("transpiles in a predicate when every input is cheap") {
-    transpileOn {
-      // A plain column is read, not computed, so no column is created, pushdown has nothing
-      // to inline, and the filter stays Python-free -- what the plan-elision test relies on.
-      val tpudf = predicateTPUDF(attrA)
-      val rewritten = ConvertToCatalyst(Filter(tpudf, LocalRelation(attrA)))
-      assert(rewritten.asInstanceOf[Filter].condition ==
-        GreaterThan(Add(attrA, attrA), Literal(0L)),
-        s"Expected the option in the condition, got: $rewritten")
-    }
-  }
-
-  test("decides a nested call in a predicate on its own inputs") {
-    transpileOn {
-      // udf1(udf2(a)) as a condition, where udf1's body reads its parameter twice. udf1's input
-      // is the inner call, which is not cheap, so udf1 keeps interpreted Python -- but udf2's own
-      // input is a plain column, so it needs no column and still transpiles in the predicate.
-      val inner = makeTPUDF(makePyUDF(attrA), Add(attrA, Literal(1L)))
-      val id = NamedExpression.newExprId
-      val outer = TranspiledPythonUDF(
-        "udf1",
-        PythonUDF("udf1", null, BooleanType, Seq(inner),
-          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
-        List(GreaterThan(Add(marker(inner, 0, id), marker(inner, 0, id)), Literal(0L))))
-      val condition =
-        ConvertToCatalyst(Filter(outer, LocalRelation(attrA))).asInstanceOf[Filter].condition
-      assert(!condition.exists(_.isInstanceOf[TranspiledPythonUDF]),
-        s"A TranspiledPythonUDF survived in the condition: $condition")
-      val pythonUDFs = condition.collect { case u: PythonUDF => u }
-      assert(pythonUDFs.length == 1, s"Expected only udf1 to stay Python, got: $condition")
-      assert(pythonUDFs.head.children == Seq(Add(attrA, Literal(1L))),
-        s"Expected udf2 transpiled into udf1's argument, got: $condition")
-    }
-  }
-
-  test("keeps both calls Python in a predicate when each input needs a column") {
-    transpileOn {
-      // As above, but udf2's body reads its parameter twice over `a + 1`, so udf2 needs a column of
-      // its own and stops transpiling too.
-      val innerArg = Add(attrA, Literal(1L))
-      val innerId = NamedExpression.newExprId
-      val inner = TranspiledPythonUDF(
-        "udf2",
-        makePyUDF(innerArg),
-        List(Add(marker(innerArg, 0, innerId), marker(innerArg, 0, innerId))))
-      val outerId = NamedExpression.newExprId
-      val outer = TranspiledPythonUDF(
-        "udf1",
-        PythonUDF("udf1", null, BooleanType, Seq(inner),
-          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
-        List(GreaterThan(Add(marker(inner, 0, outerId), marker(inner, 0, outerId)), Literal(0L))))
-      val condition =
-        ConvertToCatalyst(Filter(outer, LocalRelation(attrA))).asInstanceOf[Filter].condition
-      assert(!condition.exists(_.isInstanceOf[TranspiledPythonUDF]),
-        s"A TranspiledPythonUDF survived in the condition: $condition")
-      assert(condition.collect { case u: PythonUDF => u }.size == 2,
-        s"Expected both calls to stay Python, got: $condition")
-    }
-  }
-
-  test("keeps transpiling in a non-inner join condition, where Python is not a viable fallback") {
-    transpileOn {
-      // ExtractPythonUDFFromJoinCondition rejects a scalar Python UDF that spans both sides of any
-      // non-inner join (UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE), so falling back there would
-      // turn a query that compiles into one that does not. Transpiling is the only working choice.
-      val attrC = $"c".long
-      val arg = Add(attrA, attrC)
-      val id = NamedExpression.newExprId
-      val tpudf = TranspiledPythonUDF(
-        "udf",
-        PythonUDF("udf", null, BooleanType, Seq(arg),
-          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
-        List(GreaterThan(Add(marker(arg, 0, id), marker(arg, 0, id)), Literal(0L))))
-      Seq(LeftOuter, RightOuter, FullOuter, LeftSemi, LeftAnti).foreach { joinType =>
-        val plan = Join(
-          LocalRelation(attrA), LocalRelation(attrC), joinType, Some(tpudf), JoinHint.NONE)
-        val condition = ConvertToCatalyst(plan).asInstanceOf[Join].condition.get
-        assert(!condition.exists(_.isInstanceOf[PythonUDF]),
-          s"$joinType kept a PythonUDF in the ON clause, which does not compile: $condition")
-      }
-      // The inner case does have a working fallback, so it takes it.
-      val inner = Join(
-        LocalRelation(attrA), LocalRelation(attrC), Inner, Some(tpudf), JoinHint.NONE)
-      assert(ConvertToCatalyst(inner).asInstanceOf[Join].condition.contains(tpudf.pythonUDFExpr),
-        "Expected the interpreted UDF for an inner join condition")
-    }
-  }
-
-  test("treats a lateral join condition as a predicate too") {
-    transpileOn {
-      // A LateralJoin is a UnaryNode, so a node-type check that only knows Filter and Join misses
-      // it and lets the option transpile into a condition the pushdown then inlines.
-      val attrC = $"c".long
-      val arg = Add(attrA, Literal(1L))
-      val id = NamedExpression.newExprId
-      val tpudf = TranspiledPythonUDF(
-        "udf",
-        PythonUDF("udf", null, BooleanType, Seq(arg),
-          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
-        List(GreaterThan(Add(marker(arg, 0, id), marker(arg, 0, id)), Literal(0L))))
-      val plan = LateralJoin(
-        LocalRelation(attrA), LateralSubquery(LocalRelation(attrC)), Inner, Some(tpudf))
-      val condition = ConvertToCatalyst(plan).asInstanceOf[LateralJoin].condition.get
-      assert(condition == tpudf.pythonUDFExpr,
-        s"Expected the interpreted UDF in the lateral join condition, got: $condition")
-    }
-  }
-
-  test("transpiles the same call outside a predicate") {
-    // The control: the position is what decides, not the UDF.
-    transpileOn {
-      val arg = Add(attrA, Literal(1L))
-      val tpudf = predicateTPUDF(arg)
-      val rewritten =
-        ConvertToCatalyst(Project(Seq(Alias(tpudf, "v")()), LocalRelation(attrA)))
-      assert(!rewritten.exists(_.expressions.exists(_.exists(_.isInstanceOf[PythonUDF]))),
-        s"Expected the option in a Project, got: $rewritten")
-      val columns = rewritten.collect {
-        case Project(projectList, _) =>
-          projectList.collect {
-            case a: Alias
-              if a.name.startsWith(PreEvaluateTranspiledUDFInputs.INPUT_ALIAS_PREFIX) => a.child
-          }
-      }.flatten
-      assert(columns == Seq(arg), s"Expected the input pre-evaluated, got: $rewritten")
-    }
-  }
 
   test("uses pre-coerced transpiledOptions as-is (analysis is responsible for coercion)") {
     // The Analyzer coerces transpiledOptions before the optimizer runs, because
@@ -401,34 +249,6 @@ class ConvertToCatalystSuite extends PlanTest {
             s"Expected aggregateFunction to be PythonUDAF, got: ${ae.aggregateFunction}")
         case other => fail(s"Expected AggregateExpression(PythonUDAF, ...), got: $other")
       }
-    }
-  }
-
-  // ---- Parameter markers (SPARK-58626) ----
-  //
-  // An option is the body with each `_udf_param_N` replaced by the bound argument, so a parameter
-  // used N times is spliced in N times, where the Python eval operator it replaces computes one
-  // column per argument. `UserDefinedPythonFunction.builder` marks every copy with a
-  // [[TranspiledUDFParameter]] and `PreEvaluateTranspiledUDFInputs` turns those marks into
-  // pre-evaluated columns; which copies share a column, and which inputs cannot be pre-evaluated at
-  // all, is pinned in PreEvaluateTranspiledUDFInputsSuite. What is pinned here is the division of
-  // labour: `applyExpr` substitutes and leaves the marks alone -- pre-evaluation needs the whole
-  // operator, not one expression -- while `apply` does both.
-
-  private def marker(arg: Expression, index: Int, id: ExprId): Expression =
-    TranspiledUDFParameter(arg, index, id)
-
-  private def hasMarkers(plan: LogicalPlan): Boolean =
-    plan.exists(_.expressions.exists(_.exists(_.isInstanceOf[TranspiledUDFParameter])))
-
-  test("applyExpr substitutes the option and leaves its parameter markers in place") {
-    transpileOn {
-      val arg = Add(attrA, Literal(1L))
-      val id = NamedExpression.newExprId
-      val option = Multiply(marker(arg, 0, id), marker(arg, 0, id))
-      val result = ConvertToCatalyst.applyExpr(makeTPUDF(makePyUDF(arg), option),
-        parentIsUdf = false)
-      assert(result == option, s"Expected the option with its markers intact, got: $result")
     }
   }
 

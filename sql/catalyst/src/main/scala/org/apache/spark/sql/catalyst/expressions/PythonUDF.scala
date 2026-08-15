@@ -237,16 +237,15 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
 
 /**
  * Marks a subtree of a transpiled option as the argument spliced in for the UDF's `index`th
- * parameter, so that `PreEvaluateTranspiledUDFInputs` can give it a single evaluation per row.
+ * parameter, so that `PreEvaluateTranspiledUDFInputs` can hint on a single evaluation per row.
  *
  * `UserDefinedPythonFunction`'s builder resolves the `_udf_param_N` placeholders at
  * call-construction time, which erases which copy came from which parameter -- and two parameters
- * can be bound to structurally equal arguments, so counting copies cannot recover it. Hence the
- * marker, on every copy of every non-foldable argument the option uses.
+ * can be bound to structurally equal arguments, so counting copies cannot recover it.
  *
  * `id` is what ties the copies of one parameter of one call together: every copy the builder
  * splices in for that parameter carries the same id, and no other parameter or call shares it.
- * Structural equality is not enough -- an argument whose seed was still unresolved at call time
+ * Structural equality is not enough for non-deterministic inputs,
  * (`expr("rand()")`, or SQL text) is reseeded per copy by `ResolveRandomSeed`, because substitution
  * runs first and analysis then rewrites each copy on its own. `index` is diagnostic only: the
  * rewrite keys off `id`, but the index is what a reader of an `explain` output needs to tie the

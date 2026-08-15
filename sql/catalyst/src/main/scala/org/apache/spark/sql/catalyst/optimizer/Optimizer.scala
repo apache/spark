@@ -1038,42 +1038,23 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     plan.transformDownWithSubqueriesAndPruning(
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
       case p =>
-        // A condition is where predicate pushdown will undo the input pre-evaluation below, putting
-        // every input back at each use site, so an option that needs a pre-evaluated column there
-        // keeps the interpreted UDF instead (see
-        // PreEvaluateTranspiledUDFInputs.needsPreEvaluatedColumn). These operators hold nothing but
-        // that condition, so the position is a property of the node.
-        //
-        // Only for an *inner* join, though: `ExtractPythonUDFFromJoinCondition` rejects a scalar
-        // Python UDF that spans both sides of any other join type
-        // (UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE), so keeping Python there would turn a query
-        // that compiles today into one that does not. There is no fallback to prefer when the
-        // fallback does not work, so those keep transpiling.
-        val inPredicate = p match {
-          case _: Filter => true
-          case Join(_, _, _: InnerLike, Some(_), _) => true
-          case LateralJoin(_, _, _: InnerLike, Some(_)) => true
-          case _ => false
-        }
         val substituted = p.mapExpressions { e =>
           if (e.containsPattern(TRANSPILED_PYTHON_UDF)) {
-            applyExpr(e, parentIsUdf = false, inPredicate = inPredicate)
+            applyExpr(e, parentIsUdf = false)
           } else {
             e
           }
         }
-        // Substitution splices in one copy of an argument per use, where the Python eval operator
-        // it replaces computes one column per argument, so pre-evaluate those arguments in a
-        // Project below this operator. Done per node, and only once this node's options are
-        // substituted, so that every marker the substitution left behind is accounted for.
+        // Pre-evaluate all of the used non-literal inputs to the TranspiledPythonUDF
+        // so that we can avoid duplicate evaluations of expensive or non-deterministic
+        // operations.
         PreEvaluateTranspiledUDFInputs(substituted)
     }
   }
 
   def applyExpr(
       expression: Expression,
-      parentIsUdf: Boolean = false,
-      inPredicate: Boolean = false): Expression = {
+      parentIsUdf: Boolean = false): Expression = {
     expression match {
       case s: TranspiledPythonUDF =>
         // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
@@ -1083,12 +1064,12 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             log"${MDC(LogKeys.CONFIG, SQLConf.ANSI_ENABLED.key)} is disabled. The transpiler " +
             log"targets ANSI semantics and refuses to rewrite plans under non-ANSI mode. " +
             log"Enable ANSI or disable transpilation to silence this warning.")
-          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true, inPredicate = inPredicate))
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
         } else if (!conf.getConf(SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS)) {
           logWarning(log"Skipping Python UDF transpilation: " +
             log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
-          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true, inPredicate = inPredicate))
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
         } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
           // Walk the full list of transpiled options and pick the first one,
           // falling back to the original Python UDF if none are available.
@@ -1106,35 +1087,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           // schema.
           s.transpiledOptions.headOption match {
             case None =>
-              // `inPredicate` survives every fallback: this call staying Python does not stop a
-              // *nested* one from transpiling, and a column created for it here would be inlined
-              // straight back by the pushdown.
               s.pythonUDFExpr.mapChildren(
-                applyExpr(_, parentIsUdf = true, inPredicate = inPredicate))
-            case Some(catalystExpr)
-                if inPredicate &&
-                  PreEvaluateTranspiledUDFInputs.needsPreEvaluatedColumn(catalystExpr) =>
-              // In a predicate, an input that needs a pre-evaluated column does not get to keep it:
-              // pushdown inlines the column back into the predicate it pushes down, so a repeated
-              // input would be evaluated once per use again and, back inside the body's
-              // conditionals, only on the rows that take them -- a query that raises under
-              // interpreted Python could then quietly return rows. Keep the Python UDF, whose eval
-              // operator computes one input column per argument per row. An option whose arguments
-              // are all cheap needs no column and still transpiles here.
-              s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true, inPredicate = true))
+                applyExpr(_, parentIsUdf = true))
             case Some(catalystExpr) =>
-              // Recurse on the option itself, not just its children: an option's root can be a
-              // substituted argument (a body that is nothing but `_udf_param_N`), and if that
-              // argument is a TranspiledPythonUDF then mapChildren walks straight past the node
-              // that needs converting and leaves an Unevaluable behind -- this rule is the only
-              // one that strips them. The built-in transpiler casts every option to the UDF's
-              // return type, so its roots are always Casts and it cannot hit this; a custom
-              // transpiler, whose contract is only that the option's dataType already matches,
-              // can. Recursing from the top also lets the option's root decide whether its
-              // children see a UDF parent, rather than assuming they don't, which preserves an
-              // inner UDF's pipeline. The parameter markers it carries are left in place for
-              // PreEvaluateTranspiledUDFInputs, which needs the whole operator to see them.
-              applyExpr(catalystExpr, parentIsUdf = false, inPredicate = inPredicate)
+              // Recurse on the option itself
+              applyExpr(catalystExpr, parentIsUdf = false)
           }
         } else {
           // We should avoid converting a UDF node where that could break pipelining.
@@ -1142,15 +1099,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true, inPredicate = inPredicate))
         }
       case _ =>
-        // Not a TranspiledPythonUDF: recurse down, telling the children whether
-        // this node is itself a scalar Python UDF so a transpiled child can
-        // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
-        // transpiled wrapping one that could). `inPredicate` travels unchanged: the whole
-        // condition is in the predicate, however deep a call sits in it. It does not reach into a
-        // subquery -- a subquery's plan is not an expression child, and its own nodes get their own
-        // decision when the transform descends into them.
+        // Not a TranspiledPythonUDF: recurse down.
         expression.mapChildren(
-          applyExpr(_, parentIsUdf = isScalarPythonUDF(expression), inPredicate = inPredicate))
+          applyExpr(_, parentIsUdf = isScalarPythonUDF(expression)))
     }
   }
 }

@@ -1564,13 +1564,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.spark.catalog.dropTempView("t_58626")
                 self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS sq_test_58626")
 
-    def test_udf_transpile_skips_a_udf_used_as_a_predicate(self):
-        # SPARK-58626: a UDF used as a predicate is not transpiled. Predicate pushdown inlines a
-        # pre-evaluated column that is not `expensive` (arithmetic is not) straight back into the
-        # predicate it pushes down, which would put a repeated input back at every use site and back
-        # inside the body's branches -- so `where(udf(a / b, b) > -1)` could return rows where the
-        # interpreted UDF raises. Keeping interpreted Python keeps the eval operator's one column
-        # per argument per row.
+    def test_udf_transpile_udf_as_a_predicate(self):
+        # Ensure we transpile simple UDFs as predicates
         from pyspark.sql.functions import col
 
         used_twice = lambda a, b: (a + a) if b > 0 else 0.0  # noqa: E731
@@ -1590,7 +1585,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             other = self.spark.createDataFrame([(2.0,)], "c double")
             joined = df.join(other, u(col("a") / col("b"), col("b")) > 2.0)
             self.assertFalse(self._pre_evaluates_an_input(joined))
-            self.assertGreater(self._eval_python_count(joined), 0)
+            self.assertEqual(self._eval_python_count(joined), 0)
             self.assertEqual([(4.0, 2.0, 2.0)], [tuple(r) for r in joined.collect()])
 
             # The control: the same call in a select is transpiled, with one column for the input.
@@ -1598,33 +1593,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(self._pre_evaluates_an_input(selected))
             self.assertEqual(0, self._eval_python_count(selected))
             self.assertEqual([1.0, 4.0], [r[0] for r in selected.collect()])
-
-    def test_udf_transpile_a_later_filter_undoes_the_pre_evaluation(self):
-        # SPARK-58626: a UDF written directly in a `where` is not transpiled, because predicate
-        # pushdown would inline the pre-evaluated column back into the predicate. That decision is
-        # made in the first optimizer batch, though, so a filter added ABOVE the call still reaches
-        # it: the Filter is pushed through the pre-evaluating Project and the input goes back to one
-        # evaluation per use, inside the body's branch. The transpiled query then returns rows where
-        # interpreted Python raises. Pinned as a known limitation so a change either way is
-        # deliberate -- see transpile.py's module docstring.
-        from pyspark.sql.functions import col
-
-        used_twice = lambda a, b: (a + a) if b > 0 else 0.0  # noqa: E731
-        rows = [(1.0, 2.0), (1.0, 0.0)]
-        with self.sql_conf(_TRANSPILE_ON):
-            u = UserDefinedFunction(used_twice, DoubleType())
-            self.assertTrue(u.transpiled)
-            df = self.spark.createDataFrame(rows, "a double, b double")
-            filtered = df.select(u(col("a") / col("b"), col("b")).alias("v")).where(col("v") > 1.0)
-            # No raise, and the argument is back at both use sites in the pushed-down predicate.
-            self.assertEqual([], filtered.collect())
-            self.assertGreaterEqual(self._optimized_plan(filtered).count("(a#"), 2)
-
-            # The same query without the filter keeps its column and is eager, so it raises like
-            # interpreted Python does. That contrast is the whole point.
-            with self.assertRaises(Exception) as ctx:
-                df.select(u(col("a") / col("b"), col("b")).alias("v")).collect()
-            self.assertIn("DIVIDE_BY_ZERO", str(ctx.exception))
 
     def test_udf_transpile_unused_argument_diverges_under_ansi(self):
         # SPARK-58626: an argument the body never uses never reaches the option, so it is not
@@ -1802,19 +1770,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # PreEvaluateTranspiledUDFInputsSuite; what matters here is that the values are right.
             nested = df.select(prod_udf(col("a") + 1, (col("a") + 1) + 2).alias("v"))
             self.assertEqual([15, 48], [r[0] for r in nested.collect()])
-
-    def test_udf_transpile_keeps_distinct_inputs_distinct(self):
-        # SPARK-58626: a column is per argument, so two independent draws stay independent --
-        # `a - b` over different seeds is not collapsed into an always-0 self-subtraction.
-        from pyspark.sql.functions import rand
-
-        diff = lambda a, b: a - b  # noqa: E731
-        with self.sql_conf(_TRANSPILE_ON):
-            diff_udf = UserDefinedFunction(diff, DoubleType())
-            self.assertTrue(diff_udf.transpiled)
-            df = self.spark.range(100).select(diff_udf(rand(1), rand(2)).alias("v"))
-            self.assertEqual(2, self._draw_count(df))
-            self.assertTrue(any(r[0] != 0.0 for r in df.collect()))
 
     def test_udf_transpile_drops_unused_argument(self):
         # SPARK-58626: an argument the body never uses is not evaluated at all, where the

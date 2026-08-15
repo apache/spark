@@ -26,50 +26,13 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_UDF_PARAMETER
 import org.apache.spark.util.Utils
 
 /**
- * Gives every input of a transpiled Python UDF option one evaluation per row (SPARK-58626).
- *
- * A transpiled option is the Python body with each `_udf_param_N` placeholder replaced by the bound
- * argument, so a parameter the body uses N times has its argument spliced in N times: `a % b`
- * lowered to Python's sign rules uses the divisor several times, a null guard repeats its operand.
- * The Python UDF the option replaces does not work that way -- `ExtractPythonUDFs` puts the UDF's
- * arguments into the eval operator, which computes one column per argument, once per row, for every
- * row reaching the operator. This rewrite puts the transpiled option on the same footing: each
- * marked argument (see [[TranspiledUDFParameter]]) becomes one aliased column in a [[Project]]
- * below the operator, and every use reads that column.
+ * Gives every input of a transpiled Python UDF a projection so that they can be reused and
+ * pre-evaluated. This is best effort for deterministic inputs and guaranteed for non-deterministic
+ * inputs.
  *
  * Called by `ConvertToCatalyst` on each plan node once that node's options have been substituted.
  * The plan surgery mirrors [[RewriteWithExpression]]`.applyInternal`: pick the child that can
  * compute the column, add a [[Project]] there, and project the extra columns away again above.
- *
- * A pre-evaluated input is also eager -- computed for every row, including rows whose use of it sat
- * in a branch they did not take -- so an input that raises under ANSI raises on those rows too.
- * That is what the interpreted UDF does. And a per-row nondeterministic input may be *invoked* a
- * different number of times than leaving it inline would; each value is still a legitimate draw.
- * `transpile.py`'s module docstring spells both out for users.
- *
- * The column is best-effort for a *deterministic* input, and that is worth knowing before reading a
- * plan and believing it. Three later rules can put such an input back at its use sites:
- *
- *  - [[CollapseProject]] inlines a deterministic column read exactly once back into the body
- *    (`canCollapseExpressions` allows it, one read being one evaluation either way). Still one
- *    evaluation, but back inside the branch and so back to being lazy.
- *  - `PushPredicateThroughNonJoin` inlines a deterministic column that is not
- *    [[Expression.expensive]] -- which arithmetic is not -- into a predicate it pushes below this
- *    Project, at every use site. `ConvertToCatalyst` declines to transpile into a condition for
- *    that reason (see [[needsPreEvaluatedColumn]]), but it can only see the conditions that exist
- *    when it runs, in the first optimizer batch: a `Filter` that arrives *above* this Project later
- *    is pushed *through* it, so `df.select(f(a / b, b)).where(...)` ends up evaluating `a / b` once
- *    per use inside the pushed predicate. The same `replaceAlias` substitutes the expression behind
- *    a cheap `Attribute` argument, so even an option whose arguments are all cheap can be
- *    duplicated when those columns come from a Project of their own.
- *  - `spark.sql.optimizer.collapseProjectAlwaysInline` (false by default) force-inlines every
- *    deterministic column at every use site, which reverts this rewrite wholesale.
- *
- * What does survive all three is a *nondeterministic* input: the pushdown requires
- * `fields.forall(_.deterministic)` and [[CollapseProject]] never inlines a nondeterministic
- * producer, so the single draw this rewrite exists to guarantee is not at the mercy of any of them.
- * A deterministic input's column is an optimization; a nondeterministic input's column is a
- * semantic guarantee.
  *
  * An input stays inline (evaluated at each use) when pre-evaluating it cannot help, cannot be done,
  * or would not be safe: see [[isCheapInput]] for the first and `canPreEvaluate` plus the child
@@ -81,42 +44,17 @@ import org.apache.spark.util.Utils
  */
 object PreEvaluateTranspiledUDFInputs {
 
-  /**
-   * The copies of a marked argument that must end up reading the same column.
-   *
-   * This follows what the interpreted UDF does with its own argument columns:
-   * `EvalPythonEvaluatorFactory` builds one input column per argument but reuses an existing one
-   * for any argument `semanticEquals` to it, and `semanticEquals` is false unless both sides are
-   * deterministic. So `f(a + 1, a + 1)` really is one column there and `f(rand(1), rand(1))` really
-   * is two, and keying accordingly keeps the transpiled option in step:
-   *
-   *  - a deterministic argument keys on the argument itself, so two parameters -- or two separate
-   *    calls -- bound to the same argument share one column. For an
-   *    `Aggregate` they *must* rewrite identically, or an aggregate expression stops matching the
-   *    grouping expression it was equal to.
-   *  - a nondeterministic argument keys on the marker's id instead, which is per parameter per
-   *    call. Structural equality would be both too weak and too strong here: copies of one
-   *    parameter can differ (an unresolved `rand()` is reseeded per copy by `ResolveRandomSeed`)
-   *    and must still share a single draw, while `f(rand(1), rand(1))` is two parameters that still
-   *    owe the body two draws. Copies that differ in *type* are the one case a single column cannot
-   *    serve, and there the parameter is left inline with a draw per use (see `register`).
-   */
   private type InputKey = Either[Expression, ExprId]
 
-  /** Prefix of the aliases this rewrite adds; tests match on it, so it lives in one place. */
+  /** Prefix of the aliases this rewrite adds */
   val INPUT_ALIAS_PREFIX = "_udf_input"
 
   private case class PreEvaluated(alias: Alias, childIndex: Int)
 
   def apply(plan: LogicalPlan): LogicalPlan = {
+    // no-op on plans without transpiled UDF parameters (UDFs with zero args).
     if (!plan.expressions.exists(_.containsPattern(TRANSPILED_UDF_PARAMETER))) {
       return plan
-    }
-    // A Command has no output to widen or restore, so the schema bookkeeping below cannot check
-    // itself there. Leave those inputs inline rather than restructure a plan shape this rewrite
-    // does not understand.
-    if (plan.isInstanceOf[Command]) {
-      return plan.mapExpressions(stripMarkers)
     }
     val preEvaluated = collectInputs(plan)
     val columns = preEvaluated.map { case (key, p) => key -> p.alias.toAttribute }

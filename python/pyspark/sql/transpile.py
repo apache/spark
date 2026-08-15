@@ -35,82 +35,11 @@ keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
-Every argument the transpiled body uses is evaluated once per row: it is
-computed in a projection below the operator and each use in the body reads
-that column, the way the Python eval operator it replaces computes one column
-per argument. Arguments too cheap to bother with -- a plain column, a literal
--- stay inline and are evaluated per use, and so do these, for which a column
-is either impossible or unsafe:
+*Nondeterministic* arguments are evaluated once per row just like in Python.
+Determinstic arguments which are used inside the function can be in-lined
+or may be pre-evaluated once per row below the operator.
 
-* an argument that cannot live in a projection: an aggregate, a window or
-  generator expression, a lambda variable, one reading both sides of a join,
-  or one carrying an outer reference from an enclosing query;
-* any argument in a ``GROUP BY`` aggregation that an aggregate function does
-  not enclose -- such an argument has to match a grouping expression, and
-  rewriting one side of that match would make the aggregation invalid;
-* a nondeterministic argument under a multi-child operator such as a join,
-  where a single draw would be reused across every paired row rather than
-  redrawn per output row;
-* (rarely) copies of one nondeterministic argument that analysis left with
-  different types, since one column cannot stand in for both.
-
-Two consequences, both moving toward interpreted Python rather than away
-from it. First, a pre-evaluated argument is *eager*: with
-``lambda x, y: (x + x) if y > 0 else 0.0`` over ``f(a / b, y)``, ``a / b``
-used to be skipped on the rows where the branch was not taken and now raises
-for every row with ``b = 0``. That is what the interpreted UDF does -- it
-computes every argument column for every row, wherever the call sits -- but
-it is a visible difference for a query that leaned on the branch to guard an
-error. Second, a per-row nondeterministic argument such as ``rand()`` may be
-*invoked* a different number of times than inline copies would be; each value
-is still a legitimate draw, and per-row values line up with the interpreted
-UDF's one column per argument more closely than inline copies do.
-
-A UDF used *as a predicate* -- in a ``where``/``filter`` condition or a join
-condition -- is transpiled only when none of its arguments needs a projection in
-the first place, which in practice means they are all plain columns or literals.
-Predicate pushdown would otherwise inline the pre-evaluated column back into the
-predicate it pushes down (arithmetic does not count as expensive to Catalyst),
-putting a repeated argument back at every use site and back inside the body's
-branches -- so a query that raises under interpreted Python could quietly return
-rows instead. Rather than emit that, the call runs as interpreted Python, whose
-eval operator computes one input column per argument per row. So
-``df.where(f(col("x")))`` still avoids Python entirely, while
-``df.where(f(col("a") / col("b"))) `` does not.
-
-For a *deterministic* argument the projection is best-effort: three later
-optimizer rules can put it back at its use sites, which matters if you are
-reading a plan or relying on the eagerness above.
-
-* an argument the body reads exactly once is inlined back by
-  ``CollapseProject`` -- one read is one evaluation either way, so the count is
-  unchanged, but it is lazy again inside a branch;
-* predicate pushdown inlines it into a predicate it pushes below the
-  projection. A UDF written directly in a ``where`` is not transpiled for that
-  reason, but the decision is made before the rest of the optimizer runs, so a
-  filter added *above* the call still reaches it: ``df.select(f(a / b, b))
-  .where(...)`` evaluates ``a / b`` once per use inside the pushed predicate,
-  and can therefore return rows where interpreted Python raises. The same
-  substitution reaches the expression behind a plain column argument, so even a
-  UDF whose arguments are all columns can be duplicated when those columns come
-  from a projection of their own;
-* ``spark.sql.optimizer.collapseProjectAlwaysInline`` (off by default) inlines
-  every deterministic column everywhere, which undoes the rewrite entirely.
-
-A *nondeterministic* argument is not subject to any of them -- pushdown refuses
-to push through a nondeterministic projection and ``CollapseProject`` never
-inlines one -- so the single ``rand()`` draw per row is a guarantee, while a
-deterministic argument's single evaluation is an optimization.
-
-An argument the body never uses is not evaluated at all, where the interpreted
-UDF computes every argument column. Under ANSI that is an error-vs-rows
-difference, not just a saved computation: ``f(x, y / 0)`` with ``lambda a, b: a``
-returns rows when transpiled and raises DIVIDE_BY_ZERO when interpreted, because
-substitution drops the unused argument before it ever reaches the plan. It is
-deliberate -- an argument nothing reads is work nobody asked for -- but it is the
-one place this feature can turn a failing query into a passing one, so it is
-called out rather than filed under performance. See ``TranspiledUDFParameter`` in
-``PythonUDF.scala`` and ``PreEvaluateTranspiledUDFInputs`` for the JVM side.
+An argument the body never uses is not evaluated at all.
 """
 
 import ast
