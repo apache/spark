@@ -84,22 +84,17 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
         _enable_transpilation(cls)
 
-    # Both of these assert restrictions that exist BECAUSE a Python UDF is
-    # opaque to the planner: a UDF spanning both sides of a join has to be
-    # pulled out as Filter + Cross join (so a cartesian-product error is
-    # expected), and a Python UDF in the ON clause of a non-inner join is
-    # rejected outright. Their UDFs are inline lambdas, which SPARK-58650 now
-    # identifies and lowers, so no Python UDF survives and neither restriction
-    # applies.
+    # Both of these assert restrictions that exist BECAUSE a Python UDF is opaque
+    # to the planner: a UDF spanning both sides of a join is pulled out as Filter +
+    # Cross join, and a Python UDF in the ON clause of a non-inner join is rejected
+    # outright. Their UDFs are inline lambdas, which now lower, so no Python UDF
+    # survives and neither restriction applies.
     #
-    # Be precise about what that costs, because it is not purely a plan-shape
-    # change. With ``spark.sql.crossJoin.enabled=false``, a UDF that was the SOLE
-    # join condition used to raise "Detected implicit cartesian product"; lowered,
-    # the CASE WHEN references both sides so CheckCartesianProducts no longer
-    # flags it, yet no equi-join key is extractable, so the query still executes
-    # as an O(n*m) CartesianProduct -- the guard is defeated rather than
-    # satisfied. That is a real consequence of lowering, tracked in SPARK-58780;
-    # it is not something these skips can assert either way.
+    # That is not purely a plan-shape change. With
+    # ``spark.sql.crossJoin.enabled=false``, a lowered CASE WHEN referencing both
+    # sides no longer trips CheckCartesianProducts, yet no equi-join key is
+    # extractable -- so the query still runs as an O(n*m) CartesianProduct and the
+    # guard is defeated rather than satisfied. Tracked in SPARK-58780.
     @unittest.skip(
         "Transpilation lowers the inline lambda to a native join condition, so the "
         "implicit-cartesian-product error this asserts no longer occurs (SPARK-58650). "
@@ -121,19 +116,15 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     def test_transpiled_udf_join_condition_matches_python(self):
         """Positive replacement for the two skips above.
 
-        The contract a transpiled UDF must meet is that it agrees with the
-        INTERPRETED Python UDF -- not with the equivalent native SQL predicate.
-        The distinction is invisible on null-free keys and decisive with a NULL:
-        Python's ``None == None`` is True, so ``lambda a, b: a == b`` matches a
-        NULL pair, while SQL's ``a = b`` yields NULL and matches nothing. The
-        fixture therefore includes a NULL key.
+        A transpiled UDF must agree with the INTERPRETED Python UDF, not with the
+        equivalent native SQL predicate. The two differ on a NULL key: Python's
+        ``None == None`` is True, so ``lambda a, b: a == b`` matches a NULL pair
+        while SQL's ``a = b`` matches nothing -- hence the NULL in the fixture.
 
-        For an INNER join the interpreted UDF is legal (cross join plus filter),
-        so it is used directly as the reference. For non-inner joins Spark
-        REFUSES a Python UDF in the ON clause, so no interpreted baseline exists
-        for the shape this change newly makes reachable -- the expected rows are
-        pinned explicitly instead, and they deliberately differ from the native
-        predicate for the NULL row.
+        For an INNER join the interpreted UDF is legal, so it is the reference
+        directly. Non-inner joins refuse a Python UDF in the ON clause, so there is
+        no interpreted baseline for the shape this newly makes reachable and the
+        expected rows are pinned explicitly.
         """
         from pyspark.sql import Row
         from pyspark.sql.functions import udf
@@ -184,11 +175,9 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
                 assertDataFrameEqual(lowered, want)
 
     def test_non_lowerable_udf_still_refused_in_on_clause(self):
-        # A UDF that does NOT lower (a closure -- the common fallback case) must
-        # still be rejected in a non-inner ON clause under transpilation, exactly
-        # as before. Skipping test_udf_not_supported_in_join_condition dropped
-        # the only assertion of this; keep it with a deliberately non-lowerable
-        # UDF so a planner regression that dropped the check would be caught.
+        # Skipping test_udf_not_supported_in_join_condition dropped the only
+        # assertion that a UDF which does NOT lower is still rejected in a non-inner
+        # ON clause. Keep it, so a planner regression dropping the check is caught.
         from pyspark.sql import Row
         from pyspark.errors import AnalysisException
         from pyspark.sql.functions import udf
@@ -197,23 +186,17 @@ class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         left = self.spark.createDataFrame([Row(a=1, a1=1)])
         right = self.spark.createDataFrame([Row(b=1, b1=1)])
 
-        # Deliberately un-lowerable in a way that will STAY un-lowerable: a
-        # multi-statement body is outside the transpiler's single-expression
-        # subset by construction. It must NOT rely on a closure -- closures are
-        # un-lowerable only pending SPARK-55207 ("Handle assignments, class vars,
-        # and closures via scope evaluation"), so keying on that would make this
-        # test fail confusingly (pointing at the join planner rather than at its
-        # own fixture) the moment that TODO closes. Hence no captured variable:
-        # the two statements alone are what make it refuse.
+        # Un-lowerable in a way that will STAY un-lowerable: a multi-statement body
+        # is outside the single-expression subset by construction. Not a closure --
+        # those become lowerable when SPARK-55207 closes, and this test would then
+        # fail pointing at the join planner rather than at its own fixture.
         def not_lowerable(a, b):
             same = a == b
             return same
 
         refused = udf(not_lowerable, BooleanType())
-        # Assert the rendered join type, not just the prefix: the skipped test
-        # checked each one, so a bug labelling a LEFT ANTI join "LEFT SEMI"
-        # should still fail here. Two-predicate ON clause matches the shape the
-        # original exercised.
+        # Assert the rendered join type, not just the prefix, so a bug labelling a
+        # LEFT ANTI join "LEFT SEMI" still fails here as it did in the skipped test.
         for how, rendered in (
             ("leftouter", "LEFT OUTER"),
             ("rightouter", "RIGHT OUTER"),
