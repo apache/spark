@@ -77,16 +77,7 @@ if TYPE_CHECKING:
 
 
 class AbstractTranspiler(object):
-    """Base class for transpilers. All experimental.
-
-    ``_transpile_from_ast`` is the extension point, and its signature is NOT
-    stable: SPARK-58650 dropped the ``src`` and ``ast_info`` parameters it never
-    read. An out-of-tree subclass still implementing the older signature raises
-    ``TypeError``. ``_transpile_func`` collects it into the error list, which
-    ``udf.py`` surfaces as an "Unable to transpile UDF" warning -- so the breakage
-    is visible, but only as a warning on a fall-back, not as a hard failure. Check
-    the signature when upgrading.
-    """
+    """Base class for transpilers. All experimental."""
 
     varieties: dict[str, type["AbstractTranspiler"]] = {}
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.pyTranspilers
@@ -872,7 +863,7 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     return [{i: choice[i] for i in range(n)} for choice in itertools.product(*candidates)] or [{}]
 
 
-def _get_src_ast_from_func(func: Callable) -> Optional[ast.AST]:
+def _get_ast_from_func(func: Callable) -> Optional[ast.AST]:
     """Parse the ``inspect.getsource`` fragment for ``func``, or ``None``.
 
     Used only by the structural (``def`` / callable-class) path; a lambda is
@@ -905,36 +896,7 @@ def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
 
 
 def _instruction_extent(code: CodeType) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
-    """The (start, end) source bounds enclosing every instruction of ``code``.
-
-    Returned as lexicographic ``((line, col), (line, col))`` pairs. Reducing the
-    per-instruction spans to one bounding box up front makes the enclosure test a
-    single comparison per candidate, and it is equivalent: requiring a candidate
-    to contain every span is exactly requiring it to contain their min start and
-    max end.
-
-    ``co_positions()`` is safe here even though it yields one entry per code UNIT
-    (including inline cache slots) rather than per instruction: nothing is zipped
-    against the instruction stream, only ``min``/``max`` are taken, and a cache
-    slot carries its own instruction's position so it cannot move either bound.
-    Verified identical to a ``dis.get_instructions()`` walk on 3.11/3.12/3.13
-    (NOT on 3.14, which Spark's CI also runs -- if a future version changes which
-    opcodes carry the degenerate marker, lambda lowering stops, safely but
-    silently),
-    and it avoids building an ``Instruction`` (with ``argval``/``argrepr``) per
-    opcode on a path that runs per ``udf()`` construction.
-
-    An entry is skipped when ANY of its four bounds is absent (a partial position
-    tells us nothing), and when it is a degenerate column-0 marker -- the
-    synthetic ``RESUME``, and on 3.11 also a trailing ``RETURN_VALUE``, are
-    attributed to ``(line, line, 0, 0)``, which sits before the lambda's own
-    start column and would reject every real match. Do NOT narrow this to a
-    specific opcode: which opcodes carry that marker varies by version.
-
-    Returns ``None`` when no entry has a usable position -- the case for a whole
-    interpreter run under ``-X no_debug_ranges`` / ``PYTHONNODEBUGRANGES=1``, and
-    for ``.pyc`` files compiled that way, where lambda lowering is unavailable.
-    """
+    """The (start, end) source bounds enclosing every instruction of ``code``."""
     starts = []
     ends = []
     for lineno, end_lineno, start_col, end_col in code.co_positions():
@@ -961,19 +923,7 @@ def _node_encloses(node: ast.expr, extent: Tuple[Tuple[int, int], Tuple[int, int
 
 
 def _defaults_stripped(node: ast.Lambda) -> ast.Lambda:
-    """``node`` with its parameter defaults removed.
-
-    Builds fresh ``Lambda`` / ``arguments`` wrappers that ALIAS ``node``'s
-    children, so the cached node is left untouched. Stripping cannot change the
-    code object being reproduced -- a default is evaluated in the DEFINING scope
-    and stored on the function object, not in its code -- but it does remove the
-    extra nested code objects a lambda-valued default would contribute
-    (``lambda x, k=(lambda: 3)(): x + k``), which is what lets the caller expect
-    exactly one.
-
-    ``ast.arguments`` carries no position attributes, so only the ``Lambda``
-    needs ``copy_location``.
-    """
+    """``node`` with its parameter defaults removed."""
     args = node.args
     bare_args = ast.arguments(
         posonlyargs=list(getattr(args, "posonlyargs", [])),
@@ -1152,22 +1102,7 @@ def _code_signature(code: CodeType) -> tuple:
 
 
 def _verifies(node: ast.Lambda, target: CodeType, target_signature: tuple) -> bool:
-    """Whether ``node`` recompiles to the same code as ``target``.
-
-    ``target_signature`` is ``_code_signature(target)``, passed in so the caller
-    computes it once rather than per candidate.
-
-    Position LOCATES a candidate; this CONFIRMS it. Without it, source that has
-    diverged from the compiled code -- an edited file re-read from disk, or a
-    relative ``co_filename`` resolved against a different working directory --
-    would silently lower whatever now sits at that span.
-
-    The comparison is the full structural signature, NOT just ``co_code``: a
-    literal or global-name edit (``x + 1`` -> ``x + 2``, ``x + foo`` ->
-    ``x + bar``) leaves ``co_code`` identical because the value lives in
-    ``co_consts`` / ``co_names`` and is referenced by index, so a ``co_code``
-    check alone would confirm the stale node and lower the wrong body.
-    """
+    """Whether ``node`` recompiles to the same code as ``target``."""
     recompiled = _recompiled_lambda_code(node, target.co_freevars)
     return recompiled is not None and _code_signature(recompiled) == target_signature
 
@@ -1473,7 +1408,7 @@ def _get_function_from_ast(
     # branches this used to carry are gone.
     if func is None:
         return None
-    body = _get_src_ast_from_func(func)
+    body = _get_ast_from_func(func)
     if body is None or not hasattr(body, "body") or not body.body:
         if errors is not None:
             errors.append(
