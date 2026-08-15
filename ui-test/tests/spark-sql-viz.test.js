@@ -30,7 +30,7 @@ const vizPath = join(
   '../../sql/core/src/main/resources/org/apache/spark/sql/execution/ui/static/spark-sql-viz.js');
 const src = readFileSync(vizPath, 'utf8');
 
-global.$ = function () {};
+window.$ = function () {};
 document.body.innerHTML = '<button id="plan-viz-download-btn"></button>';
 const { buildMetricsTable, filterMetricRows } = new Function(
   src + '\nreturn { buildMetricsTable, filterMetricRows };')();
