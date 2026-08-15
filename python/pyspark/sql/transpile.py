@@ -154,6 +154,12 @@ if TYPE_CHECKING:
 # operand's subtree is emitted once per adjacent pair, and again per
 # input-category variant, so this bounds plan growth -- generously, next to real
 # code like ``0 <= x <= 100``.
+#
+# This is a stopgap, not the intended design. An operator count does not measure
+# what actually matters, the size of the emitted tree, and a cap per syntax form
+# does not converge as forms are added -- ``and`` / ``or`` admits the same
+# unbounded repetition and is not capped at all. The replacement is one size
+# budget, configurable and counted across the whole lowering.
 _MAX_COMPARISON_OPS = 64
 
 # The four ordering comparisons: same lowering, differing only in the operator
@@ -538,10 +544,12 @@ class CatalystTranspiler(AbstractTranspiler):
         ``isNull`` / ``isNotNull``, ``_lower_eq`` answers every NULL combination
         with a boolean literal, and ``_lower_value_compare`` raises rather than
         returning NULL. Its non-NULL branch cannot yield NULL either, because
-        equal operand categories plus the JVM-side category contract leave numeric
-        widening as the only coercion Catalyst inserts, and under ANSI a failing
-        cast raises. That is what lets the chain fold below use a plain ``&`` with
-        no ``coalesce``.
+        equal operand categories plus the category contract that
+        ``ResolveTranspiledPythonUDFOptions`` enforces on the JVM side
+        (non-decimal ``NumericType`` for "numeric", UTF8_BINARY ``StringType``
+        for "string") leave numeric widening as the only coercion Catalyst
+        inserts, and under ANSI a failing cast raises. That is what lets the
+        chain fold below use a plain ``&`` with no ``coalesce``.
         """
         match op:
             case ast.Is() | ast.IsNot():
@@ -819,8 +827,20 @@ class CatalystTranspiler(AbstractTranspiler):
                 # expressions that desynchronize (`50 < x < 60` over
                 # `rand(7) * 100` is ~30% true where Python is ~10%). That has to
                 # be fixed in the analyzer, which is the first place a resolved
-                # argument exists; `and` / `or` already had it and chains are newly
-                # exposed to it.
+                # argument exists.
+                #
+                # Be precise about the blast radius. `and` / `or` were already
+                # wrong this way, their operands being separate subtrees. A SINGLE
+                # comparison is not: its duplicate operand appears only inside an
+                # `IS NULL` test, whose outcome does not depend on the value drawn,
+                # so `50 < x` over `rand()` samples correctly. Chains previously
+                # fell back to interpreted Python, so lowering them is what newly
+                # exposes them to this.
+                #
+                # Folding into nested CASE WHENs instead -- atomic to predicate
+                # splitting -- was rejected: it costs pushdown for every
+                # `and` / `or` UDF, including those over non-nullable columns that
+                # need no guard at all.
                 #
                 # See the module docstring for the short-circuit and NULL-guard
                 # semantics this fold relies on.
