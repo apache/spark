@@ -51,12 +51,6 @@ sealed abstract class BlockId {
   override def toString: String = name
 }
 
-/** Mixed into every block id that belongs to a shuffle, so its shuffle can be found generically. */
-@DeveloperApi
-trait ShuffleId {
-  def shuffleId: Int
-}
-
 @DeveloperApi
 case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
   override def name: String = "rdd_" + rddId + "_" + splitIndex
@@ -65,8 +59,7 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
 // Format of the shuffle block ids (including data and index) should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
 @DeveloperApi
-case class ShuffleBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId
-    with ShuffleId {
+case class ShuffleBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
@@ -76,7 +69,7 @@ case class ShuffleBlockBatchId(
     shuffleId: Int,
     mapId: Long,
     startReduceId: Int,
-    endReduceId: Int) extends BlockId with ShuffleId {
+    endReduceId: Int) extends BlockId {
   override def name: String = {
     "shuffle_" + shuffleId + "_" + mapId + "_" + startReduceId + "_" + endReduceId
   }
@@ -88,20 +81,18 @@ case class ShuffleBlockChunkId(
     shuffleId: Int,
     shuffleMergeId: Int,
     reduceId: Int,
-    chunkId: Int) extends BlockId with ShuffleId {
+    chunkId: Int) extends BlockId {
   override def name: String =
     "shuffleChunk_" + shuffleId  + "_" + shuffleMergeId + "_" + reduceId + "_" + chunkId
 }
 
 @DeveloperApi
-case class ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId
-    with ShuffleId {
+case class ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"
 }
 
 @DeveloperApi
-case class ShuffleIndexBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId
-    with ShuffleId {
+case class ShuffleIndexBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
 }
 
@@ -117,7 +108,7 @@ case class ShufflePushBlockId(
     shuffleId: Int,
     shuffleMergeId: Int,
     mapIndex: Int,
-    reduceId: Int) extends BlockId with ShuffleId {
+    reduceId: Int) extends BlockId {
   override def name: String = "shufflePush_" + shuffleId + "_" +
     shuffleMergeId + "_" + mapIndex + "_" + reduceId + ""
 }
@@ -127,7 +118,7 @@ case class ShufflePushBlockId(
 case class ShuffleMergedBlockId(
     shuffleId: Int,
     shuffleMergeId: Int,
-    reduceId: Int) extends BlockId with ShuffleId {
+    reduceId: Int) extends BlockId {
   override def name: String = "shuffleMerged_" + shuffleId + "_" +
     shuffleMergeId + "_" + reduceId
 }
@@ -138,7 +129,7 @@ case class ShuffleMergedDataBlockId(
     appId: String,
     shuffleId: Int,
     shuffleMergeId: Int,
-    reduceId: Int) extends BlockId with ShuffleId {
+    reduceId: Int) extends BlockId {
   override def name: String = RemoteBlockPushResolver.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
     appId + "_" + shuffleId + "_" + shuffleMergeId + "_" + reduceId + ".data"
 }
@@ -149,7 +140,7 @@ case class ShuffleMergedIndexBlockId(
     appId: String,
     shuffleId: Int,
     shuffleMergeId: Int,
-    reduceId: Int) extends BlockId with ShuffleId {
+    reduceId: Int) extends BlockId {
   override def name: String = RemoteBlockPushResolver.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
     appId + "_" + shuffleId + "_" + shuffleMergeId + "_" + reduceId + ".index"
 }
@@ -160,7 +151,7 @@ case class ShuffleMergedMetaBlockId(
     appId: String,
     shuffleId: Int,
     shuffleMergeId: Int,
-    reduceId: Int) extends BlockId with ShuffleId {
+    reduceId: Int) extends BlockId {
   override def name: String = RemoteBlockPushResolver.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
     appId + "_" + shuffleId + "_" + shuffleMergeId + "_" + reduceId + ".meta"
 }
