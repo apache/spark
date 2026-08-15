@@ -960,6 +960,12 @@ private[spark] object Utils
     }
   }
 
+  /** Returns whether a literal IPv4 or IPv6 address binds to every local interface. */
+  private[spark] def isAnyLocalAddress(host: String): Boolean = {
+    val address = host.stripPrefix("[").stripSuffix("]")
+    InetAddresses.isInetAddress(address) && InetAddresses.forString(address).isAnyLocalAddress
+  }
+
   /**
    * Checks if the host contains only valid hostname/ip without port
    * NOTE: Incase of IPV6 ip it should be enclosed inside []
