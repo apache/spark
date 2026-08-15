@@ -2602,7 +2602,7 @@ package object config {
         "scheduler's root pool. The class must have a no-argument constructor. When unset, " +
         "the ordering is derived from spark.scheduler.mode (FAIR or FIFO). In FAIR mode the " +
         "root pool orders the top-level pools; in FIFO mode it orders the task sets directly.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .createOptional
