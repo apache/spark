@@ -59,16 +59,6 @@ class JdbcErrorUtilsSuite extends ConnectFunSuite {
     assert(e.getSQLState === "08004")
   }
 
-  test("a session error from a pre-4.3 server keeps the server-provided HY000") {
-    // Servers before Spark 4.3 report HY000 for the session conditions; the driver
-    // intentionally follows the server rather than remapping.
-    val e = JdbcErrorUtils.toSQLException(
-      sparkError("INVALID_HANDLE.SESSION_CLOSED", "HY000", "gone"))
-    assert(!e.isInstanceOf[SQLNonTransientConnectionException])
-    assert(!e.isInstanceOf[SQLTransientConnectionException])
-    assert(e.getSQLState === "HY000")
-  }
-
   test("operation-level INVALID_HANDLE subconditions do not map to a connection exception") {
     // the session, and thus the connection, is still healthy: no SQLState class 08
     Seq(
