@@ -833,6 +833,22 @@ struct<c:timestamp_ltz(9),count(1):bigint>
 
 
 -- !query
+SELECT k, count(*), sum(v) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 1),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 2),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 3),
+  (CAST(NULL AS timestamp_ltz(9)), 4),
+  (CAST(NULL AS timestamp_ltz(9)), 5) AS t(k, v)
+  GROUP BY k ORDER BY k
+-- !query schema
+struct<k:timestamp_ltz(9),count(1):bigint,sum(v):bigint>
+-- !query output
+NULL	2	9
+2019-12-31 16:00:00.000000001	2	3
+2019-12-31 16:00:00.000000999	1	3
+
+
+-- !query
 SELECT mode(c) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
