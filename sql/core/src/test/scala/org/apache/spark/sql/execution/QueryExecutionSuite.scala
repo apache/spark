@@ -25,7 +25,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator, SaveMode}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, NamedLambdaVariable, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Alias, NamedLambdaVariable, RegExpReplace, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -59,6 +59,14 @@ class QueryExecutionSuite extends SharedSparkSession {
     plan.collect {
       case node => node.expressions.flatMap(_.collect {
         case variable: NamedLambdaVariable => variable
+      })
+    }.flatten
+  }
+
+  private def collectRegExpReplaceExpressions(plan: LogicalPlan): Seq[RegExpReplace] = {
+    plan.collect {
+      case node => node.expressions.flatMap(_.collect {
+        case expression: RegExpReplace => expression
       })
     }.flatten
   }
@@ -126,6 +134,19 @@ class QueryExecutionSuite extends SharedSparkSession {
       assert(before.exprId == after.exprId)
       assert(before.value ne after.value)
     }
+  }
+
+  test("SPARK-58208: optimizedPlan keeps structurally equal fresh stateful expressions") {
+    val df = spark.range(1).selectExpr(
+      "regexp_replace(cast(id AS STRING), cast(id AS STRING), 'x') AS v")
+    val queryExecution = df.queryExecution
+
+    val beforeOptimize = collectRegExpReplaceExpressions(queryExecution.withCachedData)
+    val optimized = collectRegExpReplaceExpressions(queryExecution.optimizedPlan)
+
+    assert(beforeOptimize.size == 1)
+    assert(optimized.size == 1)
+    assert(beforeOptimize.head ne optimized.head)
   }
 
   test("dumping query execution info by invalid path") {

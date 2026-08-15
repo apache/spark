@@ -308,7 +308,7 @@ case class Uniform(
 
   override def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
-    Uniform(newFirst, newSecond, newThird, hideSeed)
+    copy(min = newFirst, max = newSecond, seedExpression = newThird)
 
   override def replacement: Expression = {
     if (Seq(min, max, seedExpression).exists(_.dataType == NullType)) {

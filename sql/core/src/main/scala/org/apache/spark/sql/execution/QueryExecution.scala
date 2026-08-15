@@ -309,8 +309,9 @@ class QueryExecution(
   def assertCommandExecuted(): Unit = commandExecuted
 
   private def cloneWithFreshStatefulExpressions(plan: LogicalPlan): LogicalPlan = {
-    plan.clone().transformWithSubqueries {
-      case node => node.mapExpressions(_.freshCopyIfContainsStatefulExpression())
+    plan.clone().transformDownWithSubqueriesAndReferenceEquality {
+      case node =>
+        node.mapExpressionsWithReferenceEquality(_.freshCopyIfContainsStatefulExpression())
     }
   }
 
