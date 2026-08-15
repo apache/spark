@@ -344,7 +344,9 @@ def neq_pair(x, y):
     return x != y
 
 
-# A module-scope lambda.
+# At module scope so the generated cases also cover the lambda branch of
+# ``_get_function_from_ast``, which resolves by source position rather than
+# structurally.
 lambda_plus_four = lambda x: x + 4 if x is not None else 0  # noqa: E731
 
 
