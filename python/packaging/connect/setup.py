@@ -25,7 +25,7 @@
 import sys
 from setuptools import setup
 import os
-from shutil import copyfile, copytree, move, rmtree
+from shutil import copyfile, copytree, rmtree
 import glob
 from pathlib import Path
 
@@ -57,18 +57,14 @@ in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.
 
 try:
     if in_spark:
-        # !!HACK ALTERT!!
-        # 1. `setup.py` has to be located with the same directory with the package.
-        #    Therefore, we copy the current file, and place it at `spark/python` directory.
-        #    After that, we remove it in the end.
-        # 2. Here it renames `pyspark` and `lib` to `pyspark.back` and `lib.back` so MANIFEST.in
-        #    does not pick `pyspark` and `py4j` up. We rename it back in the end.
-        move("pyspark", "pyspark.back")
-        move("lib", "lib.back")
+        # !!HACK ALERT!!
+        # `setup.py` has to be located with the same directory with the package.
+        # Therefore, we copy the current file, and place it at `spark/python` directory.
+        # After that, we remove it in the end.
         copyfile("packaging/connect/setup.py", "setup.py")
         copyfile("packaging/connect/setup.cfg", "setup.cfg")
         copytree("packaging/connect/pyspark_connect", "pyspark_connect")
-        copyfile("pyspark.back/version.py", "pyspark_connect/version.py")
+        copyfile("pyspark/version.py", "pyspark_connect/version.py")
 
     try:
         exec(open("pyspark_connect/version.py").read())
@@ -114,6 +110,7 @@ try:
         packages=connect_packages,
         include_package_data=True,
         license="Apache-2.0",
+        license_files=["LICENSE", "NOTICE"],
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=[
@@ -140,8 +137,6 @@ try:
     )
 finally:
     if in_spark:
-        move("pyspark.back", "pyspark")
-        move("lib.back", "lib")
         os.remove("setup.py")
         os.remove("setup.cfg")
         rmtree("pyspark_connect")
