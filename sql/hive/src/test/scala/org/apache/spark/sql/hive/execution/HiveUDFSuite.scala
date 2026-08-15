@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{DataInput, DataOutput, File, PrintWriter}
+import java.sql.{Date, Timestamp}
 import java.util.{ArrayList, Arrays, Properties}
 
 import scala.jdk.CollectionConverters._
@@ -35,13 +36,17 @@ import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, CodegenObjectFactoryMode, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
+import org.apache.spark.sql.hive.HiveGenericUDF
+import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.types.{TimestampType, TimeType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
@@ -883,6 +888,75 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
         s"""SELECT hive_concat(
            |         date_format(CAST(CURRENT_DATE() AS DATE), 'yyyyMMdd'),
            |         now())""".stripMargin).collect().length == 1)
+    }
+    hiveContext.reset()
+  }
+
+  test("SPARK-58792: copied HiveGenericUDF nodes must not share a mutable GenericUDF") {
+    val tsAttr = AttributeReference("ts", TimestampType, nullable = false)()
+    val constTs = Literal(
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2024-09-10 01:02:03")), TimestampType)
+    val original = HiveGenericUDF(
+      "default.date_add",
+      HiveFunctionWrapper(classOf[GenericUDFDateAdd].getName),
+      Seq(tsAttr, Literal(1)))
+    // Optimizer-created copies of a HiveGenericUDF (via withNewChildrenInternal) share
+    // one HiveFunctionWrapper, and used to share the single mutable GenericUDF
+    // instance cached inside it.
+    val constCopy = original.copy(children = Seq(constTs, Literal(1)))
+    assert(original.funcWrapper eq constCopy.funcWrapper)
+
+    val boundOriginal = BindReferences.bindReference(original, Seq(tsAttr))
+    val input = InternalRow(DateTimeUtils.fromJavaTimestamp(
+      Timestamp.valueOf("2023-12-25 10:00:00")))
+    // Interleave evaluation of the two copies the way a Project/Filter would. With a
+    // shared instance, the second evaluation of constCopy reuses the converters that
+    // the attribute copy's initialize() installed on the shared instance, and throws
+    // ClassCastException: TimestampWritable cannot be cast to java.sql.Timestamp.
+    (1 to 2).foreach { _ =>
+      assert(constCopy.eval(input) == DateTimeUtils.fromJavaDate(Date.valueOf("2024-09-11")))
+      assert(boundOriginal.eval(input) == DateTimeUtils.fromJavaDate(Date.valueOf("2023-12-26")))
+    }
+  }
+
+  test("SPARK-58792: inferred literal-binding conjunct must not corrupt a copied Hive UDF") {
+    // InferFiltersFromConstraints substitutes the pt = literal binding into the UDF
+    // conjunct and ANDs the substituted copy into the same Filter, so the Filter holds
+    // two copies of one UDF expression whose argument constness differs (literal vs.
+    // attribute). The conjunct is a bare boolean UDF call rather than a
+    // BinaryComparison, so ConstantPropagation (which substitutes into BinaryComparisons
+    // only) never rewrites the original conjunct into the same constant form, and the
+    // divergent pair reaches execution with stock rules - no rules excluded. A real
+    // table is used because a LocalRelation source lets the optimizer evaluate the
+    // Filter on the driver per-conjunct, which does not interleave the two copies.
+    // With a shared GenericUDF instance, the second row threw ClassCastException:
+    // TimestampWritable cannot be cast to java.sql.Timestamp.
+    withUserDefinedFunction("hive_gt" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION hive_gt AS '${classOf[GenericUDFOPGreaterThan].getName}'")
+      withTable("gt_table") {
+        sql("CREATE TABLE gt_table (id INT, pt DATE, created_at TIMESTAMP) STORED AS PARQUET")
+        sql("""
+          |INSERT INTO gt_table VALUES
+          |  (1, DATE '2024-09-10', TIMESTAMP '2024-09-01 00:00:00'),
+          |  (2, DATE '2024-09-10', TIMESTAMP '2024-09-05 00:00:00'),
+          |  (3, DATE '2024-09-10', TIMESTAMP '2024-09-15 00:00:00'),
+          |  (4, DATE '2024-09-11', TIMESTAMP '2024-09-01 00:00:00')
+          |""".stripMargin)
+        val df = sql("""
+          |SELECT id FROM gt_table
+          |WHERE pt = DATE '2024-09-10'
+          |  AND hive_gt(CAST(pt AS TIMESTAMP), created_at)
+          |ORDER BY id
+          |""".stripMargin)
+        // Guard against the test going silently vacuous: the optimized Filter must
+        // hold both copies, exactly one of them with a literal first argument.
+        val udfs = df.queryExecution.optimizedPlan.collect {
+          case f: Filter => f.condition.collect { case u: HiveGenericUDF => u }
+        }.flatten
+        assert(udfs.size == 2)
+        assert(udfs.count(_.children.head.isInstanceOf[Literal]) == 1)
+        checkAnswer(df, Row(1) :: Row(2) :: Nil)
+      }
     }
     hiveContext.reset()
   }
