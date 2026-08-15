@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{ByteArrayInputStream, FileNotFoundException, InputStream, IOException}
+import java.io.{ByteArrayInputStream, Closeable, FileNotFoundException, InputStream, IOException}
 import java.nio.charset.{Charset, StandardCharsets}
 
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -34,7 +34,7 @@ import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, StaxXMLRecordReader, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -81,13 +81,16 @@ abstract class XmlDataSource extends Serializable with Logging with SupportsArch
    * `XmlFileFormat` read path supports archives; XML has no DSv2 reader.
    *
    * @param parser builds a fresh XML parser for each entry.
+   * @param archivePathFilter optional glob matched against the entry's full path
    */
   def readArchive(
       conf: Configuration,
       file: PartitionedFile,
       parser: () => StaxXmlParser,
-      schema: StructType): Iterator[InternalRow] =
-    SupportsArchiveFormat.readArchiveEntries(file.toPath, conf) { (_, in) =>
+      schema: StructType,
+      archivePathFilter: Option[GlobPattern]): Iterator[InternalRow] =
+    SupportsArchiveFormat.readArchiveEntries(
+        file.toPath, conf, archivePathFilter = archivePathFilter) { (_, in) =>
       readStream(in, parser(), schema)
     }
 
@@ -101,15 +104,7 @@ abstract class XmlDataSource extends Serializable with Logging with SupportsArch
     parsedOptions.singleVariantColumn match {
       case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
       case None =>
-        // When any input is a tar archive, infer over all inputs in a single pass -- archive
-        // entries are streamed (never unpacked to disk) and tokenized as XML records alongside any
-        // loose files -- so the result matches a directory read of the same files. XML has no DSv2
-        // reader, so this archive scan is always V1.
-        val hasArchive = parsedOptions.archiveFormatEnabled &&
-          inputPaths.exists(f => SupportsArchiveFormat.isArchivePath(f.getPath))
-        if (hasArchive) {
-          Some(inferWithArchives(sparkSession, inputPaths, parsedOptions))
-        } else if (inputPaths.nonEmpty) {
+        if (inputPaths.nonEmpty) {
           Some(infer(sparkSession, inputPaths, parsedOptions))
         } else {
           None
@@ -121,69 +116,6 @@ abstract class XmlDataSource extends Serializable with Logging with SupportsArch
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: XmlOptions): StructType
-
-  /**
-   * Infers an XML schema when at least one input is a tar archive (`.tar`/`.tar.gz`/`.tgz`). Every
-   * archive entry (streamed through `SupportsArchiveFormat`, never unpacked to disk) and every
-   * loose file is tokenized into records and fed to a single [[XmlInferSchema]] pass, exactly as a
-   * directory of the same files would infer. Tokenization is per-mode so it matches the scan:
-   * multi-line splits the whole stream into `rowTag`-delimited records, single-line treats each
-   * line as a record (mirroring [[readFile]] and JSON's `inferWithArchives`).
-   */
-  private def inferWithArchives(
-      sparkSession: SparkSession,
-      inputPaths: Seq[FileStatus],
-      parsedOptions: XmlOptions): StructType = {
-    val baseRdd = createBaseRdd(sparkSession, inputPaths, parsedOptions)
-    val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
-    val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
-
-    // Applies `perEntry` to each input -- an archive entry by entry (streamed, so only one entry's
-    // bytes are in flight at a time), a loose file directly -- skipping a whole input when it is
-    // corrupt/missing and the ignore flags are set.
-    def perInput(perEntry: InputStream => Iterator[String]): RDD[String] = baseRdd.flatMap {
-      stream =>
-        val path = new Path(stream.getPath())
-        try {
-          if (SupportsArchiveFormat.isArchivePath(path)) {
-            SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
-              perEntry(in)
-            }
-          } else {
-            perEntry(
-              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
-          }
-        } catch {
-          case e: FileNotFoundException if ignoreMissingFiles =>
-            logWarning("Skipped missing file", e)
-            Iterator.empty[String]
-          case NonFatal(e) =>
-            Utils.getRootCause(e) match {
-              case root @ (_: AccessControlException | _: BlockMissingException) => throw root
-              case _: RuntimeException | _: IOException if ignoreCorruptFiles =>
-                logWarning("Skipped the rest of the content in the corrupted file", e)
-                Iterator.empty[String]
-              case other => throw other
-            }
-        }
-    }
-
-    // Tokenize each input the way this mode's scan reads records, so the inferred schema matches a
-    // directory read: multi-line splits the whole stream into rowTag-delimited records, single-line
-    // treats each line as a record (mirroring TextInputXmlDataSource.readFile).
-    val tokenRDD: RDD[String] = if (parsedOptions.multiLine) {
-      perInput(in => StaxXmlParser.tokenizeStream(in, parsedOptions))
-    } else {
-      val charset = parsedOptions.charset
-      perInput(in => lineIterator(in, None).map { line =>
-        new String(line.getBytes, 0, line.getLength, charset)
-      })
-    }
-    SQLExecution.withSQLConfPropagated(sparkSession) {
-      new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
-        .infer(tokenRDD)
-    }
-  }
 
   protected def createBaseRdd(
       sparkSession: SparkSession,
@@ -358,6 +290,12 @@ object MultiLineXmlDataSource extends XmlDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: XmlOptions): StructType = {
 
+    val hasArchive = parsedOptions.archiveFormatEnabled &&
+      inputPaths.exists(f => SupportsArchiveFormat.isArchivePath(f.getPath))
+    if (hasArchive) {
+      return inferWithArchives(sparkSession, inputPaths, parsedOptions)
+    }
+
     if (!parsedOptions.useLegacyXMLParser) {
       return inferOptimized(sparkSession, inputPaths, parsedOptions)
     }
@@ -416,6 +354,105 @@ object MultiLineXmlDataSource extends XmlDataSource {
         new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
           .inferFromReaders(xmlParserRdd)
       schema
+    }
+  }
+
+  /**
+   * Infers a multi-line XML schema when at least one input is an archive. Every archive entry
+   * (streamed through `SupportsArchiveFormat`, never unpacked to disk) and every loose file is
+   * tokenized into `rowTag`-delimited records and fed to a single [[XmlInferSchema]] pass, exactly
+   * as a directory of the same files would infer. Single-line archive inference does not come here:
+   * the Text data source reads archives directly, so it flows through
+   * [[TextInputXmlDataSource.infer]] like any directory read. Corrupt/missing inputs are skipped
+   * when the ignore flags are set (see [[skipInputOnError]]). Uses the legacy tokenizer because the
+   * optimized parser re-opens its input, which a single-use archive entry stream does not support.
+   */
+  private def inferWithArchives(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus],
+      parsedOptions: XmlOptions): StructType = {
+    val baseRdd = createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
+    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
+    // compiles it once when the archive branch is taken.
+    val archivePathFilterGlob = parsedOptions.archivePathFilter
+    val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
+    val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
+
+    val tokenRDD: RDD[String] = baseRdd.mapPartitions { streams =>
+      // Compile at most once per partition: lazy so a partition of only loose files never
+      // compiles, while a partition with archives reuses one matcher across all of them.
+      lazy val archivePathFilter =
+        archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      streams.flatMap { stream =>
+        val path = new Path(stream.getPath())
+        skipInputOnError(ignoreMissingFiles, ignoreCorruptFiles) {
+          if (SupportsArchiveFormat.isArchivePath(path)) {
+            SupportsArchiveFormat.readArchiveEntries(
+              path, stream.getConfiguration, archivePathFilter = archivePathFilter) {
+              (_, in) =>
+              StaxXmlParser.tokenizeStream(in, parsedOptions)
+            }
+          } else {
+            StaxXmlParser.tokenizeStream(
+              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
+              parsedOptions)
+          }
+        }
+      }
+    }
+    SQLExecution.withSQLConfPropagated(sparkSession) {
+      new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
+        .infer(tokenRDD)
+    }
+  }
+
+  /**
+   * Builds one input's token iterator, catching a missing/corrupt error when the ignore flags are
+   * set. `readArchiveEntries` advances to later entries lazily, so a corrupt later entry throws on
+   * `hasNext`, not at construction; the returned iterator catches both. A construction failure
+   * skips the whole input; a mid-advance failure keeps the records already yielded and skips only
+   * the remainder of the archive. Access/block errors are always rethrown (unwrapped), matching the
+   * non-archive read path.
+   */
+  private def skipInputOnError(
+      ignoreMissingFiles: Boolean,
+      ignoreCorruptFiles: Boolean)(
+      build: => Iterator[String]): Iterator[String] = {
+    def handle(e: Throwable): Iterator[String] = e match {
+      case e: FileNotFoundException if ignoreMissingFiles =>
+        logWarning("Skipped missing file", e)
+        Iterator.empty[String]
+      case NonFatal(e) =>
+        Utils.getRootCause(e) match {
+          case root @ (_: AccessControlException | _: BlockMissingException) => throw root
+          case _: RuntimeException | _: IOException if ignoreCorruptFiles =>
+            logWarning("Skipped the rest of the content in the corrupted file", e)
+            Iterator.empty[String]
+          case other => throw other
+        }
+    }
+
+    val underlying =
+      try build
+      catch { case NonFatal(e) => return handle(e) }
+
+    new Iterator[String] {
+      private var delegate = underlying
+      override def hasNext: Boolean =
+        try delegate.hasNext
+        catch {
+          case NonFatal(e) =>
+            // A mid-advance throw reaches neither exhaustion nor close, so close the failed
+            // iterator here to release its archive stream promptly rather than at task completion.
+            delegate match {
+              case c: Closeable => try c.close() catch { case NonFatal(_) => }
+              case _ =>
+            }
+            delegate = handle(e)
+            delegate.hasNext
+        }
+      override def next(): String = delegate.next()
     }
   }
 }

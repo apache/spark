@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAnd
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.debug.codegenString
+import org.apache.spark.sql.execution.debug.{codegenString, codegenStringSeq}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -751,6 +751,12 @@ class WholeStageCodegenSuite extends SharedSparkSession
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortExec]))
     assert(df.collect() === Array(Row(1), Row(2), Row(3)))
+  }
+
+  test("SPARK-58437: SortExec generates assignable iterator type") {
+    val code = genCode(spark.range(3, 0, -1).toDF().sort(col("id"))).map(_.body).mkString("\n")
+    assert(!code.contains("scala.collection.Iterator<UnsafeRow>"))
+    assert(code.contains("scala.collection.Iterator<InternalRow>"))
   }
 
   test("MapElements should be included in WholeStageCodegen") {
@@ -1549,5 +1555,66 @@ class WholeStageCodegenSuite extends SharedSparkSession
     assert(enabledCount < disabledCount,
       s"subexpressionElimination.filterExec.enabled should reduce repeated evaluation: " +
         s"addExact appears $enabledCount times when enabled vs $disabledCount times when disabled")
+  }
+
+  test("Expand should eliminate common subexpressions across branches") {
+    // The conditions of the two conditional COUNT DISTINCT aggregates share `sinh(v)`, which
+    // `RewriteDistinctAggregates` places in different branches of the Expand. Since all the
+    // branches of an Expand consume the same input row, with subexpression elimination
+    // `sinh(v)` should be evaluated once per input row (before the branch loop) instead of
+    // once per branch.
+    def runQuery(): String = {
+      val df = spark.range(10)
+        .selectExpr("id as k", "cast(id as double) as v")
+        .selectExpr(
+          "count(DISTINCT IF(sinh(v) > 5.0, k, NULL))",
+          "count(DISTINCT IF(sinh(v) > 50.0, v, NULL))")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[ExpandExec]), "Expand is expected")
+      checkAnswer(df, Row(7L, 5L))
+      codegenStringSeq(plan).map(_._2).mkString
+    }
+
+    val sinhPattern = "java\\.lang\\.Math\\.sinh".r
+    val enabledCode = withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+      runQuery()
+    }
+    val disabledCode = withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
+      runQuery()
+    }
+    assert(sinhPattern.findAllIn(enabledCode).length == 1,
+      "sinh(v) should be evaluated only once per input row with subexpression elimination")
+    assert(sinhPattern.findAllIn(disabledCode).length == 2,
+      "sinh(v) should be evaluated once per branch without subexpression elimination")
+
+    // Whether the switch/case bodies are split into separate functions (SPARK-35329)
+    // depends on the amount of code generated for the branches, so force both code paths
+    // explicitly instead of relying on the default methodSplitThreshold. With a tiny
+    // threshold the bodies are split and the eliminated subexpression variables have to
+    // be passed to the split functions as parameters; with a huge threshold the bodies
+    // stay inline and reference the variables directly. ExpandExec names each split
+    // function via `ctx.freshName("switchCaseCode")` (e.g. `switchCaseCode_0`) and emits
+    // both its definition and call site into the generated source, so the substring
+    // "switchCaseCode" appears in the generated code if and only if a split happened.
+    val splitCode = withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      runQuery()
+    }
+    assert(splitCode.contains("switchCaseCode"),
+      "switch/case bodies should be split into separate functions with a tiny " +
+        "methodSplitThreshold")
+    assert(sinhPattern.findAllIn(splitCode).length == 1,
+      "sinh(v) should be evaluated only once per input row with function splitting")
+
+    val inlineCode = withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1000000") {
+      runQuery()
+    }
+    assert(!inlineCode.contains("switchCaseCode"),
+      "switch/case bodies should stay inline with a large methodSplitThreshold")
+    assert(sinhPattern.findAllIn(inlineCode).length == 1,
+      "sinh(v) should be evaluated only once per input row without function splitting")
   }
 }

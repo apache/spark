@@ -59,7 +59,7 @@ import org.apache.spark.annotation.Private;
  * {@link CredentialProvider} contract, implementations must be thread-safe, so a returned
  * instance may be used concurrently.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @Private
 public final class CredentialProviderLoader {
@@ -252,6 +252,52 @@ public final class CredentialProviderLoader {
   }
 
   /**
+   * Closes all initialized providers, suppressing individual close exceptions.
+   * <p>
+   * This method iterates over all providers that have been initialized via
+   * {@link CredentialProvider#init(Map)} and calls {@link CredentialProvider#close()}
+   * on each. If any provider's {@code close()} throws, the exception is suppressed
+   * and attached to the first exception encountered. If at least one exception occurred,
+   * it is thrown after all providers have been attempted.
+   * <p>
+   * After this method returns (normally or exceptionally), the initialization tracking
+   * is cleared, but the cached provider list is retained. This means providers would be
+   * re-initialized on the next {@link #providerFor} call (which is not expected after
+   * shutdown).
+   * <p>
+   * <b>Contract:</b> {@code close()} implementations must not call back into
+   * {@code CredentialProviderLoader} methods (e.g., {@code providerFor}).
+   *
+   * @throws Exception if one or more providers threw during close
+   */
+  public static void closeAll() throws Exception {
+    List<CredentialProvider> toClose;
+    synchronized (CredentialProviderLoader.class) {
+      // Copy and clear under the lock to prevent double-close if closeAll() is called
+      // again concurrently, and to avoid ConcurrentModificationException.
+      toClose = new ArrayList<>(initializedProviders);
+      initializedProviders.clear();
+    }
+    // Close outside the lock so a slow or blocking close() cannot stall
+    // providerFor() callers or deadlock against them.
+    Exception firstException = null;
+    for (CredentialProvider provider : toClose) {
+      try {
+        provider.close();
+      } catch (Exception e) {
+        if (firstException == null) {
+          firstException = e;
+        } else {
+          firstException.addSuppressed(e);
+        }
+      }
+    }
+    if (firstException != null) {
+      throw firstException;
+    }
+  }
+
+  /**
    * Resets the cached provider list and initialization tracking. Intended for testing only.
    */
   @VisibleForTesting
@@ -265,6 +311,7 @@ public final class CredentialProviderLoader {
   /**
    * Overrides the cached provider list for testing. Intended for testing only.
    */
+  @VisibleForTesting
   static void setProvidersForTesting(List<CredentialProvider> providers) {
     synchronized (CredentialProviderLoader.class) {
       cachedProviders = providers;

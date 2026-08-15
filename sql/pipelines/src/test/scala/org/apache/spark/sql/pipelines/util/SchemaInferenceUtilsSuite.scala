@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.types._
 
@@ -269,5 +269,133 @@ class SchemaInferenceUtilsSuite extends SparkFunSuite {
 
     assert(addedColumnNames === Set("full_name", "email"))
     assert(deletedColumnNames === Set("first_name", "last_name"))
+  }
+
+  test("determineColumnChanges - a case-only difference is a drop-then-add, not a match") {
+    // diffSchemas keys column identity on the EXACT field name, with no case normalization. So a
+    // target `Value` against a persisted `value` is a distinct column: `value` is dropped and
+    // `Value` added. This is what makes a case-only rename visible on the non-merging paths
+    // (materialized views, full refresh), where targetSchema is the declared schema as-is.
+    val currentSchema = new StructType().add("id", IntegerType).add("value", StringType)
+    val targetSchema = new StructType().add("id", IntegerType).add("Value", StringType)
+
+    val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+
+    val addChanges = changes.collect { case ac: TableChange.AddColumn => ac.fieldNames()(0) }
+    val deleteChanges = changes.collect { case dc: TableChange.DeleteColumn => dc.fieldNames()(0) }
+    assert(addChanges === Seq("Value"))
+    assert(deleteChanges === Seq("value"))
+  }
+
+  test("determineColumnChanges - two declared columns differing only in case are both kept") {
+    // A declared schema carrying both `value` and `Value` reaches diffSchemas verbatim (nothing on
+    // the create path rejects duplicate-cased columns). Exact-name keying must surface BOTH as
+    // additions; normalizing the lookup key would collapse them and silently keep an arbitrary one
+    // (whichever came last), losing a column the user declared.
+    val currentSchema = new StructType().add("id", IntegerType)
+    val targetSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("Value", IntegerType)
+
+    val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+
+    val added = changes.collect { case ac: TableChange.AddColumn =>
+      ac.fieldNames()(0) -> ac.dataType()
+    }.toMap
+    assert(added === Map("value" -> StringType, "Value" -> IntegerType))
+  }
+
+  test("mergeSchemas - a nested field differing only in case folds onto the existing field when " +
+    "case-insensitive") {
+    // The nested analog of the top-level case-only fold. `StructType.merge` propagates the
+    // case-sensitivity flag into nested struct merges (SPARK-58525), so the incoming `s.Value` is
+    // matched to the existing `s.value` and the struct keeps a single field with the persisted
+    // (left) spelling -- rather than growing a second, case-differing nested field.
+    val currentSchema = new StructType()
+      .add("id", IntegerType)
+      .add("s", new StructType().add("value", StringType))
+    val dataSchema = new StructType()
+      .add("id", IntegerType)
+      .add("s", new StructType().add("Value", StringType))
+
+    val merged =
+      SchemaMergingUtils.mergeSchemas(currentSchema, dataSchema, caseSensitive = false)
+    assert(merged === currentSchema)
+
+    // Because the merge is a no-op, evolution derives no table changes at all: in particular the
+    // nested struct is NOT rewritten (which would be an UpdateColumnType on `s`).
+    assert(
+      SchemaInferenceUtils.diffSchemas(currentSchema, merged).isEmpty)
+  }
+
+  test("mergeSchemas - a nested field differing only in case stays distinct when case-sensitive") {
+    // The case-sensitive control: `s.value` and `s.Value` are different fields, so the merged
+    // struct carries both.
+    val currentSchema = new StructType().add("s", new StructType().add("value", StringType))
+    val dataSchema = new StructType().add("s", new StructType().add("Value", StringType))
+
+    val merged = SchemaMergingUtils.mergeSchemas(currentSchema, dataSchema, caseSensitive = true)
+    val expectedStruct = new StructType().add("value", StringType).add("Value", StringType)
+    assert(merged === new StructType().add("s", expectedStruct))
+
+    // Unlike the case-insensitive test above (where the merge is a no-op and no changes are
+    // derived), evolution here must rewrite the top-level `s` column. `diffSchemas` compares nested
+    // types wholesale, so the growth of a nested field surfaces as a single UpdateColumnType on `s`
+    // carrying the full new struct -- not as an add of `s.Value`.
+    val changes = SchemaInferenceUtils.diffSchemas(currentSchema, merged)
+    assert(changes.length === 1)
+    val typeChange = changes.collect { case tc: TableChange.UpdateColumnType => tc }
+    assert(typeChange.length === 1)
+    assert(typeChange.head.fieldNames() === Array("s"))
+    assert(typeChange.head.newDataType() === expectedStruct)
+  }
+
+  test("mergeSchemas - a nested case-only field whose type also changes fails to merge, and " +
+    "diffSchemas reports it as a type change") {
+    // A nested field that differs only in case AND changes type is rejected rather than silently
+    // resolved. Note this is a *type* incompatibility, not a case one: `StructType.merge` never
+    // widens numeric types, so `int` -> `long` fails identically for a same-cased field and at the
+    // top level. The value of pinning it here is that case-insensitive matching does not turn an
+    // incompatible type change into a silent merge -- the run still fails loudly, and the user's
+    // remedy is a full refresh.
+    val currentSchema = new StructType().add("s", new StructType().add("value", IntegerType))
+    val dataSchema = new StructType().add("s", new StructType().add("Value", LongType))
+
+    val ex = intercept[SparkException] {
+      SchemaMergingUtils.mergeSchemas(currentSchema, dataSchema, caseSensitive = false)
+    }
+    assert(ex.getCondition === "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
+
+    // Same-cased and top-level widening fail the same way, confirming the rejection is about the
+    // type change rather than the case difference.
+    intercept[SparkException] {
+      SchemaMergingUtils.mergeSchemas(
+        currentSchema,
+        new StructType().add("s", new StructType().add("value", LongType)),
+        caseSensitive = false)
+    }
+    intercept[SparkException] {
+      SchemaMergingUtils.mergeSchemas(
+        new StructType().add("v", IntegerType),
+        new StructType().add("v", LongType),
+        caseSensitive = false)
+    }
+
+    // Diffing the two schemas directly (rather than diffing against their merge, which fails
+    // above) reports a TYPE change on the enclosing `s` column -- not a field-name mismatch, i.e.
+    // not an add of `s.Value` plus a delete of `s.value`. `diffSchemas` keys column identity only
+    // at the top level and compares nested types wholesale, so the case difference inside the
+    // struct never surfaces as an add/delete pair.
+    {
+      val changes = SchemaInferenceUtils.diffSchemas(currentSchema, dataSchema)
+      assert(changes.length === 1, s"changes=$changes")
+      val typeChange = changes.collect { case tc: TableChange.UpdateColumnType => tc }
+      assert(typeChange.length === 1, s"changes=$changes")
+      assert(typeChange.head.fieldNames() === Array("s"))
+      assert(typeChange.head.newDataType() === new StructType().add("Value", LongType))
+      assert(!changes.exists(_.isInstanceOf[TableChange.AddColumn]))
+      assert(!changes.exists(_.isInstanceOf[TableChange.DeleteColumn]))
+    }
   }
 }

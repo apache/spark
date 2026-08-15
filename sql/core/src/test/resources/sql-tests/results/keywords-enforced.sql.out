@@ -130,8 +130,10 @@ DOUBLE	false
 DROP	false
 ELSE	true
 ELSEIF	false
+EMPTY	false
 END	true
 ENFORCED	false
+ERROR	false
 ESCAPE	true
 ESCAPED	false
 EVOLUTION	false
@@ -210,6 +212,8 @@ ITEMS	false
 ITERATE	false
 JOIN	true
 JSON	false
+JSON_TABLE	false
+JSON_VALUE	false
 KEY	false
 KEYS	false
 LANGUAGE	false
@@ -277,6 +281,7 @@ OPTION	false
 OPTIONS	false
 OR	true
 ORDER	true
+ORDINALITY	false
 OUT	false
 OUTER	true
 OUTPUTFORMAT	false
@@ -324,6 +329,7 @@ RESET	false
 RESPECT	false
 RESTRICT	false
 RETURN	false
+RETURNING	false
 RETURNS	false
 REVOKE	false
 RIGHT	true
@@ -412,6 +418,7 @@ UNION	true
 UNIQUE	true
 UNKNOWN	true
 UNLOCK	false
+UNNEST	false
 UNPIVOT	false
 UNSET	false
 UNTIL	false

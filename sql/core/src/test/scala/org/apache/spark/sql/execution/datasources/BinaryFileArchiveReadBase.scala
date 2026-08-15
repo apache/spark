@@ -50,14 +50,6 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
   /** Extension of the archive [[writeCorruptArchive]] produces (corruption is format-specific). */
   protected def corruptArchiveExtension: String
 
-  /**
-   * Whether the container reports each entry's size up front. Streaming zip
-   * (`ZipArchiveInputStream`) does not -- an entry sized only by a trailing data descriptor reads
-   * back as `-1` -- so the per-entry `length` tests are skipped for zip until it moves to
-   * `ZipFile`. tar and 7z report real sizes.
-   */
-  protected def entrySizeKnown: Boolean = true
-
   override def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ARCHIVE_FORMAT_READER_ENABLED.key, "true")
 
@@ -98,7 +90,6 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
   }
 
   test("wholeFile=false sources path and length from each entry, modtime from the parent") {
-    assume(entrySizeKnown)
     withArchiveFile() { archive =>
       writeArchive(archive, Seq("a.bin" -> bytes("aaa"), "b.bin" -> bytes("bbbb")))
       val rows = read(archive.getCanonicalPath, Map("wholeFile" -> "false"))
@@ -113,6 +104,37 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
       assert(byEntry === Map("a.bin" -> 3L, "b.bin" -> 4L))
       // modificationTime stays the parent archive's, identical across entries.
       assert(rows.map(_.getTimestamp(2)).distinct.length == 1)
+    }
+  }
+
+  test("wholeFile=false _metadata exposes the parent archive's values for every row") {
+    archiveExtensions.foreach { ext =>
+      withArchiveFile(ext) { archive =>
+        writeArchive(archive, Seq("a.bin" -> bytes("aaa"), "b.bin" -> bytes("bbbb")))
+        val rows = read(archive.getCanonicalPath, Map("wholeFile" -> "false"))
+          .select("_metadata.file_path", "_metadata.file_name", "_metadata.file_size",
+            "_metadata.file_block_start", "_metadata.file_block_length",
+            "_metadata.file_modification_time")
+          .collect()
+        assert(rows.length == 2)
+
+        val fileSize = archive.length()
+        rows.foreach { r =>
+          // The `path`/`length` data columns are per entry here, but _metadata stays parent-only:
+          // it is derived from the single PartitionedFile.
+          assert(r.getString(0).endsWith(archive.getName) && !r.getString(0).contains("!/"),
+            s"file_path should be the archive file, got ${r.getString(0)}")
+          assert(r.getString(1) == archive.getName, s"file_name mismatch: ${r.getString(1)}")
+          assert(r.getLong(2) == fileSize, s"file_size mismatch: ${r.getLong(2)} != $fileSize")
+          assert(r.getLong(3) == 0L, s"file_block_start should be 0, got ${r.getLong(3)}")
+          assert(r.getLong(4) == fileSize,
+            s"file_block_length should be the archive size, got ${r.getLong(4)}")
+          assert(r.getAs[java.sql.Timestamp](5).getTime == archive.lastModified(),
+            "file_modification_time should be the archive's mtime")
+        }
+        assert(rows.map(_.toSeq).distinct.length == 1,
+          "every row must carry the same parent-archive metadata")
+      }
     }
   }
 
@@ -135,8 +157,20 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("wholeFile=false honors archivePathFilter, applied on top of hidden-entry filtering") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(
+        "keep/a.bin" -> bytes("a"),
+        "keep/_hidden.bin" -> bytes("drop"), // matches the glob but hidden
+        "other/b.bin" -> bytes("drop")))
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("wholeFile" -> "false", "archivePathFilter" -> "keep/*"))
+          .select("content"),
+        Seq(Row(bytes("a"))))
+    }
+  }
+
   test("wholeFile=false enforces SOURCES_BINARY_FILE_MAX_LENGTH per entry") {
-    assume(entrySizeKnown)
     withArchiveFile() { archive =>
       writeArchive(archive, Seq("big.bin" -> bytes("0123456789")))
       withSQLConf(SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH.key -> "4") {
@@ -149,7 +183,6 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
   }
 
   test("wholeFile=false honors length filter pushdown against each entry") {
-    assume(entrySizeKnown)
     withArchiveFile() { archive =>
       writeArchive(archive, Seq("a.bin" -> bytes("aaa"), "b.bin" -> bytes("bbbb")))
       // Entry lengths are 3 and 4; the filter selects per entry, not against the archive size.
@@ -220,11 +253,6 @@ class BinaryFileTarArchiveReadSuite extends BinaryFileArchiveReadBase with TarAr
 class BinaryFileZipArchiveReadSuite extends BinaryFileArchiveReadBase with ZipArchiveTestUtils {
 
   override protected def corruptArchiveExtension: String = "zip"
-
-  // Streaming `ZipArchiveInputStream` cannot report an entry's size before reading it, so the
-  // per-entry `length` tests are skipped for zip. Remove this override once zip reads move to
-  // `ZipFile`, which exposes entry sizes from the central directory.
-  override protected def entrySizeKnown: Boolean = false
 }
 
 class BinaryFileSevenZArchiveReadSuite

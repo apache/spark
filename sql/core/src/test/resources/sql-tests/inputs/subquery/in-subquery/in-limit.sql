@@ -88,6 +88,7 @@ FROM   t1
 WHERE  t1a IN (SELECT t2a
                FROM   t2
                WHERE  t1d = t2d
+               ORDER BY t2a
                LIMIT 10
                OFFSET 2)
 LIMIT  2
@@ -109,6 +110,7 @@ FROM   t1
 WHERE  t1a IN (SELECT t2a
                FROM   t2
                WHERE  t1d = t2d
+               ORDER BY t2a
                OFFSET 2)
 OFFSET 1;
 
@@ -118,6 +120,7 @@ FROM   t1
 WHERE  t1c IN (SELECT t2c
                FROM   t2
                WHERE  t2b >= 8
+               ORDER  BY t2c NULLS LAST
                LIMIT  2)
 LIMIT 4;
 
@@ -138,6 +141,7 @@ FROM   t1
 WHERE  t1c IN (SELECT t2c
                FROM   t2
                WHERE  t2b <= t1d
+               ORDER  BY t2c NULLS LAST
                LIMIT  2)
 LIMIT 4;
 
@@ -148,6 +152,7 @@ FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
                    WHERE  t2b > 6
+                   ORDER  BY t2b
                    LIMIT  2);
 
 -- TC 01.05
@@ -200,6 +205,7 @@ FROM   t1
 WHERE  t1c IN (SELECT t2c
                FROM   t2
                WHERE  t2b >= 8
+               ORDER  BY t2c NULLS LAST
                LIMIT  2
                OFFSET 2)
 LIMIT 4
@@ -225,6 +231,7 @@ FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
                    WHERE  t2b > 6
+                   ORDER  BY t2b
                    LIMIT  2
                    OFFSET 2);
 
@@ -233,6 +240,7 @@ FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
                    WHERE  t2b <= t1d
+                   ORDER  BY t2b
                    LIMIT  2);
 
 SELECT *
@@ -296,6 +304,7 @@ FROM   t1
 WHERE  t1c IN (SELECT t2c
                FROM   t2
                WHERE  t2b >= 8
+               ORDER BY t2c DESC NULLS LAST
                OFFSET 2)
 OFFSET 4;
 
@@ -327,6 +336,7 @@ FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
                    WHERE  t2b > 6
+                   ORDER  BY t2b
                    OFFSET 2);
 
 -- OFFSET with NOT IN correlated

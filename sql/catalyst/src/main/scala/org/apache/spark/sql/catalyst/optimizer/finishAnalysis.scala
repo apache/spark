@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
-import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToNanosOfDay, truncateTimeToPrecision}
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToNanosOfDay, instantToTimestampNanos, localDateTimeToTimestampNanos, truncateTimeToPrecision}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
@@ -119,6 +119,11 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
     val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
     val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
+    // Nanosecond current-timestamp literals depend on the requested precision (sub-precision
+    // digits are floored), so they are cached separately from the microsecond ones. LTZ is keyed
+    // by precision only; NTZ (localtimestamp) is keyed by (zone, precision) like its micro sibling.
+    val currentTimestampNanos = collection.mutable.HashMap.empty[Int, Literal]
+    val localTimestampNanos = collection.mutable.HashMap.empty[(ZoneId, Int), Literal]
 
     // CAST_TO_TIMESTAMP is a dedicated tree-pattern bit set on Cast nodes whose target type is
     // any timestamp type (NTZ or LTZ family). This lets the rule reach both TIME -> TIMESTAMP_NTZ
@@ -186,11 +191,24 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
               currentTimeType.precision)
             Literal.create(truncatedTime, TimeType(currentTimeType.precision))
           case CurrentTimestamp() | Now() => currentTime
+          case ct: CurrentTimestampNanos =>
+            currentTimestampNanos.getOrElseUpdate(ct.precision, {
+              Literal.create(
+                instantToTimestampNanos(instant, ct.precision),
+                TimestampLTZNanosType(ct.precision))
+            })
           case CurrentTimeZone() => timezone
           case localTimestamp: LocalTimestamp =>
             localTimestamps.getOrElseUpdate(localTimestamp.zoneId, {
               val asDateTime = LocalDateTime.ofInstant(instant, localTimestamp.zoneId)
               Literal.create(localDateTimeToMicros(asDateTime), TimestampNTZType)
+            })
+          case lt: LocalTimestampNanos =>
+            localTimestampNanos.getOrElseUpdate((lt.zoneId, lt.precision), {
+              val asDateTime = LocalDateTime.ofInstant(instant, lt.zoneId)
+              Literal.create(
+                localDateTimeToTimestampNanos(asDateTime, lt.precision),
+                TimestampNTZNanosType(lt.precision))
             })
         }
     }

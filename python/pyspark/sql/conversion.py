@@ -503,7 +503,10 @@ class PandasToArrowConversion:
                         )
                     raise PySparkValueError(error_msg) from e
 
-        arrays = [convert_column(col, field) for col, field in zip(columns, schema.fields)]
+        converted = [convert_column(col, field) for col, field in zip(columns, schema.fields)]
+        # pa.Array.from_pandas returns a pa.ChunkedArray for a chunked arrow-backed Series
+        # (e.g. a pyarrow-backed extension dtype), which pa.RecordBatch.from_arrays rejects.
+        arrays = [a.combine_chunks() if isinstance(a, pa.ChunkedArray) else a for a in converted]
         return pa.RecordBatch.from_arrays(arrays, schema.names)
 
 

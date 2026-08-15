@@ -18,10 +18,12 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
-import org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog
+import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 
@@ -95,6 +97,17 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         updateFunc(table)
       }
     }
+  }
+
+  private def generationExpressionOf(table: String, column: String): Option[String] = {
+    val loaded = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), table))
+    Option(loaded.columns().find(_.name == column).get.generationExpression())
+  }
+
+  private def assertNoGenerationMetadata(df: DataFrame, column: String): Unit = {
+    val metadata = df.schema(column).metadata
+    assert(!metadata.contains(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY),
+      s"generation expression leaked into the schema of $column: ${metadata.json}")
   }
 
   testGeneratedColumnWrite("append_data_v2") { table =>
@@ -975,6 +988,68 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
             "fieldName" -> "event_time",
             "expressionStr" -> "CAST('12:00:00' AS TIME)",
             "reason" -> "TIME type is not supported in generated columns"))
+      }
+    }
+  }
+
+  test("generation expression is not exposed in the read schema") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  id INT,
+             |  doubled INT GENERATED ALWAYS AS (id * 2)
+             |) USING foo""".stripMargin)
+      // The table still declares the generated column; only the internal metadata is hidden.
+      assert(generationExpressionOf(tblName, "doubled").contains("id * 2"))
+      assertNoGenerationMetadata(spark.table(s"testcat.$tblName"), "doubled")
+      assertNoGenerationMetadata(spark.read.table(s"testcat.$tblName"), "doubled")
+      assertNoGenerationMetadata(sql(s"SELECT * FROM testcat.$tblName"), "doubled")
+      assertNoGenerationMetadata(spark.readStream.table(s"testcat.$tblName"), "doubled")
+    }
+  }
+
+  test("CTAS from a table with generated columns does not create generated columns") {
+    val srcName = "src_tab"
+    val dstName = "dst_tab"
+    withTable(s"testcat.$srcName", s"testcat.$dstName") {
+      sql(s"""CREATE TABLE testcat.$srcName(
+             |  id INT,
+             |  doubled INT GENERATED ALWAYS AS (id * 2)
+             |) USING foo""".stripMargin)
+      sql(s"INSERT INTO testcat.$srcName (id) VALUES (1)")
+      sql(s"CREATE TABLE testcat.$dstName USING foo AS SELECT * FROM testcat.$srcName")
+      // The query output is plain data, so the new table must not inherit the generated column.
+      assert(generationExpressionOf(dstName, "doubled").isEmpty)
+      // Confirms it behaves as an ordinary column: a value the expression would not produce is
+      // written through instead of failing a generated column constraint.
+      sql(s"INSERT INTO testcat.$dstName VALUES (5, 999)")
+      checkAnswer(spark.table(s"testcat.$dstName"), Row(1, 2) :: Row(5, 999) :: Nil)
+    }
+  }
+
+  test("streaming write to a new table does not create generated columns") {
+    val srcName = "src_tab"
+    val dstName = "dst_tab"
+    withTable(s"testcat.$srcName", s"testcat.$dstName") {
+      withTempDir { checkpointDir =>
+        sql(s"""CREATE TABLE testcat.$srcName(
+               |  id INT,
+               |  doubled INT GENERATED ALWAYS AS (id * 2)
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$srcName (id) VALUES (1)")
+        // toTable creates the target from the streaming DataFrame's schema, which must not carry
+        // the source's generation expression over: a new table with a generated column would make
+        // this very write unsupported.
+        val query = spark.readStream.table(s"testcat.$srcName").writeStream
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .toTable(s"testcat.$dstName")
+        try {
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+        assert(generationExpressionOf(dstName, "doubled").isEmpty)
+        checkAnswer(spark.table(s"testcat.$dstName"), Row(1, 2))
       }
     }
   }

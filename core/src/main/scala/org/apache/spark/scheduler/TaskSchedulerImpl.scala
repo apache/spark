@@ -533,7 +533,7 @@ private[spark] class TaskSchedulerImpl(
       availWorkerResources: ExecutorResourcesAmounts): Option[Map[String, Map[String, Long]]] = {
     val rpId = taskSet.taskSet.resourceProfileId
     val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
-    // check if the ResourceProfile has cpus first since that is common case. Both values are in
+    // check if the ResourceProfile has cpus first since that is the common case. Both values are in
     // the internal exact BigDecimal representation, so this comparison is exact regardless of
     // whether spark.task.cpus is fractional (e.g. 0.2).
     if (availCpus < taskCpus) return None
@@ -598,7 +598,7 @@ private[spark] class TaskSchedulerImpl(
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
     // Note the size estimate here might be off with different ResourceProfiles but should be
-    // close estimate. It is only a capacity hint, so cap it: with a tiny fractional
+    // a close estimate. It is only a capacity hint, so cap it: with a tiny fractional
     // spark.task.cpus the exact slot count can be huge and would preallocate a giant buffer.
     val tasks = shuffledOffers.map { o =>
       val sizeHint =

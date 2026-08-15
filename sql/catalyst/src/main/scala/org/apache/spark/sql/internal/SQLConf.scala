@@ -574,6 +574,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION =
+    buildConf("spark.sql.analyzer.singlePassResolver.enableAsOfJoinResolution")
+      .internal()
+      .doc("When true, enables ASOF JOIN resolution in single-pass analyzer. " +
+        "Otherwise, resolution falls back to fixed-point analyzer.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
@@ -599,6 +609,34 @@ object SQLConf {
     .version("4.2.0")
     .booleanConf
     .createWithDefault(true)
+
+  val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
+    buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .doc("When true, attempt to transpile Python UDFs to Catalyst expressions. " +
+        "Transpilation also requires ANSI mode (spark.sql.ansi.enabled=true) -- " +
+        "the rewritten expressions target ANSI semantics, so with ANSI off the " +
+        "transpiler falls back to interpreted Python and a warning is logged at " +
+        "UDF construction. Transpiled UDFS attempt to match the Python functionality but " +
+        "may not be 100% equivalent. Some known differences include: overflows from input types " +
+        "(you can precast to decimal to avoid), type coercion on comparison, and implicit " +
+        "returns. This initial version only works with non-Connect Spark; Spark Connect " +
+        "support is to follow. This is an *experimental* feature."
+    )
+    .version("4.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
+
+  val PYTHON_UDF_TRANSPILERS =
+    buildConf("spark.sql.experimental.optimizer.pyTranspilers")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .doc("Comma-separated list of Python transpilers to attempt, in order. " +
+      "The first transpiler that successfully produces a Catalyst expression " +
+      "is used. Default: catalyst.")
+    .version("4.3.0")
+    .stringConf
+    .createWithDefault("catalyst")
 
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
@@ -790,6 +828,53 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.enabled")
+      .internal()
+      .doc("When true, dynamic partition pruning may project a bounded value domain from the " +
+        "full rows of an existing ancestor broadcast. When false, Spark uses its existing " +
+        "broadcast-key reuse and subquery fallback behavior.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_ROWS =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.maxRows")
+      .internal()
+      .doc("Maximum number of broadcast value rows visited when projecting a dynamic partition " +
+        "pruning domain. If the limit is exceeded, the projection fails open rather than " +
+        "using a partial domain.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The maximum number of DPP broadcast rows must be nonnegative.")
+      .createWithDefault(10000)
+
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_BYTES =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.maxBytes")
+      .internal()
+      .doc("Maximum cumulative size of distinct values projected from a broadcast for dynamic " +
+        "partition pruning. If the limit is exceeded, the projection fails open rather than " +
+        "using a partial domain.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The maximum size of DPP broadcast values must be nonnegative.")
+      .createWithDefaultString("8MB")
+
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_SOURCE_BYTES =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.maxSourceBytes")
+      .internal()
+      .doc("Maximum materialized broadcast size that may be rehydrated on the driver when " +
+        "projecting dynamic partition pruning values. If runtime statistics are unavailable " +
+        "or exceed the limit, the projection fails open.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The maximum DPP source broadcast size must be nonnegative.")
+      .createWithDefaultString("128MB")
+
   val RUNTIME_FILTER_NUMBER_THRESHOLD =
     buildConf("spark.sql.optimizer.runtimeFilter.number.threshold")
       .doc("The total number of injected runtime filters (non-DPP) for a single " +
@@ -801,8 +886,9 @@ object SQLConf {
 
   val RUNTIME_BLOOM_FILTER_ENABLED =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.enabled")
-      .doc("When true and if one side of a shuffle join has a selective predicate, we attempt " +
-        "to insert a bloom filter in the other side to reduce the amount of shuffle data.")
+      .doc("When true and if one side of a shuffle join has a selective predicate, or is a " +
+        "fully materialized, repeatable cache with evidence that pruning is beneficial, we " +
+        "attempt to insert a bloom filter in the other side to reduce shuffle data.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -810,10 +896,21 @@ object SQLConf {
   val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
-        "under this value to try to inject bloom filter.")
+        "under this value to try to inject a bloom filter, unless the creation side is fully " +
+        "materialized and has accurate statistics.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")
+
+  val RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.materializedCreationSideThreshold")
+      .doc("Size threshold of a fully materialized, repeatable bloom filter creation side with " +
+        "accurate statistics. This replaces the general creation-side threshold because scanning " +
+        "materialized output does not recompute its original plan.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("100MB")
 
   val RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold")
@@ -878,11 +975,20 @@ object SQLConf {
 
   val PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED =
     buildConf("spark.sql.optimizer.pushDownJoinThroughUnion.enabled")
-      .doc("When true, pushes down Join through Union when the right side is small enough " +
-        "to broadcast. This can improve performance by allowing each Union branch to " +
-        "directly perform a broadcast join, avoiding materializing the entire Union result.")
+      .doc("When true, pushes down Join through Union when every Union branch would broadcast " +
+        "the right side of the join. This can improve performance by allowing each Union branch " +
+        "to directly perform a broadcast join, avoiding materializing the entire Union result.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val COMBINE_APPROXIMATE_PERCENTILES_ENABLED =
+    buildConf("spark.sql.optimizer.combineApproximatePercentiles.enabled")
+      .doc("When true, combines compatible scalar approximate percentile aggregates into a " +
+        "single array-valued aggregate so they share one percentile digest.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -970,6 +1076,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val SPLIT_STREAMED_SIDE_JOIN_CONDITION =
+    buildConf("spark.sql.join.splitStreamedSideJoinCondition")
+      .internal()
+      .doc("When true, split join conditions for LeftAnti, LeftOuter, RightOuter, and " +
+        "ExistenceJoin by referenced side, evaluating streamed-side-only conjuncts before " +
+        "the hash-bucket or merge walk. This avoids evaluating expensive streamed-side-only " +
+        "predicates once per matched buffered row.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val SORT_MERGE_AS_OF_JOIN_ENABLED =
     buildConf("spark.sql.join.sortMergeAsOfJoin.enabled")
       .doc("When true, use a dedicated sort-merge physical operator for AS-OF joins " +
@@ -996,7 +1114,11 @@ object SQLConf {
       .doc("When true, the planner requires all the clustering keys as the hash partition keys " +
         "of the children, to eliminate the shuffles for the operator that needs its children to " +
         "be co-partitioned, such as JOIN node. This is to avoid data skews which can lead to " +
-        "significant performance regression if shuffles are eliminated.")
+        "significant performance regression if shuffles are eliminated. For storage-partitioned " +
+        "join, every clustering key must be covered by some partition key, rather than matching " +
+        "the partition keys positionally, so a column partitioned by more than one transform " +
+        "does not prevent shuffle elimination; hash partitioning deliberately keeps the " +
+        "positional match.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -1576,6 +1698,21 @@ object SQLConf {
       .internal()
       .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
         "VALUES lists (UnresolvedInlineTable) by eagerly evaluating it in the AST Builder.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED =
+    buildConf("spark.sql.optimizer.rewriteCountDistinctConditional.enabled")
+      .internal()
+      .doc("When true, rewrites COUNT(DISTINCT IF(cond, base, NULL)) and " +
+        "COUNT(DISTINCT CASE WHEN cond THEN base END) into " +
+        "COUNT(DISTINCT base) FILTER (WHERE cond). This reduces the Expand factor " +
+        "in RewriteDistinctAggregates from Nx to 1x when multiple conditional distinct " +
+        "counts share the same base column. The rewrite is only applied to base " +
+        "expressions that are safe to evaluate unconditionally (e.g. plain columns), " +
+        "so the short-circuit semantics of IF/CASE WHEN are preserved.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -2823,6 +2960,32 @@ object SQLConf {
       "disable logging or -1 to apply no limit.")
     .createWithDefault(1000)
 
+  val CODEGEN_COMPILER = buildConf("spark.sql.codegen.compiler")
+    .internal()
+    .doc("The compiler used to turn generated Java source into bytecode. " +
+      "Supported values are 'janino' (default) and 'jdk'. " +
+      "'janino' uses the Janino library; it is several times faster but the project " +
+      "is unmaintained upstream (last release 3.1.12, Feb 2024). " +
+      "'jdk' uses javax.tools.JavaCompiler from the JDK; it is maintained on the " +
+      "JDK release cadence but adds ~5x cold-start latency for large generated units " +
+      "and 30-300x for small ones. Switch to 'jdk' only if Janino's maintenance status " +
+      "is a concern; for most workloads the default remains the better trade-off. " +
+      "When 'jdk' is requested but javax.tools.JavaCompiler is unavailable " +
+      "(e.g. JRE-only image) Spark falls back to 'janino' with a warning. " +
+      "Regardless of this setting, codegen in REPL / interactive sessions (spark-shell, " +
+      "Spark Connect session artifacts), generated code referencing a class nested in " +
+      "a Scala package object, and generated code referencing an anonymous or local class " +
+      "that Spark determines cannot be soundly rewritten to a nameable supertype (that " +
+      "supertype, or a class enclosing it, is not public, or it does not offer a member the " +
+      "class exposes) always compile with 'janino'. A one-time INFO log records each such " +
+      "routing.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .stringConf
+    .transform(_.toLowerCase(Locale.ROOT))
+    .checkValues(Set("janino", "jdk"))
+    .createWithDefault("janino")
+
   val WHOLESTAGE_HUGE_METHOD_LIMIT = buildConf("spark.sql.codegen.hugeMethodLimit")
     .internal()
     .doc("The maximum bytecode size of a single compiled Java function generated by whole-stage " +
@@ -3000,6 +3163,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED =
+    buildConf("spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled")
+      .internal()
+      .doc("When true, map-typed arguments of distinct aggregates are normalized with MapSort. " +
+        "When false, MapSort is not added solely for distinct aggregate arguments; arguments " +
+        "that are also grouping expressions remain normalized.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZE_EXPAND_RATIO =
     buildConf("spark.sql.optimizer.optimizeExpandRatio")
       .internal()
@@ -3100,13 +3274,28 @@ object SQLConf {
   val NUM_STATE_STORE_MAINTENANCE_THREADS =
     buildConf("spark.sql.streaming.stateStore.numStateStoreMaintenanceThreads")
       .internal()
-      .doc("Number of threads in the thread pool that perform clean up and snapshotting tasks " +
-        "for stateful streaming queries. The default value is the number of cores * 0.25 " +
-        "so that this thread pool doesn't take too many resources " +
-        "away from the query and affect performance.")
+      .doc("Total number of threads split between the snapshot and cleanup " +
+        "maintenance pools for stateful streaming queries. Each pool needs at least " +
+        "1 thread, so the minimum is 2. The default value is the number of " +
+        "cores * 0.25 so that the pools don't take too many resources away from the " +
+        "query and affect performance. Use snapshotToCleanupThreadRatio to " +
+        "configure the split between snapshot and cleanup pools.")
       .intConf
-      .checkValue(_ > 0, "Must be greater than 0")
-      .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 1))
+      .checkValue(_ > 1, "Must be greater than 1")
+      .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 2))
+
+  val STATE_STORE_MAINTENANCE_SNAPSHOT_THREAD_RATIO =
+    buildConf("spark.sql.streaming.stateStore.snapshotToCleanupThreadRatio")
+      .internal()
+      .version("5.0.0")
+      .doc("Ratio of total maintenance threads allocated to the snapshot " +
+        "pool. The remainder goes to the cleanup pool. The snapshot " +
+        "count is rounded to the nearest integer and clamped so each " +
+        "pool gets at least 1 thread and the total is never exceeded.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doubleConf
+      .checkValue(v => v > 0 && v < 1, "Must be between 0 and 1 (exclusive)")
+      .createWithDefault(0.5)
 
   val STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT =
     buildConf("spark.sql.streaming.stateStore.maintenanceShutdownTimeout")
@@ -3435,6 +3624,20 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(1)
 
+  val STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1 =
+    buildConf("spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled")
+      .internal()
+      .doc("Whether to allow a Real-Time Mode query to start with state store checkpoint format " +
+        "version 1. Real-Time Mode re-executes a failed batch, and with checkpoint format " +
+        "version 1 the re-execution can reuse the state file names of the partially-written " +
+        "failed batch, so starting on a version 1 checkpoint exposes the query to data loss on " +
+        "failure. Format version 2 avoids this with per-batch state store checkpoint ids. " +
+        "Escape hatch only; prefer a fresh checkpoint location.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val STREAMING_MAX_NUM_STATE_SCHEMA_FILES =
     buildConf("spark.sql.streaming.stateStore.maxNumStateSchemaFiles")
       .internal()
@@ -3596,6 +3799,36 @@ object SQLConf {
       .intConf
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
+
+  val STREAMING_USE_STREAMLINE_AGGREGATOR =
+    buildConf("spark.sql.streaming.useStreamlineAggregator")
+      .internal()
+      .doc("Test/development only, not intended for production use. When true, plan a streaming " +
+        "aggregation with the streamline aggregation operator, which merges each input row " +
+        "against state and emits immediately, instead of the microbatch operators that only emit " +
+        "once the batch ends. Real-Time Mode queries use the streamline operator regardless of " +
+        "this config; this flag exists only so the operator can be exercised under an ordinary " +
+        "microbatch trigger in tests, and changes an aggregation's output timing when set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR =
+    buildConf("spark.sql.streaming.statefulOperator.incrementalCleanupFactor")
+      .internal()
+      .doc("For a stateful operator that evicts by watermark, the number of eviction-eligible " +
+        "records to remove per input record processed, spreading eviction cost across the batch " +
+        "instead of paying it all at batch end. When 0, incremental cleanup is disabled and all " +
+        "eviction happens at batch end. When k, up to k eligible records are removed per input; " +
+        "any still-eligible records left over are removed at batch end. Only applies to modes " +
+        "that evict (e.g. Append/Update); has no effect in Complete mode, which never evicts. " +
+        "Currently read only by the streamline aggregation operator.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .longConf
+      .checkValue(_ >= 0, "The incremental cleanup factor must not be negative.")
+      .createWithDefault(0L)
 
   val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
     buildConf("spark.sql.streaming.stopActiveRunOnRestart")
@@ -3821,6 +4054,16 @@ object SQLConf {
     .version("4.1.0")
     .booleanConf
     .createWithDefault(true)
+
+  val STREAMING_TRANSFORM_WITH_STATE_REAL_TIME_MODE_TTL_EVICTION_INTERVAL_MS = buildConf(
+    "spark.sql.streaming.realTimeMode.transformWithState.ttlEvictionIntervalMs")
+    .internal()
+    .doc("The threshold in milliseconds to perform eviction of TTL when using the JVM " +
+      "transformWithState operator with real-time mode.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .longConf
+    .createWithDefault(1 * 1000)
 
   val STREAMING_ASYNC_PROGRESS_TRACKING_REAL_TIME_MODE_ENABLED_BY_DEFAULT = buildConf(
     "spark.sql.streaming.realTimeMode.asyncProgressTrackingByDefault.enabled")
@@ -5171,6 +5414,23 @@ object SQLConf {
           " must be more than one.")
       .createOptional
 
+  val PYTHON_UDF_IN_HIGHER_ORDER_FUNCTION_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled")
+      .doc("When true, a scalar Python UDF may be used inside the lambda of a higher-order " +
+        "function such as `transform` or `filter`. The UDF is not evaluated inside the lambda; " +
+        "it is applied to the whole array outside the lambda and the lambda reads the " +
+        "precomputed result. This uses an Arrow-based execution path, so PyArrow is required " +
+        "even for a UDF created with useArrow=False. Because the UDF is precomputed over the " +
+        "whole array, it runs once per element regardless of any short-circuiting (`exists`, " +
+        "`when`) in the lambda. In particular, an `array_sort` comparator that calls the UDF on " +
+        "both elements, `(a, b) -> udf(a, b)`, precomputes it over every pair, costing O(n^2) " +
+        "calls and memory for an array of length n; avoid it for large arrays. When false, such " +
+        "queries fail with UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF as before.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val PYTHON_UDF_ARROW_FALLBACK_ON_UDT =
     buildConf("spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT")
       .internal()
@@ -5843,6 +6103,19 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val DECORRELATE_LIMIT_OFFSET_LEGACY_INCORRECT_ORDER_HANDLING_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateLimitOffsetLegacyIncorrectOrderHandling.enabled")
+      .internal()
+      .doc("If enabled, revert to the legacy incorrect behavior where the ORDER BY of a " +
+        "correlated subquery with LIMIT (and optional OFFSET) whose predicates only reference " +
+        "the outer table is dropped during decorrelation, turning ORDER BY ... LIMIT ... OFFSET " +
+        "into an arbitrary LIMIT/OFFSET. When disabled (default), the ORDER BY is preserved so " +
+        "the result is deterministic.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val DECORRELATE_UNION_OR_SET_OP_UNDER_LIMIT_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateUnionOrSetOpUnderLimit.enabled")
@@ -7263,6 +7536,51 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED = buildConf(
+    "spark.sql.optimizer.mergeSubplans.filterPropagation.dsv2SymmetricFilterPropagation.enabled")
+    .doc("When true, two DataSource V2 scan subplans that pushed the same strict filters but " +
+      "carry different best-effort (post-scan) filters can merge into one scan even when " +
+      s"${MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key} is false. The strict filters " +
+      "are equal (re-enforced on the rebuilt scan) and the differing filters are pushed only as " +
+      "best-effort row-group/partition pruning (OR-widened), with the enclosing Filter " +
+      "re-checking exactness above the scan. Unlike the general symmetric case, OR-widening " +
+      "cannot change the strict (enforced) row set. Has no effect when " +
+      s"${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
+  val MERGE_SUBPLANS_DSV2_ALLOW_KEY_GROUPED_PARTITIONING_DEGRADATION = buildConf(
+    "spark.sql.optimizer.mergeSubplans.dsv2ScanMerge.keyGroupedPartitioningDegradation.enabled")
+    .doc("When false, a DataSource V2 scan merge is declined if the rebuilt merged scan would " +
+      "report weaker key-grouped partitioning than an input reported (no longer clustering by " +
+      "the same expressions), which can force a shuffle the original plan avoided. The merge is " +
+      "also declined, before any rebuild, when the two input scans report different clustering " +
+      "expressions, since no single merged scan could preserve both. When true, the merge " +
+      "proceeds anyway in both cases, trading the partitioning for a single scan. Reported " +
+      "partitioning is re-derived on the merged scan, so a merge that does not weaken it is " +
+      "always allowed. Only affects sources that declare the SCAN_MERGING table capability.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
+  val MERGE_SUBPLANS_DSV2_ALLOW_ORDERING_DEGRADATION = buildConf(
+    "spark.sql.optimizer.mergeSubplans.dsv2ScanMerge.orderingDegradation.enabled")
+    .doc("When false, a DataSource V2 scan merge is declined if the rebuilt merged scan would " +
+      "report a weaker output ordering than an input reported (an input ordering is no longer a " +
+      "prefix of the merged scan's), which can force a sort the original plan avoided. The merge " +
+      "is also declined, before any rebuild, when neither input's reported ordering satisfies " +
+      "the other, since no single merged scan could preserve both. When true, the merge proceeds " +
+      "anyway in both cases, trading the ordering for a single scan. Reported ordering is " +
+      "re-derived on the merged scan, so a merge that does not weaken it is always allowed. Only " +
+      "affects sources that declare the SCAN_MERGING table capability.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
   val MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED =
     buildConf("spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled")
       .doc("When set to true, filter attributes can propagate through Join nodes during subplan " +
@@ -7537,23 +7855,6 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
-
-  // Deprecate "spark.connect.copyFromLocalToFs.allowDestLocal" in favor of this config. This is
-  // currently optional because we don't want to break existing users who are using the old config.
-  // If this config is set, then we override the deprecated config.
-  val ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
-    buildConf("spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
-      .internal()
-      .doc("""
-             |Allow `spark.copyFromLocalToFs` destination to be local file system
-             | path on spark driver node when
-             |`spark.sql.artifact.copyFromLocalToFs.allowDestLocal` is true.
-             |This will allow user to overwrite arbitrary file on spark
-             |driver node we should only enable it for testing purpose.
-             |""".stripMargin)
-      .version("4.0.0")
-      .booleanConf
-      .createOptional
 
   val LEGACY_RETAIN_FRACTION_DIGITS_FIRST =
     buildConf("spark.sql.legacy.decimal.retainFractionDigitsOnTruncate")
@@ -8036,6 +8337,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PROTOBUF_DESCRIPTOR_CACHE_SIZE =
+    buildConf("spark.sql.protobuf.descriptorCacheSize")
+      .internal()
+      .doc("Maximum number of entries in the per-JVM cache of parsed Protobuf FileDescriptor " +
+        "graphs built from a binary FileDescriptorSet, used by from_protobuf/to_protobuf. This " +
+        "knob only bounds memory (each graph can be hundreds of KB). Setting it to 0 disables " +
+        "the cache entirely and acts as an immediate kill-switch; a non-zero size bound is fixed " +
+        "when the cache is first built for a JVM, so changing it has no effect on an " +
+        "already-built cache.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "descriptorCacheSize must be non-negative; 0 disables the cache")
+      .createWithDefault(8)
+
   val LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER =
     buildConf("spark.sql.listagg.allowDistinctCastWithOrder.enabled")
       .internal()
@@ -8094,7 +8410,7 @@ object SQLConf {
       DeprecatedConfig(ESCAPED_STRING_LITERALS.key, "4.0",
         "Use raw string literals with the `r` prefix instead. "),
       DeprecatedConfig("spark.connect.copyFromLocalToFs.allowDestLocal", "4.0",
-        s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead."),
+        "Use 'spark.sql.artifact.copyFromLocalToFs.allowDestLocal' instead."),
       DeprecatedConfig(ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key, "4.0", "Increase indexes by 1 " +
         "in `strfmt` of the `format_string` function. Refer to the first argument by \"1$\"."),
       DeprecatedConfig(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "4.1",
@@ -8235,11 +8551,26 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
+  def dynamicPartitionPruningBroadcastProjectionEnabled: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED)
+
+  def dynamicPartitionPruningBroadcastProjectionMaxRows: Int =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_ROWS)
+
+  def dynamicPartitionPruningBroadcastProjectionMaxBytes: Long =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_BYTES)
+
+  def dynamicPartitionPruningBroadcastProjectionMaxSourceBytes: Long =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_SOURCE_BYTES)
+
   def runtimeFilterBloomFilterEnabled: Boolean =
     getConf(RUNTIME_BLOOM_FILTER_ENABLED)
 
   def runtimeFilterCreationSideThreshold: Long =
     getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)
+
+  def runtimeFilterMaterializedCreationSideThreshold: Long =
+    getConf(RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD)
 
   def runtimeRowLevelOperationGroupFilterEnabled: Boolean =
     getConf(RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED)
@@ -8249,6 +8580,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
+
+  def snapshotToCleanupThreadRatio: Double =
+    getConf(STATE_STORE_MAINTENANCE_SNAPSHOT_THREAD_RATIO)
 
   def numStateStoreInstanceMetricsToReport: Int =
     getConf(STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
@@ -8477,6 +8811,14 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def streamingOffsetLogFormatVersion: Int = getConf(STREAMING_OFFSET_LOG_FORMAT_VERSION)
 
+  // The commit log format version implied by the session config for a fresh checkpoint. A state
+  // store checkpoint format of v2 makes each batch write stateUniqueIds, which only a commit log at
+  // VERSION_2 or above can persist, so the commit log version tracks the state store format. It is
+  // capped at VERSION_2 here: VERSION_3 exists only to carry sink-evolution metadata and is written
+  // exclusively by the sink-evolution path in MicroBatchExecution, never derived from a config.
+  def streamingCommitLogFormatVersion: Int =
+    if (getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION) >= 2) 2 else 1
+
   def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
 
   def streamingValueStateSchemaEvolutionThreshold: Int =
@@ -8556,6 +8898,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
 
   def codegenLogLevel: Level = getConf(CODEGEN_LOG_LEVEL)
+
+  def codegenCompiler: String = getConf(CODEGEN_COMPILER)
 
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
@@ -8698,6 +9042,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
+
+  def splitStreamedSideJoinCondition: Boolean = getConf(SPLIT_STREAMED_SIDE_JOIN_CONDITION)
 
   def sortMergeAsOfJoinEnabled: Boolean = getConf(SORT_MERGE_AS_OF_JOIN_ENABLED)
 
@@ -8992,6 +9338,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pythonUDFArrowFallbackOnUDT: Boolean = getConf(PYTHON_UDF_ARROW_FALLBACK_ON_UDT)
 
+  def pythonUDFInHigherOrderFunctionEnabled: Boolean =
+    getConf(PYTHON_UDF_IN_HIGHER_ORDER_FUNCTION_ENABLED)
+
   def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
 
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
@@ -9241,6 +9590,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def decorrelateInnerQueryEnabledForExistsIn: Boolean =
     !getConf(SQLConf.DECORRELATE_EXISTS_IN_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED)
+
+  def rewriteCountDistinctConditionalEnabled: Boolean =
+    getConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED)
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 

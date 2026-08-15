@@ -2068,6 +2068,8 @@ class AstBuilder extends DataTypeAstBuilder
           relationPrimary match {
             case _: AliasedQueryContext =>
             case _: TableValuedFunctionContext =>
+            case _: UnnestTableContext =>
+            case _: JsonTableRelationContext =>
             case other =>
               throw QueryParsingErrors.invalidLateralJoinRelationError(other)
           }
@@ -2566,6 +2568,8 @@ class AstBuilder extends DataTypeAstBuilder
         ctx.right match {
           case _: AliasedQueryContext =>
           case _: TableValuedFunctionContext =>
+          case _: UnnestTableContext =>
+          case _: JsonTableRelationContext =>
           case other =>
             throw QueryParsingErrors.invalidLateralJoinRelationError(other)
         }
@@ -3229,6 +3233,117 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitTableFunctionCallWithTrailingClauses(
       ctx: TableFunctionCallWithTrailingClausesContext): LogicalPlan = withOrigin(ctx) {
     buildTvfFromTableFunctionCall(ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
+  }
+
+  /**
+   * Create a plan for the ANSI SQL `UNNEST(array [, array ...]) [WITH ORDINALITY]` relation used
+   * in the FROM clause. It is desugared into a [[Generate]] over a [[OneRowRelation]] backed by the
+   * [[Unnest]] generator, then wrapped with the optional table/column aliases via the shared
+   * FROM-clause aliasing helper. Correlated references (e.g. `FROM t, LATERAL UNNEST(t.arr)`) are
+   * handled by the surrounding `LATERAL` machinery, exactly like generator table functions such as
+   * `explode`.
+   */
+  override def visitUnnestTable(ctx: UnnestTableContext): LogicalPlan = withOrigin(ctx) {
+    val unnest = ctx.unnest
+    val expressions = expressionList(unnest.expression)
+    val withOrdinality = unnest.ORDINALITY != null
+    val generate = Generate(
+      Unnest(expressions, withOrdinality),
+      unrequiredChildIndex = Nil,
+      outer = false,
+      qualifier = None,
+      generatorOutput = Nil,
+      child = OneRowRelation())
+    mayApplyAliasPlan(unnest.tableAlias, generate)
+  }
+
+  /**
+   * Create a plan for the SQL:2016 `JSON_TABLE` table-valued function. This builds a
+   * [[Generate]] over the [[JsonTable]] generator (reusing the existing Generate operator), so a
+   * downstream `SELECT` sees one output column per COLUMNS entry.
+   */
+  override def visitJsonTableRelation(
+      ctx: JsonTableRelationContext): LogicalPlan = withOrigin(ctx) {
+    val jt = ctx.jsonTable
+    val jsonExpr = expression(jt.jsonExpr)
+    val rowPath = string(visitStringLit(jt.rowPath))
+
+    val columns = jt.jsonTableColumn.asScala.map(buildJsonTableColumn).toSeq
+    // Column names must be unique within a single JSON_TABLE. Whether two names that differ only
+    // in case collide follows the configured resolver, so `a` and `A` stay distinct under
+    // `spark.sql.caseSensitive`.
+    val normalize: String => String =
+      if (conf.caseSensitiveAnalysis) identity else _.toLowerCase(Locale.ROOT)
+    val duplicate = columns.groupBy(c => normalize(c.name)).collectFirst {
+      case (_, cols) if cols.length > 1 => cols.head.name
+    }
+    duplicate.foreach { name =>
+      throw QueryParsingErrors.duplicateJsonTableColumnError(name, jt)
+    }
+
+    val errorMode = if (jt.jsonTableOnErrorClause != null && jt.jsonTableOnErrorClause.ERROR != null
+        && jt.jsonTableOnErrorClause.NULL == null) {
+      JsonTableErrorMode.ErrorOnError
+    } else {
+      JsonTableErrorMode.NullOnError
+    }
+
+    val generator = JsonTable(jsonExpr, rowPath, columns, errorMode)
+    val generate = Generate(
+      generator,
+      unrequiredChildIndex = Nil,
+      outer = false,
+      qualifier = None,
+      generatorOutput = columns.map(c => UnresolvedAttribute.quoted(c.name)),
+      child = OneRowRelation())
+    mayApplyAliasPlan(jt.tableAlias, generate)
+  }
+
+  /**
+   * The implicit JSON path for a column with no explicit PATH: the column name as a single JSON
+   * object key. Bracket syntax (`$['name']`) is used rather than `$.name` so a column name that
+   * contains a dot (e.g. `a.b`) reads the literal key `"a.b"` instead of the nested path `a.b`. A
+   * name containing a single quote cannot be represented and yields an unparseable path, which
+   * `JsonTable.checkInputDataTypes` rejects (such a column must use an explicit PATH).
+   */
+  private def implicitJsonTablePath(name: String): String = s"$$['$name']"
+
+  /**
+   * Build a single [[JsonTableColumn]] from a `jsonTableColumn` grammar context. A value column
+   * with no explicit PATH gets an implicit path derived from its name (see
+   * [[implicitJsonTablePath]]), matching the SQL standard / Oracle behavior.
+   */
+  private def buildJsonTableColumn(ctx: JsonTableColumnContext): JsonTableColumn = withOrigin(ctx) {
+    ctx match {
+      case ord: JsonTableOrdinalityColumnContext =>
+        JsonTableColumn(
+          name = getIdentifierText(ord.colName),
+          dataType = LongType,
+          path = None,
+          kind = JsonTableColumnKind.Ordinality)
+      case ex: JsonTableExistsColumnContext =>
+        val name = getIdentifierText(ex.colName)
+        val path = Option(ex.path).map(p => string(visitStringLit(p)))
+          .getOrElse(implicitJsonTablePath(name))
+        JsonTableColumn(
+          name = name,
+          // A column value is produced by a `Cast` to the declared type, so normalize CHAR/VARCHAR
+          // to STRING exactly as `visitCast` does; a raw CHAR/VARCHAR target has no encoder.
+          dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(
+            typedVisit[DataType](ex.dataType)),
+          path = Some(path),
+          kind = JsonTableColumnKind.Exists)
+      case v: JsonTableValueColumnContext =>
+        val name = getIdentifierText(v.colName)
+        val path = Option(v.path).map(p => string(visitStringLit(p)))
+          .getOrElse(implicitJsonTablePath(name))
+        JsonTableColumn(
+          name = name,
+          dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(
+            typedVisit[DataType](v.dataType)),
+          path = Some(path),
+          kind = JsonTableColumnKind.Value)
+    }
   }
 
   /**
@@ -4052,6 +4167,37 @@ class AstBuilder extends DataTypeAstBuilder
       case Some(length) => Overlay(input, replace, position, length)
       case None => new Overlay(input, replace, position)
     }
+  }
+
+  /**
+   * Resolve a `jsonValueBehavior` clause (`NULL` / `ERROR` / `DEFAULT <expr>`) into a
+   * [[JsonValueBehavior]] and, for the `DEFAULT` case, its expression.
+   */
+  private def buildJsonValueBehavior(
+      ctx: JsonValueBehaviorContext): (JsonValueBehavior, Option[Expression]) = ctx match {
+    case _: JsonValueBehaviorNullContext => (JsonValueBehavior.Null, None)
+    case _: JsonValueBehaviorErrorContext => (JsonValueBehavior.Error, None)
+    case d: JsonValueBehaviorDefaultContext =>
+      (JsonValueBehavior.Default, Some(expression(d.defaultExpr)))
+  }
+
+  /**
+   * Create a [[JsonValue]] expression for the SQL:2016 `JSON_VALUE` scalar function. The `ON EMPTY`
+   * / `ON ERROR` clauses default to `NULL` when absent, per the standard.
+   */
+  override def visitJsonValue(ctx: JsonValueContext): Expression = withOrigin(ctx) {
+    val jsonExpr = expression(ctx.jsonExpr)
+    val path = string(visitStringLit(ctx.path))
+    // Default RETURNING type is STRING. Normalize CHAR/VARCHAR to STRING for the cast, as the value
+    // is produced by a `Cast` to the declared type (a raw CHAR/VARCHAR target has no encoder).
+    val returning = Option(ctx.returning)
+      .map(dt => CharVarcharUtils.replaceCharVarcharWithStringForCast(typedVisit[DataType](dt)))
+      .getOrElse(StringType)
+    val (onEmpty, emptyDefault) = Option(ctx.emptyBehavior)
+      .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
+    val (onError, errorDefault) = Option(ctx.errorBehavior)
+      .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
+    JsonValue(jsonExpr, path, returning, onEmpty, onError, emptyDefault, errorDefault)
   }
 
   /**

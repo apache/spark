@@ -51,6 +51,12 @@ import org.apache.spark.sql.util.NumericHistogram
       statistical computing packages. Note: the output type of the 'x' field in the return value is
       propagated from the input value consumed in the aggregate function.
     """,
+  arguments = """
+    Arguments:
+      * expr - A numeric, date, timestamp, or interval expression whose values are aggregated
+          into the histogram.
+      * nb - A foldable integer expression (at least 2) giving the number of histogram bins.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col, 5) FROM VALUES (0), (1), (2), (10) AS tab(col);

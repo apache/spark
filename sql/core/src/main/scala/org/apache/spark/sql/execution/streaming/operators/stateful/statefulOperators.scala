@@ -1626,7 +1626,8 @@ trait SchemaValidationUtils extends Logging {
       stateSchemaDir: Path,
       session: SparkSession,
       operatorStateMetadataVersion: Int = 2,
-      stateStoreEncodingFormat: String = StateStoreEncoding.UnsafeRow.toString
+      stateStoreEncodingFormat: String = StateStoreEncoding.UnsafeRow.toString,
+      isRealTimeMode: Boolean = false
   ): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
     val usingAvro = stateStoreEncodingFormat == StateStoreEncoding.Avro.toString
@@ -1634,8 +1635,11 @@ trait SchemaValidationUtils extends Logging {
     val newStateSchemaFilePath =
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
     val metadataPath = new Path(info.checkpointLocation, s"${info.operatorId}")
+    // RTM can leave metadata for an uncommitted attempt of the current batch, so only metadata
+    // from the previous committed batch is safe to use for schema validation.
+    val metadataBatchId = if (isRealTimeMode) batchId - 1 else batchId
     val metadataReader = OperatorStateMetadataReader.createReader(
-      metadataPath, hadoopConf, operatorStateMetadataVersion, batchId)
+      metadataPath, hadoopConf, operatorStateMetadataVersion, metadataBatchId)
     val operatorStateMetadata = try {
       metadataReader.read()
     } catch {
@@ -1677,6 +1681,7 @@ object StatefulOperatorsUtils {
   )
   val SYMMETRIC_HASH_JOIN_EXEC_OP_NAME = "symmetricHashJoin"
   val STATE_STORE_SAVE_EXEC_OP_NAME = "stateStoreSave"
+  val STATEFUL_STREAMLINE_AGGREGATE_EXEC_OP_NAME = "StatefulStreamlineAggregate"
   val DEDUPLICATE_EXEC_OP_NAME = "dedupe"
   val DEDUPLICATE_WITHIN_WATERMARK_EXEC_OP_NAME = "dedupeWithinWatermark"
   val SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME = "sessionWindowStateStoreSaveExec"

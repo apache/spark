@@ -6285,6 +6285,74 @@ def collect_set(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def collect_union(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: given an array-typed column, collects the distinct union of the
+    elements of the arrays across rows and returns it as an array.
+
+    The aggregation buffer holds only the distinct elements, so its size is bounded by the
+    element universe rather than by the number of input rows. Null elements are dropped by
+    default (``IGNORE NULLS``), matching :func:`collect_set`. With ``RESPECT NULLS`` a single
+    null element is kept, in which case this is equivalent to
+    ``array_distinct(flatten(collect_list(col)))``. The ``RESPECT NULLS`` clause is only
+    available through SQL, e.g. ``expr("collect_union(col) RESPECT NULLS")``.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target array column on which the function is computed.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new Column object representing the distinct union of the array elements.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.collect_set`
+    :meth:`pyspark.sql.functions.collect_list`
+    :meth:`pyspark.sql.functions.array_distinct`
+    :meth:`pyspark.sql.functions.flatten`
+
+    Notes
+    -----
+    This function is non-deterministic as the order of collected results depends
+    on the order of the rows, which may be non-deterministic after any shuffle operations.
+
+    Examples
+    --------
+    Example 1: Union the elements of array columns across rows
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [([1, 2],), ([2, 3],), ([1],)], ('value',))
+    >>> df.select(sf.sort_array(sf.collect_union('value')).alias('u')).show()
+    +---------+
+    |        u|
+    +---------+
+    |[1, 2, 3]|
+    +---------+
+
+    Example 2: Union per group
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("a", [1, 2]), ("a", [2, 3]), ("b", [4])], ("k", "value"))
+    >>> df = df.groupBy("k").agg(sf.sort_array(sf.collect_union('value')).alias('u'))
+    >>> df.orderBy("k").show()
+    +---+---------+
+    |  k|        u|
+    +---+---------+
+    |  a|[1, 2, 3]|
+    |  b|      [4]|
+    +---+---------+
+    """
+    return _invoke_function_over_columns("collect_union", col)
+
+
+@_try_remote_functions
 def degrees(col: "ColumnOrName") -> Column:
     """
     Converts an angle measured in radians to an approximately equivalent angle
@@ -8241,6 +8309,67 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
         return _invoke_function_over_columns("round", col, scale)
+
+
+@_try_remote_functions
+def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    """
+    Truncate the given value toward zero to `scale` decimal places when `scale` >= 0,
+    or to the left of the decimal point when `scale` < 0. `scale` defaults to 0.
+
+    Unlike :func:`round`, the result is always rounded toward zero, and unlike :func:`floor`
+    negative values are not rounded toward negative infinity.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column or column name to truncate.
+        A column that evaluates to a numeric.
+    scale : :class:`~pyspark.sql.Column` or int, optional
+        An optional parameter to control the number of decimal places to keep.
+        A column that evaluates to an integer. Must be a constant. Defaults to 0.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column for the truncated value, of the same type as the input, except that a decimal
+        input may return a decimal of different precision and scale.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.round`
+    :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.floor`
+    :meth:`pyspark.sql.functions.ceil`
+
+    Examples
+    --------
+    Example 1: Truncate toward zero to a given number of decimal places
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(15.79), sf.lit(1)).alias("r")).collect()
+    [Row(r=15.7)]
+
+    Example 2: Truncation rounds toward zero for negative values
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(-2.99), sf.lit(0)).alias("r")).collect()
+    [Row(r=-2.0)]
+
+    Example 3: The scale argument defaults to 0 when omitted
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(1234.5678)).alias("r")).collect()
+    [Row(r=1234.0)]
+    """
+    if scale is None:
+        return _invoke_function_over_columns("truncate", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("truncate", col, scale)
 
 
 @_try_remote_functions
@@ -14698,6 +14827,71 @@ def md5(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def xxh3_64(col: "ColumnOrName") -> Column:
+    """Returns a 64-bit hash value of the argument using the XXH3 algorithm.
+
+    Unlike :func:`xxhash64`, which hashes one or more columns structurally, this hashes the raw
+    bytes of a single value with seed 0, so its result is byte compatible with the reference XXH3.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to hash, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_128`
+    :meth:`pyspark.sql.functions.xxhash64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.xxh3_64('a').alias('h')).collect()
+    [Row(h=80997306238743657)]
+    """
+    return _invoke_function_over_columns("xxh3_64", col)
+
+
+@_try_remote_functions
+def xxh3_128(col: "ColumnOrName") -> Column:
+    """Returns a 128-bit XXH3 hash of the argument as a 32-character hex string.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to hash, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_64`
+    :meth:`pyspark.sql.functions.md5`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.xxh3_128('a').alias('h')).collect()
+    [Row(h='7d57dd84c60c86ca1f4e82ab91a12b5e')]
+    """
+    return _invoke_function_over_columns("xxh3_128", col)
+
+
+@_try_remote_functions
 def sha1(col: "ColumnOrName") -> Column:
     """Returns the hex string result of SHA-1.
 
@@ -14872,6 +15066,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.hash`
+    :meth:`pyspark.sql.functions.xxh3_64`
 
     Examples
     --------
@@ -15175,6 +15370,7 @@ def base64(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.unbase64`
+    :meth:`pyspark.sql.functions.to_base32`
 
     Examples
     --------
@@ -15190,6 +15386,41 @@ def base64(col: "ColumnOrName") -> Column:
     +----------+----------------+
     """
     return _invoke_function_over_columns("base64", col)
+
+
+@_try_remote_functions
+def to_base32(col: "ColumnOrName") -> Column:
+    """
+    Computes the BASE32 (RFC 4648) encoding of a binary column and returns it as a
+    string column.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to work on.
+        A column that evaluates to a binary.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        BASE32 encoding of the binary value.
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_base32`
+    :meth:`pyspark.sql.functions.base64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(b"foobar",)], ["value"])
+    >>> df.select(sf.to_base32("value").alias("r")).collect()
+    [Row(r='MZXW6YTBOI======')]
+    """
+    return _invoke_function_over_columns("to_base32", col)
 
 
 @_try_remote_functions
@@ -15217,6 +15448,7 @@ def unbase64(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.base64`
+    :meth:`pyspark.sql.functions.from_base32`
 
     Examples
     --------
@@ -15232,6 +15464,41 @@ def unbase64(col: "ColumnOrName") -> Column:
     +----------------+-------------------------------+
     """
     return _invoke_function_over_columns("unbase64", col)
+
+
+@_try_remote_functions
+def from_base32(col: "ColumnOrName") -> Column:
+    """
+    Decodes a BASE32 (RFC 4648) encoded string column and returns it as a binary
+    column.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to work on.
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        decoded binary value.
+        Returns a column that evaluates to a binary.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_base32`
+    :meth:`pyspark.sql.functions.unbase64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("MZXW6YTBOI======",)], ["value"])
+    >>> df.select(sf.from_base32("value").alias("r")).collect()
+    [Row(r=b'foobar')]
+    """
+    return _invoke_function_over_columns("from_base32", col)
 
 
 @_try_remote_functions
@@ -15755,6 +16022,46 @@ def try_validate_utf8(str: "ColumnOrName") -> Column:
     +---------------------------+
     """
     return _invoke_function_over_columns("try_validate_utf8", str)
+
+
+@_try_remote_functions
+def normalize(str: "ColumnOrName", form: Optional["ColumnOrName"] = None) -> Column:
+    """
+    Returns the Unicode normalization of ``str`` using the given normalization ``form``, as
+    defined by Unicode Standard Annex #15. Normalization is backed by Spark's bundled ICU4J
+    library rather than the JVM's own Unicode data, so results are stable across JVM vendors
+    and versions.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or column name
+        the input string to normalize.
+    form : :class:`~pyspark.sql.Column` or column name, optional
+        the normalization form, one of 'NFC', 'NFD', 'NFKC', 'NFKD' (case-insensitive).
+        If omitted, 'NFC' is used.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the normalized string.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("\ufb01",)], ["s"])
+    >>> df.select(sf.normalize(df.s, sf.lit("NFKC"))).show()
+    +------------------+
+    |normalize(s, NFKC)|
+    +------------------+
+    |                fi|
+    +------------------+
+    """
+    if form is None:
+        return _invoke_function_over_columns("normalize", str)
+    else:
+        return _invoke_function_over_columns("normalize", str, form)
 
 
 @_try_remote_functions
@@ -22511,6 +22818,75 @@ def to_variant_object(
 
 
 @_try_remote_functions
+def variant_from_arrays(keys: "ColumnOrName", values: "ColumnOrName") -> Column:
+    """
+    Creates a variant object from the given arrays of keys and values. The keys must be non-null
+    strings and the two arrays must have the same length.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    keys : :class:`~pyspark.sql.Column` or column name
+        an array of string keys.
+    values : :class:`~pyspark.sql.Column` or column name
+        an array of values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_from_entries`
+    :meth:`pyspark.sql.functions.to_variant_object`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT array('a', 'b') AS keys, array(1, 2) AS values")
+    >>> df.select(sf.variant_from_arrays("keys", "values").cast("string").alias("r")).collect()
+    [Row(r='{"a":1,"b":2}')]
+    """
+    return _invoke_function_over_columns("variant_from_arrays", keys, values)
+
+
+@_try_remote_functions
+def variant_from_entries(entries: "ColumnOrName") -> Column:
+    """
+    Creates a variant object from an array of key/value struct entries. The keys must be non-null
+    strings.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    entries : :class:`~pyspark.sql.Column` or column name
+        an array of key/value structs, where the first field is a string key and the second field
+        is the value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_from_arrays`
+    :meth:`pyspark.sql.functions.to_variant_object`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT array(struct('a', 1), struct('b', 2)) AS entries")
+    >>> df.select(sf.variant_from_entries("entries").cast("string").alias("r")).collect()
+    [Row(r='{"a":1,"b":2}')]
+    """
+    return _invoke_function_over_columns("variant_from_entries", entries)
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:
@@ -23048,6 +23424,52 @@ def try_variant_array_append(
 
 
 @_try_remote_functions
+def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
+    """
+    Recursively removes object fields and array elements whose value is a variant null, unless
+    `include_arrays` is False, in which case null array elements are kept. Returns NULL if any
+    argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    include_arrays : bool, optional
+        whether null elements are also removed from arrays (default True).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with variant null fields/elements removed
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_strip_nulls
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a" : 1, "b" : null, "c" : [1, null], "d" : { "e" : null, "f" : 4 } }'''
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_strip_nulls(v)).alias("r")).collect()
+    [Row(r='{"a":1,"c":[1],"d":{"f":4}}')]
+    >>> df.select(to_json(variant_strip_nulls(v, False)).alias("r")).collect()
+    [Row(r='{"a":1,"c":[1,null],"d":{"f":4}}')]
+    >>> df.select(variant_strip_nulls(lit(None)).alias("r")).collect()
+    [Row(r=None)]
+    >>> df2 = spark.createDataFrame([{'json': '{"a": null}'}, {'json': 'null'}])
+    >>> v2 = parse_json(df2.json)
+    >>> df2.select(to_json(variant_strip_nulls(v2)).alias("r")).collect()
+    [Row(r='{}'), Row(r='null')]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "variant_strip_nulls", _to_java_column(v), _enum_to_value(include_arrays)
+    )
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
@@ -23449,6 +23871,42 @@ def json_object_keys(col: "ColumnOrName") -> Column:
     [Row(r=None), Row(r=[]), Row(r=['key1', 'key2'])]
     """
     return _invoke_function_over_columns("json_object_keys", col)
+
+
+@_try_remote_functions
+def json_typeof(col: "ColumnOrName") -> Column:
+    """
+    Returns the type of the outermost JSON value as a string: one of 'object', 'array',
+    'string', 'number', 'boolean', or 'null'. Returns null if the input is not a valid JSON
+    string or is an empty string.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the type of the outermost JSON value.
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.json_object_keys`
+    :meth:`pyspark.sql.functions.get_json_object`
+    :meth:`pyspark.sql.functions.json_array_length`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('{"a": 1}',), ('[1, 2, 3]',), ('123',), ('',)], ['data'])
+    >>> df.select(json_typeof(df.data).alias('r')).collect()
+    [Row(r='object'), Row(r='array'), Row(r='number'), Row(r=None)]
+    """
+    return _invoke_function_over_columns("json_typeof", col)
 
 
 # TODO: Fix and add an example for StructType with Spark Connect

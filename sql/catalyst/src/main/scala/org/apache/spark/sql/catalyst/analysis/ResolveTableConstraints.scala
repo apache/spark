@@ -80,10 +80,10 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
   }
 
   /**
-   * For each user-provided generated column, add a CheckInvariant that validates the column
-   * value matches the generation expression. Auto-filled generated columns are excluded:
-   * ResolveOutputRelation strips their GENERATION_EXPRESSION metadata from the table output,
-   * so they won't appear here.
+   * For each generated column whose value was provided by the write, add a CheckInvariant that
+   * validates the column value matches the generation expression. Generated columns Spark
+   * auto-filled are excluded: ResolveOutputRelation marks them in the table output and their
+   * values are correct by construction.
    */
   private def buildGeneratedColumnConstraints(
       r: DataSourceV2Relation,
@@ -92,20 +92,16 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
       return Seq.empty
     }
 
-    // Use V2 columns from the table to access both V2 expressions and SQL strings.
-    // Only add constraints for generated columns whose GENERATION_EXPRESSION metadata
-    // is still present in the table output -- ResolveOutputRelation strips the metadata
-    // from auto-filled columns so they are excluded here.
-    val v2Columns = r.table.columns()
     val resolver = catalogManager.v1SessionCatalog.conf.resolver
-    val userProvidedGenCols = r.output
-      .filter(attr => GeneratedColumn.isGeneratedColumn(attr.metadata))
+    val autoFilledGenCols = r.output
+      .filter(GeneratedColumn.isAutoFilledGeneratedColumn)
       .map(_.name)
       .toSet
 
-    v2Columns.flatMap { col =>
+    // Use V2 columns from the table to access both V2 expressions and SQL strings.
+    r.table.columns().flatMap { col =>
       Option(col.columnGenerationExpression())
-        .filter(_ => userProvidedGenCols.exists(n => resolver(n, col.name)))
+        .filter(_ => !autoFilledGenCols.exists(n => resolver(n, col.name)))
         .map { genExpr =>
           val catalystExpr = buildGenerationCatalystExpression(genExpr)
           val colRef = UnresolvedAttribute.quoted(col.name)

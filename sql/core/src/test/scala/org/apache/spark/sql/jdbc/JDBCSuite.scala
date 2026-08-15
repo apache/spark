@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
@@ -93,6 +93,7 @@ class JDBCSuite extends SharedSparkSession {
       jdbcClientType: String): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
+    .putBoolean("preferTimestampNanos", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
     .putString("jdbcClientType", jdbcClientType)
     .build()
@@ -837,6 +838,72 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-57460: JDBC TIMESTAMP keeps microsecond mapping by default") {
+    // Without preferTimestampNanos, a driver TIMESTAMP(9) still infers as microsecond
+    // TimestampType even when the nanos preview feature is enabled.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+      try {
+        conn.createStatement().execute("CREATE TABLE TEST.TS_DEFAULT (t TIMESTAMP(9))")
+        conn.createStatement().execute(
+          "INSERT INTO TEST.TS_DEFAULT VALUES (TIMESTAMP '2020-02-02 04:13:14.123456789')")
+        val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TS_DEFAULT", new Properties())
+        assert(df.schema("T").dataType === TimestampType)
+      } finally {
+        conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TS_DEFAULT")
+        conn.close()
+      }
+    }
+  }
+
+  test("SPARK-57460: JDBC TIMESTAMP reads nanosecond LTZ precision when requested") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+      try {
+        conn.createStatement().execute("CREATE TABLE TEST.TS_NANOS_LTZ (t TIMESTAMP(9))")
+        conn.createStatement().execute(
+          "INSERT INTO TEST.TS_NANOS_LTZ VALUES (TIMESTAMP '2020-02-02 04:13:14.123456789')")
+        val df = spark.read
+          .option("preferTimestampNanos", "true")
+          .jdbc(urlWithUserAndPass, "TEST.TS_NANOS_LTZ", new Properties())
+        assert(df.schema("T").dataType === TimestampLTZNanosType(9))
+        val result = df.collect()
+        // H2 stores TIMESTAMP as local wall-clock; the LTZ read binds it to the session zone.
+        val expected = java.time.LocalDateTime.of(2020, 2, 2, 4, 13, 14, 123456789)
+          .atZone(java.time.ZoneId.systemDefault()).toInstant
+        assert(result(0).getAs[java.time.Instant](0) === expected)
+      } finally {
+        conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TS_NANOS_LTZ")
+        conn.close()
+      }
+    }
+  }
+
+  test("SPARK-57460: JDBC TIMESTAMP reads nanosecond NTZ precision when requested") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+      try {
+        conn.createStatement().execute("CREATE TABLE TEST.TS_NANOS_NTZ (t TIMESTAMP(8))")
+        conn.createStatement().execute(
+          "INSERT INTO TEST.TS_NANOS_NTZ VALUES (TIMESTAMP '2020-02-02 04:13:14.123456789')")
+        val df = spark.read
+          .option("preferTimestampNanos", "true")
+          .option("preferTimestampNTZ", "true")
+          .jdbc(urlWithUserAndPass, "TEST.TS_NANOS_NTZ", new Properties())
+        // Reported scale 8 -> precision 8. H2 rounds the stored value to 8 fractional digits
+        // (.123456789 -> .12345679); Spark's read path only floors to precision, so the value is
+        // preserved at 8 digits.
+        assert(df.schema("T").dataType === TimestampNTZNanosType(8))
+        val result = df.collect()
+        assert(result(0).getAs[java.time.LocalDateTime](0) ===
+          java.time.LocalDateTime.of(2020, 2, 2, 4, 13, 14, 123456790))
+      } finally {
+        conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TS_NANOS_NTZ")
+        conn.close()
+      }
+    }
+  }
+
   test("test DATE types") {
     val rows = spark.read.jdbc(
       urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
@@ -1452,6 +1519,13 @@ class JDBCSuite extends SharedSparkSession {
   test("SPARK-35446: MySQLDialect type mapping of float") {
     val mySqlDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     assert(mySqlDialect.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT")
+  }
+
+  test("MySQL blocks casts to double") {
+    val dialect = MySQLDialect()
+    val cast = new V2Cast(FieldReference("value"), IntegerType, DoubleType)
+
+    assert(dialect.compileExpression(cast).isEmpty)
   }
 
   test("PostgresDialect type mapping") {

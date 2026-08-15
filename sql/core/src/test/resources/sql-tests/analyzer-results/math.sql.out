@@ -392,6 +392,307 @@ Project [bround(-9223372036854775808, -1) AS bround(-9223372036854775808, -1)#xL
 
 
 -- !query
+SELECT truncate(25y, 1)
+-- !query analysis
+Project [truncate(25, 1) AS truncate(25, 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(25y, 0)
+-- !query analysis
+Project [truncate(25, 0) AS truncate(25, 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(25y, -1)
+-- !query analysis
+Project [truncate(25, -1) AS truncate(25, -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(25y, -2)
+-- !query analysis
+Project [truncate(25, -2) AS truncate(25, -2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(25y, -3)
+-- !query analysis
+Project [truncate(25, -3) AS truncate(25, -3)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-25y, 1)
+-- !query analysis
+Project [truncate(-25, 1) AS truncate(-25, 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-25y, 0)
+-- !query analysis
+Project [truncate(-25, 0) AS truncate(-25, 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-25y, -1)
+-- !query analysis
+Project [truncate(-25, -1) AS truncate(-25, -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-25y, -2)
+-- !query analysis
+Project [truncate(-25, -2) AS truncate(-25, -2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-25y, -3)
+-- !query analysis
+Project [truncate(-25, -3) AS truncate(-25, -3)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(127y, -1)
+-- !query analysis
+Project [truncate(127, -1) AS truncate(127, -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-128y, -1)
+-- !query analysis
+Project [truncate(-128, -1) AS truncate(-128, -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525s, 1)
+-- !query analysis
+Project [truncate(525, 1) AS truncate(525, 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525s, 0)
+-- !query analysis
+Project [truncate(525, 0) AS truncate(525, 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525s, -1)
+-- !query analysis
+Project [truncate(525, -1) AS truncate(525, -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525s, -2)
+-- !query analysis
+Project [truncate(525, -2) AS truncate(525, -2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525s, -3)
+-- !query analysis
+Project [truncate(525, -3) AS truncate(525, -3)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525s, 1)
+-- !query analysis
+Project [truncate(-525, 1) AS truncate(-525, 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525s, 0)
+-- !query analysis
+Project [truncate(-525, 0) AS truncate(-525, 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525s, -1)
+-- !query analysis
+Project [truncate(-525, -1) AS truncate(-525, -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525s, -2)
+-- !query analysis
+Project [truncate(-525, -2) AS truncate(-525, -2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525s, -3)
+-- !query analysis
+Project [truncate(-525, -3) AS truncate(-525, -3)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525, 1)
+-- !query analysis
+Project [truncate(525, 1) AS truncate(525, 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525, 0)
+-- !query analysis
+Project [truncate(525, 0) AS truncate(525, 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525, -1)
+-- !query analysis
+Project [truncate(525, -1) AS truncate(525, -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525, -2)
+-- !query analysis
+Project [truncate(525, -2) AS truncate(525, -2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525, -3)
+-- !query analysis
+Project [truncate(525, -3) AS truncate(525, -3)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525, 1)
+-- !query analysis
+Project [truncate(-525, 1) AS truncate(-525, 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525, 0)
+-- !query analysis
+Project [truncate(-525, 0) AS truncate(-525, 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525, -1)
+-- !query analysis
+Project [truncate(-525, -1) AS truncate(-525, -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525, -2)
+-- !query analysis
+Project [truncate(-525, -2) AS truncate(-525, -2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525, -3)
+-- !query analysis
+Project [truncate(-525, -3) AS truncate(-525, -3)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525L, 1)
+-- !query analysis
+Project [truncate(525, 1) AS truncate(525, 1)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525L, 0)
+-- !query analysis
+Project [truncate(525, 0) AS truncate(525, 0)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525L, -1)
+-- !query analysis
+Project [truncate(525, -1) AS truncate(525, -1)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525L, -2)
+-- !query analysis
+Project [truncate(525, -2) AS truncate(525, -2)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(525L, -3)
+-- !query analysis
+Project [truncate(525, -3) AS truncate(525, -3)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525L, 1)
+-- !query analysis
+Project [truncate(-525, 1) AS truncate(-525, 1)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525L, 0)
+-- !query analysis
+Project [truncate(-525, 0) AS truncate(-525, 0)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525L, -1)
+-- !query analysis
+Project [truncate(-525, -1) AS truncate(-525, -1)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525L, -2)
+-- !query analysis
+Project [truncate(-525, -2) AS truncate(-525, -2)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(-525L, -3)
+-- !query analysis
+Project [truncate(-525, -3) AS truncate(-525, -3)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT truncate(1234.5678)
+-- !query analysis
+Project [truncate(1234.5678, 0) AS truncate(1234.5678, 0)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT conv('100', 2, 10)
 -- !query analysis
 Project [conv(100, 2, 10, true) AS conv(100, 2, 10)#x]

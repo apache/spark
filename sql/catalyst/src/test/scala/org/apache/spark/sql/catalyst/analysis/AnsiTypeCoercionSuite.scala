@@ -1150,4 +1150,37 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     shouldNotCast(ArrayType(ArrayType(IntegerType)),
       AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)))
   }
+
+  test("SPARK-57811: ANSI string to nanosecond timestamp coercion in comparisons and predicates") {
+    // PromoteStrings has no standalone rule id (it only runs inside AnsiCombinedTypeCoercionRule in
+    // production), so wrap it the same way to get a runnable, id-registered rule for ruleTest.
+    val rule =
+      new AnsiTypeCoercion.AnsiCombinedTypeCoercionRule(Seq(AnsiTypeCoercion.PromoteStrings))
+    // In ANSI mode the string operand is coerced to the nanosecond timestamp type for both the LTZ
+    // and NTZ families, via AnsiStringPromotionTypeCoercion.findWiderTypeForString (the atomic-type
+    // fall-through). This is config-blind: ANSI coercion never reads castDatetimeToString, so
+    // unlike the non-ANSI range path there is no legacy string-promotion branch. Both families
+    // behave exactly like their micros counterparts (TimestampType / TimestampNTZType) in ANSI
+    // mode, and the concrete operand type (family + precision) is preserved. Assert under both
+    // flag values to lock in that ANSI ignores it.
+    Seq("false", "true").foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> legacy) {
+        Seq(7, 8, 9).foreach { p =>
+          Seq(TimestampLTZNanosType(p), TimestampNTZNanosType(p)).foreach { nt =>
+            val tsn = AttributeReference("tsn", nt)()
+            val strLit = Literal("2020-01-02 03:04:05.123456789")
+            // Equality (covers both 3VL EqualTo and null-safe EqualNullSafe).
+            ruleTest(rule, EqualTo(tsn, strLit), EqualTo(tsn, Cast(strLit, nt)))
+            ruleTest(rule, EqualTo(strLit, tsn), EqualTo(Cast(strLit, nt), tsn))
+            ruleTest(rule, EqualNullSafe(tsn, strLit), EqualNullSafe(tsn, Cast(strLit, nt)))
+            ruleTest(rule, EqualNullSafe(strLit, tsn), EqualNullSafe(Cast(strLit, nt), tsn))
+            // Range comparisons.
+            ruleTest(rule, LessThan(tsn, strLit), LessThan(tsn, Cast(strLit, nt)))
+            ruleTest(rule, GreaterThanOrEqual(strLit, tsn),
+              GreaterThanOrEqual(Cast(strLit, nt), tsn))
+          }
+        }
+      }
+    }
+  }
 }

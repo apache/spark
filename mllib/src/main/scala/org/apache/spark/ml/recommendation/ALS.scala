@@ -293,20 +293,6 @@ class ALSModel private[ml] (
   @Since("3.0.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
 
-  private val predict = udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
-    if (featuresA != null && featuresB != null) {
-      var dotProduct = 0.0f
-      var i = 0
-      while (i < rank) {
-        dotProduct += featuresA(i) * featuresB(i)
-        i += 1
-      }
-      dotProduct
-    } else {
-      Float.NaN
-    }
-  }
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
@@ -326,7 +312,8 @@ class ALSModel private[ml] (
       .join(itemFactors.alias(itemFactorsAlias),
         col(s"${validatedInputAlias}.${$(itemCol)}") === col(s"${itemFactorsAlias}.id"), "left")
       .select(col(s"${validatedInputAlias}.*"),
-        predict(col(s"${userFactorsAlias}.features"), col(s"${itemFactorsAlias}.features"))
+        ALSModel.getPredictUDF(rank)(
+          col(s"${userFactorsAlias}.features"), col(s"${itemFactorsAlias}.features"))
           .alias($(predictionCol)))
 
     getColdStartStrategy match {
@@ -538,6 +525,22 @@ private[ml] case class FeatureData(id: Int, features: Array[Float])
 
 @Since("1.6.0")
 object ALSModel extends MLReadable[ALSModel] {
+
+  private def getPredictUDF(rank: Int) = {
+    udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
+      if (featuresA != null && featuresB != null) {
+        var dotProduct = 0.0f
+        var i = 0
+        while (i < rank) {
+          dotProduct += featuresA(i) * featuresB(i)
+          i += 1
+        }
+        dotProduct
+      } else {
+        Float.NaN
+      }
+    }
+  }
 
   private[ml] def serializeData(data: FeatureData, dos: DataOutputStream): Unit = {
     import ReadWriteUtils._

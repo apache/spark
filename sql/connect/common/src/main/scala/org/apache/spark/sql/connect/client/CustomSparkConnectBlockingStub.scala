@@ -52,7 +52,8 @@ private[connect] class CustomSparkConnectBlockingStub(
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,
-      request.getClientType) {
+      request.getClientType,
+      Option(request.getOperationId).filter(_.nonEmpty)) {
       grpcExceptionConverter.convertIterator[ExecutePlanResponse](
         request.getSessionId,
         request.getUserContext,
@@ -62,7 +63,8 @@ private[connect] class CustomSparkConnectBlockingStub(
           r => {
             stubState.responseValidator.wrapIterator(
               CloseableIterator(stub.executePlan(r).asScala))
-          }))
+          }),
+        Option(request.getOperationId).filter(_.nonEmpty))
     }
   }
 
@@ -71,7 +73,8 @@ private[connect] class CustomSparkConnectBlockingStub(
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,
-      request.getClientType) {
+      request.getClientType,
+      Option(request.getOperationId).filter(_.nonEmpty)) {
       grpcExceptionConverter.convertIterator[ExecutePlanResponse](
         request.getSessionId,
         request.getUserContext,
@@ -83,7 +86,8 @@ private[connect] class CustomSparkConnectBlockingStub(
             channel,
             stubState.retryHandler,
             stubState.rpcDeadlines.reattachableExecutePlan,
-            stubState.rpcDeadlines.reattachExecute)))
+            stubState.rpcDeadlines.reattachExecute)),
+        Option(request.getOperationId).filter(_.nonEmpty))
     }
   }
 

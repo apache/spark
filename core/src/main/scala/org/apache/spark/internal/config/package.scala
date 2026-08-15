@@ -503,6 +503,21 @@ package object config {
     .doubleConf
     .createWithDefault(0.6)
 
+  private[spark] val MEMORY_OOM_ERROR_CONSUMER_BREAKDOWN_LIMIT =
+    ConfigBuilder("spark.memory.oomErrorConsumerBreakdownLimit")
+      .internal()
+      .doc("The maximum number of memory consumers listed individually in the per-consumer " +
+        "memory breakdown attached to an UNABLE_TO_ACQUIRE_MEMORY error. The largest consumers " +
+        "are listed first; any beyond this limit are collapsed into a single summary line. This " +
+        "bounds the size of the error message that is sent to the driver and shown in the UI. " +
+        "It does not affect the full breakdown written to the executor logs. Set to 0 to omit " +
+        "the breakdown from the error message entirely.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The consumer breakdown limit must not be negative")
+      .createWithDefault(5)
+
   private[spark] val UNMANAGED_MEMORY_POLLING_INTERVAL =
     ConfigBuilder("spark.memory.unmanagedMemoryPollingInterval")
       .doc("Interval for polling unmanaged memory users to track their memory usage. " +
@@ -1695,7 +1710,7 @@ package object config {
       .doc("Whether to enable OIDC credential propagation. When enabled, the driver reads an " +
         "identity token from a file, exchanges it for short-lived service credentials via " +
         "CredentialProvider implementations, and propagates those credentials to executors.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -1705,7 +1720,7 @@ package object config {
       .doc("Path to the OIDC identity token file on the driver. Required when " +
         "spark.security.oidc.enabled is true. The file should contain a JWT token " +
         "(e.g., a Kubernetes projected service account token).")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .createOptional
@@ -1714,7 +1729,7 @@ package object config {
     ConfigBuilder("spark.security.oidc.renewal.safetyMargin")
       .doc("How long before credential expiry to trigger renewal. Credentials are refreshed " +
         "at min(identity token expiry, service credential expiry) minus this margin.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ > 0, "The safety margin must be a positive time value.")
@@ -1724,11 +1739,23 @@ package object config {
     ConfigBuilder("spark.security.oidc.renewal.minInterval")
       .doc("Minimum interval between credential renewal attempts. This prevents tight renewal " +
         "loops when credentials have very short TTLs or when failures cause rapid retries.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
       .createWithDefaultString("30s")
+
+  private[spark] val DIRECT_CREDENTIAL_PROVIDERS_ENABLED =
+    ConfigBuilder("spark.security.directCredentialProviders.enabled")
+      .doc(
+        "When true, enables delegation token collection and renewal without Kerberos. " +
+        "Providers are called directly (without doLogin/doAs) and participate in the " +
+        "same renewal and distribution lifecycle as Kerberos delegation token providers. " +
+        "Providers that require Kerberos self-gate via delegationTokensRequired.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val SHUFFLE_SORT_INIT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.sort.initialBufferSize")
