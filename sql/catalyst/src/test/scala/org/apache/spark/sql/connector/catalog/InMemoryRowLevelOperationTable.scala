@@ -75,11 +75,16 @@ class InMemoryRowLevelOperationTable private (
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
+  private final val NESTED_METADATA_COLUMN_REF =
+    FieldReference(Seq(MetadataStructColumn.name, "row_index"))
   private final val SUPPORTS_DELTAS = "supports-deltas"
   private final val SPLIT_UPDATES = "split-updates"
   private final val NESTED_ROW_ID = "nested-row-id"
   // row id is nested.index, whose leaf collides with the `index` metadata column
   private final val NESTED_METADATA_NAME_ROW_ID = "nested-metadata-name-row-id"
+  private final val NESTED_METADATA = "nested-metadata"
+  private final val METADATA_ROW_ID = "metadata-row-id"
+  private final val NESTED_METADATA_ROW_ID = "nested-metadata-row-id"
   private final val NO_METADATA = "no-metadata"
   private final val USE_CATALYST_RUNTIME_FILTERING = "use-catalyst-runtime-filtering"
   private final val noMetadata = properties.getOrDefault(NO_METADATA, "false") == "true"
@@ -88,6 +93,21 @@ class InMemoryRowLevelOperationTable private (
   private final val nestedRowId = properties.getOrDefault(NESTED_ROW_ID, "false") == "true"
   private final val nestedMetadataNameRowId =
     properties.getOrDefault(NESTED_METADATA_NAME_ROW_ID, "false") == "true"
+  private final val nestedMetadata =
+    properties.getOrDefault(NESTED_METADATA, "false") == "true"
+  private final val metadataRowId =
+    properties.getOrDefault(METADATA_ROW_ID, "false") == "true"
+  private final val nestedMetadataRowId =
+    properties.getOrDefault(NESTED_METADATA_ROW_ID, "false") == "true"
+
+  private def requiredMetadataRefs: Array[NamedReference] = {
+    val refs = if (metadataRowId) {
+      Array[NamedReference](PARTITION_COLUMN_REF)
+    } else {
+      Array[NamedReference](PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+    }
+    if (nestedMetadata) refs :+ NESTED_METADATA_COLUMN_REF else refs
+  }
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -148,7 +168,7 @@ class InMemoryRowLevelOperationTable private (
       if (noMetadata) {
         Array.empty
       } else {
-        Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+        requiredMetadataRefs
       }
     }
 
@@ -216,11 +236,15 @@ class InMemoryRowLevelOperationTable private (
       if (noMetadata) {
         Array.empty
       } else {
-        Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+        requiredMetadataRefs
       }
     }
 
-    override def rowId(): Array[NamedReference] = if (nestedMetadataNameRowId) {
+    override def rowId(): Array[NamedReference] = if (nestedMetadataRowId) {
+      Array(NESTED_METADATA_COLUMN_REF)
+    } else if (metadataRowId) {
+      Array(INDEX_COLUMN_REF)
+    } else if (nestedMetadataNameRowId) {
       Array(NESTED_INDEX_COLUMN_REF)
     } else if (nestedRowId) {
       Array(NESTED_PK_COLUMN_REF)
@@ -242,14 +266,22 @@ class InMemoryRowLevelOperationTable private (
         } else {
           new DeltaWrite with RequiresDistributionAndOrdering {
 
+            private val distributionRef = if (nestedMetadata) {
+              NESTED_METADATA_COLUMN_REF
+            } else if (metadataRowId || nestedRowId || nestedMetadataNameRowId) {
+              rowId().head
+            } else {
+              PARTITION_COLUMN_REF
+            }
+
             override def requiredDistribution(): Distribution = {
-              Distributions.clustered(Array(PARTITION_COLUMN_REF))
+              Distributions.clustered(Array(distributionRef))
             }
 
             override def requiredOrdering(): Array[SortOrder] = {
               Array[SortOrder](
                 LogicalExpressions.sort(
-                  PARTITION_COLUMN_REF,
+                  distributionRef,
                   SortDirection.ASCENDING,
                   SortDirection.ASCENDING.defaultNullOrdering())
               )

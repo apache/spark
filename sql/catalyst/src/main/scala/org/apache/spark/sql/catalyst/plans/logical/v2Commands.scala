@@ -361,9 +361,9 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   }
 
   protected def projectedMetadataAttrs: Seq[Attribute] = {
-    V2ExpressionUtils.resolveRefs[AttributeReference](
+    V2ExpressionUtils.resolveMetadataRefs(
       operation.requiredMetadataAttributes.toImmutableArraySeq,
-      originalTable)
+      originalTable).map(_.toAttribute)
   }
 }
 

@@ -55,6 +55,17 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
     assert(metadataRowId.references.contains(metadataStruct))
     assert(!metadataRowId.references.contains(userColumn))
 
+    val requiredMetadata = V2ExpressionUtils.resolveMetadataRef(
+      FieldReference(Seq("_metadata", "row_index")), plan)
+    assert(requiredMetadata.references.contains(metadataStruct))
+    assert(!requiredMetadata.references.contains(userColumn))
+    assert(MetadataAttribute.isValid(requiredMetadata.toAttribute.metadata))
+
+    val runtimeFilterAttrs = V2ExpressionUtils.resolveMetadataAttributeRefs(
+      Array(FieldReference(Seq("_metadata", "row_index"))), plan.output)
+    assert(runtimeFilterAttrs.contains(metadataStruct))
+    assert(!runtimeFilterAttrs.contains(userColumn))
+
     val dataRowId = V2ExpressionUtils.resolveRowIdRef(FieldReference("id"), plan)
     assert(dataRowId == dataColumn)
   }

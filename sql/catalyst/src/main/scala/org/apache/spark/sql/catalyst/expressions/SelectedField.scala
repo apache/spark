@@ -85,7 +85,7 @@ object SelectedField {
     expr match {
       case a: Attribute =>
         dataTypeOpt.map { dt =>
-          StructField(a.name, dt, a.nullable)
+          StructField(a.name, dt, a.nullable, a.metadata)
         }
       case c: GetStructField =>
         val field = c.childSchema(c.ordinal)

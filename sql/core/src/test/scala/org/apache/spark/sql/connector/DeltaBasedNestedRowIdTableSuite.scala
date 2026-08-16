@@ -18,8 +18,12 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.plans.logical.{RebalancePartitions, RepartitionByExpression, Sort, WriteDelta}
+import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, V2Writes}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 
 abstract class DeltaBasedNestedRowIdTableSuiteBase(splitUpdates: Boolean)
   extends RowLevelOperationSuiteBase {
@@ -92,6 +96,30 @@ abstract class DeltaBasedNestedRowIdTableSuiteBase(splitUpdates: Boolean)
       checkLastWriteLog(
         updateWriteLogEntry(id = 1, metadata = Row("hr", null), data = Row(10, Row(1), 1, "it")))
     }
+  }
+
+  test("write distribution and ordering use the nested row id") {
+    createNestedRowIdTable()
+
+    val command = sql(s"UPDATE $tableNameAsString SET dep = 'it' WHERE id = 1")
+    val writeDelta = V2Writes(command.queryExecution.analyzed).collectFirst {
+      case write: WriteDelta => write
+    }.getOrElse(fail("Cannot find WriteDelta"))
+    val rowIdAttr = writeDelta.query.output(
+      writeDelta.projections.rowIdProjection.colOrdinals.head)
+
+    val distributionAttr = writeDelta.query.collectFirst {
+      case repartition: RepartitionByExpression =>
+        repartition.partitionExpressions.flatMap(_.references).head
+      case rebalance: RebalancePartitions =>
+        rebalance.partitionExpressions.flatMap(_.references).head
+    }.getOrElse(fail("Cannot find required distribution"))
+    val orderingAttr = writeDelta.query.collectFirst {
+      case sort: Sort => sort.order.flatMap(_.references).head
+    }.getOrElse(fail("Cannot find required ordering"))
+
+    assert(distributionAttr.exprId == rowIdAttr.exprId)
+    assert(orderingAttr.exprId == rowIdAttr.exprId)
   }
 
   test("update replacing the struct that holds the nested row id") {
@@ -233,6 +261,99 @@ abstract class DeltaBasedNestedRowIdTableSuiteBase(splitUpdates: Boolean)
         Row(10, 1, 1, 100, "it"),
         Row(20, 2, 2, 200, "software"),
         Row(30, 3, 3, 300, "hr")))
+      if (splitUpdates) {
+        checkLastWriteLog(
+          deleteWriteLogEntry(id = 1, metadata = Row("hr", null)),
+          reinsertWriteLogEntry(
+            metadata = Row("hr", null), data = Row(10, Row(1), 1, 100, "it")))
+      } else {
+        checkLastWriteLog(
+          updateWriteLogEntry(id = 1, metadata = Row("hr", null),
+            data = Row(10, Row(1), 1, 100, "it")))
+      }
+    }
+  }
+
+  test("merge target-presence marker is not shadowed by a data column") {
+    withTempView("source") {
+      val schema = StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("nested", StructType(Seq(
+          StructField("pk", IntegerType, nullable = false))), nullable = false),
+        StructField("id", IntegerType),
+        StructField("__row_from_target", StringType),
+        StructField("dep", StringType)))
+      createTable(CatalogV2Util.structTypeToV2Columns(schema))
+      append(schema.toDDL,
+        """{ "pk": 10, "nested": { "pk": 1 }, "id": 1, "__row_from_target": "user", "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, "it")).toDF("id", "dep").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.id = s.id
+           |WHEN MATCHED THEN UPDATE SET t.dep = s.dep
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT pk, __row_from_target, dep FROM $tableNameAsString"),
+        Seq(Row(10, "user", "it")))
+    }
+  }
+
+  test("merge source-presence marker is not shadowed by a source column") {
+    withTempView("source") {
+      createNestedRowIdTable()
+      Seq((1, "source", "it"))
+        .toDF("id", "__row_from_source", "dep")
+        .createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.id = s.id
+           |WHEN MATCHED THEN UPDATE SET t.dep = s.dep
+           |""".stripMargin)
+
+      checkTable(Seq(
+        Row(10, 1, 1, "it"),
+        Row(20, 2, 2, "software"),
+        Row(30, 3, 3, "hr")))
+    }
+  }
+
+  test("merge cardinality row id is not shadowed by a data column") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      withTempView("source") {
+      val schema = StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("nested", StructType(Seq(
+          StructField("pk", IntegerType, nullable = false))), nullable = false),
+        StructField("id", IntegerType),
+        StructField("__row_id", LongType),
+        StructField("dep", StringType)))
+      createTable(CatalogV2Util.structTypeToV2Columns(schema))
+      append(schema.toDDL,
+        """{ "pk": 10, "nested": { "pk": 1 }, "id": 1, "__row_id": 0, "dep": "hr" }
+          |{ "pk": 20, "nested": { "pk": 2 }, "id": 2, "__row_id": 0, "dep": "software" }
+          |""".stripMargin)
+      Seq((1, "it"), (2, "sales")).toDF("id", "dep").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.id = s.id
+           |WHEN MATCHED THEN UPDATE SET t.dep = s.dep
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT pk, __row_id, dep FROM $tableNameAsString ORDER BY pk"),
+        Seq(Row(10, 0L, "it"), Row(20, 0L, "sales")))
+      }
     }
   }
 }
@@ -314,3 +435,142 @@ class DeltaBasedNestedRowIdMetadataCollisionSuite
 
 class DeltaBasedNestedRowIdMetadataCollisionUpdateAsDeleteAndInsertSuite
   extends DeltaBasedNestedRowIdMetadataCollisionSuiteBase(splitUpdates = true)
+
+abstract class DeltaBasedMetadataRowIdTableSuiteBase(
+    nested: Boolean,
+    splitUpdates: Boolean) extends RowLevelOperationSuiteBase {
+
+  import testImplicits._
+
+  override protected def extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("supports-deltas", "true")
+    if (nested) {
+      props.put("nested-metadata", "true")
+      props.put("nested-metadata-filter", "true")
+      props.put("nested-metadata-row-id", "true")
+    } else {
+      props.put("metadata-row-id", "true")
+    }
+    if (splitUpdates) props.put("split-updates", "true")
+    props
+  }
+
+  protected val schema: String = if (nested) {
+    "pk INT NOT NULL, id INT, _metadata STRUCT<row_index: INT>, dep STRING"
+  } else {
+    "pk INT NOT NULL, id INT, dep STRING"
+  }
+
+  protected def createMetadataRowIdTable(): Unit = {
+    createAndInitTable(schema,
+      (if (nested) {
+        """{ "pk": 0, "id": 0, "_metadata": { "row_index": 100 }, "dep": "hr" }
+          |{ "pk": 1, "id": 1, "_metadata": { "row_index": 200 }, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "_metadata": { "row_index": 300 }, "dep": "hr" }
+          |""".stripMargin
+      } else {
+        """{ "pk": 0, "id": 0, "dep": "hr" }
+          |{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "hr" }
+          |""".stripMargin
+      }))
+  }
+
+  protected def checkMetadataRowIdTable(expected: Seq[Row]): Unit = {
+    checkAnswer(
+      sql(s"SELECT pk, id, dep FROM $tableNameAsString ORDER BY pk"),
+      expected)
+  }
+
+  test("delete with a metadata row id") {
+    createMetadataRowIdTable()
+    sql(s"DELETE FROM $tableNameAsString WHERE id IN (1, 100)")
+    checkMetadataRowIdTable(Seq(Row(0, 0, "hr"), Row(2, 2, "hr")))
+  }
+
+  test("update with a metadata row id") {
+    createMetadataRowIdTable()
+    sql(s"UPDATE $tableNameAsString SET dep = 'it' WHERE id = 1")
+    checkMetadataRowIdTable(
+      Seq(Row(0, 0, "hr"), Row(1, 1, "it"), Row(2, 2, "hr")))
+  }
+
+  test("merge with a metadata row id") {
+    withTempView("source") {
+      createMetadataRowIdTable()
+      Seq((1, "it")).toDF("id", "dep").createOrReplaceTempView("source")
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.id = s.id
+           |WHEN MATCHED THEN UPDATE SET t.dep = s.dep
+           |""".stripMargin)
+      checkMetadataRowIdTable(
+        Seq(Row(0, 0, "hr"), Row(1, 1, "it"), Row(2, 2, "hr")))
+    }
+  }
+}
+
+class DeltaBasedMetadataRowIdTableSuite
+  extends DeltaBasedMetadataRowIdTableSuiteBase(nested = false, splitUpdates = false)
+
+class DeltaBasedMetadataRowIdUpdateAsDeleteAndInsertTableSuite
+  extends DeltaBasedMetadataRowIdTableSuiteBase(nested = false, splitUpdates = true)
+
+abstract class DeltaBasedNestedMetadataRowIdTableSuiteBase(splitUpdates: Boolean)
+  extends DeltaBasedMetadataRowIdTableSuiteBase(nested = true, splitUpdates = splitUpdates) {
+
+  test("shared nested metadata and row ID reference has one binding") {
+    createMetadataRowIdTable()
+    val command = sql(s"UPDATE $tableNameAsString SET id = -1 WHERE id = 1")
+    val writeDelta = V2Writes(command.queryExecution.analyzed).collectFirst {
+      case write: WriteDelta => write
+    }.getOrElse(fail("Cannot find WriteDelta"))
+
+    val rowIdAttr = writeDelta.query.output(
+      writeDelta.projections.rowIdProjection.colOrdinals.head)
+    val metadataProjection = writeDelta.projections.metadataProjection.get
+    val metadataOrdinal = metadataProjection.schema.fields.indexWhere { field =>
+      field.name == "row_index" &&
+        field.metadata.contains(METADATA_COL_ATTR_KEY) &&
+        field.metadata.getString(METADATA_COL_ATTR_KEY) == "_metadata"
+    }
+    assert(metadataOrdinal >= 0)
+    val metadataAttr = writeDelta.query.output(
+      metadataProjection.colOrdinals(metadataOrdinal))
+
+    val distributionAttr = writeDelta.query.collectFirst {
+      case repartition: RepartitionByExpression =>
+        repartition.partitionExpressions.flatMap(_.references).head
+      case rebalance: RebalancePartitions =>
+        rebalance.partitionExpressions.flatMap(_.references).head
+    }.getOrElse(fail("Cannot find required distribution"))
+    val orderingAttr = writeDelta.query.collectFirst {
+      case sort: Sort => sort.order.flatMap(_.references).head
+    }.getOrElse(fail("Cannot find required ordering"))
+
+    assert(metadataAttr.exprId == rowIdAttr.exprId)
+    assert(distributionAttr.exprId == rowIdAttr.exprId)
+    assert(orderingAttr.exprId == rowIdAttr.exprId)
+  }
+
+  test("runtime group filtering supports nested metadata") {
+    createMetadataRowIdTable()
+    val executedPlan = executeAndKeepPlan {
+      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE id = 1")
+    }
+    val filteredScans = collect(executedPlan) {
+      case scan: BatchScanExec if scan.runtimeFilters.nonEmpty => scan
+    }
+    assert(filteredScans.nonEmpty, "could not find a runtime-filtered scan")
+    checkMetadataRowIdTable(
+      Seq(Row(0, 0, "hr"), Row(1, -1, "hr"), Row(2, 2, "hr")))
+  }
+}
+
+class DeltaBasedNestedMetadataRowIdTableSuite
+  extends DeltaBasedNestedMetadataRowIdTableSuiteBase(splitUpdates = false)
+
+class DeltaBasedNestedMetadataRowIdUpdateAsDeleteAndInsertTableSuite
+  extends DeltaBasedNestedMetadataRowIdTableSuiteBase(splitUpdates = true)

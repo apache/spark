@@ -21,14 +21,17 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.expressions.PredicateHelper
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.ProjectingInternalRow
+import org.apache.spark.sql.catalyst.expressions.{NamedExpression, PredicateHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertOnlyMerge, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.write.{DeltaWriteBuilder, LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwriteV2, SupportsTruncate, Write, WriteBuilder}
+import org.apache.spark.sql.connector.write.{DeltaWriteBuilder, LogicalWriteInfoImpl, RowLevelOperationTable, SupportsDelta, SupportsDynamicOverwrite, SupportsOverwriteV2, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, WriteToMicroBatchDataSource}
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
@@ -114,15 +117,62 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
       val writeBuilder = newWriteBuilder(r.table, writeOptions, rowSchema, metadataSchema)
       val write = writeBuilder.build()
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
+      val operation = r.table.asInstanceOf[RowLevelOperationTable].operation
+      val refResolver = rowLevelWriteRefResolver(
+        query,
+        projections.metadataProjection.toSeq.map { projection =>
+          operation.requiredMetadataAttributes() -> projection
+        })
+      val newQuery =
+        DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog, refResolver)
       rd.copy(write = Some(write), query = newQuery)
 
     case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
       val deltaWriteBuilder = newDeltaWriteBuilder(r.table, writeOptions, projections)
       val deltaWrite = deltaWriteBuilder.build()
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(deltaWrite, query, r.funCatalog)
+      val operation = r.table.asInstanceOf[RowLevelOperationTable].operation
+      val deltaOperation = operation.asInstanceOf[SupportsDelta]
+      val refBindings = projections.metadataProjection.toSeq.map { projection =>
+        operation.requiredMetadataAttributes() -> projection
+      } :+
+        (deltaOperation.rowId() -> projections.rowIdProjection)
+      val refResolver = rowLevelWriteRefResolver(query, refBindings)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(
+        deltaWrite, query, r.funCatalog, refResolver)
       wd.copy(write = Some(deltaWrite), query = newQuery)
+  }
+
+  private def rowLevelWriteRefResolver(
+      query: LogicalPlan,
+      refBindings: Seq[(Array[NamedReference], ProjectingInternalRow)])
+      : NamedReference => NamedExpression = {
+    val bindings = refBindings.flatMap { case (refs, projection) =>
+      if (refs.length != projection.colOrdinals.length) {
+        throw SparkException.internalError(
+          s"Expected ${refs.length} projection ordinals, " +
+            s"but found ${projection.colOrdinals.length}")
+      }
+      refs.zip(projection.colOrdinals).map { case (ref, ordinal) =>
+        ref -> query.output(ordinal)
+      }
+    }
+    ref => {
+      val matchingAttrs = bindings.collect {
+      case (boundRef, attr) if boundRef.fieldNames().length == ref.fieldNames().length &&
+          boundRef.fieldNames().zip(ref.fieldNames()).forall { case (left, right) =>
+            conf.resolver(left, right)
+          } =>
+        attr
+      }
+      if (matchingAttrs.map(_.exprId).distinct.size > 1) {
+        throw SparkException.internalError(
+          s"Connector reference $ref is bound to multiple write attributes")
+      }
+      matchingAttrs.headOption.getOrElse {
+        V2ExpressionUtils.resolveRef[NamedExpression](ref, query)
+      }
+    }
   }
 
   private def mergeOptions(
