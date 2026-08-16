@@ -337,8 +337,7 @@ class ExternalMerger(Merger, Generic[K, V, C]):
         """
         global MemoryBytesSpilled, DiskBytesSpilled
         path = self._get_spill_dir(self.spills)
-        if not os.path.exists(path):
-            os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
 
         used_memory = get_used_memory()
         if not self.pdata:
@@ -491,8 +490,7 @@ class ExternalSorter(Generic[V]):
     def _get_path(self, n: int) -> str:
         """Choose one directory for spill by number n"""
         d = self.local_dirs[n % len(self.local_dirs)]
-        if not os.path.exists(d):
-            os.makedirs(d)
+        os.makedirs(d, exist_ok=True)
         return os.path.join(d, str(n))
 
     def _next_limit(self) -> float:
@@ -635,8 +633,7 @@ class ExternalList(Iterable[V]):
     def _open_file(self) -> None:
         dirs = _get_local_dirs("objects")
         d = dirs[id(self) % len(dirs)]
-        if not os.path.exists(d):
-            os.makedirs(d)
+        os.makedirs(d, exist_ok=True)
         p = os.path.join(d, str(id(self)))
         self._file = open(p, "w+b", 65536)
         self._ser = BatchedSerializer(CompressedSerializer(CPickleSerializer()), 1024)
@@ -782,8 +779,7 @@ class ExternalGroupBy(ExternalMerger[K, V, "SizedIterable[V]"]):
         """
         global MemoryBytesSpilled, DiskBytesSpilled
         path = self._get_spill_dir(self.spills)
-        if not os.path.exists(path):
-            os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
 
         used_memory = get_used_memory()
         if not self.pdata:
