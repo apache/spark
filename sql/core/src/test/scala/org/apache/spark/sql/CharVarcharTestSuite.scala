@@ -854,6 +854,91 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58797: CAST to CHAR/VARCHAR with standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charDf = sql("SELECT CAST('ab' AS CHAR(5)) AS c")
+      assert(charDf.schema.head.dataType === CharType(5))
+      checkAnswer(charDf, Row("ab   "))
+
+      val varcharDf = sql("SELECT CAST('hello' AS VARCHAR(5)) AS v")
+      assert(varcharDf.schema.head.dataType === VarcharType(5))
+      checkAnswer(varcharDf, Row("hello"))
+
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("SELECT CAST('hello!' AS VARCHAR(5))").collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
+
+      // Multi-byte characters: length is in characters, not octets.
+      checkAnswer(sql("SELECT CAST('你好' AS VARCHAR(2)) AS v"), Row("你好"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("SELECT CAST('你好啊' AS VARCHAR(2))").collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "2")
+      )
+    }
+  }
+
+  test("SPARK-58798: least common type for COALESCE/CASE with CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS VARCHAR(5)), cast('world' AS VARCHAR(10))) AS c")
+        .schema.head.dataType === VarcharType(10))
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS VARCHAR(5)), cast('world!' AS CHAR(6))) AS c")
+        .schema.head.dataType === VarcharType(6))
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS CHAR(5)), cast('world!' AS CHAR(6))) AS c")
+        .schema.head.dataType === CharType(6))
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS VARCHAR(5)), 'world') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        """SELECT CASE WHEN true THEN cast('a' AS CHAR(2))
+          |ELSE cast('bb' AS CHAR(4)) END AS c""".stripMargin)
+        .schema.head.dataType === CharType(4))
+      // LCT(NULL, T) = T
+      assert(sql("SELECT coalesce(null, cast('a' AS CHAR(5))) AS c")
+        .schema.head.dataType === CharType(5))
+    }
+  }
+
+  test("SPARK-58799: transforming string functions return STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT lower(cast('AB' AS VARCHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        "SELECT cast('a' AS CHAR(1)) || cast('b' AS VARCHAR(1)) AS c")
+        .schema.head.dataType === StringType)
+      // Pads from CHAR participate in the concatenated value.
+      checkAnswer(
+        sql("SELECT cast('he' AS CHAR(4)) || cast('llo' AS CHAR(3)) AS c"),
+        Row("he  llo"))
+      assert(sql("SELECT substr(cast('hello' AS VARCHAR(5)), 1, 2) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        "SELECT upper(coalesce(cast('a' AS CHAR(2)), cast('b' AS CHAR(4)))) AS c")
+        .schema.head.dataType === StringType)
+    }
+  }
+
+  test("SPARK-58796: createDataFrame allows CHAR/VARCHAR when standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val df = spark.range(1).map(_.toString).toDF()
+      val schema = new StructType().add("id", CharType(5))
+      val created = spark.createDataFrame(df.collectAsList(), schema)
+      assert(created.schema.head.dataType === CharType(5))
+      checkAnswer(created, Row("0    "))
+    }
+  }
+
   test("invalidate char/varchar in functions") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -1035,6 +1120,41 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '123456' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("select * from t"), Row("123456"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-58801: standardSemantics scan pads CHAR and errors on oversize") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col CHAR(3)) using $format LOCATION '$dir'")
+          checkAnswer(sql("SELECT * FROM t"), Row("12 "))
+        }
+      }
+      Seq("CHAR", "VARCHAR").foreach { typ =>
+        withTempPath { dir =>
+          withTable("t") {
+            sql("SELECT '123456' as col").write.format(format).save(dir.toString)
+            sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                sql("SELECT * FROM t").collect()
+              },
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2")
+            )
+          }
+        }
+      }
+      // Oversize that is only trailing blanks trims successfully.
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12  ' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col VARCHAR(2)) using $format LOCATION '$dir'")
+          checkAnswer(sql("SELECT * FROM t"), Row("12"))
         }
       }
     }

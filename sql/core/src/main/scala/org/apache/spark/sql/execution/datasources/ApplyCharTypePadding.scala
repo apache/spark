@@ -41,7 +41,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       return plan
     }
 
-    if (conf.readSideCharPadding) {
+    if (conf.readSideCharPadding || conf.charVarcharStandardSemantics) {
       val newPlan = plan.resolveOperatorsUpWithNewOutput {
         case r: LogicalRelation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>

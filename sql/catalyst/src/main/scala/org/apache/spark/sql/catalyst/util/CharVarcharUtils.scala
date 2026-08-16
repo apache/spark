@@ -84,7 +84,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   def replaceCharVarcharWithStringForCast(dt: DataType): DataType = {
     if (SQLConf.get.charVarcharAsString) {
       replaceCharVarcharWithString(dt)
-    } else if (hasCharVarchar(dt) && !SQLConf.get.preserveCharVarcharTypeInfo) {
+    } else if (hasCharVarchar(dt) && !SQLConf.get.charVarcharFirstClassTypes) {
       logWarning(log"The Spark cast operator does not support char/varchar type and simply treats" +
         log" them as string type. Please use string type directly to avoid confusion. Otherwise," +
         log" you can set ${MDC(CONFIG, SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key)} " +
@@ -183,7 +183,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       case c: CharType if charFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
-          if (SQLConf.get.preserveCharVarcharTypeInfo) {
+          if (SQLConf.get.charVarcharFirstClassTypes) {
             c
           } else {
             c.toStringType
@@ -195,7 +195,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       case v: VarcharType if varcharFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
-          if (SQLConf.get.preserveCharVarcharTypeInfo) {
+          if (SQLConf.get.charVarcharFirstClassTypes) {
             v
           } else {
             v.toStringType
@@ -257,8 +257,17 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   def addPaddingForScan(attr: Attribute): Expression = {
     getRawType(attr.metadata).map { rawType =>
-      processStringForCharVarchar(
-        attr, rawType, charFuncName = Some("readSidePadding"), varcharFuncName = None)
+      if (SQLConf.get.charVarcharStandardSemantics) {
+        // Pad CHAR and enforce length limits for CHAR/VARCHAR (trim trailing blanks first).
+        processStringForCharVarchar(
+          attr,
+          rawType,
+          charFuncName = Some("charTypeReadSideCheck"),
+          varcharFuncName = Some("varcharTypeReadSideCheck"))
+      } else {
+        processStringForCharVarchar(
+          attr, rawType, charFuncName = Some("readSidePadding"), varcharFuncName = None)
+      }
     }.getOrElse(attr)
   }
 

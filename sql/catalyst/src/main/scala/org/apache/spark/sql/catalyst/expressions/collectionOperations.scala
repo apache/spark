@@ -3111,7 +3111,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     if (children.isEmpty) {
       StringType
     } else {
-      super.dataType
+      StringHelper.transformingStringResultType(super.dataType)
     }
   }
 

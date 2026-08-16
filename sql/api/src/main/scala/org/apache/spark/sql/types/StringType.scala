@@ -159,14 +159,53 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
 
   def isPlainString(s: StringType): Boolean = s.constraint == NoConstraint
 
+  /**
+   * Strip CHAR/VARCHAR length constraints, preserving collation.
+   *
+   * Used by transforming string expressions (upper, substr, concat, ...) so their
+   * result type is plain STRING even when inputs are CharType/VarcharType
+   * (SQL standard CHAR/VARCHAR R1), when standard semantics are on.
+   */
+  def plainStringType(dt: DataType): DataType = dt match {
+    case c: CharType => c.toStringType
+    case v: VarcharType => v.toStringType
+    case other => other
+  }
+
+  def plainStringType(s: StringType): StringType = s match {
+    case c: CharType => c.toStringType
+    case v: VarcharType => v.toStringType
+    case other => other
+  }
+
+  /**
+   * Result type for transforming string expressions.
+   * Under spark.sql.charVarchar.standardSemantics.enabled, always plain STRING (R1).
+   * Under preserveCharVarcharTypeInfo alone, keep child type (legacy leaky path).
+   */
+  def transformingStringResultType(dt: DataType): DataType = {
+    if (SqlApiConf.get.charVarcharStandardSemantics) {
+      plainStringType(dt)
+    } else {
+      dt
+    }
+  }
+
   def isMoreConstrained(a: StringType, b: StringType): Boolean =
     gteq(a.constraint, b.constraint)
 
+  /**
+   * Least common string type: CHAR -> VARCHAR -> STRING, with length max(n, m)
+   * when the result remains CHAR or VARCHAR.
+   *
+   * When first-class CHAR/VARCHAR are off, always widens to unbounded STRING
+   * (legacy annotated-STRING path where Char/Varchar do not appear in plans).
+   */
   def tightestCommonString(s1: StringType, s2: StringType): Option[StringType] = {
     if (s1.collationId != s2.collationId) {
       return None
     }
-    if (!SqlApiConf.get.preserveCharVarcharTypeInfo) {
+    if (!SqlApiConf.get.charVarcharFirstClassTypes) {
       return Some(StringType(s1.collationId))
     }
     Some((s1.constraint, s2.constraint) match {

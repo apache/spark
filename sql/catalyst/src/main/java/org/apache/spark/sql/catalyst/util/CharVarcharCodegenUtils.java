@@ -64,4 +64,20 @@ public class CharVarcharCodegenUtils {
       return inputStr;
     }
   }
+
+  /**
+   * Read-side CHAR check under standard semantics: pad to limit, or trim trailing
+   * spaces then error if still longer than limit.
+   */
+  public static UTF8String charTypeReadSideCheck(UTF8String inputStr, int limit) {
+    return charTypeWriteSideCheck(inputStr, limit);
+  }
+
+  /**
+   * Read-side VARCHAR check under standard semantics: allow up to limit characters,
+   * or trim trailing spaces then error if still longer than limit.
+   */
+  public static UTF8String varcharTypeReadSideCheck(UTF8String inputStr, int limit) {
+    return varcharTypeWriteSideCheck(inputStr, limit);
+  }
 }
