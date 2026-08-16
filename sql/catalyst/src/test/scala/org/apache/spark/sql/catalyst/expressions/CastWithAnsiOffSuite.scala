@@ -942,4 +942,44 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(largeTime1, ShortType), null)
     checkEvaluation(cast(largeTime1, ByteType), null)
   }
+
+  test("SPARK-58217: cast decimal to timestamp overflow with ansi off") {
+    def decimal(value: String, precision: Int, scale: Int): Literal = {
+      Literal(Decimal(new java.math.BigDecimal(value), precision, scale))
+    }
+
+    Seq(
+      ("99999999999999999999", 38, 0),
+      ("-99999999999999999999", 38, 0),
+      ("99999999999999999999.999999", 38, 6),
+      ("9223372036854.775808", 19, 6),
+      ("-9223372036854.775809", 19, 6)
+    ).foreach { case (value, precision, scale) =>
+      checkEvaluation(cast(decimal(value, precision, scale), TimestampType, UTC_OPT), null)
+    }
+
+    Seq(
+      // The unscaled boundary values have 19 digits, so precision is 19 at scale 6.
+      ("9223372036854.775807", Long.MaxValue),
+      ("-9223372036854.775808", Long.MinValue)
+    ).foreach { case (value, expected) =>
+      checkEvaluation(cast(decimal(value, 19, 6), TimestampType, UTC_OPT), expected)
+    }
+
+    Seq(
+      ("9223372036854.7758069", Long.MaxValue - 1),
+      ("-9223372036854.7758079", Long.MinValue + 1)
+    ).foreach { case (value, expected) =>
+      checkEvaluation(cast(decimal(value, 20, 7), TimestampType, UTC_OPT), expected)
+    }
+
+    checkEvaluation(
+      cast(decimal("1.0000009", 8, 7), TimestampType, UTC_OPT), MICROS_PER_SECOND)
+    checkEvaluation(
+      cast(decimal("-1.0000009", 8, 7), TimestampType, UTC_OPT), -MICROS_PER_SECOND)
+    checkEvaluation(cast(decimal("-1", 10, 0), TimestampType, UTC_OPT), -MICROS_PER_SECOND)
+    checkEvaluation(cast(decimal("0", 10, 0), TimestampType, UTC_OPT), 0L)
+
+    assert(cast(decimal("1", 10, 0), TimestampType, UTC_OPT).nullable)
+  }
 }
