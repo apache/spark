@@ -37,7 +37,8 @@ import org.apache.spark.sql.internal.SQLConf
 object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (conf.charVarcharAsString) {
+    // standardSemantics takes precedence over legacy charVarcharAsString.
+    if (conf.charVarcharAsString && !conf.charVarcharStandardSemantics) {
       return plan
     }
 

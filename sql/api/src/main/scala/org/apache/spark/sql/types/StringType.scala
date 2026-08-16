@@ -208,11 +208,12 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
     if (!SqlApiConf.get.charVarcharFirstClassTypes) {
       return Some(StringType(s1.collationId))
     }
+    // Preserve collationId on CHAR/VARCHAR results (length-only apply defaults to UTF8_BINARY).
     Some((s1.constraint, s2.constraint) match {
-      case (FixedLength(l1), FixedLength(l2)) => CharType(l1.max(l2))
-      case (MaxLength(l1), FixedLength(l2)) => VarcharType(l1.max(l2))
-      case (FixedLength(l1), MaxLength(l2)) => VarcharType(l1.max(l2))
-      case (MaxLength(l1), MaxLength(l2)) => VarcharType(l1.max(l2))
+      case (FixedLength(l1), FixedLength(l2)) => CharType(l1.max(l2), s1.collationId)
+      case (MaxLength(l1), FixedLength(l2)) => VarcharType(l1.max(l2), s1.collationId)
+      case (FixedLength(l1), MaxLength(l2)) => VarcharType(l1.max(l2), s1.collationId)
+      case (MaxLength(l1), MaxLength(l2)) => VarcharType(l1.max(l2), s1.collationId)
       case _ => StringType(s1.collationId)
     })
   }

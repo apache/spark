@@ -82,7 +82,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * warning message if it has char or varchar types
    */
   def replaceCharVarcharWithStringForCast(dt: DataType): DataType = {
-    if (SQLConf.get.charVarcharAsString) {
+    // standardSemantics takes precedence over legacy charVarcharAsString.
+    if (SQLConf.get.charVarcharAsString && !SQLConf.get.charVarcharStandardSemantics) {
       replaceCharVarcharWithString(dt)
     } else if (hasCharVarchar(dt) && !SQLConf.get.charVarcharFirstClassTypes) {
       logWarning(log"The Spark cast operator does not support char/varchar type and simply treats" +
@@ -256,17 +257,25 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   def addPaddingForScan(attr: Attribute): Expression = {
-    getRawType(attr.metadata).map { rawType =>
+    // Prefer metadata (annotated-STRING tables); fall back to first-class Char/Varchar types.
+    val rawType = getRawType(attr.metadata).orElse {
+      attr.dataType match {
+        case c: CharType => Some(c)
+        case v: VarcharType => Some(v)
+        case _ => None
+      }
+    }
+    rawType.map { dt =>
       if (SQLConf.get.charVarcharStandardSemantics) {
         // Pad CHAR and enforce length limits for CHAR/VARCHAR (trim trailing blanks first).
         processStringForCharVarchar(
           attr,
-          rawType,
+          dt,
           charFuncName = Some("charTypeReadSideCheck"),
           varcharFuncName = Some("varcharTypeReadSideCheck"))
       } else {
         processStringForCharVarchar(
-          attr, rawType, charFuncName = Some("readSidePadding"), varcharFuncName = None)
+          attr, dt, charFuncName = Some("readSidePadding"), varcharFuncName = None)
       }
     }.getOrElse(attr)
   }

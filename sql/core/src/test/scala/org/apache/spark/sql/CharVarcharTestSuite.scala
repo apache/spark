@@ -929,6 +929,56 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58798: LCT preserves collation on CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val c1 = CharType(2, "UTF8_LCASE")
+      val c2 = CharType(4, "UTF8_LCASE")
+      assert(StringHelper.tightestCommonString(c1, c2).contains(CharType(4, "UTF8_LCASE")))
+      val v1 = VarcharType(3, "UTF8_LCASE")
+      val v2 = VarcharType(5, "UTF8_LCASE")
+      assert(StringHelper.tightestCommonString(v1, v2).contains(VarcharType(5, "UTF8_LCASE")))
+      assert(StringHelper.tightestCommonString(c1, v2).contains(VarcharType(5, "UTF8_LCASE")))
+    }
+  }
+
+  test("SPARK-58799: regexp/mask/split return STRING under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql("SELECT regexp_replace(cast('ab' AS CHAR(2)), 'a', 'x') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT regexp_extract(cast('ab' AS VARCHAR(2)), '(a)', 1) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT split(cast('a,b' AS CHAR(3)), ',') AS c")
+        .schema.head.dataType === ArrayType(StringType, containsNull = false))
+      assert(sql("SELECT mask(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+    }
+  }
+
+  test("SPARK-58796: preserve vs standardSemantics R1 matrix") {
+    // preserve-only: transforming ops may keep Char/Varchar (leaky experimental path).
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === CharType(2))
+    }
+    // standardSemantics: R1 forces STRING even if preserve is also on.
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+    }
+  }
+
+  test("SPARK-58797: standardSemantics wins over charVarcharAsString") {
+    withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val df = sql("SELECT CAST('ab' AS CHAR(5)) AS c")
+      assert(df.schema.head.dataType === CharType(5))
+      checkAnswer(df, Row("ab   "))
+    }
+  }
+
   test("SPARK-58796: createDataFrame allows CHAR/VARCHAR when standardSemantics") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val df = spark.range(1).map(_.toString).toDF()
