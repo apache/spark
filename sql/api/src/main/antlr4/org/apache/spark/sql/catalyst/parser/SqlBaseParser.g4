@@ -1629,6 +1629,7 @@ predicate
     | IS errorCapturingNot? kind=NULL
     | IS errorCapturingNot? kind=(TRUE | FALSE | UNKNOWN)
     | IS errorCapturingNot? kind=DISTINCT FROM right=valueExpression
+    | IS errorCapturingNot? kind=JSON shape=(VALUE | ARRAY | OBJECT | SCALAR)?
     ;
 
 errorCapturingNot
@@ -2687,6 +2688,7 @@ ansiNonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SCALAR
     | SCD
     | SCHEMA
     | SCHEMAS
@@ -3154,6 +3156,7 @@ nonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SCALAR
     | SCD
     | SCHEMA
     | SCHEMAS
