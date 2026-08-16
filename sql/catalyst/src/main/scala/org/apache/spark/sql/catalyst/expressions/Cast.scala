@@ -1018,7 +1018,18 @@ case class Cast(
     (d.toBigDecimal * MICROS_PER_SECOND).longValue
   }
   private[this] def doubleToTimestamp(d: Double): Any = {
-    if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
+    if (d.isNaN || d.isInfinite) {
+      null
+    } else {
+      val result = d * MICROS_PER_SECOND
+      // Long.MaxValue cannot be represented exactly as a Double and is rounded to 2^63.
+      // Keep Long.MinValue inclusive while treating the rounded positive boundary as overflow.
+      if (result < Long.MinValue.toDouble || result >= Long.MaxValue.toDouble) {
+        errorOrNull(d, DoubleType, TimestampType)
+      } else {
+        result.toLong
+      }
+    }
   }
 
   // converting seconds to us
@@ -2010,6 +2021,7 @@ case class Cast(
     case DecimalType() =>
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
+      val result = ctx.freshVariable("result", classOf[Double])
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
           val errorContext = getContextOrNullCode(ctx)
@@ -2019,11 +2031,17 @@ case class Cast(
             if (Double.isNaN($c) || Double.isInfinite($c)) {
               $evNull = true;
             } else {
-              $evPrim = (long)($c * $MICROS_PER_SECOND);
+              double $result = $c * $MICROS_PER_SECOND;
+              if ($result < Long.MIN_VALUE || $result >= Long.MAX_VALUE) {
+                $evNull = true;
+              } else {
+                $evPrim = (long)$result;
+              }
             }
           """
         }
     case FloatType =>
+      val result = ctx.freshVariable("result", classOf[Double])
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
           val errorContext = getContextOrNullCode(ctx)
@@ -2033,7 +2051,12 @@ case class Cast(
             if (Float.isNaN($c) || Float.isInfinite($c)) {
               $evNull = true;
             } else {
-              $evPrim = (long)((double)$c * $MICROS_PER_SECOND);
+              double $result = (double)$c * $MICROS_PER_SECOND;
+              if ($result < Long.MIN_VALUE || $result >= Long.MAX_VALUE) {
+                $evNull = true;
+              } else {
+                $evPrim = (long)$result;
+              }
             }
           """
         }

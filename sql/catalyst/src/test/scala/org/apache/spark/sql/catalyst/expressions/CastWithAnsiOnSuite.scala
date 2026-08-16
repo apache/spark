@@ -927,4 +927,66 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       )
     }
   }
+
+  test("SPARK-58235: cast large double to timestamp overflow with ansi on") {
+    def checkDoubleTimestampOverflow(value: Double): Unit = {
+      checkErrorInExpression[SparkArithmeticException](
+        cast(Literal(value), TimestampType),
+        "CAST_OVERFLOW",
+        Map(
+          "value" -> s"${value * 1000000.0}D",
+          "sourceType" -> "\"DOUBLE\"",
+          "targetType" -> "\"BIGINT\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        ))
+    }
+
+    checkDoubleTimestampOverflow(1E20)
+    checkDoubleTimestampOverflow(-1E20)
+    checkEvaluation(cast(Literal(1.5), TimestampType), 1500000L)
+    checkEvaluation(cast(Literal(-1.5), TimestampType), -1500000L)
+
+    val maxDoubleSeconds = Long.MaxValue.toDouble / 1000000.0
+    val maxDoubleInRange = Math.nextDown(maxDoubleSeconds)
+    checkEvaluation(
+      cast(Literal(maxDoubleInRange), TimestampType),
+      (maxDoubleInRange * 1000000.0).toLong)
+    checkDoubleTimestampOverflow(maxDoubleSeconds)
+    checkDoubleTimestampOverflow(Math.nextUp(maxDoubleSeconds))
+
+    val minDoubleSeconds = Long.MinValue.toDouble / 1000000.0
+    checkEvaluation(cast(Literal(minDoubleSeconds), TimestampType), Long.MinValue)
+    checkDoubleTimestampOverflow(Math.nextDown(minDoubleSeconds))
+  }
+
+  test("SPARK-58235: cast large float to timestamp overflow with ansi on") {
+    def checkFloatTimestampOverflow(value: Float): Unit = {
+      checkErrorInExpression[SparkArithmeticException](
+        cast(Literal(value), TimestampType),
+        "CAST_OVERFLOW",
+        Map(
+          "value" -> s"${value.toDouble * 1000000.0}D",
+          "sourceType" -> "\"DOUBLE\"",
+          "targetType" -> "\"BIGINT\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        ))
+    }
+
+    checkFloatTimestampOverflow(1E20f)
+    checkFloatTimestampOverflow(-1E20f)
+    checkEvaluation(cast(Literal(1.5f), TimestampType), 1500000L)
+    checkEvaluation(cast(Literal(-1.5f), TimestampType), -1500000L)
+
+    val maxFloatSeconds = (Long.MaxValue.toDouble / 1000000.0).toFloat
+    checkEvaluation(
+      cast(Literal(maxFloatSeconds), TimestampType),
+      (maxFloatSeconds.toDouble * 1000000.0).toLong)
+    checkFloatTimestampOverflow(java.lang.Math.nextUp(maxFloatSeconds))
+
+    val minFloatSeconds = (Long.MinValue.toDouble / 1000000.0).toFloat
+    checkEvaluation(
+      cast(Literal(minFloatSeconds), TimestampType),
+      (minFloatSeconds.toDouble * 1000000.0).toLong)
+    checkFloatTimestampOverflow(java.lang.Math.nextDown(minFloatSeconds))
+  }
 }

@@ -28,7 +28,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{
+  Decimal, DoubleExactNumeric, DoubleType, LongType, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
@@ -75,7 +76,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
     if (d.isNaN || d.isInfinite) {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(d, TimestampType, context)
     } else {
-      DoubleExactNumeric.toLong(d * MICROS_PER_SECOND)
+      val result = d * MICROS_PER_SECOND
+      // Long.MaxValue cannot be represented exactly as a Double and is rounded to 2^63.
+      if (result < Long.MinValue.toDouble || result >= Long.MaxValue.toDouble) {
+        throw QueryExecutionErrors.castingCauseOverflowError(result, DoubleType, LongType)
+      }
+      DoubleExactNumeric.toLong(result)
     }
   }
 
