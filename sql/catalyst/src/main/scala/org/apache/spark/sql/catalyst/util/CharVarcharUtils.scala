@@ -257,15 +257,12 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   def addPaddingForScan(attr: Attribute): Expression = {
-    // Prefer metadata (annotated-STRING tables); fall back to first-class Char/Varchar types.
-    val rawType = getRawType(attr.metadata).orElse {
-      attr.dataType match {
-        case c: CharType => Some(c)
-        case v: VarcharType => Some(v)
-        case _ => None
-      }
-    }
-    rawType.map { dt =>
+    // Driven by metadata rather than attr.dataType even when Char/Varchar are first-class types.
+    // The metadata is the "not yet padded" marker: ApplyCharTypePadding rebuilds the relation via
+    // cleanAttrMetadata, so a second application of the rule finds no raw type and leaves the plan
+    // alone. Keying off attr.dataType instead would re-pad an already-padded scan on every pass and
+    // break the Once strategy's idempotence check.
+    getRawType(attr.metadata).map { dt =>
       if (SQLConf.get.charVarcharStandardSemantics) {
         // Pad CHAR and enforce length limits for CHAR/VARCHAR (trim trailing blanks first).
         processStringForCharVarchar(

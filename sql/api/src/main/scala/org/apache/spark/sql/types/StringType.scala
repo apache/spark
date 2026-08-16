@@ -208,14 +208,25 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
     if (!SqlApiConf.get.charVarcharFirstClassTypes) {
       return Some(StringType(s1.collationId))
     }
-    // Preserve collationId on CHAR/VARCHAR results (length-only apply defaults to UTF8_BINARY).
+    // Carry the declared collation onto CHAR/VARCHAR results. This propagates the Option rather
+    // than the id: None means "not explicitly declared" and renders as char(n) instead of
+    // char(n) collate UTF8_BINARY, so an all-default LCT keeps printing (and comparing) as before.
+    // The two collation ids are already known to be equal here.
+    val collation = declaredCollation(s1).orElse(declaredCollation(s2))
     Some((s1.constraint, s2.constraint) match {
-      case (FixedLength(l1), FixedLength(l2)) => CharType(l1.max(l2), s1.collationId)
-      case (MaxLength(l1), FixedLength(l2)) => VarcharType(l1.max(l2), s1.collationId)
-      case (FixedLength(l1), MaxLength(l2)) => VarcharType(l1.max(l2), s1.collationId)
-      case (MaxLength(l1), MaxLength(l2)) => VarcharType(l1.max(l2), s1.collationId)
+      case (FixedLength(l1), FixedLength(l2)) => new CharType(l1.max(l2), collation)
+      case (MaxLength(l1), FixedLength(l2)) => new VarcharType(l1.max(l2), collation)
+      case (FixedLength(l1), MaxLength(l2)) => new VarcharType(l1.max(l2), collation)
+      case (MaxLength(l1), MaxLength(l2)) => new VarcharType(l1.max(l2), collation)
       case _ => StringType(s1.collationId)
     })
+  }
+
+  /** The explicitly declared collation of a CHAR/VARCHAR type, if any. */
+  private def declaredCollation(s: StringType): Option[Int] = s match {
+    case c: CharType => c.collation
+    case v: VarcharType => v.collation
+    case _ => None
   }
 
   def removeCollation(s: StringType): StringType = s match {

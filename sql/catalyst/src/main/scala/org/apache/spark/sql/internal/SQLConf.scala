@@ -7338,8 +7338,8 @@ object SQLConf {
     .doc("When true, Spark applies string padding when reading CHAR type columns/fields, " +
       "in addition to the write-side padding. This config is true by default to better enforce " +
       "CHAR type semantic in cases such as external tables. When " +
-      s"'${CHAR_VARCHAR_STANDARD_SEMANTICS.key}' is true, read-side padding is always applied " +
-      "and disabling this config is unsupported.")
+      s"'${CHAR_VARCHAR_STANDARD_SEMANTICS.key}' is true, this config is ignored: read-side " +
+      "CHAR/VARCHAR checks are always applied, and setting it to false logs a warning.")
     .version("3.4.0")
     .booleanConf
     .createWithDefault(true)

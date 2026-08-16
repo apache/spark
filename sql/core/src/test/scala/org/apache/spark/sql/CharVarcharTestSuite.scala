@@ -989,6 +989,39 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58796: single-pass resolver agrees with fixed-point under standardSemantics") {
+    // Dual run defaults to on under tests, but pin it explicitly so this coverage cannot be
+    // silently lost: the HybridAnalyzer compares output schema and normalized plan across the
+    // two analyzers and fails with HYBRID_ANALYZER_EXCEPTION on any divergence.
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE.key -> "true") {
+      // CAST introduces the type (R3).
+      assert(sql("SELECT CAST('ab' AS CHAR(5)) AS c").schema.head.dataType === CharType(5))
+      // Least common type (R2).
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS VARCHAR(3)), CAST('bb' AS VARCHAR(7))) AS c")
+        .schema.head.dataType === VarcharType(7))
+      assert(sql(
+        "SELECT CASE WHEN true THEN CAST('a' AS CHAR(2)) ELSE CAST('bb' AS CHAR(4)) END AS c")
+        .schema.head.dataType === CharType(4))
+      // Transforming operators return STRING (R1).
+      assert(sql("SELECT upper(CAST('ab' AS CHAR(2))) AS c").schema.head.dataType === StringType)
+      assert(sql("SELECT CAST('a' AS CHAR(1)) || CAST('b' AS VARCHAR(1)) AS c")
+        .schema.head.dataType === StringType)
+      // Set operation least common type.
+      val union = sql(
+        """SELECT CAST('a' AS VARCHAR(3)) AS c
+          |UNION ALL
+          |SELECT CAST('abcd' AS VARCHAR(8)) AS c""".stripMargin)
+      assert(union.schema.head.dataType === VarcharType(8))
+      checkAnswer(union, Seq(Row("a"), Row("abcd")))
+    }
+  }
+
   test("invalidate char/varchar in functions") {
     checkError(
       exception = intercept[AnalysisException] {
