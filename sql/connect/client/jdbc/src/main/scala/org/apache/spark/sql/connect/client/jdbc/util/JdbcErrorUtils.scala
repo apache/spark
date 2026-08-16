@@ -62,7 +62,7 @@ private[jdbc] object JdbcErrorUtils {
 
   // SQLState class 08 is "connection exception"; HYT00 is the conventional
   // (ODBC-derived) state for an elapsed timeout.
-  private val CONNECTION_STATE_CLASS = "08"
+  private val CONNECTION_EXCEPTION_ERROR_CLASS = "08"
   private val CONNECTION_FAILURE = "08006"
   private val TIMEOUT_EXPIRED = "HYT00"
 
@@ -99,7 +99,7 @@ private[jdbc] object JdbcErrorUtils {
       val grpcCode = chain.collectFirst { case sre: StatusRuntimeException =>
         sre.getStatus.getCode
       }
-      if (sqlState.exists(_.startsWith(CONNECTION_STATE_CLASS))) {
+      if (sqlState.exists(_.startsWith(CONNECTION_EXCEPTION_ERROR_CLASS))) {
         new SQLNonTransientConnectionException(e.getMessage, sqlState.get, e)
       } else if (grpcCode.contains(Status.Code.UNAVAILABLE)) {
         new SQLTransientConnectionException(e.getMessage, CONNECTION_FAILURE, e)
