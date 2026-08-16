@@ -2123,3 +2123,373 @@ select json_array(1 IS NULL, 2 > 1)
 struct<JSON_ARRAY((1 IS NULL), (2 > 1)):string>
 -- !query output
 [false,true]
+select '{"a":1}' IS JSON
+-- !query schema
+struct<({"a":1} IS JSON):boolean>
+-- !query output
+true
+
+
+-- !query
+select '[1,2]' IS JSON
+-- !query schema
+struct<([1,2] IS JSON):boolean>
+-- !query output
+true
+
+
+-- !query
+select '42' IS JSON
+-- !query schema
+struct<(42 IS JSON):boolean>
+-- !query output
+true
+
+
+-- !query
+select '"hello"' IS JSON
+-- !query schema
+struct<("hello" IS JSON):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'not json' IS JSON
+-- !query schema
+struct<(not json IS JSON):boolean>
+-- !query output
+false
+
+
+-- !query
+select '' IS JSON
+-- !query schema
+struct<( IS JSON):boolean>
+-- !query output
+false
+
+
+-- !query
+select '{"a":1}' IS NOT JSON
+-- !query schema
+struct<(NOT ({"a":1} IS JSON)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'bad' IS NOT JSON
+-- !query schema
+struct<(NOT (bad IS JSON)):boolean>
+-- !query output
+true
+
+
+-- !query
+select cast(null as string) IS JSON
+-- !query schema
+struct<(CAST(NULL AS STRING) IS JSON):boolean>
+-- !query output
+NULL
+
+
+-- !query
+select cast(null as string) IS NOT JSON
+-- !query schema
+struct<(NOT (CAST(NULL AS STRING) IS JSON)):boolean>
+-- !query output
+NULL
+
+
+-- !query
+select '{"a":1}' IS JSON OBJECT
+-- !query schema
+struct<({"a":1} IS JSON OBJECT):boolean>
+-- !query output
+true
+
+
+-- !query
+select '[1,2]' IS JSON OBJECT
+-- !query schema
+struct<([1,2] IS JSON OBJECT):boolean>
+-- !query output
+false
+
+
+-- !query
+select '[1,2]' IS JSON ARRAY
+-- !query schema
+struct<([1,2] IS JSON ARRAY):boolean>
+-- !query output
+true
+
+
+-- !query
+select '{"a":1}' IS JSON ARRAY
+-- !query schema
+struct<({"a":1} IS JSON ARRAY):boolean>
+-- !query output
+false
+
+
+-- !query
+select '42' IS JSON VALUE
+-- !query schema
+struct<(42 IS JSON VALUE):boolean>
+-- !query output
+true
+
+
+-- !query
+select '"hello"' IS JSON VALUE
+-- !query schema
+struct<("hello" IS JSON VALUE):boolean>
+-- !query output
+true
+
+
+-- !query
+select '{"a":1}' IS JSON VALUE
+-- !query schema
+struct<({"a":1} IS JSON VALUE):boolean>
+-- !query output
+true
+
+
+-- !query
+select '[1,2]' IS JSON VALUE
+-- !query schema
+struct<([1,2] IS JSON VALUE):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'bad' IS JSON VALUE
+-- !query schema
+struct<(bad IS JSON VALUE):boolean>
+-- !query output
+false
+
+
+-- !query
+select '42' IS JSON SCALAR
+-- !query schema
+struct<(42 IS JSON SCALAR):boolean>
+-- !query output
+true
+
+
+-- !query
+select '"hello"' IS JSON SCALAR
+-- !query schema
+struct<("hello" IS JSON SCALAR):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'true' IS JSON SCALAR
+-- !query schema
+struct<(true IS JSON SCALAR):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'false' IS JSON SCALAR
+-- !query schema
+struct<(false IS JSON SCALAR):boolean>
+-- !query output
+true
+
+
+-- !query
+select '[1]' IS JSON SCALAR
+-- !query schema
+struct<([1] IS JSON SCALAR):boolean>
+-- !query output
+false
+
+
+-- !query
+select '{"a":1}' IS JSON SCALAR
+-- !query schema
+struct<({"a":1} IS JSON SCALAR):boolean>
+-- !query output
+false
+
+
+-- !query
+select '{"a":1}' IS NOT JSON OBJECT
+-- !query schema
+struct<(NOT ({"a":1} IS JSON OBJECT)):boolean>
+-- !query output
+false
+
+
+-- !query
+select '[1,2]' IS NOT JSON ARRAY
+-- !query schema
+struct<(NOT ([1,2] IS JSON ARRAY)):boolean>
+-- !query output
+false
+
+
+-- !query
+select '{"a":1}' IS NOT JSON VALUE
+-- !query schema
+struct<(NOT ({"a":1} IS JSON VALUE)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'bad' IS NOT JSON VALUE
+-- !query schema
+struct<(NOT (bad IS JSON VALUE)):boolean>
+-- !query output
+true
+
+
+-- !query
+select '{"a":1}' IS NOT JSON SCALAR
+-- !query schema
+struct<(NOT ({"a":1} IS JSON SCALAR)):boolean>
+-- !query output
+true
+
+
+-- !query
+select '42' IS NOT JSON SCALAR
+-- !query schema
+struct<(NOT (42 IS JSON SCALAR)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'null' IS JSON
+-- !query schema
+struct<(null IS JSON):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'null' IS JSON SCALAR
+-- !query schema
+struct<(null IS JSON SCALAR):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'null' IS JSON VALUE
+-- !query schema
+struct<(null IS JSON VALUE):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'null' IS JSON OBJECT
+-- !query schema
+struct<(null IS JSON OBJECT):boolean>
+-- !query output
+false
+
+
+-- !query
+select 1 AS OBJECT
+-- !query schema
+struct<OBJECT:int>
+-- !query output
+1
+
+
+-- !query
+select 1 AS SCALAR
+-- !query schema
+struct<SCALAR:int>
+-- !query output
+1
+
+
+-- !query
+CREATE TEMPORARY VIEW events(id, payload) AS
+  SELECT * FROM VALUES
+    (1, '{"event":"click","user":42}'),
+    (2, '[1, 2, 3]'),
+    (3, '"hello"'),
+    (4, '99'),
+    (5, 'null'),
+    (6, 'not-json'),
+    (7, NULL)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT id, payload FROM events WHERE payload IS JSON ORDER BY id
+-- !query schema
+struct<id:int,payload:string>
+-- !query output
+1	{"event":"click","user":42}
+2	[1, 2, 3]
+3	"hello"
+4	99
+5	null
+
+
+-- !query
+SELECT id, payload FROM events WHERE payload IS NOT JSON ORDER BY id
+-- !query schema
+struct<id:int,payload:string>
+-- !query output
+6	not-json
+
+
+-- !query
+SELECT id, payload FROM events WHERE payload IS NOT JSON OBJECT ORDER BY id
+-- !query schema
+struct<id:int,payload:string>
+-- !query output
+2	[1, 2, 3]
+3	"hello"
+4	99
+5	null
+6	not-json
+
+
+-- !query
+SELECT id,
+       CASE
+         WHEN payload IS JSON OBJECT THEN 'object'
+         WHEN payload IS JSON ARRAY  THEN 'array'
+         WHEN payload IS JSON SCALAR THEN 'scalar'
+         ELSE 'invalid or null'
+       END AS kind
+FROM events ORDER BY id
+-- !query schema
+struct<id:int,kind:string>
+-- !query output
+1	object
+2	array
+3	scalar
+4	scalar
+5	scalar
+6	invalid or null
+7	invalid or null
+
+
+-- !query
+DROP VIEW events
+-- !query schema
+struct<>
+-- !query output
+
