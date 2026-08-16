@@ -3811,6 +3811,7 @@ class AstBuilder extends DataTypeAstBuilder
    * - IS (NOT) NULL.
    * - IS (NOT) (TRUE | FALSE | UNKNOWN)
    * - IS (NOT) DISTINCT FROM
+   * - IS (NOT) JSON [VALUE | ARRAY | OBJECT | SCALAR]
    */
   private def withPredicate(e: Expression, ctx: PredicateContext): Expression = withOrigin(ctx) {
     // Invert a predicate if it has a valid NOT clause.
@@ -3936,6 +3937,15 @@ class AstBuilder extends DataTypeAstBuilder
         EqualNullSafe(e, expression(ctx.right))
       case SqlBaseParser.DISTINCT =>
         Not(EqualNullSafe(e, expression(ctx.right)))
+      case SqlBaseParser.JSON =>
+        val jsonShape = Option(ctx.shape).map(_.getType) match {
+          case Some(SqlBaseParser.VALUE) => IsJsonShape.Value
+          case Some(SqlBaseParser.SCALAR) => IsJsonShape.Scalar
+          case Some(SqlBaseParser.ARRAY) => IsJsonShape.Array
+          case Some(SqlBaseParser.OBJECT) => IsJsonShape.Object
+          case _ => IsJsonShape.Any
+        }
+        invertIfNotDefined(IsJson(e, jsonShape))
     }
   }
 
