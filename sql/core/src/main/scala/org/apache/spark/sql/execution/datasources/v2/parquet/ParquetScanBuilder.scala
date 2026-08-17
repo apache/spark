@@ -66,6 +66,15 @@ case class ParquetScanBuilder(
       val isCaseSensitive = sqlConf.caseSensitiveAnalysis
       val parquetSchema =
         new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
+      // Shredded-variant predicate pushdown (SPARK-55817) is not wired here: it applies to the
+      // DSv1 path only. In DSv2, variant extraction is pushed through the separate
+      // SupportsPushDownVariantExtractions mechanism, and the filter reaching this builder stays a
+      // `variant_get(v, ...)` predicate -- it is never rewritten into a struct-field access like
+      // `v.`0`` (that rewrite is done by the DSv1-only PushVariantIntoScan rule). So there is no
+      // shredded-variant logical name for ParquetFilters to resolve here, and nothing would be
+      // reported convertible even with a variantExtractionSchema. DSv2 reads remain correct (the
+      // variant filter is applied post-scan); they just do not get row-group skipping on shredded
+      // columns.
       val parquetFilters = new ParquetFilters(
         parquetSchema,
         pushDownDate,

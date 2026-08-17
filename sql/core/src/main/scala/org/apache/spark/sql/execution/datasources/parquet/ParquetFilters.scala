@@ -37,11 +37,14 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition
 
+import org.apache.spark.sql.catalyst.expressions.variant.ObjectExtraction
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
+import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.{ParquetFilterOps, ParquetTypeOps}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
@@ -56,7 +59,14 @@ class ParquetFilters(
     pushDownStringPredicate: Boolean,
     pushDownInFilterThreshold: Int,
     caseSensitive: Boolean,
-    datetimeRebaseSpec: RebaseSpec) {
+    datetimeRebaseSpec: RebaseSpec,
+    variantExtractionSchema: Option[StructType] = None) {
+  // Shredded-variant physical field-name constants. Declared first so they are initialized before
+  // `nameToShreddedVariantField`, which reads them during construction (Scala initializes `val`s in
+  // declaration order).
+  private val TYPED_VALUE = "typed_value"
+  private val VALUE = "value"
+
   // A map which contains parquet field name and data type, if predicate push down applies.
   //
   // Each key in `nameToParquetField` represents a column; `dots` are used as separators for
@@ -127,6 +137,198 @@ class ParquetFilters(
   private case class ParquetPrimitiveField(
       fieldNames: Array[String],
       fieldType: ParquetSchemaType)
+
+  /**
+   * Holds the mapping from a logical shredded-variant path (e.g. "v.`0`") to the physical
+   * shredded columns needed to push a sound row-group-skipping predicate.
+   *
+   * @param leaf the physical `typed_value` scalar leaf carrying min/max statistics
+   * @param residualFieldNames the untyped `value` residual columns along the path, from the
+   *                           top-level residual down to the leaf's own-level sibling. Each is a
+   *                           physical field-name array. Only residuals that exist in this file's
+   *                           schema are included; a value for the path can only be hiding in one
+   *                           of these residuals when the typed leaf is NULL, so the pushed
+   *                           predicate OR-s in an IS NOT NULL guard on each (see
+   *                           `makeShreddedFilter`).
+   */
+  private case class ShreddedVariantField(
+      leaf: ParquetPrimitiveField,
+      residualFieldNames: Seq[Array[String]])
+
+  // Maps logical shredded-variant paths produced by PushVariantIntoScan (e.g. "v.`0`") to the
+  // physical shredded columns. Populated only when `variantExtractionSchema` is provided and the
+  // physical file schema actually shreds the requested path.
+  //
+  // Soundness: shredding is per-row and per-file best-effort. A row whose value does not fit the
+  // shredded type (type mismatch or overflow), or whose field is not shredded in this file, is
+  // stored in an untyped `value` residual with `typed_value` NULL. Parquet min/max excludes NULLs,
+  // so pushing the predicate on the typed leaf alone could skip a row group that still holds a
+  // matching row in a residual. To stay sound we push `or(leafPredicate, isNotNull(residual)...)`
+  // over every residual `value` column along the path: Parquet drops the row group only when the
+  // leaf cannot match AND every residual is entirely NULL, so a row group is skipped only when
+  // every value for the path is provably in the typed leaf. See `makeShreddedFilter`.
+  private val nameToShreddedVariantField: Map[String, ShreddedVariantField] = {
+    variantExtractionSchema match {
+      case Some(variantSchema) =>
+        val entries = shreddedVariantEntries(
+          variantSchema.fields.toSeq, schema.asGroupType(), Array.empty, Array.empty)
+        if (caseSensitive) {
+          entries.toMap
+        } else {
+          // Mirror `nameToParquetField`: drop names that are ambiguous under case-insensitive
+          // matching rather than risk pushing a filter on the wrong physical column.
+          val dedup = entries
+            .groupBy(_._1.toLowerCase(Locale.ROOT))
+            .filter(_._2.size == 1)
+            .transform((_, v) => v.head._2)
+          CaseInsensitiveMap(dedup)
+        }
+      case None => Map.empty
+    }
+  }
+
+  // Look up a child of `group` by name, honoring `caseSensitive`. Returns the child type together
+  // with its actual physical name so callers build paths from the on-disk names (needed for
+  // correct case-insensitive matching, where the requested key case may differ from the file's).
+  private def findChild(group: GroupType, name: String): Option[Type] = {
+    group.getFields.asScala.find { f =>
+      if (caseSensitive) f.getName == name else f.getName.equalsIgnoreCase(name)
+    }
+  }
+
+  // Look up the untyped `value` residual sibling in `group`, if it exists as a non-REPEATED
+  // primitive. Returns the physical field name.
+  private def residualIn(group: GroupType): Option[String] = findChild(group, VALUE).collect {
+    case p: PrimitiveType if p.getRepetition != Repetition.REPEATED => p.getName
+  }
+
+  // Copy of `getNormalizedLogicalType` from the `nameToParquetField` closure, needed here for the
+  // shredded leaf resolution which runs outside that closure.
+  private def getNormalizedLogicalType(p: PrimitiveType): LogicalTypeAnnotation = {
+    (p.getPrimitiveTypeName, p.getLogicalTypeAnnotation) match {
+      case (INT32, intType: IntLogicalTypeAnnotation)
+        if intType.getBitWidth() == 32 && intType.isSigned() => null
+      case (INT64, intType: IntLogicalTypeAnnotation)
+        if intType.getBitWidth() == 64 && intType.isSigned() => null
+      case (_, otherType) => otherType
+    }
+  }
+
+  // Navigate the regular shredding layout from a variant column's physical group, resolving both
+  // the typed leaf and the residual `value` columns along the path. The layout is:
+  //   <col> / typed_value / k0 / typed_value / ... / kN / typed_value   (leaf)
+  //   <col> / value                                                     (L0 residual)
+  //   <col> / typed_value / k0 / value                                  (L1 residual)
+  //   ...
+  //   <col> / typed_value / k0 / ... / kN / value                       (leaf-level residual)
+  // Paths are built from the on-disk field names (via `findChild`) so case-insensitive matching
+  // uses the file's actual names. A value for the path can only be hiding in one of these residual
+  // `value` columns when the typed leaf is NULL, so IS NULL on all of them is the soundness guard.
+  // Residuals absent in this file's schema are skipped (that level cannot hold a fallback here).
+  // Returns None if the file does not shred this path down to a non-REPEATED scalar leaf (nothing
+  // is pushed and the row group is simply read).
+  private def resolveShredded(
+      physCol: GroupType,
+      physColPath: Array[String],
+      keys: Array[String]): Option[ShreddedVariantField] = {
+    if (keys.isEmpty) return None
+    val residuals = scala.collection.mutable.ArrayBuffer.empty[Array[String]]
+    // L0: the variant column's own residual.
+    residualIn(physCol).foreach(r => residuals += (physColPath :+ r))
+    // Descend key by key: <group>/typed_value/<key>. Collect each level's residual sibling.
+    var group = physCol
+    var namePath = physColPath
+    var idx = 0
+    while (idx < keys.length) {
+      val typedChild = findChild(group, TYPED_VALUE) match {
+        case Some(g: GroupType) => g
+        case _ => return None
+      }
+      val typedName = typedChild.getName
+      val keyChild = findChild(typedChild, keys(idx)) match {
+        case Some(g: GroupType) => g
+        case _ => return None
+      }
+      namePath = namePath ++ Array(typedName, keyChild.getName)
+      group = keyChild
+      residualIn(group).foreach(r => residuals += (namePath :+ r))
+      idx += 1
+    }
+    // The leaf is the typed_value of the last key group.
+    findChild(group, TYPED_VALUE) match {
+      case Some(p: PrimitiveType) if p.getRepetition != Repetition.REPEATED =>
+        val leaf = ParquetPrimitiveField(namePath :+ p.getName,
+          ParquetSchemaType(getNormalizedLogicalType(p), p.getPrimitiveTypeName, p.getTypeLength))
+        Some(ShreddedVariantField(leaf, residuals.toSeq))
+      case _ => None
+    }
+  }
+
+  // Walk the variant-extraction schema alongside the physical Parquet group, collecting
+  // logicalName -> ShreddedVariantField entries for shredded scalar object paths that this file
+  // actually shreds. Only object-extraction, scalar-leaf paths are eligible; array-index paths and
+  // synthetic (empty / placeholder / companion / full-variant passthrough) paths resolve to None.
+  //
+  // `logicalParentNames` accumulates the logical field names (used to build the map key that the
+  // pushed filter references); `physParentNames` accumulates the on-disk field names (used to build
+  // the physical Parquet column paths). They differ only in case under case-insensitive matching.
+  private def shreddedVariantEntries(
+      variantFields: Seq[StructField],
+      physGroup: GroupType,
+      logicalParentNames: Array[String],
+      physParentNames: Array[String]): Seq[(String, ShreddedVariantField)] = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    variantFields.flatMap { field =>
+      val physChildOpt = physGroup.getFields.asScala.collectFirst {
+        case g: GroupType if
+          (if (caseSensitive) g.getName == field.name
+           else g.getName.equalsIgnoreCase(field.name)) => g
+      }
+      physChildOpt match {
+        case None => Nil
+        case Some(physChild) =>
+          val logicalColPath = logicalParentNames :+ field.name
+          val physColPath = physParentNames :+ physChild.getName
+          field.dataType match {
+            // Variant struct: each child is a requested extraction carrying VariantMetadata.
+            case s: StructType if VariantMetadata.isVariantStruct(s) =>
+              s.fields.toSeq.flatMap { extraction =>
+                if (!extraction.metadata.contains(VariantMetadata.METADATA_KEY)) {
+                  Nil
+                } else {
+                  val meta = VariantMetadata.fromMetadata(extraction.metadata)
+                  val segments = try { meta.parsedPath() } catch { case _: Exception => null }
+                  if (segments == null) {
+                    Nil
+                  } else {
+                    // Only scalar object-extraction paths are eligible. Reject array-index paths
+                    // (a mix of ObjectExtraction and ArrayExtraction fails this check) and empty
+                    // paths ("$" / passthrough / companion), which yield no keys.
+                    val keys = segments.collect { case o: ObjectExtraction => o.key }
+                    if (keys.isEmpty || keys.length != segments.length) {
+                      Nil
+                    } else {
+                      // `physChild` is this variant column's physical group; `physColPath` holds
+                      // its on-disk name path. Navigate the shredding layout from there.
+                      resolveShredded(physChild, physColPath, keys) match {
+                        case None => Nil
+                        case Some(shredded) =>
+                          val logicalName =
+                            (logicalColPath :+ extraction.name).toImmutableArraySeq.quoted
+                          Seq(logicalName -> shredded)
+                      }
+                    }
+                  }
+                }
+              }
+            // Ordinary struct: recurse into nested fields.
+            case s: StructType if !VariantMetadata.isVariantStruct(s) =>
+              shreddedVariantEntries(s.fields.toSeq, physChild, logicalColPath, physColPath)
+            case _ => Nil
+          }
+      }
+    }
+  }
 
   private case class ParquetSchemaType(
       logicalTypeAnnotation: LogicalTypeAnnotation,
@@ -647,7 +849,12 @@ class ParquetFilters(
   // Parquet's type in the given file should be matched to the value's type
   // in the pushed filter in order to push down the filter to Parquet.
   private def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
-    value == null || (nameToParquetField(name).fieldType match {
+    valueMatchesParquetType(nameToParquetField(name).fieldType, value)
+  }
+
+  // The value's type must match the field's on-disk Parquet type for a filter to be pushed.
+  private def valueMatchesParquetType(fieldType: ParquetSchemaType, value: Any): Boolean = {
+    value == null || (fieldType match {
       case ParquetBooleanType => value.isInstanceOf[JBoolean]
       case ParquetIntegerType if value.isInstanceOf[Period] => true
       case ParquetByteType | ParquetShortType | ParquetIntegerType => value match {
@@ -692,6 +899,43 @@ class ParquetFilters(
     nameToParquetField.contains(name) && valueCanMakeFilterOn(name, value)
   }
 
+  // Whether `name` is a shredded-variant logical path whose typed leaf accepts `value`. `value`
+  // must be non-null: shredded pushdown only handles comparison predicates.
+  private def canMakeShreddedFilterOn(name: String, value: Any): Boolean = {
+    value != null && nameToShreddedVariantField.get(name).exists { f =>
+      valueMatchesParquetType(f.leaf.fieldType, value)
+    }
+  }
+
+  // Build the sound shredded-variant predicate:
+  //   or(leafPredicate, isNotNull(residual_0), ..., isNotNull(residual_n))
+  // where each isNotNull is `notEq(residual, null)`.
+  //
+  // Parquet's statistics drop logic is: `or(a, b)` is row-group-droppable iff BOTH `a` and `b` are
+  // droppable, and `notEq(col, null)` (IS NOT NULL) is droppable iff the column is entirely NULL in
+  // the row group (no non-nulls). So the whole `or` drops the row group iff the leaf predicate is
+  // droppable (leaf min/max cannot match) AND every residual is entirely NULL (no value for the
+  // path is hiding in a residual). If any residual holds a non-null, its isNotNull conjunct is not
+  // droppable, so the row group is kept -- we never drop a row group that could contain a matching
+  // residual value.
+  //
+  // The naive `and(leafPredicate, isNull(residual))` is UNSOUND: `and` drops iff EITHER conjunct is
+  // droppable, so the leaf predicate alone would drop the row group regardless of the residual.
+  //
+  // `makeLeaf` produces the leaf predicate from the leaf's field-name array; it returns None if the
+  // leaf type has no comparison encoding.
+  private def makeShreddedFilter(
+      name: String,
+      makeLeaf: (ParquetSchemaType, Array[String]) => Option[FilterPredicate]
+      ): Option[FilterPredicate] = {
+    val field = nameToShreddedVariantField(name)
+    makeLeaf(field.leaf.fieldType, field.leaf.fieldNames).map { leafPredicate =>
+      field.residualFieldNames.foldLeft(leafPredicate) { (acc, residualNames) =>
+        FilterApi.or(acc, FilterApi.notEq(binaryColumn(residualNames), null.asInstanceOf[Binary]))
+      }
+    }
+  }
+
   /**
    * @param predicate the input filter predicates. Not all the predicates can be pushed down.
    * @param canPartialPushDownConjuncts whether a subset of conjuncts of predicates can be pushed
@@ -718,6 +962,37 @@ class ParquetFilters(
     // Probably I missed something and obviously this should be changed.
 
     predicate match {
+      // Shredded-variant paths (e.g. "v.`0`"). Only comparison predicates that use min/max
+      // statistics are eligible. Each pushes or(leafPredicate, isNotNull(residual)...) over every
+      // residual `value` column along the path (see `makeShreddedFilter`). IS NULL / IS NOT NULL on
+      // the logical variant field are intentionally out of scope: "the extracted field is null" is
+      // not the same as "typed_value is null", so we must not conflate them.
+      case sources.EqualTo(name, value) if canMakeShreddedFilterOn(name, value) =>
+        makeShreddedFilter(name, (t, n) => makeEq.lift(t).map(_(n, value)))
+      case sources.EqualNullSafe(name, value) if canMakeShreddedFilterOn(name, value) =>
+        makeShreddedFilter(name, (t, n) => makeEq.lift(t).map(_(n, value)))
+      case sources.LessThan(name, value) if canMakeShreddedFilterOn(name, value) =>
+        makeShreddedFilter(name, (t, n) => makeLt.lift(t).map(_(n, value)))
+      case sources.LessThanOrEqual(name, value) if canMakeShreddedFilterOn(name, value) =>
+        makeShreddedFilter(name, (t, n) => makeLtEq.lift(t).map(_(n, value)))
+      case sources.GreaterThan(name, value) if canMakeShreddedFilterOn(name, value) =>
+        makeShreddedFilter(name, (t, n) => makeGt.lift(t).map(_(n, value)))
+      case sources.GreaterThanOrEqual(name, value) if canMakeShreddedFilterOn(name, value) =>
+        makeShreddedFilter(name, (t, n) => makeGtEq.lift(t).map(_(n, value)))
+      case sources.In(name, values) if pushDownInFilterThreshold > 0 && values.nonEmpty &&
+          values.forall(v => canMakeShreddedFilterOn(name, v)) =>
+        // Convert `In` to the OR of per-value equalities, each already OR-ed with the residual
+        // isNotNull guards, then combine. Reuses the same soundness guard as the comparison
+        // predicates (the repeated residual disjuncts are harmless).
+        val distinct = values.distinct
+        if (distinct.length <= pushDownInFilterThreshold) {
+          distinct.flatMap { v =>
+            makeShreddedFilter(name, (t, n) => makeEq.lift(t).map(_(n, v)))
+          }.reduceLeftOption(FilterApi.or)
+        } else {
+          None
+        }
+
       case sources.IsNull(name) if canMakeFilterOn(name, null) =>
         makeEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, null))

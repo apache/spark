@@ -7102,6 +7102,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.variant.shreddedPredicatePushdown.enabled")
+      .internal()
+      .doc("When true, comparison predicates on shredded Variant fields produced by " +
+        "PushVariantIntoScan (e.g. variant_get(v, '$.a', 'bigint') > 999) are pushed to Parquet " +
+        "as the predicate on the physical shredded typed_value leaf column OR-ed with an " +
+        "IS NOT NULL check on every untyped residual value column along the path, so that a row " +
+        "group is skipped only when the leaf cannot match and every residual is entirely null " +
+        "(i.e. the whole path is provably in the typed leaf). This enables row-group skipping " +
+        "for shredded Variant columns while never dropping rows that fall back to an untyped " +
+        "residual. Has no effect unless the Parquet column is shredded and " +
+        "spark.sql.variant.pushVariantIntoScan is also true.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()

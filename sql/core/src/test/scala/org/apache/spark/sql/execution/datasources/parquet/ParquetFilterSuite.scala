@@ -34,7 +34,7 @@ import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, Eq, Gt, GtEq, In => FilterIn, Lt, LtEq, NotEq, UserDefinedByInstance}
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetOutputFormat}
 import org.apache.parquet.hadoop.util.HadoopInputFile
-import org.apache.parquet.schema.MessageType
+import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.execution.ExplainMode
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable, PushableColumnAndNestedColumn, VariantMetadata}
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
@@ -82,13 +82,15 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   protected def createParquetFilters(
       schema: MessageType,
       caseSensitive: Option[Boolean] = None,
-      datetimeRebaseSpec: RebaseSpec = RebaseSpec(LegacyBehaviorPolicy.CORRECTED)
+      datetimeRebaseSpec: RebaseSpec = RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+      variantExtractionSchema: Option[StructType] = None
     ): ParquetFilters =
     new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringPredicate,
       conf.parquetFilterPushDownInFilterThreshold,
       caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
-      datetimeRebaseSpec)
+      datetimeRebaseSpec,
+      variantExtractionSchema = variantExtractionSchema)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -2421,6 +2423,253 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
           Instant.parse("2021-01-01T00:00:00Z")))).isDefined)
       }
     }
+  }
+
+  // ----------------------------------------------------------------------------------------------
+  // Shredded-variant filter pushdown (SPARK-55817).
+  //
+  // PushVariantIntoScan rewrites variant_get(v, '$.a', 'bigint') > 999 into a struct-field access
+  // "v.`0`" > 999 where "0" carries VariantMetadata for path "$.a". ParquetFilters maps that
+  // logical path to the physical shredded leaf v.typed_value.a.typed_value and, for soundness,
+  // conjoins IS NULL on every residual `value` column along the path.
+  // ----------------------------------------------------------------------------------------------
+
+  /** A variant-extraction StructField named by ordinal, carrying VariantMetadata for `path`. */
+  private def variantField(name: String, dt: DataType, path: String): StructField =
+    StructField(name, dt, metadata = VariantMetadata(path, failOnError = true, "UTC").toMetadata)
+
+  /**
+   * The variantExtractionSchema PushVariantIntoScan produces for a top-level variant column
+   * `colName` with the given extraction fields (each an ordinal-named field with VariantMetadata).
+   */
+  private def variantExtractionSchema(colName: String, fields: StructField*): StructType =
+    StructType(Seq(StructField(colName, StructType(fields))))
+
+  test("shredded variant filter: single-level bigint resolves to leaf with residual guards") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 999L))
+    assert(filter.isDefined, "Expected shredded variant predicate to be created")
+    val s = filter.get.toString
+    // Leaf predicate on the typed_value leaf.
+    assert(s.contains("v.typed_value.a.typed_value"),
+      s"Expected leaf column v.typed_value.a.typed_value in $s")
+    // Residual IS NULL guards: leaf-level sibling and top-level residual.
+    assert(s.contains("v.typed_value.a.value"), s"Expected L1 residual guard in $s")
+    assert(s.contains("v.value"), s"Expected top-level residual guard in $s")
+  }
+
+  test("shredded variant filter: without variantExtractionSchema the logical path is unknown") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val pf = createParquetFilters(MessageTypeParser.parseMessageType(parquetSchema))
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 999L)).isEmpty)
+  }
+
+  test("shredded variant filter: string leaf and all comparison operators") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group b {
+        |        optional binary value;
+        |        optional binary typed_value (STRING);
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", StringType, "$.b"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    Seq(
+      sources.EqualTo("v.`0`", "str"),
+      sources.LessThan("v.`0`", "str"),
+      sources.LessThanOrEqual("v.`0`", "str"),
+      sources.GreaterThan("v.`0`", "str"),
+      sources.GreaterThanOrEqual("v.`0`", "str")).foreach { f =>
+      val filter = pf.createFilter(f)
+      assert(filter.isDefined, s"Expected $f to push down")
+      val s = filter.get.toString
+      assert(s.contains("v.typed_value.b.typed_value"), s"Expected leaf column in $s for $f")
+      assert(s.contains("v.typed_value.b.value") && s.contains("v.value"),
+        s"Expected residual guards in $s for $f")
+    }
+  }
+
+  test("shredded variant filter: In pushes OR of guarded equalities") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    val filter = pf.createFilter(sources.In("v.`0`", Array[Any](1L, 2L, 3L)))
+    assert(filter.isDefined, "Expected In on shredded column to push down")
+    val s = filter.get.toString
+    assert(s.contains("v.typed_value.a.typed_value"), s"Expected leaf column in $s")
+    assert(s.contains("v.typed_value.a.value") && s.contains("v.value"),
+      s"Expected residual guards in $s")
+  }
+
+  test("shredded variant filter: multi-level path resolves with a residual per level") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional group typed_value {
+        |          optional group b {
+        |            optional binary value;
+        |            optional int64 typed_value;
+        |          }
+        |        }
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a.b"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 5L))
+    assert(filter.isDefined, "Expected multi-level shredded predicate to be created")
+    val s = filter.get.toString
+    assert(s.contains("v.typed_value.a.typed_value.b.typed_value"),
+      s"Expected multi-level leaf column in $s")
+    // Three residual guards: L0, L1 (a), and leaf-level sibling (b).
+    assert(s.contains("v.value"), s"Expected L0 residual guard in $s")
+    assert(s.contains("v.typed_value.a.value"), s"Expected L1 residual guard in $s")
+    assert(s.contains("v.typed_value.a.typed_value.b.value"),
+      s"Expected leaf-level residual guard in $s")
+  }
+
+  test("shredded variant filter: array-index path is rejected") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a[0]"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 999L)).isEmpty,
+      "Array-index paths must not resolve to a shredded leaf")
+  }
+
+  test("shredded variant filter: synthetic fields (placeholder / companion) resolve to None") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val placeholder = variantField("0", BooleanType, "$.__placeholder_field__")
+    val pfPlaceholder = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      variantExtractionSchema = Some(variantExtractionSchema("v", placeholder)))
+    assert(pfPlaceholder.createFilter(sources.EqualTo("v.`0`", true)).isEmpty,
+      "Placeholder field must not resolve to a shredded leaf")
+
+    // Full-variant passthrough path "$" yields no keys -> None.
+    val passthrough = variantField("0", LongType, "$")
+    val pfPassthrough = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      variantExtractionSchema = Some(variantExtractionSchema("v", passthrough)))
+    assert(pfPassthrough.createFilter(sources.GreaterThan("v.`0`", 1L)).isEmpty,
+      "Full-variant passthrough must not resolve to a shredded leaf")
+  }
+
+  test("shredded variant filter: absent shredded field resolves to None") {
+    // The physical schema does not shred `a` (no typed_value.a subtree); the value lives entirely
+    // in the opaque residual. Nothing should be pushed.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group c {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 999L)).isEmpty,
+      "A path not shredded in this file must not be pushed")
+  }
+
+  test("shredded variant filter: case-insensitive matching resolves the leaf") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group V {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group A {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    // Logical column name and path use different case than the physical schema.
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      caseSensitive = Some(false), variantExtractionSchema = Some(extraction))
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 999L))
+    assert(filter.isDefined, "Case-insensitive matching should resolve the shredded leaf")
+    assert(filter.get.toString.toLowerCase(java.util.Locale.ROOT).contains("typed_value"),
+      s"Expected a typed_value leaf predicate, got ${filter.get}")
   }
 }
 
