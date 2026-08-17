@@ -103,11 +103,10 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     val leftProjectList = projectList(left)
     val rightProjectList = projectList(right)
 
-    left.output.size == left.output.map(_.name).distinct.size &&
-      !left.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
-        !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
-          Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
-            Project(rightProjectList, nonFilterChild(skipProject(right))))
+    !left.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
+      !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
+        Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
+          Project(rightProjectList, nonFilterChild(skipProject(right))))
   }
 
   private def projectList(node: LogicalPlan): Seq[NamedExpression] = node match {
