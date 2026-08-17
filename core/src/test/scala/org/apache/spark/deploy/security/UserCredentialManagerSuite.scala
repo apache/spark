@@ -554,7 +554,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     }
   }
 
-  test("stop() does not wait for credential renewal before closing providers") {
+  test("stop() waits for credential renewal before closing providers") {
     val conf = createSparkConf()
     val ctx = createUserContext(expiresInSeconds = 6)
     val callbackCount = new AtomicInteger()
@@ -597,15 +597,17 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
     try {
       assert(renewalInterrupted.await(10, TimeUnit.SECONDS))
-      stopThread.join(10000)
-      assert(!stopThread.isAlive, "stop() should not wait for credential renewal to finish")
-      assert(provider.getCloseCount === 1,
-        "stop() should close providers while credential renewal is still running")
+      assert(stopThread.isAlive, "stop() should wait for credential renewal to finish")
+      assert(provider.getCloseCount === 0,
+        "stop() should not close providers while credential renewal is still running")
     } finally {
       releaseRenewal.countDown()
       stopThread.join(10000)
     }
 
     assert(renewalCompleted.await(10, TimeUnit.SECONDS))
+    assert(!stopThread.isAlive, "stop() should finish after credential renewal exits")
+    assert(provider.getCloseCount === 1,
+      "stop() should close providers after credential renewal exits")
   }
 }

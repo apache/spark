@@ -144,8 +144,20 @@ private[spark] class UserCredentialManager(
   }
 
   def stop(): Unit = {
+    var interrupted = false
     if (renewalExecutor != null) {
       renewalExecutor.shutdownNow()
+      try {
+        if (!renewalExecutor.awaitTermination(
+            UserCredentialManager.RENEWAL_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+          logWarning(log"Timed out waiting for credential renewal to stop; " +
+            log"closing credential providers while renewal may still be running.")
+        }
+      } catch {
+        case e: InterruptedException =>
+          interrupted = true
+          logWarning(log"Interrupted while waiting for credential renewal to stop.", e)
+      }
     }
     // Close all initialized credential providers to release resources (e.g., HTTP clients).
     // This loader belongs to this manager, so closing it cannot affect a later SparkContext.
@@ -153,10 +165,14 @@ private[spark] class UserCredentialManager(
       credentialProviderLoader.closeAll()
     } catch {
       case e: InterruptedException =>
-        Thread.currentThread().interrupt()
+        interrupted = true
         logWarning(log"Interrupted while closing credential providers during shutdown.", e)
       case NonFatal(e) =>
         logWarning(log"Error closing credential providers during shutdown.", e)
+    } finally {
+      if (interrupted) {
+        Thread.currentThread().interrupt()
+      }
     }
   }
 
@@ -388,6 +404,8 @@ private[spark] class UserCredentialManager(
 }
 
 private[spark] object UserCredentialManager {
+
+  private val RENEWAL_SHUTDOWN_TIMEOUT_SECONDS = 10L
 
   /**
    * Synthetic authority used in target URIs for scheme-based provider resolution.
