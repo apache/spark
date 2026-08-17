@@ -911,6 +911,54 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
     )
   }
 
+  test("topic-level offsets tolerate a new topic matching subscribePattern after the start") {
+    val topicPrefix = newTopic()
+    val topic = s"$topicPrefix-a"
+    val topic2 = s"$topicPrefix-b"
+    testUtils.createTopic(topic, partitions = 1)
+    testUtils.sendMessages(topic, Array("1"), Some(0))
+
+    // The starting offsets only name the topic that exists when the query starts
+    val ds = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribePattern", s"$topicPrefix-.*")
+      .option("startingOffsets", s"""{"$topic":"earliest"}""")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(ds)(
+      StartStream(),
+      AssertOnQuery { q =>
+        q.processAllAvailable()
+        true
+      },
+      CheckAnswer(1),
+      // A topic created after the initial offsets were resolved is picked up as a new partition,
+      // starting at earliest, instead of tripping the strict topic check
+      WithOffsetSync(new TopicPartition(topic2, 0), expectedOffset = 1) { () =>
+        testUtils.createTopic(topic2, partitions = 1)
+        testUtils.sendMessages(topic2, Array("2"), Some(0))
+      },
+      AssertOnQuery { q =>
+        // The consumer based reader only sees a newly created topic on its next metadata refresh,
+        // so keep triggering batches until the topic shows up in the query's offsets
+        eventually(timeout(streamingTimeout)) {
+          q.processAllAvailable()
+          val progress = q.lastProgress
+          assert(progress != null && progress.sources.exists(_.endOffset.contains(topic2)),
+            s"$topic2 has not been discovered yet")
+        }
+        true
+      },
+      CheckAnswer(1, 2)
+    )
+  }
+
   test("ensure that initial offset are written with an extra byte in the beginning (SPARK-19517)") {
     withTempDir { metadataPath =>
       val topic = "kafka-initial-offset-current"
@@ -2133,48 +2181,6 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       StopStream,
       StartStream(),
       CheckAnswer(1, 2, 3, 12, 4) // Should get the data back on recovery
-    )
-  }
-
-  test("topic-level offsets tolerate a new topic matching subscribePattern after the start") {
-    val prefix = newTopic()
-    val topic1 = s"$prefix-a"
-    val topic2 = s"$prefix-b"
-    testUtils.createTopic(topic1, partitions = 1)
-    testUtils.sendMessages(topic1, Array("1"), Some(0))
-
-    // The offsets only name the topic that exists when the query starts
-    val kafka = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-      .option("subscribePattern", s"$prefix-.*")
-      .option("startingOffsets", s"""{"$topic1":"earliest"}""")
-      .load()
-      .selectExpr("CAST(value AS STRING)")
-      .as[String]
-    val mapped = kafka.map(_.toInt)
-
-    testStream(mapped)(
-      makeSureGetOffsetCalled,
-      CheckAnswer(1),
-      // A topic created after the initial offsets were resolved is picked up as a new partition
-      // (starting at earliest) instead of failing the strict topic check
-      Execute { q =>
-        testUtils.createTopic(topic2, partitions = 1)
-        testUtils.sendMessages(topic2, Array("2"), Some(0))
-        testUtils.waitUntilOffsetAppears(new TopicPartition(topic2, 0), 1)
-        // The consumer based reader only sees a newly created topic on its next metadata
-        // refresh, so keep triggering batches until the topic shows up in the query's offsets
-        eventually(Timeout(streamingTimeout)) {
-          q.processAllAvailable()
-          val progress = q.lastProgress
-          assert(progress != null && progress.sources.exists(_.endOffset.contains(topic2)),
-            s"$topic2 has not been discovered yet")
-        }
-      },
-      CheckAnswer(1, 2)
     )
   }
 
