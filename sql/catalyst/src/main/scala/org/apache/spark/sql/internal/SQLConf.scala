@@ -6981,7 +6981,8 @@ object SQLConf {
         "per-row cast-error companion column (nullable string) so that the cast error is only " +
         "raised when the row is consumed by the user expression. Without this flag, the cast is " +
         "always evaluated and any failure raises immediately, even when the surrounding " +
-        "expression would not have consumed the failing row.")
+        "expression would not have consumed the failing row. This also allows throwable variant " +
+        "extractions to be hoisted across joins while preserving their original error timing.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

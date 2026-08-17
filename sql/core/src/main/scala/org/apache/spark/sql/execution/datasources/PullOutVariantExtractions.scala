@@ -173,6 +173,8 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
   }
 
   private def isJoinHoistable(e: Expression): Boolean = {
+    // Unlike optimizer rules that must stop at throwable expressions, scan pushdown can preserve
+    // the original error timing with its per-row cast-error companion column when enabled.
     isHoistable(e) && (!e.throwable ||
       SQLConf.get.getConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR))
   }
