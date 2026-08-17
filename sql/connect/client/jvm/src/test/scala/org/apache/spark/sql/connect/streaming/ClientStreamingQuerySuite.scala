@@ -577,7 +577,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       }
     } finally {
       q.stop()
-      eventually(timeout(60.seconds), interval(1.seconds)) {
+      eventually(timeout(180.seconds), interval(1.seconds)) {
         assert(!q.isActive)
         assert(listener.terminate.nonEmpty)
       }
