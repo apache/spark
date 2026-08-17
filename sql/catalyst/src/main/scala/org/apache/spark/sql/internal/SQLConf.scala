@@ -7321,6 +7321,10 @@ object SQLConf {
         "This is a breaking change from the annotated-STRING default and from " +
         "preserveCharVarcharTypeInfo (which keeps Char/Varchar through transforms).")
       .version("4.4.0")
+      // PERSISTED, like ANSI mode: the flag decides the types a view body resolves to, so a view
+      // created under standard semantics must keep computing CHAR/VARCHAR regardless of the
+      // caller's session setting.
+      .withBindingPolicy(ConfigBindingPolicy.PERSISTED)
       .booleanConf
       .createWithDefault(false)
 

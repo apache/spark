@@ -873,6 +873,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       )
 
       // Multi-byte characters: length is in characters, not octets.
+      // scalastyle:off nonascii
       checkAnswer(sql("SELECT CAST('你好' AS VARCHAR(2)) AS v"), Row("你好"))
       checkError(
         exception = intercept[SparkRuntimeException] {
@@ -881,6 +882,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         condition = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "2")
       )
+      // scalastyle:on nonascii
     }
   }
 
