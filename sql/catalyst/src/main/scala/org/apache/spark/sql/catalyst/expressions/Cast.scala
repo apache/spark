@@ -540,6 +540,18 @@ object Cast extends QueryErrorsBase {
     case _ => false  // overflow
   }
 
+  private def decimalToTimestampMayOverflow(from: DecimalType): Boolean = {
+    val maxUnscaled = java.math.BigInteger.TEN.pow(from.precision)
+      .subtract(java.math.BigInteger.ONE)
+    val scaleDifference = from.scale - 6
+    val maxMicros = if (scaleDifference > 0) {
+      maxUnscaled.divide(java.math.BigInteger.TEN.pow(scaleDifference))
+    } else {
+      maxUnscaled.multiply(java.math.BigInteger.TEN.pow(-scaleDifference))
+    }
+    maxMicros.compareTo(java.math.BigInteger.valueOf(Long.MaxValue)) > 0
+  }
+
   /**
    * Returns `true` if casting non-nullable values from `from` type to `to` type
    * may return null. Note that the caller side should take care of input nullability
@@ -557,7 +569,7 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, ByteType | ShortType | IntegerType) => true
     case (_: TimeType, ByteType | ShortType) => true
     case (FloatType | DoubleType, TimestampType) => true
-    case (_: DecimalType, TimestampType) => true
+    case (from: DecimalType, TimestampType) => decimalToTimestampMayOverflow(from)
     case (TimestampType, DateType) => false
     case (_: TimestampLTZNanosType, DateType) => false
     case (_: TimestampNTZNanosType, DateType) => false
@@ -685,10 +697,6 @@ case class Cast(
   with ToStringBase
   with SupportQueryContext
   with QueryErrorsBase {
-  private val MICROS_PER_SECOND_BD = java.math.BigDecimal.valueOf(MICROS_PER_SECOND)
-  private val LONG_MAX_BD = java.math.BigDecimal.valueOf(Long.MaxValue)
-  private val LONG_MIN_BD = java.math.BigDecimal.valueOf(Long.MinValue)
-
   override def nullIntolerant: Boolean = true
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
@@ -905,8 +913,8 @@ case class Cast(
     case _: TimestampNTZNanosType =>
       buildCast[TimestampNanosVal](_, v => convertTz(v.epochMicros, zoneId, ZoneOffset.UTC))
     // TimestampWritable.decimalToTimestamp
-    case DecimalType() =>
-      buildCast[Decimal](_, d => decimalToTimestamp(d))
+    case from: DecimalType =>
+      buildCast[Decimal](_, d => decimalToTimestamp(d, from))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
       if (ansiEnabled) {
@@ -1019,12 +1027,11 @@ case class Cast(
         DateTimeUtils.makeTimestampNTZNanos(currentDate(zoneId), nanos, precision))
   }
 
-  private[this] def decimalToTimestamp(d: Decimal): Any = {
-    val result = d.toJavaBigDecimal.multiply(MICROS_PER_SECOND_BD)
-    if (result.compareTo(LONG_MAX_BD) > 0 || result.compareTo(LONG_MIN_BD) < 0) {
-      errorOrNull(d, DecimalType(d.precision, d.scale), TimestampType)
-    } else {
-      result.longValue()
+  private[this] def decimalToTimestamp(d: Decimal, from: DecimalType): Any = {
+    try {
+      DateTimeUtils.decimalToTimestamp(d)
+    } catch {
+      case _: ArithmeticException => errorOrNull(d, from, TimestampType)
     }
   }
   private[this] def doubleToTimestamp(d: Double): Any = {
@@ -2020,26 +2027,17 @@ case class Cast(
     case DecimalType() =>
       val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
       val toDt = ctx.addReferenceObj("to", TimestampType, TimestampType.getClass.getName)
-      val microsBD = ctx.addReferenceObj("microsBD",
-        MICROS_PER_SECOND_BD, classOf[java.math.BigDecimal].getName)
-      val maxBD = ctx.addReferenceObj("maxBD",
-        LONG_MAX_BD, classOf[java.math.BigDecimal].getName)
-      val minBD = ctx.addReferenceObj("minBD",
-        LONG_MIN_BD, classOf[java.math.BigDecimal].getName)
       (c, evPrim, evNull) =>
-        val result = ctx.freshName("decResult")
         val overflow = if (ansiEnabled) {
           code"""throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);"""
         } else {
           code"$evNull = true;"
         }
         code"""
-          java.math.BigDecimal $result = $c.toJavaBigDecimal().multiply($microsBD);
-          if ($result.compareTo($maxBD) > 0 ||
-              $result.compareTo($minBD) < 0) {
+          try {
+            $evPrim = $dateTimeUtilsCls.decimalToTimestamp($c);
+          } catch (java.lang.ArithmeticException e) {
             $overflow
-          } else {
-            $evPrim = $result.longValue();
           }
         """
     case DoubleType =>

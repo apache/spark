@@ -509,8 +509,8 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   }
 
   test("SPARK-58217: cast decimal to timestamp overflow with ansi on") {
-    val largeDecimal = Literal(Decimal(
-      new java.math.BigDecimal("99999999999999999999"), 38, 0))
+    val largeDecimal = Literal(
+      Decimal(new java.math.BigDecimal("99999999999999999999")), DecimalType(38, 0))
     checkErrorInExpression[SparkArithmeticException](
       cast(largeDecimal, TimestampType),
       "CAST_OVERFLOW",
@@ -548,6 +548,14 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
           "targetType" -> "\"TIMESTAMP\"",
           "ansiConfig" -> "\"spark.sql.ansi.enabled\""
         ))
+    }
+
+    Seq(
+      ("9223372036854.7758075", Long.MaxValue),
+      ("-9223372036854.7758085", Long.MinValue)
+    ).foreach { case (value, expected) =>
+      val boundaryDecimal = Literal(Decimal(new java.math.BigDecimal(value), 20, 7))
+      checkEvaluation(cast(boundaryDecimal, TimestampType), expected)
     }
   }
 

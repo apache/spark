@@ -32,9 +32,11 @@ class DecimalTimestampCastSuite extends QueryTest with SharedSparkSession {
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
       SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN"))
 
-  private def decimalDataFrame(values: Seq[String]): DataFrame = {
+  private def decimalDataFrame(
+      values: Seq[String],
+      dataType: DecimalType = DecimalType(20, 0)): DataFrame = {
     val rows = values.map(value => Row(new java.math.BigDecimal(value)))
-    val schema = StructType(StructField("value", DecimalType(20, 0), nullable = false) :: Nil)
+    val schema = StructType(StructField("value", dataType, nullable = false) :: Nil)
     spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
   }
 
@@ -86,6 +88,29 @@ class DecimalTimestampCastSuite extends QueryTest with SharedSparkSession {
                   "ansiConfig" -> "\"spark.sql.ansi.enabled\""),
                 sqlState = "22003")
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58217: decimal to timestamp fractional Long boundaries") {
+    withTempView("decimal_boundaries") {
+      decimalDataFrame(
+        Seq(
+          "9223372036854.7758075",
+          "-9223372036854.7758085",
+          "9223372036854.7758080",
+          "-9223372036854.7758090"),
+        DecimalType(20, 7)).createOrReplaceTempView("decimal_boundaries")
+
+      codegenModes.foreach { mode =>
+        withSQLConf((Seq(SQLConf.ANSI_ENABLED.key -> "false") ++ mode): _*) {
+          checkAnswer(
+            spark.sql("""
+              SELECT unix_micros(CAST(value AS TIMESTAMP))
+              FROM decimal_boundaries
+            """),
+            Row(Long.MaxValue) :: Row(Long.MinValue) :: Row(null) :: Row(null) :: Nil)
         }
       }
     }

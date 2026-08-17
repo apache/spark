@@ -968,7 +968,9 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
     Seq(
       ("9223372036854.7758069", Long.MaxValue - 1),
-      ("-9223372036854.7758079", Long.MinValue + 1)
+      ("-9223372036854.7758079", Long.MinValue + 1),
+      ("9223372036854.7758075", Long.MaxValue),
+      ("-9223372036854.7758085", Long.MinValue)
     ).foreach { case (value, expected) =>
       checkEvaluation(cast(decimal(value, 20, 7), TimestampType, UTC_OPT), expected)
     }
@@ -980,6 +982,27 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(decimal("-1", 10, 0), TimestampType, UTC_OPT), -MICROS_PER_SECOND)
     checkEvaluation(cast(decimal("0", 10, 0), TimestampType, UTC_OPT), 0L)
 
-    assert(cast(decimal("1", 10, 0), TimestampType, UTC_OPT).nullable)
+    assert(!cast(decimal("1", 10, 0), TimestampType, UTC_OPT).nullable)
+    assert(cast(decimal("1", 20, 0), TimestampType, UTC_OPT).nullable)
+  }
+
+  test("SPARK-58217: decimal to timestamp nullability tracks the source type") {
+    val safeDecimal = DecimalType(10, 0)
+    val overflowingDecimal = DecimalType(20, 0)
+    assert(!Cast.forceNullable(safeDecimal, TimestampType))
+    assert(Cast.forceNullable(overflowingDecimal, TimestampType))
+
+    val safeMap = MapType(safeDecimal, StringType, valueContainsNull = false)
+    val overflowingMap = MapType(overflowingDecimal, StringType, valueContainsNull = false)
+    val timestampMap = MapType(TimestampType, StringType, valueContainsNull = false)
+    assert(Cast.canCast(safeMap, timestampMap))
+    assert(Cast.canTryCast(safeMap, timestampMap))
+    assert(!Cast.canCast(overflowingMap, timestampMap))
+    assert(!Cast.canTryCast(overflowingMap, timestampMap))
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      assert(!Cast.forceNullable(DecimalType(1, -12), TimestampType))
+      assert(Cast.forceNullable(DecimalType(2, -11), TimestampType))
+    }
   }
 }

@@ -40,6 +40,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8S
  */
 object DateTimeUtils extends SparkDateTimeUtils {
 
+  private val microsPerSecondBD = java.math.BigDecimal.valueOf(MICROS_PER_SECOND)
+
   // See http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   // It's 2440587.5, rounding up to be compatible with Hive.
   final val JULIAN_DAY_OF_EPOCH = 2440588
@@ -77,6 +79,15 @@ object DateTimeUtils extends SparkDateTimeUtils {
     } else {
       DoubleExactNumeric.toLong(d * MICROS_PER_SECOND)
     }
+  }
+
+  /**
+   * Converts seconds stored as a decimal to microseconds since the epoch. Sub-microsecond digits
+   * are truncated towards zero, and an [[ArithmeticException]] is thrown if the truncated result
+   * does not fit in a Long.
+   */
+  def decimalToTimestamp(d: Decimal): Long = {
+    d.toJavaBigDecimal.multiply(microsPerSecondBD).toBigInteger.longValueExact()
   }
 
   /**
