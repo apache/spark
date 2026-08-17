@@ -159,6 +159,30 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     }
   }
 
+  test("negated predicate over an all-fallback row group is not dropped") {
+    withTempDir { dir =>
+      // `a` shredded as tinyint. Both rows overflow tinyint, so both are stored in the residual
+      // (typed leaf entirely NULL, residual nullCount = 0). A naive negated push would rewrite
+      // `!= 700` into and(notEq(leaf), eq(residual, null)) and skip the row group -- losing both
+      // rows. The negation guard must prevent pushing, so {500, 600} are returned.
+      val jsonExpr = "case when id = 0 then '{\"a\":500}' else '{\"a\":600}' end"
+      writeShredded(dir, "a tinyint", jsonExpr, numRows = 2, blockSize = 1024 * 1024)
+
+      Seq(
+        "variant_get(v, '$.a', 'bigint') != 700" -> Seq(Row(500L), Row(600L)),
+        "variant_get(v, '$.a', 'bigint') NOT IN (700, 800)" -> Seq(Row(500L), Row(600L))
+      ).foreach { case (predicate, want) =>
+        def read: DataFrame = spark.read.parquet(dir.getAbsolutePath)
+          .selectExpr("variant_get(v, '$.a', 'bigint') AS a")
+          .where(predicate)
+        assert(baseline(read).sortBy(_.getLong(0)) == want, s"baseline for $predicate")
+        forEachReader { (_, _) =>
+          checkAnswer(read, want)
+        }
+      }
+    }
+  }
+
   test("type-mismatch fallback: string values in a numeric-shredded field are not dropped") {
     withTempDir { dir =>
       // `a` shredded as bigint. Even rows -> a is a number (typed); odd rows -> a is a string

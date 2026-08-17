@@ -2648,10 +2648,41 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
       "A path not shredded in this file must not be pushed")
   }
 
-  test("shredded variant filter: case-insensitive matching resolves the leaf") {
+  test("shredded variant filter: case-insensitive column name resolves; keys stay exact-case") {
+    // The top-level variant column name is a Spark identifier, matched case-insensitively.
+    // The object key is variant data, matched exact-case, so the physical key must equal the
+    // requested path's key exactly.
     val parquetSchema =
       """message spark_schema {
         |  optional group V {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    // Logical column name `v` differs in case from physical `V`; key `a` matches exactly.
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      caseSensitive = Some(false), variantExtractionSchema = Some(extraction))
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 999L))
+    assert(filter.isDefined, "Case-insensitive column matching should resolve the shredded leaf")
+    assert(filter.get.toString.toLowerCase(java.util.Locale.ROOT).contains("typed_value"),
+      s"Expected a typed_value leaf predicate, got ${filter.get}")
+  }
+
+  test("shredded variant filter: object key is matched case-sensitively even when case-" +
+      "insensitive analysis") {
+    // Physical schema shreds a key `A` (uppercase). A request for `$.a` (lowercase) must NOT bind
+    // to `A`, because variant keys are data resolved exact-case by the reader. Binding to `A`
+    // would be unsound.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
         |    optional binary value;
         |    optional group typed_value {
         |      optional group A {
@@ -2661,15 +2692,46 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
         |    }
         |  }
         |}""".stripMargin
-    // Logical column name and path use different case than the physical schema.
     val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
     val pf = createParquetFilters(
       MessageTypeParser.parseMessageType(parquetSchema),
       caseSensitive = Some(false), variantExtractionSchema = Some(extraction))
-    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 999L))
-    assert(filter.isDefined, "Case-insensitive matching should resolve the shredded leaf")
-    assert(filter.get.toString.toLowerCase(java.util.Locale.ROOT).contains("typed_value"),
-      s"Expected a typed_value leaf predicate, got ${filter.get}")
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 999L)).isEmpty,
+      "Key `$.a` must not case-insensitively bind to the physical `A` subtree")
+  }
+
+  test("shredded variant filter: negated predicate is not pushed") {
+    // not(or(leaf, isNotNull(residual))) is rewritten by parquet-mr into an unsound
+    // and(notEq(leaf), eq(residual, null)), so a negated shredded predicate must not be pushed.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema), variantExtractionSchema = Some(extraction))
+    // != arrives as Not(EqualTo(...)); NOT IN as Not(In(...)); Not(GreaterThan(...)) likewise.
+    assert(pf.createFilter(sources.Not(sources.EqualTo("v.`0`", 700L))).isEmpty,
+      "Negated EqualTo on a shredded path must not be pushed")
+    assert(pf.createFilter(sources.Not(sources.In("v.`0`", Array[Any](1L, 2L)))).isEmpty,
+      "Negated In on a shredded path must not be pushed")
+    assert(pf.createFilter(sources.Not(sources.GreaterThan("v.`0`", 700L))).isEmpty,
+      "Negated GreaterThan on a shredded path must not be pushed")
+    // Still pushed inside an AND alongside a negated shredded predicate? The AND can push the
+    // non-negated side, but the negated shredded conjunct itself must be dropped.
+    val andFilter = pf.createFilter(
+      sources.And(sources.GreaterThan("v.`0`", 700L), sources.Not(sources.EqualTo("v.`0`", 900L))))
+    assert(andFilter.isDefined, "AND should still push its non-negated shredded conjunct")
+    assert(!andFilter.get.toString.contains("not("),
+      s"AND must not contain a negated shredded predicate, got ${andFilter.get}")
   }
 }
 

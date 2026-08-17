@@ -187,20 +187,30 @@ class ParquetFilters(
     }
   }
 
-  // Look up a child of `group` by name, honoring `caseSensitive`. Returns the child type together
-  // with its actual physical name so callers build paths from the on-disk names (needed for
-  // correct case-insensitive matching, where the requested key case may differ from the file's).
-  private def findChild(group: GroupType, name: String): Option[Type] = {
+  // Look up a child of `group` by name. When `exact` is true the match is always case-sensitive,
+  // regardless of `caseSensitive`; otherwise it honors `caseSensitive`. Returns the child type
+  // together with its actual physical name so callers build paths from the on-disk names.
+  //
+  // Variant object keys must be matched `exact = true`: they are data, not Spark identifiers, and
+  // the reader resolves them case-sensitively (VariantSchema.objectSchemaMap and
+  // Variant.getFieldByKey use exact equals). A file may legally shred sibling keys differing only
+  // in case (e.g. `A` and `a`), so a case-insensitive first-match could bind the predicate to the
+  // wrong physical subtree and skip a row group that holds matching rows -- silent data loss. The
+  // top-level variant column name is a Spark identifier and is matched by `caseSensitive` (in
+  // `shreddedVariantEntries`); the structural `typed_value`/`value` names are fixed, so `exact` is
+  // used for them too.
+  private def findChild(group: GroupType, name: String, exact: Boolean): Option[Type] = {
     group.getFields.asScala.find { f =>
-      if (caseSensitive) f.getName == name else f.getName.equalsIgnoreCase(name)
+      if (exact || caseSensitive) f.getName == name else f.getName.equalsIgnoreCase(name)
     }
   }
 
   // Look up the untyped `value` residual sibling in `group`, if it exists as a non-REPEATED
-  // primitive. Returns the physical field name.
-  private def residualIn(group: GroupType): Option[String] = findChild(group, VALUE).collect {
-    case p: PrimitiveType if p.getRepetition != Repetition.REPEATED => p.getName
-  }
+  // primitive. Returns the physical field name. `value` is a fixed structural name; matched exact.
+  private def residualIn(group: GroupType): Option[String] =
+    findChild(group, VALUE, exact = true).collect {
+      case p: PrimitiveType if p.getRepetition != Repetition.REPEATED => p.getName
+    }
 
   // Copy of `getNormalizedLogicalType` from the `nameToParquetField` closure, needed here for the
   // shredded leaf resolution which runs outside that closure.
@@ -221,9 +231,10 @@ class ParquetFilters(
   //   <col> / typed_value / k0 / value                                  (L1 residual)
   //   ...
   //   <col> / typed_value / k0 / ... / kN / value                       (leaf-level residual)
-  // Paths are built from the on-disk field names (via `findChild`) so case-insensitive matching
-  // uses the file's actual names. A value for the path can only be hiding in one of these residual
-  // `value` columns when the typed leaf is NULL, so IS NULL on all of them is the soundness guard.
+  // Paths are built from the on-disk field names (via `findChild`). Object keys and the structural
+  // typed_value/value names are matched case-sensitively (variant keys are data; see `findChild`).
+  // A value for the path can only be hiding in one of these residual `value` columns when the typed
+  // leaf is NULL, so IS NOT NULL on all of them is the soundness guard.
   // Residuals absent in this file's schema are skipped (that level cannot hold a fallback here).
   // Returns None if the file does not shred this path down to a non-REPEATED scalar leaf (nothing
   // is pushed and the row group is simply read).
@@ -240,12 +251,13 @@ class ParquetFilters(
     var namePath = physColPath
     var idx = 0
     while (idx < keys.length) {
-      val typedChild = findChild(group, TYPED_VALUE) match {
+      val typedChild = findChild(group, TYPED_VALUE, exact = true) match {
         case Some(g: GroupType) => g
         case _ => return None
       }
       val typedName = typedChild.getName
-      val keyChild = findChild(typedChild, keys(idx)) match {
+      // Variant object keys are data, matched case-sensitively (see `findChild`).
+      val keyChild = findChild(typedChild, keys(idx), exact = true) match {
         case Some(g: GroupType) => g
         case _ => return None
       }
@@ -255,7 +267,7 @@ class ParquetFilters(
       idx += 1
     }
     // The leaf is the typed_value of the last key group.
-    findChild(group, TYPED_VALUE) match {
+    findChild(group, TYPED_VALUE, exact = true) match {
       case Some(p: PrimitiveType) if p.getRepetition != Repetition.REPEATED =>
         val leaf = ParquetPrimitiveField(namePath :+ p.getName,
           ParquetSchemaType(getNormalizedLogicalType(p), p.getPrimitiveTypeName, p.getTypeLength))
@@ -826,6 +838,9 @@ class ParquetFilters(
         } else {
           Some(sources.Or(leftResultOptional.get, rightResultOptional.get))
         }
+      // A negated shredded-variant predicate cannot be pushed soundly (see the matching guard in
+      // `createFilterHelper`), so it is not convertible either.
+      case sources.Not(pred) if referencesShreddedName(pred) => None
       case sources.Not(pred) =>
         val resultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
         resultOptional.map(sources.Not)
@@ -905,6 +920,32 @@ class ParquetFilters(
     value != null && nameToShreddedVariantField.get(name).exists { f =>
       valueMatchesParquetType(f.leaf.fieldType, value)
     }
+  }
+
+  // Whether `predicate` references a shredded-variant logical path anywhere. Used to refuse
+  // conversion under negation: the shredded predicate is `or(leaf, isNotNull(residual)...)`, and
+  // `not(...)` of it is rewritten by parquet-mr's LogicalInverseRewriter into
+  // `and(notEq(leaf), eq(residual, null))`, whose `eq(residual, null)` conjunct makes an AND
+  // row-group-droppable whenever the residual has no nulls -- unsound (drops a row group whose
+  // matching values are all in the residual). Since a negated shredded predicate cannot be
+  // expressed soundly with row-group statistics, we do not push it at all.
+  private def referencesShreddedName(predicate: sources.Filter): Boolean = predicate match {
+    case sources.EqualTo(name, _) => nameToShreddedVariantField.contains(name)
+    case sources.EqualNullSafe(name, _) => nameToShreddedVariantField.contains(name)
+    case sources.LessThan(name, _) => nameToShreddedVariantField.contains(name)
+    case sources.LessThanOrEqual(name, _) => nameToShreddedVariantField.contains(name)
+    case sources.GreaterThan(name, _) => nameToShreddedVariantField.contains(name)
+    case sources.GreaterThanOrEqual(name, _) => nameToShreddedVariantField.contains(name)
+    case sources.In(name, _) => nameToShreddedVariantField.contains(name)
+    case sources.IsNull(name) => nameToShreddedVariantField.contains(name)
+    case sources.IsNotNull(name) => nameToShreddedVariantField.contains(name)
+    case sources.StringStartsWith(name, _) => nameToShreddedVariantField.contains(name)
+    case sources.StringEndsWith(name, _) => nameToShreddedVariantField.contains(name)
+    case sources.StringContains(name, _) => nameToShreddedVariantField.contains(name)
+    case sources.And(l, r) => referencesShreddedName(l) || referencesShreddedName(r)
+    case sources.Or(l, r) => referencesShreddedName(l) || referencesShreddedName(r)
+    case sources.Not(p) => referencesShreddedName(p)
+    case _ => false
   }
 
   // Build the sound shredded-variant predicate:
@@ -1071,6 +1112,10 @@ class ParquetFilters(
           rhsFilter <- createFilterHelper(rhs, canPartialPushDownConjuncts)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
+      // Refuse to push a negated predicate that references a shredded-variant path: not() of the
+      // sound `or(leaf, isNotNull(residual)...)` shape is rewritten into an unsound
+      // `and(..., eq(residual, null))` by parquet-mr (see `referencesShreddedName`).
+      case sources.Not(pred) if referencesShreddedName(pred) => None
       case sources.Not(pred) =>
         createFilterHelper(pred, canPartialPushDownConjuncts = false)
           .map(FilterApi.not)
