@@ -2696,12 +2696,14 @@ abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
     }
   }
 
-  test("left anti join emits an unmatched left row only once the watermark passes it") {
+  test("left anti join does not emit a left row matched by a right row in a later batch") {
     val (leftInput, rightInput, joined) = setupWindowedJoin("left_anti")
 
     testStream(joined, OutputMode.Append())(
       AddData(leftInput, 3),
-      // Unmatched so far, but not yet provably unmatched.
+      // Unmatched so far, but not yet provably unmatched, so nothing is emitted. This is the
+      // window in which a match can still arrive and cancel the eventual anti output -- the
+      // positive "emitted once the watermark passes" case is covered by "windowed left anti join".
       CheckNewAnswer(),
       // A matching right row arrives in a later batch, so left 3 must never be emitted.
       AddData(rightInput, 3),
