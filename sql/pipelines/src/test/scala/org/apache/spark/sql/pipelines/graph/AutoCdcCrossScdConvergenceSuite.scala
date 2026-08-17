@@ -39,18 +39,14 @@ import org.apache.spark.sql.test.SharedSparkSession
  * one SCD implementation keeps the other in check under out-of-order ingestion.
  *
  * Scale uses the shared defaults / system properties on [[AutoCdcRandomCdcTestMixin]]. Set a
- * deterministic base seed with `-Dspark.sql.test.autocdc.crossScdConvergenceBaseSeed=<seed>`.
- * The first iteration uses that seed directly and any remaining iteration seeds are derived
- * from it.
+ * deterministic base seed with `-Dspark.sql.test.autocdc.convergenceBaseSeed=<seed>`. The first
+ * iteration uses that seed directly and any remaining iteration seeds are derived from it.
  */
 class AutoCdcCrossScdConvergenceSuite
     extends ExecutionTest
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin
     with AutoCdcRandomCdcTestMixin {
-
-  override protected def baseSeedSystemProperty: String =
-    "spark.sql.test.autocdc.crossScdConvergenceBaseSeed"
 
   /**
    * Assert SCD1 live rows equal SCD2 current open rows (`__END_AT IS NULL`) on user data
