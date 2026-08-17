@@ -57,19 +57,19 @@ object AutoCdcRandomCdcTestMixin {
  * ([[AutoCdcOutOfOrderConvergenceSuite]], [[AutoCdcCrossScdConvergenceSuite]]).
  *
  * Owns the common event schema, stream generator, target DDL, microbatch feeding, and the
- * shared CI-sized scale configuration. Suites override [[baseSeedSystemProperty]] (and
- * optionally the `default*` vals) when they need a deterministic suite-specific base seed or a
+ * shared CI-sized scale configuration. Suites may override the `default*` vals when they need a
  * different local default; local stress testing overrides scale via the shared system properties
  * below rather than by forking suite defaults.
  *
  * Shared scale knobs (optional; defaults are CI-sized):
+ *   - `spark.sql.test.autocdc.convergenceBaseSeed`
  *   - `spark.sql.test.autocdc.convergenceNumSeeds`
  *   - `spark.sql.test.autocdc.convergenceNumKeys`
  *   - `spark.sql.test.autocdc.convergenceMaxEventsPerKey`
  *   - `spark.sql.test.autocdc.convergenceMaxBatches`
  *
- * The suite-specific base seed property supplies the first iteration's seed and deterministically
- * derives any remaining per-iteration seeds from it.
+ * The shared base seed property supplies the first iteration's seed and deterministically derives
+ * any remaining per-iteration seeds from it.
  */
 trait AutoCdcRandomCdcTestMixin {
   self: ExecutionTest with SharedSparkSession with AutoCdcGraphExecutionTestMixin =>
@@ -89,10 +89,9 @@ trait AutoCdcRandomCdcTestMixin {
   protected val defaultNumOutOfOrderBatches: Int = 8
   protected val defaultNumSeedsPerRun: Int = 3
 
-  /** Suite-specific system property supplying a deterministic base seed. */
-  protected def baseSeedSystemProperty: String
-
-  // Exposed so suite failure clues can tell callers how to force a single-seed replay.
+  // Exposed so suite failure clues can tell callers how to force a deterministic replay.
+  protected val baseSeedSystemProperty: String =
+    "spark.sql.test.autocdc.convergenceBaseSeed"
   protected val numSeedsSystemProperty: String =
     "spark.sql.test.autocdc.convergenceNumSeeds"
   private val numKeysSystemProperty: String =

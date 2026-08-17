@@ -29,18 +29,14 @@ import org.apache.spark.sql.test.SharedSparkSession
  * and as several shuffled micro-batches must converge to the same target table contents.
  *
  * Scale uses the shared defaults / system properties on [[AutoCdcRandomCdcTestMixin]]. Set a
- * deterministic base seed with
- * `-Dspark.sql.test.autocdc.outOfOrderConvergenceBaseSeed=<seed>`. The first iteration uses
- * that seed directly and any remaining iteration seeds are derived from it.
+ * deterministic base seed with `-Dspark.sql.test.autocdc.convergenceBaseSeed=<seed>`. The first
+ * iteration uses that seed directly and any remaining iteration seeds are derived from it.
  */
 class AutoCdcOutOfOrderConvergenceSuite
     extends ExecutionTest
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin
     with AutoCdcRandomCdcTestMixin {
-
-  override protected def baseSeedSystemProperty: String =
-    "spark.sql.test.autocdc.outOfOrderConvergenceBaseSeed"
 
   private def assertTargetsConverge(inOrderTable: String, outOfOrderTable: String): Unit = {
     checkAnswer(
