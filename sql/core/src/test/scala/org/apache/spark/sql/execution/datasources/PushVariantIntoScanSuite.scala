@@ -34,6 +34,18 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
   // Whether the reader-deferral tests should exercise the V2 read path. Subclasses override.
   protected def useV2: Boolean
 
+  test("hoistable variant extractions are not classified as throwable") {
+    // If either expression becomes throwable, join hoisting requires cast-error deferral.
+    val v = AttributeReference("v", VariantType)()
+    assert(!VariantGet(
+      v,
+      Literal("$.a"),
+      IntegerType,
+      failOnError = true,
+      timeZoneId = Some(localTimeZone)).throwable)
+    assert(!Cast(v, IntegerType, timeZoneId = Some(localTimeZone)).throwable)
+  }
+
   // Write a parquet dataset via V1, then expose it as the temp view `T`. The view's read path is
   // V2 when `useV2`, V1 otherwise. Use this for tests that need to actually execute a scan and
   // compare V1 vs V2 behavior.
