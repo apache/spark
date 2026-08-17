@@ -969,7 +969,7 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       ident: Identifier,
       writeOptions: Map[String, String]): Table = {
     val options = new CaseInsensitiveStringMap(writeOptions.asJava)
-    CatalogV2Util.getTableForWrite(
+    CatalogV2Util.loadTableForV2Write(
       catalog, ident, Set(TableWritePrivilege.INSERT), options)
   }
 
@@ -1021,3 +1021,4 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
+

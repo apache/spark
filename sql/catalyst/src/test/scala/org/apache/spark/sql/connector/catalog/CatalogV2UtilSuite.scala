@@ -107,7 +107,7 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(e.getMessage.contains("Cannot set both time travel and write privileges"))
   }
 
-  test("getTableForWrite forwards write privileges and only table-state options") {
+  test("loadTableForV2Write forwards write privileges and only table-state options") {
     val testCatalog = mock(classOf[TableCatalog])
     when(testCatalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("state"))
     val ident = mock(classOf[Identifier])
@@ -115,7 +115,7 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       java.util.Map.of("state", "branch", "custom", "value"))
     val contextCaptor = ArgumentCaptor.forClass(classOf[TableContext])
 
-    CatalogV2Util.getTableForWrite(
+    CatalogV2Util.loadTableForV2Write(
       testCatalog, ident, Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), options)
 
     val expectedStateOptions =
@@ -127,7 +127,7 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       java.util.Set.of(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
   }
 
-  test("getTableForWrite rejects configured time travel options") {
+  test("loadTableForV2Write rejects configured time travel options") {
     val testCatalog = mock(classOf[TableCatalog])
     when(testCatalog.name()).thenReturn("testcat")
     val ident = Identifier.of(Array("ns"), "table")
@@ -139,7 +139,7 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       Seq("customVersion", "customTimestamp").foreach { key =>
         val options = new CaseInsensitiveStringMap(java.util.Map.of(key, "value"))
         val e = intercept[AnalysisException] {
-          CatalogV2Util.getTableForWrite(
+          CatalogV2Util.loadTableForV2Write(
             testCatalog, ident, Set(TableWritePrivilege.INSERT), options)
         }
         assert(e.getCondition === "UNSUPPORTED_FEATURE.TIME_TRAVEL")

@@ -26,6 +26,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
+  AsOfVersion,
   RelationCache,
   RelationResolution,
   UnresolvedRelation,
@@ -75,10 +76,6 @@ class NullReturningInMemoryCatalog extends InMemoryCatalog {
   }
 }
 
-class WriteStateAwareInMemoryCatalog extends InMemoryCatalog {
-  override def tableStateOptionKeys(): util.Set[String] = util.Set.of("load-option")
-}
-
 class NullReturningStagingInMemoryCatalog extends InMemoryCatalog with StagingTableCatalog {
   override def stageCreate(ident: Identifier, tableInfo: TableInfo): StagedTable = {
     createTable(ident, tableInfo)
@@ -102,9 +99,6 @@ class NullReturningStagingInMemoryCatalog extends InMemoryCatalog with StagingTa
 
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
   import testImplicits._
-
-  override protected def testCatalogClass: Class[_ <: InMemoryCatalog] =
-    classOf[WriteStateAwareInMemoryCatalog]
 
   private val catalogAndNamespace = "testcat.ns1.ns2."
 
@@ -139,6 +133,12 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
   private val loadOptionValue = "load-value"
   private val writeOption = "write-option"
   private val writeOptionValue = "write-value"
+
+  private def testWithLoadOptionAsTableState(testName: String)(f: => Unit): Unit = {
+    test(testName) {
+      withSQLConf("spark.sql.catalog.testcat.tableStateOptionKeys" -> loadOption)(f)
+    }
+  }
 
   private def assertTargetOptions(
       options: CaseInsensitiveStringMap): org.scalatest.Assertion = {
@@ -259,7 +259,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-49098, SPARK-50286: Supports Dynamic Table Options for SQL Insert") {
+  testWithLoadOptionAsTableState(
+    "SPARK-49098, SPARK-50286: Supports Dynamic Table Options for SQL Insert") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -390,7 +391,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-50286: Propagate options for DataFrameWriter Append") {
+  testWithLoadOptionAsTableState("SPARK-50286: Propagate options for DataFrameWriter Append") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -423,7 +424,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-50286: Propagate options for DataFrameWriterV2 Append") {
+  testWithLoadOptionAsTableState("SPARK-50286: Propagate options for DataFrameWriterV2 Append") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -455,7 +456,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-49098, SPARK-50286: Supports Dynamic Table Options for SQL Insert Overwrite") {
+  testWithLoadOptionAsTableState(
+    "SPARK-49098, SPARK-50286: Supports Dynamic Table Options for SQL Insert Overwrite") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -488,7 +490,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-50286: Propagate options for DataFrameWriterV2 OverwritePartitions") {
+  testWithLoadOptionAsTableState(
+    "SPARK-50286: Propagate options for DataFrameWriterV2 OverwritePartitions") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -523,7 +526,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-49098, SPARK-50286: Supports Dynamic Table Options for SQL Insert Replace") {
+  testWithLoadOptionAsTableState(
+    "SPARK-49098, SPARK-50286: Supports Dynamic Table Options for SQL Insert Replace") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -557,7 +561,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-50286: Propagate options for DataFrameWriter Overwrite") {
+  testWithLoadOptionAsTableState("SPARK-50286: Propagate options for DataFrameWriter Overwrite") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -592,7 +596,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: dynamic partition overwrite separates load and write options") {
+  testWithLoadOptionAsTableState(
+    "SPARK-58389: dynamic partition overwrite separates load and write options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) PARTITIONED BY (id)")
@@ -635,7 +640,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-50286: Propagate options for DataFrameWriterV2 Overwrite") {
+  testWithLoadOptionAsTableState(
+    "SPARK-50286: Propagate options for DataFrameWriterV2 Overwrite") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -671,7 +677,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: DataFrameWriter saveAsTable separates load and write options") {
+  testWithLoadOptionAsTableState(
+    "SPARK-58389: DataFrameWriter saveAsTable separates load and write options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -696,7 +703,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: schema evolution reload separates table-state and write options") {
+  testWithLoadOptionAsTableState(
+    "SPARK-58389: schema evolution reload separates table-state and write options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint)")
@@ -1169,6 +1177,32 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("explicit time travel specs on internal write targets use qualified names") {
+    withStateAwareTable { (_, tableName) =>
+      val resolver = new RelationResolution(
+        spark.sessionState.catalogManager,
+        RelationCache.empty)
+      val write = UnresolvedRelation(Seq("ns", "table"))
+        .requireWritePrivileges(Set(TableWritePrivilege.INSERT))
+      val previousCatalog = spark.catalog.currentCatalog()
+
+      try {
+        spark.catalog.setCurrentCatalog("statecat")
+        val e = AnalysisContext.withNewAnalysisContext {
+          intercept[AnalysisException] {
+            resolver.resolveRelation(write, Some(AsOfVersion("v1")))
+          }
+        }
+        checkError(
+          exception = e,
+          condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+          parameters = Map("relationId" -> "`statecat`.`ns`.`table`"))
+      } finally {
+        spark.catalog.setCurrentCatalog(previousCatalog)
+      }
+    }
+  }
+
   test("persistent write targets establish table pins for subsequent reads") {
     withStateAwareTable { (stateCatalog, tableName) =>
       stateCatalog.resetLoadTableCalls()
@@ -1459,6 +1493,25 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
           parameters = Map("relationId" -> "`temp_view`"))
       }
+    }
+  }
+
+  test("SPARK-58389: SQL CTAS and RTAS options remain table properties") {
+    val t1 = s"${catalogAndNamespace}table"
+    val ident = Identifier.of(Array("ns1", "ns2"), "table")
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 USING foo OPTIONS ('versionAsOf' = 'v1') " +
+        "AS SELECT 1L AS id, 'a' AS data")
+      val createdProperties = inMemoryCatalog.loadTable(ident).properties()
+      assert(createdProperties.get("versionAsOf") === "v1")
+      assert(createdProperties.get("option.versionAsOf") === "v1")
+
+      sql(s"REPLACE TABLE $t1 USING foo OPTIONS ('timestampAsOf' = '2021-01-01') " +
+        "AS SELECT 2L AS id, 'b' AS data")
+      val replacedProperties = inMemoryCatalog.loadTable(ident).properties()
+      assert(replacedProperties.get("timestampAsOf") === "2021-01-01")
+      assert(replacedProperties.get("option.timestampAsOf") === "2021-01-01")
+      checkAnswer(spark.table(t1), Row(2L, "b"))
     }
   }
 

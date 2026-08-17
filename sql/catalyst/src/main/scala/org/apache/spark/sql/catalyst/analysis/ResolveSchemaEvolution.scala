@@ -50,7 +50,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       write.table match {
         case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
           evolveSchema(catalog, ident, write.pendingSchemaChanges)
-          val newTable = CatalogV2Util.getTableForWrite(
+          val newTable = CatalogV2Util.loadTableForV2Write(
             catalog, ident, write.writePrivileges, relation.options)
           val writeWithNewTarget = replaceWriteTarget(write, relation, newTable)
 

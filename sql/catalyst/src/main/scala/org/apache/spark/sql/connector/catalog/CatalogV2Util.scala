@@ -525,12 +525,25 @@ private[sql] object CatalogV2Util {
    * the catalog declares may affect table state. The complete option map remains on the write
    * relation for write planning.
    */
-  def getTableForWrite(
+  def loadTableForV2Write(
       catalog: CatalogPlugin,
       ident: Identifier,
       writePrivileges: Set[TableWritePrivilege],
       options: CaseInsensitiveStringMap): Table = {
     rejectTimeTravelOptionsForWrite(catalog, ident, options)
+    loadTableForWrite(catalog, ident, writePrivileges, options)
+  }
+
+  /**
+   * Loads a table for a write without validating the complete write option map. This is used by
+   * callers that must inspect whether the loaded table falls back to V1 before applying V2-only
+   * option validation.
+   */
+  def loadTableForWrite(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      writePrivileges: Set[TableWritePrivilege],
+      options: CaseInsensitiveStringMap): Table = {
     val context = new TableContext(null, writePrivileges.asJava)
     val stateOptions = extractTableStateOptions(catalog, options)
     catalog.asTableCatalog.loadTable(ident, context, stateOptions)

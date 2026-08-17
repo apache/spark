@@ -252,7 +252,8 @@ class RelationResolution(
         // Time travel applies to reads only; reject an explicit time-travel specification on a
         // write target with a user-facing error.
         if (finalTimeTravelSpec.nonEmpty && writePrivileges != null) {
-          throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(identifier))
+          throw QueryCompilationErrors.timeTravelUnsupportedError(
+            toSQLId(ident.toQualifiedNameParts(catalog)))
         }
         val key = toCacheKey(catalog, ident, finalTimeTravelSpec, finalOptions)
         // A reference that requires write privileges is never served from the per-query relation
