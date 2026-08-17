@@ -7327,6 +7327,22 @@ object functions {
     Column.fn("bitmap_construct_agg", col)
 
   /**
+   * Returns true if the bit at the given position is set in the bitmap.
+   *
+   * @param bitmap
+   *   A column that evaluates to a binary bitmap. A NULL bitmap produces a NULL result.
+   * @param bitPosition
+   *   A numeric column whose value is cast to a long bit position. A NULL position produces a
+   *   NULL result.
+   * @group misc_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
+   */
+  def bitmap_contains(bitmap: Column, bitPosition: Column): Column =
+    Column.fn("bitmap_contains", bitmap, bitPosition)
+
+  /**
    * Returns the number of set bits in the input bitmap.
    *
    * @param col

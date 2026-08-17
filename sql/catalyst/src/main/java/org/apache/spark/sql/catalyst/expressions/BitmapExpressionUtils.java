@@ -50,6 +50,24 @@ public class BitmapExpressionUtils {
     return count;
   }
 
+  /**
+   * Returns whether the bit at bitPosition is set in bitmap. Returns false when bitPosition is
+   * outside the supported range or beyond the actual byte length of bitmap.
+   */
+  public static boolean bitmapContains(byte[] bitmap, long bitPosition) {
+    if (bitPosition < 0 || bitPosition >= NUM_BITS) {
+      return false;
+    }
+
+    int bytePosition = (int) (bitPosition / 8);
+    if (bytePosition >= bitmap.length) {
+      return false;
+    }
+
+    int bit = (int) (bitPosition % 8);
+    return ((bitmap[bytePosition] & 0x0FF) & (1 << bit)) != 0;
+  }
+
   /** Merges both bitmaps and writes the result into bitmap1. */
   public static void bitmapMerge(byte[] bitmap1, byte[] bitmap2) {
     for (int i = 0; i < java.lang.Math.min(bitmap1.length, bitmap2.length); ++i) {

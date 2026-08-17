@@ -26,7 +26,15 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongType, StructType}
+import org.apache.spark.sql.types.{
+  AbstractDataType,
+  BinaryType,
+  BooleanType,
+  DataType,
+  LongType,
+  NullType,
+  NumericType,
+  StructType}
 
 @ExpressionDescription(
   usage = "_FUNC_(child) - Returns the bucket number for the given input child expression.",
@@ -156,6 +164,81 @@ case class BitmapCount(child: Expression)
 
   override protected def withNewChildInternal(newChild: Expression): BitmapCount =
     copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(bitmap, bit_position) - Returns true if the bit at the given position is set in the
+    bitmap, false otherwise.
+  """,
+  arguments = """
+    Arguments:
+      * bitmap - The bitmap to test.
+        An expression that evaluates to a binary. A NULL bitmap produces a NULL result.
+      * bit_position - The bit position to test.
+        An expression that evaluates to a numeric value and is cast to a long. A NULL position
+        produces a NULL result.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(X '01', 0L);
+       true
+      > SELECT _FUNC_(X '01', 1L);
+       false
+      > SELECT _FUNC_(X '10', 4L);
+       true
+  """,
+  since = "4.4.0",
+  group = "misc_funcs")
+case class BitmapContains(left: Expression, right: Expression)
+  extends BinaryExpression with RuntimeReplaceable {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (left.dataType != BinaryType && left.dataType != NullType) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(BinaryType),
+          "inputSql" -> toSQLExpr(left),
+          "inputType" -> toSQLType(left.dataType)
+        )
+      )
+    } else if (!right.dataType.isInstanceOf[NumericType] && right.dataType != NullType) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> toSQLType(LongType),
+          "inputSql" -> toSQLExpr(right),
+          "inputType" -> toSQLType(right.dataType)
+        )
+      )
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+  override def dataType: DataType = BooleanType
+
+  override def prettyName: String = "bitmap_contains"
+
+  override lazy val replacement: Expression = {
+    // StaticInvoke needs an exact BinaryType child, including for a bare NULL literal.
+    val bitmap = if (left.dataType == NullType) Cast(left, BinaryType) else left
+    StaticInvoke(
+      classOf[BitmapExpressionUtils],
+      BooleanType,
+      "bitmapContains",
+      Seq(bitmap, Cast(right, LongType)),
+      Seq(BinaryType, LongType),
+      returnNullable = false)
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): BitmapContains =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
