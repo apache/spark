@@ -7114,9 +7114,9 @@ object SQLConf {
         "for shredded Variant columns while never dropping rows that fall back to an untyped " +
         "residual. Has no effect unless the Parquet column is shredded and " +
         "spark.sql.variant.pushVariantIntoScan is also true.")
-      .version("4.4.0")
+      .version("4.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
