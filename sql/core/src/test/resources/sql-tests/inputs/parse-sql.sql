@@ -194,6 +194,11 @@ SELECT parse_sql('BEGIN SELECT 1; END');
 SELECT parse_sql('BEGIN SELECT count(a) FROM script_t WHERE c = :p; END');
 --QUERY-DELIMITER-END
 
+-- Positional markers under SingleStatement must not be double-counted.
+--QUERY-DELIMITER-START
+SELECT parse_sql('BEGIN SELECT * FROM t WHERE a = ?; END');
+--QUERY-DELIMITER-END
+
 --QUERY-DELIMITER-START
 SELECT parse_sql('BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END');
 --QUERY-DELIMITER-END

@@ -86,6 +86,15 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(tableRefs("CREATE VIEW v AS SELECT 1 AS a") === Set(Seq("v")))
   }
 
+  test("positional markers inside BEGIN END are counted once") {
+    val j = obj("BEGIN SELECT * FROM t WHERE a = ?; END")
+    assert(j \ "parse_success" === JBool(true))
+    assert(j \ "statement_identifier" === JString("BEGIN END"))
+    assert(j \ "parameter_markers" \ "unnamed_count" === JInt(1))
+    assert(j \ "parameter_markers" \ "named" === JNothing)
+    assert(tableRefs("BEGIN SELECT * FROM t WHERE a = ?; END") === Set(Seq("t")))
+  }
+
   test("syntax error returns STANDARD error JSON without throwing") {
     val j = obj("SELEC FROM t")
     assert(j \ "parse_success" === JBool(false))

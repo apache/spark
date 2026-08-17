@@ -470,6 +470,13 @@ Project [parse_sql(BEGIN SELECT count(a) FROM script_t WHERE c = :p; END) AS par
 
 
 -- !query
+SELECT parse_sql('BEGIN SELECT * FROM t WHERE a = ?; END')
+-- !query analysis
+Project [parse_sql(BEGIN SELECT * FROM t WHERE a = ?; END) AS parse_sql(BEGIN SELECT * FROM t WHERE a = ?; END)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT parse_sql('BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END')
 -- !query analysis
 Project [parse_sql(BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END) AS parse_sql(BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END)#x]

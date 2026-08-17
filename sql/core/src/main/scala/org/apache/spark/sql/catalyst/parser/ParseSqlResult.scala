@@ -88,19 +88,18 @@ object ParseSqlResult {
     fields += "statement_identifier" -> JString(classification.statementIdentifier)
     fields += "statement_code" -> JInt(classification.statementCode)
     // Omit unused collections / markers so consumers can treat absence as empty.
-    val tables = collectTableReferences(plan)
-    if (tables.nonEmpty) {
-      fields += "table_references" -> JArray(tables.map(partsToJArray).toList)
+    val refs = collectPlanReferences(plan)
+    if (refs.tables.nonEmpty) {
+      fields += "table_references" -> JArray(refs.tables.map(partsToJArray).toList)
     }
-    val functions = collectFunctionReferences(plan)
-    if (functions.nonEmpty) {
-      fields += "function_references" -> JArray(functions.map(partsToJArray).toList)
+    if (refs.functions.nonEmpty) {
+      fields += "function_references" -> JArray(refs.functions.map(partsToJArray).toList)
     }
     val selectList = collectSelectList(plan)
     if (selectList.nonEmpty) {
       fields += "select_list" -> JArray(selectList.toList)
     }
-    parameterMarkersJson(plan).foreach(markers => fields += "parameter_markers" -> markers)
+    refs.parameterMarkers.foreach(markers => fields += "parameter_markers" -> markers)
     compact(render(JObject(fields.toList)))
   }
 
@@ -163,7 +162,8 @@ object ParseSqlResult {
    * `collectWithSubqueries` miss:
    *   - [[UnresolvedWith]] CTE definitions (`innerChildren`, not `children`)
    *   - [[InsertIntoStatement]].table (non-child plan slot)
-   *   - [[SingleStatement]].parsedPlan (children expose only nested children)
+   *   - [[SingleStatement]].parsedPlan root (children expose only nested
+   *     children; visit the root without re-walking those children)
    *   - [[CompoundBody]].handlers (not in `children`)
    *   - [[SimpleCaseStatement]].elseBody (not in `children`)
    * Nested expression subqueries are still covered by `foreachWithSubqueries`.
@@ -171,27 +171,47 @@ object ParseSqlResult {
   private def foreachPlanDeep(plan: LogicalPlan)(f: LogicalPlan => Unit): Unit = {
     plan.foreachWithSubqueries { p =>
       f(p)
-      p match {
-        case w: UnresolvedWith =>
-          w.cteRelations.foreach { case (_, ctePlan, _) =>
-            foreachPlanDeep(ctePlan)(f)
-          }
-        case InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
-          foreachPlanDeep(table)(f)
-        case s: SingleStatement =>
-          // Root of the wrapped statement is skipped by SingleStatement.children.
-          foreachPlanDeep(s.parsedPlan)(f)
-        case c: CompoundBody =>
-          c.handlers.foreach(h => foreachPlanDeep(h)(f))
-        case s: SimpleCaseStatement =>
-          s.elseBody.foreach(b => foreachPlanDeep(b)(f))
-        case ExplainCommand(logicalPlan, _) =>
-          foreachPlanDeep(logicalPlan)(f)
-        case DescribeQueryCommand(_, queryPlan) =>
-          foreachPlanDeep(queryPlan)(f)
-        case _ =>
-      }
+      visitNonChildSlots(p)(f)
     }
+  }
+
+  /**
+   * Visit plan slots that are not exposed via `children` / expression
+   * subqueries. For [[SingleStatement]], only the wrapped root (and its
+   * subqueries / non-child slots) is visited -- its children were already
+   * walked by the outer `foreachWithSubqueries` via
+   * `SingleStatement.children`.
+   */
+  private def visitNonChildSlots(plan: LogicalPlan)(f: LogicalPlan => Unit): Unit = {
+    plan match {
+      case w: UnresolvedWith =>
+        w.cteRelations.foreach { case (_, ctePlan, _) =>
+          foreachPlanDeep(ctePlan)(f)
+        }
+      case InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
+        foreachPlanDeep(table)(f)
+      case s: SingleStatement =>
+        visitSingleStatementRoot(s.parsedPlan)(f)
+      case c: CompoundBody =>
+        c.handlers.foreach(h => foreachPlanDeep(h)(f))
+      case s: SimpleCaseStatement =>
+        s.elseBody.foreach(b => foreachPlanDeep(b)(f))
+      case ExplainCommand(logicalPlan, _) =>
+        foreachPlanDeep(logicalPlan)(f)
+      case DescribeQueryCommand(_, queryPlan) =>
+        foreachPlanDeep(queryPlan)(f)
+      case _ =>
+    }
+  }
+
+  /**
+   * Visit a [[SingleStatement]] wrapped root without re-traversing its
+   * children (already exposed by `SingleStatement.children`).
+   */
+  private def visitSingleStatementRoot(root: LogicalPlan)(f: LogicalPlan => Unit): Unit = {
+    f(root)
+    root.subqueries.foreach(sq => foreachPlanDeep(sq)(f))
+    visitNonChildSlots(root)(f)
   }
 
   /** Multipart name from a table/view-shaped plan node, if any. */
@@ -207,15 +227,24 @@ object ParseSqlResult {
   private def tableIdentifierParts(id: org.apache.spark.sql.catalyst.TableIdentifier): Seq[String] =
     id.catalog.toSeq ++ id.database.toSeq :+ id.table
 
+  private final case class PlanReferences(
+      tables: Seq[Seq[String]],
+      functions: Seq[Seq[String]],
+      parameterMarkers: Option[JObject])
+
   /**
-   * Collect multipart table/view identifiers for lineage (as written in the
-   * SQL). CTE definition names and correlation aliases are omitted; tables
-   * referenced inside CTE bodies are still included. Function / variable
-   * identifiers are not collected. Deduplicates while preserving first-seen
-   * order.
+   * Collect multipart table/view identifiers, function names, and parameter
+   * markers for lineage. CTE definition names and correlation aliases are
+   * omitted from tables; tables referenced inside CTE bodies are still
+   * included. Function / variable identifiers are not collected as tables.
+   * Deduplicates while preserving first-seen order. Uses one CTE-name pass
+   * then one combined deep walk for tables, functions, and parameters.
    */
-  private def collectTableReferences(plan: LogicalPlan): Seq[Seq[String]] = {
-    val seen = mutable.LinkedHashSet.empty[Seq[String]]
+  private def collectPlanReferences(plan: LogicalPlan): PlanReferences = {
+    val tables = mutable.LinkedHashSet.empty[Seq[String]]
+    val functions = mutable.LinkedHashSet.empty[Seq[String]]
+    val namedParams = mutable.LinkedHashSet.empty[String]
+    var unnamedCount = 0
     // CTE names are always single-part in the grammar; UnresolvedRelation refs
     // to CTEs are likewise single-part, so filtering matches that shape.
     val cteNames = mutable.HashSet.empty[String]
@@ -231,8 +260,19 @@ object ParseSqlResult {
       case _ => false
     }
 
-    def add(parts: Seq[String]): Unit = {
-      if (parts.nonEmpty && !isCteName(parts)) seen += parts
+    def addTable(parts: Seq[String]): Unit = {
+      if (parts.nonEmpty && !isCteName(parts)) tables += parts
+    }
+
+    def addFunction(parts: Seq[String]): Unit = {
+      if (parts.nonEmpty) functions += parts
+    }
+
+    def visitExpr(e: Expression): Unit = e.foreach {
+      case f: UnresolvedFunction => addFunction(f.nameParts)
+      case n: NamedParameter => namedParams += n.name
+      case _: PosParameter => unnamedCount += 1
+      case _ =>
     }
 
     // First pass: gather CTE names in scope (including nested).
@@ -241,52 +281,49 @@ object ParseSqlResult {
       case _ =>
     }
 
-    foreachPlanDeep(plan) {
-      case u: UnresolvedRelation => add(u.multipartIdentifier)
-      case u: UnresolvedTable => add(u.multipartIdentifier)
-      case u: UnresolvedView => add(u.multipartIdentifier)
-      case u: UnresolvedTableOrView => add(u.multipartIdentifier)
-      // Table/view DDL targets only — not CreateFunction / CreateVariable names.
-      case c: CreateView => tableOrViewParts(c.child).foreach(add)
-      case c: CreateViewCommand => add(tableIdentifierParts(c.name))
-      case c: CreateTempViewUsing => add(tableIdentifierParts(c.tableIdent))
-      case c: CreateTable => tableOrViewParts(c.name).foreach(add)
-      case c: CreateTableAsSelect => tableOrViewParts(c.name).foreach(add)
-      case c: ReplaceTable => tableOrViewParts(c.name).foreach(add)
-      case c: ReplaceTableAsSelect => tableOrViewParts(c.name).foreach(add)
-      case c: DropTable => tableOrViewParts(c.child).foreach(add)
-      case c: DropView => tableOrViewParts(c.child).foreach(add)
-      case c: TruncateTable => tableOrViewParts(c.table).foreach(add)
-      case c: TruncatePartition => tableOrViewParts(c.table).foreach(add)
-      case c: CacheTable =>
-        if (c.multipartIdentifier.nonEmpty) add(c.multipartIdentifier)
-        else tableOrViewParts(c.table).foreach(add)
-      case c: UncacheTable => tableOrViewParts(c.table).foreach(add)
-      case c: RefreshTable => tableOrViewParts(c.child).foreach(add)
-      case c: CommentOnTable => tableOrViewParts(c.table).foreach(add)
-      case _ =>
-    }
-    seen.toSeq
-  }
-
-  /** Collect multipart function names, including table-valued functions. */
-  private def collectFunctionReferences(plan: LogicalPlan): Seq[Seq[String]] = {
-    val seen = mutable.LinkedHashSet.empty[Seq[String]]
-    def add(parts: Seq[String]): Unit = {
-      if (parts.nonEmpty) seen += parts
-    }
-    def collectInExpression(e: Expression): Unit = e.foreach {
-      case f: UnresolvedFunction => add(f.nameParts)
-      case _ =>
-    }
+    // Second pass: tables, functions, and parameter markers together.
     foreachPlanDeep(plan) { p =>
-      foreachExpressionDeep(p)(collectInExpression)
+      foreachExpressionDeep(p)(visitExpr)
       p match {
-        case u: UnresolvedTableValuedFunction => add(u.name)
+        case u: UnresolvedRelation => addTable(u.multipartIdentifier)
+        case u: UnresolvedTable => addTable(u.multipartIdentifier)
+        case u: UnresolvedView => addTable(u.multipartIdentifier)
+        case u: UnresolvedTableOrView => addTable(u.multipartIdentifier)
+        // Table/view DDL targets only -- not CreateFunction / CreateVariable names.
+        case c: CreateView => tableOrViewParts(c.child).foreach(addTable)
+        case c: CreateViewCommand => addTable(tableIdentifierParts(c.name))
+        case c: CreateTempViewUsing => addTable(tableIdentifierParts(c.tableIdent))
+        case c: CreateTable => tableOrViewParts(c.name).foreach(addTable)
+        case c: CreateTableAsSelect => tableOrViewParts(c.name).foreach(addTable)
+        case c: ReplaceTable => tableOrViewParts(c.name).foreach(addTable)
+        case c: ReplaceTableAsSelect => tableOrViewParts(c.name).foreach(addTable)
+        case c: DropTable => tableOrViewParts(c.child).foreach(addTable)
+        case c: DropView => tableOrViewParts(c.child).foreach(addTable)
+        case c: TruncateTable => tableOrViewParts(c.table).foreach(addTable)
+        case c: TruncatePartition => tableOrViewParts(c.table).foreach(addTable)
+        case c: CacheTable =>
+          if (c.multipartIdentifier.nonEmpty) addTable(c.multipartIdentifier)
+          else tableOrViewParts(c.table).foreach(addTable)
+        case c: UncacheTable => tableOrViewParts(c.table).foreach(addTable)
+        case c: RefreshTable => tableOrViewParts(c.child).foreach(addTable)
+        case c: CommentOnTable => tableOrViewParts(c.table).foreach(addTable)
+        case u: UnresolvedTableValuedFunction => addFunction(u.name)
         case _ =>
       }
     }
-    seen.toSeq
+
+    val markers =
+      if (namedParams.isEmpty && unnamedCount == 0) {
+        None
+      } else {
+        val markerFields = mutable.ListBuffer.empty[JField]
+        if (namedParams.nonEmpty) {
+          markerFields += "named" -> JArray(namedParams.toList.map(JString))
+        }
+        if (unnamedCount > 0) markerFields += "unnamed_count" -> JInt(unnamedCount)
+        Some(JObject(markerFields.toList))
+      }
+    PlanReferences(tables.toSeq, functions.toSeq, markers)
   }
 
   /**
@@ -341,31 +378,5 @@ object ParseSqlResult {
       JObject("name" -> partsToJArray(a.nameParts))
     case other =>
       JObject("name" -> partsToJArray(Seq(other.name)))
-  }
-
-  /**
-   * Parameter-marker object, or None when the statement has neither named nor
-   * positional markers. Nested empty members are also omitted: `named` only
-   * when non-empty, `unnamed_count` only when > 0.
-   */
-  private def parameterMarkersJson(plan: LogicalPlan): Option[JObject] = {
-    val named = mutable.LinkedHashSet.empty[String]
-    var unnamedCount = 0
-    def visitExpr(e: Expression): Unit = e.foreach {
-      case n: NamedParameter => named += n.name
-      case _: PosParameter => unnamedCount += 1
-      case _ =>
-    }
-    foreachPlanDeep(plan) { p =>
-      foreachExpressionDeep(p)(visitExpr)
-    }
-    if (named.isEmpty && unnamedCount == 0) {
-      None
-    } else {
-      val fields = mutable.ListBuffer.empty[JField]
-      if (named.nonEmpty) fields += "named" -> JArray(named.toList.map(JString))
-      if (unnamedCount > 0) fields += "unnamed_count" -> JInt(unnamedCount)
-      Some(JObject(fields.toList))
-    }
   }
 }
