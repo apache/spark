@@ -988,6 +988,17 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       val created = spark.createDataFrame(df.collectAsList(), schema)
       assert(created.schema.head.dataType === CharType(5))
       checkAnswer(created, Row("0    "))
+
+      // RowEncoder must retain a declared collation on the constrained type, not rebuild
+      // CharType(length) / VarcharType(length) with the default collation.
+      val collated = new StructType()
+        .add("c", CharType(5, "UTF8_LCASE"))
+        .add("v", VarcharType(5, "UTF8_LCASE"))
+      val collatedDf = spark.createDataFrame(
+        java.util.Arrays.asList(Row("ab", "cd")), collated)
+      assert(collatedDf.schema("c").dataType === CharType(5, "UTF8_LCASE"))
+      assert(collatedDf.schema("v").dataType === VarcharType(5, "UTF8_LCASE"))
+      checkAnswer(collatedDf, Row("ab   ", "cd"))
     }
   }
 
@@ -1234,7 +1245,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           }
         }
       }
-      // Oversize that is only trailing blanks trims successfully.
+      // An oversized value consisting only of trailing blanks is trimmed successfully.
       withTempPath { dir =>
         withTable("t") {
           sql("SELECT '12  ' as col").write.format(format).save(dir.toString)

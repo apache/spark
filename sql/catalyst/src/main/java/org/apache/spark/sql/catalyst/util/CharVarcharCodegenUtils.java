@@ -82,7 +82,7 @@ public class CharVarcharCodegenUtils {
    * Read-side VARCHAR check under standard semantics: allow up to limit characters,
    * or trim trailing spaces then error if still longer than limit.
    *
-   * Identical to the write-side check by design; see {@link #charTypeReadSideCheck}.
+   * Identical to the write-side check by design; see {@link #varcharTypeWriteSideCheck}.
    */
   public static UTF8String varcharTypeReadSideCheck(UTF8String inputStr, int limit) {
     return varcharTypeWriteSideCheck(inputStr, limit);

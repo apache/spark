@@ -92,9 +92,9 @@ object RowEncoder extends DataTypeErrorsBase {
       case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
       case BinaryType => BinaryEncoder
       case c: CharType if SqlApiConf.get.charVarcharFirstClassTypes =>
-        CharEncoder(c.length)
+        CharEncoder(c)
       case v: VarcharType if SqlApiConf.get.charVarcharFirstClassTypes =>
-        VarcharEncoder(v.length)
+        VarcharEncoder(v)
       case s: StringType if StringHelper.isPlainString(s) => StringEncoder
       case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
       case TimestampType => TimestampEncoder(lenient)
