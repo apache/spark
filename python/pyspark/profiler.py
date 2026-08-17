@@ -264,7 +264,8 @@ class BasicProfiler(Profiler):
 
     def dump(self, id: int, path: str) -> None:
         """Dump the profile into path, id is the RDD id"""
-        os.makedirs(path, exist_ok=True)
+        if not os.path.exists(path):
+            os.makedirs(path)
         stats = self.stats()
         if stats:
             p = os.path.join(path, "rdd_%d.pstats" % id)
@@ -287,7 +288,8 @@ class UDFBasicProfiler(BasicProfiler):
 
     def dump(self, id: int, path: str) -> None:
         """Dump the profile into path, id is the PythonUDF id"""
-        os.makedirs(path, exist_ok=True)
+        if not os.path.exists(path):
+            os.makedirs(path)
         stats = self.stats()
         if stats:
             p = os.path.join(path, "udf_%d.pstats" % id)
@@ -403,7 +405,8 @@ class MemoryProfiler(Profiler):
 
     def dump(self, id: int, path: str) -> None:
         """Dump the memory profile into path, id is the PythonUDF id"""
-        os.makedirs(path, exist_ok=True)
+        if not os.path.exists(path):
+            os.makedirs(path)
         stats = self.stats()  # dict
         if stats:
             p = os.path.join(path, "udf_%d_memory.txt" % id)
