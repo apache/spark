@@ -20,13 +20,16 @@ package org.apache.spark.sql.execution.externalUDF
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference,
-  ExternalUserDefinedFunction, Expression}
+  Expression, ExternalUserDefinedFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{EvalExternalUDF, LocalRelation,
-  LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EvalExternalUDF, Filter, Join,
+  JoinHint, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType}
 import org.apache.spark.udf.worker.{DirectWorker, ProcessCallable, UDFWorkerProperties,
   UDFWorkerSpecification, WorkerCapabilities, WorkerEnvironment}
 
@@ -53,22 +56,28 @@ class ExtractExternalUDFsSuite extends PlanTest {
   private def udf(
       name: String,
       spec: UDFWorkerSpecification,
-      children: Seq[Expression]): ExternalUserDefinedFunction = {
+      children: Seq[Expression],
+      dataType: DataType = IntegerType,
+      deterministic: Boolean = true): ExternalUserDefinedFunction = {
     ExternalUserDefinedFunction(
       name = Some(name),
       workerSpec = spec,
       payload = name.getBytes(StandardCharsets.UTF_8),
-      dataType = IntegerType,
+      dataType = dataType,
       children = children,
       inputTypes = None,
-      udfDeterministic = true,
+      udfDeterministic = deterministic,
       udfNullable = false)
   }
 
-  private def extract(expression: Expression): LogicalPlan = {
+  private def extract(plan: LogicalPlan): LogicalPlan = {
     withSQLConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key -> "true") {
-      extractRule(Project(Seq(Alias(expression, "result")()), relation))
+      extractRule(plan)
     }
+  }
+
+  private def extract(expression: Expression): LogicalPlan = {
+    extract(Project(Seq(Alias(expression, "result")()), relation))
   }
 
   private def evalNodes(plan: LogicalPlan): Seq[EvalExternalUDF] = {
@@ -111,6 +120,28 @@ class ExtractExternalUDFsSuite extends PlanTest {
     assert(nodes.head.udfs.forall(callCount(_) == 1))
   }
 
+  test("equivalent deterministic UDF roots share one result") {
+    val spec = workerSpec("deduplicated", supportsChaining = true)
+    val expression = Add(
+      udf("duplicate", spec, Seq(input)),
+      udf("duplicate", spec, Seq(input)))
+
+    val nodes = evalNodes(extract(expression))
+    assert(nodes.size == 1)
+    assert(nodes.head.udfs.size == 1)
+  }
+
+  test("equivalent non-deterministic UDF roots remain separate") {
+    val spec = workerSpec("non-deterministic", supportsChaining = true)
+    val expression = Add(
+      udf("duplicate", spec, Seq(input), deterministic = false),
+      udf("duplicate", spec, Seq(input), deterministic = false))
+
+    val nodes = evalNodes(extract(expression))
+    assert(nodes.size == 1)
+    assert(nodes.head.udfs.size == 2)
+  }
+
   test("dependent branches use separate session nodes") {
     val spec = workerSpec("branched", supportsChaining = true)
     val left = udf("left", spec, Seq(input))
@@ -141,6 +172,74 @@ class ExtractExternalUDFsSuite extends PlanTest {
     val nodes = evalNodes(extract(expression))
     assert(nodes.size == 2)
     assert(nodes.forall(_.udfs.size == 1))
+  }
+
+  test("an external UDF over an aggregate expression is evaluated after aggregate") {
+    val spec = workerSpec("aggregate", supportsChaining = true)
+    val sum = Sum(input).toAggregateExpression()
+    val plan = Aggregate(
+      groupingExpressions = Seq.empty,
+      aggregateExpressions = Seq(Alias(udf("aggregate", spec, Seq(sum)), "result")()),
+      child = relation)
+
+    val nodes = evalNodes(extract(plan))
+    assert(nodes.size == 1)
+    assert(nodes.head.child.isInstanceOf[Aggregate])
+  }
+
+  test("a zero-argument non-deterministic UDF is evaluated after aggregate") {
+    val spec = workerSpec("zero-argument", supportsChaining = true)
+    val plan = Aggregate(
+      groupingExpressions = Seq.empty,
+      aggregateExpressions = Seq(Alias(
+        udf("zero-argument", spec, Seq.empty, deterministic = false), "result")()),
+      child = relation)
+
+    val nodes = evalNodes(extract(plan))
+    assert(nodes.size == 1)
+    assert(nodes.head.child.isInstanceOf[Aggregate])
+  }
+
+  test("an external UDF used as a grouping key is evaluated before aggregate") {
+    val spec = workerSpec("grouping", supportsChaining = true)
+    val plan = Aggregate(
+      groupingExpressions = Seq(udf("grouping", spec, Seq(input))),
+      aggregateExpressions = Seq(Alias(udf("grouping", spec, Seq(input)), "result")()),
+      child = relation)
+
+    val extracted = extract(plan)
+    val aggregate = extracted.collectFirst { case node: Aggregate => node }.get
+    assert(aggregate.child.collect { case node: EvalExternalUDF => node }.size == 1)
+  }
+
+  test("an external UDF join condition referencing both sides is evaluated after join") {
+    val spec = workerSpec("join", supportsChaining = true)
+    val rightInput = AttributeReference("right", IntegerType, nullable = false)()
+    val right = LocalRelation(Seq(rightInput))
+    val condition = udf("join", spec, Seq(input, rightInput), dataType = BooleanType)
+    val plan = Join(relation, right, Inner, Some(condition), JoinHint.NONE)
+
+    val extracted = extract(plan)
+    val filter = extracted.collectFirst { case node: Filter => node }.get
+    val evaluation = filter.child.asInstanceOf[EvalExternalUDF]
+    val join = evaluation.child.asInstanceOf[Join]
+    assert(join.condition.isEmpty)
+  }
+
+  test("an external UDF join condition rejects unsupported join types") {
+    val spec = workerSpec("join", supportsChaining = true)
+    val rightInput = AttributeReference("right", IntegerType, nullable = false)()
+    val right = LocalRelation(Seq(rightInput))
+    val condition = udf("join", spec, Seq(input, rightInput), dataType = BooleanType)
+    val plan = Join(relation, right, LeftOuter, Some(condition), JoinHint.NONE)
+
+    val exception = intercept[AnalysisException] {
+      extract(plan)
+    }
+    checkError(
+      exception = exception,
+      condition = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_ON_CLAUSE",
+      parameters = Map("joinType" -> LeftOuter.sql))
   }
 
   test("external UDF expressions are rejected when unified execution is disabled") {

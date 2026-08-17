@@ -89,13 +89,13 @@ class SparkOptimizer(
     postHocOptimizationBatches,
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromJoinCondition,
-      // `ExtractPythonUDFFromJoinCondition` can convert a join to a cartesian product.
-      // Here, we rerun cartesian product check.
+      extractExternalUDFs,
+      // Join-condition UDF extraction can convert a join to a cartesian product.
+      // Here, we rerun the cartesian product check.
       CheckCartesianProducts,
       ExtractPythonUDFFromAggregate,
       // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
       ExtractGroupingPythonUDFFromAggregate,
-      extractExternalUDFs,
       // `ExtractPythonUDFs` first lifts Python UDFs out of higher-order function lambdas
       // (via `ExtractPythonUDFFromLambda`) and then extracts them as ordinary top-level UDFs.
       ExtractPythonUDFs,

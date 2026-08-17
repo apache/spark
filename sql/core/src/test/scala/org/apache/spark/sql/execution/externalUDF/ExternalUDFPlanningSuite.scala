@@ -23,8 +23,8 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan,
-  EvalExternalUDF, MapInPandas, MapPartitionsExternalUDF}
+import org.apache.spark.sql.catalyst.plans.logical.{EvalExternalUDF, LogicalPlan,
+  MapInPandas, MapPartitionsExternalUDF}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.python.{BatchEvalPythonExec, MapInPandasExec,
   UserDefinedPythonFunction}
@@ -164,11 +164,6 @@ class UnifiedUDFPlanningSuite
   test("scalar Python UDF uses EvalExternalUDF logical node") {
     val result = applyScalarPythonUDF()
     assertOptimizedLogicalNode[EvalExternalUDF](result)
-  }
-
-  test("scalar Python UDF uses EvalExternalUDFExec physical node") {
-    val result = applyScalarPythonUDF()
-    assertPhysicalNode[EvalExternalUDFExec](result)
   }
 }
 

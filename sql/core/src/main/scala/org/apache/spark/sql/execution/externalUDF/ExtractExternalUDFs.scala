@@ -20,11 +20,16 @@ package org.apache.spark.sql.execution.externalUDF
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.JOIN_CONDITION
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.PythonUDF.isScalarPythonUDF
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.plans.InnerLike
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_UDF, PYTHON_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, EXTERNAL_UDF, JOIN, PYTHON_UDF}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 
@@ -40,7 +45,8 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
  * scalar [[PythonUDF]] expressions are converted to
  * [[ExternalUserDefinedFunction]] expressions before extraction.
  */
-private[sql] class ExtractExternalUDFs(sparkConf: SparkConf) extends Rule[LogicalPlan] {
+private[sql] class ExtractExternalUDFs(sparkConf: SparkConf)
+    extends Rule[LogicalPlan] with Logging with PredicateHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // A correlated subquery is rewritten as a join and revisits this rule later.
@@ -55,7 +61,10 @@ private[sql] class ExtractExternalUDFs(sparkConf: SparkConf) extends Rule[Logica
       plan
     case _ =>
       val externalPlan = convertPythonUDFs(plan)
-      externalPlan.transformUpWithPruning(_.containsPattern(EXTERNAL_UDF)) {
+      val joinPlan = extractExternalUDFFromJoinCondition(externalPlan)
+      val aggregatePlan = extractExternalUDFFromAggregate(joinPlan)
+      val groupingPlan = extractGroupingExternalUDFFromAggregate(aggregatePlan)
+      groupingPlan.transformUpWithPruning(_.containsPattern(EXTERNAL_UDF)) {
         // These nodes already own their external UDF expressions.
         case udfPlan: ExternalUDF => udfPlan
         case other => extract(other)
@@ -89,6 +98,131 @@ private[sql] class ExtractExternalUDFs(sparkConf: SparkConf) extends Rule[Logica
     }
   }
 
+  private def hasUnevaluableExternalUDF(expression: Expression, join: Join): Boolean = {
+    expression.exists {
+      case udf: ExternalUserDefinedFunction =>
+        !canEvaluate(udf, join.left) && !canEvaluate(udf, join.right)
+      case _ => false
+    }
+  }
+
+  private def extractExternalUDFFromJoinCondition(plan: LogicalPlan): LogicalPlan = {
+    plan.transformUpWithPruning(_.containsAllPatterns(EXTERNAL_UDF, JOIN)) {
+      case join @ Join(_, _, joinType, Some(condition), _)
+          if hasUnevaluableExternalUDF(condition, join) =>
+        if (!joinType.isInstanceOf[InnerLike]) {
+          throw QueryCompilationErrors.useExternalUDFInJoinConditionUnsupportedError(joinType)
+        }
+
+        val (udfConditions, otherConditions) = splitConjunctivePredicates(condition)
+          .partition(hasUnevaluableExternalUDF(_, join))
+        val newCondition = if (otherConditions.isEmpty) {
+          logWarning(log"The join condition:${MDC(JOIN_CONDITION, condition)} " +
+            log"of the join plan contains external UDFs only, " +
+            log"so it will be moved out and the join plan will become a cross join.")
+          None
+        } else {
+          Some(otherConditions.reduceLeft(And))
+        }
+        Filter(udfConditions.reduceLeft(And), join.copy(condition = newCondition))
+    }
+  }
+
+  private def belongsToAggregate(expression: Expression, aggregate: Aggregate): Boolean = {
+    expression.isInstanceOf[AggregateExpression] ||
+      aggregate.groupingExpressions.exists(_.semanticEquals(expression))
+  }
+
+  private def hasExternalUDFOverAggregate(
+      expression: Expression,
+      aggregate: Aggregate): Boolean = {
+    expression.exists {
+      case udf: ExternalUserDefinedFunction =>
+        udf.references.isEmpty || udf.exists(belongsToAggregate(_, aggregate))
+      case _ => false
+    }
+  }
+
+  private def extractExternalUDFFromAggregate(plan: LogicalPlan): LogicalPlan = {
+    plan.transformUpWithPruning(_.containsAllPatterns(EXTERNAL_UDF, AGGREGATE)) {
+      case aggregate: Aggregate
+          if aggregate.aggregateExpressions.exists(
+            hasExternalUDFOverAggregate(_, aggregate)) =>
+        val projectExpressions = ArrayBuffer.empty[NamedExpression]
+        val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
+        aggregate.aggregateExpressions.foreach { expression =>
+          if (hasExternalUDFOverAggregate(expression, aggregate)) {
+            val newExpression = expression.transformDown {
+              case child: Expression if belongsToAggregate(child, aggregate) =>
+                val alias = child match {
+                  case named: NamedExpression => named
+                  case other => Alias(other, "agg")()
+                }
+                aggregateExpressions += alias
+                alias.toAttribute
+            }
+            projectExpressions += newExpression.asInstanceOf[NamedExpression]
+          } else {
+            aggregateExpressions += expression
+            projectExpressions += expression.toAttribute
+          }
+        }
+        Project(
+          projectExpressions.toSeq,
+          aggregate.copy(aggregateExpressions = aggregateExpressions.toSeq))
+    }
+  }
+
+  private def hasExternalUDF(expression: Expression): Boolean = {
+    expression.exists(_.isInstanceOf[ExternalUserDefinedFunction])
+  }
+
+  private def extractGroupingExternalUDFFromAggregate(plan: LogicalPlan): LogicalPlan = {
+    plan.transformUpWithPruning(_.containsAllPatterns(EXTERNAL_UDF, AGGREGATE)) {
+      case aggregate: Aggregate if aggregate.groupingExpressions.exists(hasExternalUDF) =>
+        val projectExpressions = ArrayBuffer.empty[NamedExpression]
+        val groupingExpressions = ArrayBuffer.empty[Expression]
+        val attributeMap = ArrayBuffer.empty[
+          (ExternalUserDefinedFunction, NamedExpression)]
+
+        def mappedAttribute(udf: ExternalUserDefinedFunction): Option[NamedExpression] = {
+          attributeMap.collectFirst {
+            case (candidate, attribute) if sameUDF(candidate, udf) => attribute
+          }
+        }
+
+        aggregate.groupingExpressions.foreach { expression =>
+          if (hasExternalUDF(expression)) {
+            val newExpression = expression.transformDown {
+              case udf: ExternalUserDefinedFunction =>
+                assert(udf.udfDeterministic,
+                  "Non-deterministic external UDFs should not appear in grouping expressions")
+                mappedAttribute(udf).getOrElse {
+                  val alias = Alias(udf, "groupingExternalUDF")()
+                  projectExpressions += alias
+                  attributeMap += ((udf, alias.toAttribute))
+                  alias.toAttribute
+                }
+            }
+            groupingExpressions += newExpression
+          } else {
+            groupingExpressions += expression
+          }
+        }
+
+        val aggregateExpressions = aggregate.aggregateExpressions.map { expression =>
+          expression.transformUp {
+            case udf: ExternalUserDefinedFunction if udf.udfDeterministic =>
+              mappedAttribute(udf).getOrElse(udf)
+          }.asInstanceOf[NamedExpression]
+        }
+        aggregate.copy(
+          groupingExpressions = groupingExpressions.toSeq,
+          aggregateExpressions = aggregateExpressions,
+          child = Project((projectExpressions ++ aggregate.child.output).toSeq, aggregate.child))
+    }
+  }
+
   private def supportsUDFChaining(workerSpec: UDFWorkerSpecification): Boolean = {
     workerSpec.hasCapabilities &&
       workerSpec.getCapabilities.hasSupportsUdfChaining &&
@@ -115,7 +249,10 @@ private[sql] class ExtractExternalUDFs(sparkConf: SparkConf) extends Rule[Logica
       left: ExternalUserDefinedFunction,
       right: ExternalUserDefinedFunction): Boolean = {
     if (left.deterministic && right.deterministic) {
-      left.semanticEquals(right)
+      val normalizedPayload = Array.emptyByteArray
+      left.payload.sameElements(right.payload) &&
+        left.copy(payload = normalizedPayload).semanticEquals(
+          right.copy(payload = normalizedPayload))
     } else {
       left.resultId == right.resultId
     }

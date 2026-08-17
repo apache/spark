@@ -8792,6 +8792,11 @@
           "External UDF expressions. Set <config> to true to enable them."
         ]
       },
+      "EXTERNAL_UDF_IN_ON_CLAUSE" : {
+        "message" : [
+          "External UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
       "GEOSPATIAL_DISABLED" : {
         "message" : [
           "Geospatial feature is disabled."
