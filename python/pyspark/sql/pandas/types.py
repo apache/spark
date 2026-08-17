@@ -114,7 +114,8 @@ def _time_type_from_arrow_metadata(
     if metadata is None or time_precision_key not in metadata:
         return TimeType()
     try:
-        precision = int(metadata[time_precision_key])
+        # Base 10 accepts PyArrow bytes values and str, matching JVM Integer.parse.
+        precision = int(metadata[time_precision_key], 10)
     except (TypeError, ValueError):
         return TimeType()
     if 0 <= precision <= 9:
@@ -520,7 +521,9 @@ def _from_arrow_field(
     """Convert a PyArrow field to a Spark type, recovering TIME precision from metadata."""
     import pyarrow.types as types
 
-    if types.is_time64(field.type):
+    # JVM ArrowUtils.fromArrowField only reads SPARK::time::precision on Time(NANOSECOND).
+    # Foreign time64[us] stays TIME(6); do not invent precision from the Arrow unit.
+    if types.is_time64(field.type) and field.type.unit == "ns":
         return _time_type_from_arrow_metadata(field.metadata)
     return from_arrow_type(field.type, prefer_timestamp_ntz)
 

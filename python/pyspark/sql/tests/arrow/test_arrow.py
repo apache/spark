@@ -871,7 +871,7 @@ class ArrowTestsMixin:
         # SPARK-57696: TIME(p) precision is stored on the Arrow field, not the type.
         import pyarrow.types as types
 
-        for precision in (0, 3, 6, 9):
+        for precision in (0, 3, 6, 7, 9):
             with self.subTest(precision=precision):
                 schema = StructType([StructField("t", TimeType(precision))])
                 arrow_schema = to_arrow_schema(schema)
@@ -885,9 +885,18 @@ class ArrowTestsMixin:
 
         # Bare time64 with no precision key maps to the default TIME(6).
         self.assertEqual(from_arrow_type(pa.time64("ns")), TimeType())
+        self.assertEqual(from_arrow_type(pa.time64("us")), TimeType())
         untagged = pa.schema([pa.field("t", pa.time64("ns"))])
         self.assertEqual(
             from_arrow_schema(untagged), StructType([StructField("t", TimeType())])
+        )
+        # Foreign time64[us] stays TIME(6) even if a precision key is present.
+        # JVM fromArrowField only honors the key on Time(NANOSECOND).
+        us_tagged = pa.schema(
+            [pa.field("t", pa.time64("us"), metadata={time_precision_key: b"3"})]
+        )
+        self.assertEqual(
+            from_arrow_schema(us_tagged), StructType([StructField("t", TimeType())])
         )
 
         # Present-but-invalid keys also fall back to TIME(6), matching the JVM.
