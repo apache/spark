@@ -45,8 +45,8 @@ private[sql] trait SqlApiConf {
   def charVarcharStandardSemantics: Boolean
 
   /**
-   * True when CHAR/VARCHAR may appear as first-class types in schemas and plans
-   * (either the legacy preserve path or SQL standard semantics).
+   * True when CHAR/VARCHAR may appear as first-class types in schemas and plans (either the
+   * legacy preserve path or SQL standard semantics).
    */
   def charVarcharFirstClassTypes: Boolean =
     preserveCharVarcharTypeInfo || charVarcharStandardSemantics

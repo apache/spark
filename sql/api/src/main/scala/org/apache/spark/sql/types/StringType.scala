@@ -162,9 +162,9 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
   /**
    * Strip CHAR/VARCHAR length constraints, preserving collation.
    *
-   * Used by transforming string expressions (upper, substr, concat, ...) so their
-   * result type is plain STRING even when inputs are CharType/VarcharType
-   * (SQL standard CHAR/VARCHAR R1), when standard semantics are on.
+   * Used by transforming string expressions (upper, substr, concat, ...) so their result type is
+   * plain STRING even when inputs are CharType/VarcharType (SQL standard CHAR/VARCHAR R1), when
+   * standard semantics are on.
    */
   def plainStringType(dt: DataType): DataType = dt match {
     case c: CharType => c.toStringType
@@ -179,9 +179,9 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
   }
 
   /**
-   * Result type for transforming string expressions.
-   * Under spark.sql.charVarchar.standardSemantics.enabled, always plain STRING (R1).
-   * Under preserveCharVarcharTypeInfo alone, keep child type (legacy leaky path).
+   * Result type for transforming string expressions. Under
+   * spark.sql.charVarchar.standardSemantics.enabled, always plain STRING (R1). Under
+   * preserveCharVarcharTypeInfo alone, keep child type (legacy leaky path).
    */
   def transformingStringResultType(dt: DataType): DataType = {
     if (SqlApiConf.get.charVarcharStandardSemantics) {
@@ -195,11 +195,11 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
     gteq(a.constraint, b.constraint)
 
   /**
-   * Least common string type: CHAR -> VARCHAR -> STRING, with length max(n, m)
-   * when the result remains CHAR or VARCHAR.
+   * Least common string type: CHAR -> VARCHAR -> STRING, with length max(n, m) when the result
+   * remains CHAR or VARCHAR.
    *
-   * When first-class CHAR/VARCHAR are off, always widens to unbounded STRING
-   * (legacy annotated-STRING path where Char/Varchar do not appear in plans).
+   * When first-class CHAR/VARCHAR are off, always widens to unbounded STRING (legacy
+   * annotated-STRING path where Char/Varchar do not appear in plans).
    */
   def tightestCommonString(s1: StringType, s2: StringType): Option[StringType] = {
     if (s1.collationId != s2.collationId) {

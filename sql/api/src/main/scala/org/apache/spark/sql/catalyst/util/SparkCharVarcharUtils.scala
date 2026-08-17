@@ -31,8 +31,8 @@ trait SparkCharVarcharUtils {
   }
 
   /**
-   * Fail if the type contains CHAR/VARCHAR unless legacy-as-string or first-class
-   * CHAR/VARCHAR is enabled (standard semantics or preserveCharVarcharTypeInfo).
+   * Fail if the type contains CHAR/VARCHAR unless legacy-as-string or first-class CHAR/VARCHAR is
+   * enabled (standard semantics or preserveCharVarcharTypeInfo).
    */
   def failIfHasCharVarchar(dt: DataType): DataType = {
     if (SqlApiConf.get.charVarcharFirstClassTypes) {
