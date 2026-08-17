@@ -3077,9 +3077,18 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
           |EXCEPT
           |(SELECT val AS v FROM repro_t WHERE id = 1)
         """.stripMargin
+      // Duplicate names in the left output are matched by expression id, so the rewrite applies
+      // and still binds the condition to the base column that the right side filters.
+      val duplicateNamesQuery =
+        """
+          |(SELECT id AS x, val AS x FROM repro_t)
+          |EXCEPT
+          |(SELECT id AS x, val AS x FROM repro_t WHERE id = 1)
+        """.stripMargin
       Seq(true, false).foreach { enabled =>
         withSQLConf(SQLConf.REPLACE_EXCEPT_WITH_FILTER.key -> enabled.toString) {
           checkAnswer(sql(query), Row(20) :: Nil)
+          checkAnswer(sql(duplicateNamesQuery), Row(2, 20) :: Nil)
         }
       }
     }
