@@ -470,14 +470,20 @@ real server hostname (used for certificate verification and SNI) and `grpc.defau
 to the routing tag.
 
 {% highlight python %}
-cb = DefaultChannelBuilder("sc://myhost.com:443")
+cb = DefaultChannelBuilder("sc://myhost.com:443/;use_ssl=true")
 cb.setChannelOption("grpc.ssl_target_name_override", "myhost.com")  # certificate verification / SNI
 cb.setChannelOption("grpc.default_authority", "sparkconnect")       # routing tag
 spark = SparkSession.builder.channelBuilder(cb).getOrCreate()
 {% endhighlight %}
 
-The Ingress `tls.hosts` entry should list the real hostname (matching the certificate), while
-the `host:` rule keeps matching the routing tag. Two notes on `grpc.ssl_target_name_override`:
+`use_ssl=true` verifies the server certificate against the system's trusted CA store. If your
+gateway's certificate is issued by a CA the client does not trust by default (a self-signed or
+internal CA), make that CA trusted on the client side (for example, via
+`GRPC_DEFAULT_SSL_ROOTS_FILE_PATH`) rather than through the connection string. Configuring the
+proxy's own TLS (which certificate it presents for which hostname) is part of your ingress
+setup and is out of scope here.
+
+Two notes on `grpc.ssl_target_name_override`:
 gRPC documents it as testing-oriented because its typical misuse is to *mask* a certificate
 name mismatch (verifying against a name the server does not actually present, which defeats
 hostname verification). Here it is set to the real, verified hostname, so the certificate is
