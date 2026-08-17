@@ -148,6 +148,22 @@ struct<parse_sql(WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte):stri
 
 
 -- !query
+SELECT parse_sql('SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t)')
+-- !query schema
+struct<parse_sql(SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t)):string>
+-- !query output
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["inner_base"],["real_t"]],"select_list":[{"name":["*"]}]}
+
+
+-- !query
+SELECT parse_sql('WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a')
+-- !query schema
+struct<parse_sql(WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a):string>
+-- !query output
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["b"]],"select_list":[{"name":["*"]}]}
+
+
+-- !query
 SELECT parse_sql('SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)')
 -- !query schema
 struct<parse_sql(SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)):string>

@@ -157,61 +157,74 @@ object ParseSqlResult {
     plan.productIterator.foreach(visit)
   }
 
+  /** CTE aliases visible at a given point of the walk, normalized for lookup. */
+  private type CteScope = Set[String]
+
+  private def normalizeCteName(name: String): String =
+    name.toLowerCase(java.util.Locale.ROOT)
+
   /**
-   * Deep plan walk covering tree slots that standard `collect` /
-   * `collectWithSubqueries` miss:
+   * Deep plan walk that hands each node the CTE aliases in scope there, and
+   * covers tree slots that standard `collect` / `collectWithSubqueries` miss:
    *   - [[UnresolvedWith]] CTE definitions (`innerChildren`, not `children`)
    *   - [[InsertIntoStatement]].table (non-child plan slot)
-   *   - [[SingleStatement]].parsedPlan root (children expose only nested
-   *     children; visit the root without re-walking those children)
+   *   - [[SingleStatement]].parsedPlan (`children` exposes only the wrapped
+   *     plan's children, so the wrapped plan is walked in their place)
    *   - [[CompoundBody]].handlers (not in `children`)
    *   - [[SimpleCaseStatement]].elseBody (not in `children`)
-   * Nested expression subqueries are still covered by `foreachWithSubqueries`.
+   * Expression subqueries are walked in the scope that encloses them.
    */
-  private def foreachPlanDeep(plan: LogicalPlan)(f: LogicalPlan => Unit): Unit = {
-    plan.foreachWithSubqueries { p =>
-      f(p)
-      visitNonChildSlots(p)(f)
+  private def foreachPlanDeep(plan: LogicalPlan)(f: (LogicalPlan, CteScope) => Unit): Unit =
+    visitPlan(plan, Set.empty)(f)
+
+  private def visitPlan(plan: LogicalPlan, scope: CteScope)(
+      f: (LogicalPlan, CteScope) => Unit): Unit = {
+    f(plan, scope)
+    plan match {
+      case s: SingleStatement =>
+        // `children` forwards the wrapped plan's children, so walking the
+        // wrapped plan here visits every node exactly once.
+        visitPlan(s.parsedPlan, scope)(f)
+      case _ =>
+        visitNonChildSlots(plan, scope)(f)
+        // A WITH body sees every alias the clause defines.
+        val childScope = plan match {
+          case w: UnresolvedWith => scope ++ w.cteRelations.map(r => normalizeCteName(r._1))
+          case _ => scope
+        }
+        plan.subqueries.foreach(sq => visitPlan(sq, childScope)(f))
+        plan.children.foreach(child => visitPlan(child, childScope)(f))
     }
   }
 
-  /**
-   * Visit plan slots that are not exposed via `children` / expression
-   * subqueries. For [[SingleStatement]], only the wrapped root (and its
-   * subqueries / non-child slots) is visited -- its children were already
-   * walked by the outer `foreachWithSubqueries` via
-   * `SingleStatement.children`.
-   */
-  private def visitNonChildSlots(plan: LogicalPlan)(f: LogicalPlan => Unit): Unit = {
+  /** Visit plan slots that are not exposed via `children` / subqueries. */
+  private def visitNonChildSlots(plan: LogicalPlan, scope: CteScope)(
+      f: (LogicalPlan, CteScope) => Unit): Unit = {
     plan match {
       case w: UnresolvedWith =>
-        w.cteRelations.foreach { case (_, ctePlan, _) =>
-          foreachPlanDeep(ctePlan)(f)
+        // A CTE definition sees the aliases defined before it, plus its own
+        // name when the clause is RECURSIVE. Later aliases are not in scope,
+        // so a definition naming one refers to the real table.
+        var definitionScope = scope
+        w.cteRelations.foreach { case (name, ctePlan, _) =>
+          val normalized = normalizeCteName(name)
+          val bodyScope =
+            if (w.allowRecursion) definitionScope + normalized else definitionScope
+          visitPlan(ctePlan, bodyScope)(f)
+          definitionScope += normalized
         }
       case InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
-        foreachPlanDeep(table)(f)
-      case s: SingleStatement =>
-        visitSingleStatementRoot(s.parsedPlan)(f)
+        visitPlan(table, scope)(f)
       case c: CompoundBody =>
-        c.handlers.foreach(h => foreachPlanDeep(h)(f))
+        c.handlers.foreach(h => visitPlan(h, scope)(f))
       case s: SimpleCaseStatement =>
-        s.elseBody.foreach(b => foreachPlanDeep(b)(f))
+        s.elseBody.foreach(b => visitPlan(b, scope)(f))
       case ExplainCommand(logicalPlan, _) =>
-        foreachPlanDeep(logicalPlan)(f)
+        visitPlan(logicalPlan, scope)(f)
       case DescribeQueryCommand(_, queryPlan) =>
-        foreachPlanDeep(queryPlan)(f)
+        visitPlan(queryPlan, scope)(f)
       case _ =>
     }
-  }
-
-  /**
-   * Visit a [[SingleStatement]] wrapped root without re-traversing its
-   * children (already exposed by `SingleStatement.children`).
-   */
-  private def visitSingleStatementRoot(root: LogicalPlan)(f: LogicalPlan => Unit): Unit = {
-    f(root)
-    root.subqueries.foreach(sq => foreachPlanDeep(sq)(f))
-    visitNonChildSlots(root)(f)
   }
 
   /** Multipart name from a table/view-shaped plan node, if any. */
@@ -234,34 +247,28 @@ object ParseSqlResult {
 
   /**
    * Collect multipart table/view identifiers, function names, and parameter
-   * markers for lineage. CTE definition names and correlation aliases are
-   * omitted from tables; tables referenced inside CTE bodies are still
-   * included. Function / variable identifiers are not collected as tables.
-   * Deduplicates while preserving first-seen order. Uses one CTE-name pass
-   * then one combined deep walk for tables, functions, and parameters.
+   * markers for lineage in a single deep walk. A single-part name is dropped
+   * only when a CTE alias in scope at that node shadows it, so an inner CTE
+   * does not hide a same-named real table outside it; tables referenced inside
+   * CTE bodies are still included. Correlation aliases and function / variable
+   * identifiers are not collected as tables. Deduplicates while preserving
+   * first-seen order.
    */
   private def collectPlanReferences(plan: LogicalPlan): PlanReferences = {
     val tables = mutable.LinkedHashSet.empty[Seq[String]]
     val functions = mutable.LinkedHashSet.empty[Seq[String]]
     val namedParams = mutable.LinkedHashSet.empty[String]
     var unnamedCount = 0
-    // CTE names are always single-part in the grammar; UnresolvedRelation refs
-    // to CTEs are likewise single-part, so filtering matches that shape.
-    val cteNames = mutable.HashSet.empty[String]
 
-    def addCteNames(w: UnresolvedWith): Unit = {
-      w.cteRelations.foreach { case (name, _, _) =>
-        cteNames += name.toLowerCase(java.util.Locale.ROOT)
-      }
-    }
-
-    def isCteName(parts: Seq[String]): Boolean = parts match {
-      case Seq(name) => cteNames.contains(name.toLowerCase(java.util.Locale.ROOT))
+    // CTE aliases are always single-part in the grammar, and so are references
+    // to them, so shadowing only applies to single-part names.
+    def isCteName(parts: Seq[String], scope: CteScope): Boolean = parts match {
+      case Seq(name) => scope.contains(normalizeCteName(name))
       case _ => false
     }
 
-    def addTable(parts: Seq[String]): Unit = {
-      if (parts.nonEmpty && !isCteName(parts)) tables += parts
+    def addTable(parts: Seq[String], scope: CteScope): Unit = {
+      if (parts.nonEmpty && !isCteName(parts, scope)) tables += parts
     }
 
     def addFunction(parts: Seq[String]): Unit = {
@@ -275,38 +282,32 @@ object ParseSqlResult {
       case _ =>
     }
 
-    // First pass: gather CTE names in scope (including nested).
-    foreachPlanDeep(plan) {
-      case w: UnresolvedWith => addCteNames(w)
-      case _ =>
-    }
-
-    // Second pass: tables, functions, and parameter markers together.
-    foreachPlanDeep(plan) { p =>
+    foreachPlanDeep(plan) { (p, scope) =>
       foreachExpressionDeep(p)(visitExpr)
+      def add(parts: Seq[String]): Unit = addTable(parts, scope)
       p match {
-        case u: UnresolvedRelation => addTable(u.multipartIdentifier)
-        case u: UnresolvedTable => addTable(u.multipartIdentifier)
-        case u: UnresolvedView => addTable(u.multipartIdentifier)
-        case u: UnresolvedTableOrView => addTable(u.multipartIdentifier)
+        case u: UnresolvedRelation => add(u.multipartIdentifier)
+        case u: UnresolvedTable => add(u.multipartIdentifier)
+        case u: UnresolvedView => add(u.multipartIdentifier)
+        case u: UnresolvedTableOrView => add(u.multipartIdentifier)
         // Table/view DDL targets only -- not CreateFunction / CreateVariable names.
-        case c: CreateView => tableOrViewParts(c.child).foreach(addTable)
-        case c: CreateViewCommand => addTable(tableIdentifierParts(c.name))
-        case c: CreateTempViewUsing => addTable(tableIdentifierParts(c.tableIdent))
-        case c: CreateTable => tableOrViewParts(c.name).foreach(addTable)
-        case c: CreateTableAsSelect => tableOrViewParts(c.name).foreach(addTable)
-        case c: ReplaceTable => tableOrViewParts(c.name).foreach(addTable)
-        case c: ReplaceTableAsSelect => tableOrViewParts(c.name).foreach(addTable)
-        case c: DropTable => tableOrViewParts(c.child).foreach(addTable)
-        case c: DropView => tableOrViewParts(c.child).foreach(addTable)
-        case c: TruncateTable => tableOrViewParts(c.table).foreach(addTable)
-        case c: TruncatePartition => tableOrViewParts(c.table).foreach(addTable)
+        case c: CreateView => tableOrViewParts(c.child).foreach(add)
+        case c: CreateViewCommand => add(tableIdentifierParts(c.name))
+        case c: CreateTempViewUsing => add(tableIdentifierParts(c.tableIdent))
+        case c: CreateTable => tableOrViewParts(c.name).foreach(add)
+        case c: CreateTableAsSelect => tableOrViewParts(c.name).foreach(add)
+        case c: ReplaceTable => tableOrViewParts(c.name).foreach(add)
+        case c: ReplaceTableAsSelect => tableOrViewParts(c.name).foreach(add)
+        case c: DropTable => tableOrViewParts(c.child).foreach(add)
+        case c: DropView => tableOrViewParts(c.child).foreach(add)
+        case c: TruncateTable => tableOrViewParts(c.table).foreach(add)
+        case c: TruncatePartition => tableOrViewParts(c.table).foreach(add)
         case c: CacheTable =>
-          if (c.multipartIdentifier.nonEmpty) addTable(c.multipartIdentifier)
-          else tableOrViewParts(c.table).foreach(addTable)
-        case c: UncacheTable => tableOrViewParts(c.table).foreach(addTable)
-        case c: RefreshTable => tableOrViewParts(c.child).foreach(addTable)
-        case c: CommentOnTable => tableOrViewParts(c.table).foreach(addTable)
+          if (c.multipartIdentifier.nonEmpty) add(c.multipartIdentifier)
+          else tableOrViewParts(c.table).foreach(add)
+        case c: UncacheTable => tableOrViewParts(c.table).foreach(add)
+        case c: RefreshTable => tableOrViewParts(c.child).foreach(add)
+        case c: CommentOnTable => tableOrViewParts(c.table).foreach(add)
         case u: UnresolvedTableValuedFunction => addFunction(u.name)
         case _ =>
       }

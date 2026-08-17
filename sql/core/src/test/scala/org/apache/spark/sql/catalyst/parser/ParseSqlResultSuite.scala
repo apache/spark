@@ -86,6 +86,17 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(tableRefs("CREATE VIEW v AS SELECT 1 AS a") === Set(Seq("v")))
   }
 
+  test("CTE aliases only shadow references within their own scope") {
+    // The inner CTE named real_t must not hide the outer real table real_t.
+    assert(tableRefs(
+      "SELECT * FROM real_t WHERE EXISTS (" +
+        "WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t)") ===
+      Set(Seq("real_t"), Seq("inner_base")))
+    // A definition sees only preceding aliases, so b here is the real table.
+    assert(tableRefs("WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a") ===
+      Set(Seq("b")))
+  }
+
   test("positional markers inside BEGIN END are counted once") {
     val j = obj("BEGIN SELECT * FROM t WHERE a = ?; END")
     assert(j \ "parse_success" === JBool(true))

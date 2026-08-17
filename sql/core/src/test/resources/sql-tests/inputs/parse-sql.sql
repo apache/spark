@@ -45,6 +45,12 @@ SELECT parse_sql('SELECT * FROM t WHERE a = :foo AND b = ?');
 -- CTE: lineage excludes CTE names; still walks CTE bodies for real tables
 SELECT parse_sql('WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte');
 
+-- CTE shadowing is scoped: the inner CTE real_t does not hide the outer table
+SELECT parse_sql('SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t)');
+
+-- a CTE definition sees only preceding aliases, so b below is the real table
+SELECT parse_sql('WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a');
+
 -- nested subqueries
 SELECT parse_sql('SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)');
 

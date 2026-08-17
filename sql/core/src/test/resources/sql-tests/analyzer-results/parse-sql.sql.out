@@ -132,6 +132,20 @@ Project [parse_sql(WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte) AS
 
 
 -- !query
+SELECT parse_sql('SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t)')
+-- !query analysis
+Project [parse_sql(SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t)) AS parse_sql(SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT parse_sql('WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a')
+-- !query analysis
+Project [parse_sql(WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a) AS parse_sql(WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT parse_sql('SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)')
 -- !query analysis
 Project [parse_sql(SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)) AS parse_sql(SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id))#x]
