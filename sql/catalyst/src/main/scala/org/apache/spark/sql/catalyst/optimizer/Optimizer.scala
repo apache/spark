@@ -1754,6 +1754,10 @@ object OptimizeWindowFunctions extends Rule[LogicalPlan] {
  * Collapse Adjacent Window Expression.
  * - If the partition specs and order specs are the same and the window expression are
  *   independent and are of the same window function type, collapse into the parent.
+ * - If the partition specs are the same and one of the order specs is empty, collapse into the
+ *   parent when the window expressions of the empty-order window can be evaluated under any row
+ *   order. The merged window keeps the non-empty order spec. Merging an empty-order child is
+ *   gated by `spark.sql.optimizer.collapseWindowWithEmptyOrderSpecInChild`.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
   private def specCompatible(s1: Seq[Expression], s2: Seq[Expression]): Boolean = {
@@ -1788,11 +1792,17 @@ object CollapseWindow extends Rule[LogicalPlan] {
     specCompatible(w1.partitionSpec, w2.partitionSpec) &&
       // The order specs can differ when one of them is empty, as long as the window expressions
       // of the window with the empty order spec are safe to evaluate under any row order. In that
-      // case, they can be evaluated under the non-empty order spec of the other window.
+      // case, they can be evaluated under the non-empty order spec of the other window. The
+      // operator then keeps the non-empty order spec while the merged-in expressions keep their
+      // own empty order spec; this divergence is safe because after analysis only
+      // OptimizeWindowFunctions reads an expression's own order spec, and it is a no-op without
+      // one. Merging an empty-order child into an ordered parent can disable InferWindowGroupLimit,
+      // so that direction is gated by conf.collapseWindowWithEmptyOrderSpecInChild.
       (specCompatible(w1.orderSpec, w2.orderSpec) ||
         (w1.orderSpec.isEmpty && w2.orderSpec.nonEmpty &&
           w1.windowExpressions.forall(canEvaluateUnderAnyOrder)) ||
-        (w2.orderSpec.isEmpty && w1.orderSpec.nonEmpty &&
+        (conf.collapseWindowWithEmptyOrderSpecInChild && w2.orderSpec.isEmpty &&
+          w1.orderSpec.nonEmpty &&
           w2.windowExpressions.forall(canEvaluateUnderAnyOrder))) &&
       w1.references.intersect(w2.windowOutputSet).isEmpty &&
       w1.windowExpressions.nonEmpty && w2.windowExpressions.nonEmpty &&

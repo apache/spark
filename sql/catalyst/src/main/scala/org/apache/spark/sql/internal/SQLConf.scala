@@ -4761,6 +4761,16 @@ object SQLConf {
         "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
 
+  val COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD =
+    buildConf("spark.sql.optimizer.collapseWindowWithEmptyOrderSpecInChild")
+      .doc("When true, the optimizer collapses two adjacent windows with the same partition " +
+        "spec into one when the window with the empty order spec is the child (inner) window. " +
+        "This saves a WindowExec pass but can disable the WindowGroupLimit optimization for " +
+        "top-k queries.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
@@ -8781,6 +8791,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
+
+  def collapseWindowWithEmptyOrderSpecInChild: Boolean =
+    getConf(COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
