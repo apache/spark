@@ -949,7 +949,8 @@ object FunctionRegistry {
     expressionBuilder("json_value", JsonValueExpressionBuilder),
     expressionBuilder("json_query", JsonQueryExpressionBuilder),
     expressionBuilder("json_exists", JsonExistsExpressionBuilder),
-    expressionBuilder("json_array", JsonArrayExpressionBuilder)
+    expressionBuilder("json_array", JsonArrayExpressionBuilder),
+    expressionBuilder("json_object", JsonObjectExpressionBuilder)
   )
 
   private def jsonExpressions: Seq[FunctionRegistryEntry] = Seq(
