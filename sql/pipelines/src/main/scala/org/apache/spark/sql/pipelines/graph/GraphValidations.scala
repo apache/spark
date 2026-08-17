@@ -39,7 +39,7 @@ trait GraphValidations extends Logging {
     // A multiflow table may not have an AutoCDC flow; AutoCDC targets must have exactly one
     // input flow.
     multiQueryTables
-      .find { case (_, flows) => flows.exists(isAutoCdcFlow) }
+      .find { case (_, flows) => flows.exists(GraphElementTypeUtils.isAutoCdcFlow) }
       .foreach {
         case (dest, flows) =>
           throw new AnalysisException(
@@ -76,12 +76,6 @@ trait GraphValidations extends Logging {
       }
 
     multiQueryTables
-  }
-
-  /** Returns true iff the given flow is an [[AutoCdcFlow]] (resolved or not). */
-  private def isAutoCdcFlow(f: Flow): Boolean = f match {
-    case _: AutoCdcFlow | _: AutoCdcMergeFlow => true
-    case _ => false
   }
 
   /**
@@ -276,17 +270,23 @@ trait GraphValidations extends Logging {
         SchemaInferenceUtils.effectiveCaseSensitivity(t.identifier, flows, sessionCaseSensitive))
 
       t.specifiedSchema.foreach { ss =>
-        // Check the specified schema matches the inferred schema once the engine-owned reserved
-        // AUTO CDC metadata column(s) are set aside on both sides. The user may omit them (the
-        // engine appends them at materialization) or declare them; comparing both schemas with the
-        // reserved columns removed accepts either while still catching a genuine mismatch in the
-        // remaining columns, and stays correct if more than one reserved column is ever added.
-        if (AutoCdcReservedNames.stripReservedFields(inferredSchema, resolver) !=
-            AutoCdcReservedNames.stripReservedFields(ss, resolver)) {
-          val datasetType = GraphElementTypeUtils
-            .getDatasetTypeForMaterializedViewOrStreamingTable(
-              flowsTo(t.identifier).map(f => resolvedFlow(f.identifier))
-            )
+        // A declared schema must match the schema inferred from the incoming flows. Only for an
+        // AUTO CDC target are the engine-owned reserved metadata column(s) set aside on both sides
+        // first: the user may omit them (the engine appends them at materialization) or declare
+        // them, and comparing with the reserved columns removed accepts either while still catching
+        // a genuine mismatch in the remaining columns, and stays correct if more than one reserved
+        // column is ever added. For any other table the reserved prefix carries no special meaning,
+        // so the comparison is exact -- otherwise a reserved-prefixed column a non-CDC flow
+        // produces but the declaration omits would be wrongly accepted (then dropped later).
+        val schemasMatch = if (flows.exists(GraphElementTypeUtils.isAutoCdcFlow)) {
+          AutoCdcReservedNames.stripReservedFields(inferredSchema, resolver) ==
+            AutoCdcReservedNames.stripReservedFields(ss, resolver)
+        } else {
+          inferredSchema == ss
+        }
+        if (!schemasMatch) {
+          val datasetType =
+            GraphElementTypeUtils.getDatasetTypeForMaterializedViewOrStreamingTable(flows)
           throw GraphErrors.incompatibleUserSpecifiedAndInferredSchemasError(
             t.identifier,
             datasetType,

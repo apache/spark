@@ -172,10 +172,9 @@ class AutoCdcReservedColumnMaterializationSuite
       assert(
         schema.fieldNames.contains(AutoCdcReservedNames.cdcMetadataColName),
         schema.fieldNames.mkString(", "))
-      // The engine owns and always writes the lower-case column; the user's column is unpopulated.
-      assert(!schema(AutoCdcReservedNames.cdcMetadataColName).nullable)
-      assert(schema(userColName).nullable)
-      // Read under case-sensitive analysis so the two case-differing columns stay distinct.
+      // Read under case-sensitive analysis so the two case-differing columns stay distinct. The
+      // engine writes its metadata to the lower-case column; the user's upper-case column is left
+      // unpopulated (null).
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         checkAnswer(
           spark.table(s"$catalog.$namespace.target"),
@@ -183,5 +182,92 @@ class AutoCdcReservedColumnMaterializationSuite
         )
       }
     }
+  }
+
+  test("a same-graph downstream SELECT * sees the target's materialized schema, including the " +
+    "engine-owned reserved column") {
+    // The target declares a data-only schema (omits the reserved metadata column). A downstream
+    // dataset in the same graph reads it with SELECT *. Its plan-time view of the target (through
+    // VirtualTableInput) must match the schema the target is actually materialized with, otherwise
+    // the plan carries the 3-column declaration while execution reads the 4-column table.
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("name", StringType)
+      .add("version", LongType, nullable = false)
+    val stream = MemoryStream[(Int, String, Long)]
+    stream.addData((1, "alice", 5L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "writer", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "name", "version")),
+        keys = Seq("id"), sequencing = functions.col("version")))
+      registerMaterializedView("enriched", catalog = Some(catalog), database = Some(namespace),
+        query = readFlowFunc(s"$catalog.$namespace.target"))
+    }
+    runPipeline(ctx)
+
+    val targetFields = spark.table(s"$catalog.$namespace.target").schema.fieldNames.toSeq
+    val enrichedFields = spark.table(s"$catalog.$namespace.enriched").schema.fieldNames.toSeq
+    assert(
+      enrichedFields == targetFields,
+      s"downstream consumer schema ${enrichedFields.mkString(",")} should match the materialized " +
+        s"target schema ${targetFields.mkString(",")}")
+    assert(enrichedFields.contains(AutoCdcReservedNames.cdcMetadataColName))
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.enriched"),
+      Seq(Row(1, "alice", 5L, cdcMeta(None, Some(5L))))
+    )
+  }
+
+  test("the engine-owned reserved column is nullable when the user declares a data-only schema, " +
+    "matching the omitted-schema path") {
+    // A target created from a data-only declaration must get the same nullable metadata column as
+    // one created with no declared schema (that path materializes the inferred schema asNullable),
+    // so adding or removing a declaration between runs does not surface as a nullability change.
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 5L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"), sequencing = functions.col("version")))
+    }
+    runPipeline(ctx)
+    val metaField = spark.table(s"$catalog.$namespace.target")
+      .schema(AutoCdcReservedNames.cdcMetadataColName)
+    assert(metaField.nullable, "engine-owned reserved metadata column should be nullable")
+  }
+
+  test("a data-only declaration on an already-materialized target is stable across an " +
+    "incremental re-run") {
+    // The second run reaches the target through evolveTable/mergeWithExistingSchema rather than a
+    // fresh create. Because the declared-schema path produces the same engine-owned shape the
+    // target already carries, the schema must not churn between runs.
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+    def buildCtx(rows: Seq[(Int, Long)]): TestGraphRegistrationContext = {
+      val stream = MemoryStream[(Int, Long)]
+      stream.addData(rows: _*)
+      new TestGraphRegistrationContext(spark) {
+        registerTable("target", catalog = Some(catalog), database = Some(namespace),
+          specifiedSchema = Some(declaredSchema))
+        registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+          query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+          keys = Seq("id"), sequencing = functions.col("version")))
+      }
+    }
+    runPipeline(buildCtx(Seq((1, 5L))))
+    val schemaAfterRun1 = spark.table(s"$catalog.$namespace.target").schema
+    runPipeline(buildCtx(Seq((2, 3L))))
+    val schemaAfterRun2 = spark.table(s"$catalog.$namespace.target").schema
+    assert(
+      schemaAfterRun2 == schemaAfterRun1,
+      s"schema changed across incremental runs: $schemaAfterRun1 -> $schemaAfterRun2")
   }
 }

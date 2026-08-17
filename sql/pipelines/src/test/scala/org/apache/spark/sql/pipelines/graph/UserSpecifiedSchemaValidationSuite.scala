@@ -191,6 +191,26 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
     }
   }
 
+  test("a non-AUTO CDC table's declared schema is compared exactly, so omitting a reserved-" +
+    "prefixed column the flow produces is rejected") {
+    val session = spark
+    import session.implicits._
+    // A plain (non-AUTO CDC) flow that produces a reserved-prefixed column, with a declared
+    // schema that omits it. For a plain flow the reserved prefix is not special, so this must fail
+    // validation the same as omitting any other produced column -- the AUTO CDC strip-both
+    // relaxation must not apply here (otherwise the column would be accepted and later dropped at
+    // materialization).
+    val reservedCol = s"${AutoCdcReservedNames.prefix}x"
+    val src = Seq((1, "alice", "m")).toDF("id", "name", reservedCol)
+    val ctx = new TestGraphRegistrationContext(spark)
+    ctx.registerTable(
+      "target",
+      query = Some(ctx.dfFlowFunc(src)),
+      specifiedSchema = Some(new StructType().add("id", IntegerType, nullable = false)
+        .add("name", StringType)))
+    assertSchemaIncompatible(ctx.resolveToDataflowGraph())
+  }
+
   // AUTO CDC flows: the inferred schema appends a reserved metadata column to the data columns.
 
   test("data-only user-specified schema is accepted for an implicit AUTO CDC flow") {

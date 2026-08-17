@@ -57,4 +57,25 @@ private[pipelines] object AutoCdcReservedNames {
   /** `schema` with the engine-owned reserved AUTO CDC column(s) removed. */
   private[pipelines] def stripReservedFields(schema: StructType, resolver: Resolver): StructType =
     StructType(schema.fields.filterNot(f => isReservedFieldName(f.name, resolver)))
+
+  /**
+   * The schema a materialized AUTO CDC target carries when the user declares a schema: the user's
+   * non-reserved columns, followed by the engine-owned reserved column(s) taken from the
+   * flow-inferred schema. `flowInferredSchema` must be flow-derived (no user-declared columns
+   * merged in), so the appended fields are exactly the engine-produced ones and never a user column
+   * that happens to carry the prefix.
+   *
+   * The appended reserved fields are made nullable so a target created from a declared schema
+   * matches one created from an omitted schema (that path materializes the inferred schema
+   * `asNullable`), avoiding a spurious nullability diff when a declaration is added or removed
+   * between runs. The same helper feeds both the materialization path and the analysis-time read
+   * path, so a downstream consumer plans against the schema the target is actually created with.
+   */
+  private[pipelines] def appendEngineOwnedReservedFields(
+      declaredSchema: StructType,
+      flowInferredSchema: StructType,
+      resolver: Resolver): StructType =
+    StructType(
+      stripReservedFields(declaredSchema, resolver).fields ++
+        StructType(reservedFields(flowInferredSchema, resolver)).asNullable.fields)
 }
