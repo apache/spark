@@ -42,11 +42,15 @@ class AutoCdcReservedColumnMaterializationSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  import testImplicits._
+
+  /** The engine's SCD1 metadata struct shape: `deleteSequence` / `upsertSequence`, both long. */
+  private def scd1MetadataType: StructType = new StructType()
+    .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
+    .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
+
   test("materialization appends the engine-owned reserved metadata column when the user " +
     "schema omits it") {
-    val session = spark
-    import session.implicits._
-
     // The user declares only the logical data columns and omits the engine-owned reserved
     // metadata column. Materialization must append it so the created target has exactly what the
     // AUTO CDC MERGE writes; otherwise the MERGE fails with an unresolved metadata column.
@@ -92,16 +96,10 @@ class AutoCdcReservedColumnMaterializationSuite
     // up with a single engine-owned column, not keep the upper-case one and append a lower-case
     // duplicate. Matching against the session resolver (case-sensitive) here would leave two.
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val session = spark
-      import session.implicits._
-
-      val metadataType = new StructType()
-        .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
-        .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
       val declaredSchema = new StructType()
         .add("id", IntegerType, nullable = false)
         .add("version", LongType, nullable = false)
-        .add(AutoCdcReservedNames.cdcMetadataColName.toUpperCase(Locale.ROOT), metadataType)
+        .add(AutoCdcReservedNames.cdcMetadataColName.toUpperCase(Locale.ROOT), scd1MetadataType)
 
       val stream = MemoryStream[(Int, Long)]
       stream.addData((1, 5L))
@@ -131,6 +129,59 @@ class AutoCdcReservedColumnMaterializationSuite
         spark.table(s"$catalog.$namespace.target"),
         Seq(Row(1, 5L, cdcMeta(None, Some(5L))))
       )
+    }
+  }
+
+  test("materialization keeps a differently-cased user column distinct from the engine's " +
+    "reserved column when the flow is case-sensitive") {
+    // Reverse of the previous test: the session is case-insensitive but the flow sets
+    // spark.sql.caseSensitive=true. Under the flow's case-sensitive analysis a user-declared
+    // __SPARK_AUTOCDC_METADATA is a genuinely distinct column from the engine's lower-case
+    // __spark_autocdc_metadata, so both survive. The engine still owns and writes only the
+    // lower-case column (nullable=false); the user's upper-case column is left unpopulated.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val userColName = AutoCdcReservedNames.cdcMetadataColName.toUpperCase(Locale.ROOT)
+      val declaredSchema = new StructType()
+        .add("id", IntegerType, nullable = false)
+        .add("version", LongType, nullable = false)
+        .add(userColName, scd1MetadataType)
+
+      val stream = MemoryStream[(Int, Long)]
+      stream.addData((1, 5L))
+      val ctx = new TestGraphRegistrationContext(
+        spark,
+        Map(SQLConf.CASE_SENSITIVE.key -> "true")) {
+        registerTable(
+          "target",
+          catalog = Some(catalog),
+          database = Some(namespace),
+          specifiedSchema = Some(declaredSchema))
+        registerFlow(autoCdcFlow(
+          name = "auto_cdc_flow",
+          target = "target",
+          query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+          keys = Seq("id"),
+          sequencing = functions.col("version")))
+      }
+      runPipeline(ctx)
+
+      val schema = spark.table(s"$catalog.$namespace.target").schema
+      // Both the user column and the engine column survive; case-sensitive analysis keeps them
+      // distinct.
+      assert(schema.fieldNames.contains(userColName), schema.fieldNames.mkString(", "))
+      assert(
+        schema.fieldNames.contains(AutoCdcReservedNames.cdcMetadataColName),
+        schema.fieldNames.mkString(", "))
+      // The engine owns and always writes the lower-case column; the user's column is unpopulated.
+      assert(!schema(AutoCdcReservedNames.cdcMetadataColName).nullable)
+      assert(schema(userColName).nullable)
+      // Read under case-sensitive analysis so the two case-differing columns stay distinct.
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        checkAnswer(
+          spark.table(s"$catalog.$namespace.target"),
+          Seq(Row(1, 5L, null, cdcMeta(None, Some(5L))))
+        )
+      }
     }
   }
 }
