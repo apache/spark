@@ -4181,6 +4181,14 @@ class AstBuilder extends DataTypeAstBuilder
       (JsonValueBehavior.Default, Some(expression(d.defaultExpr)))
   }
 
+  private def buildJsonConstructorNullBehavior(
+      ctx: JsonConstructorNullBehaviorContext): JsonConstructorNullBehavior = ctx match {
+    case _: JsonConstructorNullNullContext =>
+      JsonConstructorNullBehavior.Null
+    case _: JsonConstructorNullAbsentContext =>
+      JsonConstructorNullBehavior.Absent
+  }
+
   /**
    * Create a [[JsonValue]] expression for the SQL:2016 `JSON_VALUE` scalar function. The `ON EMPTY`
    * / `ON ERROR` clauses default to `NULL` when absent, per the standard.
@@ -4214,6 +4222,51 @@ class AstBuilder extends DataTypeAstBuilder
       else JsonExistsBehavior.Error
     }.getOrElse(JsonExistsBehavior.False)
     JsonExists(jsonExpr, path, onError)
+  }
+
+  /**
+   * Create a [[JsonObjectExpr]] expression for the SQL:2016 `JSON_OBJECT` constructor function.
+   * The `ON NULL` clause defaults to `NULL` when absent, per the standard.
+   */
+  override def visitJsonObject(ctx: JsonObjectContext): Expression = withOrigin(ctx) {
+    // Parse key-value pairs. The standard `key VALUE value` / `key : value` forms and the
+    // compatibility `key, value` form are separate grammar alternatives, so only one list is
+    // populated for a single constructor.
+    val standardMembers = ctx.jsonObjectMember().asScala.map { memberCtx =>
+      val keyExpr = expression(memberCtx.keyExpr)
+      val valueExpr = expression(memberCtx.valueExpr)
+      (keyExpr, valueExpr)
+    }.toSeq
+    val members = if (standardMembers.nonEmpty) {
+      standardMembers
+    } else {
+      ctx.jsonObjectCommaMember().asScala.map { memberCtx =>
+        val keyExpr = expression(memberCtx.keyExpr)
+        val valueExpr = expression(memberCtx.valueExpr)
+        (keyExpr, valueExpr)
+      }.toSeq
+    }
+    // Freeze the raw-splice decision here, from the lexical argument, so it cannot be changed by a
+    // later optimizer rewrite that swaps the child expression (see [[ImplicitlyFormattedAsJson]]).
+    // A value is spliced raw when it is a nested JSON constructor (implicit FORMAT JSON), including
+    // one behind a pass-through `COLLATE` (which does not change the JSON text). An explicit
+    // `CAST(... AS STRING)` is not seen through: it cancels raw splicing (see JsonObjectExpr).
+    val rawJson = members.map { case (_, v) => JsonObjectExpr.rawJsonValue(v).isDefined }
+    // Default RETURNING type is STRING; the result is JSON text. A CHAR/VARCHAR RETURNING is
+    // normalized to STRING unconditionally: JSON_OBJECT serializes the fragment itself and never
+    // advertises a CHAR/VARCHAR length it does not enforce. The CharVarcharUtils helpers cannot be
+    // used here -- they honor spark.sql.preserveCharVarcharTypeInfo and would leave a VARCHAR(n)
+    // length in the output type when that flag is set. A non-string RETURNING is left intact for
+    // checkInputDataTypes to fail.
+    val returning = Option(ctx.returning).map(typedVisit[DataType]).map {
+      case c: CharType => c.toStringType
+      case v: VarcharType => v.toStringType
+      case other => other
+    }.getOrElse(StringType)
+    // JSON_OBJECT defaults to NULL ON NULL per the SQL standard (emits keys with null values).
+    val nullBehavior = Option(ctx.nullBehavior)
+      .map(buildJsonConstructorNullBehavior).getOrElse(JsonConstructorNullBehavior.Null)
+    JsonObjectExpr(members, rawJson, nullBehavior, returning)
   }
 
   /**

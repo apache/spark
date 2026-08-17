@@ -245,3 +245,22 @@ select json_exists('{"a":[{"b":1},{"b":2}]}', '$.a.b');
 select json_exists('{"addr":{"city":"NYC"}}', '$.*');
 -- invalid: an unparseable path is rejected at analysis
 select json_exists('{"a":1}', '$[');
+
+-- JSON_OBJECT constructor
+select json_object('id' VALUE 7, 'name' VALUE 'Ada');
+select json_object('id': 7, 'name': 'Ada');
+select json_object('id': 7, 'v': NULL);
+select json_object('id': 7, 'v': NULL ABSENT ON NULL);
+select json_object();
+select json_object('int': 42, 'str': 'hello', 'bool': true, 'float': 3.14);
+-- JSON_OBJECT error: null key
+select json_object(NULL VALUE 'value');
+-- JSON_OBJECT with mixed syntax (VALUE and colon)
+select json_object('a' VALUE 1, 'b': 2);
+-- JSON_OBJECT comma-separated (MySQL-style) key/value pairs
+select json_object('id', 7, 'name', 'Ada');
+select json_object('a', json_object('b', 1));
+-- JSON_OBJECT value accepts an unparenthesized predicate expression
+select json_object('isnull' VALUE 1 IS NULL);
+-- JSON_OBJECT error: invalid RETURNING type
+select json_object('a' VALUE 1 RETURNING INT);

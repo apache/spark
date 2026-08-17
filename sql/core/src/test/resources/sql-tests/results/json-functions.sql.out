@@ -1722,3 +1722,119 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "json_exists('{\"a\":1}', '$[')"
   } ]
 }
+
+
+-- !query
+select json_object('id' VALUE 7, 'name' VALUE 'Ada')
+-- !query schema
+struct<JSON_OBJECT(id VALUE 7, name VALUE Ada):string>
+-- !query output
+{"id":7,"name":"Ada"}
+
+
+-- !query
+select json_object('id': 7, 'name': 'Ada')
+-- !query schema
+struct<JSON_OBJECT(id VALUE 7, name VALUE Ada):string>
+-- !query output
+{"id":7,"name":"Ada"}
+
+
+-- !query
+select json_object('id': 7, 'v': NULL)
+-- !query schema
+struct<JSON_OBJECT(id VALUE 7, v VALUE NULL):string>
+-- !query output
+{"id":7,"v":null}
+
+
+-- !query
+select json_object('id': 7, 'v': NULL ABSENT ON NULL)
+-- !query schema
+struct<JSON_OBJECT(id VALUE 7, v VALUE NULL ABSENT ON NULL):string>
+-- !query output
+{"id":7}
+
+
+-- !query
+select json_object()
+-- !query schema
+struct<JSON_OBJECT():string>
+-- !query output
+{}
+
+
+-- !query
+select json_object('int': 42, 'str': 'hello', 'bool': true, 'float': 3.14)
+-- !query schema
+struct<JSON_OBJECT(int VALUE 42, str VALUE hello, bool VALUE true, float VALUE 3.14):string>
+-- !query output
+{"int":42,"str":"hello","bool":true,"float":3.14}
+
+
+-- !query
+select json_object(NULL VALUE 'value')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_OBJECT_NULL_KEY",
+  "sqlState" : "2200E"
+}
+
+
+-- !query
+select json_object('a' VALUE 1, 'b': 2)
+-- !query schema
+struct<JSON_OBJECT(a VALUE 1, b VALUE 2):string>
+-- !query output
+{"a":1,"b":2}
+
+
+-- !query
+select json_object('id', 7, 'name', 'Ada')
+-- !query schema
+struct<JSON_OBJECT(id VALUE 7, name VALUE Ada):string>
+-- !query output
+{"id":7,"name":"Ada"}
+
+
+-- !query
+select json_object('a', json_object('b', 1))
+-- !query schema
+struct<JSON_OBJECT(a VALUE JSON_OBJECT(b VALUE 1)):string>
+-- !query output
+{"a":{"b":1}}
+
+
+-- !query
+select json_object('isnull' VALUE 1 IS NULL)
+-- !query schema
+struct<JSON_OBJECT(isnull VALUE (1 IS NULL)):string>
+-- !query output
+{"isnull":false}
+
+
+-- !query
+select json_object('a' VALUE 1 RETURNING INT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_RETURNING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_object`",
+    "returningType" : "\"INT\"",
+    "sqlExpr" : "\"JSON_OBJECT(a VALUE 1 RETURNING INT)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "json_object('a' VALUE 1 RETURNING INT)"
+  } ]
+}

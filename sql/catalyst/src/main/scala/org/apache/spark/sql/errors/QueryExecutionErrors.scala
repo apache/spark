@@ -1645,6 +1645,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)))
   }
 
+  def jsonObjectNullKeyError(): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_OBJECT_NULL_KEY",
+      messageParameters = Map.empty)
+  }
+
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2179",
