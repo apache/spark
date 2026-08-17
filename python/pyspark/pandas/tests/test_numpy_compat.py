@@ -289,6 +289,29 @@ class NumPyCompatTestsMixin:
         self.assert_eq(np.signbit(ps_fractional.to_pandas()), np.signbit(pd_fractional))
         self.assert_eq(np.signbit(ps_integral.to_pandas()), np.signbit(pd_integral))
 
+        # DataFrame input: np.modf returns a tuple of DataFrames, one per output.
+        pdf = pd.DataFrame(
+            {
+                "a": [-3.5, -2.0, -0.5, 0.0, 2.7],
+                "b": [1.5, -0.0, np.inf, -np.inf, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        ps_fractional, ps_integral = np.modf(psdf)
+        pd_fractional, pd_integral = np.modf(pdf)
+        self.assert_eq(ps_fractional, pd_fractional, almost=True)
+        self.assert_eq(ps_integral, pd_integral, almost=True)
+        self.assert_eq(np.signbit(ps_fractional.to_pandas()), np.signbit(pd_fractional))
+        self.assert_eq(np.signbit(ps_integral.to_pandas()), np.signbit(pd_integral))
+
+        # Index input: np.modf returns a tuple of Index objects.
+        pidx = pd.Index([-3.5, -2.0, -0.5, 0.0, 2.7])
+        psidx = ps.from_pandas(pidx)
+        ps_fractional, ps_integral = np.modf(psidx)
+        pd_fractional, pd_integral = np.modf(pidx)
+        self.assert_eq(ps_fractional, pd_fractional, almost=True)
+        self.assert_eq(ps_integral, pd_integral, almost=True)
+
     def test_floor_divide_func(self):
         from pyspark.pandas.numpy_compat import _floor_divide_func
 
