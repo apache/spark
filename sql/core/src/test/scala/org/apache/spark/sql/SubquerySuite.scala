@@ -2678,4 +2678,164 @@ class SubquerySuite extends SharedSparkSession
 
     assert(exposedAttribute.exprId == outerReferenceAttribute.exprId)
   }
+
+  test("SPARK-58481: InSubqueryExec nullable correctly accounts for subquery output nullability") {
+    // 5 NOT IN (99, NULL) is UNKNOWN, not TRUE or FALSE.  A join condition that is not TRUE
+    // matches no rows, so a FULL OUTER JOIN must emit null-padded rows for every row in each
+    // side -- 3 + 3 = 6 null-padded rows -- not the full cross product (9 rows).
+    withTable("t0", "t1", "t3") {
+      sql("CREATE TABLE t0(c0 INT) USING PARQUET")
+      sql("INSERT INTO t0 VALUES (1), (2), (3)")
+      sql("CREATE TABLE t1(c0 INT) USING PARQUET")
+      sql("INSERT INTO t1 VALUES (10), (20), (30)")
+      sql("CREATE TABLE t3(c0 INT) USING PARQUET")
+      sql("INSERT INTO t3 VALUES (99), (CAST(NULL AS INT))")
+
+      // t1 rows are null-padded (no match on left), t0 rows are null-padded (no match on right).
+      val expected = Seq(
+        Row(null, 10), Row(null, 20), Row(null, 30),  // t0 side: null-padded
+        Row(1, null), Row(2, null), Row(3, null))      // t1 side: null-padded
+      checkAnswer(
+        sql("SELECT t0.c0, t1.c0 FROM t1 FULL OUTER JOIN t0 ON (5 NOT IN (SELECT t3.c0 FROM t3))"),
+        expected)
+    }
+  }
+
+  test("SPARK-58481: multi-column IN subquery with nullable non-head output is nullable") {
+    // Disable the optimizer's join-condition IN rewrite so the query exercises InSubqueryExec.
+    // Covers both per-candidate cases:
+    //   (1,1) vs (99,NULL): first field differs => definitely FALSE (not UNKNOWN).
+    //   (1,1) vs (1,NULL):  first fields equal, second null => UNKNOWN.
+    //   (2,2) vs either row: both are FALSE => NOT IN = TRUE.
+    // Expected: (1,1) gets UNKNOWN => null-padded; (2,2) gets TRUE => joined.
+    withSQLConf(
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      withTable("lhs", "rhs") {
+        sql("CREATE TABLE lhs(a INT NOT NULL, b INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO lhs VALUES (1, 1), (2, 2)")
+        sql("CREATE TABLE rhs(a INT NOT NULL, b INT) USING PARQUET")
+        // (99, 99): definitively not equal to any lhs row (first field differs from both).
+        // (1, NULL): first field equals lhs(1,1).a; second is null => UNKNOWN for (1,1).
+        //            first field 1 != 2 => FALSE for (2,2).
+        sql("INSERT INTO rhs VALUES (99, 99), (1, CAST(NULL AS INT))")
+
+        // (1,1): UNKNOWN (indeterminate against (1,NULL)) => null-padded.
+        // (2,2): TRUE (definitively not in set) => joins with both rhs rows.
+        checkAnswer(
+          sql(
+            """SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
+              |ON ((lhs.a, lhs.b) NOT IN (SELECT a, b FROM rhs))""".stripMargin),
+          Seq(Row(1, null), Row(2, 99), Row(2, 1)))
+      }
+    }
+  }
+
+  test("SPARK-58481: multi-column IN subquery uses Catalyst ordering for BinaryType fields") {
+    // Object.equals on Array[Byte] compares by identity, not value; Catalyst ordering compares
+    // by content. A multi-column IN where one field is BinaryType would incorrectly return FALSE
+    // (no match) with JVM equality even when the bytes are equal. Use an inner join to keep the
+    // assertion simple: the join condition is TRUE iff the IN match succeeds.
+    withSQLConf(
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      withTable("lbin", "rbin") {
+        sql("CREATE TABLE lbin(id INT NOT NULL, b BINARY NOT NULL) USING PARQUET")
+        sql("INSERT INTO lbin VALUES (1, X'01')")
+        sql("CREATE TABLE rbin(id INT NOT NULL, b BINARY NOT NULL) USING PARQUET")
+        sql("INSERT INTO rbin VALUES (1, X'01')")
+        // (1, 0x01) IN ((1, 0x01)) must be TRUE; the join should return one row.
+        checkAnswer(
+          sql(
+            """SELECT lbin.id FROM lbin JOIN rbin
+              |ON ((lbin.id, lbin.b) IN (SELECT id, b FROM rbin))""".stripMargin),
+          Seq(Row(1)))
+      }
+    }
+  }
+
+  test("SPARK-58481: multi-column NOT IN with nullable LHS and non-nullable RHS is nullable") {
+    // CreateNamedStruct.nullable is always false, so child.nullable would return false for a
+    // multi-column LHS even when individual fields are nullable. The generated NOT IN code
+    // would then suppress null handling and turn UNKNOWN into TRUE, producing wrong results.
+    // Fixture: lhs.a is nullable; rhs columns are NOT NULL.
+    // (NULL, 2) vs (99, 2): second fields equal (2=2), first field is null => UNKNOWN.
+    // (1, 1)   vs (99, 2): first field 1!=99 => FALSE => NOT IN = TRUE => matches all rhs rows.
+    // FULL OUTER JOIN: (NULL,2) gets null-padded (UNKNOWN condition); (1,1) joins with (99,2);
+    // since (1,1) matched rhs(99,2), rhs(99,2) is not null-padded.
+    // Pre-fix: (NULL,2) NOT IN is wrongly TRUE (null suppressed) => emits (null,99); no
+    //   null-padded rows. Post-fix: UNKNOWN propagated => emits (null,null) for (NULL,2).
+    withSQLConf(
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      withTable("lhs", "rhs") {
+        sql("CREATE TABLE lhs(a INT, b INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO lhs VALUES (1, 1), (NULL, 2)")
+        sql("CREATE TABLE rhs(a INT NOT NULL, b INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO rhs VALUES (99, 2)")
+        // (NULL, 2) NOT IN ((99,2)): second fields match, first is null => UNKNOWN
+        //   => join condition not TRUE => (NULL,2) is null-padded: Row(null, null).
+        // (1, 1)   NOT IN ((99,2)): first field 1!=99 => FALSE => NOT IN = TRUE
+        //   => (1,1) joins with rhs(99,2): Row(1, 99).  rhs(99,2) is matched; no null-padded rhs.
+        checkAnswer(
+          sql(
+            """SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
+              |ON ((lhs.a, lhs.b) NOT IN (SELECT a, b FROM rhs))""".stripMargin),
+          Seq(Row(1, 99), Row(null, null)))
+      }
+    }
+  }
+
+  test("SPARK-58481: LEGACY_IN_SUBQUERY_NULLABILITY suppresses RHS-only nullability") {
+    // Legacy mode suppresses only RHS-derived nullability (plan.output nullable).
+    // A non-nullable scalar LHS (Literal 5) has lhsNullable=false; with RHS suppressed,
+    // nullable=false. The generated code omits null handling and NOT IN on a subquery that
+    // returns NULL evaluates to TRUE -- the pre-fix single-column behaviour the flag preserves.
+    // Note: intentionally codegen-specific. The interpreted path correctly returns UNKNOWN
+    // regardless of nullable (6 rows); the assertion of 9 verifies codegen ran.
+    withSQLConf(
+      SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key -> "true",
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      withTable("t0", "t1", "t3") {
+        sql("CREATE TABLE t0(c0 INT) USING PARQUET")
+        sql("INSERT INTO t0 VALUES (1), (2), (3)")
+        sql("CREATE TABLE t1(c0 INT) USING PARQUET")
+        sql("INSERT INTO t1 VALUES (10), (20), (30)")
+        sql("CREATE TABLE t3(c0 INT) USING PARQUET")
+        sql("INSERT INTO t3 VALUES (99), (CAST(NULL AS INT))")
+
+        // Legacy: lhsNullable=false (Literal 5), rhsNullable suppressed => nullable=false.
+        // Generated code suppresses null; 5 NOT IN (99, NULL) evaluates to TRUE.
+        // FULL OUTER JOIN condition is TRUE => full cross product of 3 x 3 = 9 rows.
+        assert(sql(
+          "SELECT t0.c0, t1.c0 FROM t1 FULL OUTER JOIN t0 ON (5 NOT IN (SELECT t3.c0 FROM t3))")
+          .count() === 9)
+      }
+    }
+  }
+
+  test("SPARK-58481: LEGACY_IN_SUBQUERY_NULLABILITY preserves nullable LHS fields multi-column") {
+    // Legacy mode suppresses RHS nullability but preserves LHS field nullability.
+    // With a nullable LHS field, lhsNullable=true even in legacy mode, so nullable=true.
+    // Generated NOT IN code propagates UNKNOWN correctly; result is identical to non-legacy.
+    withSQLConf(
+      SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key -> "true",
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
+    ) {
+      withTable("lhs", "rhs") {
+        sql("CREATE TABLE lhs(a INT, b INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO lhs VALUES (1, 1), (NULL, 2)")
+        sql("CREATE TABLE rhs(a INT NOT NULL, b INT NOT NULL) USING PARQUET")
+        sql("INSERT INTO rhs VALUES (99, 2)")
+        // (NULL, 2) NOT IN ((99,2)): first field null => UNKNOWN => null-padded: Row(null, null).
+        // (1, 1)   NOT IN ((99,2)): 1!=99 => FALSE => NOT IN=TRUE => joins: Row(1, 99).
+        checkAnswer(
+          sql(
+            """SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
+              |ON ((lhs.a, lhs.b) NOT IN (SELECT a, b FROM rhs))""".stripMargin),
+          Seq(Row(1, 99), Row(null, null)))
+      }
+    }
+  }
 }
