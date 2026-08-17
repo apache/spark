@@ -34,13 +34,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  * implementation but not the other.
  *
  * CDC metadata and SCD2 interval bounds are not compared.
- *
- * Each seed independently shuffles and micro-batches the same event set for SCD1 and SCD2, so
- * one SCD implementation keeps the other in check under out-of-order ingestion.
- *
- * Scale uses the shared defaults / system properties on [[AutoCdcRandomCdcTestMixin]]. Set a
- * deterministic base seed with `-Dspark.sql.test.autocdc.convergenceBaseSeed=<seed>`. The first
- * iteration uses that seed directly and any remaining iteration seeds are derived from it.
  */
 class AutoCdcCrossScdConvergenceSuite
     extends ExecutionTest
@@ -69,7 +62,7 @@ class AutoCdcCrossScdConvergenceSuite
 
     forEachConvergenceSeed { (seed, seedIndex) =>
       val rand = new Random(seed)
-      val sortedEventStream = generateConfiguredCdcEventStream(rand)
+      val sortedEventStream = generateRandomCdcEventStream(rand)
 
       // Independent shuffle / batching RNGs so each SCD side exercises a different arrival order
       // while still being fully determined by `seed`.

@@ -27,10 +27,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Differential test for the AutoCDC merge's order-invariance property, for both SCD Type 1 and
  * SCD Type 2: feeding the same randomly-generated CDC event stream as a single sorted micro-batch
  * and as several shuffled micro-batches must converge to the same target table contents.
- *
- * Scale uses the shared defaults / system properties on [[AutoCdcRandomCdcTestMixin]]. Set a
- * deterministic base seed with `-Dspark.sql.test.autocdc.convergenceBaseSeed=<seed>`. The first
- * iteration uses that seed directly and any remaining iteration seeds are derived from it.
  */
 class AutoCdcOutOfOrderConvergenceSuite
     extends ExecutionTest
@@ -52,7 +48,7 @@ class AutoCdcOutOfOrderConvergenceSuite
 
     forEachConvergenceSeed { (seed, seedIndex) =>
       val rand = new Random(seed)
-      val sortedEventStream = generateConfiguredCdcEventStream(rand)
+      val sortedEventStream = generateRandomCdcEventStream(rand)
       val shuffledEventStream = rand.shuffle(sortedEventStream)
 
       // Seed alone regenerates the stream; avoid dumping every event into an eagerly-built clue.
@@ -64,11 +60,8 @@ class AutoCdcOutOfOrderConvergenceSuite
         s"keys=$numDistinctKeys maxEventsPerKey=$maxUniqueEventsPerKey " +
         s"outOfOrderBatches=$numOutOfOrderBatches events=${sortedEventStream.size}\n"
       ) {
-        // Table names are scd-type- and seed-suffixed so multi-seed runs within one test case do
-        // not collide before afterEach resets the catalog.
-        val suffix = scdType.label.toLowerCase(java.util.Locale.ROOT)
-        val inOrderTable = s"inorder_target_${suffix}_$seedIndex"
-        val outOfOrderTable = s"outoforder_target_${suffix}_$seedIndex"
+        val inOrderTable = s"inorder_target_$seedIndex"
+        val outOfOrderTable = s"outoforder_target_$seedIndex"
 
         // In-order baseline: one microbatch with the sequence-sorted stream.
         runRandomCdcPipeline(inOrderTable, scdType, sortedEventStream, numBatches = 1)

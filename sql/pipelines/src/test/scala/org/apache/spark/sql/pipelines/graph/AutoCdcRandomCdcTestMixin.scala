@@ -56,17 +56,24 @@ object AutoCdcRandomCdcTestMixin {
  * Shared random-CDC fixture helpers for AutoCDC differential convergence suites
  * ([[AutoCdcOutOfOrderConvergenceSuite]], [[AutoCdcCrossScdConvergenceSuite]]).
  *
- * Owns the common event schema, stream generator, target DDL, microbatch feeding, and the
- * shared CI-sized scale configuration. Suites may override the `default*` vals when they need a
- * different local default; local stress testing overrides scale via the shared system properties
- * below rather than by forking suite defaults.
+ * Owns the common event schema, stream generator, target DDL, microbatch feeding, for random-data
+ * AutoCDC suites.
  *
- * Shared scale knobs (optional; defaults are CI-sized):
+ * Exposed random data generation knobs (optional; defaults are CI-sized):
  *   - `spark.sql.test.autocdc.convergenceBaseSeed`
  *   - `spark.sql.test.autocdc.convergenceNumSeeds`
  *   - `spark.sql.test.autocdc.convergenceNumKeys`
  *   - `spark.sql.test.autocdc.convergenceMaxEventsPerKey`
  *   - `spark.sql.test.autocdc.convergenceMaxBatches`
+ *
+ * Suites may override these defaults when they genuinely need a different baseline. For local
+ * stress testing, for example:
+ * {{{
+ * build/sbt \
+ *   -Dspark.sql.test.autocdc.convergenceNumSeeds=10 \
+ *   -Dspark.sql.test.autocdc.convergenceNumKeys=100 \
+ *   'pipelines/testOnly *AutoCdcCrossScdConvergenceSuite'
+ * }}}
  *
  * The shared base seed property supplies the first iteration's seed and deterministically derives
  * any remaining per-iteration seeds from it.
@@ -139,6 +146,7 @@ trait AutoCdcRandomCdcTestMixin {
     }
   }
 
+  // Forward declare key, sequence, and data columns, so that inheriting suites can reference them.
   protected val keyColumn: String = "key"
   protected val nameColumn: String = "name"
   protected val amountColumn: String = "amount"
@@ -168,13 +176,12 @@ trait AutoCdcRandomCdcTestMixin {
   }
 
   /**
-   * Generate a sequence-sorted CDC event stream with `numDistinctKeys` keys and up to
-   * `maxUniqueEventsPerKey` unique events per key (plus optional duplicates).
+   * Generate a sequence-sorted CDC event stream.
    */
-  private def generateRandomCdcEventStream(
-      rand: Random,
-      numDistinctKeys: Int,
-      maxUniqueEventsPerKey: Int): Seq[SourceRow] = {
+  protected def generateRandomCdcEventStream(rand: Random): Seq[SourceRow] = {
+    val numDistinctKeys = resolveNumDistinctKeys()
+    val maxUniqueEventsPerKey = resolveMaxUniqueEventsPerKey()
+    
     var nextSequence: Long = 0L
     val events = ArrayBuffer.empty[SourceRow]
     (0 until numDistinctKeys).foreach { key =>
@@ -192,16 +199,10 @@ trait AutoCdcRandomCdcTestMixin {
     events.sortBy(_.sequence).toSeq
   }
 
-  /** Generate using the resolved shared scale configuration. */
-  protected def generateConfiguredCdcEventStream(rand: Random): Seq[SourceRow] = {
-    generateRandomCdcEventStream(
-      rand, resolveNumDistinctKeys(), resolveMaxUniqueEventsPerKey())
-  }
-
   /**
    * Feed `events` through an AutoCDC pipeline of `scdType` across `numBatches` microbatches
    * (one pipeline run per microbatch). The target and auxiliary tables are created by pipeline
-   * materialization from the flow's inferred schema; no harness-side `CREATE TABLE` is needed.
+   * materialization from the flow's inferred schema.
    */
   protected def runRandomCdcPipeline(
       targetTable: String,
