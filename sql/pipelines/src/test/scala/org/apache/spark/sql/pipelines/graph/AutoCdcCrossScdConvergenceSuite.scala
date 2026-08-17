@@ -38,8 +38,10 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Each seed independently shuffles and micro-batches the same event set for SCD1 and SCD2, so
  * one SCD implementation keeps the other in check under out-of-order ingestion.
  *
- * Scale uses the shared defaults / system properties on [[AutoCdcRandomCdcTestMixin]]. Pin a
- * failing seed with `-Dspark.sql.test.autocdc.crossScdConvergenceSeed=<seed>`.
+ * Scale uses the shared defaults / system properties on [[AutoCdcRandomCdcTestMixin]]. Set a
+ * deterministic base seed with `-Dspark.sql.test.autocdc.crossScdConvergenceBaseSeed=<seed>`.
+ * The first iteration uses that seed directly and any remaining iteration seeds are derived
+ * from it.
  */
 class AutoCdcCrossScdConvergenceSuite
     extends ExecutionTest
@@ -47,8 +49,8 @@ class AutoCdcCrossScdConvergenceSuite
     with AutoCdcGraphExecutionTestMixin
     with AutoCdcRandomCdcTestMixin {
 
-  override protected def seedSystemProperty: String =
-    "spark.sql.test.autocdc.crossScdConvergenceSeed"
+  override protected def baseSeedSystemProperty: String =
+    "spark.sql.test.autocdc.crossScdConvergenceBaseSeed"
 
   /**
    * Assert SCD1 live rows equal SCD2 current open rows (`__END_AT IS NULL`) on user data
@@ -86,7 +88,8 @@ class AutoCdcCrossScdConvergenceSuite
       // every clue string (ScalaTest evaluates clues eagerly).
       withClue(
         s"\ncross-SCD convergence seedIndex=$seedIndex seed=$seed " +
-        s"(rerun with -D$seedSystemProperty=$seed -D$numSeedsSystemProperty=1 to reproduce)\n" +
+        s"(rerun with -D$baseSeedSystemProperty=$seed " +
+        s"-D$numSeedsSystemProperty=1 to reproduce)\n" +
         s"keys=$numDistinctKeys maxEventsPerKey=$maxUniqueEventsPerKey " +
         s"scd1Batches=$scd1Batches scd2Batches=$scd2Batches " +
         s"events=${sortedEventStream.size}\n"

@@ -28,8 +28,10 @@ import org.apache.spark.sql.test.SharedSparkSession
  * SCD Type 2: feeding the same randomly-generated CDC event stream as a single sorted micro-batch
  * and as several shuffled micro-batches must converge to the same target table contents.
  *
- * Scale uses the shared defaults / system properties on [[AutoCdcRandomCdcTestMixin]]. Pin a
- * failing seed with `-Dspark.sql.test.autocdc.outOfOrderConvergenceSeed=<seed>`.
+ * Scale uses the shared defaults / system properties on [[AutoCdcRandomCdcTestMixin]]. Set a
+ * deterministic base seed with
+ * `-Dspark.sql.test.autocdc.outOfOrderConvergenceBaseSeed=<seed>`. The first iteration uses
+ * that seed directly and any remaining iteration seeds are derived from it.
  */
 class AutoCdcOutOfOrderConvergenceSuite
     extends ExecutionTest
@@ -37,8 +39,8 @@ class AutoCdcOutOfOrderConvergenceSuite
     with AutoCdcGraphExecutionTestMixin
     with AutoCdcRandomCdcTestMixin {
 
-  override protected def seedSystemProperty: String =
-    "spark.sql.test.autocdc.outOfOrderConvergenceSeed"
+  override protected def baseSeedSystemProperty: String =
+    "spark.sql.test.autocdc.outOfOrderConvergenceBaseSeed"
 
   private def assertTargetsConverge(inOrderTable: String, outOfOrderTable: String): Unit = {
     checkAnswer(
@@ -61,7 +63,8 @@ class AutoCdcOutOfOrderConvergenceSuite
       withClue(
         s"\nout-of-order convergence scdType=${scdType.label} " +
         s"seedIndex=$seedIndex seed=$seed " +
-        s"(rerun with -D$seedSystemProperty=$seed -D$numSeedsSystemProperty=1 to reproduce)\n" +
+        s"(rerun with -D$baseSeedSystemProperty=$seed " +
+        s"-D$numSeedsSystemProperty=1 to reproduce)\n" +
         s"keys=$numDistinctKeys maxEventsPerKey=$maxUniqueEventsPerKey " +
         s"outOfOrderBatches=$numOutOfOrderBatches events=${sortedEventStream.size}\n"
       ) {

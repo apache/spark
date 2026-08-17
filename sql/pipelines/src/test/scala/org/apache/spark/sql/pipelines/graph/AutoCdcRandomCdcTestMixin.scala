@@ -20,8 +20,6 @@ package org.apache.spark.sql.pipelines.graph
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.scalatest.Suite
-
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.pipelines.autocdc.{
@@ -30,7 +28,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
   UnqualifiedColumnName
 }
 import org.apache.spark.sql.pipelines.graph.AutoCdcRandomCdcTestMixin.SourceRow
-import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
+import org.apache.spark.sql.pipelines.utils.ExecutionTest
 import org.apache.spark.sql.test.SharedSparkSession
 
 object AutoCdcRandomCdcTestMixin {
@@ -59,10 +57,10 @@ object AutoCdcRandomCdcTestMixin {
  * ([[AutoCdcOutOfOrderConvergenceSuite]], [[AutoCdcCrossScdConvergenceSuite]]).
  *
  * Owns the common event schema, stream generator, target DDL, microbatch feeding, and the
- * shared CI-sized scale configuration. Suites override [[seedSystemProperty]] (and optionally
- * the `default*` vals) when they need suite-specific seed pinning or a different local default;
- * local stress testing overrides scale via the shared system properties below rather than by
- * forking suite defaults.
+ * shared CI-sized scale configuration. Suites override [[baseSeedSystemProperty]] (and
+ * optionally the `default*` vals) when they need a deterministic suite-specific base seed or a
+ * different local default; local stress testing overrides scale via the shared system properties
+ * below rather than by forking suite defaults.
  *
  * Shared scale knobs (optional; defaults are CI-sized):
  *   - `spark.sql.test.autocdc.convergenceNumSeeds`
@@ -70,10 +68,11 @@ object AutoCdcRandomCdcTestMixin {
  *   - `spark.sql.test.autocdc.convergenceMaxEventsPerKey`
  *   - `spark.sql.test.autocdc.convergenceMaxBatches`
  *
- * Suite-specific seed pinning is declared by [[seedSystemProperty]].
+ * The suite-specific base seed property supplies the first iteration's seed and deterministically
+ * derives any remaining per-iteration seeds from it.
  */
 trait AutoCdcRandomCdcTestMixin {
-  self: Suite with ExecutionTest with SharedSparkSession with AutoCdcGraphExecutionTestMixin =>
+  self: ExecutionTest with SharedSparkSession with AutoCdcGraphExecutionTestMixin =>
 
   // Probability an event is a delete; (1 - this) is the upsert probability.
   protected val deleteEventProbability: Double = 0.20
@@ -90,8 +89,8 @@ trait AutoCdcRandomCdcTestMixin {
   protected val defaultNumOutOfOrderBatches: Int = 8
   protected val defaultNumSeedsPerRun: Int = 3
 
-  /** Suite-specific system property used to pin the base seed for reproduction. */
-  protected def seedSystemProperty: String
+  /** Suite-specific system property supplying a deterministic base seed. */
+  protected def baseSeedSystemProperty: String
 
   // Exposed so suite failure clues can tell callers how to force a single-seed replay.
   protected val numSeedsSystemProperty: String =
@@ -103,41 +102,41 @@ trait AutoCdcRandomCdcTestMixin {
   private val numBatchesSystemProperty: String =
     "spark.sql.test.autocdc.convergenceMaxBatches"
 
-  private def intProp(name: String, default: Int): Int =
-    Option(System.getProperty(name)).map(_.toInt).getOrElse(default)
+  private def positiveIntProp(name: String, default: Int): Int = {
+    val value = Option(System.getProperty(name)).map(_.toInt).getOrElse(default)
+    require(value > 0, s"$name must be positive, but got $value")
+    value
+  }
 
   private def resolveBaseSeed(): Long = {
-    Option(System.getProperty(seedSystemProperty)).map(_.toLong).getOrElse(Random.nextLong())
+    Option(System.getProperty(baseSeedSystemProperty))
+      .map(_.toLong)
+      .getOrElse(Random.nextLong())
   }
 
   private def resolveNumSeeds(): Int =
-    intProp(numSeedsSystemProperty, defaultNumSeedsPerRun)
+    positiveIntProp(numSeedsSystemProperty, defaultNumSeedsPerRun)
 
   protected def resolveNumDistinctKeys(): Int =
-    intProp(numKeysSystemProperty, defaultNumDistinctKeys)
+    positiveIntProp(numKeysSystemProperty, defaultNumDistinctKeys)
 
   protected def resolveMaxUniqueEventsPerKey(): Int =
-    intProp(maxEventsPerKeySystemProperty, defaultMaxUniqueEventsPerKey)
+    positiveIntProp(maxEventsPerKeySystemProperty, defaultMaxUniqueEventsPerKey)
 
   protected def resolveNumOutOfOrderBatches(): Int =
-    intProp(numBatchesSystemProperty, defaultNumOutOfOrderBatches)
+    positiveIntProp(numBatchesSystemProperty, defaultNumOutOfOrderBatches)
 
   /**
-   * Invoke `body(seed, seedIndex)` once per configured seed. When the suite's seed property is
-   * set and `resolveNumSeeds` is 1, `seed` is exactly that pinned value so failure clues are
-   * one-shot reproducible.
+   * Invoke `callback(seed, seedIndex)` once per configured seed. The first iteration uses the
+   * base seed directly; any remaining iteration seeds are deterministically derived from it.
    */
-  protected def forEachConvergenceSeed(body: (Long, Int) => Unit): Unit = {
+  protected def forEachConvergenceSeed(callback: (Long, Int) => Unit): Unit = {
     val baseSeed = resolveBaseSeed()
     val numSeeds = resolveNumSeeds()
     val masterRand = new Random(baseSeed)
-    (0 until numSeeds).foreach { seedIndex =>
-      val seed = if (numSeeds == 1 && System.getProperty(seedSystemProperty) != null) {
-        baseSeed
-      } else {
-        masterRand.nextLong()
-      }
-      body(seed, seedIndex)
+    val seeds = baseSeed +: Seq.fill(numSeeds - 1)(masterRand.nextLong())
+    seeds.zipWithIndex.foreach { case (seed, seedIndex) =>
+      callback(seed, seedIndex)
     }
   }
 
@@ -200,28 +199,6 @@ trait AutoCdcRandomCdcTestMixin {
       rand, resolveNumDistinctKeys(), resolveMaxUniqueEventsPerKey())
   }
 
-  /** Build a pipeline context with a single AutoCDC flow of `scdType` reading from `stream`. */
-  private def buildRandomCdcPipelineContext(
-      targetTable: String,
-      stream: MemoryStream[SourceRow],
-      scdType: ScdType): TestGraphRegistrationContext = {
-    new TestGraphRegistrationContext(spark) {
-      registerTable(targetTable, catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = s"${targetTable}_flow",
-        target = targetTable,
-        query = dfFlowFunc(stream.toDF().toDF(sourceColumnNames: _*)),
-        keys = Seq(keyColumn),
-        sequencing = functions.col(sequenceColumn),
-        deleteCondition = Some(functions.col(isDeleteColumn) === true),
-        columnSelection = Some(ColumnSelection.ExcludeColumns(
-          Seq(UnqualifiedColumnName(isDeleteColumn))
-        )),
-        scdType = scdType
-      ))
-    }
-  }
-
   /**
    * Feed `events` through an AutoCDC pipeline of `scdType` across `numBatches` microbatches
    * (one pipeline run per microbatch). The target and auxiliary tables are created by pipeline
@@ -236,7 +213,18 @@ trait AutoCdcRandomCdcTestMixin {
     import session.implicits._
 
     val stream = MemoryStream[SourceRow]
-    val ctx = buildRandomCdcPipelineContext(targetTable, stream, scdType)
+    val ctx = singleAutoCdcFlowPipeline(
+      flowName = s"${targetTable}_flow",
+      target = targetTable,
+      sourceDf = stream.toDF().toDF(sourceColumnNames: _*),
+      keys = Seq(keyColumn),
+      sequencing = functions.col(sequenceColumn),
+      columnSelection = Some(ColumnSelection.ExcludeColumns(
+        Seq(UnqualifiedColumnName(isDeleteColumn))
+      )),
+      deleteCondition = Some(functions.col(isDeleteColumn) === true),
+      scdType = scdType
+    )
     val totalEvents = events.size
     (0 until numBatches).foreach { batchIndex =>
       val batchStart = batchIndex * totalEvents / numBatches
