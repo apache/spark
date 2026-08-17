@@ -430,6 +430,19 @@ class ColumnExpressionSuite extends SharedSparkSession {
     checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
   }
 
+  test("SPARK-58818: BETWEEN on a nondeterministic input inside a conditional branch") {
+    // A single partition makes the id sequence 0, 1, 2, ... so the answer is exact.
+    val df = spark.range(0, 10, 1, 1)
+    val inBranch = "CASE WHEN id < 0 THEN false " +
+      "ELSE monotonically_increasing_id() BETWEEN 3 AND 5 END"
+    val expected = (0 until 10).map(i => Row(i >= 3 && i <= 5))
+
+    // `BETWEEN` references its input twice. Inlining it into the branch gave each reference its
+    // own counter, so the second one advanced only on the rows where the first predicate passed.
+    checkAnswer(df.selectExpr(inBranch), expected)
+    checkAnswer(df.selectExpr("monotonically_increasing_id() BETWEEN 3 AND 5"), expected)
+  }
+
   test("in") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
     checkAnswer(df.filter($"a".isin(1, 2)),

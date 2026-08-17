@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.DoubleType
 
 class RewriteWithExpressionSuite extends PlanTest {
 
@@ -248,6 +249,79 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select(Coalesce(Seq(($"_common_expr_0" * $"_common_expr_0"), a)).as("col"))
         .analyze
     )
+  }
+
+  test("SPARK-58818: nondeterministic common expression in a conditional branch") {
+    val a = testRelation.output.head
+    // The shape `input BETWEEN lower AND upper` builds: the reference appears twice.
+    def between(input: Expression, lower: Expression, upper: Expression): Expression =
+      With(input) { case Seq(ref) => ref >= lower && ref <= upper }
+
+    // Inlining a nondeterministic common expression draws an independent value per reference,
+    // which is what `With` exists to prevent, so it is pre-evaluated in a project instead.
+    val rand = Rand(Literal(1L))
+    val plan = testRelation.select(
+      CaseWhen(Seq((a > 0, Literal(true))), Some(between(rand, Literal(0.4), Literal(0.6))))
+        .as("col"))
+    comparePlans(
+      Optimizer.execute(plan),
+      testRelation
+        .select((testRelation.output :+ rand.as("_common_expr_0")): _*)
+        .select(
+          CaseWhen(
+            Seq((a > 0, Literal(true))),
+            Some($"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6)))
+            .as("col"))
+        .analyze)
+
+    // Control: a deterministic common expression in the same position is still inlined, so the
+    // branch above is what pre-evaluates `rand()` rather than some other precondition.
+    val plan2 = testRelation.select(
+      CaseWhen(Seq((a > 0, Literal(true))), Some(between(a + a, Literal(1), Literal(10))))
+        .as("col"))
+    comparePlans(
+      Optimizer.execute(plan2),
+      testRelation.select(
+        CaseWhen(
+          Seq((a > 0, Literal(true))),
+          Some((a + a) >= Literal(1) && (a + a) <= Literal(10))).as("col")))
+
+    // A nondeterministic expression that can raise stays inlined: pre-evaluating it would run it
+    // for the rows whose branch is not taken, turning a wrong result into a spurious error.
+    // `randstr` is nondeterministic with foldable children and still raises on a negative length.
+    val randStr = new RandStr(Literal(-1), Literal(0))
+    val plan3 = testRelation.select(
+      CaseWhen(Seq((a > 0, Literal(true))), Some(between(randStr, Literal("a"), Literal("z"))))
+        .as("col"))
+    comparePlans(
+      Optimizer.execute(plan3),
+      testRelation.select(
+        CaseWhen(
+          Seq((a > 0, Literal(true))),
+          Some(randStr >= Literal("a") && randStr <= Literal("z"))).as("col")))
+
+    // Same for a nondeterministic expression that is not the root: `rand() / a` reads row data.
+    val divide = Divide(rand, a.cast(DoubleType))
+    val plan4 = testRelation.select(
+      CaseWhen(Seq((a > 0, Literal(true))), Some(between(divide, Literal(0.4), Literal(0.6))))
+        .as("col"))
+    comparePlans(
+      Optimizer.execute(plan4),
+      testRelation.select(
+        CaseWhen(
+          Seq((a > 0, Literal(true))),
+          Some(divide >= Literal(0.4) && divide <= Literal(0.6))).as("col")))
+
+    // A single reference evaluates once either way, so there is nothing to fix and the branch keeps
+    // deciding whether `rand()` runs at all.
+    val plan5 = testRelation.select(
+      CaseWhen(
+        Seq((a > 0, Literal(0.0d))),
+        Some(With(rand) { case Seq(ref) => ref + Literal(1.0d) })).as("col"))
+    comparePlans(
+      Optimizer.execute(plan5),
+      testRelation.select(
+        CaseWhen(Seq((a > 0, Literal(0.0d))), Some(rand + Literal(1.0d))).as("col")))
   }
 
   test("WITH expression in grouping exprs") {
