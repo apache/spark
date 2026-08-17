@@ -273,8 +273,8 @@ SELECT count(age) FROM person;
 |         5|
 +----------+
 
--- `count(DISTINCT age)` also skips `NULL`. A null group is not a distinct counted value.
--- This is different from GROUP BY / SELECT DISTINCT, which put all nulls in one bucket.
+-- `count(DISTINCT age)` also skips `NULL`. This is different from GROUP BY / SELECT DISTINCT,
+-- which put all nulls in one bucket.
 SELECT count(DISTINCT age) FROM person;
 +-------------------+
 |count(DISTINCT age)|
@@ -394,7 +394,7 @@ two `NULL` values are not equal. However, for the purpose of grouping and distin
 values with `NULL data`are grouped together into the same bucket. This behaviour is conformant with SQL
 standard and with other enterprise database management systems.
 
-`COUNT(DISTINCT expr)` still follows the aggregate rule above and does not count null.
+`COUNT(DISTINCT expr)` ignores `NULL` values. Only distinct non-null values are counted.
 
 **Examples**
 
