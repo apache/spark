@@ -3065,6 +3065,26 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-58383: EXCEPT when a left alias reuses the name of a base column") {
+    withTable("repro_t") {
+      sql("CREATE TABLE repro_t(id INT, val INT) USING parquet")
+      sql("INSERT INTO repro_t VALUES (1, 10), (2, 20)")
+      // The right side filters the base column `id`, while the left side aliases `val` to `id`.
+      // ReplaceExceptWithFilter must not port the filter onto that alias.
+      val query =
+        """
+          |(SELECT val AS id FROM repro_t)
+          |EXCEPT
+          |(SELECT val AS v FROM repro_t WHERE id = 1)
+        """.stripMargin
+      Seq(true, false).foreach { enabled =>
+        withSQLConf(SQLConf.REPLACE_EXCEPT_WITH_FILTER.key -> enabled.toString) {
+          checkAnswer(sql(query), Row(20) :: Nil)
+        }
+      }
+    }
+  }
+
   test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkError(
