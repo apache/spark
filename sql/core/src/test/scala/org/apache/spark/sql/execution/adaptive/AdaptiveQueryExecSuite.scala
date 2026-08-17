@@ -33,7 +33,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, EqualTo, IsNull, Or, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.{CoalescedNullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.classic.Strategy
@@ -971,6 +971,49 @@ class AdaptiveQueryExecSuite
           val rightJoin = getJoinNode(rightAdaptivePlan)
           checkSkewJoin(rightJoin, 0, 1)
         }
+      }
+    }
+  }
+
+  test("SPARK-44426: adaptive skew join for ExistenceJoin") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .select(
+            when($"id" < 250, 249)
+              .when($"id" >= 750, 1000)
+              .otherwise($"id").as("key1"),
+            $"id" as "value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .select(
+            when($"id" < 250, 249)
+              .otherwise($"id").as("key2"),
+            $"id" as "value2")
+          .createOrReplaceTempView("skewData2")
+
+        def isSplit(plan: SparkPlan): Boolean = plan.collect {
+          case read: AQEShuffleReadExec => read
+        }.exists(_.partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec]))
+
+        // A subquery under a disjunction is rewritten to an ExistenceJoin. Both sides are skewed
+        // here, so this also covers that the right side is left alone even though it qualifies.
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM skewData1 WHERE value1 < 0 OR key1 IN (SELECT key2 FROM skewData2)")
+        val joins = findTopLevelSortMergeJoin(adaptivePlan)
+        assert(joins.size == 1)
+        assert(joins.head.joinType.isInstanceOf[ExistenceJoin])
+        assert(joins.head.isSkewJoin)
+        assert(isSplit(joins.head.left))
+        assert(!isSplit(joins.head.right))
       }
     }
   }
