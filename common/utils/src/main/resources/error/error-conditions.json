@@ -5810,6 +5810,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "JSON_OBJECT_NULL_KEY" : {
+    "message" : [
+      "JSON_OBJECT key must be a non-null string, but got a null key."
+    ],
+    "sqlState" : "2200E"
+  },
   "JSON_QUERY_ON_ERROR" : {
     "message" : [
       "<functionName> could not extract a value at path <path>."
