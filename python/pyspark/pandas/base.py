@@ -542,11 +542,12 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     # NDArray Compat
     def __array_ufunc__(
         self, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-    ) -> SeriesOrIndex:
+    ) -> Union[SeriesOrIndex, Tuple[SeriesOrIndex, ...]]:
         from pyspark.pandas import numpy_compat
 
         # Try dunder methods first. A multi-output ufunc (for example np.modf) yields a
-        # tuple of results rather than a single Series or Index, so `result` must admit it.
+        # tuple of results rather than a single Series or Index, so both `result` and this
+        # method's return type must admit that tuple.
         result: Union[IndexOpsMixin, Tuple[IndexOpsMixin, ...]] = (
             numpy_compat.maybe_dispatch_ufunc_to_dunder_op(self, ufunc, method, *inputs, **kwargs)
         )
@@ -558,7 +559,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             )
 
         if result is not NotImplemented:
-            return cast(SeriesOrIndex, result)
+            return cast("Union[SeriesOrIndex, Tuple[SeriesOrIndex, ...]]", result)
         else:
             # TODO: support more APIs?
             raise NotImplementedError(
