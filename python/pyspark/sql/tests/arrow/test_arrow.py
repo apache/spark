@@ -54,6 +54,7 @@ from pyspark.sql.pandas.types import (
     to_arrow_type,
     from_arrow_schema,
     to_arrow_schema,
+    time_precision_key,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -865,6 +866,61 @@ class ArrowTestsMixin:
                     pa_schema2 = to_arrow_schema(t, timezone="UTC", prefers_large_types=True)
                     schema3 = from_arrow_schema(pa_schema2)
                     self.assertEqual(t, schema3)
+
+    def test_time_precision_arrow_round_trip(self):
+        # SPARK-57696: TIME(p) precision is stored on the Arrow field, not the type.
+        import pyarrow.types as types
+
+        for precision in (0, 3, 6, 9):
+            with self.subTest(precision=precision):
+                schema = StructType([StructField("t", TimeType(precision))])
+                arrow_schema = to_arrow_schema(schema)
+                field = arrow_schema.field("t")
+                self.assertTrue(types.is_time64(field.type))
+                self.assertEqual(field.type.unit, "ns")
+                self.assertEqual(
+                    field.metadata[time_precision_key], str(precision).encode("utf-8")
+                )
+                self.assertEqual(from_arrow_schema(arrow_schema), schema)
+
+        # Bare time64 with no precision key maps to the default TIME(6).
+        self.assertEqual(from_arrow_type(pa.time64("ns")), TimeType())
+        untagged = pa.schema([pa.field("t", pa.time64("ns"))])
+        self.assertEqual(
+            from_arrow_schema(untagged), StructType([StructField("t", TimeType())])
+        )
+
+        # Present-but-invalid keys also fall back to TIME(6), matching the JVM.
+        for raw in (b"-1", b"10", b"x"):
+            with self.subTest(raw=raw):
+                arrow_schema = pa.schema(
+                    [pa.field("t", pa.time64("ns"), metadata={time_precision_key: raw})]
+                )
+                self.assertEqual(
+                    from_arrow_schema(arrow_schema),
+                    StructType([StructField("t", TimeType())]),
+                )
+
+        # The precision key must not leak into reconstructed column metadata.
+        schema = StructType([StructField("t", TimeType(3), True, {"city": "beijing"})])
+        schema_rt = from_arrow_schema(to_arrow_schema(schema))
+        self.assertEqual(schema_rt, schema)
+        self.assertEqual(schema_rt["t"].metadata, {"city": "beijing"})
+        self.assertIn(time_precision_key, to_arrow_schema(schema).field("t").metadata)
+
+        # Nested array / struct / map fields must keep precision (JVM toArrowField is recursive).
+        nested = StructType(
+            [
+                StructField("s", StructType([StructField("inner", TimeType(3))])),
+                StructField("arr", ArrayType(TimeType(3))),
+                StructField("m", MapType(StringType(), TimeType(9))),
+            ]
+        )
+        self.assertEqual(from_arrow_schema(to_arrow_schema(nested)), nested)
+        self.assertEqual(
+            from_arrow_type(to_arrow_type(ArrayType(TimeType(3)))),
+            ArrayType(TimeType(3)),
+        )
 
     def test_createDataFrame_with_ndarray(self):
         for arrow_enabled in [True, False]:
