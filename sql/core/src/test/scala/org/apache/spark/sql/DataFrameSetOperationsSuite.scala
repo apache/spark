@@ -1589,6 +1589,49 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
     }
   }
 
+  test("SPARK-58819: union outputPartitioning ignores partition key nullability") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempView("t1", "t2") {
+        // `id` is nullable (Option[Int]) so that `IsNotNull` in the Filter actually adjusts it.
+        Seq((Option(1), 10), (Option(2), 20)).toDF("id", "v").createOrReplaceTempView("t1")
+        Seq((Option(3), 30), (Option(4), 40)).toDF("id", "v").createOrReplaceTempView("t2")
+
+        val union = spark.sql(
+          """
+            |SELECT id, v FROM (SELECT id, v FROM t1 DISTRIBUTE BY id) WHERE id IS NOT NULL
+            |UNION ALL
+            |SELECT id, sum(v) AS v FROM t2 GROUP BY id
+            |""".stripMargin)
+        val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+        assert(unionExec.size == 1)
+
+        // `IsNotNull` in the Filter adjusts the nullability of the partition key, but nullability
+        // does not affect the hash, so the union should still propagate the hash partitioning.
+        assert(unionExec.head.outputPartitioning.isInstanceOf[HashPartitioning],
+          s"expected a HashPartitioning pass-through but got ${unionExec.head.outputPartitioning}")
+
+        // The two branches contribute one shuffle each (DISTRIBUTE BY and GROUP BY). The propagated
+        // HashPartitioning lets the downstream group-by reuse them instead of adding a third.
+        val unionShuffles = union.queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }.size
+        val grouped = union.groupBy($"id").count()
+        val groupedShuffles = grouped.queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }.size
+        assert(unionShuffles == 2, s"union should have 2 shuffles but got $unionShuffles")
+        assert(groupedShuffles == 2,
+          s"group-by should reuse the union's partitioning (expect 2 shuffles) but got " +
+            s"$groupedShuffles\n${grouped.queryExecution.executedPlan}")
+
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          union.collect()
+        }
+        checkAnswer(union, correctResult)
+      }
+    }
+  }
+
   test("SPARK-52921: union partitioning - range partitioning") {
     val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
     val df2 = Seq((4, 1, 5), (2, 4, 6), (1, 4, 2), (3, 5, 1)).toDF("d", "e", "f")

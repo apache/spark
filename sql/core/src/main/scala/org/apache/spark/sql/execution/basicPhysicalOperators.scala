@@ -892,22 +892,19 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   }
 
   /**
-   * Returns the output partitionings of the children, with the attributes converted to
-   * the first child's attributes at the same position.
+   * Returns the output partitionings of the children, with the attributes converted to this
+   * union's output attributes at the same position.
    */
   private def prepareOutputPartitioning(): Seq[Partitioning] = {
-    // Create a map of attributes from the other children to the first child.
-    val firstAttrs = children.head.output
-    val attributesMap = children.tail.map(_.output).map { otherAttrs =>
-      AttributeMap(otherAttrs.zip(firstAttrs))
+    // Map every child's partitioning attributes to this union's output attributes, so all
+    // partitionings are expressed in the same attribute space before comparison. A child's
+    // `outputPartitioning` may reference its own input attributes (e.g. a Filter passes through
+    // its child's partitioning but adjusts the output nullability), so even the first child is
+    // remapped.
+    val attributesMap = children.map(_.output).map { childAttrs =>
+      AttributeMap(childAttrs.zip(output))
     }
-
-    val partitionings = children.map(_.outputPartitioning)
-    val firstPartitioning = partitionings.head
-    val otherPartitionings = partitionings.tail
-
-    val convertedOtherPartitionings = otherPartitionings.zipWithIndex.map { case (p, idx) =>
-      val attributeMap = attributesMap(idx)
+    children.map(_.outputPartitioning).zip(attributesMap).map { case (p, attributeMap) =>
       p match {
         case e: Expression =>
           e.transform {
@@ -917,7 +914,6 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
         case _ => p
       }
     }
-    Seq(firstPartitioning) ++ convertedOtherPartitionings
   }
 
   // Compares two leaf partitionings for union pass-through equivalence. Callers pass leaf
@@ -928,7 +924,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       case (SinglePartition, SinglePartition) => true
       case (l: HashPartitioningLike, r: HashPartitioningLike) => l == r
       // For `KeyedPartitioning`, only the partition expressions must match (the other child's
-      // expressions have already been remapped to the first child's attributes by
+      // expressions have already been remapped to this union's output attributes by
       // `prepareOutputPartitioning`). The partition keys are intentionally not compared here:
       // children typically carry different key sets, and `outputPartitioning` merges them.
       case (l: KeyedPartitioning, r: KeyedPartitioning) =>
@@ -945,17 +941,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       return super.outputPartitioning
     }
 
-    // Children's partitionings with attributes remapped to the first child's attributes.
+    // Children's partitionings with attributes remapped to this union's output attributes.
     val partitionings = prepareOutputPartitioning()
-    // Map from the first child's attributes to this union's own output attributes.
-    val attributeMap = children.head.output.zip(output).toMap
-    def toUnionOutput(p: Partitioning): Partitioning = p match {
-      case e: Expression =>
-        e.transform {
-          case a: Attribute if attributeMap.contains(a) => attributeMap(a)
-        }.asInstanceOf[Partitioning]
-      case _ => p
-    }
 
     // Case A: every child is a single `KeyedPartitioning`. A `UnionExec` concatenates its
     // children's partitions in order (one child's partitions after another's), so the merged
@@ -972,9 +959,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       val compatible = kps.forall(comparePartitioning(_, headKp))
       if (compatible) {
         val mergedKeys = kps.flatMap(_.partitionKeys)
-        val mergedExpressions = headKp.expressions.map(_.transform {
-          case a: Attribute if attributeMap.contains(a) => attributeMap(a)
-        })
+        val mergedExpressions = headKp.expressions
         val isGrouped = mergedKeys.distinct.size == mergedKeys.size
         val isNarrowed = kps.exists(_.isNarrowed)
         return KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped, isNarrowed)
@@ -1005,8 +990,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
     intersection match {
       case Seq() => super.outputPartitioning
-      case Seq(p) => toUnionOutput(p)
-      case ps => PartitioningCollection.fromPartitionings(ps.map(toUnionOutput))
+      case Seq(p) => p
+      case ps => PartitioningCollection.fromPartitionings(ps)
     }
   }
 
