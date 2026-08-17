@@ -143,8 +143,8 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       case LatestOffsetRangeLimit => partitions.map {
         case tp => tp -> KafkaOffsetRangeLimit.LATEST
       }.toMap
-      case SpecificOffsetRangeLimit(partitionOffsets) =>
-        validateTopicPartitions(partitions, partitionOffsets)
+      case offsets: SpecificOffsetRangeLimit =>
+        validateTopicPartitions(partitions, offsets.resolve(partitions))
       case SpecificTimestampRangeLimit(partitionTimestamps, strategyOnNoMatchingStartingOffset) =>
         fetchSpecificTimestampBasedOffsets(partitionTimestamps, isStartingOffsets,
           strategyOnNoMatchingStartingOffset).partitionToOffsets
@@ -155,8 +155,10 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   }
 
   override def fetchSpecificOffsets(
-      partitionOffsets: Map[TopicPartition, Long],
+      offsets: SpecificOffsetRangeLimit,
       reportDataLoss: (String, () => Throwable) => Unit): KafkaSourceOffset = {
+    val partitionOffsets = offsets.resolve(withRetries { resolvePartitions() })
+
     val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
       assert(partitions.asScala == partitionOffsets.keySet,
         "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
@@ -424,9 +426,11 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
       // No need to report data loss here
       val resolvedFromOffsets =
-        fetchSpecificOffsets(fromOffsetsMap, (_, _) => ()).partitionToOffsets
+        fetchSpecificOffsets(SpecificOffsetRangeLimit(fromOffsetsMap), (_, _) => ())
+          .partitionToOffsets
       val resolvedUntilOffsets =
-        fetchSpecificOffsets(untilOffsetsMap, (_, _) => ()).partitionToOffsets
+        fetchSpecificOffsets(SpecificOffsetRangeLimit(untilOffsetsMap), (_, _) => ())
+          .partitionToOffsets
       val ranges = offsetRangesBase.map(_.topicPartition).map { tp =>
         KafkaOffsetRange(tp, resolvedFromOffsets(tp), resolvedUntilOffsets(tp), preferredLoc = None)
       }
