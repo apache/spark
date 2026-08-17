@@ -181,6 +181,74 @@ Missing or inaccurate statistics will hinder Spark's ability to select an optima
 - **Query plan estimates**: You can inspect Spark's cost estimates in the optimized query plan via [`EXPLAIN COST`](sql-ref-syntax-qry-explain.html) or `DataFrame.explain(mode="cost")`.
 - **Runtime statistics**: You can inspect these statistics in the [SQL UI](web-ui.html#sql-tab) under the "Details" section as a query is running. Look for `Statistics(..., isRuntime=true)` in the plan.
 
+## Optimizing the Aggregate
+
+### Adaptive Partial Aggregation
+
+A grouping aggregation normally runs in two phases: a partial aggregation before the shuffle and a
+final aggregation after it. The partial aggregation is only worthwhile when it actually reduces the
+number of rows; when the grouping keys are close to unique it maintains, and possibly spills, an
+aggregation map roughly as large as its input while emitting almost as many rows as it consumed.
+
+When adaptive partial aggregation is enabled, hash aggregation measures the compaction ratio (the
+number of processed rows divided by the number of keys held in its aggregation maps) at runtime
+and, if the partial aggregation is not collapsing enough rows to be worthwhile, stops populating
+the aggregation map and passes the remaining rows through as single-row partial aggregation buffers
+for the final aggregation to merge. Once pass-through is active the map is frozen and its output
+always comes before the passed-through rows: rows that collide with the frozen map are held in a
+queue behind it and flushed only after it drains, so a duplicate of a key already in the map still
+merges after that key's accumulated rows, keeping an order-sensitive aggregate such as
+`first`/`last` consistent with a run that never bypasses. The ratio is evaluated periodically, and
+again right before the aggregation map would spill, in which case the spill is skipped entirely.
+
+Both evaluations use the cumulative rows and keys of the current map epoch and, once triggered,
+pass-through is not reversed for the rest of the task, so a skewed prefix biases the outcome in
+either direction. A favorable prefix can mask a later distinct-heavy tail, keeping the aggregation
+on until a spill restarts the accounting; conversely, a distinct-heavy prefix can trip the
+pass-through early and keep it tripped even where the rest of the input would aggregate well. To
+catch the former without waiting for a spill, raise `minCompaction` so the cumulative ratio trips
+the threshold on a weaker late turn (a higher threshold also bypasses more readily on other inputs).
+To avoid committing the task to pass-through on the latter, raise `minRows` so the periodic
+evaluations start later.
+
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.enabled</code></td>
+    <td>false</td>
+    <td>
+      When true, hash aggregation adaptively bypasses the pre-shuffle partial aggregation at runtime
+      when it observes that the partial aggregation is not reducing the number of rows enough to be
+      worthwhile. This applies only to hash aggregation with grouping keys.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minRows</code></td>
+    <td>100000</td>
+    <td>
+      The number of rows between periodic compaction-ratio evaluations. Setting this to
+      <code>0</code> disables the periodic evaluation. The ratio may still be evaluated when the
+      aggregation map is about to spill. A larger value also delays the periodic evaluations, so
+      when one of them trips pass-through the frozen map tends to hold more rows; the frozen map
+      stays resident until its output is drained, so a larger value raises that transient memory
+      peak.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minCompaction</code></td>
+    <td>1.05</td>
+    <td>
+      The minimum compaction ratio required to keep the partial aggregation. A ratio of 10 means the
+      partial aggregation collapses ten rows into one key; when an evaluation finds the ratio below
+      this value the partial aggregation is bypassed for the rest of the input. A larger value
+      bypasses more aggressively.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+</table>
+
 ## Optimizing the Join Strategy
 
 ### Automatically Broadcasting Joins

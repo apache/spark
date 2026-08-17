@@ -214,7 +214,7 @@ try:
     copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if in_spark:
-        # !!HACK ALTERT!!
+        # !!HACK ALERT!!
         # `setup.py` has to be located with the same directory with the package.
         # Therefore, we copy the current file, and place it at `spark/python` directory.
         # After that, we remove it in the end.
@@ -340,8 +340,9 @@ try:
             "pyspark.examples.src.main.python": "deps/examples",
         },
         package_data={
-            "pyspark.jars": ["*.jar"],
-            "pyspark.bin": ["*"],
+            "pyspark": ["**/*.pyi", "**/py.typed", "**/*.json"],
+            "pyspark.jars": ["**/*.jar"],
+            "pyspark.bin": ["**/*"],
             "pyspark.sbin": [
                 "spark-config.sh",
                 "spark-daemon.sh",
@@ -350,13 +351,14 @@ try:
                 "stop-connect-server.sh",
                 "stop-history-server.sh",
             ],
-            "pyspark.python.lib": ["*.zip"],
-            "pyspark.data": ["*.txt", "*.data"],
-            "pyspark.licenses": ["*"],
-            "pyspark.examples.src.main.python": ["*.py", "*/*.py"],
+            "pyspark.python.lib": ["**/*.zip"],
+            "pyspark.data": ["**/*.txt", "**/*.data"],
+            "pyspark.licenses": ["**/*"],
+            "pyspark.examples.src.main.python": ["**/*.py"],
         },
         scripts=scripts,
         license="Apache-2.0",
+        license_files=["LICENSE", "NOTICE"],
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=["py4j>=0.10.9.7,<0.10.9.10"],

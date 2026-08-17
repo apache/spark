@@ -192,11 +192,31 @@ SELECT c, count(*) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
   GROUP BY c ORDER BY c;
+-- GROUP BY a nanosecond key with aggregates and a NULL group: exact-duplicate keys collapse, two
+-- keys sharing epochMicros but differing within the microsecond stay in separate groups, and all
+-- NULL keys group together (unlike an equi-join). Three groups: .000000001 (count 2, sum 3),
+-- .000000999 (count 1, sum 3), NULL (count 2, sum 9).
+SELECT k, count(*), sum(v) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
+  (CAST(NULL AS timestamp_ntz(9)), 4),
+  (CAST(NULL AS timestamp_ntz(9)), 5) AS t(k, v)
+  GROUP BY k ORDER BY k;
 
 -- SPARK-56822: mode over nanosecond-precision TIMESTAMP_NTZ. Frequencies are counted on the full
 -- nanos value, so the most-frequent value is selected down to the sub-microsecond and the result
 -- type stays TIMESTAMP_NTZ(9). .000000001 appears twice, .000000999 once.
 SELECT mode(c) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c);
+
+-- SPARK-56822: collect_set over nanosecond-precision TIMESTAMP_NTZ. It deduplicates on the full
+-- sub-microsecond value: the two .000000001 rows collapse to one, the .000000999 row stays, so the
+-- sorted set has two distinct elements and the element type stays TIMESTAMP_NTZ(9). collect_set
+-- order is non-deterministic, so the output is stabilized with sort_array.
+SELECT sort_array(collect_set(c)) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c);

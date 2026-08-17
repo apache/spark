@@ -740,6 +740,40 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  // collect_set over nanosecond-precision timestamps (SPARK-56822). `CollectSet` deduplicates via a
+  // `HashSet` keyed on the physical `TimestampNanosVal`, whose `equals`/`hashCode` cover the full
+  // `(epochMicros, nanosWithinMicro)` pair, so sub-microsecond-distinct values are kept distinct;
+  // the result element type is exactly `child.dataType`.
+
+  test("SPARK-56822: collect_set over nanos deduplicates on the full sub-microsecond value") {
+    // Two values share the microsecond and differ only in the last nanosecond digit. Flooring the
+    // input to precision `p` collapses them when p < 9 (the distinguishing digit is below the
+    // grid), but keeps them apart at p = 9. collect_set must dedup on the full stored value,
+    // not on micros.
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType().add("ntz", TimestampNTZNanosType(p))
+      val data = Seq(
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.123456780")),
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.123456789")),
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.123456780")))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+      val res = df.selectExpr("collect_set(ntz)")
+      assert(res.schema.head.dataType === ArrayType(TimestampNTZNanosType(p), containsNull = false))
+
+      // Values are floored to `p` on ingestion, so the distinct set depends on `p`.
+      val expected = p match {
+        case 7 => Set(LocalDateTime.parse("2020-01-01T12:34:56.123456700"))
+        case 8 => Set(LocalDateTime.parse("2020-01-01T12:34:56.123456780"))
+        case _ => Set(
+          LocalDateTime.parse("2020-01-01T12:34:56.123456780"),
+          LocalDateTime.parse("2020-01-01T12:34:56.123456789"))
+      }
+      val collected = res.collect().head.getSeq[LocalDateTime](0).toSet
+      assert(collected === expected, s"collect_set(p=$p) expected $expected, got $collected")
+    }
+  }
+
   // collect_list over nanosecond-precision timestamps (SPARK-56822). `CollectList` is
   // type-agnostic: its `ArrayBuffer` buffer holds the physical `TimestampNanosVal` and the
   // result element type is exactly `child.dataType`, so the input precision, family (NTZ/LTZ)
