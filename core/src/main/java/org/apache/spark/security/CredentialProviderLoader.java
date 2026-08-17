@@ -252,20 +252,6 @@ public final class CredentialProviderLoader {
   }
 
   /**
-   * Returns all registered providers discovered via ServiceLoader.
-   * <p>
-   * Unlike {@link #providerFor(String, Map)}, this does not initialize providers.
-   * It is intended for querying provider metadata (e.g.,
-   * {@link CredentialProvider#additionalSparkProperties()}).
-   *
-   * @return an unmodifiable list of all discovered providers
-   * @since 4.4.0
-   */
-  public static List<CredentialProvider> discoverAllProviders() {
-    return Collections.unmodifiableList(getProviders());
-  }
-
-  /**
    * Closes all initialized providers, suppressing individual close exceptions.
    * <p>
    * This method iterates over all providers that have been initialized via
