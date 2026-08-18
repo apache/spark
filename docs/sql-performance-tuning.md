@@ -101,7 +101,7 @@ Configuration of in-memory caching can be done via `spark.conf.set` or by runnin
     <td>None</td>
     <td>
       The suggested (not guaranteed) maximum number of split file partitions. If it is set,
-      Spark will rescale each partition to make the number of partitions is close to this
+      Spark will rescale each partition to make the number of partitions close to this
       value if the initial number of partitions exceeds this value. This configuration is
       effective only when using file-based sources such as Parquet, JSON and ORC.
     </td>
@@ -361,7 +361,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td><code>spark.sql.adaptive.coalescePartitions.parallelismFirst</code></td>
      <td>true</td>
      <td>
-       When true, Spark ignores the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> (default 64MB) when coalescing contiguous shuffle partitions, and only respect the minimum partition size specified by <code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code> (default 1MB), to maximize the parallelism. This is to avoid performance regressions when enabling adaptive query execution. It's recommended to set this config to false on a busy cluster to make resource utilization more efficient (not many small tasks).
+       When true, Spark ignores the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> (default 64MB) when coalescing contiguous shuffle partitions, and only respects the minimum partition size specified by <code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code> (default 1MB), to maximize the parallelism. This is to avoid performance regressions when enabling adaptive query execution. It's recommended to set this config to false on a busy cluster to make resource utilization more efficient (not many small tasks).
      </td>
      <td>3.2.0</td>
    </tr>
@@ -414,7 +414,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td><code>spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor</code></td>
      <td>0.2</td>
      <td>
-       A partition will be merged during splitting if its size is small than this factor multiply <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
+       A partition will be merged during splitting if its size is smaller than this factor multiplying <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
      </td>
      <td>3.3.0</td>
    </tr>
@@ -554,7 +554,7 @@ You can control the details of how AQE works by providing your own cost evaluato
 
 ## Storage Partition Join
 
-Storage Partition Join (SPJ) is an optimization technique in Spark SQL that makes use the existing storage layout to avoid the shuffle phase.
+Storage Partition Join (SPJ) is an optimization technique in Spark SQL that makes use of the existing storage layout to avoid the shuffle phase.
 
 This is a generalization of the concept of Bucket Joins, which is only applicable for [bucketed](sql-data-sources-load-save-functions.html#bucketing-sorting-and-partitioning) tables, to tables partitioned by functions registered in FunctionCatalog. Storage Partition Joins are currently supported for compatible V2 DataSources.
 
