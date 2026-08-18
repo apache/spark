@@ -4763,6 +4763,7 @@ object SQLConf {
 
   val COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD =
     buildConf("spark.sql.optimizer.collapseWindowWithEmptyOrderSpecInChild")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("When true, the optimizer collapses two adjacent windows with the same partition " +
         "spec into one when the window with the empty order spec is the child (inner) window. " +
         "This saves a WindowExec pass but can disable the WindowGroupLimit optimization for " +
