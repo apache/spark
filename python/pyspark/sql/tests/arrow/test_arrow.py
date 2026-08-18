@@ -958,8 +958,8 @@ class ArrowTestsMixin:
                 rows_df = self.spark.createDataFrame([(expected,)], schema)
                 self._assert_time_precision_df(rows_df, precision, expected)
 
-                pdf = pd.DataFrame({"t": [expected]})
-                pandas_df = self.spark.createDataFrame(pdf, schema)
+                # toPandas then createDataFrame must keep the declared TIME(p).
+                pandas_df = self.spark.createDataFrame(sql_df.toPandas(), schema)
                 self._assert_time_precision_df(pandas_df, precision, expected)
 
                 table = sql_df.toArrow()
