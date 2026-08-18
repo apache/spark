@@ -764,7 +764,7 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitRejectsSessionNameWithAccentedChar() {
-    // Accented 'é' is valid under \w but NOT valid in STS session names.
+    // U+00E9 (accented e) is valid under \w but NOT valid in STS session names.
     // This test would PASS (incorrectly) under the buggy \w pattern and must
     // FAIL (correctly) under the explicit ASCII pattern.
     assertInitThrowsForConfig(AwsStsCredentialProvider.CONF_SESSION_NAME, "café");
@@ -772,7 +772,7 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitRejectsSessionNameWithCjkChar() {
-    // CJK ideograph '世' is valid under \w but NOT valid in STS session names.
+    // U+4E16 (CJK ideograph) is valid under \w but NOT valid in STS session names.
     // Regression test for the ASCII-only fix.
     assertInitThrowsForConfig(AwsStsCredentialProvider.CONF_SESSION_NAME, "session世");
   }
