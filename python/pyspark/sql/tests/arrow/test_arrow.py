@@ -931,6 +931,54 @@ class ArrowTestsMixin:
             ArrayType(TimeType(3)),
         )
 
+    def _time_precision_e2e_cases(self):
+        # Python datetime.time stores microseconds only, so TIME(9) collects as us.
+        return (
+            ("12:34:56", 0, datetime.time(12, 34, 56)),
+            ("12:34:56.123", 3, datetime.time(12, 34, 56, 123000)),
+            ("12:34:56.123456", 6, datetime.time(12, 34, 56, 123456)),
+            ("12:34:56.123456789", 9, datetime.time(12, 34, 56, 123456)),
+        )
+
+    def _assert_time_precision_df(self, df, precision, expected):
+        self.assertEqual(df.schema["t"].dataType, TimeType(precision))
+        self.assertEqual(df.collect(), [Row(t=expected)])
+
+    def test_time_precision_e2e_createDataFrame_collect(self):
+        # SPARK-57696: createDataFrame / collect / toArrow keep TIME(p) end-to-end.
+        # ArrowParityTests runs this on Spark Connect as well.
+        for literal, precision, expected in self._time_precision_e2e_cases():
+            with self.subTest(precision=precision):
+                schema = StructType([StructField("t", TimeType(precision))])
+                sql_df = self.spark.sql(
+                    "SELECT CAST('%s' AS TIME(%d)) AS t" % (literal, precision)
+                )
+                self._assert_time_precision_df(sql_df, precision, expected)
+
+                rows_df = self.spark.createDataFrame([(expected,)], schema)
+                self._assert_time_precision_df(rows_df, precision, expected)
+
+                pdf = pd.DataFrame({"t": [expected]})
+                pandas_df = self.spark.createDataFrame(pdf, schema)
+                self._assert_time_precision_df(pandas_df, precision, expected)
+
+                table = sql_df.toArrow()
+                self.assertEqual(
+                    table.schema.field("t").metadata[time_precision_key],
+                    str(precision).encode("utf-8"),
+                )
+                self.assertEqual(from_arrow_schema(table.schema), schema)
+                arrow_df = self.spark.createDataFrame(table)
+                self._assert_time_precision_df(arrow_df, precision, expected)
+
+                # Untagged time64 has no precision key, so inference stays TIME(6).
+                if precision != 6:
+                    untagged = pa.table(
+                        {"t": pa.array([expected], type=pa.time64("ns"))}
+                    )
+                    inferred = self.spark.createDataFrame(untagged)
+                    self.assertEqual(inferred.schema["t"].dataType, TimeType())
+
     def test_createDataFrame_with_ndarray(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):

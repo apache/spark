@@ -16,6 +16,7 @@
 #
 
 from decimal import Decimal
+import datetime
 import unittest
 
 from pyspark.errors import AnalysisException, PythonException, PySparkNotImplementedError
@@ -32,6 +33,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimeType,
     VarcharType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -269,6 +271,25 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
 
             rounded = df.select(f("v").alias("d")).first().d
             self.assertEqual(rounded, Decimal("1.233999999999999986"))
+
+    def test_time_precision_python_udf(self):
+        # SPARK-57696: Arrow and pickled Python UDFs keep TIME(p) through collect.
+        cases = (
+            ("12:34:56", 0, datetime.time(12, 34, 56)),
+            ("12:34:56.123", 3, datetime.time(12, 34, 56, 123000)),
+            ("12:34:56.123456", 6, datetime.time(12, 34, 56, 123456)),
+            ("12:34:56.123456789", 9, datetime.time(12, 34, 56, 123456)),
+        )
+        for literal, precision, expected in cases:
+            for use_arrow in (True, False):
+                with self.subTest(precision=precision, use_arrow=use_arrow):
+                    df = self.spark.sql(
+                        "SELECT CAST('%s' AS TIME(%d)) AS t" % (literal, precision)
+                    )
+                    ident = udf(lambda t: t, TimeType(precision), useArrow=use_arrow)
+                    out = df.select(ident("t").alias("t"))
+                    self.assertEqual(out.schema["t"].dataType, TimeType(precision))
+                    self.assertEqual(out.collect(), [Row(t=expected)])
 
     def test_err_return_type(self):
         with self.assertRaises(PySparkNotImplementedError) as pe:
