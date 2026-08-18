@@ -460,8 +460,10 @@ class ALSModel private[ml] (
         var scores: Array[Float] = null
         var idxOrd: GuavaOrdering[Int] = null
         iter.flatMap { case (srcIds, srcMat, dstIds, dstMat) =>
-          require(srcMat.length == srcIds.length * rank)
-          require(dstMat.length == dstIds.length * rank)
+          require(srcMat.length == srcIds.length * rank,
+            s"srcMat has ${srcMat.length} entries, expected ${srcIds.length * rank}.")
+          require(dstMat.length == dstIds.length * rank,
+            s"dstMat has ${dstMat.length} entries, expected ${dstIds.length * rank}.")
           val m = srcIds.length
           val n = dstIds.length
           if (scores == null || scores.length < n) {
@@ -891,7 +893,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         ata = new Array[Double](rank * rank)
         initialized = true
       } else {
-        require(this.rank == rank)
+        require(this.rank == rank,
+          s"Expected rank ${this.rank} but found $rank.")
       }
     }
 
@@ -968,8 +971,10 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
     /** Adds an observation. */
     def add(a: Array[Float], b: Double, c: Double = 1.0): NormalEquation = {
-      require(c >= 0.0)
-      require(a.length == k)
+      require(c >= 0.0,
+        s"Observation weight must be non-negative but found $c.")
+      require(a.length == k,
+        s"Observation length ${a.length} must equal rank $k.")
       copyToDouble(a)
       BLAS.nativeBLAS.dspr(upper, k, c, da, 1, ata)
       if (b != 0.0) {
@@ -980,7 +985,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
     /** Merges another normal equation object. */
     def merge(other: NormalEquation): NormalEquation = {
-      require(other.k == k)
+      require(other.k == k,
+        s"Cannot merge normal equations of rank ${other.k} into rank $k.")
       BLAS.nativeBLAS.daxpy(ata.length, 1.0, other.ata, 1, ata, 1)
       BLAS.nativeBLAS.daxpy(atb.length, 1.0, other.atb, 1, atb, 1)
       this
@@ -1330,8 +1336,10 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       ratings: Array[Float]) {
     /** Size of the block. */
     def size: Int = ratings.length
-    require(dstEncodedIndices.length == size)
-    require(dstPtrs.length == srcIds.length + 1)
+    require(dstEncodedIndices.length == size,
+      s"dstEncodedIndices has ${dstEncodedIndices.length} entries, expected $size.")
+    require(dstPtrs.length == srcIds.length + 1,
+      s"dstPtrs has ${dstPtrs.length} entries, expected ${srcIds.length + 1}.")
   }
 
   /**
@@ -1373,8 +1381,10 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       ratings: Array[Float]) {
     /** Size of the block. */
     def size: Int = srcIds.length
-    require(dstIds.length == srcIds.length)
-    require(ratings.length == srcIds.length)
+    require(dstIds.length == srcIds.length,
+      s"dstIds has ${dstIds.length} entries, expected ${srcIds.length}.")
+    require(ratings.length == srcIds.length,
+      s"ratings has ${ratings.length} entries, expected ${srcIds.length}.")
   }
 
   /**
@@ -1497,8 +1507,10 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         dstLocalIndices: Array[Int],
         ratings: Array[Float]): this.type = {
       val sz = srcIds.length
-      require(dstLocalIndices.length == sz)
-      require(ratings.length == sz)
+      require(dstLocalIndices.length == sz,
+        s"dstLocalIndices has ${dstLocalIndices.length} entries, expected $sz.")
+      require(ratings.length == sz,
+        s"ratings has ${ratings.length} entries, expected $sz.")
       this.srcIds ++= srcIds
       this.ratings ++= ratings
       var j = 0
@@ -1878,8 +1890,10 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
     /** Encodes a (blockId, localIndex) into a single integer. */
     def encode(blockId: Int, localIndex: Int): Int = {
-      require(blockId < numBlocks)
-      require((localIndex & ~localIndexMask) == 0)
+      require(blockId < numBlocks,
+        s"blockId $blockId must be less than numBlocks $numBlocks.")
+      require((localIndex & ~localIndexMask) == 0,
+        s"localIndex $localIndex exceeds the maximum encodable value.")
       (blockId << numLocalIndexBits) | localIndex
     }
 
