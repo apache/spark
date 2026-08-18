@@ -307,6 +307,45 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("-+~~a", -( +(~(~$"a"))))
   }
 
+  test("JSON_VALUE expressions") {
+    import org.apache.spark.sql.catalyst.expressions.JsonValueBehavior
+    // Bare form: default STRING RETURNING, NULL ON EMPTY / NULL ON ERROR.
+    assertEqual(
+      "json_value(a, '$.b')",
+      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Null, JsonValueBehavior.Null,
+        None, None))
+    // RETURNING.
+    assertEqual(
+      "json_value(a, '$.b' RETURNING INT)",
+      JsonValue($"a", "$.b", IntegerType, JsonValueBehavior.Null, JsonValueBehavior.Null,
+        None, None))
+    // ERROR ON EMPTY / ERROR ON ERROR.
+    assertEqual(
+      "json_value(a, '$.b' ERROR ON EMPTY ERROR ON ERROR)",
+      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Error, JsonValueBehavior.Error,
+        None, None))
+    // DEFAULT ON EMPTY / DEFAULT ON ERROR carry expressions.
+    assertEqual(
+      "json_value(a, '$.b' DEFAULT 'x' ON EMPTY DEFAULT 'y' ON ERROR)",
+      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Default, JsonValueBehavior.Default,
+        Some(Literal("x")), Some(Literal("y"))))
+  }
+
+  test("JSON_EXISTS expressions") {
+    import org.apache.spark.sql.catalyst.expressions.JsonExistsBehavior
+    // Bare form defaults to FALSE ON ERROR.
+    assertEqual("json_exists(a, '$.b')", JsonExists($"a", "$.b", JsonExistsBehavior.False))
+    assertEqual(
+      "json_exists(a, '$.b' TRUE ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.True))
+    assertEqual(
+      "json_exists(a, '$.b' FALSE ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.False))
+    assertEqual(
+      "json_exists(a, '$.b' UNKNOWN ON ERROR)",
+      JsonExists($"a", "$.b", JsonExistsBehavior.Unknown))
+    assertEqual(
+      "json_exists(a, '$.b' ERROR ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.Error))
+  }
+
   test("cast expressions") {
     // Note that DataType parsing is tested elsewhere.
     assertEqual("cast(a as int)", $"a".cast(IntegerType))

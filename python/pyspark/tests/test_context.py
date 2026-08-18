@@ -321,6 +321,33 @@ class ContextTests(unittest.TestCase):
         with SparkContext("local-cluster[3, 1, 1024]") as sc:
             sc.range(2).foreach(lambda _: create_spark_context())
 
+    def test_cancel_all_jobs_reason_reaches_the_job_failure(self):
+        # SPARK-58616: the reason must survive the trip to the JVM and land in the cancelled
+        # job's error, instead of the generic "as part of cancellation of all jobs".
+        with SparkContext() as sc:
+            errors = []
+
+            def run_job():
+                try:
+                    sc.parallelize(range(4), 4).map(lambda x: time.sleep(60)).collect()
+                except Exception as e:
+                    errors.append(str(e))
+
+            job = threading.Thread(target=run_job)
+            job.start()
+            # Wait for the job to reach the scheduler before cancelling it.
+            deadline = time.time() + 60
+            while not sc.statusTracker().getActiveJobsIds():
+                self.assertLess(time.time(), deadline, "job never reached the scheduler")
+                time.sleep(0.1)
+
+            sc.cancelAllJobs(reason="because the test asked for it")
+            job.join(60)
+
+            self.assertEqual(len(errors), 1)
+            self.assertIn("because the test asked for it", errors[0])
+            self.assertNotIn("as part of cancellation of all jobs", errors[0])
+
 
 class ContextTestsWithResources(unittest.TestCase):
     def setUp(self):

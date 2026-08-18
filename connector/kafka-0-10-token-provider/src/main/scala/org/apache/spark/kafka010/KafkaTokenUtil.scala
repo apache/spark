@@ -68,9 +68,13 @@ object KafkaTokenUtil extends Logging {
     checkProxyUser()
 
     val adminClient = AdminClient.create(createAdminClientProperties(sparkConf, clusterConf))
-    val createDelegationTokenOptions = new CreateDelegationTokenOptions()
-    val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
-    val token = createResult.delegationToken().get()
+    val token = try {
+      val createDelegationTokenOptions = new CreateDelegationTokenOptions()
+      val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
+      createResult.delegationToken().get()
+    } finally {
+      Utils.closeQuietly(adminClient)
+    }
     printToken(token)
 
     (new Token[KafkaDelegationTokenIdentifier](

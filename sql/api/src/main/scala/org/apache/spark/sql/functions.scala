@@ -7534,6 +7534,34 @@ object functions {
     Column.fn("try_validate_utf8", str)
 
   /**
+   * Returns the Unicode normalization of `str` using the given normalization `form`. Valid forms
+   * are 'NFC', 'NFD', 'NFKC', and 'NFKD', as defined by Unicode Standard Annex #15. The form name
+   * is case-insensitive. Normalization is backed by Spark's bundled ICU4J library rather than the
+   * JVM's own Unicode data, so results are stable across JVM vendors and versions.
+   *
+   * @param str
+   *   the input string to normalize.
+   * @param form
+   *   the normalization form: 'NFC', 'NFD', 'NFKC', or 'NFKD'.
+   * @group string_funcs
+   * @since 4.4.0
+   */
+  def normalize(str: Column, form: Column): Column =
+    Column.fn("normalize", str, form)
+
+  /**
+   * Returns the Unicode normalization of `str` using the default form 'NFC'. To use a different
+   * form, call the two-argument overload.
+   *
+   * @param str
+   *   the input string to normalize.
+   * @group string_funcs
+   * @since 4.4.0
+   */
+  def normalize(str: Column): Column =
+    Column.fn("normalize", str)
+
+  /**
    * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places with
    * HALF_EVEN round mode, and returns the result as a string column.
    *
@@ -14655,6 +14683,32 @@ object functions {
    */
   def try_variant_array_append(v: Column, path: String, value: Column): Column =
     Column.fn("try_variant_array_append", v, lit(path), value)
+
+  /**
+   * Recursively removes object fields and array elements whose value is a variant null. Returns
+   * NULL if `v` is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_strip_nulls(v: Column): Column = Column.fn("variant_strip_nulls", v)
+
+  /**
+   * Recursively removes object fields and array elements whose value is a variant null, unless
+   * `includeArrays` is false, in which case null array elements are kept. Returns NULL if any
+   * argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param includeArrays
+   *   whether null elements are also removed from arrays.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_strip_nulls(v: Column, includeArrays: Boolean): Column =
+    Column.fn("variant_strip_nulls", v, lit(includeArrays))
 
   /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to

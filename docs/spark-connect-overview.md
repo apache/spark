@@ -111,17 +111,19 @@ latest release in  the release drop down at the top of the page. Then choose you
 
 Now extract the Spark package you just downloaded on your computer, for example:
 
-{% highlight bash %}
+```bash
 tar -xvf spark-{{site.SPARK_VERSION_SHORT}}-bin-hadoop3.tgz
-{% endhighlight %}
+```
 
 In a terminal window, go to the `spark` folder in the location where you extracted
 Spark before and run the `start-connect-server.sh` script to start Spark server with
 Spark Connect, like in this example:
 
-{% highlight bash %}
+```bash
 ./sbin/start-connect-server.sh
-{% endhighlight %}
+```
+
+Alternatively, `./bin/spark-connect-shell` starts an interactive Scala shell with the Connect server hosted inside the shell process itself.
 
 Make sure to use the same version  of the package as the Spark version you
 downloaded previously. In this example, Spark {{site.SPARK_VERSION_SHORT}} with Scala 2.13.

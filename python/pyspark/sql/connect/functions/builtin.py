@@ -2327,6 +2327,13 @@ def try_variant_array_append(
 try_variant_array_append.__doc__ = pysparkfuncs.try_variant_array_append.__doc__
 
 
+def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
+    return _invoke_function("variant_strip_nulls", _to_col(v), lit(include_arrays))
+
+
+variant_strip_nulls.__doc__ = pysparkfuncs.variant_strip_nulls.__doc__
+
+
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     assert isinstance(path, (Column, str))
     if isinstance(path, str):
@@ -2732,6 +2739,16 @@ def try_validate_utf8(str: "ColumnOrName") -> Column:
 
 
 try_validate_utf8.__doc__ = pysparkfuncs.try_validate_utf8.__doc__
+
+
+def normalize(str: "ColumnOrName", form: Optional["ColumnOrName"] = None) -> Column:
+    if form is None:
+        return _invoke_function_over_columns("normalize", str)
+    else:
+        return _invoke_function_over_columns("normalize", str, form)
+
+
+normalize.__doc__ = pysparkfuncs.normalize.__doc__
 
 
 def format_number(col: "ColumnOrName", d: int) -> Column:

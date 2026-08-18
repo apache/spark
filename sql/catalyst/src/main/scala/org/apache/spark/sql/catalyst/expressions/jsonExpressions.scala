@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
   JsonPathParser, JsonPathResult, JsonTableEvaluator, JsonTablePathTrie, JsonToStructsEvaluator,
-  JsonTupleEvaluator, MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator,
-  StructsToJsonEvaluator}
+  JsonTupleEvaluator, JsonValueLookup, MultiGetJsonObjectEvaluator, PathInstruction,
+  SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
@@ -634,6 +634,348 @@ case class JsonTable(
   }
 
   override protected def withNewChildInternal(newChild: Expression): JsonTable =
+    copy(child = newChild)
+}
+
+/**
+ * Behavior of `JSON_VALUE`'s `ON EMPTY` / `ON ERROR` clause: what to produce when the path matches
+ * nothing, or when the input/extraction fails.
+ */
+sealed trait JsonValueBehavior
+object JsonValueBehavior {
+  /** Produce SQL NULL (the SQL-standard default for both ON EMPTY and ON ERROR). */
+  case object Null extends JsonValueBehavior
+  /** Raise an error. */
+  case object Error extends JsonValueBehavior
+  /** Produce the value of a `DEFAULT` expression, cast to the RETURNING type. */
+  case object Default extends JsonValueBehavior
+}
+
+// scalastyle:off line.size.limit
+/**
+ * The SQL:2016 `JSON_VALUE` scalar function (feature T821): extracts a single scalar located by a
+ * SQL/JSON `path` from a JSON input, casts it to the `RETURNING` type (default STRING), and applies
+ * the `ON EMPTY` / `ON ERROR` behavior when the path matches nothing or the extraction/cast fails:
+ *
+ *   - missing path                       -> ON EMPTY behavior
+ *   - explicit JSON `null`                -> SQL NULL
+ *   - non-scalar (object/array) match     -> ON ERROR behavior
+ *   - malformed / non-single-value input  -> ON ERROR behavior
+ *   - scalar match, cast fails            -> ON ERROR behavior
+ *   - scalar match, cast succeeds         -> the cast value
+ *
+ * Both clauses default to NULL per the standard. A `null` JSON input yields SQL NULL directly, not
+ * the ON EMPTY/ERROR path.
+ *
+ * `emptyDefault` / `errorDefault` hold the `DEFAULT <expr>` expressions, present only for the
+ * corresponding `Default` behavior. The child list is variable (0-2 defaults), so this extends
+ * `Expression` directly rather than `UnaryExpression`.
+ *
+ * {{{
+ *   JSON_VALUE('{"id":7}', '$.id' RETURNING INT)                    -- 7
+ *   JSON_VALUE('{"id":7}', '$.missing' DEFAULT -1 ON EMPTY)          -- -1
+ *   JSON_VALUE('{"a":{}}', '$.a' ERROR ON ERROR)                     -- raises (non-scalar)
+ * }}}
+ */
+// scalastyle:on line.size.limit
+case class JsonValue(
+    child: Expression,
+    path: String,
+    returning: DataType,
+    onEmpty: JsonValueBehavior,
+    onError: JsonValueBehavior,
+    emptyDefault: Option[Expression],
+    errorDefault: Option[Expression],
+    timeZoneId: Option[String] = None,
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends Expression
+  with TimeZoneAwareExpression
+  with CodegenFallback
+  with ExpectsInputTypes
+  with QueryErrorsBase {
+
+  override def nullable: Boolean = true
+
+  // Reuses the mutable `castInput` row across rows (see `castScalar`), so it holds evaluation
+  // state. Interpreted execution must fresh-copy the expression before use, or a shared instance
+  // could cast another concurrent evaluation's value; matches the neighboring JSON expressions.
+  override def stateful: Boolean = true
+
+  // Children: the JSON input first, then whichever DEFAULT expressions are present. The two
+  // defaults are resolved/coerced through the normal child machinery; their cast to `returning`
+  // happens at eval time via `emptyDefaultCast` / `errorDefaultCast`.
+  override def children: Seq[Expression] =
+    child +: (emptyDefault.toSeq ++ errorDefault.toSeq)
+
+  // One entry per child: the JSON input must be STRING; the DEFAULT children accept anything (they
+  // are cast to `returning` explicitly at eval). One entry per child is required because the
+  // coercion rule zips `children` against `inputTypes` and rebuilds via `withNewChildren`; a
+  // shorter list would truncate the zip and pass the wrong child count.
+  override def inputTypes: Seq[AbstractDataType] =
+    StringTypeWithCollation(supportsTrimCollation = true) +:
+      children.tail.map(_ => AnyDataType)
+
+  override def dataType: DataType = returning
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputCheck = super.checkInputDataTypes()
+    if (inputCheck.isFailure) {
+      inputCheck
+    } else if (!JsonPathParser.hasWildcard(path).contains(false)) {
+      // The path must parse and be wildcard-free (JSON_VALUE returns a single scalar). The
+      // `INVALID_JSON_PATH` message is shared with `JSON_EXISTS`, which does accept wildcards, so
+      // it must stay generic -- do not re-add wildcard-specific wording here.
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_PATH",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName), "path" -> toSQLValue(path)))
+    } else if (!JsonValue.isValidReturningType(returning)) {
+      // RETURNING is restricted to scalar (atomic) types per ANSI 9075-2 6.28.
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_SCALAR_RETURNING_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName), "returningType" -> toSQLType(returning)))
+    } else {
+      // Each DEFAULT expression is cast to the RETURNING type at eval time (see
+      // `emptyDefaultCast` / `errorDefaultCast`). Those casts are not analyzed children, so an
+      // uncastable default (e.g. `DEFAULT array(1)` with `RETURNING INT`) would otherwise slip
+      // past analysis and fail late only when its branch is taken. Surface the cast's own type
+      // check here so it is rejected up front with the standard CAST_* message.
+      (emptyDefaultCast ++ errorDefaultCast)
+        .map(_.checkInputDataTypes())
+        .find(_.isFailure)
+        .getOrElse(TypeCheckResult.TypeCheckSuccess)
+    }
+  }
+
+  // Eval mode for the user-provided DEFAULT expression casts: follows the session ANSI setting like
+  // any ordinary value cast. The extracted-scalar cast is separate (see `valueCast`).
+  @transient private lazy val defaultEvalMode = EvalMode.fromBoolean(ansiEnabled)
+
+  // Path parsed once (the grammar makes it a string literal). `checkInputDataTypes` guarantees it
+  // parses and is wildcard-free, so the evaluator is only built for a valid path.
+  @transient private lazy val evaluator: JsonTableEvaluator =
+    JsonTableEvaluator(JsonPathParser.parse(path).getOrElse(Nil), explodeRoot = false)
+
+  // Cast from the extracted scalar's STRING form to the RETURNING type, built once over a reused
+  // input slot to avoid per-row allocation. Always an ANSI (throwing) cast, independent of the
+  // session's ANSI setting, so a failed conversion always routes to ON ERROR (see `eval`) rather
+  // than being silently turned into NULL by a non-ANSI session.
+  @transient private lazy val valueCast: Expression =
+    Cast(BoundReference(0, StringType, nullable = true), returning, timeZoneId, EvalMode.ANSI)
+  @transient private lazy val castInput: GenericInternalRow = new GenericInternalRow(1)
+
+  // Casts for the DEFAULT expressions to the RETURNING type (only built when present).
+  @transient private lazy val emptyDefaultCast: Option[Expression] =
+    emptyDefault.map(e => Cast(e, returning, timeZoneId, defaultEvalMode))
+  @transient private lazy val errorDefaultCast: Option[Expression] =
+    errorDefault.map(e => Cast(e, returning, timeZoneId, defaultEvalMode))
+
+  private def castScalar(text: UTF8String): Any = {
+    castInput.update(0, text)
+    valueCast.eval(castInput)
+  }
+
+  // Handle the ON EMPTY case per the configured behavior.
+  private def onEmptyResult(input: InternalRow): Any = onEmpty match {
+    case JsonValueBehavior.Null => null
+    case JsonValueBehavior.Default => emptyDefaultCast.get.eval(input)
+    case JsonValueBehavior.Error =>
+      throw QueryExecutionErrors.jsonValueOnEmptyError(prettyName, path, cause = null)
+  }
+
+  // Handle the ON ERROR case per the configured behavior. `cause` (if any) is attached for context.
+  private def onErrorResult(input: InternalRow, cause: Throwable): Any = onError match {
+    case JsonValueBehavior.Null => null
+    case JsonValueBehavior.Default => errorDefaultCast.get.eval(input)
+    case JsonValueBehavior.Error =>
+      throw QueryExecutionErrors.jsonValueOnErrorError(prettyName, path, cause)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // NULL input propagates to NULL (not ON EMPTY / ON ERROR), matching ANSI and the other engines.
+    if (json == null) return null
+    evaluator.lookup(json) match {
+      // Malformed / non-single-value input.
+      case None => onErrorResult(input, cause = null)
+      // Path matched nothing.
+      case Some(JsonValueLookup.Missing) => onEmptyResult(input)
+      // Matched an explicit JSON null: a present, scalar null value -> SQL NULL.
+      case Some(JsonValueLookup.NullValue) => null
+      // Matched an object or array: not a scalar -> ON ERROR.
+      case Some(JsonValueLookup.NonScalar) => onErrorResult(input, cause = null)
+      case Some(JsonValueLookup.Scalar(text)) =>
+        // `valueCast` throws on a failed conversion, which routes to ON ERROR.
+        try castScalar(text) catch { case e: Exception => onErrorResult(input, e) }
+    }
+  }
+
+  override def prettyName: String = "json_value"
+
+  override def sql: String = {
+    val returningSQL = if (returning == StringType) "" else s" RETURNING ${returning.sql}"
+    def behaviorSQL(b: JsonValueBehavior, default: Option[Expression]): String = b match {
+      case JsonValueBehavior.Null => "NULL"
+      case JsonValueBehavior.Error => "ERROR"
+      case JsonValueBehavior.Default => s"DEFAULT ${default.get.sql}"
+    }
+    val emptySQL = if (onEmpty == JsonValueBehavior.Null) ""
+      else s" ${behaviorSQL(onEmpty, emptyDefault)} ON EMPTY"
+    val errorSQL = if (onError == JsonValueBehavior.Null) ""
+      else s" ${behaviorSQL(onError, errorDefault)} ON ERROR"
+    // Render the path as a properly escaped string literal so bracket-quoted paths such as
+    // `$['a']` (and any path containing a quote or backslash) round-trip as valid SQL.
+    val pathSQL = Literal(UTF8String.fromString(path), StringType).sql
+    s"JSON_VALUE(${child.sql}, $pathSQL$returningSQL$emptySQL$errorSQL)"
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): JsonValue = {
+    // Rebuild the child list in the same order `children` produced it: json, then the present
+    // defaults. `copy(child = ...)` alone would drop coercion applied to the DEFAULT children.
+    var i = 1
+    val newEmpty = emptyDefault.map { _ => val e = newChildren(i); i += 1; e }
+    val newError = errorDefault.map { _ => val e = newChildren(i); i += 1; e }
+    copy(child = newChildren(0), emptyDefault = newEmpty, errorDefault = newError)
+  }
+}
+
+object JsonValue {
+  /**
+   * ANSI (9075-2 6.28) restricts JSON_VALUE RETURNING to predefined scalar types: string, numeric,
+   * boolean, and datetime. We allow exactly those families. Note this deliberately excludes VARIANT
+   * (a Spark extension, deferred per the design's open question) and BINARY, even though both are
+   * `AtomicType`s -- so an `AtomicType` check is not sufficient. STRUCT/ARRAY/MAP are excluded as
+   * non-atomic. CHAR/VARCHAR are normalized to STRING by the parser before reaching here.
+   */
+  def isValidReturningType(dt: DataType): Boolean = dt match {
+    case _: StringType => true
+    case _: NumericType => true
+    case BooleanType => true
+    case _: DatetimeType => true
+    case _ => false
+  }
+}
+
+/**
+ * Behavior of `JSON_EXISTS`'s `ON ERROR` clause: the value produced when the input is not a single
+ * well-formed JSON value (malformed / trailing garbage). `Unknown` is a BOOLEAN NULL.
+ */
+sealed trait JsonExistsBehavior
+object JsonExistsBehavior {
+  case object True extends JsonExistsBehavior
+  case object False extends JsonExistsBehavior
+  case object Unknown extends JsonExistsBehavior
+  case object Error extends JsonExistsBehavior
+}
+
+/**
+ * The SQL:2016 `JSON_EXISTS` predicate (feature T821): returns whether a SQL/JSON `path` matches at
+ * least one item in a JSON input.
+ *
+ *   - path matches (including an explicit JSON `null`) -> true
+ *   - path matches nothing                              -> false
+ *   - malformed / non-single-value input                -> ON ERROR behavior (default FALSE)
+ *   - SQL NULL input                                     -> SQL NULL (Unknown, per 9075-2 8.23)
+ *
+ * This distinguishes "present but null" from "absent" (unlike `get_json_object(...) IS NOT NULL`).
+ * The `ON ERROR` clause chooses TRUE / FALSE / UNKNOWN (a BOOLEAN NULL) / ERROR; it defaults to
+ * FALSE ON ERROR.
+ *
+ * Paths are evaluated in SQL/JSON lax mode (matching Oracle / PostgreSQL): wildcards are supported
+ * and arrays are auto-wrapped/unwrapped, while a structural mismatch is a non-match, not an error.
+ *
+ * {{{
+ *   JSON_EXISTS('{"a":{"b":1}}', '$.a.b')            -- true
+ *   JSON_EXISTS('{"a":null}', '$.a')                 -- true  (present, value is null)
+ *   JSON_EXISTS('{"a":1}', '$.b')                    -- false (absent)
+ *   JSON_EXISTS('{"a":[1,2]}', '$.a[*]')             -- true  (array has elements)
+ *   JSON_EXISTS('not json', '$.a' TRUE ON ERROR)     -- true
+ * }}}
+ */
+case class JsonExists(
+    child: Expression,
+    path: String,
+    onError: JsonExistsBehavior)
+  extends UnaryExpression
+  with CodegenFallback
+  with ExpectsInputTypes
+  with QueryErrorsBase {
+
+  // The result is NULL only when the input is SQL NULL, or when `UNKNOWN ON ERROR` turns malformed
+  // input into a BOOLEAN NULL. With a non-nullable input and any other ON ERROR behavior the result
+  // is always a concrete boolean, which lets the optimizer treat e.g. a WHERE predicate as such.
+  override def nullable: Boolean =
+    child.nullable || onError == JsonExistsBehavior.Unknown
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def dataType: DataType = BooleanType
+
+  // The path is a constant (the grammar makes it a string literal), so it is parsed once and shared
+  // by `checkInputDataTypes` and `evaluator` rather than reparsed. `None` means it did not parse.
+  @transient private lazy val parsedPath: Option[Seq[PathInstruction]] = JsonPathParser.parse(path)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputCheck = super.checkInputDataTypes()
+    if (inputCheck.isFailure) {
+      inputCheck
+    } else if (parsedPath.isDefined) {
+      // A valid SQL/JSON path. Wildcards are allowed and evaluated in lax mode at runtime.
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      // The path is not a valid SQL/JSON path. `JSON_EXISTS` reaches this branch only for a
+      // syntactically malformed path -- wildcards parse and are accepted above. The shared
+      // `INVALID_JSON_PATH` error is also raised by `JSON_VALUE` (which additionally rejects
+      // wildcards, as it returns a single scalar); its message is worded generically for both.
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_PATH",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName), "path" -> toSQLValue(path)))
+    }
+  }
+
+  // `checkInputDataTypes` guarantees the path parses before this is forced; `Nil` is an unreachable
+  // fallback that would match the document root.
+  @transient private lazy val evaluator: JsonTableEvaluator =
+    JsonTableEvaluator(parsedPath.getOrElse(Nil), explodeRoot = false)
+
+  private def onErrorResult(): Any = onError match {
+    case JsonExistsBehavior.True => true
+    case JsonExistsBehavior.False => false
+    case JsonExistsBehavior.Unknown => null
+    case JsonExistsBehavior.Error =>
+      throw QueryExecutionErrors.jsonExistsOnError(prettyName, path)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // SQL NULL input yields Unknown (BOOLEAN NULL), not the ON ERROR path, per 9075-2 8.23.
+    if (json == null) return null
+    evaluator.pathExists(json) match {
+      case Some(exists) => exists
+      case None => onErrorResult() // malformed / non-single-value input
+    }
+  }
+
+  override def prettyName: String = "json_exists"
+
+  override def sql: String = {
+    val errorSQL = onError match {
+      case JsonExistsBehavior.False => "" // the default
+      case JsonExistsBehavior.True => " TRUE ON ERROR"
+      case JsonExistsBehavior.Unknown => " UNKNOWN ON ERROR"
+      case JsonExistsBehavior.Error => " ERROR ON ERROR"
+    }
+    s"JSON_EXISTS(${child.sql}, ${toSQLValue(path)}$errorSQL)"
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): JsonExists =
     copy(child = newChild)
 }
 

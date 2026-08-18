@@ -28,9 +28,9 @@ own server-side session, so session-local state does not leak between runs.
 
 The discovery file, the daemon's pid file, and the logs live in a per-user ``0700`` directory
 under the system temp dir; ``SPARK_LOCAL_CONNECT_DISCOVERY`` overrides the discovery file
-location. The auth token is stored with ``0600`` and the server binds localhost, so other
-users on the machine can neither read the token nor reach the server. Processes of the same
-user share the server by design.
+location. The auth token is stored with ``0600`` and the server always binds IPv4 loopback,
+overriding any configured binding address, so other users on the machine can neither read the
+token nor authenticate to the server. Processes of the same user share the server by design.
 
 The server runs until stopped with ``python -m pyspark.sql.connect.local_server --stop``.
 (A plain ``sbin/stop-connect-server.sh`` cannot find it: the daemon runs with a custom pid
@@ -73,6 +73,24 @@ def _pid_alive(pid: int) -> bool:
     except OSError:
         pass
     return True
+
+
+def _is_local_connect_server(pid: int) -> Optional[bool]:
+    """Whether ``pid`` is still the managed Connect server recorded in discovery.
+
+    Returns ``None`` when the process cannot be inspected, so callers do not discard the
+    discovery information needed to retry later.
+    """
+    try:
+        result = subprocess.run(
+            ["ps", "-ww", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.returncode == 0 and _SERVER_CLASS in result.stdout
 
 
 def runtime_dir() -> str:
@@ -247,14 +265,18 @@ class LocalConnectServer:
         ).launch()
         self._reload()
 
-    def stop(self) -> bool:
+    def stop(self) -> Optional[bool]:
         stopped = False
         if self.pid is not None:
-            try:
-                os.kill(self.pid, signal.SIGTERM)
-                stopped = True
-            except OSError:
-                pass
+            is_server = _is_local_connect_server(self.pid)
+            if is_server is None:
+                return None
+            if is_server:
+                try:
+                    os.kill(self.pid, signal.SIGTERM)
+                    stopped = True
+                except OSError:
+                    pass
         self._discovery.clear()
         return stopped
 
@@ -419,6 +441,8 @@ class ServerLauncher:
             "--master",
             self._master,
             "--conf",
+            "spark.connect.grpc.binding.address=127.0.0.1",
+            "--conf",
             "spark.connect.grpc.binding.port={}".format(port),
         ]
         if conf_file is not None:
@@ -522,9 +546,11 @@ def reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> st
         return LocalConnectServer(discovery).reuse_or_start(master, opts)
 
 
-def stop_local_connect_server() -> bool:
+def stop_local_connect_server() -> Optional[bool]:
     """Stop the recorded persistent local Connect server, if any; safe to call when none is
-    running. Also available as ``python -m pyspark.sql.connect.local_server --stop``.
+    running. Returns ``True`` when the server was signalled, ``False`` when no matching server
+    was found, and ``None`` when the process could not be inspected. Also available as
+    ``python -m pyspark.sql.connect.local_server --stop``.
     """
     with Discovery() as discovery:
         return LocalConnectServer(discovery).stop()
@@ -544,8 +570,12 @@ def main() -> None:
     if not args.stop:
         parser.print_help(sys.stderr)
         sys.exit(2)
-    if stop_local_connect_server():
+    stopped = stop_local_connect_server()
+    if stopped:
         print("Stopped the persistent local Spark Connect server.")
+    elif stopped is None:
+        print("Could not verify the persistent local Spark Connect server; try again later.")
+        sys.exit(1)
     else:
         print("No running persistent local Spark Connect server found.")
 

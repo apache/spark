@@ -974,7 +974,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def writingJobFailedError(cause: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2070",
+      errorClass = "WRITING_JOB_FAILED",
       messageParameters = Map.empty,
       cause = cause)
   }
@@ -1623,6 +1623,26 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "badRecord" -> badRecord,
         "failFastMode" -> FailFastMode.name),
       cause = e)
+  }
+
+  def jsonValueOnEmptyError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_VALUE_ON_ERROR.EMPTY",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
+  }
+
+  def jsonValueOnErrorError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_VALUE_ON_ERROR.ERROR",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
+  }
+
+  def jsonExistsOnError(functionName: String, path: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_EXISTS_ON_ERROR",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)))
   }
 
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
@@ -2550,6 +2570,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "parameter" -> toSQLId("key"),
         "functionName" -> toSQLId("hmac"),
         "detailMessage" -> detailMessage))
+  }
+
+  def invalidNormalizeFormError(form: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+      messageParameters = Map(
+        "parameter" -> toSQLId("form"),
+        "functionName" -> toSQLId("normalize"),
+        "form" -> toSQLValue(form, StringType)))
   }
 
   def hiveTableWithAnsiIntervalsError(
