@@ -82,8 +82,8 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     Table is defined using the path provided as `LOCATION`, does not use default location for this table.
     Dropping an external table removes catalog metadata and leaves the data files in place.
-    `CREATE EXTERNAL TABLE` for a data source table must include `LOCATION` or an equivalent path option.
-    A data source table created with `LOCATION` or a path option is also external even without the
+    `CREATE EXTERNAL TABLE` for a data source table must include `LOCATION`.
+    A data source table created with `LOCATION` is also external even without the
     `EXTERNAL` keyword.
 
 * **LOCATION**
@@ -128,10 +128,6 @@ CREATE TABLE student (id INT, name STRING, age INT) USING CSV;
 CREATE EXTERNAL TABLE student (id INT, name STRING, age INT)
     USING parquet
     LOCATION '/tmp/student';
-
-CREATE EXTERNAL TABLE student_ext (id INT, name STRING)
-    USING parquet
-    OPTIONS (PATH '/tmp/student_ext');
 
 --Use data from another table
 CREATE TABLE student_copy USING CSV
