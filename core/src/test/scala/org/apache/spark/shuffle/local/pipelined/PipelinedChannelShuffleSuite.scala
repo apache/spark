@@ -19,8 +19,12 @@ package org.apache.spark.shuffle.local.pipelined
 
 import scala.reflect.ClassTag
 
+import org.mockito.Mockito.{mock, when}
+
 import org.apache.spark.{HashPartitioner, Partitioner, PipelinedShuffleDependency, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
+import org.apache.spark.executor.TempShuffleReadMetrics
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.shuffle.BaseShuffleHandle
 
 /**
  * A [[ShuffledRDD]] that emits a [[PipelinedShuffleDependency]] instead of a regular
@@ -103,7 +107,8 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       }
     }
     withPipelinedSparkContext(cores = 8) { sc =>
-      val actual = repartition(sc, 1000, numIn = 3, numOut = 4).map { case (idx, k, _) => (idx, k) }.toSet
+      val actual = repartition(sc, 1000, numIn = 3, numOut = 4)
+        .map { case (idx, k, _) => (idx, k) }.toSet
       assert(actual === expected)
     }
   }
@@ -223,6 +228,111 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       }
       assert(ex.getMessage.contains("fully-materialized prefix"),
         s"expected the unmaterialized-prefix rejection, got: ${ex.getMessage}")
+    }
+  }
+
+  test("abandon marks partition and drains its queue") {
+    // abandon() sets an abandoned mark and drains the queue. The key contract:
+    // when a writer is blocked on put() due to a full queue, abandon() drains
+    // the queue so the put() unblocks (freeing capacity). This test verifies both
+    // the mark is set and the queue is drained.
+    ChannelShuffleRendezvous.clearForTesting()
+    try {
+      val q = ChannelShuffleRendezvous.queue(42, 0)
+      // Put a few batches into the queue.
+      q.put("batch1")
+      q.put("batch2")
+      q.put("batch3")
+      assert(!q.isEmpty, "queue should have elements")
+
+      // Abandon the partition.
+      ChannelShuffleRendezvous.abandon(42, 0)
+
+      // Both conditions must hold after abandon:
+      // 1. The partition is marked abandoned (prevents new writes).
+      assert(ChannelShuffleRendezvous.isAbandoned(42, 0),
+        "partition should be marked abandoned")
+      // 2. The queue is drained (unblocks any parked put and cleans up).
+      assert(q.isEmpty, "queue should be drained by abandon()")
+    } finally {
+      ChannelShuffleRendezvous.clearForTesting()
+    }
+  }
+
+  test("clearAbandoned resets mark and removeShuffle drops both queues and marks") {
+    ChannelShuffleRendezvous.clearForTesting()
+    try {
+      val shuffleId = 55
+      val pid1 = 0
+      val pid2 = 1
+
+      // Create queues and abandon them.
+      ChannelShuffleRendezvous.queue(shuffleId, pid1).put("data1")
+      ChannelShuffleRendezvous.queue(shuffleId, pid2).put("data2")
+      ChannelShuffleRendezvous.abandon(shuffleId, pid1)
+      ChannelShuffleRendezvous.abandon(shuffleId, pid2)
+
+      assert(ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1))
+      assert(ChannelShuffleRendezvous.isAbandoned(shuffleId, pid2))
+      assert(ChannelShuffleRendezvous.numQueuesForTesting === 2)
+
+      // Test clearAbandoned: clears a single partition's mark, re-usable for a re-run.
+      ChannelShuffleRendezvous.clearAbandoned(shuffleId, pid1)
+      assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1),
+        "clearAbandoned should reset the mark")
+      assert(ChannelShuffleRendezvous.isAbandoned(shuffleId, pid2),
+        "other partitions' marks should persist")
+
+      // Re-abandon pid1, then test removeShuffle: clears both queues and all marks
+      // for this shuffle.
+      ChannelShuffleRendezvous.abandon(shuffleId, pid1)
+      assert(ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1))
+
+      ChannelShuffleRendezvous.removeShuffle(shuffleId)
+      assert(ChannelShuffleRendezvous.numQueuesForTesting === 0,
+        "removeShuffle should drop all queues for this shuffle")
+      assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1),
+        "removeShuffle should clear all abandoned marks for this shuffle")
+      assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid2),
+        "removeShuffle should clear all abandoned marks for this shuffle")
+    } finally {
+      ChannelShuffleRendezvous.clearForTesting()
+    }
+  }
+
+  test("reader stops after exactly numMaps EndOfStream markers") {
+    // Drive the REAL ChannelShuffleReader.read() (not a reimplementation of its loop): pre-load
+    // its partition queue with data batches interleaved with exactly numMaps EndOfStream markers,
+    // then assert read() yields every data row IN ORDER and terminates -- it must not block
+    // waiting for a further marker (would hang the test), nor stop early. The reader reads only
+    // handle.shuffleId, so a mock handle suffices; TaskContext.get() is None here so no
+    // completion listener is registered. TempShuffleReadMetrics is a no-op reporter.
+    ChannelShuffleRendezvous.clearForTesting()
+    try {
+      val shuffleId = 11
+      val pid = 0
+      val numMaps = 3
+      val q = ChannelShuffleRendezvous.queue(shuffleId, pid)
+      // batch1, EOS, batch2, EOS, batch3, EOS (3 markers = numMaps). Rows are (k, v) pairs.
+      q.put(Array[AnyRef]((1, 1), (2, 2)))
+      q.put(ChannelShuffleRendezvous.EndOfStream)
+      q.put(Array[AnyRef]((3, 3)))
+      q.put(ChannelShuffleRendezvous.EndOfStream)
+      q.put(Array[AnyRef]((4, 4), (5, 5), (6, 6)))
+      q.put(ChannelShuffleRendezvous.EndOfStream)
+
+      val handle = mock(classOf[BaseShuffleHandle[Int, Int, Int]])
+      when(handle.shuffleId).thenReturn(shuffleId)
+      val reader = new ChannelShuffleReader[Int, Int](
+        handle, startPartition = pid, endPartition = pid + 1, numMaps = numMaps,
+        readMetrics = new TempShuffleReadMetrics)
+
+      val values = reader.read().map(_._2).toSeq
+      assert(values === Seq(1, 2, 3, 4, 5, 6),
+        s"reader must yield every data row in order and then stop, got $values")
+      assert(q.isEmpty, "the reader should have drained the queue to empty")
+    } finally {
+      ChannelShuffleRendezvous.clearForTesting()
     }
   }
 }

@@ -24,22 +24,22 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
 /**
- * KNOWN-BUG reproduction (SPARK-57399 local-repartition v2). An early-stopping reader over a
- * pipelined channel shuffle hangs the writer: the channel queue is bounded (64 batches), so
- * once a LIMIT's reduce task is satisfied and stops draining while the map task is still
- * producing, the writer blocks on a full queue's put() with no drainer -- forever. Verified
- * to hang under a 90s deadline in BOTH AQE modes (2026-08-10).
+ * Acceptance test for the LIMIT early-stop fix (SPARK-57399 local-repartition v2). An
+ * early-stopping reader over a pipelined channel shuffle used to hang the writer: the channel
+ * queue is bounded (64 batches), so once a LIMIT's reduce task was satisfied and stopped
+ * draining while the map task was still producing, the writer blocked forever on a full
+ * queue's put() with no drainer. That is now fixed -- the reader marks its partitions abandoned
+ * on task completion, and the writer stops feeding an abandoned partition (see
+ * ChannelShuffleWriter.putUnlessAbandoned / ChannelShuffleRendezvous.abandon). regular shuffle
+ * never had this: it materializes to disk first, so the writer finishes regardless of whether
+ * the reader drains everything.
  *
- * regular shuffle does not have this: it materializes to disk first, so the writer finishes
- * and leaves regardless of whether the reader drains everything (LIMIT just skips reading
- * the rest). The pipelined transport's writer/reader concurrency + backpressure assumes the
- * reader stays; early stop breaks that assumption.
- *
- * Both tests are `ignore` on purpose: they HANG until the deadline, so running them in CI
- * would waste 90s each and (sharing a process) the cancelled first would corrupt the second.
- * They document the bug and become the fix's acceptance test -- flip `ignore` to `test`, drop
- * the deadline scaffold, and assert `rows == 10` once early-stop is handled. Run one at a
- * time by hand: build/sbt "sql/testOnly *PipelinedLimitHangSuite -- -z off" after flipping.
+ * Both tests are ENABLED. Each runs a repartition + LIMIT(10) on a background thread under a
+ * 90s deadline and asserts it both COMPLETES (no hang) and returns the correct row count
+ * (rows == 10) in BOTH AQE modes. A hang trips the TimeoutException path -> the helper returns
+ * false -> the test fails; a wrong count throws out of the future -> the test fails. Each test
+ * builds and stops its OWN SparkSession (withSession), so they do not share process state and
+ * one test's timeout/cancel cannot affect the other.
  */
 class PipelinedLimitHangSuite extends SparkFunSuite with AdaptiveSparkPlanHelper {
 

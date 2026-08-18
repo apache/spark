@@ -239,6 +239,12 @@ private[spark] class ChannelShuffleReader[K, C](
       private def advance(): Unit = {
         batch = null
         pos = 0
+        // A producer with zero map tasks (numMaps == 0, e.g. a pipelined shuffle over an empty
+        // RDD) enqueues nothing and no end-of-stream marker ever arrives; without this guard the
+        // take() below would block forever. Terminate immediately with an empty iterator. The
+        // check is also correct for numMaps > 0 once every marker has been seen (advance is not
+        // called again after batch stays null, but this keeps the invariant explicit).
+        if (endOfStreamSeen >= numMaps) return
         var item = q.take()
         while (item eq ChannelShuffleRendezvous.EndOfStream) {
           endOfStreamSeen += 1
