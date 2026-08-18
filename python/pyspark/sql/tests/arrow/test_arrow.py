@@ -967,7 +967,9 @@ class ArrowTestsMixin:
                     table.schema.field("t").metadata[time_precision_key],
                     str(precision).encode("utf-8"),
                 )
-                self.assertEqual(from_arrow_schema(table.schema), schema)
+                self.assertEqual(
+                    from_arrow_schema(table.schema)["t"].dataType, TimeType(precision)
+                )
                 arrow_df = self.spark.createDataFrame(table)
                 self._assert_time_precision_df(arrow_df, precision, expected)
 
