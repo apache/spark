@@ -1645,6 +1645,18 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
   }
 
+  test("SPARK-58627: do not push down predicate with raise_error through joins") {
+    val x = testStringRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+
+    // raise_error over literals references no columns, so it looks evaluable on either side and
+    // gets pushed into the left relation, where it fires on rows the join would have dropped.
+    val queryWithRaiseError = x.join(y, joinType = Inner, condition = Some($"x.a" === $"y.d"))
+      .where(IsNull(RaiseError(Literal("boom"))))
+      .analyze
+    comparePlans(Optimize.execute(queryWithRaiseError), queryWithRaiseError)
+  }
+
   test("SPARK-58627: do not push down predicate with a throwing child of sequence through joins") {
     val x = testStringRelation.subquery("x")
     val y = testRelation1.subquery("y")
