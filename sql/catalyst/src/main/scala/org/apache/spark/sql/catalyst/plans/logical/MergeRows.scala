@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Instruction, ROW_ID}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.Instruction
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.types.{DataType, NullType}
@@ -29,7 +29,7 @@ case class MergeRows(
     matchedInstructions: Seq[Instruction],
     notMatchedInstructions: Seq[Instruction],
     notMatchedBySourceInstructions: Seq[Instruction],
-    checkCardinality: Boolean,
+    cardinalityRowId: Option[Attribute],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
 
@@ -39,13 +39,7 @@ case class MergeRows(
 
   @transient
   override lazy val references: AttributeSet = {
-    val usedExprs = if (checkCardinality) {
-      val rowIdAttr = child.output.find(attr => conf.resolver(attr.name, ROW_ID))
-      assert(rowIdAttr.isDefined, "Cannot find row ID attr")
-      rowIdAttr.get +: expressions
-    } else {
-      expressions
-    }
+    val usedExprs = cardinalityRowId.toSeq ++ expressions
     AttributeSet.fromAttributeSets(usedExprs.map(_.references)) -- producedAttributes
   }
 

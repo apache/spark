@@ -171,3 +171,48 @@ class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
       Row(1, 1, -1, "hr") :: Row(2, 2, 150, "software") :: Row(3, 3, 120, "hr") :: Nil)
   }
 }
+
+abstract class DeltaBasedMetadataRowIdUpdateTableSuiteBase(
+    splitUpdates: Boolean) extends RowLevelOperationSuiteBase {
+
+  override protected lazy val extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("supports-deltas", "true")
+    props.put("row-id", "index")
+    props.put("split-updates", splitUpdates.toString)
+    props
+  }
+
+  test("SPARK-58815: resolve a metadata row ID despite a conflicting data column") {
+    createAndInitTable("pk INT NOT NULL, index INT, dep STRING",
+      """{ "pk": 0, "index": 100, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET dep = 'software' WHERE pk = 0")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(0, 100, "software"))
+
+    checkLastWriteInfo(
+      expectedRowSchema = StructType(table.schema.map {
+        case field if field.name == "dep" => field.copy(nullable = false) // input is a constant
+        case field => field
+      }),
+      expectedRowIdSchema = Some(StructType(Array(INDEX_FIELD))),
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+    if (splitUpdates) {
+      checkLastWriteLog(
+        deleteWriteLogEntry(id = 0, metadata = Row("hr", null)),
+        reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(0, 100, "software")))
+    } else {
+      checkLastWriteLog(
+        updateWriteLogEntry(id = 0, metadata = Row("hr", null), data = Row(0, 100, "software")))
+    }
+  }
+}
+
+class DeltaBasedMetadataRowIdUpdateTableSuite
+  extends DeltaBasedMetadataRowIdUpdateTableSuiteBase(splitUpdates = false)
+
+class DeltaBasedMetadataRowIdUpdateAsDeleteAndInsertTableSuite
+  extends DeltaBasedMetadataRowIdUpdateTableSuiteBase(splitUpdates = true)

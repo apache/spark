@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, EqualNullSafe, Expression, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, EqualNullSafe, Expression, Literal, Not}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, LogicalPlan, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.trees.TreePattern.DELETE_FROM_TABLE
@@ -88,7 +88,8 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
     val query = addOperationColumn(COPY_OPERATION, remainingRowsPlan)
-    val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
+    val projections = buildReplaceDataProjections(
+      query, relation.output, metadataAttrs, readRelation.output)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
@@ -110,12 +111,16 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
     // construct a plan that only contains records to delete
     val deletedRowsPlan = Filter(cond, readRelation)
     val operationType = Alias(Literal(DELETE_OPERATION), OPERATION_COLUMN)()
-    val requiredWriteAttrs = nullifyMetadataOnDelete(dedupAttrs(rowIdAttrs ++ metadataAttrs))
+    val sourceAttrs = dedupAttrs(rowIdAttrs ++ metadataAttrs)
+    val originalRowIdValues = buildOriginalRowIdValues(rowIdAttrs, Nil, metadataAttrs)
+    val requiredWriteAttrs = nullifyMetadataOnDelete(sourceAttrs) ++ originalRowIdValues
     val project = Project(operationType +: requiredWriteAttrs, deletedRowsPlan)
 
     // build a plan to write deletes to the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections = buildWriteDeltaProjections(project, Nil, rowIdAttrs, metadataAttrs)
+    val originalRowIdAttrs = originalRowIdValues.map(_.child.asInstanceOf[Attribute])
+    val projections = buildWriteDeltaProjections(
+      project, Nil, rowIdAttrs, metadataAttrs, sourceAttrs, originalRowIdAttrs)
     WriteDelta(writeRelation, cond, project, relation, projections)
   }
 }

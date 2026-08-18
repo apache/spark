@@ -60,6 +60,21 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     refs.map(ref => resolveRef[T](ref, plan))
   }
 
+  def resolveMetadataRef(ref: NamedReference, plan: LogicalPlan): AttributeReference = {
+    val fieldNames = ref.fieldNames.toImmutableArraySeq
+    if (fieldNames.length != 1) {
+      val name = fieldNames.quoted
+      throw QueryCompilationErrors.cannotResolveAttributeError(name, plan.output.mkString(","))
+    }
+    plan.getMetadataAttributeByName(fieldNames.head)
+  }
+
+  def resolveMetadataRefs(
+      refs: Seq[NamedReference],
+      plan: LogicalPlan): Seq[AttributeReference] = {
+    refs.map(ref => resolveMetadataRef(ref, plan))
+  }
+
   /**
    * Resolves [[NamedReference]]s against the given output and returns them as an [[AttributeSet]].
    */

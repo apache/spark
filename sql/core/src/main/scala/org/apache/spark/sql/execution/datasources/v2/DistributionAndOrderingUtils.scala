@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, ResolveTimeZone, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, SortOrder, TransformExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal, SortOrder, TransformExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartitions, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, RebalancePartitions, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
@@ -34,17 +34,26 @@ object DistributionAndOrderingUtils {
   def prepareQuery(
       write: Write,
       query: LogicalPlan,
-      funCatalogOpt: Option[FunctionCatalog]): LogicalPlan = write match {
+      funCatalogOpt: Option[FunctionCatalog]): LogicalPlan = {
+    prepareQuery(write, query, funCatalogOpt, Nil)
+  }
+
+  def prepareQuery(
+      write: Write,
+      query: LogicalPlan,
+      funCatalogOpt: Option[FunctionCatalog],
+      writeAttrs: Seq[Attribute]): LogicalPlan = write match {
     case write: RequiresDistributionAndOrdering =>
       val numPartitions = write.requiredNumPartitions()
       val partitionSize = write.advisoryPartitionSizeInBytes()
+      val resolutionQuery = buildResolutionQuery(query, writeAttrs)
 
       val distribution = write.requiredDistribution match {
         case d: OrderedDistribution =>
-          toCatalystOrdering(d.ordering(), query, funCatalogOpt)
+          toCatalystOrdering(d.ordering(), resolutionQuery, funCatalogOpt)
             .map(e => resolveTransformExpression(e).asInstanceOf[SortOrder])
         case d: ClusteredDistribution =>
-          d.clustering.map(e => toCatalyst(e, query, funCatalogOpt))
+          d.clustering.map(e => toCatalyst(e, resolutionQuery, funCatalogOpt))
             .map(e => resolveTransformExpression(e)).toImmutableArraySeq
         case _: UnspecifiedDistribution => Seq.empty[Expression]
       }
@@ -74,7 +83,7 @@ object DistributionAndOrderingUtils {
         query
       }
 
-      val ordering = toCatalystOrdering(write.requiredOrdering, query, funCatalogOpt)
+      val ordering = toCatalystOrdering(write.requiredOrdering, resolutionQuery, funCatalogOpt)
       val queryWithDistributionAndOrdering = if (ordering.nonEmpty) {
         Sort(
           ordering.map(e => resolveTransformExpression(e).asInstanceOf[SortOrder]),
@@ -87,6 +96,31 @@ object DistributionAndOrderingUtils {
       TypeCoercionExecutor.execute(queryWithDistributionAndOrdering)
     case _ =>
       query
+  }
+
+  private def buildResolutionQuery(
+      query: LogicalPlan,
+      writeAttrs: Seq[Attribute]): LogicalPlan = {
+    if (writeAttrs.isEmpty) {
+      query
+    } else {
+      val preferredAttrs = writeAttrs.foldLeft(Seq.empty[Attribute]) { (attrs, attr) =>
+        if (attrs.exists(existing => conf.resolver(existing.name, attr.name))) {
+          attrs
+        } else {
+          attrs :+ attr
+        }
+      }
+      val resolutionOutput = query.output.map { attr =>
+        writeAttrs.find(_.exprId == attr.exprId) match {
+          case Some(writeAttr) if preferredAttrs.exists(_.exprId == writeAttr.exprId) =>
+            attr.withName(writeAttr.name)
+          case _ =>
+            attr.withName(s"__row_level_internal_${attr.exprId.id}")
+        }
+      }
+      LocalRelation(resolutionOutput)
+    }
   }
 
   private object TypeCoercionExecutor extends RuleExecutor[LogicalPlan] {
