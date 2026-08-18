@@ -461,6 +461,61 @@ SELECT k FROM VALUES
     (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
   WHERE k IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k;
 
+-- Scalar subquery in projection returns the nanos value and carries the nanos type;
+-- the sub-microsecond precision survives scalar-subquery result boxing.
+SELECT (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999');
+SELECT typeof((SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'));
+-- A NULL scalar subquery still carries the nanos type.
+SELECT typeof((SELECT CAST(NULL AS timestamp_ntz(9))));
+-- Scalar subquery in a WHERE comparison: the sub-microsecond value decides the match, so only
+-- the .000000999 row qualifies (not the .000000001 row).
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k = (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k;
+
+-- EXISTS (correlated on a nanos equality): the outer row is kept iff a matching nanos key exists
+-- in the subquery relation. Only the .000000999 row correlates to s.v.
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE EXISTS (SELECT 1 FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS s(v)
+    WHERE s.v = t.k) ORDER BY k;
+
+-- NOT EXISTS (correlated on a nanos equality): the opposite; the outer row is kept iff no matching
+-- nanos key exists. The subquery holds only .000000001, so the .000000999 row survives.
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE NOT EXISTS (SELECT 1 FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS s(v)
+    WHERE s.v = t.k) ORDER BY k;
+
+-- NOT IN (subquery): anti-semi-join on the full nanos key. The .000000999 row is in the subquery
+-- set (excluded); the .000000001 row is not (kept). Sub-microsecond precision decides membership --
+-- the two values differ in the nanosecond digit, not by rounding error.
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k;
+
+-- Mixed-precision NOT IN widens the probe to p=9 before the anti-join. The p=7 value .0000009
+-- becomes .000000900 at p=9, which is not .000000999, so the row is not in the set and is kept.
+SELECT k FROM VALUES
+    ('2020-01-01 00:00:00.0000009' :: timestamp_ntz(7)) AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k;
+
+-- NOT IN with a NULL in the subquery set: three-valued logic. For the row that does not equal the
+-- non-null member, the comparison against NULL is UNKNOWN, so NOT IN is UNKNOWN and the row is
+-- filtered out; the row that equals the non-null member is a definite match and also excluded.
+-- The result is therefore empty.
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'
+                  UNION ALL SELECT CAST(NULL AS timestamp_ntz(9))) ORDER BY k;
+
 -- explode(array<ts_nanos>) yields one row per element, each keeping the nanos type and value.
 SELECT typeof(col), col FROM (SELECT explode(array(
     TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001',
