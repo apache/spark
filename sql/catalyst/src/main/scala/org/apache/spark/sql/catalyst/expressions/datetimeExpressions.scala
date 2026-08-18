@@ -4896,19 +4896,28 @@ case class ConvertTimezone(
       StringTypeWithCollation(supportsTrimCollation = true),
       TypeCollection(TimestampNTZType, AnyTimestampNanoType))
 
-  // AnyTimestampNanoType covers both LTZ(p) and NTZ(p), but this function is NTZ-only (like the
-  // TimestampNTZType-only micro path above): reject a nanos source that is LTZ(p) rather than
-  // silently reinterpreting it, since a silent LTZ -> NTZ cast would drop the source time zone
-  // without the user asking for it.
+  // sourceTs's requiredType, as actually enforced by this method: TypeCollection includes
+  // AnyTimestampNanoType (rather than an NTZ-only nanos type) only so that a LTZ(p) input is
+  // accepted here and rejected below with the friendly message, instead of being silently
+  // widened to TimestampNTZType by the generic datetime-to-datetime implicit cast rule. That
+  // makes AnyTimestampNanoType.simpleString (which lists timestamp_ltz(p)) leak into the
+  // generic super.checkInputDataTypes() mismatch message for this param when sourceTs is some
+  // unrelated type (e.g. an int), even though LTZ(p) is never actually accepted. Route both the
+  // generic mismatch and the explicit LTZ rejection through the same message so they agree.
+  private def wrongSourceTsType: DataTypeMismatch = DataTypeMismatch(
+    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "paramIndex" -> ordinalNumber(2),
+      "requiredType" -> toSQLType("(timestamp_ntz or timestamp_ntz(p) with p in [7, 9])"),
+      "inputSql" -> toSQLExpr(sourceTs),
+      "inputType" -> toSQLType(sourceTs.dataType)))
+
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckSuccess if sourceTs.dataType.isInstanceOf[TimestampLTZNanosType] =>
-      DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_INPUT_TYPE",
-        messageParameters = Map(
-          "paramIndex" -> ordinalNumber(2),
-          "requiredType" -> toSQLType("(timestamp_ntz or timestamp_ntz(p) with p in [7, 9])"),
-          "inputSql" -> toSQLExpr(sourceTs),
-          "inputType" -> toSQLType(sourceTs.dataType)))
+      wrongSourceTsType
+    case DataTypeMismatch("UNEXPECTED_INPUT_TYPE", params)
+        if params.get("paramIndex").contains(ordinalNumber(2)) =>
+      wrongSourceTsType
     case result => result
   }
 

@@ -2587,6 +2587,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .checkInputDataTypes().asInstanceOf[DataTypeMismatch]
     assert(ltzMismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
 
+    // A wholly-invalid source type (not any kind of timestamp) hits the generic type check
+    // instead of the explicit LTZ guard above; both paths must report the same requiredType,
+    // since neither actually accepts a LTZ(p) source.
+    val wrongTypeMismatch = ConvertTimezone(
+      Literal("Europe/Brussels"), Literal("Europe/Moscow"), Literal(1))
+      .checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(wrongTypeMismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
+    assert(wrongTypeMismatch.messageParameters("requiredType") ===
+      ltzMismatch.messageParameters("requiredType"))
+
     // NULL handling: a NULL nanosecond timestamp, and NULL zone arguments with a non-NULL
     // nanosecond timestamp.
     checkEvaluation(
