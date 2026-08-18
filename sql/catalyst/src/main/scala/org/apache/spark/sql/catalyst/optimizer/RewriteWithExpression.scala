@@ -99,12 +99,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whether pre-evaluating this common expression is both necessary and safe in a conditional
-   * branch, where inlining is otherwise preferred because the branch may not be evaluated at all.
-   *
-   * It is necessary when the expression is nondeterministic and referenced more than once: inlining
-   * evaluates it once per reference and hands each reference a different value, which is exactly
-   * what `With` exists to prevent.
+   * Whether pre-evaluating this common expression in a conditional branch is safe, where inlining
+   * is otherwise preferred because the branch may not be evaluated at all.
    *
    * It is safe only when the expression cannot raise. Pre-evaluating happens for every row,
    * including the rows whose branch is not taken, so an expression that raises would turn a wrong
@@ -114,11 +110,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
    * from a seed or from the task context, evaluate no argument beyond a foldable seed, and so have
    * nothing to raise on. Any other nondeterministic expression, say `rand() / col`, keeps the
    * existing inlining and its existing wrong result.
+   *
+   * Only nondeterministic expressions are worth pre-evaluating here at all: inlining a
+   * deterministic one repeats the work but returns the same value, so the branch keeps deciding
+   * whether it runs.
    */
-  private def shouldPreEvaluateInBranch(
-      d: CommonExpressionDef,
-      commonExprIdSet: Set[CommonExpressionId]): Boolean = {
-    val cannotRaise = d.child match {
+  private def canPreEvaluateInBranch(child: Expression): Boolean = {
+    val cannotRaise = child match {
       // `rand`/`randn`: the seed is their only child and the analyzer rejects a non-foldable one
       // with `SEED_EXPRESSION_IS_UNFOLDABLE`, so there is no row data left to raise on.
       case _: NondeterministicUnaryRDG => true
@@ -127,7 +125,41 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       case _: LeafExpression => true
       case _ => false
     }
-    !d.child.deterministic && commonExprIdSet.contains(d.id) && cannotRaise
+    !child.deterministic && cannotRaise
+  }
+
+  /**
+   * Adds `child` to the input plan that supplies its references as a pre-evaluated column, and
+   * returns the attribute referring to it. Falls back to `child` itself when it cannot be placed in
+   * a project, matching the main `With` rewrite.
+   */
+  private def preEvaluateInChildProject(
+      child: Expression,
+      id: CommonExpressionId,
+      index: Int,
+      inputPlans: Seq[LogicalPlan],
+      commonExprsPerChild: Array[mutable.ListBuffer[(Alias, Long)]]): Expression = {
+    val childPlanIndex = inputPlans.indexWhere(c => child.references.subsetOf(c.outputSet))
+    if (childPlanIndex == -1) {
+      child
+    } else {
+      val commonExprs = commonExprsPerChild(childPlanIndex)
+      commonExprs.find(_._2 == id.id).map(_._1.toAttribute).getOrElse {
+        val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
+          s"_common_expr_${id.id}"
+        } else {
+          s"_common_expr_$index"
+        }
+        val alias = Alias(child, aliasName)()
+        val fakeProj = Project(Seq(alias), inputPlans(childPlanIndex))
+        if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
+          child
+        } else {
+          commonExprs.append((alias, id.id))
+          alias.toAttribute
+        }
+      }
+    }
   }
 
   private def rewriteWithExprAndInputPlans(
@@ -215,19 +247,21 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
         // Use transformUp to handle nested With.
         newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          case w @ With(_, defs) if defs.exists(shouldPreEvaluateInBranch(_, commonExprIdSet)) =>
-            // Pre-evaluate in a project instead of inlining, see `shouldPreEvaluateInBranch`. A
-            // nested With is left to the next rule executor batch, matching the main branch.
-            if (isNestedWith) {
-              w
-            } else {
-              rewriteWithExprAndInputPlans(w, inputPlans, commonExprsPerChild, commonExprIdSet)
-            }
-
           case With(child, defs) =>
             // For With in the conditional branches, they may not be evaluated at all and we can't
-            // pull the common expressions into a project which will always be evaluated. Inline it.
-            val refToExpr = defs.map(d => d.id -> d.child).toMap
+            // pull the common expressions into a project which will always be evaluated, so inline
+            // them. The exception is a nondeterministic definition that is referenced more than
+            // once, which inlining would evaluate once per reference and hand each reference a
+            // different value; see `canPreEvaluateInBranch`. Each definition is decided on its own,
+            // so an unsafe sibling keeps its inlining instead of being dragged into the project.
+            val refToExpr = defs.zipWithIndex.map { case (d, index) =>
+              val expr = if (commonExprIdSet.contains(d.id) && canPreEvaluateInBranch(d.child)) {
+                preEvaluateInChildProject(d.child, d.id, index, inputPlans, commonExprsPerChild)
+              } else {
+                d.child
+              }
+              d.id -> expr
+            }.toMap
             child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
               case ref: CommonExpressionRef => refToExpr(ref.id)
             }

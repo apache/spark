@@ -253,7 +253,7 @@ class RewriteWithExpressionSuite extends PlanTest {
 
   test("SPARK-58818: nondeterministic common expression in a conditional branch") {
     val a = testRelation.output.head
-    // The shape `input BETWEEN lower AND upper` builds: the reference appears twice.
+    // The shape built for `input BETWEEN lower AND upper` references the input twice.
     def between(input: Expression, lower: Expression, upper: Expression): Expression =
       With(input) { case Seq(ref) => ref >= lower && ref <= upper }
 
@@ -322,6 +322,25 @@ class RewriteWithExpressionSuite extends PlanTest {
       Optimizer.execute(plan5),
       testRelation.select(
         CaseWhen(Seq((a > 0, Literal(0.0d))), Some(rand + Literal(1.0d))).as("col")))
+
+    // Each definition of one `With` is decided on its own: `rand()` is pre-evaluated while its
+    // `randstr` sibling, which can raise, keeps its inlining rather than being dragged along.
+    val plan6 = testRelation.select(
+      CaseWhen(
+        Seq((a > 0, Literal(true))),
+        Some(With(rand, randStr) { case Seq(r1, r2) =>
+          (r1 >= Literal(0.4) && r1 <= Literal(0.6)) && (r2 >= Literal("a") && r2 <= Literal("z"))
+        })).as("col"))
+    comparePlans(
+      Optimizer.execute(plan6),
+      testRelation
+        .select((testRelation.output :+ rand.as("_common_expr_0")): _*)
+        .select(
+          CaseWhen(
+            Seq((a > 0, Literal(true))),
+            Some(($"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6)) &&
+              (randStr >= Literal("a") && randStr <= Literal("z")))).as("col"))
+        .analyze)
   }
 
   test("WITH expression in grouping exprs") {
