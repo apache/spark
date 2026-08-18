@@ -27,6 +27,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
 )
+from pyspark.util import PythonEvalType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pyarrow,
@@ -341,9 +342,112 @@ class ArrowPythonAggregatorTestsMixin:
         got = {(r["k"]["i"], r["k"]["s"]): r["m"] for r in result}
         self.assertEqual(got, {(1, "a"): 2.0, (2, "b"): 10.0})
 
+    def test_bounded_map_side_combine(self):
+        # A small maxRecordsPerBatch forces the map-side PARTIAL stage to flush its per-key buffer
+        # in bounded chunks (emitting duplicate keys that the FINAL stage re-merges authoritatively)
+        # instead of holding every key for the whole partition. The result must be unchanged --
+        # this guards the cap/flush + chunked-emission path against OOM on high-cardinality keys.
+        df = self._data()
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+            result = (
+                df.groupBy("k").agg(udaf(Mean())(sf.col("v")).alias("m")).orderBy("k").collect()
+            )
+        expected = df.groupBy("k").agg(sf.avg("v").alias("m")).orderBy("k").collect()
+        self.assertEqual({r["k"]: r["m"] for r in result}, {r["k"]: r["m"] for r in expected})
+
+    def test_missing_buffer_schema_rejected(self):
+        # udaf() enforces a struct buffer schema up front, but a low-level construction (or a
+        # malformed Connect proto) can build an incremental aggregator UDF without one. That must
+        # surface a classed planner error, not a bare IllegalArgumentException / ClassCastException.
+        from pyspark.sql.utils import is_remote
+
+        if is_remote():
+            from pyspark.sql.connect.udf import UserDefinedFunction
+        else:
+            from pyspark.sql.udf import UserDefinedFunction  # type: ignore[assignment]
+
+        bad = UserDefinedFunction(
+            Mean(),
+            returnType=DoubleType(),
+            name="bad_mean",
+            evalType=PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+            deterministic=True,
+        )._wrapped()
+        df = self._data()
+        with self.assertRaises(AnalysisException) as ctx:
+            df.groupBy("k").agg(bad(sf.col("v"))).collect()
+        self.assertEqual(ctx.exception.getCondition(), "INVALID_PYTHON_AGGREGATOR_BUFFER_SCHEMA")
+
+    def test_mixed_pandas_udaf_and_incremental_rejected(self):
+        # Mixing a grouped-agg pandas UDAF with an incremental aggregator in one Aggregate is
+        # unsupported. It falls through to the dedicated placement error, which must name BOTH
+        # offending functions rather than dropping the co-offending pandas UDAF.
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        @pandas_udf("double", PandasUDFType.GROUPED_AGG)
+        def pandas_mean(v):
+            return v.mean()
+
+        df = self._data()
+        with self.assertRaises(AnalysisException) as ctx:
+            df.groupBy("k").agg(
+                udaf(Mean())(sf.col("v")).alias("m"),
+                pandas_mean(sf.col("v")).alias("pm"),
+            ).collect()
+        self.assertEqual(ctx.exception.getCondition(), "INVALID_PYTHON_UDF_PLACEMENT")
+        message = ctx.exception.getMessage()
+        self.assertIn("Mean", message)
+        self.assertIn("pandas_mean", message)
+
 
 class ArrowPythonAggregatorTests(ArrowPythonAggregatorTestsMixin, ReusedSQLTestCase):
     pass
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowPythonAggregatorProfilerTests(unittest.TestCase):
+    # Profiling is not supported for incremental aggregators: their ``func`` is an ``Aggregator``
+    # object, so the profiler wrappers would either break the worker (a plain function has no
+    # ``bufferSchema`` / ``zero`` / ``reduce``) or fail on the driver in
+    # ``inspect.getsourcelines(f.__code__)``. Enabling a profiler must therefore fall back to the
+    # non-profiled path (with a warning) and still compute the correct result, not crash. These
+    # confs are set at session creation, so this needs its own session (classic only).
+    def _run(self, conf_key):
+        import warnings
+
+        from pyspark import SparkConf
+        from pyspark.sql import SparkSession
+
+        conf = SparkConf().set(conf_key, "true")
+        spark = (
+            SparkSession.builder.master("local[4]")
+            .config(conf=conf)
+            .appName(self.__class__.__name__)
+            .getOrCreate()
+        )
+        try:
+            df = spark.range(0, 20).select(
+                (sf.col("id") % 3).alias("k"), sf.col("id").cast("double").alias("v")
+            )
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = (
+                    df.groupBy("k").agg(udaf(Mean())(sf.col("v")).alias("m")).orderBy("k").collect()
+                )
+            expected = df.groupBy("k").agg(sf.avg("v").alias("m")).orderBy("k").collect()
+            self.assertEqual({r["k"]: r["m"] for r in result}, {r["k"]: r["m"] for r in expected})
+            self.assertTrue(
+                any("incremental Python aggregators" in str(w.message) for w in caught),
+                "expected an unsupported-profiling warning",
+            )
+        finally:
+            spark.stop()
+
+    def test_cpu_profiler_falls_back(self):
+        self._run("spark.python.profile")
+
+    def test_memory_profiler_falls_back(self):
+        self._run("spark.python.profile.memory")
 
 
 if __name__ == "__main__":

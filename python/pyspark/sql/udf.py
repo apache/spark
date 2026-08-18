@@ -532,32 +532,23 @@ class UserDefinedFunction:
         input_categories = self._transpiled_input_categories if include_transpiled else []
         # Incremental Python aggregators additionally carry the intermediate buffer schema, which
         # the JVM needs at planning time to build the two-stage aggregation (see PythonAggregate).
-        if self.bufferSchema is not None:
-            jbuf = spark._jsparkSession.parseDataType(self.bufferSchema.json())
-            judf = getattr(
-                sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction"
-            )(
-                self._name,
-                wrapped_func,
-                jdt,
-                self.evalType,
-                self.deterministic,
-                map(_to_java_column_opt, transpiled),
-                input_categories,
-                jbuf,
-            )
-        else:
-            judf = getattr(
-                sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction"
-            )(
-                self._name,
-                wrapped_func,
-                jdt,
-                self.evalType,
-                self.deterministic,
-                map(_to_java_column_opt, transpiled),
-                input_categories,
-            )
+        # Everyone else passes ``None`` here, which Py4J maps to the JVM ``null`` the ``bufferType``
+        # parameter already defaults to.
+        jbuf = (
+            spark._jsparkSession.parseDataType(self.bufferSchema.json())
+            if self.bufferSchema is not None
+            else None
+        )
+        judf = getattr(sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction")(
+            self._name,
+            wrapped_func,
+            jdt,
+            self.evalType,
+            self.deterministic,
+            map(_to_java_column_opt, transpiled),
+            input_categories,
+            jbuf,
+        )
         return judf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> Column:
@@ -601,6 +592,19 @@ class UserDefinedFunction:
         memory_profiler_enabled = sc._conf.get("spark.python.profile.memory", "false") == "true"
 
         if profiler_enabled or memory_profiler_enabled:
+            # Profiling is not supported for incremental Python aggregators. Their ``self.func`` is
+            # an ``Aggregator`` object, not a plain function: the profiler wrappers below would
+            # replace it with a function the worker cannot drive (it has no ``zero``/``reduce``/
+            # ``bufferSchema``), and the memory profiler's ``inspect.getsourcelines(f.__code__)``
+            # fails on the driver because an ``Aggregator`` instance has no ``__code__``.
+            if self.evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF:
+                warnings.warn(
+                    "Profiling incremental Python aggregators is not supported.",
+                    UserWarning,
+                )
+                judf = self._judf
+                return Column(judf.apply(_to_seq(sc, jcols)))
+
             # Disable profiling Pandas UDFs with iterators as input/output.
             if self.evalType in [
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,

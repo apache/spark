@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -98,21 +99,7 @@ abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with Pyt
     // duplicates, mirroring ArrowAggregatePythonExec.
     val allInputs = new ArrayBuffer[Expression]
     val dataTypes = new ArrayBuffer[DataType]
-    val argMetas = udfInputs.map { input =>
-      input.map { e =>
-        val (key, value) = e match {
-          case NamedArgumentExpression(key, value) => (Some(key), value)
-          case _ => (None, e)
-        }
-        if (allInputs.exists(_.semanticEquals(value))) {
-          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key)
-        } else {
-          allInputs += value
-          dataTypes += value.dataType
-          ArgumentMetadata(allInputs.length - 1, key)
-        }
-      }.toArray
-    }.toArray
+    val argMetas = PythonIncrementalAggregateExec.buildArgMetas(udfInputs, allInputs, dataTypes)
 
     val aggInputSchema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
       StructField(s"_$i", dt)
@@ -158,8 +145,11 @@ abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with Pyt
 
       val context = TaskContext.get()
 
+      // In pipelined mode the queue's add() runs in the writer thread and remove() in the task
+      // thread; use lock-free mode to skip per-row synchronization (as ArrowAggregatePythonExec).
+      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
       val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingExprs.length, lockFree = false)
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingExprs.length, lockFree = pipelined)
       context.addTaskCompletionListener[Unit] { _ => queue.close() }
 
       val projectedRowIter = grouped.map { case (groupingKey, rows) =>
@@ -250,21 +240,8 @@ case class PythonIncrementalAggregatePartialExec(
     }
     val numGroupingKeys = groupingExpressions.length
 
-    val argMetas = udfExpressions.map { u =>
-      u.children.map { e =>
-        val (key, value) = e match {
-          case NamedArgumentExpression(key, value) => (Some(key), value)
-          case _ => (None, e)
-        }
-        if (allInputs.exists(_.semanticEquals(value))) {
-          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key)
-        } else {
-          allInputs += value
-          dataTypes += value.dataType
-          ArgumentMetadata(allInputs.length - 1, key)
-        }
-      }.toArray
-    }.toArray
+    val argMetas = PythonIncrementalAggregateExec.buildArgMetas(
+      udfExpressions.map(_.children), allInputs, dataTypes)
 
     val aggInputSchema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
       StructField(s"_$i", dt)
@@ -361,6 +338,35 @@ case class PythonIncrementalAggregateFinalExec(
 }
 
 object PythonIncrementalAggregateExec {
+
+  /**
+   * Deduplicates the per-aggregator input expressions into a shared column list (matched by
+   * [[Expression.semanticEquals]]), returning one [[ArgumentMetadata]] array per aggregator that
+   * points into that list. `allInputs`/`dataTypes` may be pre-seeded -- the PARTIAL stage prepends
+   * its grouping-key columns so a UDF input equal to a grouping key reuses that leading column --
+   * and any newly seen columns are appended to them in place. Shared by both stages (and mirrors
+   * the same dedup in [[ArrowAggregatePythonExec]]).
+   */
+  private[python] def buildArgMetas(
+      udfInputs: Seq[Seq[Expression]],
+      allInputs: ArrayBuffer[Expression],
+      dataTypes: ArrayBuffer[DataType]): Array[Array[ArgumentMetadata]] = {
+    udfInputs.map { input =>
+      input.map { e =>
+        val (key, value) = e match {
+          case NamedArgumentExpression(key, value) => (Some(key), value)
+          case _ => (None, e)
+        }
+        if (allInputs.exists(_.semanticEquals(value))) {
+          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key)
+        } else {
+          allInputs += value
+          dataTypes += value.dataType
+          ArgumentMetadata(allInputs.length - 1, key)
+        }
+      }.toArray
+    }.toArray
+  }
 
   /**
    * Builds the two-stage physical plan (PARTIAL -> [Exchange, inserted by EnsureRequirements] ->

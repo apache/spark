@@ -62,20 +62,6 @@ case class UserDefinedPythonFunction(
     // `Option` so it can be passed positionally from Python over Py4J.
     bufferType: DataType = null) {
 
-  // Preserves the constructor arity used by non-aggregator Python callers (which pass no
-  // `bufferType`), so their positional Py4J `new UserDefinedPythonFunction(...)` still resolves.
-  def this(
-      name: String,
-      func: PythonFunction,
-      dataType: DataType,
-      pythonEvalType: Int,
-      udfDeterministic: Boolean,
-      transpiled: JList[Column],
-      transpiledInputTypes: JList[JList[String]]) = {
-    this(name, func, dataType, pythonEvalType, udfDeterministic,
-      transpiled, transpiledInputTypes, null)
-  }
-
   def builder(e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
         || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
@@ -108,12 +94,19 @@ case class UserDefinedPythonFunction(
       PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType)
     } else if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF) {
       // The incremental Python aggregator. `bufferType` (the intermediate buffer schema) must have
-      // been supplied when the UDF was created. The single expression carries the aggregator for
-      // both the PARTIAL and FINAL stages; the physical operator picks the per-stage eval type.
-      require(bufferType != null,
-        "An incremental Python aggregator requires a buffer schema.")
-      PythonAggregate(
-        name, func, dataType, e, udfDeterministic, bufferType.asInstanceOf[StructType])
+      // been supplied as a struct when the UDF was created. The single expression carries the
+      // aggregator for both the PARTIAL and FINAL stages; the physical operator picks the per-stage
+      // eval type. `udaf()` enforces this up front, but a malformed Connect proto (eval type set,
+      // `buffer_type` missing or non-struct) or a direct `UserDefinedFunction(f, evalType=...)` can
+      // reach here without it, so return a classed error rather than a bare require /
+      // ClassCastException.
+      val bufferStruct = bufferType match {
+        case s: StructType => s
+        case _ =>
+          throw QueryCompilationErrors.invalidIncrementalPythonAggregatorBufferError(
+            name, bufferType)
+      }
+      PythonAggregate(name, func, dataType, e, udfDeterministic, bufferStruct)
     } else {
       PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
     }

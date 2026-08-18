@@ -2288,18 +2288,55 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             list(args_offsets) + list(kwargs_offsets.values())
             for _, args_offsets, kwargs_offsets, _ in udfs
         ]
+        # Input columns actually consumed per batch: the leading grouping keys plus every
+        # aggregator input, deduplicated. A UDF input may reuse a grouping-key column (the operator
+        # dedups its projection), so converting by distinct offset avoids repeated `to_pylist()`.
+        needed_offsets = sorted(
+            set(range(num_grouping_keys)) | {o for offsets in input_offsets_by_udf for o in offsets}
+        )
+
+        # Cap the map-side buffer so a high-cardinality partition -- exactly where partial
+        # aggregation degenerates -- cannot grow the per-key dict without bound and OOM the worker.
+        # When the distinct-key count reaches the cap we flush the whole map as one batch and start
+        # fresh; end-of-partition buffers are emitted in equally bounded chunks. This is safe
+        # because the FINAL stage re-groups the emitted partial buffers authoritatively after the
+        # shuffle and merges any duplicate keys that early flushes produce. A non-positive
+        # maxRecordsPerBatch means "unbounded" (mirroring the reader side).
+        max_records = runner_conf.arrow_max_records_per_batch
+        cap = max_records if max_records > 0 else None
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            # key_index -> (representative key value tuple, list of per-aggregator buffers)
+            # hashable key -> (representative key value tuple, list of per-aggregator buffers)
             groups: "dict[Any, tuple]" = {}
             key_field_types: Optional[list] = None
+
+            def make_batch(entries: list) -> pa.RecordBatch:
+                arrays = []
+                names = []
+                for j in range(num_grouping_keys):
+                    arrays.append(
+                        pa.array(
+                            [e[0][j] for e in entries],
+                            type=key_field_types[j],  # type: ignore
+                        )
+                    )
+                    names.append("k_%d" % j)
+                for i, (agg, _, _, _) in enumerate(udfs):
+                    field_names = field_names_by_udf[i]
+                    structs = [
+                        {name: e[1][i][t] for t, name in enumerate(field_names)} for e in entries
+                    ]
+                    arrays.append(pa.array(structs, type=buffer_arrow_types[i]))
+                    names.append(buffer_col_names[i])
+                return pa.RecordBatch.from_arrays(arrays, names)
+
             for batch in data:
                 if key_field_types is None:
                     key_field_types = [batch.schema.field(j).type for j in range(num_grouping_keys)]
-                key_cols = [batch.column(j).to_pylist() for j in range(num_grouping_keys)]
+                pylist_by_offset = {o: batch.column(o).to_pylist() for o in needed_offsets}
+                key_cols = [pylist_by_offset[j] for j in range(num_grouping_keys)]
                 udf_cols = [
-                    [batch.column(o).to_pylist() for o in input_offsets_by_udf[i]]
-                    for i in range(len(udfs))
+                    [pylist_by_offset[o] for o in input_offsets_by_udf[i]] for i in range(len(udfs))
                 ]
                 for r in range(batch.num_rows):
                     key_values = tuple(key_cols[j][r] for j in range(num_grouping_keys))
@@ -2313,28 +2350,21 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     for i, (agg, _, _, _) in enumerate(udfs):
                         cols_i = udf_cols[i]
                         buffers[i] = agg.reduce(buffers[i], tuple(c[r] for c in cols_i))
+                if cap is not None and len(groups) >= cap:
+                    yield make_batch(list(groups.values()))
+                    groups = {}
 
             if not groups:
-                # Empty partition: emit nothing. The FINAL stage supplies the global-aggregation
-                # identity row when there is no input at all.
+                # Empty partition (or fully flushed above): emit nothing more. The FINAL stage
+                # supplies the global-aggregation identity row when there is no input at all.
                 return
 
             entries = list(groups.values())
-            arrays = []
-            names = []
-            for j in range(num_grouping_keys):
-                arrays.append(
-                    pa.array([e[0][j] for e in entries], type=key_field_types[j])  # type: ignore
-                )
-                names.append("k_%d" % j)
-            for i, (agg, _, _, _) in enumerate(udfs):
-                field_names = field_names_by_udf[i]
-                structs = [
-                    {name: e[1][i][t] for t, name in enumerate(field_names)} for e in entries
-                ]
-                arrays.append(pa.array(structs, type=buffer_arrow_types[i]))
-                names.append(buffer_col_names[i])
-            yield pa.RecordBatch.from_arrays(arrays, names)
+            if cap is None:
+                yield make_batch(entries)
+            else:
+                for start in range(0, len(entries), cap):
+                    yield make_batch(entries[start : start + cap])
 
         # profiling is not supported for UDF
         return func, None, ser, ser

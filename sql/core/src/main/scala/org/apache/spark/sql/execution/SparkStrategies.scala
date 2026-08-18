@@ -826,13 +826,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // (SQL or differently-typed Python) aggregate functions in the same Aggregate.
         val aggFunctions = aggExpressions.map(_.aggregateFunction)
         val incrementalNames = aggFunctions.collect { case p: PythonAggregate => p.name }
-        if (incrementalNames.nonEmpty) {
-          // The message for pandas UDFs is misleading for an Arrow-based incremental aggregator,
-          // so report a dedicated, aggregator-neutral error naming the offending functions.
-          throw QueryCompilationErrors.invalidPythonAggregatePlacementError(
-            incrementalNames.distinct)
-        }
         val pandasUDFNames = aggFunctions.collect { case p: PythonUDAF => p.name }
+        if (incrementalNames.nonEmpty) {
+          // The message for pandas UDFs is misleading for an Arrow-based incremental aggregator, so
+          // report the dedicated, aggregator-neutral error. Name every offending Python aggregate
+          // function -- both the incremental aggregators and any grouped-agg pandas/arrow UDAFs
+          // mixed in -- so the diagnostic is complete rather than dropping the co-offenders.
+          throw QueryCompilationErrors.invalidPythonAggregatePlacementError(
+            (incrementalNames ++ pandasUDFNames).distinct)
+        }
         throw QueryCompilationErrors.invalidPandasUDFPlacementError(pandasUDFNames.distinct)
 
       case _ => Nil
