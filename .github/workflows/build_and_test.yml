@@ -51,6 +51,23 @@ on:
         required: false
         type: string
         default: ''
+      build_timeout_minutes:
+        description: >-
+          Timeout for each `build` matrix job. Raise it for a caller whose configuration makes the
+          tests slower, e.g. a non-default codegen compiler.
+        required: false
+        type: number
+        default: 150
+      pyspark_timeout_minutes:
+        description: Timeout for each `pyspark` matrix job. Same reason as above.
+        required: false
+        type: number
+        default: 120
+      docker_integration_tests_timeout_minutes:
+        description: Timeout for the `docker-integration-tests` job. Same reason as above.
+        required: false
+        type: number
+        default: 120
     secrets:
       codecov_token:
         description: The upload token of codecov.
@@ -261,7 +278,7 @@ jobs:
     needs: [precondition, precompile]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: ${{ inputs.build_timeout_minutes }}
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -628,7 +645,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.pyspark_timeout_minutes }}
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
       options: >-
@@ -1379,7 +1396,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.docker_integration_tests_timeout_minutes }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
