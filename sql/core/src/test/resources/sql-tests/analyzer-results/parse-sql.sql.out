@@ -23,11 +23,11 @@ Project [parse_sql(SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2) AS par
 -- !query
 SELECT
   get_json_object(result, '$.statement_identifier') AS statement_identifier,
-  get_json_object(result, '$.table_references[0][0]') AS first_table,
+  get_json_object(result, '$.source_table_references[0][0]') AS first_table,
   get_json_object(result, '$.select_list[1].name[0]') AS second_column
 FROM (SELECT parse_sql('SELECT a, b FROM t') AS result)
 -- !query analysis
-Project [get_json_object(result#x, $.statement_identifier) AS statement_identifier#x, get_json_object(result#x, $.table_references[0][0]) AS first_table#x, get_json_object(result#x, $.select_list[1].name[0]) AS second_column#x]
+Project [get_json_object(result#x, $.statement_identifier) AS statement_identifier#x, get_json_object(result#x, $.source_table_references[0][0]) AS first_table#x, get_json_object(result#x, $.select_list[1].name[0]) AS second_column#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [parse_sql(SELECT a, b FROM t) AS result#x]
       +- OneRowRelation

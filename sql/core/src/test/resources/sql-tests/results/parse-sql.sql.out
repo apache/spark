@@ -12,7 +12,7 @@ SELECT parse_sql('SELECT a, b FROM t')
 -- !query schema
 struct<parse_sql(SELECT a, b FROM t):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["t"]],"select_list":[{"name":["a"]},{"name":["b"]}]}
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["t"]],"select_list":[{"name":["a"]},{"name":["b"]}]}
 
 
 -- !query
@@ -20,13 +20,13 @@ SELECT parse_sql('SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2')
 -- !query schema
 struct<parse_sql(SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["cat","ns","t1"],["t2"]],"function_references":[["db","my_func"],["count"]],"select_list":[{"name":[]},{"name":[]}]}
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["cat","ns","t1"],["t2"]],"function_references":[["db","my_func"],["count"]],"select_list":[{"name":[]},{"name":[]}]}
 
 
 -- !query
 SELECT
   get_json_object(result, '$.statement_identifier') AS statement_identifier,
-  get_json_object(result, '$.table_references[0][0]') AS first_table,
+  get_json_object(result, '$.source_table_references[0][0]') AS first_table,
   get_json_object(result, '$.select_list[1].name[0]') AS second_column
 FROM (SELECT parse_sql('SELECT a, b FROM t') AS result)
 -- !query schema
@@ -40,7 +40,7 @@ SELECT parse_sql('INSERT INTO t SELECT 1')
 -- !query schema
 struct<parse_sql(INSERT INTO t SELECT 1):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"INSERT","statement_code":50,"table_references":[["t"]],"select_list":[{"name":[]}]}
+{"parse_success":true,"statement_identifier":"INSERT","statement_code":50,"target_table_references":[["t"]],"select_list":[{"name":[]}]}
 
 
 -- !query
@@ -48,7 +48,7 @@ SELECT parse_sql('DELETE FROM t WHERE a = 1')
 -- !query schema
 struct<parse_sql(DELETE FROM t WHERE a = 1):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"DELETE WHERE","statement_code":19,"table_references":[["t"]]}
+{"parse_success":true,"statement_identifier":"DELETE WHERE","statement_code":19,"target_table_references":[["t"]]}
 
 
 -- !query
@@ -56,7 +56,7 @@ SELECT parse_sql('UPDATE t SET a = 1 WHERE b = 2')
 -- !query schema
 struct<parse_sql(UPDATE t SET a = 1 WHERE b = 2):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"UPDATE WHERE","statement_code":82,"table_references":[["t"]]}
+{"parse_success":true,"statement_identifier":"UPDATE WHERE","statement_code":82,"target_table_references":[["t"]]}
 
 
 -- !query
@@ -64,7 +64,7 @@ SELECT parse_sql('MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE')
 -- !query schema
 struct<parse_sql(MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"MERGE","statement_code":128,"table_references":[["t"],["s"]]}
+{"parse_success":true,"statement_identifier":"MERGE","statement_code":128,"target_table_references":[["t"]],"source_table_references":[["s"]]}
 
 
 -- !query
@@ -72,7 +72,7 @@ SELECT parse_sql('CREATE TABLE t (a INT)')
 -- !query schema
 struct<parse_sql(CREATE TABLE t (a INT)):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"CREATE TABLE","statement_code":77,"table_references":[["t"]]}
+{"parse_success":true,"statement_identifier":"CREATE TABLE","statement_code":77,"target_table_references":[["t"]]}
 
 
 -- !query
@@ -80,7 +80,7 @@ SELECT parse_sql('CREATE TABLE t AS SELECT 1 AS a')
 -- !query schema
 struct<parse_sql(CREATE TABLE t AS SELECT 1 AS a):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"CREATE TABLE","statement_code":77,"table_references":[["t"]],"select_list":[{"name":["a"]}]}
+{"parse_success":true,"statement_identifier":"CREATE TABLE","statement_code":77,"target_table_references":[["t"]],"select_list":[{"name":["a"]}]}
 
 
 -- !query
@@ -88,7 +88,7 @@ SELECT parse_sql('DROP TABLE t')
 -- !query schema
 struct<parse_sql(DROP TABLE t):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"DROP TABLE","statement_code":32,"table_references":[["t"]]}
+{"parse_success":true,"statement_identifier":"DROP TABLE","statement_code":32,"target_table_references":[["t"]]}
 
 
 -- !query
@@ -96,7 +96,7 @@ SELECT parse_sql('CACHE TABLE t')
 -- !query schema
 struct<parse_sql(CACHE TABLE t):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"CACHE TABLE","statement_code":-1,"table_references":[["t"]]}
+{"parse_success":true,"statement_identifier":"CACHE TABLE","statement_code":-1,"target_table_references":[["t"]]}
 
 
 -- !query
@@ -104,7 +104,7 @@ SELECT parse_sql('TABLE t')
 -- !query schema
 struct<parse_sql(TABLE t):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["t"]]}
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["t"]]}
 
 
 -- !query
@@ -136,7 +136,7 @@ SELECT parse_sql('SELECT * FROM t WHERE a = :foo AND b = ?')
 -- !query schema
 struct<parse_sql(SELECT * FROM t WHERE a = :foo AND b = ?):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["t"]],"select_list":[{"name":["*"]}],"parameter_markers":{"named":["foo"],"unnamed_count":1}}
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["t"]],"select_list":[{"name":["*"]}],"parameter_markers":{"named":["foo"],"unnamed_count":1}}
 
 
 -- !query
@@ -144,7 +144,7 @@ SELECT parse_sql('WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte')
 -- !query schema
 struct<parse_sql(WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["hidden_base"]],"select_list":[{"name":["a"]}]}
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["hidden_base"]],"select_list":[{"name":["a"]}]}
 
 
 -- !query
@@ -152,7 +152,7 @@ SELECT parse_sql('SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FR
 -- !query schema
 struct<parse_sql(SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t)):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["inner_base"],["real_t"]],"select_list":[{"name":["*"]}]}
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["inner_base"],["real_t"]],"select_list":[{"name":["*"]}]}
 
 
 -- !query
@@ -160,7 +160,7 @@ SELECT parse_sql('WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FRO
 -- !query schema
 struct<parse_sql(WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["b"]],"select_list":[{"name":["*"]}]}
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["b"]],"select_list":[{"name":["*"]}]}
 
 
 -- !query
@@ -168,7 +168,7 @@ SELECT parse_sql('SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t 
 -- !query schema
 struct<parse_sql(SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["scalar_src"],["exists_src"],["outer_t"]],"function_references":[["max"]],"select_list":[{"name":["m"]},{"name":["t","a"]}]}
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["scalar_src"],["exists_src"],["outer_t"]],"function_references":[["max"]],"select_list":[{"name":["m"]},{"name":["t","a"]}]}
 
 
 -- !query
@@ -195,7 +195,7 @@ struct<parse_sql(SELECT coalesce(t.a, 0), sum(abs(t.b)) OVER (
  HAVING count_if(t.b > 0) > 0
  ORDER BY greatest(t.a, 1)):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["scalar_t"],["left_t"],["right_t"]],"function_references":[["greatest"],["count_if"],["coalesce"],["sum"],["abs"],["lower"],["length"],["startswith"],["max"],["range"],["hash"]],"select_list":[{"name":[]},{"name":[]}]}
+{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["scalar_t"],["left_t"],["right_t"]],"function_references":[["greatest"],["count_if"],["coalesce"],["sum"],["abs"],["lower"],["length"],["startswith"],["max"],["range"],["hash"]],"select_list":[{"name":[]},{"name":[]}]}
 
 
 -- !query
@@ -224,7 +224,7 @@ struct<parse_sql(MERGE INTO target t
  WHEN NOT MATCHED THEN
    INSERT (id, name) VALUES (s.id, lower(s.name))):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"MERGE","statement_code":128,"table_references":[["target"],["source"]],"function_references":[["hash"],["should_update"],["coalesce"],["upper"],["lower"],["normalize_name"],["is_valid"]]}
+{"parse_success":true,"statement_identifier":"MERGE","statement_code":128,"target_table_references":[["target"]],"source_table_references":[["source"]],"function_references":[["hash"],["should_update"],["coalesce"],["upper"],["lower"],["normalize_name"],["is_valid"]]}
 
 
 -- !query
@@ -239,7 +239,7 @@ struct<parse_sql(CREATE TABLE defaults (
    normalized STRING DEFAULT upper('x')
  )):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"CREATE TABLE","statement_code":77,"table_references":[["defaults"]],"function_references":[["current_date"],["upper"]]}
+{"parse_success":true,"statement_identifier":"CREATE TABLE","statement_code":77,"target_table_references":[["defaults"]],"function_references":[["current_date"],["upper"]]}
 
 
 -- !query
@@ -357,7 +357,7 @@ SELECT parse_sql('CREATE VIEW v AS SELECT a, b FROM t')
 -- !query schema
 struct<parse_sql(CREATE VIEW v AS SELECT a, b FROM t):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"CREATE VIEW","statement_code":84,"table_references":[["v"],["t"]],"select_list":[{"name":["a"]},{"name":["b"]}]}
+{"parse_success":true,"statement_identifier":"CREATE VIEW","statement_code":84,"target_table_references":[["v"]],"source_table_references":[["t"]],"select_list":[{"name":["a"]},{"name":["b"]}]}
 
 
 -- !query
@@ -459,8 +459,8 @@ AS t(sql_text)
 -- !query schema
 struct<sql_text:string,parse_sql(sql_text):string>
 -- !query output
-CACHE TABLE t	{"parse_success":true,"statement_identifier":"CACHE TABLE","statement_code":-1,"table_references":[["t"]]}
-INSERT INTO t SELECT 1	{"parse_success":true,"statement_identifier":"INSERT","statement_code":50,"table_references":[["t"]],"select_list":[{"name":[]}]}
+CACHE TABLE t	{"parse_success":true,"statement_identifier":"CACHE TABLE","statement_code":-1,"target_table_references":[["t"]]}
+INSERT INTO t SELECT 1	{"parse_success":true,"statement_identifier":"INSERT","statement_code":50,"target_table_references":[["t"]],"select_list":[{"name":[]}]}
 SELECT 1	{"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"select_list":[{"name":[]}]}
 
 
@@ -477,7 +477,7 @@ SELECT parse_sql('BEGIN SELECT count(a) FROM script_t WHERE c = :p; END')
 -- !query schema
 struct<parse_sql(BEGIN SELECT count(a) FROM script_t WHERE c = :p; END):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"table_references":[["script_t"]],"function_references":[["count"]],"parameter_markers":{"named":["p"]}}
+{"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"source_table_references":[["script_t"]],"function_references":[["count"]],"parameter_markers":{"named":["p"]}}
 
 
 -- !query
@@ -485,7 +485,7 @@ SELECT parse_sql('BEGIN SELECT * FROM t WHERE a = ?; END')
 -- !query schema
 struct<parse_sql(BEGIN SELECT * FROM t WHERE a = ?; END):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"table_references":[["t"]],"parameter_markers":{"unnamed_count":1}}
+{"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"source_table_references":[["t"]],"parameter_markers":{"unnamed_count":1}}
 
 
 -- !query
@@ -493,7 +493,7 @@ SELECT parse_sql('BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT 
 -- !query schema
 struct<parse_sql(BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"table_references":[["gate"],["dest"],["src_if"],["src_else"]]}
+{"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"target_table_references":[["dest"],["src_else"]],"source_table_references":[["gate"],["src_if"]]}
 
 
 -- !query
@@ -501,7 +501,7 @@ SELECT parse_sql('BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO 
 -- !query schema
 struct<parse_sql(BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"table_references":[["err_log"],["failing_row"],["main_t"]]}
+{"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"target_table_references":[["err_log"]],"source_table_references":[["failing_row"],["main_t"]]}
 
 
 -- !query
@@ -568,4 +568,4 @@ struct<parse_sql(BEGIN
    END FOR;
  END):string>
 -- !query output
-{"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"table_references":[["error_log"],["error_source"],["input_names"],["output_names"],["control_flags"],["update_source"],["update_target"],["delete_source"],["delete_target"],["loop_source"],["loop_body"]],"function_references":[["format_string"],["normalize_name"],["is_valid"],["upper"],["enabled"],["coalesce"],["should_update"],["max"],["expired"],["ready"],["audit"],["count"]]}
+{"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"target_table_references":[["error_log"],["output_names"],["update_target"],["delete_target"]],"source_table_references":[["error_source"],["input_names"],["control_flags"],["update_source"],["delete_source"],["loop_source"],["loop_body"]],"function_references":[["format_string"],["normalize_name"],["is_valid"],["upper"],["enabled"],["coalesce"],["should_update"],["max"],["expired"],["ready"],["audit"],["count"]]}

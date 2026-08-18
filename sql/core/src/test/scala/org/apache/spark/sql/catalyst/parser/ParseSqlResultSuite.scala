@@ -32,15 +32,21 @@ class ParseSqlResultSuite extends SparkFunSuite {
   private def obj(sql: String): JObject =
     parse(ParseSqlResult.fromSql(sql)).asInstanceOf[JObject]
 
-  private def tableRefs(sql: String): Set[Seq[String]] =
-    obj(sql) \ "table_references" match {
+  private def tableRefs(sql: String, field: String): Set[Seq[String]] =
+    obj(sql) \ field match {
       case JNothing => Set.empty
       case JArray(arr) => arr.map {
         case JArray(parts) => parts.map(_.asInstanceOf[JString].s)
-        case other => fail(s"unexpected table_references entry: $other")
+        case other => fail(s"unexpected $field entry: $other")
       }.toSet
-      case other => fail(s"unexpected table_references: $other")
+      case other => fail(s"unexpected $field: $other")
     }
+
+  private def sourceTableRefs(sql: String): Set[Seq[String]] =
+    tableRefs(sql, "source_table_references")
+
+  private def targetTableRefs(sql: String): Set[Seq[String]] =
+    tableRefs(sql, "target_table_references")
 
   test("Table 39 standard and Spark code pairs are pinned") {
     assert(SqlStatementCodes.Select.statementCode === 21)
@@ -65,7 +71,7 @@ class ParseSqlResultSuite extends SparkFunSuite {
     val table = obj("TABLE t")
     assert(table \ "statement_identifier" === JString("SELECT"))
     assert(table \ "statement_code" === JInt(21))
-    assert(tableRefs("TABLE t") === Set(Seq("t")))
+    assert(sourceTableRefs("TABLE t") === Set(Seq("t")))
 
     // Eager inlining must not flip VALUES between SELECT and Unrecognized.
     Seq(true, false).foreach { eager =>
@@ -79,21 +85,47 @@ class ParseSqlResultSuite extends SparkFunSuite {
     }
   }
 
-  test("CREATE FUNCTION and DECLARE VARIABLE are not table_references") {
-    assert(tableRefs("CREATE FUNCTION f AS 'x' USING JAR 'y.jar'").isEmpty)
-    assert(tableRefs("DECLARE VARIABLE x INT").isEmpty)
-    // Contrast: CREATE VIEW still reports the view target.
-    assert(tableRefs("CREATE VIEW v AS SELECT 1 AS a") === Set(Seq("v")))
+  test("CREATE FUNCTION and DECLARE VARIABLE are not table references") {
+    assert(sourceTableRefs("CREATE FUNCTION f AS 'x' USING JAR 'y.jar'").isEmpty)
+    assert(targetTableRefs("CREATE FUNCTION f AS 'x' USING JAR 'y.jar'").isEmpty)
+    assert(sourceTableRefs("DECLARE VARIABLE x INT").isEmpty)
+    assert(targetTableRefs("DECLARE VARIABLE x INT").isEmpty)
+    // Contrast: CREATE VIEW still reports the view target and query source.
+    assert(targetTableRefs("CREATE VIEW v AS SELECT 1 AS a") === Set(Seq("v")))
+    assert(sourceTableRefs("CREATE VIEW v AS SELECT 1 AS a").isEmpty)
+  }
+
+  test("DML and DDL split target and source table references") {
+    assert(targetTableRefs("INSERT INTO t SELECT 1") === Set(Seq("t")))
+    assert(sourceTableRefs("INSERT INTO t SELECT 1").isEmpty)
+
+    assert(targetTableRefs("DELETE FROM t WHERE a = 1") === Set(Seq("t")))
+    assert(sourceTableRefs("DELETE FROM t WHERE a = 1").isEmpty)
+
+    assert(targetTableRefs("UPDATE t SET a = 1 WHERE b = 2") === Set(Seq("t")))
+    assert(sourceTableRefs("UPDATE t SET a = 1 WHERE b = 2").isEmpty)
+
+    assert(targetTableRefs(
+      "MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE") === Set(Seq("t")))
+    assert(sourceTableRefs(
+      "MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE") === Set(Seq("s")))
+
+    assert(targetTableRefs("CREATE TABLE x AS SELECT a FROM src") === Set(Seq("x")))
+    assert(sourceTableRefs("CREATE TABLE x AS SELECT a FROM src") === Set(Seq("src")))
+
+    assert(targetTableRefs("DROP TABLE t") === Set(Seq("t")))
+    assert(sourceTableRefs("DROP TABLE t").isEmpty)
   }
 
   test("CTE aliases only shadow references within their own scope") {
     // The inner CTE named real_t must not hide the outer real table real_t.
-    assert(tableRefs(
+    assert(sourceTableRefs(
       "SELECT * FROM real_t WHERE EXISTS (" +
         "WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t)") ===
       Set(Seq("real_t"), Seq("inner_base")))
     // A definition sees only preceding aliases, so b here is the real table.
-    assert(tableRefs("WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a") ===
+    assert(sourceTableRefs(
+      "WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a") ===
       Set(Seq("b")))
   }
 
@@ -103,7 +135,7 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(j \ "statement_identifier" === JString("BEGIN END"))
     assert(j \ "parameter_markers" \ "unnamed_count" === JInt(1))
     assert(j \ "parameter_markers" \ "named" === JNothing)
-    assert(tableRefs("BEGIN SELECT * FROM t WHERE a = ?; END") === Set(Seq("t")))
+    assert(sourceTableRefs("BEGIN SELECT * FROM t WHERE a = ?; END") === Set(Seq("t")))
   }
 
   test("syntax error returns STANDARD error JSON without throwing") {

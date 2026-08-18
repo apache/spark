@@ -40,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
 @ExpressionDescription(
   usage = """_FUNC_(sqlStmt) - Parses `sqlStmt` with the stock Spark SQL parser and
     returns a JSON string describing the statement (parse success, Table 39 statement
-    identifier/code, table and function references for lineage, select-list column
+    identifier/code, target and source table references for lineage, select-list column
     names, and parameter markers). Session parser extensions are not applied.
     Requires spark.sql.parseSql.enabled=true. On syntax / parse error returns JSON
     with `parse_success` false, source location, and a nested STANDARD error object
@@ -53,7 +53,7 @@ import org.apache.spark.unsafe.types.UTF8String
   examples = """
     Examples:
       > SELECT _FUNC_('SELECT a, b FROM t');
-       {"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"table_references":[["t"]],"select_list":[{"name":["a"]},{"name":["b"]}]}
+       {"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["t"]],"select_list":[{"name":["a"]},{"name":["b"]}]}
       > SELECT get_json_object(_FUNC_('SELEC'), '$.error.errorClass');
        PARSE_SYNTAX_ERROR
   """,

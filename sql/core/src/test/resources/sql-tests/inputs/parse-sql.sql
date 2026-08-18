@@ -13,7 +13,7 @@ SELECT parse_sql('SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2');
 -- JSON-path access over one shared successful parse result
 SELECT
   get_json_object(result, '$.statement_identifier') AS statement_identifier,
-  get_json_object(result, '$.table_references[0][0]') AS first_table,
+  get_json_object(result, '$.source_table_references[0][0]') AS first_table,
   get_json_object(result, '$.select_list[1].name[0]') AS second_column
 FROM (SELECT parse_sql('SELECT a, b FROM t') AS result);
 
@@ -35,7 +35,7 @@ SELECT parse_sql('CACHE TABLE t');
 SELECT parse_sql('TABLE t');
 SELECT parse_sql('VALUES (1), (2)');
 
--- function / variable names are not table_references
+-- function / variable names are not target or source table references
 SELECT parse_sql('CREATE FUNCTION f AS ''x'' USING JAR ''y.jar''');
 SELECT parse_sql('DECLARE VARIABLE x INT');
 
