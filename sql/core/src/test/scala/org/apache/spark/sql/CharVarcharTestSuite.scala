@@ -23,7 +23,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, ScalarSubquery, StringRPad}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Project}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
@@ -1265,6 +1265,41 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assert(sql(
         """SELECT c FROM (VALUES (cast('a' AS CHAR(2))), (cast('bb' AS CHAR(4)))) t(c)""")
         .schema.head.dataType === CharType(4))
+    }
+  }
+
+  test("SPARK-58794: parameterized CHAR/VARCHAR lengths under standardSemantics") {
+    // Length positions accept parameter markers (`integerValue` -> `parameterMarker`). Under
+    // standardSemantics the bound type stays first-class: CAST keeps CHAR/VARCHAR, pads and
+    // enforces length, and DDL schemas retain the substituted n.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charDf = spark.sql("SELECT cast('ab' AS CHAR(:n)) AS c", Map("n" -> 5))
+      assert(charDf.schema.head.dataType === CharType(5))
+      checkAnswer(
+        spark.sql("SELECT concat('<', cast('ab' AS CHAR(:n)), '>')", Map("n" -> 5)),
+        Row("<ab   >"))
+
+      val varcharDf = spark.sql("SELECT cast('hello' AS VARCHAR(?)) AS c", Array(5))
+      assert(varcharDf.schema.head.dataType === VarcharType(5))
+      intercept[SparkRuntimeException] {
+        spark.sql("SELECT cast('abcdef' AS VARCHAR(?))", Array(2)).collect()
+      }
+
+      withTable("param_varchar", "param_char") {
+        spark.sql(
+          "CREATE TABLE param_varchar (c VARCHAR(:n)) USING parquet", Map("n" -> 7))
+        assert(spark.table("param_varchar").schema.head.dataType === VarcharType(7))
+        spark.sql("CREATE TABLE param_char (c CHAR(?)) USING parquet", Array(4))
+        assert(spark.table("param_char").schema.head.dataType === CharType(4))
+      }
+
+      // Non-integral / negative lengths fail when substituted into the length position.
+      intercept[ParseException] {
+        spark.sql("SELECT cast('a' AS CHAR(:n))", Map("n" -> -1)).collect()
+      }
+      intercept[ParseException] {
+        spark.sql("SELECT cast('a' AS CHAR(:n))", Map("n" -> 1.5)).collect()
+      }
     }
   }
 
