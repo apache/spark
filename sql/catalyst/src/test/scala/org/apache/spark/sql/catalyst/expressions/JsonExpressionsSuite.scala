@@ -1089,8 +1089,10 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val freshMultiGetJsonObject =
       multiGetJsonObject.freshCopyIfContainsStatefulExpression().asInstanceOf[DelegateExpression]
     assert(freshMultiGetJsonObject ne multiGetJsonObject)
-    val evaluator = multiGetJsonObject.definition.asInstanceOf[Invoke].targetObject.eval()
-    val freshEvaluator = freshMultiGetJsonObject.definition.asInstanceOf[Invoke].targetObject.eval()
+    val evaluator = multiGetJsonObject.definition.asInstanceOf[Invoke]
+      .targetObject.eval().asInstanceOf[AnyRef]
+    val freshEvaluator = freshMultiGetJsonObject.definition.asInstanceOf[Invoke]
+      .targetObject.eval().asInstanceOf[AnyRef]
     assert(freshEvaluator ne evaluator)
 
     // JsonValue reuses a mutable row to cast the extracted scalar, so it must be stateful.

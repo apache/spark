@@ -461,10 +461,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
       // the shared extraction is its definition: an Invoke of MultiGetJsonObjectEvaluator.
       def isSharedEval(e: Expression): Boolean = e.exists {
         case i: Invoke if i.functionName == "evaluate" =>
-          i.targetObject match {
-            case Literal(_: MultiGetJsonObjectEvaluator, _) => true
-            case _ => false
-          }
+          i.targetObject.dataType == ObjectType(classOf[MultiGetJsonObjectEvaluator])
         case _ => false
       }
       def containsSharedExtraction(plan: SparkPlan): Boolean = plan match {

@@ -249,6 +249,8 @@ private case class MultiGetJsonObjectEvaluatorHolder(
   override def nullable: Boolean = false
   override def stateful: Boolean = true
   override def eval(input: InternalRow): Any = evaluator
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = copy()
 }
 
 // scalastyle:off line.size.limit line.contains.tab

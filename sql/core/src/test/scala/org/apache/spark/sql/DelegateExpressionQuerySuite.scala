@@ -97,12 +97,27 @@ class DelegateExpressionQuerySuite
         |  1)
         |FROM range(5)""".stripMargin)
 
-    val windowExpressions = df.queryExecution.executedPlan.collect {
+    val windowExpressions = collect(df.queryExecution.executedPlan) {
       case window: WindowExec => window.windowExpression
     }.flatten
     assert(windowExpressions.size == 1,
       s"right() should produce one window aggregate, got:\n${df.queryExecution.executedPlan}")
     checkAnswer(df, (0 until 5).map(i => Row(i.toString)))
+  }
+
+  test("right() extracts a window length only once") {
+    val df = spark.sql(
+      """SELECT right(
+        |  'abcdef',
+        |  CAST(sum(id) OVER (ORDER BY id) AS INT))
+        |FROM range(5)""".stripMargin)
+
+    val windowExpressions = collect(df.queryExecution.executedPlan) {
+      case window: WindowExec => window.windowExpression
+    }.flatten
+    assert(windowExpressions.size == 1,
+      s"right() should produce one window aggregate, got:\n${df.queryExecution.executedPlan}")
+    checkAnswer(df, Seq("", "f", "def", "abcdef", "abcdef").map(Row(_)))
   }
 
   test("optimizer-inserted MultiGetJsonObject is a delegate in the optimized plan, lowered " +
@@ -250,5 +265,17 @@ class DelegateExpressionQuerySuite
         "inputType" -> "\"ARRAY<INT>\""),
       queryContext = Array(ExpectedContext(
         fragment = "right('abc', array(1))", start = 7, stop = 28)))
+
+    checkError(
+      exception = intercept[AnalysisException](spark.sql("SELECT right(array(1), 1)")),
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"right(array(1), 1)\"",
+        "paramIndex" -> "first",
+        "requiredType" -> "\"STRING\"",
+        "inputSql" -> "\"array(1)\"",
+        "inputType" -> "\"ARRAY<INT>\""),
+      queryContext = Array(ExpectedContext(
+        fragment = "right(array(1), 1)", start = 7, stop = 23)))
   }
 }

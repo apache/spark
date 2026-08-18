@@ -124,7 +124,14 @@ trait InputTypeMarker extends Unevaluable {
   def callSql: String
 
   override def inputTypes: Seq[AbstractDataType] = Seq(expectedType)
-  override def dataType: DataType = child.dataType
+  // Keep the lowered definition type-correct even when the input cannot be coerced. The marker
+  // itself remains unresolved and reports the user-facing type error, but expressions that refer
+  // to it through a With/CommonExpressionRef must not fail first with an internal error.
+  override def dataType: DataType = if (checkInputDataTypes().isSuccess) {
+    child.dataType
+  } else {
+    expectedType.defaultConcreteType
+  }
   override def nullable: Boolean = child.nullable
   override lazy val canonicalized: Expression = child.canonicalized
   final override val nodePatterns: Seq[TreePattern] = Seq(INPUT_TYPE_MARKER)
