@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkConf, SparkRuntimeException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, ScalarSubquery, StringRPad}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.SharedSparkSession
@@ -999,6 +1000,110 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assert(collatedDf.schema("c").dataType === CharType(5, "UTF8_LCASE"))
       assert(collatedDf.schema("v").dataType === VarcharType(5, "UTF8_LCASE"))
       checkAnswer(collatedDf, Row("ab   ", "cd"))
+    }
+  }
+
+  test("SPARK-58803: Dataset/encoder/UDF CHAR/VARCHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // createDataFrame / RowEncoder write-side: pad CHAR, reject oversize.
+      val charSchema = new StructType().add("c", CharType(3))
+      checkAnswer(
+        spark.createDataFrame(java.util.Arrays.asList(Row("ab")), charSchema),
+        Row("ab "))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.createDataFrame(java.util.Arrays.asList(Row("abcd")), charSchema).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+      val varcharSchema = new StructType().add("v", VarcharType(3))
+      checkAnswer(
+        spark.createDataFrame(java.util.Arrays.asList(Row("ab")), varcharSchema),
+        Row("ab"))
+      // Oversize by trailing blanks only: trim just enough to fit the limit.
+      checkAnswer(
+        spark.createDataFrame(java.util.Arrays.asList(Row("abc ")), varcharSchema),
+        Row("abc"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.createDataFrame(java.util.Arrays.asList(Row("abcd")), varcharSchema).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      // Explicit Encoders.CHAR / VARCHAR: typed Dataset write-side checks.
+      val charDs = spark.createDataset(Seq("ab"))(Encoders.CHAR(4))
+      assert(charDs.schema.head.dataType === CharType(4))
+      checkAnswer(charDs.toDF(), Row("ab  "))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.createDataset(Seq("abcde"))(Encoders.VARCHAR(3)).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      // UDF register: return type stays CHAR/VARCHAR; write-side pad / length apply.
+      spark.udf.register("std_char_udf", () => "B", CharType(3))
+      spark.udf.register("std_varchar_udf", (x: String) => x, VarcharType(3))
+      val charUdf = sql("SELECT std_char_udf() AS c")
+      assert(charUdf.schema.head.dataType === CharType(3))
+      checkAnswer(charUdf, Row("B  "))
+      val varcharUdf = sql("SELECT std_varchar_udf('ab') AS v")
+      assert(varcharUdf.schema.head.dataType === VarcharType(3))
+      checkAnswer(varcharUdf, Row("ab"))
+      checkError(
+        exception = intercept[SparkException] {
+          sql("SELECT std_varchar_udf('abcd')").collect()
+        }.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      // Java udf(..., returnType) path and Dataset.encoder from CHAR result schema.
+      val javaUdf = functions.udf(
+        new org.apache.spark.sql.api.java.UDF0[String] {
+          override def call(): String = "a"
+        },
+        CharType(5))
+      val javaUdfDf = spark.range(1).select(javaUdf().as("c"))
+      assert(javaUdfDf.schema.head.dataType === CharType(5))
+      checkAnswer(javaUdfDf, Row("a    "))
+      assert(javaUdfDf.encoder.schema.head.dataType === CharType(5))
+
+      // Dataset.to: CHAR/VARCHAR target schema allowed; Cast applies store assignment.
+      withTable("std_cv_to") {
+        sql("CREATE TABLE std_cv_to (c CHAR(10), v VARCHAR(255)) USING parquet")
+        sql("INSERT INTO std_cv_to VALUES ('spark', 'awesome')")
+        val df = sql("SELECT * FROM std_cv_to")
+        assert(df.schema("c").dataType === CharType(10))
+        assert(df.schema("v").dataType === VarcharType(255))
+        val reordered = StructType.fromDDL("v VARCHAR(255), c CHAR(10)")
+        val toDf = df.to(reordered)
+        assert(toDf.schema.map(_.dataType) === Seq(VarcharType(255), CharType(10)))
+        checkAnswer(toDf, Row("awesome", "spark     "))
+        // Narrowing CHAR length is store assignment and must enforce length.
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            df.select($"c").to(new StructType().add("c", CharType(3))).collect()
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "3"))
+      }
+
+      // DataFrameReader / DataStreamReader user schemas keep CHAR/VARCHAR.
+      val readerSchema = new StructType().add("id", CharType(5))
+      val csvInput = spark.range(1).map(_.toString)
+      val csvDf = spark.read.schema(readerSchema).csv(csvInput)
+      assert(csvDf.schema.head.dataType === CharType(5))
+      checkAnswer(csvDf, Row("0    "))
+      val csvDfDdl = spark.read.schema("id VARCHAR(5)").csv(csvInput)
+      assert(csvDfDdl.schema.head.dataType === VarcharType(5))
+      withTempPath { dir =>
+        spark.range(1).write.save(dir.toString)
+        val streamDf = spark.readStream.schema(readerSchema).load(dir.toString)
+        assert(streamDf.schema.head.dataType === CharType(5))
+        val streamDdl = spark.readStream.schema("id VARCHAR(5)").load(dir.toString)
+        assert(streamDdl.schema.head.dataType === VarcharType(5))
+      }
     }
   }
 
