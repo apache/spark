@@ -377,7 +377,7 @@ class InferWindowGroupLimitSuite extends PlanTest {
       windowSpec(a :: Nil, c.desc :: Nil,
         SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("rn")
 
-    def analyzed = testRelation
+    def analyzed: LogicalPlan = testRelation
       .window(Seq(cnt), a :: Nil, Nil)
       .window(Seq(rn), a :: Nil, c.desc :: Nil)
       .where($"rn" <= 2)
