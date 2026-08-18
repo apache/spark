@@ -126,7 +126,7 @@ class RemoteMLWriter(MLWriter):
 
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             plm_writer = PipelineModelWriter(instance)
-            plm_writer.session(session)
+            plm_writer.session(session)  # type: ignore[arg-type]
             plm_writer.save(path)
         elif isinstance(instance, CrossValidator):
             from pyspark.ml.tuning import CrossValidatorWriter
@@ -155,7 +155,7 @@ class RemoteMLWriter(MLWriter):
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             tvsm_writer = TrainValidationSplitModelWriter(instance)
             tvsm_writer.optionMap = optionMap
-            tvsm_writer.session(session)  # type: ignore[arg-type]
+            tvsm_writer.session(session)
             tvsm_writer.save(path)
         elif isinstance(instance, OneVsRest):
             from pyspark.ml.classification import OneVsRestWriter
