@@ -25,7 +25,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Proj
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, IndeterminateStringType, MapType, NullType, StringType, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType, DataType, IndeterminateStringType, MapType, NullType, StringHelper, StringType,
+  StructType
+}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -429,8 +432,18 @@ object CollationTypeCoercion extends SQLConfHelper {
 
     (left.strength.priority, right.strength.priority) match {
       case (leftPriority, rightPriority) if leftPriority == rightPriority =>
-        if (left.sameType(right)) left
-        else handleMismatch()
+        if (left.sameType(right)) {
+          left
+        } else {
+          // Equal strength with differing types is only a real collation mismatch when the
+          // collations differ. Same-collation CHAR(2) and CHAR(4) differ only in length, so widen
+          // to the string-family LCT (max(n, m), which pads rather than truncates); a genuine
+          // collation mismatch has no LCT and falls through.
+          StringHelper.tightestCommonString(left.stringType, right.stringType) match {
+            case Some(lct) => StringTypeWithContext(lct, left.strength)
+            case None => handleMismatch()
+          }
+        }
 
       case (leftPriority, rightPriority) =>
         if (leftPriority < rightPriority) left

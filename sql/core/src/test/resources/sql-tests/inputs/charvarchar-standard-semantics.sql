@@ -66,22 +66,74 @@ SELECT typeof(reverse(array(1, 2)));
 SELECT typeof(str_to_map(cast('a:1,b:2' AS CHAR(7))));
 SELECT typeof(c0) FROM (SELECT json_tuple(cast('{"a":"1"}' AS CHAR(9)), 'a') AS c0);
 
--- R2 with collation. A declared collation survives the CAST and an LCT over equally constrained
--- operands. The mixed-length case (CHAR(2) with CHAR(4), same collation) is deliberately not
--- covered here: CollationTypeCoercion reads the differing lengths as a collation mismatch and
--- yields an indeterminate collation. That predates this change (it reproduces under
--- spark.sql.preserveCharVarcharTypeInfo) and is tracked separately, so goldening it would
--- normalize the bug.
+-- Collation survives CAST and LCT. Mixed lengths with the same collation widen to max(n, m);
+-- they must not collapse to an indeterminate collation.
 SELECT typeof(cast('a' AS CHAR(2) COLLATE UTF8_LCASE));
 SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(2) COLLATE UTF8_LCASE)));
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)));
+SELECT concat('<', coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)), '>');
 
--- UNION LCT
+-- Set operations and multi-row VALUES share the same LCT as COALESCE.
 SELECT typeof(c) FROM (
   SELECT cast('a' AS VARCHAR(3)) AS c
   UNION ALL
   SELECT cast('abcd' AS VARCHAR(8)) AS c
 ) t LIMIT 1;
+SELECT typeof(c) FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION
+  SELECT cast('a' AS CHAR(4)) AS c
+) t;
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION
+  SELECT cast('a' AS CHAR(4)) AS c
+) t;
+SELECT typeof(c) FROM (
+  SELECT cast('ab' AS CHAR(2)) AS c
+  INTERSECT
+  SELECT cast('ab' AS CHAR(4)) AS c
+) t;
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('ab' AS CHAR(2)) AS c
+  INTERSECT
+  SELECT cast('ab' AS CHAR(4)) AS c
+) t;
+SELECT typeof(c) FROM (
+  SELECT cast('ab' AS CHAR(2)) AS c
+  EXCEPT
+  SELECT cast('ab' AS CHAR(4)) AS c
+) t;
+SELECT typeof(c) FROM (VALUES
+  (cast('a' AS CHAR(2))),
+  (cast('bb' AS CHAR(4)))
+) t(c);
+SELECT concat('<', c, '>') FROM (VALUES
+  (cast('a' AS CHAR(2))),
+  (cast('bb' AS CHAR(4)))
+) t(c);
+
+-- Comparison and IN: both sides (including the IN left-hand side) are cast to the LCT of all
+-- participants. Casting to CHAR pads, so CHAR vs CHAR of different lengths compares equal after
+-- widen; casting to VARCHAR/STRING keeps the CHAR pad, so CHAR 'a' (stored as 'a ') is not equal
+-- to VARCHAR/STRING 'a' unless the other side carries the same trailing blank. Trailing-blank
+-- ignoring is a collation concern (RTRIM), not a type-level PAD SPACE policy.
+SELECT cast('a' AS CHAR(2)) = cast('a' AS CHAR(4));
+SELECT cast('a' AS CHAR(2)) = cast('a' AS VARCHAR(2));
+SELECT cast('a' AS CHAR(2)) = cast('a ' AS VARCHAR(2));
+SELECT cast('a' AS CHAR(2)) = 'a';
+SELECT cast('a' AS CHAR(2)) = 'a ';
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = 'a';
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) =
+  cast('a' AS CHAR(4) COLLATE UTF8_BINARY_RTRIM);
+SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)));
+SELECT cast('a' AS CHAR(2)) IN (cast('a' AS VARCHAR(2)));
+SELECT cast('a' AS CHAR(2)) IN (cast('a ' AS VARCHAR(2)));
+SELECT cast('a' AS CHAR(2)) IN ('a', 'b');
+SELECT cast('a' AS CHAR(2)) IN ('a ', 'b');
 
 -- Nested types keep CHAR/VARCHAR
 SELECT typeof(array(cast('a' AS CHAR(2)), cast('bb' AS CHAR(3))));

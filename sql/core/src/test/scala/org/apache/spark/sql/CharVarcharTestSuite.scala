@@ -1201,6 +1201,73 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58794: compare, IN and set-ops cast every participant to the string LCT") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // Comparison and IN cast both sides (including the IN left-hand side) to the LCT of all
+      // participants. Casting to CHAR pads, so unequal CHAR lengths compare equal after widen;
+      // casting to VARCHAR/STRING keeps the CHAR pad, so equality needs a matching blank.
+      checkAnswer(sql("SELECT cast('a' AS CHAR(2)) = cast('a' AS CHAR(4))"), Row(true))
+      checkAnswer(sql("SELECT cast('a' AS CHAR(2)) = cast('a' AS VARCHAR(2))"), Row(false))
+      checkAnswer(sql("SELECT cast('a' AS CHAR(2)) = cast('a ' AS VARCHAR(2))"), Row(true))
+      checkAnswer(sql("SELECT cast('a' AS CHAR(2)) = 'a'"), Row(false))
+      checkAnswer(sql("SELECT cast('a' AS CHAR(2)) = 'a '"), Row(true))
+
+      // INTypeCoercion uses findWiderCommonType over (lhs +: list), then casts every child —
+      // the left-hand side is not exempt.
+      val inAnalyzed = sql(
+        "SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)), cast('b' AS VARCHAR(3)))")
+        .queryExecution.analyzed
+      assert(inAnalyzed.toString.contains("as varchar(4)"),
+        s"LHS and list should all widen to VARCHAR(4), got:\n$inAnalyzed")
+      checkAnswer(
+        sql("SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)))"), Row(true))
+      checkAnswer(
+        sql("SELECT cast('a' AS CHAR(2)) IN (cast('a' AS VARCHAR(2)))"), Row(false))
+      checkAnswer(
+        sql("SELECT cast('a' AS CHAR(2)) IN (cast('a ' AS VARCHAR(2)))"), Row(true))
+
+      // RTRIM ignores trailing blanks for CHAR vs STRING and for mixed CHAR lengths.
+      checkAnswer(
+        sql("SELECT cast('a' AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = 'a'"), Row(true))
+      checkAnswer(
+        sql("""SELECT cast('a' AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) =
+              |  cast('a' AS CHAR(4) COLLATE UTF8_BINARY_RTRIM)""".stripMargin),
+        Row(true))
+
+      // Collated LCT must keep the collation and take max(n, m), not become indeterminate.
+      assert(sql(
+        """SELECT coalesce(
+          |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === CharType(4, "UTF8_LCASE"))
+
+      // Set ops and multi-row VALUES share the same LCT.
+      assert(sql(
+        """SELECT c FROM (
+          |  SELECT cast('a' AS CHAR(2)) AS c UNION SELECT cast('a' AS CHAR(4)) AS c) t"""
+          .stripMargin)
+        .schema.head.dataType === CharType(4))
+      checkAnswer(
+        sql("""SELECT c FROM (
+              |  SELECT cast('a' AS CHAR(2)) AS c UNION SELECT cast('a' AS CHAR(4)) AS c) t"""
+          .stripMargin),
+        Row("a   "))
+      checkAnswer(
+        sql("""SELECT c FROM (
+              |  SELECT cast('ab' AS CHAR(2)) AS c INTERSECT
+              |  SELECT cast('ab' AS CHAR(4)) AS c) t""".stripMargin),
+        Row("ab  "))
+      checkAnswer(
+        sql("""SELECT c FROM (
+              |  SELECT cast('ab' AS CHAR(2)) AS c EXCEPT
+              |  SELECT cast('ab' AS CHAR(4)) AS c) t""".stripMargin),
+        Seq.empty)
+      assert(sql(
+        """SELECT c FROM (VALUES (cast('a' AS CHAR(2))), (cast('bb' AS CHAR(4)))) t(c)""")
+        .schema.head.dataType === CharType(4))
+    }
+  }
+
   test("SPARK-58802: single-pass resolver agrees with fixed-point under standardSemantics") {
     // Dual run defaults to on under tests, but pin it explicitly so this coverage cannot be
     // silently lost: the HybridAnalyzer compares output schema and normalized plan across the
