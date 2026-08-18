@@ -1002,36 +1002,107 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58796: single-pass resolver agrees with fixed-point under standardSemantics") {
+  test("SPARK-58802: single-pass resolver agrees with fixed-point under standardSemantics") {
     // Dual run defaults to on under tests, but pin it explicitly so this coverage cannot be
     // silently lost: the HybridAnalyzer compares output schema and normalized plan across the
-    // two analyzers and fails with HYBRID_ANALYZER_EXCEPTION on any divergence.
+    // two analyzers and fails with HYBRID_ANALYZER_EXCEPTION on any divergence. Resolver has no
+    // Char/Varchar-specific logic; it inherits Expression.dataType and shared TypeCoercion, so
+    // this matrix is the proof that LCT/CAST/R1 stay aligned (D19).
     withSQLConf(
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
         SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
         SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE.key -> "true") {
-      // CAST introduces the type (R3).
+      // CAST / try_cast introduce the type (R3).
       assert(sql("SELECT CAST('ab' AS CHAR(5)) AS c").schema.head.dataType === CharType(5))
-      // Least common type (R2).
+      assert(sql("SELECT CAST('hello' AS VARCHAR(5)) AS c").schema.head.dataType ===
+        VarcharType(5))
+      assert(sql("SELECT try_cast('abcdef' AS CHAR(2)) AS c").schema.head.dataType ===
+        CharType(2))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS c"), Row(null))
+
+      // Least common type (R2): COALESCE / CASE / NULL / CHAR+VARCHAR / CHAR+STRING.
       assert(sql(
         "SELECT coalesce(CAST('a' AS VARCHAR(3)), CAST('bb' AS VARCHAR(7))) AS c")
         .schema.head.dataType === VarcharType(7))
       assert(sql(
+        "SELECT coalesce(CAST('a' AS CHAR(2)), CAST('bb' AS VARCHAR(4))) AS c")
+        .schema.head.dataType === VarcharType(4))
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS CHAR(2)), 'bb') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS CHAR(5)), CAST(NULL AS CHAR(5))) AS c")
+        .schema.head.dataType === CharType(5))
+      assert(sql(
         "SELECT CASE WHEN true THEN CAST('a' AS CHAR(2)) ELSE CAST('bb' AS CHAR(4)) END AS c")
         .schema.head.dataType === CharType(4))
+      assert(sql(
+        "SELECT CASE WHEN false THEN CAST('a' AS VARCHAR(2)) ELSE CAST('bb' AS CHAR(4)) END AS c")
+        .schema.head.dataType === VarcharType(4))
+
+      // IN-list common type (side condition uses LCT; result is boolean).
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2)) IN (CAST('a ' AS CHAR(2)), CAST('bbb' AS VARCHAR(3)))"),
+        Row(true))
+
       // Transforming operators return STRING (R1).
       assert(sql("SELECT upper(CAST('ab' AS CHAR(2))) AS c").schema.head.dataType === StringType)
+      assert(sql("SELECT lower(CAST('AB' AS VARCHAR(2))) AS c").schema.head.dataType ===
+        StringType)
       assert(sql("SELECT CAST('a' AS CHAR(1)) || CAST('b' AS VARCHAR(1)) AS c")
         .schema.head.dataType === StringType)
-      // Set operation least common type.
+      assert(sql("SELECT concat(CAST('a' AS CHAR(2)), CAST('b' AS CHAR(3))) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT substr(CAST('hello' AS VARCHAR(5)), 1, 2) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT trim(CAST('ab  ' AS CHAR(4))) AS c").schema.head.dataType === StringType)
+      assert(sql("SELECT regexp_replace(CAST('ab' AS CHAR(2)), 'a', 'x') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT mask(CAST('ab' AS CHAR(2))) AS c").schema.head.dataType === StringType)
+      assert(sql("SELECT split(CAST('a,b' AS CHAR(3)), ',') AS c").schema.head.dataType ===
+        ArrayType(StringType, containsNull = false))
+      // R1 after LCT: coalesce stays CHAR, upper widens to STRING.
+      assert(sql(
+        "SELECT upper(coalesce(CAST('a' AS CHAR(2)), CAST('b' AS CHAR(4)))) AS c")
+        .schema.head.dataType === StringType)
+
+      // Set-operation LCT.
       val union = sql(
         """SELECT CAST('a' AS VARCHAR(3)) AS c
           |UNION ALL
           |SELECT CAST('abcd' AS VARCHAR(8)) AS c""".stripMargin)
       assert(union.schema.head.dataType === VarcharType(8))
       checkAnswer(union, Seq(Row("a"), Row("abcd")))
+
+      val intersect = sql(
+        """SELECT CAST('ab' AS CHAR(2)) AS c
+          |INTERSECT
+          |SELECT CAST('ab' AS CHAR(4)) AS c""".stripMargin)
+      assert(intersect.schema.head.dataType === CharType(4))
+      checkAnswer(intersect, Seq(Row("ab  ")))
+
+      // Nested types keep CHAR/VARCHAR through analysis.
+      assert(sql("SELECT array(CAST('a' AS CHAR(2)), CAST('bb' AS CHAR(3))) AS c")
+        .schema.head.dataType === ArrayType(CharType(3), containsNull = false))
+      assert(sql("SELECT struct(CAST('a' AS CHAR(2)) AS f) AS c")
+        .schema.head.dataType ===
+        StructType(Seq(StructField("f", CharType(2), nullable = false))))
+
+      // Collated CAST keeps the declared collation under both analyzers.
+      assert(sql("SELECT CAST('ab' AS CHAR(2) COLLATE UTF8_LCASE) AS c")
+        .schema.head.dataType === CharType(2, "UTF8_LCASE"))
+
+      // Bare column references keep the declared type (R3) through dual-run analysis.
+      withTable("char_varchar_dual_run") {
+        sql("CREATE TABLE char_varchar_dual_run (c CHAR(5), v VARCHAR(5)) USING parquet")
+        sql("INSERT INTO char_varchar_dual_run VALUES ('ab', 'ab')")
+        val df = sql("SELECT c, v FROM char_varchar_dual_run")
+        assert(df.schema("c").dataType === CharType(5))
+        assert(df.schema("v").dataType === VarcharType(5))
+        checkAnswer(df, Row("ab   ", "ab"))
+      }
     }
   }
 
