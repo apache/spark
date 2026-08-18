@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Locale
-import java.util.zip.{Adler32, CRC32, Checksum}
+import java.util.zip.{Adler32, Checksum, CRC32}
 
 /**
  * Computes integrity checksums over the set of non-empty partition indices of a MapStatus.
