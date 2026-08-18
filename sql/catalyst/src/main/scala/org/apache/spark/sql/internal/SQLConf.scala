@@ -7115,6 +7115,9 @@ object SQLConf {
         "residual. Has no effect unless the Parquet column is shredded and " +
         "spark.sql.variant.pushVariantIntoScan is also true.")
       .version("4.3.0")
+      // Physical scan optimization only: it changes which Parquet row groups are read, not the
+      // resolved plan of a view/UDF/procedure body, so it does not participate in binding.
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
