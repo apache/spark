@@ -33,8 +33,8 @@ import org.apache.spark.sql.functions.{
   expr,
   hex,
   lit,
-  sum,
   substring,
+  sum,
   to_binary}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -467,10 +467,10 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
           },
           condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           parameters = Map(
-            "sqlExpr" -> s"\"$sqlExpr\"",
+            "sqlExpr" -> s""""$sqlExpr"""",
             "paramIndex" -> paramIndex,
             "requiredType" -> "\"BINARY\"",
-            "inputSql" -> s"\"$inputColumn\"",
+            "inputSql" -> s""""$inputColumn"""",
             "inputType" -> "\"INT\""),
           context = ExpectedContext(fragment = sqlExpr, start = 0, stop = sqlExpr.length - 1))
       }
