@@ -649,6 +649,19 @@ class DataFrameStatSuite extends SharedSparkSession {
     val values = summaryDf.select("t").collect().map(_.getString(0))
     assert(values === Array(null, null))
   }
+
+  test("SPARK-57849: describe() includes TIME columns") {
+    val df = sql(
+      "SELECT * FROM VALUES (CAST('06:00:00' AS TIME(9))), (CAST('08:00:00' AS TIME(9))), " +
+        "(CAST('10:00:00' AS TIME(9))) AS tab(t);"
+    )
+
+    val describeDf = df.describe("t")
+    val min = describeDf.filter($"summary" === "min").select("t").head().getString(0)
+    val max = describeDf.filter($"summary" === "max").select("t").head().getString(0)
+    assert(min === "06:00:00")
+    assert(max === "10:00:00")
+  }
 }
 
 
