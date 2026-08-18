@@ -1437,7 +1437,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: time travel options on write targets are rejected consistently") {
+  test("SPARK-58389: time travel is rejected for resolved and newly created V2 write targets") {
     val t1 = s"${catalogAndNamespace}table"
     val newTable = s"${catalogAndNamespace}new_table"
     withTable(t1, newTable) {
@@ -1494,6 +1494,18 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           parameters = Map("relationId" -> "`temp_view`"))
       }
     }
+  }
+
+  test("SPARK-58389: a missing insertInto target reports table not found before time travel") {
+    val missingTable = s"${catalogAndNamespace}missing"
+    val input = Seq(1L -> "a").toDF("id", "data")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        input.write.option("versionAsOf", "v1").insertInto(missingTable)
+      },
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> "`ns1`.`ns2`.`missing`"))
   }
 
   test("SPARK-58389: SQL CTAS and RTAS options remain table properties") {
