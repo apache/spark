@@ -21,6 +21,7 @@ import java.net.{URI, URISyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
@@ -684,8 +685,10 @@ case class DescribeTableCommand(
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (table.partitionColumnNames.nonEmpty) {
-      append(buffer, "# Partition Information", "", "")
-      describeSchema(table.partitionSchema, buffer, header = true)
+      Try(table.partitionSchema).foreach { partitionSchema =>
+        append(buffer, "# Partition Information", "", "")
+        describeSchema(partitionSchema, buffer, header = true)
+      }
     }
   }
 
