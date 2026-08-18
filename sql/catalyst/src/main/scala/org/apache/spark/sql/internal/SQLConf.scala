@@ -7113,7 +7113,10 @@ object SQLConf {
         "(i.e. the whole path is provably in the typed leaf). This enables row-group skipping " +
         "for shredded Variant columns while never dropping rows that fall back to an untyped " +
         "residual. Has no effect unless the Parquet column is shredded and " +
-        "spark.sql.variant.pushVariantIntoScan is also true.")
+        "spark.sql.variant.pushVariantIntoScan is also true, and it does not fire when " +
+        "spark.sql.variant.pushVariantIntoScan.deferCastError is true (the extraction is " +
+        "rewritten into a form that is not translated to a pushable filter). Results are " +
+        "unaffected either way; this only controls whether row groups can be skipped.")
       .version("4.3.0")
       // Physical scan optimization only: it changes which Parquet row groups are read, not the
       // resolved plan of a view/UDF/procedure body, so it does not participate in binding.

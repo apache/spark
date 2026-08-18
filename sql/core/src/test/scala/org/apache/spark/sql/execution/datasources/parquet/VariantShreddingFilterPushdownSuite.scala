@@ -52,13 +52,13 @@ import org.apache.spark.util.AccumulatorContext
 class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     with SharedSparkSession {
 
-  // Base configs to write shredded Variant Parquet files.
-  private def writeConf(forceSchema: String): Seq[(String, String)] = Seq(
+  // Base configs to write shredded Variant Parquet files. `annotate` controls whether the physical
+  // variant group carries the VARIANT logical-type annotation (the production default is true).
+  private def writeConf(forceSchema: String, annotate: Boolean): Seq[(String, String)] = Seq(
     SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> "true",
     SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> "true",
     SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> forceSchema,
-    // Keep the physical group unannotated so the schema is a plain shredded struct.
-    SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key -> "false")
+    SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key -> annotate.toString)
 
   /**
    * Counts how many Parquet row groups are actually read by the given DataFrame, using the
@@ -86,8 +86,9 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
       forceSchema: String,
       jsonExpr: String,
       numRows: Int,
-      blockSize: Int = 512): Unit = {
-    withSQLConf(writeConf(forceSchema): _*) {
+      blockSize: Int = 512,
+      annotate: Boolean = false): Unit = {
+    withSQLConf(writeConf(forceSchema, annotate): _*) {
       spark.sql(
         s"""SELECT parse_json($jsonExpr) AS v
            |FROM range(0, $numRows, 1, 1)""".stripMargin)
@@ -292,6 +293,62 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
 
       forEachReader { (_, _) =>
         checkAnswer(read, expected)
+      }
+    }
+  }
+
+  test("annotated variant layout: skip fires on DSv1 and fallback is not dropped") {
+    // The production default writes the variant group with the VARIANT logical-type annotation.
+    // Exercise both a skip-eligible query and an overflow-fallback query against that layout.
+    withTempDir { dir =>
+      writeShredded(dir, "a bigint", "'{\"a\":' || id || '}'", numRows = 2000, blockSize = 512,
+        annotate = true)
+      forEachReader { (dsv1, vectorized) =>
+        val filtered = spark.read.parquet(dir.getAbsolutePath)
+          .selectExpr("variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
+        val all = spark.read.parquet(dir.getAbsolutePath)
+          .selectExpr("variant_get(v, '$.a', 'bigint') AS a")
+        checkAnswer(filtered.orderBy("a"), (1000L to 1999L).map(Row(_)))
+        if (dsv1 && vectorized) {
+          assert(countRowGroupsRead(filtered) < countRowGroupsRead(all),
+            "Expected a row group to be skipped on the annotated layout")
+        }
+      }
+    }
+
+    withTempDir { dir =>
+      // Overflow fallback under the annotated layout: the residual row must survive.
+      writeShredded(dir, "a tinyint",
+        "case when id = 50 then '{\"a\":1500}' else '{\"a\":' || id || '}' end",
+        numRows = 51, blockSize = 1024 * 1024, annotate = true)
+      def read: DataFrame = spark.read.parquet(dir.getAbsolutePath)
+        .selectExpr("variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
+      assert(baseline(read) == Seq(Row(1500L)))
+      forEachReader { (_, _) =>
+        checkAnswer(read, Seq(Row(1500L)))
+      }
+    }
+  }
+
+  test("deferCastError=true: optimization does not fire but results are correct") {
+    // With deferCastError, strict variant_get is rewritten into UnwrapVariantCastError, which is
+    // not translated to a pushable filter -- so shredded pushdown silently does not fire. Results
+    // must still be correct (the filter is applied post-scan).
+    withTempDir { dir =>
+      writeShredded(dir, "a bigint", "'{\"a\":' || id || '}'", numRows = 2000, blockSize = 512)
+      Seq("true", "false").foreach { defer =>
+        withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+          SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> defer,
+          SQLConf.VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED.key -> "true",
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+          SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> "true") {
+          withClue(s"(deferCastError=$defer) ") {
+            val df = spark.read.parquet(dir.getAbsolutePath)
+              .selectExpr("variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
+            checkAnswer(df.orderBy("a"), (1000L to 1999L).map(Row(_)))
+          }
+        }
       }
     }
   }

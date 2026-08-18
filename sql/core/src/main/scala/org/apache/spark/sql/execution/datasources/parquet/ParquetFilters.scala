@@ -37,14 +37,14 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition
 
-import org.apache.spark.sql.catalyst.expressions.variant.ObjectExtraction
+import org.apache.spark.sql.catalyst.expressions.variant.{ObjectExtraction, VariantPathParser}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
 import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.{ParquetFilterOps, ParquetTypeOps}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
@@ -73,18 +73,6 @@ class ParquetFilters(
   // nested columns. If any part of the names contains `dots`, it is quoted to avoid confusion.
   // See `org.apache.spark.sql.connector.catalog.quote` for implementation details.
   private val nameToParquetField : Map[String, ParquetPrimitiveField] = {
-    def getNormalizedLogicalType(p: PrimitiveType): LogicalTypeAnnotation = {
-      // SPARK-40280: Signed 64 bits on an INT64 and signed 32 bits on an INT32 are optional, but
-      // the rest of the code here assumes they are not set, so normalize them to not being set.
-      (p.getPrimitiveTypeName, p.getLogicalTypeAnnotation) match {
-        case (INT32, intType: IntLogicalTypeAnnotation)
-          if intType.getBitWidth() == 32 && intType.isSigned() => null
-        case (INT64, intType: IntLogicalTypeAnnotation)
-          if intType.getBitWidth() == 64 && intType.isSigned() => null
-        case (_, otherType) => otherType
-      }
-    }
-
     // Recursively traverse the parquet schema to get primitive fields that can be pushed-down.
     // `parentFieldNames` is used to keep track of the current nested level when traversing.
     def getPrimitiveFields(
@@ -167,7 +155,11 @@ class ParquetFilters(
   // over every residual `value` column along the path: Parquet drops the row group only when the
   // leaf cannot match AND every residual is entirely NULL, so a row group is skipped only when
   // every value for the path is provably in the typed leaf. See `makeShreddedFilter`.
-  private val nameToShreddedVariantField: Map[String, ShreddedVariantField] = {
+  //
+  // Lazy so it is computed after the `Parquet*Type` vals below are initialized (resolution reads
+  // them via `expectedLeafType`); a strict val here would see them as null under Scala's
+  // declaration-order initialization.
+  private lazy val nameToShreddedVariantField: Map[String, ShreddedVariantField] = {
     variantExtractionSchema match {
       case Some(variantSchema) =>
         val entries = shreddedVariantEntries(
@@ -212,9 +204,11 @@ class ParquetFilters(
       case p: PrimitiveType if p.getRepetition != Repetition.REPEATED => p.getName
     }
 
-  // Copy of `getNormalizedLogicalType` from the `nameToParquetField` closure, needed here for the
-  // shredded leaf resolution which runs outside that closure.
+  // Shared by both the `nameToParquetField` traversal and the shredded leaf resolution so the two
+  // pushdown paths normalize physical types identically.
   private def getNormalizedLogicalType(p: PrimitiveType): LogicalTypeAnnotation = {
+    // SPARK-40280: Signed 64 bits on an INT64 and signed 32 bits on an INT32 are optional, but
+    // the rest of the code here assumes they are not set, so normalize them to not being set.
     (p.getPrimitiveTypeName, p.getLogicalTypeAnnotation) match {
       case (INT32, intType: IntLogicalTypeAnnotation)
         if intType.getBitWidth() == 32 && intType.isSigned() => null
@@ -241,7 +235,8 @@ class ParquetFilters(
   private def resolveShredded(
       physCol: GroupType,
       physColPath: Array[String],
-      keys: Array[String]): Option[ShreddedVariantField] = {
+      keys: Array[String],
+      targetType: DataType): Option[ShreddedVariantField] = {
     if (keys.isEmpty) return None
     val residuals = scala.collection.mutable.ArrayBuffer.empty[Array[String]]
     // L0: the variant column's own residual.
@@ -269,11 +264,47 @@ class ParquetFilters(
     // The leaf is the typed_value of the last key group.
     findChild(group, TYPED_VALUE, exact = true) match {
       case Some(p: PrimitiveType) if p.getRepetition != Repetition.REPEATED =>
-        val leaf = ParquetPrimitiveField(namePath :+ p.getName,
-          ParquetSchemaType(getNormalizedLogicalType(p), p.getPrimitiveTypeName, p.getTypeLength))
-        Some(ShreddedVariantField(leaf, residuals.toSeq))
+        val leafType =
+          ParquetSchemaType(getNormalizedLogicalType(p), p.getPrimitiveTypeName, p.getTypeLength)
+        // Require the extraction's target type to map to the exact physical leaf type. Comparing on
+        // representation alone (as `valueMatchesParquetType` does for the literal) would push a
+        // narrower extraction such as smallint against an int leaf: the leaf min/max is over int
+        // values, so a row group holding only out-of-range values (residuals null) would be
+        // skipped, changing an eager INVALID_VARIANT_CAST into an empty result. Requiring an exact
+        // type match keeps the optimization result-preserving.
+        if (!expectedLeafType(targetType).contains(leafType)) {
+          None
+        } else {
+          val leaf = ParquetPrimitiveField(namePath :+ p.getName, leafType)
+          Some(ShreddedVariantField(leaf, residuals.toSeq))
+        }
       case _ => None
     }
+  }
+
+  // The physical Parquet leaf type a shredded scalar of `targetType` is written as, matching
+  // `SparkShreddingUtils.variantShreddingSchema` (which writes the scalar's natural type) and the
+  // `Parquet*Type` normalization used for the leaf. Returns None for types that are not shredded as
+  // a comparable scalar leaf (or that this pushdown does not handle), so the path is not pushed.
+  private def expectedLeafType(targetType: DataType): Option[ParquetSchemaType] = targetType match {
+    case BooleanType => Some(ParquetBooleanType)
+    case ByteType => Some(ParquetByteType)
+    case ShortType => Some(ParquetShortType)
+    case IntegerType => Some(ParquetIntegerType)
+    case LongType => Some(ParquetLongType)
+    case FloatType => Some(ParquetFloatType)
+    case DoubleType => Some(ParquetDoubleType)
+    case _: StringType => Some(ParquetStringType)
+    case BinaryType => Some(ParquetBinaryType)
+    case DateType => Some(ParquetDateType)
+    case d: DecimalType if DecimalType.is32BitDecimalType(d) =>
+      Some(ParquetSchemaType(LogicalTypeAnnotation.decimalType(d.scale, d.precision), INT32, 0))
+    case d: DecimalType if DecimalType.is64BitDecimalType(d) =>
+      Some(ParquetSchemaType(LogicalTypeAnnotation.decimalType(d.scale, d.precision), INT64, 0))
+    case d: DecimalType =>
+      Some(ParquetSchemaType(LogicalTypeAnnotation.decimalType(d.scale, d.precision),
+        FIXED_LEN_BYTE_ARRAY, Decimal.minBytesForPrecision(d.precision)))
+    case _ => None
   }
 
   // Walk the variant-extraction schema alongside the physical Parquet group, collecting
@@ -309,27 +340,30 @@ class ParquetFilters(
                   Nil
                 } else {
                   val meta = VariantMetadata.fromMetadata(extraction.metadata)
-                  val segments = try { meta.parsedPath() } catch { case _: Exception => null }
-                  if (segments == null) {
-                    Nil
-                  } else {
-                    // Only scalar object-extraction paths are eligible. Reject array-index paths
-                    // (a mix of ObjectExtraction and ArrayExtraction fails this check) and empty
-                    // paths ("$" / passthrough / companion), which yield no keys.
-                    val keys = segments.collect { case o: ObjectExtraction => o.key }
-                    if (keys.isEmpty || keys.length != segments.length) {
-                      Nil
-                    } else {
-                      // `physChild` is this variant column's physical group; `physColPath` holds
-                      // its on-disk name path. Navigate the shredding layout from there.
-                      resolveShredded(physChild, physColPath, keys) match {
-                        case None => Nil
-                        case Some(shredded) =>
-                          val logicalName =
-                            (logicalColPath :+ extraction.name).toImmutableArraySeq.quoted
-                          Seq(logicalName -> shredded)
+                  // `VariantPathParser.parse` returns None for an unparseable path; use it directly
+                  // rather than `parsedPath()` (which throws) so a bad path is a clean no-push and
+                  // we don't swallow unrelated exceptions.
+                  VariantPathParser.parse(meta.path) match {
+                    case None => Nil
+                    case Some(segments) =>
+                      // Only scalar object-extraction paths are eligible. Reject array-index paths
+                      // (a mix of ObjectExtraction and ArrayExtraction fails this check) and empty
+                      // paths ("$" / passthrough / companion), which yield no keys.
+                      val keys = segments.collect { case o: ObjectExtraction => o.key }
+                      if (keys.isEmpty || keys.length != segments.length) {
+                        Nil
+                      } else {
+                        // `physChild` is this variant column's physical group; `physColPath` holds
+                        // its on-disk name path. Navigate the shredding layout from there. The
+                        // extraction's target type must match the physical leaf type exactly.
+                        resolveShredded(physChild, physColPath, keys, extraction.dataType) match {
+                          case None => Nil
+                          case Some(shredded) =>
+                            val logicalName =
+                              (logicalColPath :+ extraction.name).toImmutableArraySeq.quoted
+                            Seq(logicalName -> shredded)
+                        }
                       }
-                    }
                   }
                 }
               }
@@ -929,24 +963,11 @@ class ParquetFilters(
   // row-group-droppable whenever the residual has no nulls -- unsound (drops a row group whose
   // matching values are all in the residual). Since a negated shredded predicate cannot be
   // expressed soundly with row-group statistics, we do not push it at all.
-  private def referencesShreddedName(predicate: sources.Filter): Boolean = predicate match {
-    case sources.EqualTo(name, _) => nameToShreddedVariantField.contains(name)
-    case sources.EqualNullSafe(name, _) => nameToShreddedVariantField.contains(name)
-    case sources.LessThan(name, _) => nameToShreddedVariantField.contains(name)
-    case sources.LessThanOrEqual(name, _) => nameToShreddedVariantField.contains(name)
-    case sources.GreaterThan(name, _) => nameToShreddedVariantField.contains(name)
-    case sources.GreaterThanOrEqual(name, _) => nameToShreddedVariantField.contains(name)
-    case sources.In(name, _) => nameToShreddedVariantField.contains(name)
-    case sources.IsNull(name) => nameToShreddedVariantField.contains(name)
-    case sources.IsNotNull(name) => nameToShreddedVariantField.contains(name)
-    case sources.StringStartsWith(name, _) => nameToShreddedVariantField.contains(name)
-    case sources.StringEndsWith(name, _) => nameToShreddedVariantField.contains(name)
-    case sources.StringContains(name, _) => nameToShreddedVariantField.contains(name)
-    case sources.And(l, r) => referencesShreddedName(l) || referencesShreddedName(r)
-    case sources.Or(l, r) => referencesShreddedName(l) || referencesShreddedName(r)
-    case sources.Not(p) => referencesShreddedName(p)
-    case _ => false
-  }
+  //
+  // `sources.Filter.references` already recurses through And/Or/Not and every leaf filter, so this
+  // stays correct if new Filter subtypes are added.
+  private def referencesShreddedName(predicate: sources.Filter): Boolean =
+    predicate.references.exists(nameToShreddedVariantField.contains)
 
   // Build the sound shredded-variant predicate:
   //   or(leafPredicate, isNotNull(residual_0), ..., isNotNull(residual_n))
@@ -1022,17 +1043,16 @@ class ParquetFilters(
         makeShreddedFilter(name, (t, n) => makeGtEq.lift(t).map(_(n, value)))
       case sources.In(name, values) if pushDownInFilterThreshold > 0 && values.nonEmpty &&
           values.forall(v => canMakeShreddedFilterOn(name, v)) =>
-        // Convert `In` to the OR of per-value equalities, each already OR-ed with the residual
-        // isNotNull guards, then combine. Reuses the same soundness guard as the comparison
-        // predicates (the repeated residual disjuncts are harmless).
-        val distinct = values.distinct
-        if (distinct.length <= pushDownInFilterThreshold) {
-          distinct.flatMap { v =>
-            makeShreddedFilter(name, (t, n) => makeEq.lift(t).map(_(n, v)))
-          }.reduceLeftOption(FilterApi.or)
-        } else {
-          None
-        }
+        // Build the leaf predicate once (an OR of per-value equalities under the threshold, or a
+        // single FilterApi.in above it), then OR the residual isNotNull guards on once via
+        // `makeShreddedFilter`. Mirrors the regular `In` path below: threshold on `values.length`,
+        // and `makeInPredicate`/`FilterApi.in` for large lists so those still get skipping.
+        makeShreddedFilter(name, (t, n) =>
+          if (values.length <= pushDownInFilterThreshold) {
+            values.distinct.flatMap(v => makeEq.lift(t).map(_(n, v))).reduceLeftOption(FilterApi.or)
+          } else {
+            makeInPredicate.lift(t).map(_(n, values))
+          })
 
       case sources.IsNull(name) if canMakeFilterOn(name, null) =>
         makeEq.lift(nameToParquetField(name).fieldType)

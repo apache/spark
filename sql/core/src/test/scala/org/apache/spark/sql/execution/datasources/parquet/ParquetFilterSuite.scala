@@ -2431,7 +2431,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   // PushVariantIntoScan rewrites variant_get(v, '$.a', 'bigint') > 999 into a struct-field access
   // "v.`0`" > 999 where "0" carries VariantMetadata for path "$.a". ParquetFilters maps that
   // logical path to the physical shredded leaf v.typed_value.a.typed_value and, for soundness,
-  // conjoins IS NULL on every residual `value` column along the path.
+  // OR-s an IS NOT NULL guard on every residual `value` column along the path.
   // ----------------------------------------------------------------------------------------------
 
   /** A variant-extraction StructField named by ordinal, carrying VariantMetadata for `path`. */
@@ -2732,6 +2732,66 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     assert(andFilter.isDefined, "AND should still push its non-negated shredded conjunct")
     assert(!andFilter.get.toString.contains("not("),
       s"AND must not contain a negated shredded predicate, got ${andFilter.get}")
+  }
+
+  test("shredded variant filter: extraction type narrower than the leaf is not pushed") {
+    // Physical leaf is a plain int (INT32). A smallint extraction must NOT be pushed: the leaf
+    // min/max is over int values, so a row group holding only out-of-int16-range values would be
+    // wrongly skipped, turning an eager INVALID_VARIANT_CAST into an empty result.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int32 typed_value (INTEGER(32,true));
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val narrower = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      variantExtractionSchema = Some(variantExtractionSchema("v", variantField("0", ShortType,
+        "$.a"))))
+    assert(narrower.createFilter(sources.GreaterThan("v.`0`", 5.toShort)).isEmpty,
+      "A smallint extraction against an int leaf must not be pushed")
+    // The exact type (int extraction against int leaf) is pushed.
+    val exact = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      variantExtractionSchema = Some(variantExtractionSchema("v", variantField("0", IntegerType,
+        "$.a"))))
+    assert(exact.createFilter(sources.GreaterThan("v.`0`", 5)).isDefined,
+      "An int extraction against an int leaf should be pushed")
+  }
+
+  test("shredded variant filter: large In above threshold still pushes") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val extraction = variantExtractionSchema("v", variantField("0", LongType, "$.a"))
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "2") {
+      val pf = createParquetFilters(
+        MessageTypeParser.parseMessageType(parquetSchema),
+        variantExtractionSchema = Some(extraction))
+      // 3 values > threshold 2: the regular path uses FilterApi.in; the shredded path must too,
+      // OR-ed with the residual guards, rather than returning None.
+      val filter = pf.createFilter(sources.In("v.`0`", Array[Any](1L, 2L, 3L)))
+      assert(filter.isDefined, "A large In on a shredded path should still push down")
+      val s = filter.get.toString
+      assert(s.contains("v.typed_value.a.typed_value"), s"Expected leaf column in $s")
+      assert(s.contains("v.typed_value.a.value") && s.contains("v.value"),
+        s"Expected residual guards in $s")
+    }
   }
 }
 

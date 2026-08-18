@@ -210,11 +210,14 @@ class ParquetFileFormat
     val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-    // When shredded-variant predicate pushdown is enabled, `requiredSchema` may carry the
-    // variant-extraction structs produced by PushVariantIntoScan. Passing it lets ParquetFilters
-    // map logical paths like "v.`0`" to the physical shredded columns for row-group skipping.
+    // When shredded-variant predicate pushdown is enabled and `requiredSchema` actually carries a
+    // variant-extraction struct produced by PushVariantIntoScan, passing it lets ParquetFilters map
+    // logical paths like "v.`0`" to the physical shredded columns for row-group skipping. The
+    // `isVariantStruct` check keeps the per-file ParquetFilters construction free of any shredded
+    // traversal for the common case of scans with no variant-extraction columns.
     val variantExtractionSchema =
-      if (sqlConf.getConf(SQLConf.VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED)) {
+      if (sqlConf.getConf(SQLConf.VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED) &&
+          requiredSchema.existsRecursively(VariantMetadata.isVariantStruct)) {
         Some(requiredSchema)
       } else {
         None
