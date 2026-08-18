@@ -33011,8 +33011,11 @@ def bitmap_and(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
     input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
     4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
-    ``BITMAP_INPUT_TOO_LARGE``. This scalar function combines two bitmaps from the same row; use
-    ``bitmap_*_agg`` to combine bitmaps across rows.
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
 
     Examples
     --------
@@ -33055,8 +33058,11 @@ def bitmap_or(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
     input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
     4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
-    ``BITMAP_INPUT_TOO_LARGE``. This scalar function combines two bitmaps from the same row; use
-    ``bitmap_*_agg`` to combine bitmaps across rows.
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
 
     Examples
     --------
@@ -33099,8 +33105,11 @@ def bitmap_andnot(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
     input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
     4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
-    ``BITMAP_INPUT_TOO_LARGE``. This scalar function combines two bitmaps from the same row; use
-    ``bitmap_*_agg`` to combine bitmaps across rows.
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
 
     Examples
     --------
@@ -33143,8 +33152,11 @@ def bitmap_xor(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
     input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
     4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
-    ``BITMAP_INPUT_TOO_LARGE``. This scalar function combines two bitmaps from the same row; use
-    ``bitmap_*_agg`` to combine bitmaps across rows.
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
 
     Examples
     --------

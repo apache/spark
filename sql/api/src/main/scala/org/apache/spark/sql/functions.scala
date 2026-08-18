@@ -7342,9 +7342,11 @@ object functions {
    * Returns a bitmap that is the bitwise AND of two input bitmaps. The result is always a
    * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
    * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
-   * `BITMAP_INPUT_TOO_LARGE`. This scalar function operates on two bitmaps from the same row; use
-   * `bitmap_*_agg` to combine bitmaps across rows. The representation is not a RoaringBitmap
-   * serialization.
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
    *
    * @param left
    *   A column that evaluates to a binary bitmap.
@@ -7361,9 +7363,11 @@ object functions {
    * Returns a bitmap that is the bitwise OR of two input bitmaps. The result is always a
    * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
    * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
-   * `BITMAP_INPUT_TOO_LARGE`. This scalar function operates on two bitmaps from the same row; use
-   * `bitmap_*_agg` to combine bitmaps across rows. The representation is not a RoaringBitmap
-   * serialization.
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
    *
    * @param left
    *   A column that evaluates to a binary bitmap.
@@ -7380,9 +7384,11 @@ object functions {
    * Returns a bitmap that is the bitwise AND NOT of two input bitmaps. The result is always a
    * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
    * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
-   * `BITMAP_INPUT_TOO_LARGE`. This scalar function operates on two bitmaps from the same row; use
-   * `bitmap_*_agg` to combine bitmaps across rows. The representation is not a RoaringBitmap
-   * serialization.
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
    *
    * @param left
    *   A column that evaluates to a binary bitmap.
@@ -7400,9 +7406,11 @@ object functions {
    * Returns a bitmap that is the bitwise XOR of two input bitmaps. The result is always a
    * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
    * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
-   * `BITMAP_INPUT_TOO_LARGE`. This scalar function operates on two bitmaps from the same row; use
-   * `bitmap_*_agg` to combine bitmaps across rows. The representation is not a RoaringBitmap
-   * serialization.
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
    *
    * @param left
    *   A column that evaluates to a binary bitmap.
