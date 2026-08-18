@@ -7,15 +7,15 @@ Intel(R) Xeon(R) 6975P-C
 
 Kafka-to-Kafka dropDuplicates e2e latency in milliseconds
 RTM trigger=RealTime(5m) MBM trigger=ProcessingTime(0ms)
-modeOrder=RTM,MBM observationWindow=1800s firstOutputBatchFiltered=true warmupFiltered=300s recordsPerSecond=1000
+modeOrder=RTM,MBM observationWindow=1800s rtmOutputBatchesFiltered=2 mbmOutputBatchesFiltered=1 warmupFiltered=300s recordsPerSecond=1000
 master=local-cluster[3, 5, 2048] inputPartitions=5 shufflePartitions=5
 stateStore=RocksDB checkpointFormatVersion=2 changelogCheckpointing=true trackTotalNumberOfRows=false
 workload=dropDuplicates(key), 80% fresh keys, 20% guaranteed duplicates; samples are unique rows
 
 Mode   obsBatch   produced sourceRows   sinkRows    samples   tailMs         p0        p50        p90        p95        p99       p100
 --------------------------------------------------------------------------------------------------------------------------------------
-RTM           5    1799962    1799962    1439970    1199359        0       32.0       99.0      121.0      125.0      134.0      777.0
-MBM       10172    1799996    1799996    1439997    1199995        0      136.0      261.0      333.0      350.0      398.0      638.0
+RTM           5    1799953    1799953    1439963     958883        0       25.0       99.0      121.0      126.0      134.0      348.0
+MBM       10023    1799997    1799997    1439998    1199996        0      137.0      263.0      336.0      353.0      401.0      608.0
 
 MBM / RTM ratio over each mode's emitted samples (>1 means RTM has lower latency)
-ratio                                                                     4.25x      2.64x      2.75x      2.80x      2.97x      0.82x
+ratio                                                                     5.48x      2.66x      2.78x      2.80x      2.99x      1.75x

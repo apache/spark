@@ -7,15 +7,15 @@ Intel(R) Xeon(R) 6975P-C
 
 Kafka-to-Kafka transformWithState e2e latency in milliseconds
 RTM trigger=RealTime(5m) MBM trigger=ProcessingTime(0ms)
-modeOrder=RTM,MBM observationWindow=1800s firstOutputBatchFiltered=true warmupFiltered=300s recordsPerSecond=1000
+modeOrder=RTM,MBM observationWindow=1800s rtmOutputBatchesFiltered=2 mbmOutputBatchesFiltered=1 warmupFiltered=300s recordsPerSecond=1000
 master=local-cluster[3, 5, 2048] inputPartitions=5 shufflePartitions=5
 stateStore=RocksDB checkpointFormatVersion=2 changelogCheckpointing=true trackTotalNumberOfRows=false
 workload=ProcessingTime, one ValueState get/update per row, keys=50000, no registered timers or TTL; includes empty timer checks; samples are steady-state updates
 
 Mode   obsBatch   produced sourceRows   sinkRows    samples   tailMs         p0        p50        p90        p95        p99       p100
 --------------------------------------------------------------------------------------------------------------------------------------
-RTM           5    1799957    1799957    1799957    1498979        0       29.0      103.0      125.0      130.0      139.0      973.0
-MBM        8054    1799997    1799997    1799997    1499994        0      148.0      294.0      383.0      396.0      418.0      580.0
+RTM           5    1799957    1799957    1799957    1198265        0       40.0      104.0      127.0      132.0      141.0      384.0
+MBM        8084    1799997    1799997    1799997    1499996        0      132.0      291.0      380.0      393.0      414.0      577.0
 
 MBM / RTM ratio over each mode's emitted samples (>1 means RTM has lower latency)
-ratio                                                                     5.10x      2.85x      3.06x      3.05x      3.01x      0.60x
+ratio                                                                     3.30x      2.80x      2.99x      2.98x      2.94x      1.50x

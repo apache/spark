@@ -7,14 +7,14 @@ Intel(R) Xeon(R) 6975P-C
 
 Kafka-to-Kafka window aggregation e2e latency in milliseconds
 RTM trigger=RealTime(5m) MBM trigger=ProcessingTime(0ms)
-modeOrder=RTM,MBM observationWindow=1800s firstOutputBatchFiltered=true warmupFiltered=300s recordsPerSecond=1000
+modeOrder=RTM,MBM observationWindow=1800s rtmOutputBatchesFiltered=2 mbmOutputBatchesFiltered=1 warmupFiltered=300s recordsPerSecond=1000
 master=local-cluster[3, 5, 2048] inputPartitions=5 shufflePartitions=5
 stateStore=RocksDB checkpointFormatVersion=2 changelogCheckpointing=true trackTotalNumberOfRows=false
 workload=groupBy(window=1 minute,key).count, keys=1000; native aggregate-update samples, not a per-input distribution; MBM may coalesce updates within a micro-batch
 
 Mode   obsBatch   produced sourceRows   sinkRows    samples   tailMs         p0        p50        p90        p95        p99       p100
 --------------------------------------------------------------------------------------------------------------------------------------
-RTM           5    1799961    1799961    1799961    1499185        0       24.0      103.0      125.0      130.0      139.0      799.0
-MBM        7473    1799997    1799997    1799997    1499994        0      200.0      361.0      458.0      474.0      501.0      627.0
+RTM           5    1799957    1799957    1799957    1198493        0       26.0      103.0      125.0      130.0      138.0      346.0
+MBM        7574    1799997    1799997    1799997    1499996        0      201.0      358.0      453.0      468.0      492.0      651.0
 
 Percentile ratio omitted: RTM and MBM may emit different native sample populations.
