@@ -114,7 +114,14 @@ object SchemaConverters extends Logging {
           }
           SchemaType(catalystType, nullable = false)
       }
-      case STRING => SchemaType(StringType, nullable = false)
+      case STRING =>
+        val catalystTypeAttrValue = avroSchema.getProp(CATALYST_TYPE_PROP_NAME)
+        val catalystType = if (catalystTypeAttrValue == null) {
+          StringType
+        } else {
+          CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+        }
+        SchemaType(catalystType, nullable = false)
       case BOOLEAN => SchemaType(BooleanType, nullable = false)
       case BYTES | FIXED => avroSchema.getLogicalType match {
         // For FIXED type, if the precision requires more bytes than fixed size, the logical
@@ -369,6 +376,16 @@ object SchemaConverters extends Logging {
 
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
+      // CharType/VarcharType are not equal to the StringType singleton; stamp the catalyst
+      // type so file-schema inference restores the length constraint.
+      case c: CharType =>
+        val stringSchema = builder.stringType()
+        stringSchema.addProp(CATALYST_TYPE_PROP_NAME, c.typeName)
+        stringSchema
+      case v: VarcharType =>
+        val stringSchema = builder.stringType()
+        stringSchema.addProp(CATALYST_TYPE_PROP_NAME, v.typeName)
+        stringSchema
       case StringType => builder.stringType()
       case NullType => builder.nullType()
       case d: DecimalType =>
@@ -489,6 +506,14 @@ object SchemaConverters extends Logging {
       case LongType => builder.longType()
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
+      case c: CharType =>
+        val stringSchema = builder.stringType()
+        stringSchema.addProp(CATALYST_TYPE_PROP_NAME, c.typeName)
+        stringSchema
+      case v: VarcharType =>
+        val stringSchema = builder.stringType()
+        stringSchema.addProp(CATALYST_TYPE_PROP_NAME, v.typeName)
+        stringSchema
       case StringType => builder.stringType()
       case NullType => builder.nullType()
       case DateType => LogicalTypes.date().addToSchema(builder.intType())

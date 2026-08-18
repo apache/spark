@@ -781,6 +781,99 @@ Project [length(cast(c#x as string)) AS length(c)#x, length(cast(v#x as string))
 
 
 -- !query
+CREATE TABLE char_varchar_std_ctas USING parquet AS SELECT c, v FROM char_varchar_std
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`char_varchar_std_ctas`, ErrorIfExists, [c, v]
+   +- Project [c#x, v#x]
+      +- SubqueryAlias spark_catalog.default.char_varchar_std
+         +- Relation spark_catalog.default.char_varchar_std[c#x,v#x] parquet
+
+
+-- !query
+SELECT typeof(c), typeof(v) FROM char_varchar_std_ctas
+-- !query analysis
+Project [typeof(c#x) AS typeof(c)#x, typeof(v#x) AS typeof(v)#x]
++- SubqueryAlias spark_catalog.default.char_varchar_std_ctas
+   +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+      +- Relation spark_catalog.default.char_varchar_std_ctas[c#x,v#x] parquet
+
+
+-- !query
+CREATE VIEW char_varchar_std_view AS SELECT c FROM char_varchar_std
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`char_varchar_std_view`, SELECT c FROM char_varchar_std, false, false, PersistedView, COMPENSATION, true
+   +- Project [c#x]
+      +- SubqueryAlias spark_catalog.default.char_varchar_std
+         +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+            +- Relation spark_catalog.default.char_varchar_std[c#x,v#x] parquet
+
+
+-- !query
+SELECT typeof(c) FROM char_varchar_std_view
+-- !query analysis
+Project [typeof(c#x) AS typeof(c)#x]
++- SubqueryAlias spark_catalog.default.char_varchar_std_view
+   +- View (`spark_catalog`.`default`.`char_varchar_std_view`, [c#x])
+      +- Project [cast(c#x as char(5)) AS c#x]
+         +- Project [c#x]
+            +- SubqueryAlias spark_catalog.default.char_varchar_std
+               +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+                  +- Relation spark_catalog.default.char_varchar_std[c#x,v#x] parquet
+
+
+-- !query
+CREATE TABLE char_varchar_std_orc (c CHAR(5), v VARCHAR(5)) USING orc
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`char_varchar_std_orc`, false
+
+
+-- !query
+INSERT INTO char_varchar_std_orc VALUES ('ab', 'cd')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/char_varchar_std_orc, false, ORC, [path=file:[not included in comparison]/{warehouse_dir}/char_varchar_std_orc], Append, `spark_catalog`.`default`.`char_varchar_std_orc`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/char_varchar_std_orc), [c, v]
++- Project [static_invoke(CharVarcharCodegenUtils.charTypeWriteSideCheck(cast(col1#x as char(5)), 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(cast(col2#x as varchar(5)), 5)) AS v#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT typeof(c), typeof(v) FROM char_varchar_std_orc
+-- !query analysis
+Project [typeof(c#x) AS typeof(c)#x, typeof(v#x) AS typeof(v)#x]
++- SubqueryAlias spark_catalog.default.char_varchar_std_orc
+   +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+      +- Relation spark_catalog.default.char_varchar_std_orc[c#x,v#x] orc
+
+
+-- !query
+SELECT concat('[', c, ']'), concat('[', v, ']') FROM char_varchar_std_orc
+-- !query analysis
+Project [concat([, cast(c#x as string), ]) AS concat([, c, ])#x, concat([, cast(v#x as string), ]) AS concat([, v, ])#x]
++- SubqueryAlias spark_catalog.default.char_varchar_std_orc
+   +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+      +- Relation spark_catalog.default.char_varchar_std_orc[c#x,v#x] orc
+
+
+-- !query
+DROP VIEW char_varchar_std_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`char_varchar_std_view`, false, true, false
+
+
+-- !query
+DROP TABLE char_varchar_std_ctas
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.char_varchar_std_ctas
+
+
+-- !query
+DROP TABLE char_varchar_std_orc
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.char_varchar_std_orc
+
+
+-- !query
 DROP TABLE char_varchar_std
 -- !query analysis
 DropTable false, false

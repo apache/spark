@@ -250,7 +250,7 @@ private[sql] class AvroDeserializer(
       case (DOUBLE, DoubleType) => (updater, ordinal, value) =>
         updater.setDouble(ordinal, value.asInstanceOf[Double])
 
-      case (STRING, StringType) => (updater, ordinal, value) =>
+      case (STRING, _: StringType) => (updater, ordinal, value) =>
         val str = value match {
           case s: String => UTF8String.fromString(s)
           case s: Utf8 =>
@@ -260,7 +260,7 @@ private[sql] class AvroDeserializer(
         }
         updater.set(ordinal, str)
 
-      case (ENUM, StringType) => (updater, ordinal, value) =>
+      case (ENUM, _: StringType) => (updater, ordinal, value) =>
         updater.set(ordinal, UTF8String.fromString(value.toString))
 
       case (FIXED, BinaryType) => (updater, ordinal, value) =>

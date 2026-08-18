@@ -193,4 +193,18 @@ INSERT INTO char_varchar_std VALUES ('ab', 'ab');
 SELECT typeof(c), typeof(v) FROM char_varchar_std;
 SELECT concat('[', c, ']'), concat('[', v, ']') FROM char_varchar_std;
 SELECT length(c), length(v) FROM char_varchar_std;
+
+-- Language surfaces: CTAS / VIEW inherit CHAR/VARCHAR; ORC catalog round-trip
+CREATE TABLE char_varchar_std_ctas USING parquet AS SELECT c, v FROM char_varchar_std;
+SELECT typeof(c), typeof(v) FROM char_varchar_std_ctas;
+CREATE VIEW char_varchar_std_view AS SELECT c FROM char_varchar_std;
+SELECT typeof(c) FROM char_varchar_std_view;
+CREATE TABLE char_varchar_std_orc (c CHAR(5), v VARCHAR(5)) USING orc;
+INSERT INTO char_varchar_std_orc VALUES ('ab', 'cd');
+SELECT typeof(c), typeof(v) FROM char_varchar_std_orc;
+SELECT concat('[', c, ']'), concat('[', v, ']') FROM char_varchar_std_orc;
+
+DROP VIEW char_varchar_std_view;
+DROP TABLE char_varchar_std_ctas;
+DROP TABLE char_varchar_std_orc;
 DROP TABLE char_varchar_std;

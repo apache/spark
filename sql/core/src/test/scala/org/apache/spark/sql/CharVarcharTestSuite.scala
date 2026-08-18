@@ -1341,6 +1341,114 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58794: language surfaces keep CHAR/VARCHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // CTAS / CREATE VIEW inherit projected CHAR/VARCHAR (D13).
+      withTable("std_src", "std_ctas") {
+        sql("CREATE TABLE std_src (c CHAR(5), v VARCHAR(5)) USING parquet")
+        sql("INSERT INTO std_src VALUES ('ab', 'ab')")
+        sql("CREATE TABLE std_ctas USING parquet AS SELECT c, v FROM std_src")
+        assert(spark.table("std_ctas").schema.map(_.dataType) ===
+          Seq(CharType(5), VarcharType(5)))
+        checkAnswer(
+          sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_ctas"),
+          Row("<ab   >", "<ab>"))
+      }
+      withTable("std_view_src") {
+        withView("std_cv_view") {
+          sql("CREATE TABLE std_view_src (c CHAR(4)) USING parquet")
+          sql("INSERT INTO std_view_src VALUES ('xy')")
+          sql("CREATE VIEW std_cv_view AS SELECT c FROM std_view_src")
+          assert(spark.table("std_cv_view").schema.head.dataType === CharType(4))
+          checkAnswer(
+            sql("SELECT concat('<', c, '>') FROM std_cv_view"), Row("<xy  >"))
+        }
+      }
+
+      // ALTER COLUMN equal-length CHAR/VARCHAR remains supported with first-class types.
+      withTable("std_alter") {
+        sql("CREATE TABLE std_alter (c CHAR(4), v VARCHAR(4)) USING parquet")
+        sql("ALTER TABLE std_alter CHANGE COLUMN c TYPE CHAR(4)")
+        sql("ALTER TABLE std_alter CHANGE COLUMN v TYPE VARCHAR(4)")
+        assert(spark.table("std_alter").schema.map(_.dataType) ===
+          Seq(CharType(4), VarcharType(4)))
+        intercept[AnalysisException] {
+          sql("ALTER TABLE std_alter CHANGE COLUMN c TYPE CHAR(5)")
+        }
+      }
+
+      // Session variables: DECLARE / SET keep the type and apply CAST assignment.
+      sql("DECLARE OR REPLACE VARIABLE std_char_var CHAR(4)")
+      try {
+        sql("SET VARIABLE std_char_var = 'ab'")
+        val varDf = sql("SELECT std_char_var AS c")
+        assert(varDf.schema.head.dataType === CharType(4))
+        checkAnswer(sql("SELECT concat('<', std_char_var, '>')"), Row("<ab  >"))
+        intercept[SparkRuntimeException] {
+          sql("SET VARIABLE std_char_var = 'abcde'").collect()
+        }
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS std_char_var")
+      }
+
+      // SQL FUNCTION RETURNS CHAR applies store assignment on the returned value.
+      sql("CREATE OR REPLACE TEMPORARY FUNCTION std_char_fn() RETURNS CHAR(3) RETURN 'a'")
+      try {
+        val fnDf = sql("SELECT std_char_fn() AS c")
+        assert(fnDf.schema.head.dataType === CharType(3))
+        checkAnswer(sql("SELECT concat('<', std_char_fn(), '>')"), Row("<a  >"))
+      } finally {
+        sql("DROP TEMPORARY FUNCTION IF EXISTS std_char_fn")
+      }
+
+      // ORC catalog tables stamp the catalyst type so typeof survives write/read.
+      withTable("std_orc") {
+        sql("CREATE TABLE std_orc (c CHAR(5), v VARCHAR(5)) USING orc")
+        sql("INSERT INTO std_orc VALUES ('ab', 'cd')")
+        assert(spark.table("std_orc").schema.map(_.dataType) ===
+          Seq(CharType(5), VarcharType(5)))
+        checkAnswer(
+          sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_orc"),
+          Row("<ab   >", "<cd>"))
+      }
+
+      // File-only ORC inference recovers the catalyst type stamped on write.
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
+          .write.mode("overwrite").orc(path)
+        val orcDf = spark.read.orc(path)
+        assert(orcDf.schema.head.dataType === CharType(4))
+        checkAnswer(orcDf.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+      }
+
+      // Avro schema conversion round-trips CHAR/VARCHAR via the catalyst type property.
+      // (Full Avro data-source E2E lives in the avro module.)
+      Seq(CharType(5), VarcharType(7)).foreach { dt =>
+        val avro = org.apache.spark.sql.avro.SchemaConverters.toAvroType(dt, nullable = false)
+        val back = org.apache.spark.sql.avro.SchemaConverters.toSqlType(avro).dataType
+        assert(back === dt, s"Avro round-trip lost $dt, got $back")
+      }
+
+      // JSON / CSV keep a user-specified CHAR/VARCHAR schema under the flag.
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).selectExpr("cast(id AS STRING) AS c").write.mode("overwrite")
+          .json(s"$path/json")
+        val jsonDf = spark.read.schema("c CHAR(5)").json(s"$path/json")
+        assert(jsonDf.schema.head.dataType === CharType(5))
+        checkAnswer(jsonDf.selectExpr("concat('<', c, '>')"), Row("<0    >"))
+
+        spark.range(1).selectExpr("cast(id AS STRING) AS c").write.mode("overwrite")
+          .option("header", "true").csv(s"$path/csv")
+        val csvDf = spark.read.schema("c VARCHAR(5)").option("header", "true")
+          .csv(s"$path/csv")
+        assert(csvDf.schema.head.dataType === VarcharType(5))
+        checkAnswer(csvDf, Row("0"))
+      }
+    }
+  }
+
   test("SPARK-58802: single-pass resolver agrees with fixed-point under standardSemantics") {
     // Dual run defaults to on under tests, but pin it explicitly so this coverage cannot be
     // silently lost: the HybridAnalyzer compares output schema and normalized plan across the
