@@ -1212,7 +1212,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(sql("SELECT cast('a' AS CHAR(2)) = 'a'"), Row(false))
       checkAnswer(sql("SELECT cast('a' AS CHAR(2)) = 'a '"), Row(true))
 
-      // INTypeCoercion uses findWiderCommonType over (lhs +: list), then casts every child —
+      // INTypeCoercion uses findWiderCommonType over (lhs +: list), then casts every child:
       // the left-hand side is not exempt.
       val inAnalyzed = sql(
         "SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)), cast('b' AS VARCHAR(3)))")
