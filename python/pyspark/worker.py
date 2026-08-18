@@ -2323,7 +2323,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             arrays = []
             names = []
             for j in range(num_grouping_keys):
-                field = grouping_key_schema.fields[j]
                 arrays.append(
                     pa.array([e[0][j] for e in entries], type=key_field_types[j])  # type: ignore
                 )
