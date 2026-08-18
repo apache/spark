@@ -206,7 +206,8 @@ private[spark] object SparkCoreErrors {
   }
 
   def mustSpecifyCheckpointDirError(): Throwable = {
-    SparkException.internalError("Checkpoint dir must be specified.")
+    SparkException.internalError(
+      "SparkContext.checkpointDir is unset when creating ReliableRDDCheckpointData.")
   }
 
   def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {

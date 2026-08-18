@@ -729,7 +729,7 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext("local", "test", conf)
       sc.setCheckpointDir(checkpointDir.toString)
       val rdd = sc.makeRDD(1 to 4)
-      val rddPath = new Path(sc.getCheckpointDir.get, s"rdd-${rdd.id}")
+      val rddPath = ReliableRDDCheckpointData.checkpointPath(sc, rdd.id).get
 
       rdd.checkpoint()
       checkError(
