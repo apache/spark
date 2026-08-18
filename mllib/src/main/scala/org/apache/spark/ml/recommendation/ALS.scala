@@ -461,9 +461,9 @@ class ALSModel private[ml] (
         var idxOrd: GuavaOrdering[Int] = null
         iter.flatMap { case (srcIds, srcMat, dstIds, dstMat) =>
           require(srcMat.length == srcIds.length * rank,
-            s"srcMat has ${srcMat.length} entries, expected ${srcIds.length * rank}.")
+            s"srcMat must have ${srcIds.length * rank} entries but has ${srcMat.length}."
           require(dstMat.length == dstIds.length * rank,
-            s"dstMat has ${dstMat.length} entries, expected ${dstIds.length * rank}.")
+            s"dstMat must have ${dstIds.length * rank} entries but has ${dstMat.length}."
           val m = srcIds.length
           val n = dstIds.length
           if (scores == null || scores.length < n) {
@@ -894,7 +894,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         initialized = true
       } else {
         require(this.rank == rank,
-          s"Expected rank ${this.rank} but found $rank.")
+          s"NNLSSolver was initialized with rank ${this.rank} but got $rank."
       }
     }
 
@@ -971,10 +971,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
     /** Adds an observation. */
     def add(a: Array[Float], b: Double, c: Double = 1.0): NormalEquation = {
-      require(c >= 0.0,
-        s"Observation weight must be non-negative but found $c.")
-      require(a.length == k,
-        s"Observation length ${a.length} must equal rank $k.")
+      require(c >= 0.0, s"Observation weight must be non-negative but found $c.")
+      require(a.length == k, s"Observation length ${a.length} must equal rank $k.")
       copyToDouble(a)
       BLAS.nativeBLAS.dspr(upper, k, c, da, 1, ata)
       if (b != 0.0) {
@@ -985,8 +983,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
     /** Merges another normal equation object. */
     def merge(other: NormalEquation): NormalEquation = {
-      require(other.k == k,
-        s"Cannot merge normal equations of rank ${other.k} into rank $k.")
+      require(other.k == k, s"Cannot merge normal equations of rank ${other.k} into rank $k.")
       BLAS.nativeBLAS.daxpy(ata.length, 1.0, other.ata, 1, ata, 1)
       BLAS.nativeBLAS.daxpy(atb.length, 1.0, other.atb, 1, atb, 1)
       this
@@ -1337,9 +1334,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     /** Size of the block. */
     def size: Int = ratings.length
     require(dstEncodedIndices.length == size,
-      s"dstEncodedIndices has ${dstEncodedIndices.length} entries, expected $size.")
+      s"dstEncodedIndices must have $size entries but has ${dstEncodedIndices.length}."
     require(dstPtrs.length == srcIds.length + 1,
-      s"dstPtrs has ${dstPtrs.length} entries, expected ${srcIds.length + 1}.")
+      s"dstPtrs must have ${srcIds.length + 1} entries but has ${dstPtrs.length}."
   }
 
   /**
@@ -1382,9 +1379,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     /** Size of the block. */
     def size: Int = srcIds.length
     require(dstIds.length == srcIds.length,
-      s"dstIds has ${dstIds.length} entries, expected ${srcIds.length}.")
+      s"dstIds must have ${srcIds.length} entries but has ${dstIds.length}."
     require(ratings.length == srcIds.length,
-      s"ratings has ${ratings.length} entries, expected ${srcIds.length}.")
+      s"ratings must have ${srcIds.length} entries but has ${ratings.length}."
   }
 
   /**
@@ -1508,9 +1505,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         ratings: Array[Float]): this.type = {
       val sz = srcIds.length
       require(dstLocalIndices.length == sz,
-        s"dstLocalIndices has ${dstLocalIndices.length} entries, expected $sz.")
-      require(ratings.length == sz,
-        s"ratings has ${ratings.length} entries, expected $sz.")
+        s"dstLocalIndices must have $sz entries but has ${dstLocalIndices.length}."
+      require(ratings.length == sz, s"ratings must have $sz entries but has ${ratings.length}.")
       this.srcIds ++= srcIds
       this.ratings ++= ratings
       var j = 0
@@ -1890,10 +1886,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
     /** Encodes a (blockId, localIndex) into a single integer. */
     def encode(blockId: Int, localIndex: Int): Int = {
-      require(blockId < numBlocks,
-        s"blockId $blockId must be less than numBlocks $numBlocks.")
+      require(blockId < numBlocks, s"blockId $blockId must be less than numBlocks $numBlocks.")
       require((localIndex & ~localIndexMask) == 0,
-        s"localIndex $localIndex exceeds the maximum encodable value.")
+        s"localIndex $localIndex must be in [0, $localIndexMask]."
       (blockId << numLocalIndexBits) | localIndex
     }
 
