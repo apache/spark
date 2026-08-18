@@ -1107,6 +1107,56 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58794: R1 promotion unifies CHAR/VARCHAR with STRING at plain-string inputs") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("std_promote") {
+        sql("CREATE TABLE std_promote (c CHAR(5), v VARCHAR(5)) USING parquet")
+        sql("INSERT INTO std_promote VALUES ('ab', 'ab')")
+
+        // Expressions requiring all their string inputs to share one type must accept a
+        // CHAR/VARCHAR argument alongside a STRING one by promoting it to STRING.
+        Seq(
+          "overlay(c PLACING 'x' FROM 1)" -> "xb   ",
+          "overlay(v PLACING 'x' FROM 1)" -> "xb",
+          "string_agg(c, '-')" -> "ab   ",
+          "listagg(c, '-')" -> "ab   ",
+          "elt(1, c, 'x')" -> "ab   ",
+          // right() is RuntimeReplaceable; its literal branches must agree with the substring
+          // branch, which R1 has already reduced to STRING.
+          "right(c, 2)" -> "  ",
+          "left(c, 2)" -> "ab").foreach { case (expr, expected) =>
+          val df = sql(s"SELECT $expr AS r FROM std_promote")
+          assert(df.schema.head.dataType === StringType, s"$expr should return STRING")
+          checkAnswer(df, Row(expected))
+        }
+
+        // Transforming expressions must not inherit the input's length constraint: each of these
+        // produces a value whose length differs from the CHAR(5) input.
+        Seq(
+          "reverse(c)" -> "   ba",
+          "hex(c)" -> "6162202020",
+          "array_join(array(c, c), '-')" -> "ab   -ab   ").foreach { case (expr, expected) =>
+          val df = sql(s"SELECT $expr AS r FROM std_promote")
+          assert(df.schema.head.dataType === StringType, s"$expr should return STRING")
+          checkAnswer(df, Row(expected))
+        }
+
+        // Promotion must not reach pass-through / LCT sites, which preserve CHAR/VARCHAR (R2/R3).
+        Seq(
+          "c", "coalesce(c, c)", "case when true then c else c end", "max(c)",
+          "element_at(array(c), 1)", "transform(array(c), x -> x)[0]",
+          "first_value(c) over (order by 1)").foreach { expr =>
+          val df = sql(s"SELECT $expr AS r FROM std_promote")
+          assert(df.schema.head.dataType === CharType(5), s"$expr should stay CHAR(5)")
+        }
+
+        // reverse() on non-string inputs is unaffected by the R1 change.
+        assert(sql("SELECT reverse(array(1, 2)) AS r").schema.head.dataType ===
+          ArrayType(IntegerType, containsNull = false))
+      }
+    }
+  }
+
   test("SPARK-58802: single-pass resolver agrees with fixed-point under standardSemantics") {
     // Dual run defaults to on under tests, but pin it explicitly so this coverage cannot be
     // silently lost: the HybridAnalyzer compares output schema and normalized plan across the

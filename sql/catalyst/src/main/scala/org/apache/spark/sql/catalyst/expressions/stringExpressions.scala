@@ -2706,12 +2706,18 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
+  // Type the literal branches after R1: Substring returns plain STRING for a CHAR(n)/VARCHAR(n)
+  // input, so deriving the literals from str.dataType would leave the If with branches of
+  // different types. CheckAnalysis does not see inside a RuntimeReplaceable's replacement, so
+  // that mismatch would surface later as COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.
+  private lazy val resultType: DataType = StringHelper.transformingStringResultType(str.dataType)
+
   override lazy val replacement: Expression = If(
     IsNull(str),
-    Literal(null, str.dataType),
+    Literal(null, resultType),
     If(
       LessThanOrEqual(len, Literal(0)),
-      Literal(UTF8String.EMPTY_UTF8, str.dataType),
+      Literal(UTF8String.EMPTY_UTF8, resultType),
       new Substring(str, UnaryMinus(len, failOnError = false))
     )
   )

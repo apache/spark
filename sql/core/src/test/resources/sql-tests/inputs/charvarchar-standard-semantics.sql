@@ -42,6 +42,26 @@ SELECT typeof(regexp_extract_all(cast('aab' AS VARCHAR(3)), '(a)', 1));
 SELECT typeof(split(cast('a,b' AS CHAR(3)), ','));
 SELECT typeof(mask(cast('ab' AS CHAR(2))));
 
+-- R1: CHAR/VARCHAR promote to STRING where a plain string is expected, so expressions that
+-- require all their string inputs to share one type accept them alongside a STRING argument.
+-- Values are wrapped in sentinels because the golden format trims trailing blanks, which would
+-- otherwise hide the CHAR padding these expressions operate on.
+SELECT typeof(overlay(cast('ab' AS CHAR(5)) PLACING 'x' FROM 1));
+SELECT concat('<', overlay(cast('ab' AS CHAR(5)) PLACING 'x' FROM 1), '>');
+SELECT typeof(elt(1, cast('ab' AS CHAR(5)), 'x'));
+SELECT typeof(right(cast('ab' AS CHAR(5)), 2));
+SELECT concat('<', right(cast('ab' AS CHAR(5)), 2), '>');
+SELECT typeof(left(cast('ab' AS CHAR(5)), 2));
+
+-- R1: transforms whose result length differs from the input must not inherit the constraint.
+SELECT typeof(reverse(cast('ab' AS CHAR(5))));
+SELECT typeof(hex(cast('ab' AS CHAR(5))));
+SELECT hex(cast('ab' AS CHAR(5)));
+SELECT typeof(array_join(array(cast('ab' AS CHAR(5)), cast('cd' AS CHAR(5))), '-'));
+SELECT concat('<', array_join(array(cast('ab' AS CHAR(5)), cast('cd' AS CHAR(5))), '-'), '>');
+-- reverse() on a non-string input is unaffected.
+SELECT typeof(reverse(array(1, 2)));
+
 -- R2 with collation.
 -- The recorded "string collate null" is a pre-existing gap, not a standardSemantics behavior:
 -- it reproduces with every char/varchar flag off, where the folded CAST loses both the length

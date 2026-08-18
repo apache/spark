@@ -247,6 +247,102 @@ string
 
 
 -- !query
+SELECT typeof(overlay(cast('ab' AS CHAR(5)) PLACING 'x' FROM 1))
+-- !query schema
+struct<typeof(overlay(CAST(ab AS CHAR(5)), x, 1, -1)):string>
+-- !query output
+string
+
+
+-- !query
+SELECT concat('<', overlay(cast('ab' AS CHAR(5)) PLACING 'x' FROM 1), '>')
+-- !query schema
+struct<concat(<, overlay(CAST(ab AS CHAR(5)), x, 1, -1), >):string>
+-- !query output
+<xb   >
+
+
+-- !query
+SELECT typeof(elt(1, cast('ab' AS CHAR(5)), 'x'))
+-- !query schema
+struct<typeof(elt(1, CAST(ab AS CHAR(5)), x)):string>
+-- !query output
+string
+
+
+-- !query
+SELECT typeof(right(cast('ab' AS CHAR(5)), 2))
+-- !query schema
+struct<typeof(right(CAST(ab AS CHAR(5)), 2)):string>
+-- !query output
+string
+
+
+-- !query
+SELECT concat('<', right(cast('ab' AS CHAR(5)), 2), '>')
+-- !query schema
+struct<concat(<, right(CAST(ab AS CHAR(5)), 2), >):string>
+-- !query output
+<  >
+
+
+-- !query
+SELECT typeof(left(cast('ab' AS CHAR(5)), 2))
+-- !query schema
+struct<typeof(left(CAST(ab AS CHAR(5)), 2)):string>
+-- !query output
+string
+
+
+-- !query
+SELECT typeof(reverse(cast('ab' AS CHAR(5))))
+-- !query schema
+struct<typeof(reverse(CAST(ab AS CHAR(5)))):string>
+-- !query output
+string
+
+
+-- !query
+SELECT typeof(hex(cast('ab' AS CHAR(5))))
+-- !query schema
+struct<typeof(hex(CAST(ab AS CHAR(5)))):string>
+-- !query output
+string
+
+
+-- !query
+SELECT hex(cast('ab' AS CHAR(5)))
+-- !query schema
+struct<hex(CAST(ab AS CHAR(5))):string>
+-- !query output
+6162202020
+
+
+-- !query
+SELECT typeof(array_join(array(cast('ab' AS CHAR(5)), cast('cd' AS CHAR(5))), '-'))
+-- !query schema
+struct<typeof(array_join(array(CAST(ab AS CHAR(5)), CAST(cd AS CHAR(5))), -)):string>
+-- !query output
+string
+
+
+-- !query
+SELECT concat('<', array_join(array(cast('ab' AS CHAR(5)), cast('cd' AS CHAR(5))), '-'), '>')
+-- !query schema
+struct<concat(<, array_join(array(CAST(ab AS CHAR(5)), CAST(cd AS CHAR(5))), -), >):string>
+-- !query output
+<ab   -cd   >
+
+
+-- !query
+SELECT typeof(reverse(array(1, 2)))
+-- !query schema
+struct<typeof(reverse(array(1, 2))):string>
+-- !query output
+array<int>
+
+
+-- !query
 SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)))
 -- !query schema
