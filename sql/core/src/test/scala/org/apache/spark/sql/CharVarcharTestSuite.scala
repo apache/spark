@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql
 
+import scala.util.Try
+
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, ScalarSubquery, StringRPad}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -1153,6 +1156,46 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         // reverse() on non-string inputs is unaffected by the R1 change.
         assert(sql("SELECT reverse(array(1, 2)) AS r").schema.head.dataType ===
           ArrayType(IntegerType, containsNull = false))
+      }
+    }
+  }
+
+  // Every registered function that may return a CHAR(n)/VARCHAR(n) when handed one. These are the
+  // pass-through and container cases R2/R3 require to keep the type: aggregates and ordering
+  // functions that return one of their inputs unchanged, the null-handling family, element access,
+  // and the array/map/struct constructors along with the collection functions that rearrange
+  // elements without rewriting them. Anything not listed here must reduce to plain STRING (R1), so
+  // a newly added expression that leaks a length constraint fails this test rather than shipping.
+  private val charVarcharPassThroughFunctions = Set(
+    "any_value", "approx_top_k", "approx_top_k_accumulate", "array", "array_agg", "array_compact",
+    "array_distinct", "array_max", "array_min", "array_repeat", "array_sort", "arrays_zip",
+    "coalesce", "collect_list", "collect_set", "collect_union", "concat", "explode",
+    "explode_outer", "first", "first_value", "get", "greatest", "ifnull", "last", "last_value",
+    "least", "map", "max", "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif",
+    "nullifzero", "nvl", "reverse", "shuffle", "sort_array", "struct", "when")
+
+  test("SPARK-58794: no unlisted function returns a CHAR/VARCHAR type under standardSemantics") {
+    val argumentShapes = Seq(
+      "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
+      "%s(array(c), '-')")
+
+    withTable("std_inventory") {
+      sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        val leaks = FunctionRegistry.functionSet.map(_.funcName).toSeq.sorted
+          .filterNot(charVarcharPassThroughFunctions.contains)
+          .flatMap { name =>
+            argumentShapes.map(_.format(name)).filter { call =>
+              // Most shapes do not typecheck for a given function; those are simply not evidence.
+              Try(sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType)
+                .toOption
+                .exists(CharVarcharUtils.hasCharVarchar)
+            }
+          }
+
+        assert(leaks.isEmpty,
+          "these calls returned a CHAR/VARCHAR type; either fix the expression to return plain " +
+            s"STRING or add it to charVarcharPassThroughFunctions: ${leaks.mkString(", ")}")
       }
     }
   }

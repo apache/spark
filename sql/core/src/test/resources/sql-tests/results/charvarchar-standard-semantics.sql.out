@@ -343,12 +343,36 @@ array<int>
 
 
 -- !query
-SELECT typeof(coalesce(
-  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)))
+SELECT typeof(str_to_map(cast('a:1,b:2' AS CHAR(7))))
 -- !query schema
-struct<typeof(coalesce(a, bb)):string>
+struct<typeof(str_to_map(CAST(a:1,b:2 AS CHAR(7)), ,, :)):string>
 -- !query output
-string collate null
+map<string,string>
+
+
+-- !query
+SELECT typeof(c0) FROM (SELECT json_tuple(cast('{"a":"1"}' AS CHAR(9)), 'a') AS c0)
+-- !query schema
+struct<typeof(c0):string>
+-- !query output
+string
+
+
+-- !query
+SELECT typeof(cast('a' AS CHAR(2) COLLATE UTF8_LCASE))
+-- !query schema
+struct<typeof(CAST(a AS CHAR(2) COLLATE UTF8_LCASE)):string>
+-- !query output
+char(2) collate UTF8_LCASE
+
+
+-- !query
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(2) COLLATE UTF8_LCASE)))
+-- !query schema
+struct<typeof(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS CHAR(2) COLLATE UTF8_LCASE))):string>
+-- !query output
+char(2) collate UTF8_LCASE
 
 
 -- !query

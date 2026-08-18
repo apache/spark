@@ -1431,8 +1431,9 @@ case class Reverse(child: Expression)
       ArrayType))
 
   // Reversing a string transforms its content, so a CHAR/VARCHAR input yields plain STRING (R1).
-  // Array and binary inputs are unaffected. The promotion in ImplicitTypeCasts does not reach
-  // here because the expected type is a TypeCollection rather than a plain string type.
+  // Array and binary inputs are unaffected. ImplicitTypeCasts already promotes the string branch
+  // (its promotion looks inside a TypeCollection), so this covers the paths that do not go
+  // through implicit casting, such as an expression built directly.
   override def dataType: DataType = StringHelper.transformingStringResultType(child.dataType)
 
   private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull

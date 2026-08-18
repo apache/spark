@@ -291,10 +291,34 @@ Project [typeof(reverse(array(1, 2))) AS typeof(reverse(array(1, 2)))#x]
 
 
 -- !query
-SELECT typeof(coalesce(
-  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)))
+SELECT typeof(str_to_map(cast('a:1,b:2' AS CHAR(7))))
 -- !query analysis
-Project [typeof(coalesce(cast(a as string collate null), cast(bb as string collate null))) AS typeof(coalesce(a, bb))#x]
+Project [typeof(str_to_map(cast(a:1,b:2 as char(7)), ,, :)) AS typeof(str_to_map(CAST(a:1,b:2 AS CHAR(7)), ,, :))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(c0) FROM (SELECT json_tuple(cast('{"a":"1"}' AS CHAR(9)), 'a') AS c0)
+-- !query analysis
+Project [typeof(c0#x) AS typeof(c0)#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [c0#x]
+      +- Generate json_tuple(cast({"a":"1"} as char(9)), a), false, [c0#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT typeof(cast('a' AS CHAR(2) COLLATE UTF8_LCASE))
+-- !query analysis
+Project [typeof(cast(a as char(2) collate UTF8_LCASE)) AS typeof(CAST(a AS CHAR(2) COLLATE UTF8_LCASE))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(2) COLLATE UTF8_LCASE)))
+-- !query analysis
+Project [typeof(coalesce(cast(a as char(2) collate UTF8_LCASE), cast(bb as char(2) collate UTF8_LCASE))) AS typeof(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS CHAR(2) COLLATE UTF8_LCASE)))#x]
 +- OneRowRelation
 
 

@@ -61,13 +61,20 @@ SELECT typeof(array_join(array(cast('ab' AS CHAR(5)), cast('cd' AS CHAR(5))), '-
 SELECT concat('<', array_join(array(cast('ab' AS CHAR(5)), cast('cd' AS CHAR(5))), '-'), '>');
 -- reverse() on a non-string input is unaffected.
 SELECT typeof(reverse(array(1, 2)));
+-- Expressions that pull values out of a wrapper do not inherit the wrapper's constraint. These
+-- take their inputs through ExpectsInputTypes, so no implicit cast strips the length for them.
+SELECT typeof(str_to_map(cast('a:1,b:2' AS CHAR(7))));
+SELECT typeof(c0) FROM (SELECT json_tuple(cast('{"a":"1"}' AS CHAR(9)), 'a') AS c0);
 
--- R2 with collation.
--- The recorded "string collate null" is a pre-existing gap, not a standardSemantics behavior:
--- it reproduces with every char/varchar flag off, where the folded CAST loses both the length
--- and the collation. A collated CAST on its own resolves correctly to char(2) collate UTF8_LCASE.
+-- R2 with collation. A declared collation survives the CAST and an LCT over equally constrained
+-- operands. The mixed-length case (CHAR(2) with CHAR(4), same collation) is deliberately not
+-- covered here: CollationTypeCoercion reads the differing lengths as a collation mismatch and
+-- yields an indeterminate collation. That predates this change (it reproduces under
+-- spark.sql.preserveCharVarcharTypeInfo) and is tracked separately, so goldening it would
+-- normalize the bug.
+SELECT typeof(cast('a' AS CHAR(2) COLLATE UTF8_LCASE));
 SELECT typeof(coalesce(
-  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)));
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(2) COLLATE UTF8_LCASE)));
 
 -- UNION LCT
 SELECT typeof(c) FROM (

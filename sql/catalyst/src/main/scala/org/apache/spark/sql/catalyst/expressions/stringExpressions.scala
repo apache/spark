@@ -4212,6 +4212,11 @@ case class SplitPart (
 case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
   override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
 
+  // Not a transforming function: every non-empty value is returned unchanged, so this keeps the
+  // child's type rather than taking the plain-STRING result that String2StringExpression gives
+  // its transforming implementations (R1).
+  override def dataType: DataType = child.dataType
+
   override def nullable: Boolean = true
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
