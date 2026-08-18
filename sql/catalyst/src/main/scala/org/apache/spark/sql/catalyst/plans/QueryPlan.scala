@@ -278,6 +278,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       val newE = CurrentOrigin.withOrigin(e.origin) {
         f(e)
       }
+      // Reference equality preserves fresh stateful copies that fastEquals sees as unchanged.
       val unchanged = if (useFastEquals) newE.fastEquals(e) else newE.eq(e)
       if (unchanged) {
         e

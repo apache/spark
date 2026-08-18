@@ -74,5 +74,12 @@ class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(copied ne uniform)
     assert(copied.timeZoneId == uniform.timeZoneId)
     assert(copied.resolved)
+
+    Seq(uniform.withNewSeed(1), uniform.withShiftedSeed(1)).foreach {
+      case copied: Uniform =>
+        assert(copied.timeZoneId == uniform.timeZoneId)
+        assert(copied.resolved)
+      case other => fail(s"Expected Uniform but got ${other.getClass.getName}")
+    }
   }
 }
