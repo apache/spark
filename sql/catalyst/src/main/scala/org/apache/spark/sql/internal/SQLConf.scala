@@ -5611,8 +5611,8 @@ object SQLConf {
     .createWithDefault(false)
 
   val PARSE_SQL_ENABLED =
-    buildConf("spark.sql.parseSql.enabled")
-      .doc("When true, enables the parse_sql function. This feature is under active " +
+    buildConf("spark.sql.function.parseSql.enabled")
+      .doc("When true, enables the parse_sql SQL function. This feature is under active " +
         "development; the JSON contract may change across releases while the flag remains " +
         "off by default.")
       .version("5.0.0")

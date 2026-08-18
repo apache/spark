@@ -42,7 +42,7 @@ import org.apache.spark.unsafe.types.UTF8String
     returns a JSON string describing the statement (parse success, Table 39 statement
     identifier/code, target and source table references for lineage, select-list column
     names, and parameter markers). Session parser extensions are not applied.
-    Requires spark.sql.parseSql.enabled=true. On syntax / parse error returns JSON
+    Requires spark.sql.function.parseSql.enabled=true. On syntax / parse error returns JSON
     with `parse_success` false, source location, and a nested STANDARD error object
     instead of throwing.""",
   arguments = """

@@ -1,7 +1,7 @@
 -- End-to-end coverage for parse_sql (SPARK-58738).
 -- Returns compact JSON for parse-only statement analysis via SparkSqlParser.
 -- Off by default while the JSON contract is still evolving.
---SET spark.sql.parseSql.enabled=true
+--SET spark.sql.function.parseSql.enabled=true
 
 -- null input
 SELECT parse_sql(NULL);
