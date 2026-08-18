@@ -92,19 +92,39 @@ expression. A draw is never inlined, because those rules check determinism.
 An argument the body never reads is not computed at all.
 
 Constructs that short-circuit in Python -- ``and`` / ``or`` and chained
-comparisons such as ``0 <= x <= 100`` -- fold with ``&`` / ``|``, which also
-short-circuit at evaluation time: ``And`` skips its right operand when the left
-is false and ``Or`` when the left is true, in both ``eval`` and ``doGenCode``.
-That is what keeps the ``raise_error`` NULL guard in a later operand from firing
-on rows Python never reaches. ``and`` / ``or`` operands must be provably boolean
+comparisons such as ``0 <= x <= 100`` -- fold with ``&`` / ``|``. That fold is
+what is meant to keep the ``raise_error`` NULL guard in a later operand from
+firing on rows Python never reaches, since ``And`` skips its right operand when
+the left is exactly ``false`` (and ``Or`` when the left is exactly ``true``) in
+both ``eval`` and ``doGenCode``. Note the "exactly": a NULL left operand still
+evaluates the right. ``and`` / ``or`` operands must therefore be provably boolean
 and non-NULL (see ``_is_never_null_boolean``); chain links need no such gate,
 because every comparison lowering is total.
 
-Two known divergences in the fold: it is splittable by
-``splitConjunctivePredicates``, so a NULL guard can be pushed across a join
-until ``RaiseError`` overrides ``Expression.throwable``; and Spark orders NaN
-above every value and treats ``NaN = NaN`` as true where Python does neither
-(SPARK-58781).
+That short-circuit is an EVALUATION-time property only, and it does not survive
+the optimizer. Three divergences, all measured rather than reasoned about:
+
+* Predicate pushdown. The fold is splittable by ``splitConjunctivePredicates``,
+  and ``Optimizer`` partitions on ``cond.deterministic && !cond.throwable``,
+  which ``RaiseError`` fails to set. So a guard can be pushed below a join and
+  run on rows the join drops. Measured on a PURE chain with no ``and`` / ``or``:
+  ``lambda a, b, c: a < b < c`` over a join, ``select`` returns False correctly
+  but ``filter`` raises USER_RAISED_EXCEPTION where Python returns False. Fixed
+  by ``RaiseError`` overriding ``Expression.throwable`` (SPARK-58627), which is
+  a prerequisite for this lowering rather than a nice-to-have.
+* Subexpression elimination. ``spark.sql.subexpressionElimination.enabled``
+  defaults true while ``...skipForShortcutExpr`` defaults FALSE, so a conjunct
+  living only in a short-circuited position is hoisted and evaluated
+  unconditionally. Measured on a plain ``select``, no join and no filter:
+  ``(a < b < c) or (d > 0 and b < c)`` on ``(5, 1, None, -1)`` raises where
+  Python returns False, and setting ``skipForShortcutExpr=true`` alone fixes it.
+  ``Expression.throwable`` does NOT help here -- this rule never consults it.
+* NaN. Spark orders NaN above every value and treats ``NaN = NaN`` as true where
+  Python does neither (SPARK-58781).
+
+A chain duplicates every interior operand by construction, so it manufactures
+the common subexpressions the second bullet needs. Treat both of the first two
+as open, not theoretical.
 """
 
 import ast
@@ -150,20 +170,33 @@ if TYPE_CHECKING:
 
 
 # The most operators we will lower in one chained comparison (64 operators over
-# 65 operands); longer chains fall back to interpreted Python. Each interior
-# operand is lowered once per adjacent pair, so growth is linear in the operator
-# count, and only two options can survive: every adjacent pair must share a
-# category, which leaves the all-numeric and all-string variants as the only ones
-# that lower at all. Measured at the cap over three untyped params: 2 options,
-# one `raise_error` guard per operator, ~17 KB of expression per option. Generous
-# next to real code like ``0 <= x <= 100``.
-#
-# This is a stopgap, not the intended design. An operator count does not measure
-# what actually matters, the size of the emitted tree, and a cap per syntax form
-# does not converge as forms are added -- ``and`` / ``or`` admits the same
-# unbounded repetition and is not capped at all. The replacement is one size
-# budget, configurable and counted across the whole lowering.
+# 65 operands); longer chains fall back to interpreted Python. For a FLAT chain
+# this is close to linear: each interior operand is lowered once per adjacent
+# pair, and only two options survive because every adjacent pair must share a
+# category, leaving all-numeric and all-string. Measured over three untyped
+# params: 2 options, one `raise_error` guard per operator, ~17 KB of expression
+# per option. Generous next to real code like ``0 <= x <= 100``.
 _MAX_COMPARISON_OPS = 64
+
+# Total comparison links we will lower for one function body, across every
+# nesting level. This is the bound that actually matters, and a per-form operator
+# count cannot express it: a comparison's operand may itself be a comparison
+# (both have category "bool", so `(a < b) < (c < d)` type-checks), and a chain
+# re-lowers each interior operand once per adjacent pair. Nesting those two facts
+# doubles the work per level while every individual node stays far under
+# `_MAX_COMPARISON_OPS`.
+#
+# Measured before this bound existed, with `L(d) = "((a<b) < L(d-1) < (a<b))"`:
+# UDF construction took 8.0s at d=8, 32.0s at d=10 and 63.4s at d=11 -- exact
+# doubling, from a 249-character body, and extrapolating to hours by d=20. Each
+# link is a py4j round trip on the driver, so that is a wedged driver at
+# `udf(...)` time, which `_transpile_func`'s blanket `except` cannot recover
+# from. Counting links once across the whole lowering turns it into a refusal
+# and a fallback to interpreted Python.
+#
+# 128 leaves flat chains at the cap untouched (64 links) while holding the worst
+# nested case to well under a second.
+_MAX_LOWERED_COMPARISONS = 128
 
 # The four ordering comparisons: same lowering, differing only in the operator
 # and the symbol used to name it in an error message.
@@ -320,6 +353,11 @@ class CatalystTranspiler(AbstractTranspiler):
     """Transpiler that attempts to convert a Python UDF into native Spark SQL expressions."""
 
     variety = "catalyst"
+
+    # Class-level default so the lowering helpers can be driven directly (tests
+    # call ``_convert_chunk`` without going through ``_transpile_from_ast``, which
+    # is what normally resets this).
+    _lowered_comparisons = 0
 
     def __init__(self) -> None:
         self._param_categories: dict[int, str] = {}
@@ -553,7 +591,17 @@ class CatalystTranspiler(AbstractTranspiler):
         for "string") leave numeric widening as the only coercion Catalyst
         inserts, and under ANSI a failing cast raises. That is what lets the
         chain fold below use a plain ``&`` with no ``coalesce``.
+
+        Every comparison link routes through here, which is what makes this the
+        place to charge ``_MAX_LOWERED_COMPARISONS``.
         """
+        self._lowered_comparisons += 1
+        if self._lowered_comparisons > _MAX_LOWERED_COMPARISONS:
+            raise UnsupportedOperationException(
+                f"lowering this body needs more than {_MAX_LOWERED_COMPARISONS} "
+                "comparisons, so the UDF falls back to interpreted Python; "
+                "nested comparisons double the count per level"
+            )
         match op:
             case ast.Is() | ast.IsNot():
                 # Only lower `x is None` / `None is x` (and their
@@ -987,6 +1035,10 @@ class CatalystTranspiler(AbstractTranspiler):
         # Category inference depends on the per-variant assumptions above. Cache
         # each AST node only for this lowering so recursive conversion stays linear.
         self._category_cache = {}
+        # Charged by ``_lower_compare_pair``. Reset per variant, not per process:
+        # the budget bounds one body's lowering, and each variant lowers the body
+        # again from scratch.
+        self._lowered_comparisons = 0
         function_body = function_ast.body
         if len(function_body) != 1:
             raise UnsupportedOperationException(
