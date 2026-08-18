@@ -252,7 +252,8 @@ abstract class BucketedWriteSuite extends QueryTest {
         .bucketBy(8, "j", "k")
         .sortBy("k")
         .saveAsTable("bucketed_table")),
-      condition = "_LEGACY_ERROR_TEMP_1166",
+      condition = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
+      sqlState = "42601",
       parameters = Map("bucketCol" -> "j", "normalizedPartCols" -> "i, j"))
 
     checkError(
@@ -261,7 +262,8 @@ abstract class BucketedWriteSuite extends QueryTest {
         .bucketBy(8, "k")
         .sortBy("i")
         .saveAsTable("bucketed_table")),
-      condition = "_LEGACY_ERROR_TEMP_1167",
+      condition = "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS",
+      sqlState = "42601",
       parameters = Map("sortCol" -> "i", "normalizedPartCols" -> "i, j"))
   }
 

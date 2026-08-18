@@ -2230,7 +2230,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def bucketingColumnCannotBePartOfPartitionColumnsError(
       bucketCol: String, normalizedPartCols: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1166",
+      errorClass = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
       messageParameters = Map(
         "bucketCol" -> bucketCol,
         "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
@@ -2239,7 +2239,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def bucketSortingColumnCannotBePartOfPartitionColumnsError(
     sortCol: String, normalizedPartCols: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1167",
+      errorClass = "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS",
       messageParameters = Map(
         "sortCol" -> sortCol,
         "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
