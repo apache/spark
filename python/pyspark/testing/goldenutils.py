@@ -316,12 +316,12 @@ class GoldenFileTestMixin:
         """
         Render one PyArrow scalar for a golden cell via PyArrow's own ``str(scalar)``.
 
-        Some values are valid in Arrow yet unrenderable in Python, where a fixed marker
-        is recorded instead of failing:
+        Some values are valid in Arrow yet unrenderable via ``str``:
         - a temporal value past Python's ``datetime`` range (e.g. date32 past year 9999)
-          raises ``OverflowError`` -> ``temporal overflow``;
+          raises ``OverflowError`` -> the marker ``temporal overflow``;
         - an unsafe ``binary``->``string`` cast relabels bytes without UTF-8 validation,
-          so non-UTF-8 bytes raise ``UnicodeDecodeError`` -> ``invalid utf-8``.
+          so non-UTF-8 bytes raise ``UnicodeDecodeError`` -> the raw bytes, so the golden
+          still tracks what Arrow stored for them.
         An unexpected error (non-temporal overflow, non-string decode error) propagates.
         """
         try:
@@ -335,10 +335,11 @@ class GoldenFileTestMixin:
             raise
         except UnicodeDecodeError:
             # An unsafe binary->string cast relabels bytes as a string without UTF-8
-            # validation, so str() cannot decode non-UTF-8 bytes; record ``invalid utf-8``.
-            # A UnicodeDecodeError on a non-string type is unexpected, so re-raise.
+            # validation, so str() cannot decode non-UTF-8 bytes; render the raw bytes
+            # so the golden still tracks what Arrow stored for them.  A UnicodeDecodeError
+            # on a non-string type is unexpected, so re-raise.
             if pa.types.is_string(scalar.type) or pa.types.is_large_string(scalar.type):
-                return "invalid utf-8"
+                return repr(scalar.as_buffer().to_pybytes())
             raise
 
     @classmethod
@@ -347,7 +348,7 @@ class GoldenFileTestMixin:
         Format a PyArrow Array/ChunkedArray for golden file.
 
         Each element is rendered by ``_scalar_str`` (PyArrow's scalar formatting, with
-        markers for values that are valid in Arrow but unrenderable in Python).
+        fallbacks for values that are valid in Arrow but unrenderable via ``str``).
 
         Parameters
         ----------
