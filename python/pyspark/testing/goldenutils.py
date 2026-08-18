@@ -316,10 +316,13 @@ class GoldenFileTestMixin:
         """
         Render one PyArrow scalar for a golden cell via PyArrow's own ``str(scalar)``.
 
-        A temporal value can be valid in Arrow yet outside Python's ``datetime`` range
-        (e.g. a date32 past year 9999), where ``str`` builds a Python datetime and
-        raises ``OverflowError``.  Record ``temporal overflow`` for those instead of
-        failing.  A non-temporal ``OverflowError`` is unexpected, so it propagates.
+        Some values are valid in Arrow yet unrenderable in Python, where a fixed marker
+        is recorded instead of failing:
+        - a temporal value past Python's ``datetime`` range (e.g. date32 past year 9999)
+          raises ``OverflowError`` -> ``temporal overflow``;
+        - an unsafe ``binary``->``string`` cast relabels bytes without UTF-8 validation,
+          so non-UTF-8 bytes raise ``UnicodeDecodeError`` -> ``invalid utf-8``.
+        An unexpected error (non-temporal overflow, non-string decode error) propagates.
         """
         try:
             return str(scalar).replace("\x00", "\\0")
@@ -330,6 +333,13 @@ class GoldenFileTestMixin:
             if pa.types.is_temporal(scalar.type):
                 return "temporal overflow"
             raise
+        except UnicodeDecodeError:
+            # An unsafe binary->string cast relabels bytes as a string without UTF-8
+            # validation, so str() cannot decode non-UTF-8 bytes; record ``invalid utf-8``.
+            # A UnicodeDecodeError on a non-string type is unexpected, so re-raise.
+            if pa.types.is_string(scalar.type) or pa.types.is_large_string(scalar.type):
+                return "invalid utf-8"
+            raise
 
     @classmethod
     def repr_arrow_value(cls, value: Any, max_len: int = 32) -> str:
@@ -337,7 +347,7 @@ class GoldenFileTestMixin:
         Format a PyArrow Array/ChunkedArray for golden file.
 
         Each element is rendered by ``_scalar_str`` (PyArrow's scalar formatting, with
-        an out-of-range temporal fallback).
+        markers for values that are valid in Arrow but unrenderable in Python).
 
         Parameters
         ----------
