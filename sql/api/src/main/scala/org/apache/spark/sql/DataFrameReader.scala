@@ -392,6 +392,17 @@ abstract class DataFrameReader {
   def csv(paths: String*): DataFrame = format("csv").load(paths: _*)
 
   /**
+   * Loads a fixed-width file and returns the result as a `DataFrame`. See the documentation on
+   * the other overloaded `fwf()` method for more details.
+   *
+   * @since 4.4.0
+   */
+  def fwf(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    fwf(Seq(path): _*)
+  }
+
+  /**
    * Loads fixed-width files and returns the result as a `DataFrame`.
    *
    * This function will go through the input once to determine the input schema if no schema is

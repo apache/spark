@@ -21,7 +21,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.fwf.FixedWidthOptions
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -202,6 +202,36 @@ class FixedWidthSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("MALFORMED_FWF_RECORD when token count does not match schema") {
+    withTempDir { dir =>
+      val path = writeFile(dir, "data.txt", Seq(row1))
+      val schema = new StructType().add("id", IntegerType).add("name", StringType)
+      val df = spark.read
+        .format("fwf")
+        .option("widths", "4,10,6")
+        .option("mode", "FAILFAST")
+        .schema(schema)
+        .load(path)
+
+      val ex = intercept[SparkException](df.collect())
+      checkErrorMatchPVals(
+        exception = ex,
+        condition = "FAILED_READ_FILE.NO_HINT",
+        parameters = Map("path" -> s".*$path.*"))
+      val parsing = ex.getCause.asInstanceOf[SparkException]
+      checkError(
+        exception = parsing,
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map(
+          "badRecord" -> "[1,Alice]",
+          "failFastMode" -> "FAILFAST"))
+      checkError(
+        exception = parsing.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "MALFORMED_FWF_RECORD",
+        parameters = Map("badRecord" -> "1 Alice 95.5"))
+    }
+  }
+
   test("writing requires explicit widths or colspecs") {
     withTempDir { dir =>
       val out = new File(dir, "out").getCanonicalPath
@@ -212,6 +242,19 @@ class FixedWidthSuite extends QueryTest with SharedSparkSession {
         }),
         condition = "INVALID_FIXED_WIDTH_COLSPECS.REQUIRED_FOR_WRITE",
         parameters = Map.empty)
+    }
+  }
+
+  test("write width count must match column count") {
+    withTempDir { dir =>
+      val out = new File(dir, "out").getCanonicalPath
+      val df = Seq((1, "Alice", 95.5)).toDF("id", "name", "score")
+      checkError(
+        exception = illegalArg(intercept[Exception] {
+          df.write.format("fwf").option("widths", "4,10").save(out)
+        }),
+        condition = "INVALID_FIXED_WIDTH_COLSPECS.WIDTH_COUNT_MISMATCH",
+        parameters = Map("numWidths" -> "2", "numColumns" -> "3"))
     }
   }
 

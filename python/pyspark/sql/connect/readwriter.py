@@ -955,6 +955,7 @@ class DataFrameWriter(OptionUtils):
         mode: Optional[str] = None,
         colspecs: Optional[str] = None,
         widths: Optional[str] = None,
+        header: Optional[Union[bool, str]] = None,
         nullValue: Optional[str] = None,
         dateFormat: Optional[str] = None,
         timestampFormat: Optional[str] = None,
@@ -965,6 +966,7 @@ class DataFrameWriter(OptionUtils):
         self._set_opts(
             colspecs=colspecs,
             widths=widths,
+            header=header,
             nullValue=nullValue,
             dateFormat=dateFormat,
             timestampFormat=timestampFormat,

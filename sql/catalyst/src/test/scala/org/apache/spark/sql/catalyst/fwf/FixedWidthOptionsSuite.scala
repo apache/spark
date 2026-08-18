@@ -123,6 +123,15 @@ class FixedWidthOptionsSuite extends SparkFunSuite {
       parameters = Map("value" -> "-1"))
   }
 
+  test("negative skipRows in a list") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        options("skipRows" -> "0,-1,2")
+      },
+      condition = "INVALID_FIXED_WIDTH_SKIP_ROWS.NEGATIVE",
+      parameters = Map("value" -> "0,-1,2"))
+  }
+
   test("malformed skipRows") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {

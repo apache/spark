@@ -195,9 +195,10 @@ class DataSourcesTestsMixin:
             self.spark.createDataFrame(
                 [(1, "Alice", 95.5), (2, "Bob", 88.0)],
                 schema="id INT, name STRING, score DOUBLE",
-            ).coalesce(1).write.fwf(tmpPath, widths="4,10,6")
+            ).coalesce(1).write.fwf(tmpPath, widths="4,10,6", header=True)
             result = self.spark.read.fwf(
-                tmpPath, widths="4,10,6", schema="id INT, name STRING, score DOUBLE"
+                tmpPath, widths="4,10,6", header=True,
+                schema="id INT, name STRING, score DOUBLE"
             )
             expected = [Row(id=1, name="Alice", score=95.5), Row(id=2, name="Bob", score=88.0)]
             self.assertEqual(sorted(result.collect(), key=lambda r: r.id), expected)

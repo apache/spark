@@ -122,7 +122,11 @@ class FixedWidthOptions(
   private def parseSkipRows(value: String): Set[Int] = {
     try {
       if (value.contains(",")) {
-        value.split(",").map(_.trim.toInt).toSet
+        val rows = value.split(",").map(_.trim.toInt)
+        if (rows.exists(_ < 0)) {
+          throw QueryExecutionErrors.negativeFwfSkipRowsError(value)
+        }
+        rows.toSet
       } else {
         val n = value.trim.toInt
         if (n < 0) {
