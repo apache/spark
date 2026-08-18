@@ -1161,7 +1161,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   }
 
   // Allowlist for the inventory below: R2/R3 pass-through and container cases that may keep
-  // CHAR(n)/VARCHAR(n) — aggregates/ordering that return an input unchanged, null-handling,
+  // CHAR(n)/VARCHAR(n): aggregates/ordering that return an input unchanged, null-handling,
   // element access, array/map/struct constructors, and collection rearrangements that keep
   // element types. Coverage is limited to the seven fixed argumentShapes templates in the test;
   // a leak only at another arity or nested shape would not fail here. For those shapes,
