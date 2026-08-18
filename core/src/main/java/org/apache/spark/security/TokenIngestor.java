@@ -29,7 +29,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * configuration is passed at construction time.
  * Implementations must be thread-safe because {@link #load()} may be called concurrently.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @DeveloperApi
 public interface TokenIngestor {
