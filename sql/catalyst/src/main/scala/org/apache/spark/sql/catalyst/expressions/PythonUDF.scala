@@ -236,30 +236,39 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
 
 
 /**
- * Marks a subtree of a transpiled option as the argument spliced in for the UDF's `index`th
- * parameter, so that `PreEvaluateTranspiledUDFInputs` can give it one evaluation per row.
+ * Marks a subtree of a transpiled option as the argument that got dropped in for the UDF's
+ * `index`th parameter, so `PreEvaluateTranspiledUDFInputs` can give it one column and compute it
+ * once per row.
  *
- * `UserDefinedPythonFunction`'s builder resolves the `_udf_param_N` placeholders at
- * call-construction time, and the marker is what survives that: the resolved copies are just
- * argument expressions, indistinguishable from the rest of the option's body.
+ * `UserDefinedPythonFunction`'s builder fills in the `_udf_param_N` placeholders when the call is
+ * built, and the marker is the only thing that survives that -- once they are filled in, the copies
+ * are ordinary argument expressions, no different from the rest of the option's body.
  *
- * `id` ties one parameter's copies together -- every copy the builder splices in for it carries the
- * same id, and no other parameter or call shares it. The rewrite needs that for a nondeterministic
- * argument, where structural equality would not do: an argument whose seed was still unresolved
- * (`expr("rand()")`, or SQL text) is reseeded per copy by `ResolveRandomSeed`, because substitution
- * runs before analysis.
+ * `id` is what ties one parameter's copies together: every copy the builder drops in for it carries
+ * the same id. We need that for a nondeterministic argument, where matching on shape is not enough
+ * -- an argument whose seed was still unresolved (`expr("rand()")`, or SQL text) gets a fresh seed
+ * per copy from `ResolveRandomSeed`, because the placeholders are filled in before analysis runs.
  *
- * A [[TaggingExpression]], so it is transparent: it evaluates as its child, and a stray one costs a
- * repeated evaluation rather than a wrong answer.
+ * The id is minted once per builder call, which is once per `Column` rather than once per place
+ * that `Column` lands in a plan. So reusing one transpiled `Column` in two spots leaves both spots
+ * carrying the same ids, and `PreEvaluateTranspiledUDFInputs` gives them one shared column -- one
+ * draw where the Python path would make two. Fixing that needs the ids re-minted per plan
+ * occurrence during analysis, which is not done yet.
+ *
+ * A [[TaggingExpression]], so it evaluates as its child. It is not fully see-through, though:
+ * `canonicalized` keeps `index`, so a marker is not `semanticEquals` the bare argument, and one
+ * that survived into an [[Aggregate]]'s expressions would break grouping-expression matching
+ * rather than just cost an extra evaluation. `ConvertToCatalyst` is non-excludable and strips every
+ * marker in the same pass that puts them to use, so nothing today can leave one behind.
  */
 case class TranspiledUDFParameter(child: Expression, index: Int, id: ExprId)
   extends TaggingExpression {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_UDF_PARAMETER)
 
-  // `id` is bookkeeping for the rewrite rather than part of the value, so canonicalize it away like
-  // PythonUDF's resultId. `index` stays: it is what ties a marker in an `explain` back to a
-  // `_udf_param_N` in the transpiled body.
+  // `id` is bookkeeping for the rewrite, not part of the value, so canonicalize it away the way
+  // PythonUDF does with resultId. `index` stays: it is what lets you tie a marker in an `explain`
+  // back to a `_udf_param_N` in the transpiled body.
   override lazy val canonicalized: Expression = copy(id = ExprId(-1), child = child.canonicalized)
 
   // Markers live in the plan from call construction to the first optimizer batch, so they show up

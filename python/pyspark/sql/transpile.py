@@ -35,12 +35,12 @@ keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
-How often a lowered UDF evaluates its arguments is best effort. An argument
-the body uses is normally pre-evaluated once per row below the operator, the
-same eagerness the Python eval operator has, but a cheap or awkwardly placed
-one may instead be inlined at each use site -- so a nondeterministic argument
-can be drawn more than once per row. An argument the body never uses is not
-evaluated at all.
+How many times a lowered UDF computes its arguments is best effort. An
+argument the body uses normally gets its own column below the operator and is
+computed once per row, as eagerly as the Python eval operator would, but a
+cheap argument or one we cannot put in a projection is left at each use site
+instead -- so a nondeterministic argument can get drawn more than once per
+row. An argument the body never uses is never computed at all.
 """
 
 import ast

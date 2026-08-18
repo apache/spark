@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Max, Sum}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, LocalRelation, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, DeleteFromTable, Filter, Join,
+  JoinHint, LocalRelation, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, IntegerType, LongType, MapType, StringType}
 
@@ -98,7 +99,7 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
 
   /**
    * The property that makes an Aggregate valid, and that pre-evaluating one side of a grouping
-   * expression would break: everything no aggregate function encloses reads only grouping
+   * expression would break: everything no aggregate function wraps reads only grouping
    * expressions. Analysis rejects an Aggregate that fails this.
    */
   private def assertGroupByIntact(agg: Aggregate): Unit = {
@@ -144,7 +145,8 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
 
   test("keeps the pre-evaluation when the call sits in a conditional branch") {
     // A `With` expression would be inlined back into the branch here (RewriteWithExpression cannot
-    // hoist out of a branch that may not run), which is why this rewrite builds the Project itself.
+    // pull out of a branch that might not run), which is why this rewrite builds the Project
+    // itself.
     // The input becomes eager, which is what the interpreted UDF does.
     val arg = Add(attrA, Literal(1L))
     val call = tpudf(usedTwice(arg), LongType, arg)
@@ -154,10 +156,8 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
     assert(countEvaluations(optimized)(_ == arg) == 1, s"Not a single evaluation: $optimized")
   }
 
-  // An input is worth a column only if reading it at each use site costs more than the column does.
-  // A Python call is not cheap here even though CollapseProject.isCheap counts one: left inline at
-  // two use sites it is two round trips per row. GetMapValue walks the key array comparing keys, so
-  // it is not cheap either, unlike the offset read a struct field compiles to.
+  // Which arguments are cheap enough to leave alone; isCheapInput has the reasoning, including why
+  // this is not CollapseProject.isCheap.
   namedGridTest[(Expression, Boolean)](
     "decides whether an input is cheap enough to leave inline:")(Map(
     "a column" -> (attrA, false),
@@ -232,7 +232,10 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
   test("gives copies analysis rewrote differently a column each") {
     // Analysis rewrites each spliced copy on its own, so one parameter's copies can end up as
     // different expressions -- here one use was cast to int. Deterministic copies key on the
-    // argument rather than on the parameter, so each gets its own column and is evaluated once.
+    // argument rather than on the parameter, so each shape gets its own column.
+    //
+    // Pinned as a known gap rather than as what we want: `a + 1` sits inside both columns, so it is
+    // computed twice per row where the Python eval operator computes one column for the parameter.
     val asLong = Add(attrA, Literal(1L))
     val asInt = Cast(asLong, IntegerType)
     val id = newId
@@ -240,6 +243,8 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
     val optimized = convert(select(tpudf(option, IntegerType, asLong)))
     assert(preEvaluated(optimized).map(_.child) == Seq(asLong, asInt),
       s"Expected a column per rewritten copy, got: $optimized")
+    assert(countEvaluations(optimized)(_ == asLong) == 2,
+      s"Expected a + 1 inside both columns, got: $optimized")
   }
 
   test("does not share a nested call's parameters with the outer call's") {
@@ -256,8 +261,12 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
     assert(preEvaluated(optimized).length == 2, s"Expected a column per level, got: $optimized")
     assert(countEvaluations(optimized)(_ == innerArg) == 1,
       s"Expected the inner input evaluated once, got: $optimized")
-    assert(countEvaluations(optimized)(_ == innerOption) == 0,
-      s"Expected the inner call's body evaluated through its column, got: $optimized")
+    // The outer body reads its column twice rather than holding two copies of the inner body. Match
+    // on the *rewritten* inner body -- comparing against `innerOption` can never fail, since that
+    // still holds the markers `convert` has already asserted are gone.
+    val innerColumn = preEvaluated(optimized).map(_.toAttribute).last
+    assert(countEvaluations(optimized)(_ == Multiply(innerColumn, innerColumn)) == 1,
+      s"Expected one copy of the inner body, got: $optimized")
   }
 
   // ---- where the column can live ----
@@ -284,6 +293,38 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
     comparePlans(optimized,
       select(ArrayTransform(attrArr,
         LambdaFunction(Multiply(lambdaVar, lambdaVar), Seq(lambdaVar)))))
+  }
+
+  test("leaves an input inside a lambda inline even when it reads no lambda variable") {
+    // `transform(arr, x -> udf(rand()))`. `rand()` references nothing, so the child search would
+    // happily put it below the operator -- and then the draw is made once per ROW and shared by
+    // every element, where the lambda body runs once per element. The deterministic case is worse
+    // than merely wrong: `a / b` below the operator raises DIVIDE_BY_ZERO under ANSI on a row whose
+    // array is empty, so the body never ran. Being inside a lambda is what rules both out.
+    val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
+    Seq(Rand(Literal(1L)), Divide(attrA, attrB)).foreach { arg =>
+      val body = tpudf(Add(usedTwice(arg), lambdaVar), LongType, arg)
+      val optimized = convert(select(ArrayTransform(attrArr, LambdaFunction(body, Seq(lambdaVar)))))
+      assert(preEvaluated(optimized).isEmpty,
+        s"Expected no column for an argument inside a lambda, got: $optimized")
+    }
+  }
+
+  test("leaves a Command alone") {
+    // A Command keeps its query in a field, not a child, and has no output of its own, so the
+    // schema guard cannot project a widened child back down. Worse, a Project between
+    // DeleteFromTable and its relation hides the relation DataSourceV2Strategy matches on and the
+    // query dies with an internal error. So no column here -- but the markers still come off, since
+    // this rewrite is the only thing that takes them off, and `convert` checks that for us.
+    val arg = Add(attrA, Literal(1L))
+    val plan = DeleteFromTable(relation,
+      GreaterThan(tpudf(usedTwice(arg), LongType, arg), Literal(0L)))
+    val optimized = convert(plan).asInstanceOf[DeleteFromTable]
+    assert(preEvaluated(optimized).isEmpty, s"Expected no column in a Command, got: $optimized")
+    assert(optimized.table eq relation,
+      s"Expected the relation untouched below the Command, got: $optimized")
+    assert(optimized.condition == GreaterThan(Multiply(arg, arg), Literal(0L)),
+      s"Expected the argument left at both use sites, got: $optimized")
   }
 
   test("puts a join condition's column below the side that can compute it, or nowhere") {
@@ -313,8 +354,8 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
   }
 
   test("leaves a nondeterministic input inline below a multi-child operator") {
-    // Hoisted below one side of a join, a draw would be made once per row of that side and reused
-    // for every row it is paired with -- correlated across output rows rather than one per row.
+    // Put below one side of a join, a draw is made once per row of that side and reused for every
+    // row it is paired with -- correlated across output rows. See preservesRowCount.
     val arg = Rand(Literal(1L))
     val id = newId
     val option = GreaterThan(Add(marker(arg, 0, id), marker(arg, 0, id)), Literal(0.5))
@@ -348,13 +389,22 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
     assert(subqueryPlans.nonEmpty, s"Expected the subquery to survive: $optimized")
     assert(subqueryPlans.flatMap(preEvaluated).map(_.child) == Seq(arg),
       s"Expected the input pre-evaluated inside the subquery: $optimized")
+    // `convert` cannot check this for us: Expression.exists does not walk into a subquery's plan,
+    // so its assertion never sees these. Same for countEvaluations, hence both by hand here.
+    assert(!subqueryPlans.exists(_.exists(_.expressions.exists(
+      _.exists(_.isInstanceOf[TranspiledUDFParameter])))),
+      s"A marker survived inside the subquery: $optimized")
+    assert(subqueryPlans.map(countEvaluations(_)(_ == arg)).sum == 1,
+      s"Expected one evaluation inside the subquery: $optimized")
   }
 
   // ---- Aggregate ----
 
   test("leaves an aggregate argument inline") {
-    // `udf(sum(a))` binds the parameter to the aggregate itself, and an aggregate cannot live in a
-    // Project. PhysicalAggregation shares semantically equal aggregate expressions anyway.
+    // `udf(sum(a))` binds the parameter to the aggregate itself. Nothing an aggregate function
+    // wraps is here, so the Aggregate rule declines it before `childIndexFor` is ever asked -- the
+    // "cannot live in a Project" guard is a backstop, not what fires. PhysicalAggregation shares
+    // semantically equal aggregate expressions anyway.
     val arg = Sum(attrA).toAggregateExpression()
     val id = newId
     val option = Add(marker(arg, 0, id), marker(arg, 0, id))
@@ -382,12 +432,8 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
     assert(countEvaluations(optimized)(_ == arg) == 1, s"Not a single evaluation: $optimized")
   }
 
-  // Everything in an Aggregate's expressions that no aggregate function encloses has to *be* a
-  // grouping expression. Pre-evaluating it would rewrite only the argument's side of that
-  // correspondence and leave the Aggregate reading a column that is not a grouping expression --
-  // invalid, whenever the user wrote the grouping expression without the UDF. Every such use is
-  // declined for that reason, even where it happens to be rewritable, and a grouping key is
-  // evaluated once per row anyway.
+  // Nothing an aggregate function wraps may read a column, or the Aggregate ends up reading a
+  // column that is not a grouping expression. The rule's scaladoc has the full reasoning.
   test("leaves an input inline in an Aggregate outside an aggregate function") {
     val arg = Add(attrA, Literal(1L))
     val call = tpudf(usedTwice(arg), LongType, arg)
@@ -407,8 +453,8 @@ class PreEvaluateTranspiledUDFInputsSuite extends PlanTest {
   test("does not share a column between an enclosed use and a bare one in an Aggregate") {
     // `SELECT a + 1, count(f(a + 1)), g(a + 1) FROM t GROUP BY a + 1`. Both calls bind the same
     // deterministic argument, so they key to one column -- but only the use an aggregate function
-    // encloses may read it. The rewrite asks per use rather than once per key, so the enclosed use
-    // keeps its column and the bare one stays inline as a grouping expression.
+    // wraps gets to read it. We ask per use instead of once per key, so the wrapped use keeps its
+    // column and the bare one stays put as a grouping expression.
     val arg = Add(attrA, Literal(1L))
     val enclosed = Count(Seq(usedTwice(arg, id = newId))).toAggregateExpression()
     val bare = tpudf(usedTwice(arg, id = newId), LongType, arg)

@@ -27,10 +27,10 @@ does not change UDF results compared with the default (transpilation off) runs
 covered by the original concrete classes (``UDFTests``,
 ``UDFCombinationsTests``, ``UnifiedUDFTests``).
 
-They are also the regression net for how a lowered UDF evaluates its inputs
-(SPARK-58626): an input is normally pre-evaluated once per row below the
-operator, the same eagerness the Python eval operator has, so a test that
-leaned on an argument being lazy or evaluated repeatedly would surface here.
+They are also the regression net for how often a lowered UDF computes its
+inputs (SPARK-58626): an input normally gets its own column below the operator
+and is computed once per row, as eagerly as the Python eval operator would, so
+a test leaning on an argument being lazy or computed repeatedly shows up here.
 
 Transpilation is currently only supported in regular (non-Connect) Spark, so
 these classes are guarded with ``is_remote_only()`` and are intentionally not

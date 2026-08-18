@@ -1440,10 +1440,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual([0, 1, 4], [r[0] for r in col_df.collect()])
 
     def test_udf_transpile_pre_evaluates_inside_a_group_by(self):
-        # SPARK-58626: in an Aggregate only a use an aggregate function encloses may read a
-        # pre-evaluated column. Anything else there has to match a grouping expression, and
-        # rewriting one side of that match produced an Aggregate the plan validator rejected. The
-        # Scala test only inspects the plan, so run all three shapes here for their values.
+        # SPARK-58626: in an Aggregate only a use an aggregate function wraps may read a column --
+        # see PreEvaluateTranspiledUDFInputs' scaladoc for why. The Scala test only inspects the
+        # plan, so run all three shapes here for their values.
         from pyspark.sql.functions import col, sum as sum_
 
         square_fn = lambda x: x * x  # noqa: E731
@@ -1478,9 +1477,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         with self.sql_conf(_TRANSPILE_ON):
             square = UserDefinedFunction(square_fn, LongType())
             self.assertTrue(square.transpiled)
-            self.spark.udf.register("sq_test_58626", square)
-            self.spark.range(0, 5).selectExpr("id as a").createOrReplaceTempView("t_58626")
-            try:
+            # Both registrations go through SQLTestUtils' context managers: ReusedSQLTestCase
+            # shares one session across the class, so a failure between a bare register() and the
+            # try would leave sq_test_58626 in every later test's session.
+            with self.temp_func("sq_test_58626"), self.temp_view("t_58626"):
+                self.spark.udf.register("sq_test_58626", square)
+                self.spark.range(0, 5).selectExpr("id as a").createOrReplaceTempView("t_58626")
                 uncorrelated = self.spark.sql(
                     "SELECT a FROM t_58626 WHERE a < "
                     "(SELECT max(sq_test_58626(a + 1)) FROM t_58626)"
@@ -1493,14 +1495,16 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     "(SELECT max(sq_test_58626(i.a + 1)) FROM t_58626 i WHERE i.a = o.a)"
                 )
                 self.assertEqual([0, 1, 2, 3, 4], sorted(r[0] for r in correlated.collect()))
-            finally:
-                self.spark.catalog.dropTempView("t_58626")
-                self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS sq_test_58626")
 
     def test_udf_transpile_udf_as_a_predicate(self):
         # A predicate is transpiled like anything else: no Python worker in a `where` or a join
-        # condition, and the same answers. Pre-evaluating the input is safe there because predicate
-        # pushdown will not push through the Project that holds it -- pinned at the plan level in
+        # condition, and the same answers.
+        #
+        # The column does NOT survive in a deterministic predicate: PushPredicateThroughNonJoin
+        # substitutes the alias and pushes the whole Filter below the Project, putting the argument
+        # back at each use site. That is the best-effort part of the contract (see transpile.py),
+        # and it is why the assertions here are about answers, not the plan. Only a
+        # nondeterministic argument keeps its column through pushdown -- pinned at the plan level in
         # PreEvaluateTranspiledUDFInputsSuite.
         from pyspark.sql.functions import col
 

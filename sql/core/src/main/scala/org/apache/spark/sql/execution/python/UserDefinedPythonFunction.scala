@@ -147,11 +147,11 @@ case class UserDefinedPythonFunction(
           }
         case _ => None
       }
-      // Substitution splices one copy of the argument per use, after which nothing says which copy
-      // came from which parameter. Mark each copy here, while we still know, with one id per
-      // parameter: that is what tells PreEvaluateTranspiledUDFInputs which copies of a
-      // nondeterministic argument owe the body a single draw. A foldable argument is left bare --
-      // constant folding collapses it at each use site, which beats reading a shared column.
+      // Filling in a placeholder drops one copy of the argument at each use, and after that nothing
+      // says which copy came from which parameter. So mark each copy here, while we still know,
+      // with one id per parameter -- that tells PreEvaluateTranspiledUDFInputs which copies of a
+      // nondeterministic argument only owe the body one draw. A foldable argument is left unmarked:
+      // constant folding kills it at each use site, which beats reading a shared column.
       val paramIds = udfChildren.map(_ => NamedExpression.newExprId)
       def resolveUDFParams(expression: Expression): Expression =
         placeholderIndex(expression) match {
