@@ -1593,8 +1593,10 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempView("t1", "t2") {
         // `id` is nullable (Option[Int]) so that `IsNotNull` in the Filter actually adjusts it.
+        // The two branches overlap on `id = 1`, so a shared key's grouping result depends on the
+        // union's co-location claim being honored (guarded by `checkAnswer(grouped, ...)` below).
         Seq((Option(1), 10), (Option(2), 20)).toDF("id", "v").createOrReplaceTempView("t1")
-        Seq((Option(3), 30), (Option(4), 40)).toDF("id", "v").createOrReplaceTempView("t2")
+        Seq((Option(1), 30), (Option(3), 40)).toDF("id", "v").createOrReplaceTempView("t2")
 
         val union = spark.sql(
           """
@@ -1624,10 +1626,16 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
           s"group-by should reuse the union's partitioning (expect 2 shuffles) but got " +
             s"$groupedShuffles\n${grouped.queryExecution.executedPlan}")
 
+        // `UNION_OUTPUT_PARTITIONING=false` drops the pass-through so the group-by adds its own
+        // shuffle; that path is the oracle for both the raw union rows and the grouped result.
         val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
           union.collect()
         }
         checkAnswer(union, correctResult)
+        val correctGrouped = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          grouped.collect()
+        }
+        checkAnswer(grouped, correctGrouped)
       }
     }
   }
