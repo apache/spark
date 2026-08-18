@@ -80,7 +80,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **EXTERNAL**
 
-    Table is defined using the path provided as `LOCATION`, does not use default location for this table.
+    The table is defined using the path provided as `LOCATION` and does not use the default location for this table.
     Dropping an external table removes catalog metadata and leaves the data files in place.
     `CREATE EXTERNAL TABLE` for a data source table must include `LOCATION`.
     A data source table created with `LOCATION` is also external even without the
