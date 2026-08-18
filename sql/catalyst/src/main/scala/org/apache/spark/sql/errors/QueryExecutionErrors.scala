@@ -269,6 +269,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def bitmapInputTooLargeError(inputNumBytes: Int, maxNumBytes: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "BITMAP_INPUT_TOO_LARGE",
+      messageParameters = Map(
+        "inputNumBytes" -> inputNumBytes.toString,
+        "maxNumBytes" -> maxNumBytes.toString),
+      cause = null)
+  }
+
   def invalidFractionOfSecondError(secAndMicros: Double): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
