@@ -396,7 +396,7 @@ class TungstenAggregationIterator(
       val inputAggregationBuffer = sortedKVIterator.getValue
 
       // Check if the current row belongs the current input row.
-      if (currentGroupingKey.equals(groupingKey)) {
+      if (hashMap.keysEqual(currentGroupingKey, groupingKey)) {
         sortBasedProcessRow(sortBasedAggregationBuffer, inputAggregationBuffer)
 
         hasNext = sortedKVIterator.next()

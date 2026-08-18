@@ -25,22 +25,69 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{UnsafeRowKeyOperations, UnsafeRowUtils}
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
+import org.apache.spark.sql.types.StructType
+
+private object ObjectAggregationMap {
+  private final class SemanticKey(
+      val keyOperations: UnsafeRowKeyOperations,
+      var row: UnsafeRow) {
+    override def hashCode(): Int = keyOperations.hash(row)
+
+    override def equals(other: Any): Boolean = other match {
+      case that: SemanticKey => keyOperations.areEqual(row, that.row)
+      case _ => false
+    }
+  }
+}
 
 /**
  * An aggregation map that supports using safe `SpecificInternalRow`s aggregation buffers, so that
  * we can support storing arbitrary Java objects as aggregate function states in the aggregation
  * buffers. This class is only used together with [[ObjectHashAggregateExec]].
  */
-class ObjectAggregationMap() {
-  private[this] val hashMap = new ju.LinkedHashMap[UnsafeRow, InternalRow]
+class ObjectAggregationMap(groupingSchema: StructType) {
+  import ObjectAggregationMap.SemanticKey
+
+  def this() = this(StructType(Nil))
+
+  private val keyOperations = if (UnsafeRowUtils.isBinaryStable(groupingSchema)) {
+    None
+  } else {
+    Some(new UnsafeRowKeyOperations(groupingSchema))
+  }
+
+  private val hashMap = new ju.LinkedHashMap[AnyRef, InternalRow]
+  private val reusableLookupKey =
+    keyOperations.map(operations => new SemanticKey(operations, null))
+
+  private def lookupKey(groupingKey: UnsafeRow): AnyRef = reusableLookupKey match {
+    case Some(key) =>
+      key.row = groupingKey
+      key
+    case None => groupingKey
+  }
+
+  private def storedKey(groupingKey: UnsafeRow): AnyRef = {
+    val copiedKey = groupingKey.copy()
+    keyOperations match {
+      case Some(operations) => new SemanticKey(operations, copiedKey)
+      case None => copiedKey
+    }
+  }
+
+  private def groupingKey(mapKey: AnyRef): UnsafeRow = mapKey match {
+    case key: SemanticKey => key.row
+    case key: UnsafeRow => key
+  }
 
   def getAggregationBuffer(groupingKey: UnsafeRow): InternalRow = {
-    hashMap.get(groupingKey)
+    hashMap.get(lookupKey(groupingKey))
   }
 
   def putAggregationBuffer(groupingKey: UnsafeRow, aggBuffer: InternalRow): Unit = {
-    hashMap.put(groupingKey, aggBuffer)
+    hashMap.put(storedKey(groupingKey), aggBuffer)
   }
 
   def size: Int = hashMap.size()
@@ -59,7 +106,7 @@ class ObjectAggregationMap() {
       override def next(): AggregationBufferEntry = {
         val entry = iter.next()
         iter.remove()
-        new AggregationBufferEntry(entry.getKey, entry.getValue)
+        new AggregationBufferEntry(groupingKey(entry.getKey), entry.getValue)
       }
     }
   }

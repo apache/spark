@@ -1291,18 +1291,34 @@ object Aggregate {
     schema.forall(f => UnsafeRow.isMutable(f.dataType))
   }
 
+  /**
+   * Returns whether hash aggregation can compare grouping keys of this type. Binary-stable types
+   * retain their raw UnsafeRow path. For binary-unstable types, only collated strings and nested
+   * arrays or structs containing them have semantic key operations.
+   */
+  def supportsHashAggregateGroupingKey(dataType: DataType): Boolean = {
+    def supportsSemanticEquality(dataType: DataType): Boolean = dataType match {
+      case _: StringType => true
+      case _: MapType => false
+      case ArrayType(elementType, _) => supportsSemanticEquality(elementType)
+      case StructType(fields) => fields.forall(f => supportsSemanticEquality(f.dataType))
+      case other => UnsafeRowUtils.isBinaryStable(other)
+    }
+
+    UnsafeRowUtils.isBinaryStable(dataType) || supportsSemanticEquality(dataType)
+  }
+
   def supportsHashAggregate(
       aggregateBufferAttributes: Seq[Attribute], groupingExpression: Seq[Expression]): Boolean = {
     val aggregationBufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
     isAggregateBufferMutable(aggregationBufferSchema) &&
-      groupingExpression.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
+      groupingExpression.forall(e => supportsHashAggregateGroupingKey(e.dataType))
   }
 
   def supportsObjectHashAggregate(
       aggregateExpressions: Seq[AggregateExpression],
       groupingExpressions: Seq[Expression]): Boolean = {
-    // We should not use hash aggregation on binary unstable types.
-    if (groupingExpressions.exists(e => !UnsafeRowUtils.isBinaryStable(e.dataType))) {
+    if (groupingExpressions.exists(e => !supportsHashAggregateGroupingKey(e.dataType))) {
       return false
     }
 

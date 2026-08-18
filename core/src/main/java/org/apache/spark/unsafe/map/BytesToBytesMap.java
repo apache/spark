@@ -68,6 +68,31 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  */
 public final class BytesToBytesMap extends MemoryConsumer {
 
+  /**
+   * Hashes and compares keys whose semantics cannot be determined from their raw bytes.
+   * Implementations must assign the same hash code to equal keys.
+   */
+  public interface KeyOperations {
+    int hash(Object base, long offset, int length);
+
+    boolean equals(
+      Object leftBase,
+      long leftOffset,
+      int leftLength,
+      Object rightBase,
+      long rightOffset,
+      int rightLength);
+  }
+
+  /**
+   * Creates independent key operations for a single {@link Location}, allowing each instance to
+   * reuse mutable state.
+   */
+  @FunctionalInterface
+  public interface KeyOperationsFactory {
+    KeyOperations create();
+  }
+
   private static final SparkLogger logger = SparkLoggerFactory.getLogger(BytesToBytesMap.class);
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
@@ -127,6 +152,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   private final double loadFactor;
 
+  @Nullable private final KeyOperationsFactory keyOperationsFactory;
+
   /**
    * The size of the data pages that hold key and value data. Map entries cannot span multiple
    * pages, so this limits the maximum entry size.
@@ -180,11 +207,30 @@ public final class BytesToBytesMap extends MemoryConsumer {
       int initialCapacity,
       double loadFactor,
       long pageSizeBytes) {
+    this(
+      taskMemoryManager,
+      blockManager,
+      serializerManager,
+      initialCapacity,
+      loadFactor,
+      pageSizeBytes,
+      null);
+  }
+
+  public BytesToBytesMap(
+      TaskMemoryManager taskMemoryManager,
+      BlockManager blockManager,
+      SerializerManager serializerManager,
+      int initialCapacity,
+      double loadFactor,
+      long pageSizeBytes,
+      @Nullable KeyOperationsFactory keyOperationsFactory) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
     this.serializerManager = serializerManager;
     this.loadFactor = loadFactor;
+    this.keyOperationsFactory = keyOperationsFactory;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
     if (initialCapacity <= 0) {
@@ -206,6 +252,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
       TaskMemoryManager taskMemoryManager,
       int initialCapacity,
       long pageSizeBytes) {
+    this(taskMemoryManager, initialCapacity, pageSizeBytes, null);
+  }
+
+  public BytesToBytesMap(
+      TaskMemoryManager taskMemoryManager,
+      int initialCapacity,
+      long pageSizeBytes,
+      @Nullable KeyOperationsFactory keyOperationsFactory) {
     this(
       taskMemoryManager,
       SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
@@ -213,7 +267,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       initialCapacity,
       // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
       0.5,
-      pageSizeBytes);
+      pageSizeBytes,
+      keyOperationsFactory);
   }
 
   /**
@@ -498,8 +553,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * This function is not thread-safe.
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
-    safeLookup(keyBase, keyOffset, keyLength, loc,
-      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+    final int hash = keyOperationsFactory == null ?
+      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42) : 0;
+    safeLookup(keyBase, keyOffset, keyLength, loc, hash);
     return loc;
   }
 
@@ -508,7 +564,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * and read/write values.
    *
    * This function always returns the same {@link Location} instance to avoid object allocation.
-   * This function is not thread-safe.
+   * This function is not thread-safe. If key operations are configured, the supplied hash is
+   * ignored and recomputed by those operations.
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
     safeLookup(keyBase, keyOffset, keyLength, loc, hash);
@@ -518,10 +575,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Looks up a key, and saves the result in provided `loc`.
    *
-   * This is a thread-safe version of `lookup`, could be used by multiple threads.
+   * This is a thread-safe version of `lookup`, provided that each thread supplies its own
+   * {@link Location}. The map must not be modified concurrently. If key operations are configured,
+   * the supplied hash is ignored and recomputed by those operations.
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
+
+    final KeyOperations keyOperations = loc.getKeyOperations();
+    if (keyOperations != null) {
+      hash = keyOperations.hash(keyBase, keyOffset, keyLength);
+    }
 
     numKeyLookups++;
 
@@ -538,17 +602,23 @@ public final class BytesToBytesMap extends MemoryConsumer {
         if ((int) (stored) == hash) {
           // Full hash code matches.  Let's compare the keys for equality.
           loc.with(pos, hash, true);
-          if (loc.getKeyLength() == keyLength) {
-            final boolean areEqual = ByteArrayMethods.arrayEquals(
+          if (loc.getKeyLength() == keyLength &&
+              ByteArrayMethods.arrayEquals(
               keyBase,
               keyOffset,
               loc.getKeyBase(),
               loc.getKeyOffset(),
-              keyLength
-            );
-            if (areEqual) {
-              return;
-            }
+              keyLength)) {
+            return;
+          }
+          if (keyOperations != null && keyOperations.equals(
+              keyBase,
+              keyOffset,
+              keyLength,
+              loc.getKeyBase(),
+              loc.getKeyOffset(),
+              loc.getKeyLength())) {
+            return;
           }
         }
       }
@@ -577,10 +647,20 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private long valueOffset;
     private int valueLength;
 
+    @Nullable private KeyOperations keyOperations;
+
     /**
      * Memory page containing the record. Only set if created by {@link BytesToBytesMap#iterator()}.
      */
     @Nullable private MemoryBlock memoryPage;
+
+    @Nullable
+    private KeyOperations getKeyOperations() {
+      if (keyOperations == null && keyOperationsFactory != null) {
+        keyOperations = keyOperationsFactory.create();
+      }
+      return keyOperations;
+    }
 
     private void updateAddressesAndSizes(long fullKeyAddress) {
       updateAddressesAndSizes(

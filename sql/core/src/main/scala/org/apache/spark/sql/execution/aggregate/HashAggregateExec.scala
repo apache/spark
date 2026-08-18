@@ -33,8 +33,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.{truncatedString, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
-import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
@@ -60,6 +60,8 @@ case class HashAggregateExec(
   extends AggregateCodegenSupport {
 
   require(Aggregate.supportsHashAggregate(aggregateBufferAttributes, groupingExpressions))
+  require(!isStreaming ||
+    groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType)))
 
   override def allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -363,7 +365,7 @@ case class HashAggregateExec(
           var findNextGroup = false
           while (!findNextGroup && sortedIter.next()) {
             val key = sortedIter.getKey
-            if (currentKey.equals(key)) {
+            if (hashMap.keysEqual(currentKey, key)) {
               mergeProjection(joinedRow(currentRow, sortedIter.getValue))
             } else {
               // We find a new group.
@@ -494,6 +496,7 @@ case class HashAggregateExec(
    */
   private def checkIfFastHashMapSupported(): Boolean = {
     val isSupported =
+      groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType)) &&
       (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType] ||
         f.dataType.isInstanceOf[CalendarIntervalType])

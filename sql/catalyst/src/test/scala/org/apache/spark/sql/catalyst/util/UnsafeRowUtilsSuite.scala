@@ -21,10 +21,14 @@ import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, BooleanType, Decimal, DecimalType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
-class UnsafeRowUtilsSuite extends SparkFunSuite {
+class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
 
   val testKeys: Seq[String] = Seq("key1", "key2")
   val testValues: Seq[String] = Seq("sum(key1)", "sum(key2)")
@@ -157,6 +161,137 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
     assert(!UnsafeRowUtils.isBinaryStable(
       StructType(StructField("field",
         StructType(StructField("sub", nonBinaryStringType) :: Nil)) :: Nil)))
+  }
+
+  test("hash aggregate grouping key support is limited to collated arrays and structs") {
+    val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
+
+    assert(Aggregate.supportsHashAggregateGroupingKey(collatedString))
+    assert(Aggregate.supportsHashAggregateGroupingKey(ArrayType(collatedString)))
+    assert(Aggregate.supportsHashAggregateGroupingKey(
+      StructType(StructField("s", collatedString) :: Nil)))
+    assert(!Aggregate.supportsHashAggregateGroupingKey(MapType(collatedString, IntegerType)))
+    assert(!Aggregate.supportsHashAggregateGroupingKey(StructType(Seq(
+      StructField("s", collatedString),
+      StructField("m", MapType(StringType, IntegerType))))))
+  }
+
+  test("UnsafeRowKeyOperations equality and hash contract") {
+    case class KeyContractCase(
+        name: String,
+        schema: StructType,
+        left: InternalRow,
+        right: InternalRow,
+        different: InternalRow)
+
+    def collatedString(collationName: String): StringType = {
+      StringType(CollationFactory.collationNameToId(collationName))
+    }
+
+    def utf8(value: String): UTF8String = UTF8String.fromString(value)
+
+    def array(values: Any*): GenericArrayData = new GenericArrayData(values.toArray)
+
+    val lcase = collatedString("UTF8_LCASE")
+    val unicodeCI = collatedString("UNICODE_CI")
+    val binaryRtrim = collatedString("UTF8_BINARY_RTRIM")
+    val lcaseRtrim = collatedString("UTF8_LCASE_RTRIM")
+    val nestedType = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("label", lcaseRtrim)))
+
+    val testCases = Seq(
+      KeyContractCase(
+        "scalar LCASE string",
+        StructType(StructField("s", lcase) :: Nil),
+        InternalRow(utf8("AAA")),
+        InternalRow(utf8("aaa")),
+        InternalRow(utf8("bbb"))),
+      KeyContractCase(
+        "mixed primitive fields",
+        StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("s", lcase),
+          StructField("flag", BooleanType),
+          StructField("count", LongType))),
+        InternalRow(1, utf8("HELLO"), true, 10L),
+        InternalRow(1, utf8("hello"), true, 10L),
+        InternalRow(2, utf8("hello"), true, 10L)),
+      KeyContractCase(
+        "array with ICU collation and null element",
+        StructType(StructField("a", ArrayType(unicodeCI)) :: Nil),
+        InternalRow(array(utf8("HELLO"), null, utf8("WORLD"))),
+        InternalRow(array(utf8("hello"), null, utf8("world"))),
+        InternalRow(array(utf8("hello"), null, utf8("other")))),
+      KeyContractCase(
+        "nested struct with LCASE RTRIM collation",
+        StructType(StructField("nested", nestedType) :: Nil),
+        InternalRow(InternalRow(7, utf8("VALUE"))),
+        InternalRow(InternalRow(7, utf8("value   "))),
+        InternalRow(InternalRow(8, utf8("value")))),
+      KeyContractCase(
+        "binary RTRIM string with different lengths",
+        StructType(StructField("s", binaryRtrim) :: Nil),
+        InternalRow(utf8("value")),
+        InternalRow(utf8("value   ")),
+        InternalRow(utf8("VALUE"))),
+      KeyContractCase(
+        "null collated field",
+        StructType(Seq(StructField("s", unicodeCI), StructField("id", IntegerType))),
+        InternalRow(null, 1),
+        InternalRow(null, 1),
+        InternalRow(utf8("value"), 1)))
+
+    Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN).foreach {
+      codegenMode =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
+          testCases.foreach { testCase =>
+            withClue(s"$codegenMode: ${testCase.name}: ") {
+              val projection = UnsafeProjection.create(testCase.schema)
+              val left = projection(testCase.left).copy()
+              val right = projection(testCase.right).copy()
+              val different = projection(testCase.different).copy()
+              val keyOperations = new UnsafeRowKeyOperations(testCase.schema)
+
+              assert(keyOperations.areEqual(left, right))
+              assert(keyOperations.areEqual(right, left))
+              assert(!keyOperations.areEqual(left, different))
+              assert(!keyOperations.areEqual(different, left))
+              assert(keyOperations.hash(left) == keyOperations.hash(right))
+
+              val serializedOperations = keyOperations.create()
+              assert(serializedOperations.equals(
+                left.getBaseObject,
+                left.getBaseOffset,
+                left.getSizeInBytes,
+                right.getBaseObject,
+                right.getBaseOffset,
+                right.getSizeInBytes))
+              assert(serializedOperations.equals(
+                right.getBaseObject,
+                right.getBaseOffset,
+                right.getSizeInBytes,
+                left.getBaseObject,
+                left.getBaseOffset,
+                left.getSizeInBytes))
+              assert(!serializedOperations.equals(
+                left.getBaseObject,
+                left.getBaseOffset,
+                left.getSizeInBytes,
+                different.getBaseObject,
+                different.getBaseOffset,
+                different.getSizeInBytes))
+              assert(serializedOperations.hash(
+                left.getBaseObject,
+                left.getBaseOffset,
+                left.getSizeInBytes) == serializedOperations.hash(
+                right.getBaseObject,
+                right.getBaseOffset,
+                right.getSizeInBytes))
+            }
+          }
+        }
+    }
   }
 
   test("PaddingProvider handles endianness") {
