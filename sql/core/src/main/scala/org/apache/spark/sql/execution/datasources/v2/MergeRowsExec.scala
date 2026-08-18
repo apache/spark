@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Projection
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GeneratePredicate, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Context, Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Context, Copy, Delete, Discard, Insert, Instruction, Keep, Split, Update}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryExecNode}
@@ -45,9 +45,11 @@ case class MergeRowsExec(
     matchedInstructions: Seq[Instruction],
     notMatchedInstructions: Seq[Instruction],
     notMatchedBySourceInstructions: Seq[Instruction],
-    checkCardinality: Boolean,
+    cardinalityRowId: Option[Attribute],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+
+  def checkCardinality: Boolean = cardinalityRowId.isDefined
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numTargetRowsCopied" -> SQLLastAttemptMetrics.createMetric(sparkContext,
@@ -73,13 +75,7 @@ case class MergeRowsExec(
 
   @transient
   override lazy val references: AttributeSet = {
-    val usedExprs = if (checkCardinality) {
-      val rowIdAttr = child.output.find(attr => conf.resolver(attr.name, ROW_ID))
-      assert(rowIdAttr.isDefined, "Cannot find row ID attr")
-      rowIdAttr.get +: expressions
-    } else {
-      expressions
-    }
+    val usedExprs = cardinalityRowId.toSeq ++ expressions
     AttributeSet.fromAttributeSets(usedExprs.map(_.references)) -- producedAttributes
   }
 
@@ -179,7 +175,7 @@ case class MergeRowsExec(
       ctx, notMatchedBySourceInstructions, inputExprs, sourcePresent = false)
 
     val cardinalityValidationCode = if (checkCardinality) {
-      val rowIdOrdinal = child.output.indexWhere(attr => conf.resolver(attr.name, ROW_ID))
+      val rowIdOrdinal = child.output.indexWhere(_.exprId == cardinalityRowId.get.exprId)
       assert(rowIdOrdinal != -1, "Cannot find row ID attr")
       generateCardinalityValidationCode(ctx, rowIdOrdinal, inputExprs).code
     } else {
@@ -412,7 +408,7 @@ case class MergeRowsExec(
     val notMatchedBySourceInstructionExecs = planInstructions(notMatchedBySourceInstructions)
 
     val cardinalityValidator = if (checkCardinality) {
-      val rowIdOrdinal = child.output.indexWhere(attr => conf.resolver(attr.name, ROW_ID))
+      val rowIdOrdinal = child.output.indexWhere(_.exprId == cardinalityRowId.get.exprId)
       assert(rowIdOrdinal != -1, "Cannot find row ID attr")
       BitmapCardinalityValidator(rowIdOrdinal)
     } else {

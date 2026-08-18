@@ -60,6 +60,36 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     refs.map(ref => resolveRef[T](ref, plan))
   }
 
+  def resolveMetadataRef(ref: NamedReference, plan: LogicalPlan): NamedExpression = {
+    val parts = ref.fieldNames.toImmutableArraySeq
+    plan.getMetadataAttributeByNameOpt(parts.head) match {
+      case Some(struct) if parts.length == 1 =>
+        struct
+      case Some(struct) =>
+        val extracted = parts.tail.foldLeft(struct: Expression) { (base, field) =>
+          ExtractValue.applyOrNull(base, Literal(field), conf.resolver)
+        }
+        Alias(extracted, parts.last)(explicitMetadata = Some(struct.metadata))
+      case None =>
+        resolveRef[NamedExpression](ref, plan)
+    }
+  }
+
+  def resolveMetadataRefs(
+      refs: Seq[NamedReference], plan: LogicalPlan): Seq[NamedExpression] = {
+    refs.map(ref => resolveMetadataRef(ref, plan))
+  }
+
+  // resolve metadata-rooted row IDs by logical name to avoid collisions with data columns
+  def resolveRowIdRef(ref: NamedReference, plan: LogicalPlan): NamedExpression = {
+    resolveMetadataRef(ref, plan)
+  }
+
+  def resolveRowIdRefs(
+      refs: Seq[NamedReference], plan: LogicalPlan): Seq[NamedExpression] = {
+    refs.map(ref => resolveRowIdRef(ref, plan))
+  }
+
   /**
    * Resolves [[NamedReference]]s against the given output and returns them as an [[AttributeSet]].
    */
@@ -70,6 +100,13 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     AttributeSet(resolveRefs[Attribute](refs.toImmutableArraySeq, plan))
   }
 
+  def resolveMetadataAttributeRefs(
+      refs: Array[NamedReference],
+      output: Seq[Attribute]): AttributeSet = {
+    val plan = LocalRelation(output)
+    AttributeSet(resolveMetadataRefs(refs.toImmutableArraySeq, plan).flatMap(_.references))
+  }
+
   /**
    * Converts the array of input V2 [[V2SortOrder]] into their counterparts in catalyst.
    */
@@ -77,14 +114,33 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       ordering: Array[V2SortOrder],
       query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Seq[SortOrder] = {
-    ordering.map(toCatalyst(_, query, funCatalogOpt).asInstanceOf[SortOrder]).toImmutableArraySeq
+    toCatalystOrdering(
+      ordering, query, funCatalogOpt, resolveRef[NamedExpression](_, query))
+  }
+
+  def toCatalystOrdering(
+      ordering: Array[V2SortOrder],
+      query: LogicalPlan,
+      funCatalogOpt: Option[FunctionCatalog],
+      refResolver: NamedReference => NamedExpression): Seq[SortOrder] = {
+    ordering.map(
+      toCatalyst(_, query, funCatalogOpt, refResolver).asInstanceOf[SortOrder])
+      .toImmutableArraySeq
   }
 
   def toCatalyst(
       expr: V2Expression,
       query: LogicalPlan,
-      funCatalogOpt: Option[FunctionCatalog] = None): Expression =
-    toCatalystOpt(expr, query, funCatalogOpt)
+      funCatalogOpt: Option[FunctionCatalog] = None): Expression = {
+    toCatalyst(expr, query, funCatalogOpt, resolveRef[NamedExpression](_, query))
+  }
+
+  def toCatalyst(
+      expr: V2Expression,
+      query: LogicalPlan,
+      funCatalogOpt: Option[FunctionCatalog],
+      refResolver: NamedReference => NamedExpression): Expression =
+    toCatalystOpt(expr, query, funCatalogOpt, refResolver)
         .getOrElse(throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3054", messageParameters = Map("expr" -> expr.toString)))
 
@@ -92,17 +148,25 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       expr: V2Expression,
       query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = {
+    toCatalystOpt(expr, query, funCatalogOpt, resolveRef[NamedExpression](_, query))
+  }
+
+  def toCatalystOpt(
+      expr: V2Expression,
+      query: LogicalPlan,
+      funCatalogOpt: Option[FunctionCatalog],
+      refResolver: NamedReference => NamedExpression): Option[Expression] = {
     expr match {
       case l: V2Literal[_] =>
         Some(Literal.create(l.value, l.dataType))
       case t: Transform =>
-        toCatalystTransformOpt(t, query, funCatalogOpt)
+        toCatalystTransformOpt(t, query, funCatalogOpt, refResolver)
       case SortValue(child, direction, nullOrdering) =>
-        toCatalystOpt(child, query, funCatalogOpt).map { catalystChild =>
+        toCatalystOpt(child, query, funCatalogOpt, refResolver).map { catalystChild =>
           SortOrder(catalystChild, toCatalyst(direction), toCatalyst(nullOrdering), Seq.empty)
         }
       case ref: FieldReference =>
-        Some(resolveRef[NamedExpression](ref, query))
+        Some(refResolver(ref))
       case _ =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3054",
@@ -113,12 +177,20 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   def toCatalystTransformOpt(
       trans: Transform,
       query: LogicalPlan,
-      funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
+      funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = {
+    toCatalystTransformOpt(trans, query, funCatalogOpt, resolveRef[NamedExpression](_, query))
+  }
+
+  def toCatalystTransformOpt(
+      trans: Transform,
+      query: LogicalPlan,
+      funCatalogOpt: Option[FunctionCatalog],
+      refResolver: NamedReference => NamedExpression): Option[Expression] = trans match {
     case IdentityTransform(ref) =>
-      Some(resolveRef[NamedExpression](ref, query))
+      Some(refResolver(ref))
     case BucketTransform(numBuckets, refs, sorted)
         if sorted.isEmpty && refs.length == 1 && refs.forall(_.isInstanceOf[NamedReference]) =>
-      val resolvedRefs = refs.map(r => resolveRef[NamedExpression](r, query))
+      val resolvedRefs = refs.map(refResolver)
       // Create a dummy reference for `numBuckets` here and use that, together with `refs`, to
       // look up the V2 function.
       val numBucketsRef = AttributeReference("numBuckets", IntegerType, nullable = false)()
@@ -128,7 +200,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         }
       }
     case NamedTransform(name, args) =>
-      val catalystArgs = args.map(toCatalyst(_, query, funCatalogOpt))
+      val catalystArgs = args.map(toCatalyst(_, query, funCatalogOpt, refResolver))
       funCatalogOpt.flatMap { catalog =>
         loadV2FunctionOpt(catalog, name, catalystArgs).map { bound =>
           TransformExpression(bound, catalystArgs)

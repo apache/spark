@@ -18,13 +18,14 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, ResolveTimeZone, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, SortOrder, TransformExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, NamedExpression, SortOrder, TransformExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartitions, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.distributions._
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
@@ -34,17 +35,26 @@ object DistributionAndOrderingUtils {
   def prepareQuery(
       write: Write,
       query: LogicalPlan,
-      funCatalogOpt: Option[FunctionCatalog]): LogicalPlan = write match {
+      funCatalogOpt: Option[FunctionCatalog]): LogicalPlan = {
+    prepareQuery(
+      write, query, funCatalogOpt, V2ExpressionUtils.resolveRef[NamedExpression](_, query))
+  }
+
+  def prepareQuery(
+      write: Write,
+      query: LogicalPlan,
+      funCatalogOpt: Option[FunctionCatalog],
+      refResolver: NamedReference => NamedExpression): LogicalPlan = write match {
     case write: RequiresDistributionAndOrdering =>
       val numPartitions = write.requiredNumPartitions()
       val partitionSize = write.advisoryPartitionSizeInBytes()
 
       val distribution = write.requiredDistribution match {
         case d: OrderedDistribution =>
-          toCatalystOrdering(d.ordering(), query, funCatalogOpt)
+          toCatalystOrdering(d.ordering(), query, funCatalogOpt, refResolver)
             .map(e => resolveTransformExpression(e).asInstanceOf[SortOrder])
         case d: ClusteredDistribution =>
-          d.clustering.map(e => toCatalyst(e, query, funCatalogOpt))
+          d.clustering.map(e => toCatalyst(e, query, funCatalogOpt, refResolver))
             .map(e => resolveTransformExpression(e)).toImmutableArraySeq
         case _: UnspecifiedDistribution => Seq.empty[Expression]
       }
@@ -74,7 +84,7 @@ object DistributionAndOrderingUtils {
         query
       }
 
-      val ordering = toCatalystOrdering(write.requiredOrdering, query, funCatalogOpt)
+      val ordering = toCatalystOrdering(write.requiredOrdering, query, funCatalogOpt, refResolver)
       val queryWithDistributionAndOrdering = if (ordering.nonEmpty) {
         Sort(
           ordering.map(e => resolveTransformExpression(e).asInstanceOf[SortOrder]),

@@ -361,9 +361,9 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   }
 
   protected def projectedMetadataAttrs: Seq[Attribute] = {
-    V2ExpressionUtils.resolveRefs[AttributeReference](
+    V2ExpressionUtils.resolveMetadataRefs(
       operation.requiredMetadataAttributes.toImmutableArraySeq,
-      originalTable)
+      originalTable).map(_.toAttribute)
   }
 }
 
@@ -515,9 +515,10 @@ case class WriteDelta(
 
   // validates row ID projection output is compatible with row ID attributes
   private def rowIdAttrsResolved: Boolean = {
-    val outRowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
+    // must match the rewrite so a data column can't shadow a metadata-rooted row ID
+    val outRowIdAttrs = V2ExpressionUtils.resolveRowIdRefs(
       operation.rowId.toImmutableArraySeq,
-      originalTable)
+      originalTable).map(_.toAttribute)
     val inRowIdAttrs = DataTypeUtils.toAttributes(projections.rowIdProjection.schema)
     areCompatible(inRowIdAttrs, outRowIdAttrs)
   }

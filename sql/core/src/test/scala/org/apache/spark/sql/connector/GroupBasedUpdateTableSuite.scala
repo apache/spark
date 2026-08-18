@@ -19,8 +19,10 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, InSubquery}
+import org.apache.spark.sql.catalyst.plans.logical.{RebalancePartitions, RepartitionByExpression, ReplaceData, Sort}
+import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
 import org.apache.spark.sql.execution.{InSubqueryExec, ReusedSubqueryExec}
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, V2Writes}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -48,6 +50,43 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
     checkLastWriteLog(
       writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(1, -1, "hr")),
       writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")))
+  }
+
+  test("write distribution is not shadowed by a same-named data column") {
+    createAndInitTable("pk INT NOT NULL, id INT, _partition STRING, dep STRING",
+      """{ "pk": 1, "id": 1, "_partition": "user", "dep": "hr" }
+        |{ "pk": 2, "id": 2, "_partition": "user", "dep": "software" }
+        |""".stripMargin)
+
+    val command = sql(s"UPDATE $tableNameAsString SET id = -1 WHERE id = 1")
+    val preparedCommand = V2Writes(command.queryExecution.analyzed)
+    val replaceData = preparedCommand.collectFirst {
+      case write: ReplaceData => write
+    }.getOrElse(fail("Cannot find ReplaceData"))
+    val metadataProjection = replaceData.projections.metadataProjection.get
+    val metadataOrdinal = metadataProjection.schema.fields.indexWhere { field =>
+      field.metadata.contains(METADATA_COL_ATTR_KEY) &&
+        field.metadata.getString(METADATA_COL_ATTR_KEY) == "_partition"
+    }
+    assert(metadataOrdinal >= 0)
+    val metadataAttr = replaceData.query.output(metadataProjection.colOrdinals(metadataOrdinal))
+    val rowProjection = replaceData.projections.rowProjection
+    val rowOrdinal = rowProjection.schema.fieldIndex("_partition")
+    val rowAttr = replaceData.query.output(rowProjection.colOrdinals(rowOrdinal))
+
+    val distributionAttr = replaceData.query.collectFirst {
+      case repartition: RepartitionByExpression =>
+        repartition.partitionExpressions.flatMap(_.references).head
+      case rebalance: RebalancePartitions =>
+        rebalance.partitionExpressions.flatMap(_.references).head
+    }.getOrElse(fail("Cannot find required distribution"))
+    val orderingAttr = replaceData.query.collectFirst {
+      case sort: Sort => sort.order.flatMap(_.references).head
+    }.getOrElse(fail("Cannot find required ordering"))
+
+    assert(distributionAttr.exprId == metadataAttr.exprId)
+    assert(orderingAttr.exprId == metadataAttr.exprId)
+    assert(distributionAttr.exprId != rowAttr.exprId)
   }
 
   test("update with subquery handles metadata columns correctly") {

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ReplaceDataProjectio
   WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -100,33 +100,168 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     }
   }
 
-  protected def resolveRequiredMetadataAttrs(
-      relation: DataSourceV2Relation,
-      operation: RowLevelOperation): Seq[AttributeReference] = {
+  protected case class ResolvedConnectorRefs(
+      attrs: Seq[AttributeReference],
+      extractionAliases: Seq[Alias],
+      scanAttrs: Seq[AttributeReference]) {
 
-    V2ExpressionUtils.resolveRefs[AttributeReference](
-      operation.requiredMetadataAttributes.toImmutableArraySeq,
-      relation)
+    lazy val extractionAttrs: Seq[AttributeReference] = extractionAliases.map { alias =>
+      attrs.find(_.exprId == alias.exprId).getOrElse {
+        throw SparkException.internalError(s"Cannot find extracted attribute: $alias")
+      }
+    }
+
+    def rowIdAttrs: Seq[AttributeReference] = attrs
   }
 
-  protected def resolveRowIdAttrs(
+  protected case class ResolvedDeltaRefs(
+      rowIdRefs: ResolvedConnectorRefs,
+      metadataRefs: ResolvedConnectorRefs)
+
+  protected case class RowDeltaPlan(
+      plan: LogicalPlan,
+      bindings: Map[ExprId, Attribute],
+      originalRowIdBindings: Map[ExprId, Attribute] = Map.empty) {
+
+    def projectionAttrs(attrs: Seq[Attribute]): Seq[Attribute] = {
+      attrs.map(attr => binding(attr.exprId))
+    }
+
+    def rowIdProjectionAttrs(attrs: Seq[Attribute]): Seq[Attribute] = {
+      attrs.map { attr =>
+        originalRowIdBindings.getOrElse(attr.exprId, binding(attr.exprId))
+      }
+    }
+
+    private def binding(exprId: ExprId): Attribute = {
+      bindings.getOrElse(exprId,
+        throw SparkException.internalError(s"Cannot find projected attribute: $exprId"))
+    }
+  }
+
+  protected def buildRowDeltaPlan(
+      baseAttrs: Seq[Attribute],
+      outputs: Seq[Seq[Expression]],
+      rowIdRefs: ResolvedConnectorRefs,
+      originalRowIdValues: Seq[Alias] = Nil)(
+      buildPlan: Seq[Attribute] => LogicalPlan): RowDeltaPlan = {
+    val attrs = baseAttrs ++ rowIdRefs.extractionAttrs
+    outputs.find(_.size != attrs.size).foreach { output =>
+      throw SparkException.internalError(
+        s"Expected ${attrs.size} row delta values, but found ${output.size}")
+    }
+    val output = generateExpandOutput(attrs, outputs)
+    bindRowDeltaPlan(buildPlan(output), attrs, output, originalRowIdValues)
+  }
+
+  protected def bindRowDeltaPlan(
+      plan: LogicalPlan,
+      sourceAttrs: Seq[Attribute],
+      outputAttrs: Seq[Attribute],
+      originalRowIdValues: Seq[Alias] = Nil): RowDeltaPlan = {
+    if (sourceAttrs.size != outputAttrs.size) {
+      throw SparkException.internalError(
+        s"Expected ${sourceAttrs.size} projected attributes, but found ${outputAttrs.size}")
+    }
+    val bindings = sourceAttrs.zip(outputAttrs).map { case (sourceAttr, outputAttr) =>
+      sourceAttr.exprId -> outputAttr
+    }.toMap
+    val originalRowIdBindings = originalRowIdValues.map { alias =>
+      val originalAttr = alias.child.asInstanceOf[Attribute]
+      originalAttr.exprId -> bindings(alias.exprId)
+    }.toMap
+    RowDeltaPlan(plan, bindings, originalRowIdBindings)
+  }
+
+  private def resolveConnectorRefs(
       relation: DataSourceV2Relation,
-      operation: SupportsDelta): Seq[AttributeReference] = {
+      refs: Seq[NamedReference]): ResolvedConnectorRefs = {
+    resolveConnectorRefs(relation, refs, V2ExpressionUtils.resolveMetadataRef(_, relation))
+  }
 
-    val rowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
-      operation.rowId.toImmutableArraySeq,
-      relation)
+  private def resolveConnectorRefs(
+      relation: DataSourceV2Relation,
+      refs: Seq[NamedReference],
+      refResolver: NamedReference => NamedExpression): ResolvedConnectorRefs = {
+    val attrs = mutable.ArrayBuffer.empty[AttributeReference]
+    val extractionAliases = mutable.ArrayBuffer.empty[Alias]
+    val scanAttrs = mutable.ArrayBuffer.empty[AttributeReference]
+    refs.foreach { ref =>
+      refResolver(ref) match {
+        case attr: AttributeReference =>
+          attrs += attr
+          scanAttrs += attr
+        case alias: Alias =>
+          extractionAliases += alias
+          scanAttrs ++= alias.references.collect { case scanRef: AttributeReference => scanRef }
+          alias.toAttribute match {
+            case attr: AttributeReference => attrs += attr
+            case other =>
+              throw SparkException.internalError(s"Connector reference did not resolve: $other")
+          }
+        case other =>
+          throw SparkException.internalError("Unexpected resolved row-level reference: " + other)
+      }
+    }
+    ResolvedConnectorRefs(attrs.toSeq, extractionAliases.toSeq, dedupAttrs(scanAttrs.toSeq))
+  }
 
-    val nullableRowIdAttrs = rowIdAttrs.filter(_.nullable)
+  protected def resolveRequiredMetadataRefs(
+      relation: DataSourceV2Relation,
+      operation: RowLevelOperation): ResolvedConnectorRefs = {
+    resolveConnectorRefs(relation, operation.requiredMetadataAttributes.toImmutableArraySeq)
+  }
+
+  protected def resolveDeltaRefs(
+      relation: DataSourceV2Relation,
+      operation: SupportsDelta): ResolvedDeltaRefs = {
+    val resolvedRefs = mutable.ArrayBuffer.empty[(NamedReference, NamedExpression)]
+    // Resolve a reference declared as both row ID and metadata once so both roles share its exprId.
+    def resolveRef(ref: NamedReference): NamedExpression = {
+      resolvedRefs.collectFirst {
+        case (resolvedRef, resolved) if sameRef(resolvedRef, ref) => resolved
+      }.getOrElse {
+        val resolved = V2ExpressionUtils.resolveMetadataRef(ref, relation)
+        resolvedRefs += ref -> resolved
+        resolved
+      }
+    }
+
+    val rowIdRefs = resolveConnectorRefs(
+      relation, operation.rowId.toImmutableArraySeq, resolveRef)
+    val metadataRefs = resolveConnectorRefs(
+      relation, operation.requiredMetadataAttributes.toImmutableArraySeq, resolveRef)
+    val nullableRowIdAttrs = rowIdRefs.rowIdAttrs.filter(_.nullable)
     if (nullableRowIdAttrs.nonEmpty) {
       throw QueryCompilationErrors.nullableRowIdError(nullableRowIdAttrs)
     }
-
-    rowIdAttrs
+    ResolvedDeltaRefs(rowIdRefs, metadataRefs)
   }
 
-  protected def resolveAttrRef(name: String, plan: LogicalPlan): AttributeReference = {
-    V2ExpressionUtils.resolveRef[AttributeReference](FieldReference(name), plan)
+  private def sameRef(left: NamedReference, right: NamedReference): Boolean = {
+    left.fieldNames.length == right.fieldNames.length &&
+      left.fieldNames.zip(right.fieldNames).forall { case (leftName, rightName) =>
+        conf.resolver(leftName, rightName)
+      }
+  }
+
+  protected def withExtractedRefs(
+      plan: LogicalPlan,
+      extractionAliases: Seq[Alias]): LogicalPlan = {
+    val exprIds = mutable.Set.empty[ExprId]
+    val aliases = extractionAliases.filter(alias => exprIds.add(alias.exprId))
+    if (aliases.isEmpty) {
+      plan
+    } else {
+      Project(plan.output ++ aliases, plan)
+    }
+  }
+
+  protected def projectWithExtractedRefs(
+      plan: LogicalPlan,
+      output: Seq[Attribute],
+      extractionAliases: Seq[Alias]): LogicalPlan = {
+    Project(output, withExtractedRefs(plan, extractionAliases))
   }
 
   protected def deltaDeleteOutput(
@@ -135,28 +270,39 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       metadataAttrs: Seq[Attribute],
       originalRowIdValues: Seq[Expression] = Seq.empty): Seq[Expression] = {
     val rowValues = buildDeltaDeleteRowValues(rowAttrs, rowIdAttrs)
-    val metadataValues = nullifyMetadataOnDelete(metadataAttrs)
+    val metadataValues = nullifyMetadataOnDelete(metadataAttrs, rowIdAttrs)
     Seq(Literal(DELETE_OPERATION)) ++ rowValues ++ metadataValues ++ originalRowIdValues
   }
 
-  protected def nullifyMetadataOnDelete(attrs: Seq[Attribute]): Seq[NamedExpression] = {
-    nullifyMetadata(attrs, MetadataAttribute.isPreservedOnDelete)
+  protected def nullifyMetadataOnDelete(
+      attrs: Seq[Attribute],
+      rowIdAttrs: Seq[Attribute] = Nil): Seq[NamedExpression] = {
+    nullifyMetadata(attrs, rowIdAttrs, MetadataAttribute.isPreservedOnDelete)
   }
 
-  protected def nullifyMetadataOnUpdate(attrs: Seq[Attribute]): Seq[NamedExpression] = {
-    nullifyMetadata(attrs, MetadataAttribute.isPreservedOnUpdate)
+  protected def nullifyMetadataOnUpdate(
+      attrs: Seq[Attribute],
+      rowIdAttrs: Seq[Attribute] = Nil): Seq[NamedExpression] = {
+    nullifyMetadata(attrs, rowIdAttrs, MetadataAttribute.isPreservedOnUpdate)
   }
 
   private def nullifyMetadataOnReinsert(attrs: Seq[Attribute]): Seq[NamedExpression] = {
-    nullifyMetadata(attrs, MetadataAttribute.isPreservedOnReinsert)
+    nullifyMetadata(attrs, Nil, MetadataAttribute.isPreservedOnReinsert)
   }
 
   private def nullifyMetadata(
       attrs: Seq[Attribute],
+      rowIdAttrs: Seq[Attribute],
       shouldPreserve: Attribute => Boolean): Seq[NamedExpression] = {
+    val rowIdAttrSet = AttributeSet(rowIdAttrs)
     attrs.map {
+      // A row ID must remain available to identify the affected row.
+      case attr if rowIdAttrSet.contains(attr) =>
+        attr
       case MetadataAttribute(attr) if !shouldPreserve(attr) =>
-        Alias(Literal(null, attr.dataType), attr.name)(explicitMetadata = Some(attr.metadata))
+        // keep the exprId so the projection binds this by id, not by a name a row id may share
+        Alias(Literal(null, attr.dataType), attr.name)(
+          exprId = attr.exprId, explicitMetadata = Some(attr.metadata))
       case attr =>
         attr
     }
@@ -185,10 +331,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
   protected def deltaUpdateOutput(
       assignments: Seq[Assignment],
+      rowIdAttrs: Seq[Attribute],
       metadataAttrs: Seq[Attribute],
       originalRowIdValues: Seq[Expression]): Seq[Expression] = {
     val rowValues = assignments.map(_.value)
-    val metadataValues = nullifyMetadataOnUpdate(metadataAttrs)
+    val metadataValues = nullifyMetadataOnUpdate(metadataAttrs, rowIdAttrs)
     Seq(Literal(UPDATE_OPERATION)) ++ rowValues ++ metadataValues ++ originalRowIdValues
   }
 
@@ -212,13 +359,17 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       rowAttrs: Seq[Attribute],
       metadataAttrs: Seq[Attribute]): ReplaceDataProjections = {
     val outputs = extractOutputs(plan)
+    val rowProjectionAttrs = plan.output.slice(1, 1 + rowAttrs.size)
+    val metadataProjectionAttrs =
+      plan.output.slice(1 + rowAttrs.size, 1 + rowAttrs.size + metadataAttrs.size)
 
     val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
-    val rowProjection = newLazyProjection(plan, outputsWithRow, rowAttrs)
+    val rowProjection = newLazyProjection(plan, outputsWithRow, rowProjectionAttrs, rowAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       val outputsWithMetadata = filterOutputs(outputs, OPERATIONS_WITH_METADATA)
-      Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
+      Some(newLazyProjection(
+        plan, outputsWithMetadata, metadataProjectionAttrs, metadataAttrs))
     } else {
       None
     }
@@ -227,25 +378,29 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   }
 
   protected def buildWriteDeltaProjections(
-      plan: LogicalPlan,
+      rowDelta: RowDeltaPlan,
       rowAttrs: Seq[Attribute],
       rowIdAttrs: Seq[Attribute],
       metadataAttrs: Seq[Attribute]): WriteDeltaProjections = {
+    val plan = rowDelta.plan
     val outputs = extractOutputs(plan)
 
     val rowProjection = if (rowAttrs.nonEmpty) {
       val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
-      Some(newLazyProjection(plan, outputsWithRow, rowAttrs))
+      Some(newLazyProjection(
+        plan, outputsWithRow, rowDelta.projectionAttrs(rowAttrs), rowAttrs))
     } else {
       None
     }
 
     val outputsWithRowId = filterOutputs(outputs, OPERATIONS_WITH_ROW_ID)
-    val rowIdProjection = newLazyRowIdProjection(plan, outputsWithRowId, rowIdAttrs)
+    val rowIdProjection = newLazyProjection(
+      plan, outputsWithRowId, rowDelta.rowIdProjectionAttrs(rowIdAttrs), rowIdAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       val outputsWithMetadata = filterOutputs(outputs, OPERATIONS_WITH_METADATA)
-      Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
+      Some(newLazyProjection(
+        plan, outputsWithMetadata, rowDelta.projectionAttrs(metadataAttrs), metadataAttrs))
     } else {
       None
     }
@@ -278,22 +433,20 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   private def newLazyProjection(
       plan: LogicalPlan,
       outputs: Seq[Seq[Expression]],
-      attrs: Seq[Attribute]): ProjectingInternalRow = {
-    val colOrdinals = attrs.map(attr => findColOrdinal(plan, attr.name))
-    createProjectingInternalRow(outputs, colOrdinals, attrs)
-  }
-
-  // if there are assignment to row ID attributes, original values are projected as special columns
-  // this method honors such special columns if present
-  private def newLazyRowIdProjection(
-      plan: LogicalPlan,
-      outputs: Seq[Seq[Expression]],
-      rowIdAttrs: Seq[Attribute]): ProjectingInternalRow = {
-    val colOrdinals = rowIdAttrs.map { attr =>
-      val originalValueIndex = findColOrdinal(plan, ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
-      if (originalValueIndex != -1) originalValueIndex else findColOrdinal(plan, attr.name)
+      projectionAttrs: Seq[Attribute],
+      schemaAttrs: Seq[Attribute]): ProjectingInternalRow = {
+    if (projectionAttrs.size != schemaAttrs.size) {
+      throw SparkException.internalError(
+        s"Expected ${schemaAttrs.size} projection attributes, but found ${projectionAttrs.size}")
     }
-    createProjectingInternalRow(outputs, colOrdinals, rowIdAttrs)
+    val colOrdinals = projectionAttrs.map { attr =>
+      val ordinal = findColOrdinalByExprId(plan, attr.exprId)
+      if (ordinal == -1) {
+        throw SparkException.internalError(s"Cannot find projection attribute: $attr")
+      }
+      ordinal
+    }
+    createProjectingInternalRow(outputs, colOrdinals, schemaAttrs)
   }
 
   private def createProjectingInternalRow(
@@ -307,8 +460,8 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     ProjectingInternalRow(schema, colOrdinals)
   }
 
-  private def findColOrdinal(plan: LogicalPlan, name: String): Int = {
-    plan.output.indexWhere(attr => conf.resolver(attr.name, name))
+  private def findColOrdinalByExprId(plan: LogicalPlan, exprId: ExprId): Int = {
+    plan.output.indexWhere(_.exprId == exprId)
   }
 
   protected def buildOriginalRowIdValues(

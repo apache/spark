@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, Filter, HintInfo, InsertAction, InsertOnlyMerge, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, Split, Update}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, INSERT_OPERATION, OPERATION_COLUMN, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
@@ -111,7 +112,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             matchedInstructions = Nil,
             notMatchedInstructions = notMatchedInstructions,
             notMatchedBySourceInstructions = Nil,
-            checkCardinality = false,
+            cardinalityRowId = None,
             output = generateExpandOutput(r.output, outputs),
             joinPlan)
 
@@ -156,21 +157,27 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     // resolve all required metadata attrs that may be used for grouping data on write
     // for instance, JDBC data source may cluster data by shard/host before writing
-    val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
+    val metadataRefs = resolveRequiredMetadataRefs(relation, operationTable.operation)
+    val metadataAttrs = metadataRefs.attrs
 
     // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+    val relationWithMetadata =
+      buildRelationWithAttrs(relation, operationTable, metadataRefs.scanAttrs)
+    val readRelation = projectWithExtractedRefs(
+      relationWithMetadata,
+      relation.output ++ metadataAttrs,
+      metadataRefs.extractionAliases)
 
     val checkCardinality = shouldCheckCardinality(matchedActions)
 
     // use left outer join if there is no NOT MATCHED action, unmatched source rows can be discarded
     // use full outer join in all other cases, unmatched source rows may be needed
     val joinType = if (notMatchedActions.isEmpty) LeftOuter else FullOuter
-    val joinPlan = join(readRelation, source, joinType, cond, checkCardinality)
+    val mergeJoin = join(readRelation, source, joinType, cond, checkCardinality)
 
     val mergeRowsPlan = buildReplaceDataMergeRowsPlan(
-      readRelation, joinPlan, matchedActions, notMatchedActions,
-      notMatchedBySourceActions, metadataAttrs, checkCardinality)
+      readRelation, mergeJoin, matchedActions, notMatchedActions,
+      notMatchedBySourceActions, metadataAttrs)
 
     // predicates of the ON condition can be used to filter the target table (planning & runtime)
     // only if there is no NOT MATCHED BY SOURCE clause
@@ -192,12 +199,11 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
   private def buildReplaceDataMergeRowsPlan(
       targetTable: LogicalPlan,
-      joinPlan: LogicalPlan,
+      mergeJoin: MergeJoin,
       matchedActions: Seq[MergeAction],
       notMatchedActions: Seq[MergeAction],
       notMatchedBySourceActions: Seq[MergeAction],
-      metadataAttrs: Seq[Attribute],
-      checkCardinality: Boolean): MergeRows = {
+      metadataAttrs: Seq[Attribute]): MergeRows = {
 
     // target records that were read but did not match any MATCHED or NOT MATCHED BY SOURCE actions
     // must be copied over and included in the new state of the table as groups are being replaced
@@ -219,9 +225,6 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       toInstruction(action, metadataAttrs)
     } :+ keepCarryoverRowsInstruction
 
-    val rowFromSourceAttr = resolveAttrRef(ROW_FROM_SOURCE, joinPlan)
-    val rowFromTargetAttr = resolveAttrRef(ROW_FROM_TARGET, joinPlan)
-
     val outputs = matchedInstructions.flatMap(_.outputs) ++
       notMatchedInstructions.flatMap(_.outputs) ++
       notMatchedBySourceInstructions.flatMap(_.outputs)
@@ -230,14 +233,14 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val attrs = operationTypeAttr +: targetTable.output
 
     MergeRows(
-      isSourceRowPresent = IsNotNull(rowFromSourceAttr),
-      isTargetRowPresent = IsNotNull(rowFromTargetAttr),
+      isSourceRowPresent = IsNotNull(mergeJoin.sourcePresent),
+      isTargetRowPresent = IsNotNull(mergeJoin.targetPresent),
       matchedInstructions = matchedInstructions,
       notMatchedInstructions = notMatchedInstructions,
       notMatchedBySourceInstructions = notMatchedBySourceInstructions,
-      checkCardinality = checkCardinality,
+      cardinalityRowId = mergeJoin.cardinalityRowId,
       output = generateExpandOutput(attrs, outputs),
-      joinPlan)
+      mergeJoin.plan)
   }
 
   // converts a MERGE condition into an EXISTS subquery for runtime filtering
@@ -270,39 +273,47 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     // resolve all needed attrs (e.g. row ID and any required metadata attrs)
     val rowAttrs = relation.output
-    val rowIdAttrs = resolveRowIdAttrs(relation, operation)
-    val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
+    val resolvedRefs = resolveDeltaRefs(relation, operation)
+    val rowIdRefs = resolvedRefs.rowIdRefs
+    val metadataRefs = resolvedRefs.metadataRefs
+    val metadataAttrs = metadataRefs.attrs
 
-    // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs, rowIdAttrs)
+    // construct a read plan with all required row ID and metadata columns
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataRefs.scanAttrs, rowIdRefs.scanAttrs)
+    val readPlan = projectWithExtractedRefs(
+      readRelation,
+      dedupAttrs(relation.output ++ metadataAttrs ++ rowIdRefs.attrs),
+      metadataRefs.extractionAliases ++ rowIdRefs.extractionAliases)
 
     // if there is no NOT MATCHED BY SOURCE clause, predicates of the ON condition that
     // reference only the target table can be pushed down
     val (filteredReadRelation, joinCond) = if (notMatchedBySourceActions.isEmpty) {
-      pushDownTargetPredicates(readRelation, cond)
+      pushDownTargetPredicates(readPlan, cond)
     } else {
-      (readRelation, cond)
+      (readPlan, cond)
     }
 
     val checkCardinality = shouldCheckCardinality(matchedActions)
 
     val joinType = chooseWriteDeltaJoinType(notMatchedActions, notMatchedBySourceActions)
-    val joinPlan = join(filteredReadRelation, source, joinType, joinCond, checkCardinality)
+    val mergeJoin = join(filteredReadRelation, source, joinType, joinCond, checkCardinality)
 
-    val mergeRowsPlan = buildWriteDeltaMergeRowsPlan(
-      readRelation, joinPlan, matchedActions, notMatchedActions,
-      notMatchedBySourceActions, rowIdAttrs, checkCardinality,
+    val rowDelta = buildWriteDeltaMergeRowsPlan(
+      readPlan, mergeJoin, matchedActions, notMatchedActions,
+      notMatchedBySourceActions, rowIdRefs,
       operation.representUpdateAsDeleteAndInsert)
 
     // build a plan to write the row delta to the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections = buildWriteDeltaProjections(mergeRowsPlan, rowAttrs, rowIdAttrs, metadataAttrs)
+    val projections = buildWriteDeltaProjections(
+      rowDelta, rowAttrs, rowIdRefs.rowIdAttrs, metadataAttrs)
     val groupFilterCond = if (notMatchedBySourceActions.isEmpty && groupFilterEnabled) {
       Some(toGroupFilterCondition(relation, source, cond))
     } else {
       None
     }
-    WriteDelta(writeRelation, cond, mergeRowsPlan, relation, projections, groupFilterCond)
+    WriteDelta(writeRelation, cond, rowDelta.plan, relation, projections, groupFilterCond)
   }
 
   private def chooseWriteDeltaJoinType(
@@ -324,17 +335,25 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   }
 
   private def buildWriteDeltaMergeRowsPlan(
-      targetTable: DataSourceV2Relation,
-      joinPlan: LogicalPlan,
+      targetTable: LogicalPlan,
+      mergeJoin: MergeJoin,
       matchedActions: Seq[MergeAction],
       notMatchedActions: Seq[MergeAction],
       notMatchedBySourceActions: Seq[MergeAction],
-      rowIdAttrs: Seq[Attribute],
-      checkCardinality: Boolean,
-      splitUpdates: Boolean): MergeRows = {
+      rowIdRefs: ResolvedConnectorRefs,
+      splitUpdates: Boolean): RowDeltaPlan = {
 
-    val (metadataAttrs, rowAttrs) = targetTable.output.partition { attr =>
+    val extractionExprIds = rowIdRefs.extractionAttrs.map(_.exprId).toSet
+    val (extractionAttrs, nonExtractionAttrs) = targetTable.output.partition { attr =>
+      extractionExprIds.contains(attr.exprId)
+    }
+    val (metadataAttrs, rowAttrs) = nonExtractionAttrs.partition { attr =>
       MetadataAttribute.isValid(attr.metadata)
+    }
+    // buildRowDeltaPlan rebinds extracted row IDs by position
+    if (extractionAttrs.map(_.exprId) != rowIdRefs.extractionAttrs.map(_.exprId)) {
+      throw SparkException.internalError(
+        "Extracted row ID attributes are missing or out of order")
     }
 
     val originalRowIdValues = if (splitUpdates) {
@@ -346,23 +365,26 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         case UpdateAction(_, assignments, _) => assignments
         case _ => Nil
       }
-      buildOriginalRowIdValues(rowIdAttrs, updateAssignments)
+      buildOriginalRowIdValues(rowIdRefs.rowIdAttrs, updateAssignments)
     }
 
     val matchedInstructions = matchedActions.map { action =>
-      toInstruction(action, rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues, splitUpdates)
+      toInstruction(
+        action, rowAttrs, rowIdRefs.rowIdAttrs, metadataAttrs, originalRowIdValues,
+        extractionAttrs, splitUpdates)
     }
 
     val notMatchedInstructions = notMatchedActions.map { action =>
-      toInstruction(action, rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues, splitUpdates)
+      toInstruction(
+        action, rowAttrs, rowIdRefs.rowIdAttrs, metadataAttrs, originalRowIdValues,
+        extractionAttrs, splitUpdates)
     }
 
     val notMatchedBySourceInstructions = notMatchedBySourceActions.map { action =>
-      toInstruction(action, rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues, splitUpdates)
+      toInstruction(
+        action, rowAttrs, rowIdRefs.rowIdAttrs, metadataAttrs, originalRowIdValues,
+        extractionAttrs, splitUpdates)
     }
-
-    val rowFromSourceAttr = resolveAttrRef(ROW_FROM_SOURCE, joinPlan)
-    val rowFromTargetAttr = resolveAttrRef(ROW_FROM_TARGET, joinPlan)
 
     val outputs = matchedInstructions.flatMap(_.outputs) ++
       notMatchedInstructions.flatMap(_.outputs) ++
@@ -370,17 +392,23 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     val operationTypeAttr = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)()
     val originalRowIdAttrs = originalRowIdValues.map(_.toAttribute)
-    val attrs = Seq(operationTypeAttr) ++ targetTable.output ++ originalRowIdAttrs
+    val baseAttrs = Seq(operationTypeAttr) ++ rowAttrs ++ metadataAttrs ++ originalRowIdAttrs
 
-    MergeRows(
-      isSourceRowPresent = IsNotNull(rowFromSourceAttr),
-      isTargetRowPresent = IsNotNull(rowFromTargetAttr),
-      matchedInstructions = matchedInstructions,
-      notMatchedInstructions = notMatchedInstructions,
-      notMatchedBySourceInstructions = notMatchedBySourceInstructions,
-      checkCardinality = checkCardinality,
-      output = generateExpandOutput(attrs, outputs),
-      joinPlan)
+    buildRowDeltaPlan(
+        baseAttrs,
+        outputs,
+        rowIdRefs,
+        originalRowIdValues) { output =>
+      MergeRows(
+        isSourceRowPresent = IsNotNull(mergeJoin.sourcePresent),
+        isTargetRowPresent = IsNotNull(mergeJoin.targetPresent),
+        matchedInstructions = matchedInstructions,
+        notMatchedInstructions = notMatchedInstructions,
+        notMatchedBySourceInstructions = notMatchedBySourceInstructions,
+        cardinalityRowId = mergeJoin.cardinalityRowId,
+        output = output,
+        mergeJoin.plan)
+    }
   }
 
   private def pushDownTargetPredicates(
@@ -396,22 +424,28 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     (Filter(targetCond, targetTable), joinCond)
   }
 
+  private case class MergeJoin(
+      plan: LogicalPlan,
+      sourcePresent: Attribute,
+      targetPresent: Attribute,
+      cardinalityRowId: Option[Attribute])
+
   private def join(
       targetTable: LogicalPlan,
       source: LogicalPlan,
       joinType: JoinType,
       joinCond: Expression,
-      checkCardinality: Boolean): LogicalPlan = {
+      checkCardinality: Boolean): MergeJoin = {
 
     // project an extra column to check if a target row exists after the join
     // if needed, project a synthetic row ID used to perform the cardinality check later
     val rowFromTarget = Alias(TrueLiteral, ROW_FROM_TARGET)()
-    val targetTableProjExprs = if (checkCardinality) {
-      val rowId = Alias(MonotonicallyIncreasingID(), ROW_ID)()
-      targetTable.output ++ Seq(rowFromTarget, rowId)
+    val cardinalityRowId = if (checkCardinality) {
+      Some(Alias(MonotonicallyIncreasingID(), "__row_id")())
     } else {
-      targetTable.output :+ rowFromTarget
+      None
     }
+    val targetTableProjExprs = targetTable.output ++ Seq(rowFromTarget) ++ cardinalityRowId
     val targetTableProj = Project(targetTableProjExprs, targetTable)
 
     // project an extra column to check if a source row exists after the join
@@ -426,7 +460,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     } else {
       JoinHint.NONE
     }
-    Join(targetTableProj, sourceTableProj, joinType, Some(joinCond), joinHint)
+    val plan = Join(targetTableProj, sourceTableProj, joinType, Some(joinCond), joinHint)
+    MergeJoin(plan, rowFromSource.toAttribute, rowFromTarget.toAttribute,
+      cardinalityRowId.map(_.toAttribute))
   }
 
   // skip the cardinality check in these cases:
@@ -472,24 +508,33 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       rowIdAttrs: Seq[Attribute],
       metadataAttrs: Seq[Attribute],
       originalRowIdValues: Seq[Alias],
+      extractionAttrs: Seq[Attribute],
       splitUpdates: Boolean): Instruction = {
+
+    // inserts and reinserts have no existing row ID, so use null placeholders
+    val nullExtractionValues = extractionAttrs.map(attr => Literal(null, attr.dataType))
 
     action match {
       case UpdateAction(cond, assignments, _) if splitUpdates =>
-        val output = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues)
-        val otherOutput = deltaReinsertOutput(assignments, metadataAttrs, originalRowIdValues)
+        val output = deltaDeleteOutput(
+          rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues) ++ extractionAttrs
+        val otherOutput = deltaReinsertOutput(
+          assignments, metadataAttrs, originalRowIdValues) ++ nullExtractionValues
         Split(cond.getOrElse(TrueLiteral), output, otherOutput)
 
       case UpdateAction(cond, assignments, _) =>
-        val output = deltaUpdateOutput(assignments, metadataAttrs, originalRowIdValues)
+        val output = deltaUpdateOutput(
+          assignments, rowIdAttrs, metadataAttrs, originalRowIdValues) ++ extractionAttrs
         Keep(Update, cond.getOrElse(TrueLiteral), output)
 
       case DeleteAction(cond) =>
-        val output = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues)
+        val output = deltaDeleteOutput(
+          rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues) ++ extractionAttrs
         Keep(Delete, cond.getOrElse(TrueLiteral), output)
 
       case InsertAction(cond, assignments) =>
-        val output = deltaInsertOutput(assignments, metadataAttrs, originalRowIdValues)
+        val output = deltaInsertOutput(
+          assignments, metadataAttrs, originalRowIdValues) ++ nullExtractionValues
         Keep(Insert, cond.getOrElse(TrueLiteral), output)
 
       case other =>

@@ -107,7 +107,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       matchedInstructions = matchedInstr,
       notMatchedInstructions = notMatchedInstr,
       notMatchedBySourceInstructions = notMatchedBySourceInstr,
-      checkCardinality = false,
+      cardinalityRowId = None,
       output = outputAttrs,
       child = inputPlan
     )

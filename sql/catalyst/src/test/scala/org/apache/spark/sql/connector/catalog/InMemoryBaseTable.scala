@@ -166,6 +166,12 @@ abstract class InMemoryBaseTable(
     }
   }
 
+  protected object MetadataStructColumn extends MetadataColumn {
+    override def name: String = "_metadata"
+    override def dataType: DataType = new StructType().add("row_index", IntegerType, false)
+    override def isNullable: Boolean = false
+  }
+
   override def schema(): StructType = CatalogV2Util.v2ColumnsToStructType(columns())
 
   override def supportsColumnChange(change: TableChange.ColumnChange): Boolean = change match {
@@ -182,7 +188,14 @@ abstract class InMemoryBaseTable(
   }
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
-  override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
+  override val metadataColumns: Array[MetadataColumn] = {
+    val columns = Array[MetadataColumn](IndexColumn, PartitionKeyColumn)
+    if (properties.getOrDefault("nested-metadata", "false").toBoolean) {
+      columns :+ MetadataStructColumn
+    } else {
+      columns
+    }
+  }
   private val metadataColumnNames = metadataColumns.map(_.name).toSet
 
   // Metadata column renaming is supported -- see [[InMemoryScanBuilder.pruneColumns]] and
@@ -378,12 +391,14 @@ abstract class InMemoryBaseTable(
     dataMap.update(key, Seq(new BufferedRows(key, schema)))
   }
 
-  def withDeletes(data: Array[BufferedRows]): InMemoryBaseTable = {
+  def withDeletes(
+      data: Array[BufferedRows],
+      rowId: InternalRow => Int = _.getInt(0)): InMemoryBaseTable = {
     data.foreach { p =>
       dataMap ++= dataMap.map { case (key, currentSplits) =>
         val newSplits = currentSplits.map { currentRows =>
           val newRows = new BufferedRows(currentRows.key, currentRows.schema)
-          newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(r.getInt(0)))
+          newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(rowId(r)))
           newRows
         }
         key -> newSplits
@@ -780,9 +795,18 @@ abstract class InMemoryBaseTable(
     var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
-      val scanFields = readSchema.fields.map(_.name).toSet
-      partitioning.flatMap(_.references)
-        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+      val hasNestedMetadata = readSchema.exists {
+        case MetadataStructFieldWithLogicalName(_, "_metadata") => true
+        case _ => false
+      }
+      if (properties.getOrDefault("nested-metadata-filter", "false").toBoolean &&
+          hasNestedMetadata) {
+        Array(FieldReference(Seq("_metadata", "row_index")))
+      } else {
+        val scanFields = readSchema.fields.map(_.name).toSet
+        partitioning.flatMap(_.references)
+          .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+      }
     }
 
     override def filter(filters: Array[Filter]): Unit = {
@@ -1167,6 +1191,7 @@ private class BufferedRowsReader(
     val metadataRow = new GenericInternalRow(metadataColumnNames.map {
       case "index" => index
       case "_partition" => UTF8String.fromString(partition.keyString())
+      case "_metadata" => new GenericInternalRow(Array[Any](index))
     }.toArray)
     new JoinedRow(row, metadataRow)
   }

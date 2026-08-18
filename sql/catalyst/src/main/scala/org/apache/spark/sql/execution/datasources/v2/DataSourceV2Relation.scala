@@ -38,7 +38,6 @@ import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -207,8 +206,7 @@ case class DataSourceV2ScanRelation(
       case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
       case _ => Array.empty[NamedReference]
     }
-    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
-      filterAttrs.toImmutableArraySeq, this))
+    V2ExpressionUtils.resolveMetadataAttributeRefs(filterAttrs, output)
   }
 
   /**
@@ -221,8 +219,7 @@ case class DataSourceV2ScanRelation(
       case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
       case _ => Array.empty[NamedReference]
     }
-    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
-      filterAttrs.toImmutableArraySeq, this))
+    V2ExpressionUtils.resolveMetadataAttributeRefs(filterAttrs, output)
   }
 
   override def name: String = relation.name
