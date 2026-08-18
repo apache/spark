@@ -88,6 +88,15 @@ private[spark] class ChannelShuffleWriter[K, V](
     val start = System.nanoTime()
     while (!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid)) {
       if (q.offer(batch, 100, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+        // A successful offer can race abandon(): abandon does `add(mark)` then `q.clear()`, so if
+        // it ran between the isAbandoned check above and this offer, our batch lands AFTER the
+        // clear and would be stranded in the queue (no reader will ever drain it). Re-check and
+        // clear it ourselves so nothing is left behind. The reader has departed, so discarding is
+        // correct; and it keeps the queue empty for removeShuffle rather than pinning a batch.
+        if (ChannelShuffleRendezvous.isAbandoned(shuffleId, pid)) {
+          q.clear()
+          return false
+        }
         if (records > 0) {
           writeMetrics.incRecordsWritten(records.toLong)
           writeMetrics.incWriteTime(System.nanoTime() - start)

@@ -173,10 +173,13 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
    * Note: `ShuffleExchangeExec.pipelined` is a plain case-class field with no doCanonicalize
    * override, so it PARTICIPATES in the canonical form. An already-flipped (pipelined = true)
    * exchange and a structurally identical unflipped twin therefore canonicalize DIFFERENTLY and
-   * would not be paired here. That is fine: this rule only ever runs before any flip in a given
-   * replanning round, and reuse-twins are collapsed by ReuseExchangeAndSubquery /
-   * ShuffleQueryStageExec earlier, so the counts compared here are always over pre-flip
-   * (pipelined = false) forms.
+   * would not be paired here. The counts are taken over the CURRENT plan on each replanning
+   * round (and this rule does re-run in later rounds on a plan that may already contain an
+   * earlier round's flip -- it is NOT a before-any-flip pass). That is still safe: a flipped and
+   * an unflipped structural twin cannot coexist as a real duplicate, because reuse collapses
+   * twins (ReuseExchangeAndSubquery / ShuffleQueryStageExec) before this rule runs, and if one
+   * somehow slipped through, the DAGScheduler's fan-out check rejects a multi-consumer pipelined
+   * producer rather than producing wrong results. So missing such a pair here is fail-safe.
    */
   private def duplicatedShuffleForms(plan: SparkPlan): Set[Any] = {
     val counts = mutable.HashMap.empty[Any, Int]

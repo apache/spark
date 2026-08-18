@@ -153,6 +153,35 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
+  test("ContextCleaner frees the channel's queues for a tracker-less pipelined shuffle") {
+    // Regression for the production leak (C1): a channel-manager shuffle registers in NO output
+    // tracker (usesStreamingShuffleOutputTracker = false), so ContextCleaner.doCleanupShuffle
+    // finds it in neither the MapOutputTracker nor the StreamingShuffleOutputTracker and takes
+    // its tracker-less branch. That branch must still reach the manager's unregisterShuffle (->
+    // ChannelShuffleRendezvous.removeShuffle) or the process-wide queues leak for the JVM's life.
+    // The SQL suite cannot catch this: it runs under spark.sql.classic.shuffleDependency.
+    // fileCleanup.enabled, whose default is Utils.isTesting = true, so the SQL path proactively
+    // removes the shuffle in tests and masks the leak. Here we drive doCleanupShuffle directly
+    // (the production GC path, minus the flaky GC) and assert the queues are freed.
+    withPipelinedSparkContext(cores = 8) { sc =>
+      val keyed: RDD[(Int, Int)] = sc.parallelize(0 until 1000, 3).map(v => (v, v))
+      val rdd = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(4))
+      val shuffleId = rdd.dependencies.head
+        .asInstanceOf[org.apache.spark.ShuffleDependency[_, _, _]].shuffleId
+      // Run it so the writer creates the rendezvous queues.
+      rdd.collect()
+      assert(ChannelShuffleRendezvous.numQueuesForTesting > 0,
+        "the pipelined run should have created rendezvous queues")
+
+      // The production cleanup path: ContextCleaner.doCleanupShuffle for this shuffle id. With the
+      // fix, its tracker-less branch calls shuffleDriverComponents.removeShuffle, which routes to
+      // the channel manager and frees the queues.
+      sc.cleaner.get.doCleanupShuffle(shuffleId, blocking = true)
+      assert(ChannelShuffleRendezvous.numQueuesForTesting === 0,
+        "doCleanupShuffle must free the channel's queues for a tracker-less pipelined shuffle")
+    }
+  }
+
   test("the channel manager refuses to construct outside local mode") {
     // The rendezvous is JVM-local; on a multi-executor master every reader would hang on
     // data written in another JVM. A cluster misconfiguration must fail loudly at startup.

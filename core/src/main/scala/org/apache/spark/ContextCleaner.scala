@@ -262,7 +262,23 @@ private[spark] class ContextCleaner(
         listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
         logDebug("Cleaned pipelined shuffle " + shuffleId)
       } else {
-        logDebug("Asked to cleanup non-existent shuffle (maybe it was already removed)")
+        // The shuffle is in NEITHER tracker. This is either a genuinely non-existent shuffle
+        // (already removed) OR an in-process pipelined shuffle whose manager keeps NO output
+        // tracker (PipelinedChannelShuffleManager.usesStreamingShuffleOutputTracker = false):
+        // such a shuffle registers with no tracker at all, so the two branches above miss it,
+        // yet its process-wide rendezvous queues (ChannelShuffleRendezvous) still need freeing.
+        // Call shuffleDriverComponents.removeShuffle unconditionally: the RemoveShuffle it issues
+        // routes to SparkEnv.unregisterShuffleFromAllManagers, which reaches that manager's
+        // unregisterShuffle (-> ChannelShuffleRendezvous.removeShuffle) and frees the queues.
+        // Safe for a truly non-existent id: BlockManagerMasterEndpoint.removeShuffle finds no
+        // blocks and unregisterShuffle for an unknown id is a no-op on every manager. No
+        // shuffle-manager type check here on purpose -- the cleaner stays transport-agnostic and
+        // just balances the registerShuffle the ShuffleDependency constructor issues for every
+        // shuffle.
+        logDebug("Cleaning tracker-less shuffle " + shuffleId)
+        shuffleDriverComponents.removeShuffle(shuffleId, blocking)
+        listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
+        logDebug("Cleaned tracker-less shuffle " + shuffleId)
       }
     } catch {
       case e: Exception => logError(log"Error cleaning shuffle ${MDC(SHUFFLE_ID, shuffleId)}", e)
