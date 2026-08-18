@@ -53,6 +53,20 @@ _TRANSPILE_OFF_ANSI_ON = {
 }
 
 
+def _fallback_warnings(caught):
+    """The warnings that mean "this UDF fell back to interpreted Python".
+
+    Asserting on these is what distinguishes a deliberate refusal from a
+    transpile that silently produced nothing: ``transpiled == []`` alone is also
+    what you get if an exception is swallowed before the reason is recorded.
+    """
+    return [
+        w
+        for w in caught
+        if "Unable to transpile" in str(w.message) or "Errors encountered" in str(w.message)
+    ]
+
+
 @unittest.skipIf(
     is_remote_only(),
     "UDF transpilation is only supported in regular (non-Connect) Spark.",
@@ -666,10 +680,14 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         with self.sql_conf(_TRANSPILE_ON):
             for label, func, schema, rows, expected in cases:
                 with self.subTest(func=label):
-                    with _warnings.catch_warnings(record=True):
+                    with _warnings.catch_warnings(record=True) as caught:
                         _warnings.simplefilter("always")
                         pudf = UserDefinedFunction(func, BooleanType())
                     self.assertEqual([], pudf.transpiled, f"{label} must NOT transpile")
+                    self.assertTrue(
+                        _fallback_warnings(caught),
+                        f"{label}: expected a fallback warning",
+                    )
                     df = self.spark.createDataFrame(rows, schema)
                     self.assertEqual(
                         [r[0] for r in df.select(pudf(*df.columns)).collect()],
@@ -686,13 +704,17 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 (in_long_rt, LongType(), "an `in` with a LongType return type"),
             ]:
                 with self.subTest(label=label):
-                    with _warnings.catch_warnings(record=True):
+                    with _warnings.catch_warnings(record=True) as caught:
                         _warnings.simplefilter("always")
                         self.assertEqual(
                             [],
                             UserDefinedFunction(func, rt).transpiled,
                             f"{label} must NOT transpile",
                         )
+                    self.assertTrue(
+                        _fallback_warnings(caught),
+                        f"{label}: expected a fallback warning",
+                    )
 
     def test_udf_transpile_boolean_body_requires_boolean_return_type(self):
         # A comparison body is boolean whatever its operands look like, so it must
@@ -747,15 +769,18 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual([True], [r[0] for r in df.select(pudf("c", "x", "y")).collect()])
 
     def test_udf_transpile_lowering_caps(self):
-        # The chain cap bounds plan growth. Exercise the boundary directly rather
-        # than through a UDF, so the refusal cannot be confused with a fallback for
-        # some other reason.
+        # Both bounds on comparison lowering. Exercised directly rather than
+        # through a UDF so a refusal cannot be confused with a fallback for some
+        # other reason. No `sql_conf` here on purpose: nothing on this path reads
+        # SQLConf (only `_get_transpilers` does), so wrapping it would imply the
+        # caps are conf-gated when they are module constants.
         import ast as _ast
 
         from pyspark.errors import UnsupportedOperationException
         from pyspark.sql.transpile import (
             CatalystTranspiler,
             _MAX_COMPARISON_OPS,
+            _MAX_LOWERED_COMPARISONS,
         )
 
         transpiler = CatalystTranspiler()
@@ -764,23 +789,57 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         def compare_node(src):
             return _ast.parse(src, mode="eval").body
 
+        def lower(src):
+            # `_transpile_from_ast` is what normally zeroes the budget; reset it
+            # here so each case is charged on its own.
+            transpiler._lowered_comparisons = 0
+            return transpiler._convert_chunk(["x"], compare_node(src))
+
         def chain_src(n):
             # n operators over n + 1 operands: x < 0 < 1 < ... < n - 1
             return " < ".join(["x"] + [str(i) for i in range(n)])
 
-        with self.sql_conf(_TRANSPILE_ON):
-            # At the cap the lowering succeeds.
-            transpiler._convert_chunk(["x"], compare_node(chain_src(_MAX_COMPARISON_OPS)))
+        # ---- Per-chain operator cap ----
+        lower(chain_src(_MAX_COMPARISON_OPS))  # at the cap, succeeds
+        with self.assertRaises(UnsupportedOperationException) as ctx:
+            lower(chain_src(_MAX_COMPARISON_OPS + 1))
+        self.assertIn("operators", str(ctx.exception))
 
-            # One past it, it refuses so the UDF falls back.
-            with self.assertRaises(UnsupportedOperationException) as ctx:
-                transpiler._convert_chunk(["x"], compare_node(chain_src(_MAX_COMPARISON_OPS + 1)))
-            self.assertIn("operators", str(ctx.exception))
+        # ---- Whole-body budget ----
+        # A comparison may be an operand of another comparison (both category
+        # "bool"), and a chain re-lowers each interior operand once per adjacent
+        # pair, so nesting doubles the link count per level while every node stays
+        # far under the per-chain cap. Before the budget existed this reached hours
+        # of driver-side py4j work from a few hundred characters of source.
+        def nested_src(depth):
+            src = "(x < 0)"
+            for _ in range(depth):
+                src = "((x < 0) < %s < (x < 0))" % src
+            return src
 
-            # `in` / `not in` are refused outright, deferred to SPARK-56925.
-            with self.assertRaises(UnsupportedOperationException) as ctx:
-                transpiler._convert_chunk(["x"], compare_node("x in (1, 2)"))
-            self.assertIn("`in` / `not in`", str(ctx.exception))
+        # Shallow nesting stays inside the budget and still lowers.
+        lower(nested_src(2))
+
+        # Deep nesting is refused by the budget, not by the per-chain cap: every
+        # `ast.Compare` in here has exactly two operators.
+        deep = nested_src(10)
+        node = compare_node(deep)
+        self.assertTrue(
+            all(
+                len(n.ops) <= _MAX_COMPARISON_OPS
+                for n in _ast.walk(node)
+                if isinstance(n, _ast.Compare)
+            ),
+            "every node must be under the per-chain cap, so the budget is what fires",
+        )
+        with self.assertRaises(UnsupportedOperationException) as ctx:
+            lower(deep)
+        self.assertIn(str(_MAX_LOWERED_COMPARISONS), str(ctx.exception))
+
+        # `in` / `not in` are refused outright, deferred to SPARK-56925.
+        with self.assertRaises(UnsupportedOperationException) as ctx:
+            lower("x in (1, 2)")
+        self.assertIn("`in` / `not in`", str(ctx.exception))
 
     def test_udf_transpile_multi_row(self):
         # Every other transpile test uses a 1-row DataFrame; this one runs
