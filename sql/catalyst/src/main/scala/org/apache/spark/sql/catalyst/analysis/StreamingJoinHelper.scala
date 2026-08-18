@@ -52,6 +52,38 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
+   * Whether the watermark sits on the right equality join key at the ordinal that actually drives
+   * state-key eviction. This is stricter than [[isWatermarkInJoinKeys]] (side-insensitive) and than
+   * simply "some right key is watermarked" (ordinal-insensitive). It matters for join types (e.g.
+   * left anti) whose correctness depends on the right side being late-filtered on the *same* key
+   * dimension the left state is evicted by.
+   *
+   * State-key eviction uses a single key ordinal, chosen exactly as in
+   * [[org.apache.spark.sql.execution.streaming.operators.stateful.join.
+   * StreamingSymmetricHashJoinHelper.findJoinKeyOrdinalForWatermark]]: the first watermarked left
+   * key, else the first watermarked right key. The right side is late-filtered on its own
+   * watermarked column, so unless the right key at that ordinal is the watermarked one, a right row
+   * that is old on the eviction key but fresh on some other watermarked key/column would not be
+   * late-filtered and could match an already-emitted anti row. This method must stay in sync with
+   * that ordinal selection.
+   */
+  def isWatermarkOnRightEvictionJoinKey(plan: LogicalPlan): Boolean = {
+    plan match {
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
+        def watermarked(e: Expression): Boolean = e match {
+          case ne: NamedExpression => ne.metadata.contains(EventTimeWatermark.delayKey)
+          case _ => false
+        }
+        val ordinal = leftKeys.indexWhere(watermarked) match {
+          case i if i >= 0 => i
+          case _ => rightKeys.indexWhere(watermarked)
+        }
+        ordinal >= 0 && ordinal < rightKeys.length && watermarked(rightKeys(ordinal))
+      case _ => false
+    }
+  }
+
+  /**
    * Get state value watermark (see [[StreamingSymmetricHashJoinExec]] for context about it)
    * given the join condition and the event time watermark. This is how it works.
    * - The condition is split into conjunctive predicates, and we find the predicates of the

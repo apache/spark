@@ -718,5 +718,55 @@ object UnsupportedOperationChecker extends Logging {
           "is not supported without a watermark in the join keys, or a watermark on " +
           "the nullable side and an appropriate range condition")(join)
     }
+
+    // Left anti has stricter watermark requirements than the other stream-stream joins, because it
+    // is the only outer-like join whose output (the unmatched left rows) is produced from left
+    // state eviction AND can be invalidated by a *later* right row. Correct anti output needs both
+    // of the following, which the generic side-insensitive check above does not guarantee:
+    //
+    //   1. The right side must be late-filtered on the matching dimension, so a right row old
+    //      enough to match an already-evicted (hence already-emitted) left row is dropped rather
+    //      than processed. The operator late-filters a side using that side's own watermarked
+    //      event-time column, so this bounds matching only when the watermark is on the right
+    //      *join key* (equi-join path) or the right *range-bound* attribute (range path).
+    //   2. The left state must actually be evicted, so surviving unmatched left rows are emitted.
+    //      A watermark in the join keys evicts the left key state; a range condition needs a
+    //      watermark on the LEFT side to evict the left value state.
+    //
+    // Left outer/semi keep their existing one-sided-watermark behavior for compatibility; a general
+    // fix for them is tracked separately. Note the range path still only checks that the left side
+    // is watermarked, not that the watermark is on the range-bound attribute -- that column-level
+    // precision is a pre-existing gap shared by all stream-stream joins and is deferred.
+    if (join.joinType == LeftAnti) {
+      if (watermarkInJoinKeys) {
+        // Equi-join path: the left key state is evicted via the join-key watermark at a single
+        // ordinal, so we need the right side late-filtered on that *same* key ordinal. That
+        // requires the right key at the eviction ordinal to be watermarked -- a watermark on only
+        // the left key, on an unrelated right column, or on a different key position (composite
+        // keys) would let a late right row match an already-emitted anti row.
+        if (!StreamingJoinHelper.isWatermarkOnRightEvictionJoinKey(join)) {
+          throwError(
+            "Stream-stream LeftAnti join between two streaming DataFrame/Datasets with a " +
+              "watermarked join key requires the watermark to be on the right join key used for " +
+              "state eviction (for a composite key, the right key at the same position as the " +
+              "watermarked left key), so that late right rows are dropped and cannot invalidate " +
+              "already-emitted anti rows. A watermark on only the left key, on an unrelated " +
+              "right column, or on a different key position, is not supported.")(join)
+        }
+      } else {
+        // Range-condition path (hasValidWatermarkRange holds here): the right side is late-filtered
+        // via its range-bound watermark, but the left state is evicted -- and hence anti rows
+        // emitted -- only when the LEFT side is watermarked.
+        val leftHasWatermark =
+          join.left.output.exists(_.metadata.contains(EventTimeWatermark.delayKey))
+        if (!leftHasWatermark) {
+          throwError(
+            "Stream-stream LeftAnti join between two streaming DataFrame/Datasets with a range " +
+              "condition requires a watermark on the left side, so that the left state (whose " +
+              "surviving unmatched rows form the anti output) is evicted. A watermark on only " +
+              "the right side is not supported.")(join)
+        }
+      }
+    }
   }
 }

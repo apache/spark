@@ -408,8 +408,10 @@ case class StreamingSymmetricHashJoinExec(
     //      new left input with stored right input, and also stores all the left input.
     //    - Left Semi Join: generates all new left input rows from matching new left input with
     //      stored right input, and also stores all the non-matched left input.
-    //    - Left Anti Join: like left semi, but generates nothing; it stores only the non-matched
-    //      new left input (a matched left row can never be anti output, so it is not buffered).
+    //    - Left Anti Join: like left semi, but generates nothing while joining; it stores only the
+    //      non-matched new left input (a matched left row can never be anti output, so it is not
+    //      buffered). A left row that fails the pre-join filter is unmatched by definition and is
+    //      emitted immediately without being stored (see `generateFilteredJoinedRow`).
     //
     //  - `rightSideJoiner.storeAndJoinWithOtherSide(leftSideJoiner)`
     //    - Inner, Left Outer, Right Outer, Full Outer Join: generates all rows from matching
@@ -428,10 +430,11 @@ case class StreamingSymmetricHashJoinExec(
     //  rows in the same microbatch are handled immediately without being buffered in state (emitted
     //  for left semi, dropped for left anti).
     //
-    //  Left Anti differs from left semi only in what it emits: nothing during the join. A surviving
-    //  (never-matched) left row is not provably unmatched until the watermark rules out any future
-    //  right match, so -- like left outer -- those rows are emitted when the left state is evicted
-    //  (see `outputIter`).
+    //  Left Anti differs from left semi only in what it emits: for a row that passes the pre-join
+    //  filter, nothing during the join (a left row that fails the pre-join filter is emitted
+    //  immediately, since it can never match). A surviving (never-matched) left row is not provably
+    //  unmatched until the watermark rules out any future right match, so -- like left outer --
+    //  those rows are emitted when the left state is evicted (see `outputIter`).
     val leftOutputIter =
       joinerManager.leftSideJoiner.storeAndJoinWithOtherSide(joinerManager.rightSideJoiner) {
         (input: InternalRow, matched: InternalRow) => joinedRow.withLeft(input).withRight(matched)

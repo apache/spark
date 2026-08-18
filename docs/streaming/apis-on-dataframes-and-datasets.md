@@ -1326,16 +1326,24 @@ regarding watermark delays and whether data will be dropped or not.
 An anti join returns values from the left side of the relation that has no match with the right.
 It is also referred to as a left anti join. As with semi joins, watermarking and event-time
 constraints must be specified for an anti join: since a row is emitted precisely because it has
-*no* match, the engine has to wait until the watermark guarantees that no matching row can arrive
-on the right side in future before it can emit the row.
+*no* match, the engine generally has to wait until the watermark guarantees that no matching row
+can arrive on the right side in future before it can emit the row. (The exception is a left row
+that fails a deterministic left-side-only predicate in the join condition: it can never match any
+right row, so it is emitted immediately without waiting for the watermark.)
 
-As for the other stateful join types, the event-time constraint can be expressed in either of two
-ways: a watermarked event-time column can appear in the equality join keys, or a watermark can be
-defined on the right side together with a time range condition (for example
-`leftTime BETWEEN rightTime - INTERVAL 1 HOUR AND rightTime`). The right side watermark is what
-lets the engine decide that a left row can no longer be matched and emit it, so it drives the
-eviction and output of left side state. Defining a watermark on the left side as well is optional,
-and is what allows the right side state to be cleaned up.
+Unlike outer joins, an anti join has stricter watermark requirements, because two independent things
+must both hold. First, the right side must be late-filtered on the matching dimension, so that a
+right row arriving too late to matter is dropped rather than processed; without this a late right
+row could match a left row that has *already* been emitted as an anti row, silently corrupting the
+result. Second, the left state must be evicted, since eviction is what emits the surviving unmatched
+left rows. Concretely: for an equality join on a watermarked event-time key, that key must be
+watermarked on the **right** side (the left state is then evicted through the shared key); for a
+time range condition (for example `leftTime BETWEEN rightTime - INTERVAL 1 HOUR AND rightTime`), a
+watermark must be defined on **both** sides -- the right side for late filtering and the left side
+for eviction. The recommended, always-correct configuration is to watermark both sides on the
+event-time column used by the join. Configurations that leave the right side un-filtered (for
+example a watermark on only the left join key) or the left state never evicted (a watermark on only
+the right side of a range condition) are rejected at analysis time.
 
 Note that anti join is only supported in Append output mode. Update mode would have to emit rows
 early, before the watermark can rule out a future match, and such a row could be invalidated by a
@@ -1343,8 +1351,9 @@ later batch.
 
 ###### Semantic Guarantees of Stream-stream Anti Joins with Watermarking
 Anti joins have the same guarantees regarding watermark delays and whether data will be dropped as
-[outer joins](#outer-joins-with-watermarking), because unmatched rows are likewise only emitted once
-the watermark has passed them.
+[outer joins](#outer-joins-with-watermarking), because surviving unmatched rows are likewise only
+emitted once the watermark has passed them (the sole exception being left rows that fail a
+deterministic left-side-only predicate, which are emitted immediately as noted above).
 
 ##### Support matrix for joins in streaming queries
 
@@ -1458,8 +1467,9 @@ the watermark has passed them.
   <tr>
     <td style="vertical-align: middle;">Left Anti</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on right + time constraints for correct
-      results, optionally specify watermark on left for all state cleanup. Append output mode only
+      Conditionally supported, must watermark the right join key (equality-key joins) or both sides
+      (range-condition joins), plus time constraints, for correct results; watermarking both sides
+      on the join event-time column always works. Append output mode only
     </td>
   </tr>
   <tr>
@@ -1551,7 +1561,8 @@ joined = impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
     """),
-  "leftOuter"     # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
+  "leftOuter"     # "inner", "leftOuter", "rightOuter", "fullOuter" (not "leftSemi"/"leftAnti":
+                  # they output left columns only, which this aggregation on click* does not have)
 )
 
 joined.groupBy(
@@ -1573,7 +1584,9 @@ val joined = impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
   """),
-  joinType = "leftOuter"  // "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
+  // "inner", "leftOuter", "rightOuter", "fullOuter" (not "leftSemi"/"leftAnti": they output left
+  // columns only, which this aggregation on click* does not have)
+  joinType = "leftOuter"
 )
 
 joined
@@ -1592,7 +1605,9 @@ Dataset<Row> joined = impressionsWithWatermark.join(
     "clickAdId = impressionAdId AND " +
     "clickTime >= impressionTime AND " +
     "clickTime <= impressionTime + interval 1 hour "),
-  "leftOuter"     // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
+  // "inner", "leftOuter", "rightOuter", "fullOuter" (not "leftSemi"/"leftAnti": they output left
+  // columns only, which this aggregation on click* does not have)
+  "leftOuter"
 );
 
 joined

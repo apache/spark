@@ -239,16 +239,20 @@ abstract class StreamingJoinSuite
       joinType: String,
       watermark: String = "10 seconds",
       lowerBound: String = "interval 5 seconds",
-      upperBound: String = "interval 5 seconds")
+      upperBound: String = "interval 5 seconds",
+      leftWatermark: Boolean = true)
     : (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], DataFrame) = {
 
     val leftInput = MemoryStream[(Int, Int)]
     val rightInput = MemoryStream[(Int, Int)]
 
-    val df1 = leftInput.toDF().toDF("leftKey", "time")
+    val df1Base = leftInput.toDF().toDF("leftKey", "time")
       .select($"leftKey", timestamp_seconds($"time") as "leftTime",
         ($"leftKey" * 2) as "leftValue")
-      .withWatermark("leftTime", watermark)
+    // The left watermark is optional for most join types; left anti requires it (a watermark on
+    // only the right side leaves the left state unevicted). Allow tests to omit it to exercise
+    // that path.
+    val df1 = if (leftWatermark) df1Base.withWatermark("leftTime", watermark) else df1Base
 
     val df2 = rightInput.toDF().toDF("rightKey", "time")
       .select($"rightKey", timestamp_seconds($"time") as "rightTime",
@@ -2837,6 +2841,20 @@ abstract class StreamingLeftAntiJoinSuite extends StreamingLeftAntiJoinBase {
     }
     assert(e.getMessage.contains("LeftAnti join between two streaming DataFrames/Datasets " +
       "is not supported in Update output mode, only in Append output mode"))
+  }
+
+  test("left anti join with a range condition requires a watermark on the left side") {
+    // Only the right side is watermarked. With a range condition (no watermark in the join keys),
+    // the operator would never build a left-side eviction predicate, so no anti row would ever be
+    // emitted. This must be rejected at analysis rather than silently producing no output.
+    val (_, _, joined) = setupJoinWithRangeCondition("left_anti", leftWatermark = false)
+
+    val e = intercept[AnalysisException] {
+      joined.writeStream.format("memory").queryName("leftAntiRightWatermarkOnly")
+        .outputMode(OutputMode.Append()).start()
+    }
+    assert(e.getMessage.contains(
+      "requires a watermark on the left side"))
   }
 }
 
