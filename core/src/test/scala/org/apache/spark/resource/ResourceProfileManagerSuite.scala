@@ -17,12 +17,17 @@
 
 package org.apache.spark.resource
 
+import org.mockito.ArgumentMatchers.isA
+import org.mockito.Mockito.{never, reset, times, verify}
+import org.scalatestplus.mockito.MockitoSugar
+
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
-import org.apache.spark.scheduler.LiveListenerBus
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}
+import org.apache.spark.util.ThreadUtils
 
-class ResourceProfileManagerSuite extends SparkFunSuite {
+class ResourceProfileManagerSuite extends SparkFunSuite with MockitoSugar {
 
   override def beforeAll(): Unit = {
     try {
@@ -253,7 +258,9 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
 
   test("getOrAddEquivalentProfile reuses an equivalent profile") {
     val conf = new SparkConf().set(EXECUTOR_CORES, 4)
-    val rpmanager = new ResourceProfileManager(conf, listenerBus)
+    val mockListenerBus = mock[LiveListenerBus]
+    val rpmanager = new ResourceProfileManager(conf, mockListenerBus)
+    reset(mockListenerBus)
 
     def buildProfile(cores: Int): ResourceProfile = {
       val rprofBuilder = new ResourceProfileBuilder()
@@ -280,5 +287,87 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val different = buildProfile(16)
     val resolvedDifferent = rpmanager.getOrAddEquivalentProfile(different)
     assert(resolvedDifferent.id == different.id)
+
+    verify(mockListenerBus, times(2)).post(isA(classOf[SparkListenerResourceProfileAdded]))
+  }
+
+  test("getOrAddEquivalentProfile atomically registers equivalent profiles") {
+    val conf = new SparkConf().set(EXECUTOR_CORES, 4)
+    val mockListenerBus = mock[LiveListenerBus]
+    val rpmanager = new ResourceProfileManager(conf, mockListenerBus)
+    reset(mockListenerBus)
+
+    val profiles = (1 to 16).map { _ =>
+      val ereqs = new ExecutorResourceRequests().cores(8)
+      val treqs = new TaskResourceRequests().cpus(1)
+      new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+    }
+    val resolved = ThreadUtils.parmap(profiles, "register-resource-profiles", profiles.size) {
+      rpmanager.getOrAddEquivalentProfile
+    }
+
+    assert(resolved.map(_.id).toSet.size === 1)
+    verify(mockListenerBus, times(1)).post(isA(classOf[SparkListenerResourceProfileAdded]))
+  }
+
+  test("getOrAddEquivalentProfile validates before registering") {
+    val conf = new SparkConf().setMaster("yarn").set(EXECUTOR_CORES, 4)
+      .set(DYN_ALLOCATION_ENABLED, true)
+    val mockListenerBus = mock[LiveListenerBus]
+    val rpmanager = new ResourceProfileManager(conf, mockListenerBus)
+    reset(mockListenerBus)
+
+    def invalidProfile(): ResourceProfile = {
+      val ereqs = new ExecutorResourceRequests().resource("gpu", 1, "discoveryScript")
+      val treqs = new TaskResourceRequests().resource("gpu", 2)
+      new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+    }
+
+    val first = invalidProfile()
+    val equivalent = invalidProfile()
+    Seq(first, equivalent).foreach { profile =>
+      val error = intercept[SparkException] {
+        rpmanager.getOrAddEquivalentProfile(profile)
+      }
+      assert(error.getMessage.contains("needs to be >= the task resource request amount"))
+      intercept[SparkException] {
+        rpmanager.resourceProfileFromId(profile.id)
+      }
+    }
+    assert(rpmanager.getEquivalentProfile(first).isEmpty)
+    verify(mockListenerBus, never()).post(isA(classOf[SparkListenerResourceProfileAdded]))
+  }
+
+  test("getOrAddEquivalentProfile keeps explicit profiles distinct from the default") {
+    Seq("yarn", "k8s://test").foreach { master =>
+      ResourceProfile.clearDefaultProfile()
+      val conf = new SparkConf().setMaster(master).set(EXECUTOR_CORES, 4)
+        .set(DYN_ALLOCATION_ENABLED, true)
+      val rpmanager = new ResourceProfileManager(conf, listenerBus)
+      val defaultProfile = rpmanager.defaultResourceProfile
+      val explicitProfile = new ResourceProfile(
+        defaultProfile.executorResources, defaultProfile.taskResources)
+
+      val resolved = rpmanager.getOrAddEquivalentProfile(explicitProfile)
+      assert(resolved eq explicitProfile)
+      assert(resolved.id !== ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      assert(rpmanager.getEquivalentProfile(explicitProfile).contains(explicitProfile))
+    }
+  }
+
+  test("getOrAddEquivalentProfile preserves an existing id mapping") {
+    val conf = new SparkConf().set(EXECUTOR_CORES, 4)
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
+    val defaultProfile = rpmanager.defaultResourceProfile
+    val collidingProfile = new ResourceProfileBuilder()
+      .require(new ExecutorResourceRequests().cores(8))
+      .require(new TaskResourceRequests().cpus(1))
+      .build()
+    collidingProfile.setToDefaultProfile()
+
+    val resolved = rpmanager.getOrAddEquivalentProfile(collidingProfile)
+    assert(resolved eq defaultProfile)
+    assert(rpmanager.resourceProfileFromId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) eq
+      defaultProfile)
   }
 }
