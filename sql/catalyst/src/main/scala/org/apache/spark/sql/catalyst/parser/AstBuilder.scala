@@ -4201,6 +4201,22 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create a [[JsonExists]] expression for the SQL:2016 `JSON_EXISTS` predicate. The `ON ERROR`
+   * clause defaults to `FALSE` when absent, per the standard.
+   */
+  override def visitJsonExists(ctx: JsonExistsContext): Expression = withOrigin(ctx) {
+    val jsonExpr = expression(ctx.jsonExpr)
+    val path = string(visitStringLit(ctx.path))
+    val onError = Option(ctx.errorBehavior).map { b =>
+      if (b.TRUE != null) JsonExistsBehavior.True
+      else if (b.FALSE != null) JsonExistsBehavior.False
+      else if (b.UNKNOWN != null) JsonExistsBehavior.Unknown
+      else JsonExistsBehavior.Error
+    }.getOrElse(JsonExistsBehavior.False)
+    JsonExists(jsonExpr, path, onError)
+  }
+
+  /**
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {

@@ -710,6 +710,117 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  // mode over nanosecond-precision timestamps (SPARK-56822). `Mode` counts frequencies in an
+  // `OpenHashMap` keyed on the physical `TimestampNanosVal` (its `equals`/`hashCode` cover the full
+  // `(epochMicros, nanosWithinMicro)` pair) and returns `child.dataType`, so the most-frequent
+  // value is selected on the full nanos value and its precision and family (NTZ/LTZ) are preserved.
+
+  test("SPARK-56822: mode over nanosecond-precision timestamps returns the most frequent value") {
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p))
+        .add("ltz", TimestampLTZNanosType(p))
+      // The frequent value (3 rows) and the rare one (1 row) differ only within the microsecond, so
+      // frequency counting must key on the full nanos value; a NULL row is ignored. The fractions
+      // are multiples of 100ns, exact at every p in [7, 9]. There is a unique most-frequent value,
+      // so the result is deterministic without a WITHIN GROUP / deterministic argument.
+      val ldtHot = LocalDateTime.parse("2020-01-01T00:00:00.000000100")
+      val ldtCold = LocalDateTime.parse("2020-01-01T00:00:00.000000900")
+      val insHot = Instant.parse("2020-01-01T00:00:00.000000100Z")
+      val insCold = Instant.parse("2020-01-01T00:00:00.000000900Z")
+      val data = Seq(
+        Row(ldtHot, insHot), Row(ldtHot, insHot), Row(ldtHot, insHot),
+        Row(ldtCold, insCold), Row(null, null))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+      val res = df.selectExpr("mode(ntz)", "mode(ltz)")
+      // The result keeps the family (NTZ/LTZ) and precision of the input.
+      assert(res.schema.map(_.dataType) === Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p)))
+      checkAnswer(res, Row(ldtHot, insHot))
+    }
+  }
+
+  // collect_set over nanosecond-precision timestamps (SPARK-56822). `CollectSet` deduplicates via a
+  // `HashSet` keyed on the physical `TimestampNanosVal`, whose `equals`/`hashCode` cover the full
+  // `(epochMicros, nanosWithinMicro)` pair, so sub-microsecond-distinct values are kept distinct;
+  // the result element type is exactly `child.dataType`.
+
+  test("SPARK-56822: collect_set over nanos deduplicates on the full sub-microsecond value") {
+    // Two values share the microsecond and differ only in the last nanosecond digit. Flooring the
+    // input to precision `p` collapses them when p < 9 (the distinguishing digit is below the
+    // grid), but keeps them apart at p = 9. collect_set must dedup on the full stored value,
+    // not on micros.
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType().add("ntz", TimestampNTZNanosType(p))
+      val data = Seq(
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.123456780")),
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.123456789")),
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.123456780")))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+      val res = df.selectExpr("collect_set(ntz)")
+      assert(res.schema.head.dataType === ArrayType(TimestampNTZNanosType(p), containsNull = false))
+
+      // Values are floored to `p` on ingestion, so the distinct set depends on `p`.
+      val expected = p match {
+        case 7 => Set(LocalDateTime.parse("2020-01-01T12:34:56.123456700"))
+        case 8 => Set(LocalDateTime.parse("2020-01-01T12:34:56.123456780"))
+        case _ => Set(
+          LocalDateTime.parse("2020-01-01T12:34:56.123456780"),
+          LocalDateTime.parse("2020-01-01T12:34:56.123456789"))
+      }
+      val collected = res.collect().head.getSeq[LocalDateTime](0).toSet
+      assert(collected === expected, s"collect_set(p=$p) expected $expected, got $collected")
+    }
+  }
+
+  // collect_list over nanosecond-precision timestamps (SPARK-56822). `CollectList` is
+  // type-agnostic: its `ArrayBuffer` buffer holds the physical `TimestampNanosVal` and the
+  // result element type is exactly `child.dataType`, so the input precision, family (NTZ/LTZ)
+  // and sub-microsecond remainder survive with no truncation to micros. The collection order
+  // after aggregation is not deterministic, so the contents are compared as a set.
+
+  test("SPARK-56822: collect_list over nanosecond-precision timestamps preserves type and nanos " +
+    "remainder") {
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p))
+        .add("ltz", TimestampLTZNanosType(p))
+      // The sub-microsecond parts are multiples of 100ns, so they are exact at every p in [7, 9]
+      // (no flooring) yet non-zero -- a value truncated to micros would be visibly wrong. The NULL
+      // row is dropped (collect_list ignores nulls by default).
+      val data = Seq(
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.000000100"),
+          Instant.parse("2020-01-01T12:34:56.000000100Z")),
+        Row(LocalDateTime.parse("2020-01-02T00:00:00.000000900"),
+          Instant.parse("2020-01-02T00:00:00.000000900Z")),
+        Row(null, null))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+      val sqlRes = df.selectExpr("collect_list(ntz)", "collect_list(ltz)")
+      // The result keeps the family (NTZ/LTZ) and precision; nulls are dropped so
+      // containsNull=false.
+      assert(sqlRes.schema.map(_.dataType) === Seq(
+        ArrayType(TimestampNTZNanosType(p), containsNull = false),
+        ArrayType(TimestampLTZNanosType(p), containsNull = false)))
+
+      val expectedNtz = Set(
+        LocalDateTime.parse("2020-01-01T12:34:56.000000100"),
+        LocalDateTime.parse("2020-01-02T00:00:00.000000900"))
+      val expectedLtz = Set(
+        Instant.parse("2020-01-01T12:34:56.000000100Z"),
+        Instant.parse("2020-01-02T00:00:00.000000900Z"))
+      // The Scala Column API path agrees with the SQL path; both drop the null and keep
+      // both values.
+      val sqlRow = sqlRes.collect().head
+      val colRow = df.select(collect_list(col("ntz")), collect_list(col("ltz"))).collect().head
+      assert(sqlRow.getSeq[LocalDateTime](0).toSet === expectedNtz)
+      assert(sqlRow.getSeq[Instant](1).toSet === expectedLtz)
+      assert(colRow.getSeq[LocalDateTime](0).toSet === expectedNtz)
+      assert(colRow.getSeq[Instant](1).toSet === expectedLtz)
+    }
+  }
+
   test("SPARK-57816: date_format / to_char / to_varchar over nanosecond-precision timestamps") {
     // The 9-`S` pattern is a fixed-width fraction field, so it always emits 9 digits; truncating to
     // precision `p` zeros the low digits (floor); it does not drop them. The session zone is

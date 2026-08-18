@@ -386,7 +386,8 @@ object SparkConnectService extends Logging {
       Some(
         new SparkConnectServerTab(
           new SparkConnectServerAppStatusStore(kvStore),
-          SparkConnectServerTab.getSparkUI(sc)))
+          SparkConnectServerTab.getSparkUI(sc),
+          Some(sessionManager)))
     } else {
       None
     }

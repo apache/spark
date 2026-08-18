@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.client.dsl.base.PatchContext
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
-import org.mockito.Mockito.{atLeastOnce, mock, never, spy, verify, when}
+import org.mockito.Mockito.{atLeastOnce, inOrder, mock, never, spy, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, SparkFunSuite}
@@ -158,6 +158,13 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(watchEvents).start(TEST_SPARK_APP_ID)
     verify(pollEvents).start(TEST_SPARK_APP_ID)
     verify(configMapResource).create()
+  }
+
+  test("SPARK-38794: executor ConfigMap is created before executors are requested") {
+    schedulerBackendUnderTest.start()
+    val ordered = inOrder(configMapResource, podAllocator)
+    ordered.verify(configMapResource).create()
+    ordered.verify(podAllocator).setTotalExpectedExecutors(Map(defaultProfile -> 3))
   }
 
   test("SPARK-56684: kubernetesClient is exposed within the k8s package") {
