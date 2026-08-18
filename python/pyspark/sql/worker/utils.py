@@ -67,6 +67,34 @@ def is_method_overridden(reader: Any, name: str) -> bool:
     return getattr(getattr(reader, name), "__func__", None) is not getattr(DataSourceReader, name)
 
 
+def check_pushdown_not_disabled(
+    reader: Any, enable_filter_pushdown: bool, enable_limit_pushdown: bool
+) -> None:
+    """
+    Raise `DATA_SOURCE_PUSHDOWN_DISABLED` if `reader` implements a pushdown method while the
+    corresponding pushdown configuration is disabled, so that the method is not silently ignored.
+
+    This is shared by both planning workers: `plan_data_source_read` runs it for a plain read,
+    and `data_source_pushdown_filters` runs it too, because a filter- or limit-only scan caches
+    the read info in that worker and `plan_data_source_read` never runs for such a scan.
+    """
+    from pyspark.errors import PySparkAssertionError
+
+    for method, conf, enabled in (
+        ("pushFilters", "spark.sql.python.filterPushdown.enabled", enable_filter_pushdown),
+        ("pushLimit", "spark.sql.python.limitPushdown.enabled", enable_limit_pushdown),
+    ):
+        if not enabled and is_method_overridden(reader, method):
+            raise PySparkAssertionError(
+                errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
+                messageParameters={
+                    "type": type(reader).__name__,
+                    "method": method,
+                    "conf": conf,
+                },
+            )
+
+
 @with_faulthandler
 def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
     try:

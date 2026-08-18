@@ -42,7 +42,7 @@ from pyspark.sql.types import (
     BinaryType,
     StructType,
 )
-from pyspark.sql.worker.utils import is_method_overridden, worker_run
+from pyspark.sql.worker.utils import check_pushdown_not_disabled, worker_run
 from pyspark.worker_util import (
     get_sock_file_to_executor,
     read_command,
@@ -283,9 +283,15 @@ def _main(infile: IO, outfile: IO) -> None:
     for creating a `DataSourceReader` object and send the information needed back to the JVM.
 
     The infile and outfile are connected to the JVM via a socket. The JVM sends the following
-    information to this process via the socket:
+    information to this process via the socket, in this order (the protocol is positional):
     - a `DataSource` instance representing the data source
+    - a `StructType` instance representing the input schema from the child plan
     - a `StructType` instance representing the output schema of the data source
+    - the max Arrow batch size (int)
+    - whether filter pushdown is enabled (bool)
+    - whether limit pushdown is enabled (bool)
+    - whether this is a streaming read (bool)
+    - whether binary values are returned as `bytes` (bool)
 
     This process then creates a `DataSourceReader` instance by calling the `reader` method
     on the `DataSource` instance. Then it calls the `partitions()` method of the reader and
@@ -363,19 +369,7 @@ def _main(infile: IO, outfile: IO) -> None:
                 )
             # Do not silently ignore a pushdown method that the reader implements while the
             # corresponding pushdown is disabled. Raise an error to ask the user to enable it.
-            for method, conf, enabled in (
-                ("pushFilters", "spark.sql.python.filterPushdown.enabled", enable_pushdown),
-                ("pushLimit", "spark.sql.python.limitPushdown.enabled", enable_limit_pushdown),
-            ):
-                if not enabled and is_method_overridden(reader, method):
-                    raise PySparkAssertionError(
-                        errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
-                        messageParameters={
-                            "type": type(reader).__name__,
-                            "method": method,
-                            "conf": conf,
-                        },
-                    )
+            check_pushdown_not_disabled(reader, enable_pushdown, enable_limit_pushdown)
 
         # Send the read function and partitions to the JVM.
         write_read_func_and_partitions(

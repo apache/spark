@@ -404,6 +404,184 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     }
   }
 
+  test("limit pushdown is not used for top-N (orderBy then limit)") {
+    assume(shouldTestPandasUDFs)
+    // A LIMIT after an ORDER BY is a top-N: the limit cannot be pushed to the scan, because
+    // pushing it before the sort would drop rows the sort needs. The reader must not see it.
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def pushLimit(self, limit):
+         |        raise AssertionError("pushLimit must not be called for a top-N query")
+         |
+         |    def partitions(self):
+         |        return [InputPartition(0)]
+         |
+         |    def read(self, partition):
+         |        yield from [(2,), (1,), (3,)]
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df = spark.read.format(dataSourceName).schema(schema).load().orderBy("id").limit(2)
+      val plan = df.queryExecution.executedPlan
+
+      collectFirst(plan) {
+        case s: BatchScanExec if s.scan.isInstanceOf[PythonScan] =>
+          val p = s.scan.asInstanceOf[PythonScan]
+          assert(!p.getMetaData().contains("PushedLimit"))
+      }.getOrElse(
+        fail(s"PythonScan not found in the plan. Actual plan:\n$plan")
+      )
+
+      checkAnswer(df, Seq(Row(1), Row(2)))
+    }
+  }
+
+  test("no limit is pushed for a filter-only query with both pushdowns enabled") {
+    assume(shouldTestPandasUDFs)
+    // The filter-pushdown worker also handles limit pushdown, but a query without a LIMIT sends
+    // the -1 no-limit sentinel, so `pushLimit` must not be called even when the reader implements
+    // it and limit pushdown is enabled.
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def pushFilters(self, filters):
+         |        # Reject the filter so Spark re-applies it; this test is only about the limit.
+         |        return filters
+         |
+         |    def pushLimit(self, limit):
+         |        raise AssertionError("pushLimit must not be called when the query has no limit")
+         |
+         |    def partitions(self):
+         |        return [InputPartition(0)]
+         |
+         |    def read(self, partition):
+         |        yield from [(1,), (2,)]
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(
+      SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df = spark.read.format(dataSourceName).schema(schema).load().filter("id = 1")
+      val plan = df.queryExecution.executedPlan
+
+      collectFirst(plan) {
+        case s: BatchScanExec if s.scan.isInstanceOf[PythonScan] =>
+          val p = s.scan.asInstanceOf[PythonScan]
+          assert(!p.getMetaData().contains("PushedLimit"))
+      }.getOrElse(
+        fail(s"PythonScan not found in the plan. Actual plan:\n$plan")
+      )
+
+      checkAnswer(df, Seq(Row(1)))
+    }
+  }
+
+  test("limit pushdown does not leak into a reused base scan") {
+    assume(shouldTestPandasUDFs)
+    // A base DataFrame and its `.limit(n)` share the same Python data source instance. The read
+    // function produced while pushing the limit must stay scoped to the limited scan and not
+    // leak into the base scan, which would make the base DataFrame read too few rows.
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def pushLimit(self, limit):
+         |        self._limit = limit
+         |        return True
+         |
+         |    def partitions(self):
+         |        return [InputPartition(0)]
+         |
+         |    def read(self, partition):
+         |        n = getattr(self, "_limit", 10)
+         |        for i in range(n):
+         |            yield (i,)
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df = spark.read.format(dataSourceName).schema(schema).load()
+      checkAnswer(df.limit(2), Seq(Row(0), Row(1)))
+      checkAnswer(df, (0 until 10).map(Row(_)))
+    }
+  }
+
+  test("filter pushdown does not leak into a reused base scan") {
+    assume(shouldTestPandasUDFs)
+    // Same as above for filter pushdown: the read function bound to the pushed filters must not
+    // leak into the base scan, which would make the base DataFrame return only filtered rows.
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def pushFilters(self, filters):
+         |        self._filtered = True
+         |        return []
+         |
+         |    def partitions(self):
+         |        return [InputPartition(0)]
+         |
+         |    def read(self, partition):
+         |        if getattr(self, "_filtered", False):
+         |            yield (1,)
+         |        else:
+         |            for i in range(10):
+         |                yield (i,)
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df = spark.read.format(dataSourceName).schema(schema).load()
+      checkAnswer(df.filter("id = 1"), Seq(Row(1)))
+      checkAnswer(df, (0 until 10).map(Row(_)))
+    }
+  }
+
   test("register data source") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
