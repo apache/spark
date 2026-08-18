@@ -7112,7 +7112,10 @@ object SQLConf {
         "group is skipped only when the leaf cannot match and every residual is entirely null " +
         "(i.e. the whole path is provably in the typed leaf). This enables row-group skipping " +
         "for shredded Variant columns while never dropping rows that fall back to an untyped " +
-        "residual. Has no effect unless the Parquet column is shredded and " +
+        "residual. The benefit depends on the data layout, like any Parquet min/max skipping: it " +
+        "helps most when the data is sorted on the filtered field (so each row group covers a " +
+        "narrow value range) and a file holds many row groups; unsorted data or a single row " +
+        "group per file gains little. Has no effect unless the Parquet column is shredded and " +
         "spark.sql.variant.pushVariantIntoScan is also true, and it does not fire when " +
         "spark.sql.variant.pushVariantIntoScan.deferCastError is true (the extraction is " +
         "rewritten into a form that is not translated to a pushable filter). Results are " +
