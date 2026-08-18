@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
@@ -34,18 +35,16 @@ import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
- * Shared execution logic for the two stages of an incremental Python aggregation (see
- * [[org.apache.spark.sql.catalyst.expressions.PythonAggregate]]). Both stages group the child rows
- * by the grouping expressions, send each group's projected input columns to the Python worker as
- * Arrow record batches, and join the single result row the worker returns per group back with the
- * grouping key.
+ * Execution logic for the post-shuffle FINAL stage of an incremental Python aggregation (see
+ * [[org.apache.spark.sql.catalyst.expressions.PythonAggregate]]). It groups the (shuffled) child
+ * rows by the grouping expressions via a local sort + [[GroupedIterator]], sends each group's
+ * intermediate-buffer columns to the Python worker as Arrow record batches, and joins the single
+ * result row the worker returns per group back with the grouping key.
  *
- * The two stages differ only in:
- *   - which columns are sent to Python (`udfInputs`): the aggregator arguments in the PARTIAL
- *     stage, the intermediate buffer columns in the FINAL stage;
- *   - the Python eval type, which selects `reduce`-into-buffer vs. `merge`+`finish` in the worker;
- *   - the required child distribution (map-side/local for PARTIAL, clustered for FINAL);
- *   - the output attributes and the final projection.
+ * The map-side PARTIAL stage does not extend this base: it hash-combines many groups per batch
+ * inside the worker and needs no sort (see [[PythonIncrementalAggregatePartialExec]]). This base is
+ * kept as an abstract class so the per-stage inputs, eval type, output attributes and final
+ * projection stay explicit hooks.
  */
 abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with PythonSQLMetrics {
 
@@ -194,32 +193,125 @@ abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with Pyt
 }
 
 /**
- * Map-side PARTIAL stage: folds each group's input rows into a per-group intermediate buffer via
- * the aggregator's `reduce`. It requires only a local sort on the grouping expressions (no
- * shuffle), so keys may be split across partitions; [[PythonIncrementalAggregateFinalExec]] merges
- * resulting partial buffers after the shuffle. Its output is the grouping key columns followed by
- * one intermediate-buffer struct column per aggregator.
+ * Map-side PARTIAL stage: hash-combines the input rows of each group into a per-group intermediate
+ * buffer via the aggregator's `reduce`, inside the Python worker. Unlike the FINAL stage it needs
+ * neither a clustered distribution nor an ordering: the whole point of the map-side combine is to
+ * avoid a full pre-shuffle sort. It streams ordinary (multi-group) Arrow batches to the worker,
+ * which maintains one running buffer per distinct grouping key and emits, at end of partition, one
+ * row per key -- the grouping key columns followed by one intermediate-buffer struct column per
+ * aggregator.
+ *
+ * Because keys may be split across partitions (no shuffle here) and the worker's map-side grouping
+ * is only a combine optimization, correctness does not depend on it being exhaustive:
+ * [[PythonIncrementalAggregateFinalExec]] re-groups the emitted partial buffers authoritatively
+ * (by JVM `UnsafeRow` key, after the shuffle) and merges any that share a key.
  */
 case class PythonIncrementalAggregatePartialExec(
     groupingExpressions: Seq[NamedExpression],
     aggExpressions: Seq[AggregateExpression],
     bufferAttributes: Seq[Attribute],
-    child: SparkPlan) extends PythonIncrementalAggregateExecBase {
+    child: SparkPlan) extends UnaryExecNode with PythonSQLMetrics {
 
-  override protected def evalType: Int =
-    PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF
+  private val udfExpressions: Seq[PythonAggregate] =
+    aggExpressions.map(_.aggregateFunction.asInstanceOf[PythonAggregate])
 
-  override protected def udfInputs: Seq[Seq[Expression]] = udfExpressions.map(_.children)
+  private def groupingAttributes: Seq[Attribute] = groupingExpressions.map(_.toAttribute)
 
-  override protected def pythonOutputAttributes: Seq[Attribute] = bufferAttributes
+  override def output: Seq[Attribute] = groupingAttributes ++ bufferAttributes
 
-  override protected def outputExpressions: Seq[NamedExpression] =
-    groupingAttributes ++ bufferAttributes
+  override def producedAttributes: AttributeSet = AttributeSet(output)
 
-  override def requiredChildDistribution: Seq[Distribution] =
-    Seq(UnspecifiedDistribution)
+  override def requiredChildDistribution: Seq[Distribution] = Seq(UnspecifiedDistribution)
+
+  // No ordering: the worker hash-combines rather than relying on grouped input.
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(Nil)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val inputRDD = child.execute()
+
+    val sessionLocalTimeZone = conf.sessionLocalTimeZone
+    val largeVarTypes = conf.arrowUseLargeVarTypes
+    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
+
+    val pyFuncs = udfExpressions.map { u =>
+      (ChainedPythonFunctions(Seq(u.func)), u.resultId.id)
+    }
+
+    // The columns sent to Python are the grouping keys first (so the worker can hash-group by them
+    // and echo them back with each partial buffer), followed by the deduplicated aggregator input
+    // columns. A UDF input that coincides with a grouping key simply reuses that leading column.
+    val allInputs = new ArrayBuffer[Expression]
+    val dataTypes = new ArrayBuffer[DataType]
+    groupingExpressions.foreach { g =>
+      allInputs += g
+      dataTypes += g.dataType
+    }
+    val numGroupingKeys = groupingExpressions.length
+
+    val argMetas = udfExpressions.map { u =>
+      u.children.map { e =>
+        val (key, value) = e match {
+          case NamedArgumentExpression(key, value) => (Some(key), value)
+          case _ => (None, e)
+        }
+        if (allInputs.exists(_.semanticEquals(value))) {
+          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key)
+        } else {
+          allInputs += value
+          dataTypes += value.dataType
+          ArgumentMetadata(allInputs.length - 1, key)
+        }
+      }.toArray
+    }.toArray
+
+    val aggInputSchema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
+      StructField(s"_$i", dt)
+    }.toArray)
+    // The leading `numGroupingKeys` columns are the grouping keys; hand their schema to the worker.
+    val groupingKeySchemaJson = StructType(aggInputSchema.fields.take(numGroupingKeys)).json
+
+    val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+    val sessionUUID = Option(session).collect {
+      case s if s.sessionState.conf.pythonWorkerLoggingEnabled => s.sessionUUID
+    }
+
+    val childOutput = child.output
+    val outputAttrs = output
+
+    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) Iterator.empty else {
+      val prunedProj = UnsafeProjection.create(allInputs.toSeq, childOutput)
+      val projectedRowIter = iter.map(prunedProj)
+
+      val context = TaskContext.get()
+
+      val runner = new ArrowPythonWithNamedArgumentRunner(
+        pyFuncs,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+        argMetas,
+        aggInputSchema,
+        sessionLocalTimeZone,
+        largeVarTypes,
+        pythonRunnerConf,
+        pythonMetrics,
+        jobArtifactUUID,
+        sessionUUID) with BatchedPythonArrowInput {
+        // Tell the worker how many leading columns are grouping keys, so it can hash-group by them
+        // and re-emit them alongside each partial buffer.
+        override protected def evalConf: Map[String, String] =
+          super.evalConf + ("grouping_key_schema" -> groupingKeySchemaJson)
+      }
+
+      val columnarBatchIter = runner.compute(
+        Iterator(projectedRowIter), context.partitionId(), context)
+
+      // Each batch the worker returns holds (grouping key columns ++ one buffer struct column per
+      // aggregator), i.e. this operator's output columns; copy each row out as an UnsafeRow.
+      val resultProj = UnsafeProjection.create(outputAttrs, outputAttrs)
+      columnarBatchIter.flatMap(_.rowIterator().asScala).map(resultProj)
+    }}
+  }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)

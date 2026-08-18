@@ -32,7 +32,7 @@ from pyspark.sql.connect.expressions import (
     PythonUDF,
 )
 from pyspark.sql.connect.column import Column
-from pyspark.sql.types import DataType, StringType, _parse_datatype_string
+from pyspark.sql.types import DataType, StringType, StructType, _parse_datatype_string
 from pyspark.sql.udf import (
     UDFRegistration as PySparkUDFRegistration,
     UserDefinedFunction as PySparkUserDefinedFunction,
@@ -113,10 +113,16 @@ def _create_udf(
     evalType: int,
     name: Optional[str] = None,
     deterministic: bool = True,
+    bufferSchema: Optional[StructType] = None,
 ) -> "UserDefinedFunctionLike":
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
-        f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
+        f,
+        returnType=returnType,
+        name=name,
+        evalType=evalType,
+        deterministic=deterministic,
+        bufferSchema=bufferSchema,
     )
     return udf_obj._wrapped()
 
@@ -139,6 +145,7 @@ class UserDefinedFunction:
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
+        bufferSchema: Optional[StructType] = None,
     ):
         if not callable(func):
             raise PySparkTypeError(
@@ -178,6 +185,10 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        # Intermediate aggregation buffer schema, set only for an incremental Python aggregator
+        # (see :class:`pyspark.sql.aggregator.Aggregator`); ``None`` otherwise. A first-class field
+        # so it survives ``_wrapped()``, ``asNondeterministic()`` and ``spark.udf.register``.
+        self.bufferSchema = bufferSchema
 
     @property
     def returnType(self) -> DataType:
@@ -211,7 +222,7 @@ class UserDefinedFunction:
             func=self.func,
             python_ver="%d.%d" % sys.version_info[:2],
             # Set for incremental Python aggregators (see pyspark.sql.aggregator).
-            buffer_type=getattr(self, "bufferSchema", None),
+            buffer_type=self.bufferSchema,
         )
         return CommonInlineUserDefinedFunction(
             function_name=self._name,
@@ -255,6 +266,7 @@ class UserDefinedFunction:
         wrapper.returnType = self.returnType  # type: ignore[attr-defined]
         wrapper.evalType = self.evalType  # type: ignore[attr-defined]
         wrapper.deterministic = self.deterministic  # type: ignore[attr-defined]
+        wrapper.bufferSchema = self.bufferSchema  # type: ignore[attr-defined]
         wrapper.asNondeterministic = functools.wraps(  # type: ignore[attr-defined]
             self.asNondeterministic
         )(lambda: self.asNondeterministic()._wrapped())

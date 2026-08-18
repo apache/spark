@@ -22,7 +22,7 @@ Incremental user-defined aggregators for PySpark, the Python analog of Scala's
 from abc import ABC, abstractmethod
 from typing import Any, Tuple
 
-from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import DataType, StructType
 from pyspark.util import PythonEvalType
 
@@ -185,18 +185,27 @@ def udaf(agg: "Aggregator") -> Any:
                 "arg_type": type(agg.bufferSchema).__name__,
             },
         )
+    # The buffer crosses the shuffle as an Arrow struct whose children are matched by name, and the
+    # worker keys the buffer tuple back by field name. Duplicate names would silently collapse
+    # fields on the map side and then fail with an opaque Arrow error post-shuffle, so reject them
+    # up front where the aggregator is created.
+    field_names = [field.name for field in agg.bufferSchema.fields]
+    if len(field_names) != len(set(field_names)):
+        duplicates = sorted({name for name in field_names if field_names.count(name) > 1})
+        raise PySparkValueError(
+            errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+            messageParameters={"field_names": ", ".join(duplicates)},
+        )
 
+    # ``bufferSchema`` is a first-class ``UserDefinedFunction`` field (threaded to the JVM in
+    # ``_create_judf`` so ``PythonAggregate`` can plan the two-stage aggregation), so it survives
+    # ``_wrapped()`` and ``spark.udf.register`` without being re-attached.
     udf_obj = UserDefinedFunction(
         agg,
         returnType=agg.outputType,
         name=agg.__class__.__name__,
         evalType=PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
         deterministic=True,
+        bufferSchema=agg.bufferSchema,
     )
-    # Threaded to the JVM in UserDefinedFunction._create_judf so PythonAggregate can plan the
-    # two-stage aggregation. Set on both the UDF and its wrapper so it survives
-    # ``spark.udf.register`` (which reconstructs the UDF from the wrapper).
-    udf_obj.bufferSchema = agg.bufferSchema  # type: ignore[attr-defined]
-    wrapped = udf_obj._wrapped()
-    wrapped.bufferSchema = agg.bufferSchema  # type: ignore[attr-defined]
-    return wrapped
+    return udf_obj._wrapped()

@@ -2445,6 +2445,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionList" -> groupAggPandasUDFNames.map(toSQLId).mkString(", ")))
   }
 
+  def invalidPythonAggregatePlacementError(
+      pythonAggregateNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PYTHON_UDF_PLACEMENT",
+      messageParameters = Map(
+        "functionList" -> pythonAggregateNames.map(toSQLId).mkString(", ")))
+  }
+
   def ambiguousAttributesInSelfJoinError(
       ambiguousAttrs: Seq[AttributeReference]): Throwable = {
     new AnalysisException(

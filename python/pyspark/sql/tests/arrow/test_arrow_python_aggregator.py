@@ -17,7 +17,9 @@
 import unittest
 from decimal import Decimal
 
+from pyspark.errors import AnalysisException, PySparkValueError
 from pyspark.sql import functions as sf
+from pyspark.sql.window import Window
 from pyspark.sql.types import (
     DecimalType,
     DoubleType,
@@ -238,6 +240,106 @@ class ArrowPythonAggregatorTestsMixin:
         got = {r["k"]: r["m"] for r in result}
         exp = {r["k"]: r["m"] for r in expected}
         self.assertEqual(got, exp)
+
+    def test_named_arguments(self):
+        # A named argument (both DataFrame and SQL forms) must feed the aggregator's value tuple,
+        # not be silently dropped.
+        df = self._data()
+        result = df.groupBy("k").agg(udaf(Mean())(v=sf.col("v")).alias("m")).orderBy("k").collect()
+        expected = df.groupBy("k").agg(sf.avg("v").alias("m")).orderBy("k").collect()
+        self.assertEqual({r["k"]: r["m"] for r in result}, {r["k"]: r["m"] for r in expected})
+
+        df.createOrReplaceTempView("agg_input")
+        self.spark.udf.register("my_mean", udaf(Mean()))
+        sql_result = self.spark.sql(
+            "SELECT k, my_mean(v => v) AS m FROM agg_input GROUP BY k ORDER BY k"
+        ).collect()
+        self.assertEqual({r["k"]: r["m"] for r in sql_result}, {r["k"]: r["m"] for r in expected})
+
+    def test_distinct_and_filter_rejected(self):
+        # Neither DISTINCT nor FILTER is honored by the two-stage operator, so both must be
+        # rejected at analysis rather than silently returning the non-distinct/unfiltered result.
+        df = self._data()
+        df.createOrReplaceTempView("agg_input")
+        self.spark.udf.register("my_mean", udaf(Mean()))
+        with self.assertRaises(AnalysisException):
+            self.spark.sql("SELECT my_mean(DISTINCT v) FROM agg_input GROUP BY k").collect()
+        with self.assertRaises(AnalysisException):
+            self.spark.sql(
+                "SELECT my_mean(v) FILTER (WHERE v > 0) FROM agg_input GROUP BY k"
+            ).collect()
+
+    def test_pivot_rejected(self):
+        # ResolvePivot must reject the incremental aggregator (its null-ignoring fallback rewrite
+        # would produce wrong results), like it already rejects pandas UDAFs.
+        df = self.spark.createDataFrame(
+            [("a", "x", 1.0), ("a", "y", 2.0), ("b", "x", 3.0)],
+            "k string, p string, v double",
+        )
+        with self.assertRaises(AnalysisException):
+            df.groupBy("k").pivot("p").agg(udaf(Mean())(sf.col("v"))).collect()
+
+    def test_window_rejected(self):
+        # The incremental aggregator has no window operator; using it over a window must fail
+        # analysis rather than crash with an internal error at execution.
+        df = self._data()
+        with self.assertRaises(AnalysisException):
+            df.select(udaf(Mean())(sf.col("v")).over(Window.partitionBy("k"))).collect()
+
+    def test_mixed_with_other_aggregate_rejected(self):
+        # An incremental aggregator mixed with another aggregate in one Aggregate is unsupported;
+        # the error must be the dedicated (non-pandas) placement error.
+        df = self._data()
+        with self.assertRaises(AnalysisException) as ctx:
+            df.groupBy("k").agg(
+                udaf(Mean())(sf.col("v")).alias("m"), sf.count("*").alias("c")
+            ).collect()
+        self.assertEqual(ctx.exception.getCondition(), "INVALID_PYTHON_UDF_PLACEMENT")
+
+    def test_duplicate_buffer_field_names_rejected(self):
+        # Duplicate buffer field names silently collapse on the map side and then fail with an
+        # opaque Arrow error post-shuffle; reject them where the aggregator is created.
+        class DupBuffer(Mean):
+            @property
+            def bufferSchema(self):
+                return StructType([StructField("x", DoubleType()), StructField("x", LongType())])
+
+        with self.assertRaises(PySparkValueError) as ctx:
+            udaf(DupBuffer())
+        self.check_error(
+            exception=ctx.exception,
+            errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+            messageParameters={"field_names": "x"},
+        )
+
+    def test_float_grouping_keys_normalized(self):
+        # 0.0 / -0.0 must fall into one group, and NaN keys (unequal to themselves) must group
+        # together, matching SQL aggregate semantics -- guards grouping-key normalization and the
+        # NaN handling of the map-side hash combine.
+        zeros = self.spark.createDataFrame(
+            [(0.0, 1.0), (-0.0, 2.0), (0.0, 3.0)], "k double, v double"
+        )
+        zero_rows = zeros.groupBy("k").agg(udaf(Mean())(sf.col("v")).alias("m")).collect()
+        self.assertEqual(len(zero_rows), 1)
+        self.assertAlmostEqual(zero_rows[0]["m"], 2.0, places=6)
+
+        nans = self.spark.createDataFrame(
+            [(float("nan"), 1.0), (float("nan"), 3.0)], "k double, v double"
+        )
+        nan_rows = nans.groupBy("k").agg(udaf(Mean())(sf.col("v")).alias("m")).collect()
+        self.assertEqual(len(nan_rows), 1)
+        self.assertAlmostEqual(nan_rows[0]["m"], 2.0, places=6)
+
+    def test_complex_grouping_key(self):
+        # A struct grouping key exercises the map-side hash combine's canonicalization of complex
+        # keys (dict -> hashable) as well as the authoritative FINAL re-grouping.
+        df = self.spark.createDataFrame(
+            [(1, "a", 1.0), (1, "a", 3.0), (2, "b", 10.0)],
+            "i int, s string, v double",
+        ).select(sf.struct("i", "s").alias("k"), sf.col("v"))
+        result = df.groupBy("k").agg(udaf(Mean())(sf.col("v")).alias("m")).collect()
+        got = {(r["k"]["i"], r["k"]["s"]): r["m"] for r in result}
+        self.assertEqual(got, {(1, "a"): 2.0, (2, "b"): 10.0})
 
 
 class ArrowPythonAggregatorTests(ArrowPythonAggregatorTestsMixin, ReusedSQLTestCase):

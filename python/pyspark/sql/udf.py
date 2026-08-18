@@ -76,11 +76,17 @@ def _create_udf(
     evalType: int,
     name: Optional[str] = None,
     deterministic: bool = True,
+    bufferSchema: Optional[StructType] = None,
 ) -> "UserDefinedFunctionLike":
     """Create a regular(non-Arrow-optimized) Python UDF."""
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
-        f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
+        f,
+        returnType=returnType,
+        name=name,
+        evalType=evalType,
+        deterministic=deterministic,
+        bufferSchema=bufferSchema,
     )
     return udf_obj._wrapped()
 
@@ -165,6 +171,7 @@ class UserDefinedFunction:
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
+        bufferSchema: Optional[StructType] = None,
     ):
         if not callable(func):
             raise PySparkTypeError(
@@ -206,6 +213,12 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        # Schema of the intermediate aggregation buffer, set only for an incremental Python
+        # aggregator (see :class:`pyspark.sql.aggregator.Aggregator`); ``None`` otherwise. It is a
+        # first-class field so it survives reconstruction paths such as ``_wrapped()``,
+        # ``asNondeterministic()`` and ``spark.udf.register``, and is threaded to the JVM in
+        # ``_create_judf`` so ``PythonAggregate`` can plan the two-stage aggregation.
+        self.bufferSchema = bufferSchema
         # Extract Python UDF details if transpilation is enabled.
         self.transpiled: list = []
         self._transpiled_param_names: list[str] = []
@@ -519,9 +532,8 @@ class UserDefinedFunction:
         input_categories = self._transpiled_input_categories if include_transpiled else []
         # Incremental Python aggregators additionally carry the intermediate buffer schema, which
         # the JVM needs at planning time to build the two-stage aggregation (see PythonAggregate).
-        buffer_schema = getattr(self, "bufferSchema", None)
-        if buffer_schema is not None:
-            jbuf = spark._jsparkSession.parseDataType(buffer_schema.json())
+        if self.bufferSchema is not None:
+            jbuf = spark._jsparkSession.parseDataType(self.bufferSchema.json())
             judf = getattr(
                 sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction"
             )(
@@ -696,6 +708,7 @@ class UserDefinedFunction:
         wrapper.returnType = self.returnType  # type: ignore[attr-defined]
         wrapper.evalType = self.evalType  # type: ignore[attr-defined]
         wrapper.deterministic = self.deterministic  # type: ignore[attr-defined]
+        wrapper.bufferSchema = self.bufferSchema  # type: ignore[attr-defined]
         wrapper.asNondeterministic = functools.wraps(  # type: ignore[attr-defined]
             self.asNondeterministic
         )(lambda: self.asNondeterministic()._wrapped())
@@ -878,12 +891,10 @@ class UDFRegistration:
                 name=name,
                 evalType=f.evalType,
                 deterministic=f.deterministic,
+                # Preserve the incremental aggregator's buffer schema (None for other UDFs).
+                bufferSchema=getattr(f, "bufferSchema", None),
             )
             register_udf = source_udf._unwrapped  # type: ignore[attr-defined]
-            # Preserve the incremental aggregator's buffer schema, which _create_udf drops.
-            buffer_schema = getattr(f, "bufferSchema", None)
-            if buffer_schema is not None:
-                register_udf.bufferSchema = buffer_schema
             return_udf = register_udf
         else:
             if returnType is None:

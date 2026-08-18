@@ -4883,6 +4883,12 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_PYTHON_UDF_PLACEMENT" : {
+    "message" : [
+      "The Python user-defined aggregate function(s) <functionList> cannot be invoked together with other aggregate functions. Each such function must be the only aggregate expression in its aggregation."
+    ],
+    "sqlState" : "0A000"
+  },
   "INVALID_QUERY_MIXED_QUERY_PARAMETERS" : {
     "message" : [
       "Parameterized query must either use positional, or named parameters, but not both."
