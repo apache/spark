@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.streaming
 
 import java.util.Properties
+import java.util.concurrent.TimeoutException
 import java.util.zip.CRC32C
 
 import io.netty.buffer.{ByteBuf, Unpooled}
@@ -30,7 +31,11 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext.withSpark
-import org.apache.spark.internal.config.{SHUFFLE_MANAGER_INCREMENTAL, STREAMING_SHUFFLE_CHECKSUM_ENABLED, STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE}
+import org.apache.spark.internal.config.{
+  SHUFFLE_MANAGER_INCREMENTAL,
+  STREAMING_SHUFFLE_CHECKSUM_ENABLED,
+  STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE,
+  STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.client.TransportClient
@@ -223,6 +228,56 @@ class StreamingShuffleWriterSuite
 
         writer.errorNotifier.getError() shouldBe defined
         writer.errorNotifier.getError().get.getMessage should include("write failed")
+      } finally {
+        context.markTaskCompleted(None)
+      }
+    }
+  }
+
+  test("writer fails when a reader does not connect before timeout") {
+    val conf = newConf()
+      .set(STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS, 100L)
+    withSpark(new SparkContext("local", "StreamingShuffleWriterSuite", conf)) { sc =>
+      val context = createTaskContext(sc.conf, 0)
+      try {
+        val writer = newWriter(sc, context)
+        val error = intercept[SparkRuntimeException] {
+          writer.write(Iterator.empty)
+        }
+        checkError(
+          exception = error,
+          condition = "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT",
+          sqlState = "XXKST",
+          parameters = Map(
+            "shuffleId" -> "0",
+            "writerId" -> "0",
+            "readerId" -> "0",
+            "timeoutMs" -> "100"))
+      } finally {
+        context.markTaskCompleted(None)
+      }
+    }
+  }
+
+  test("send throws the structured error when a reader connection times out") {
+    withSpark(new SparkContext("local", "StreamingShuffleWriterSuite", newConf())) { sc =>
+      val context = createTaskContext(sc.conf, 0)
+      try {
+        val writer = newWriter(sc, context)
+        writer.transportServerHandler.futureClients(0)
+          .completeExceptionally(new TimeoutException())
+        val error = intercept[SparkRuntimeException] {
+          writer.shards(0).send(new TerminationControlMessage(0, 0))
+        }
+        checkError(
+          exception = error,
+          condition = "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT",
+          sqlState = "XXKST",
+          parameters = Map(
+            "shuffleId" -> "0",
+            "writerId" -> "0",
+            "readerId" -> "0",
+            "timeoutMs" -> "3600000"))
       } finally {
         context.markTaskCompleted(None)
       }
