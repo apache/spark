@@ -56,10 +56,8 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var driverPodOperations2: PodResource = _
 
-  // A handle for a pod that does not exist. `withName` returns a handle regardless, and `get`
-  // is what reports absence by returning null, so the missing pod has to be a real mock rather
-  // than an unstubbed name: an unstubbed `withName` would return null and make the buggy
-  // `Option(handle).isDefined` check take the false branch for the wrong reason.
+  // The missing pod needs a real mock whose `get` returns null. `executeOnPod` resolves the
+  // handle, so a bare unstubbed name would make `withName` return null and NPE instead.
   @Mock
   private var missingPodOperations: PodResource = _
 
