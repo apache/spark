@@ -62,7 +62,9 @@ class InMemoryPartitionPredicateDeleteTable(
     }
   }
 
-  override def deleteWhere(predicates: Array[Predicate]): Unit = dataMap.synchronized {
+  override def deleteWhere(
+      predicates: Array[Predicate]): Array[InternalRow] = dataMap.synchronized {
+    val numRowsBeforeDelete = rows.size.toLong
     val (partPreds, standardPreds) = predicates.partition(_.isInstanceOf[PartitionPredicate])
     val (partStdPreds, dataStdPreds) = standardPreds.partition(refsOnlyPartCols)
 
@@ -105,6 +107,7 @@ class InMemoryPartitionPredicateDeleteTable(
         }
       }
     }
+    deletedRowsOutput(numRowsBeforeDelete - rows.size)
   }
 
   private def rowMatchesAll(

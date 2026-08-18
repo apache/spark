@@ -28,6 +28,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
@@ -66,7 +67,7 @@ abstract class InMemoryBaseTable(
     val isDistributionStrictlyRequired: Boolean = true,
     val numRowsPerSplit: Int = Int.MaxValue)
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns
-    with SupportsSchemaEvolution {
+    with SupportsSchemaEvolution with SupportsOperationOutput {
 
   // Tracks the current version number of the table.
   protected var tableVersion: Int = 0
@@ -216,6 +217,89 @@ abstract class InMemoryBaseTable(
   val dataMap: mutable.Map[Seq[Any], Seq[BufferedRows]] = mutable.Map.empty
 
   val commits: ListBuffer[Commit] = ListBuffer[Commit]()
+
+  private val affectedRowsOutputSchema = new StructType()
+    .add("num_affected_rows", LongType, nullable = false)
+
+  private val insertOutputSchema = new StructType()
+    .add("num_affected_rows", LongType, nullable = false)
+    .add("num_inserted_rows", LongType, nullable = false)
+
+  private val insertReplaceOutputSchema = new StructType()
+    .add("num_affected_rows", LongType, nullable = false)
+    .add("num_deleted_rows", LongType, nullable = false)
+    .add("num_inserted_rows", LongType, nullable = false)
+
+  private val deleteOutputSchema = new StructType()
+    .add("num_affected_rows", LongType, nullable = false)
+    .add("num_deleted_rows", LongType, nullable = false)
+
+  private val mergeOutputSchema = new StructType()
+    .add("num_affected_rows", LongType, nullable = false)
+    .add("num_updated_rows", LongType, nullable = false)
+    .add("num_deleted_rows", LongType, nullable = false)
+    .add("num_inserted_rows", LongType, nullable = false)
+
+  override def outputSchema(operation: TableOperation): StructType = operation match {
+    case TableOperation.INSERT |
+         TableOperation.INSERT_OVERWRITE => insertOutputSchema
+    case TableOperation.INSERT_REPLACE_WHERE |
+         TableOperation.INSERT_REPLACE_ON |
+         TableOperation.INSERT_REPLACE_USING => insertReplaceOutputSchema
+    case TableOperation.UPDATE |
+         TableOperation.TRUNCATE => affectedRowsOutputSchema
+    case TableOperation.DELETE => deleteOutputSchema
+    case TableOperation.MERGE => mergeOutputSchema
+  }
+
+  protected def commandOutput(operation: TableOperation): Array[InternalRow] = {
+    commits.lastOption.flatMap(_.writeSummary).map {
+      case summary: MergeSummary =>
+        val affectedRows = sumIfKnown(
+          summary.numTargetRowsUpdated(),
+          summary.numTargetRowsDeleted(),
+          summary.numTargetRowsInserted())
+        Array[InternalRow](new GenericInternalRow(Array[Any](
+          affectedRows,
+          summary.numTargetRowsUpdated(),
+          summary.numTargetRowsDeleted(),
+          summary.numTargetRowsInserted())))
+
+      case summary: UpdateSummary =>
+        affectedRowsOutput(summary.numUpdatedRows())
+
+      case summary: DeleteSummary =>
+        deletedRowsOutput(summary.numDeletedRows())
+
+      case summary: InsertSummary =>
+        val insertedRows = summary.numInsertedRows()
+        operation match {
+          case TableOperation.INSERT | TableOperation.INSERT_OVERWRITE =>
+            Array[InternalRow](new GenericInternalRow(Array[Any](insertedRows, insertedRows)))
+
+          case TableOperation.INSERT_REPLACE_WHERE |
+               TableOperation.INSERT_REPLACE_ON |
+               TableOperation.INSERT_REPLACE_USING =>
+            Array[InternalRow](new GenericInternalRow(Array[Any](insertedRows, -1L, insertedRows)))
+
+          case _ => Array.empty[InternalRow]
+        }
+
+      case _ => Array.empty[InternalRow]
+    }.getOrElse(Array.empty)
+  }
+
+  protected def affectedRowsOutput(numAffectedRows: Long): Array[InternalRow] = {
+    Array(new GenericInternalRow(Array[Any](numAffectedRows)))
+  }
+
+  protected def deletedRowsOutput(numDeletedRows: Long): Array[InternalRow] = {
+    Array(new GenericInternalRow(Array[Any](numDeletedRows, numDeletedRows)))
+  }
+
+  private def sumIfKnown(values: Long*): Long = {
+    if (values.exists(_ < 0)) -1L else values.sum
+  }
 
   def data: Array[BufferedRows] = dataMap.values.flatten.toArray
 
@@ -834,6 +918,8 @@ abstract class InMemoryBaseTable(
     }
 
     override def build(): Write = new Write with RequiresDistributionAndOrdering {
+      override def output(): Array[InternalRow] = commandOutput(info.operation().get())
+
       override def requiredDistribution: Distribution = distribution
 
       override def distributionStrictlyRequired: Boolean = isDistributionStrictlyRequired
@@ -988,6 +1074,10 @@ object InMemoryBaseTable {
   private val columnIdGlobalCounter = new AtomicLong(0)
   def nextColumnId(): Long = columnIdGlobalCounter.incrementAndGet()
   def nextColumnIdString(): String = nextColumnId().toString
+
+  def commandOutput(metrics: (String, Long)*): Seq[Row] = {
+    Seq(Row.fromSeq(metrics.map(_._2)))
+  }
 
   // SQL conf key that enables column ID assignment
   val ASSIGN_COLUMN_IDS = "spark.sql.test.inMemoryTable.assignColumnIds"

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable.commandOutput
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionPredicateDeleteCatalog
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
@@ -52,7 +53,10 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
 
       assertDeleteWithFilters(
         s"DELETE FROM $deleteTableName WHERE dep = 'hr'",
-        expectedNumConditions = 1)
+        expectedNumConditions = 1,
+        expectedOutput = Some(commandOutput(
+          "num_affected_rows" -> 2L,
+          "num_deleted_rows" -> 2L)))
 
       checkAnswer(
         sql(s"SELECT * FROM $deleteTableName"),
@@ -276,9 +280,12 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
       expectedNumConditions: Int,
       expectedNumPartitionPredicates: Int = 0,
       expectedOrdinalsPerPredicate: Seq[Array[Int]] = Seq.empty,
-      expectedPartitionFieldNames: Array[String] = Array.empty
+      expectedPartitionFieldNames: Array[String] = Array.empty,
+      expectedOutput: Option[Seq[Row]] = None
   ): Unit = {
-    val plan = executeAndKeepPlan { sql(query) }
+    var result: DataFrame = null
+    val plan = executeAndKeepPlan { result = sql(query) }
+    expectedOutput.foreach(checkAnswer(result, _))
     val exec = plan match {
       case d: DeleteFromTableExec => d
       case other =>

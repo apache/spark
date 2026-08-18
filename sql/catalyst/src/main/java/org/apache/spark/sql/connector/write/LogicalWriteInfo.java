@@ -22,6 +22,7 @@ import java.util.Optional;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.catalog.TableOperation;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -49,6 +50,15 @@ public interface LogicalWriteInfo {
    * the schema of the input data from Spark to data source.
    */
   StructType schema();
+
+  /**
+   * the table operation associated with this write, if it modifies an existing table.
+   *
+   * @since 4.3.0
+   */
+  default Optional<TableOperation> operation() {
+    return Optional.empty();
+  }
 
   /**
    * the schema of the ID columns from Spark to data source.

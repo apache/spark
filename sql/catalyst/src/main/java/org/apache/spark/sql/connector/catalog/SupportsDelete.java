@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Optional;
+
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.internal.connector.PredicateUtils;
 import org.apache.spark.sql.sources.AlwaysTrue;
@@ -68,9 +71,10 @@ public interface SupportsDelete extends SupportsDeleteV2 {
    * error message that identifies which expression was rejected.
    *
    * @param filters filter expressions, used to select rows to delete when all expressions match
+   * @return rows produced by the delete command
    * @throws IllegalArgumentException If the delete is rejected due to required effort
    */
-  void deleteWhere(Filter[] filters);
+  InternalRow[] deleteWhere(Filter[] filters);
 
   default boolean canDeleteWhere(Predicate[] predicates) {
     Filter[] v1Filters = PredicateUtils.toV1(predicates);
@@ -78,17 +82,17 @@ public interface SupportsDelete extends SupportsDeleteV2 {
     return this.canDeleteWhere(v1Filters);
   }
 
-  default void deleteWhere(Predicate[] predicates) {
-    this.deleteWhere(PredicateUtils.toV1(predicates));
+  default InternalRow[] deleteWhere(Predicate[] predicates) {
+    return this.deleteWhere(PredicateUtils.toV1(predicates));
   }
 
   @Override
-  default boolean truncateTable() {
+  default Optional<InternalRow[]> truncateTable() {
     Filter[] filters = new Filter[] { new AlwaysTrue() };
     boolean canDelete = canDeleteWhere(filters);
     if (canDelete) {
-      deleteWhere(filters);
+      return Optional.of(deleteWhere(filters));
     }
-    return canDelete;
+    return Optional.empty();
   }
 }

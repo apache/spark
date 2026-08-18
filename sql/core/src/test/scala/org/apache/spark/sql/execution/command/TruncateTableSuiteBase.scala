@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable.commandOutput
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -53,7 +54,10 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CREATE TABLE $t (c0 INT, c1 INT) $defaultUsing")
       sql(s"INSERT INTO $t SELECT 0, 1")
 
-      sql(s"TRUNCATE TABLE $t")
+      val result = sql(s"TRUNCATE TABLE $t")
+      if (commandVersion == DDLCommandTestUtils.V2_COMMAND_VERSION) {
+        checkAnswer(result, commandOutput("num_affected_rows" -> 1L))
+      }
       QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Nil)
     }
   }

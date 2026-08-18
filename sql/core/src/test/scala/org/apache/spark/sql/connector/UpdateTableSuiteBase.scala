@@ -23,6 +23,7 @@ import org.apache.spark.sql.{sources, AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable.commandOutput
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.write.UpdateSummary
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
@@ -76,7 +77,9 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     sql(s"ALTER TABLE $tableNameAsString ALTER COLUMN txt SET DEFAULT 'new-text'")
 
-    sql(s"UPDATE $tableNameAsString SET txt = DEFAULT WHERE pk IN (2, 8, 11)")
+    checkAnswer(
+      sql(s"UPDATE $tableNameAsString SET txt = DEFAULT WHERE pk IN (2, 8, 11)"),
+      commandOutput("num_affected_rows" -> 1L))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),

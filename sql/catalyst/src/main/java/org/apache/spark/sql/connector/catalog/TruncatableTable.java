@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Optional;
+
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.metric.CustomMetric;
 import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
@@ -32,23 +35,29 @@ public interface TruncatableTable extends Table {
   /**
    * Truncate a table by removing all rows from the table atomically.
    *
-   * @return true if a table was truncated successfully otherwise false
+   * @return the rows produced by the command if the table was truncated successfully;
+   *         otherwise, an empty optional
    *
    * @since 3.2.0
    */
-  boolean truncateTable();
+  Optional<InternalRow[]> truncateTable();
 
   /**
    * Truncate a table with per-statement options from a {@code DELETE ... WITH (key=value)} clause.
    * <p>
-   * The default implementation ignores {@code options} and delegates to {@link #truncateTable()},
-   * which preserves backward compatibility for connectors that do not need per-statement options.
+   * Spark may use table truncation to execute another operation, such as a {@code DELETE} without
+   * a condition. The default implementation ignores all parameters and delegates to
+   * {@link #truncateTable()}, which preserves backward compatibility for connectors that do not
+   * need per-statement options or the logical operation.
    *
    * @param options per-statement options from the {@code WITH} clause; empty if none were given
-   * @return true if the table was truncated successfully, false otherwise
+   * @param operation the logical table operation being executed
+   * @return the rows produced by the command if the table was truncated successfully;
+   *         otherwise, an empty optional
    * @since 4.3.0
    */
-  default boolean truncateTable(CaseInsensitiveStringMap options) {
+  default Optional<InternalRow[]> truncateTable(
+      CaseInsensitiveStringMap options, TableOperation operation) {
     return truncateTable();
   }
 

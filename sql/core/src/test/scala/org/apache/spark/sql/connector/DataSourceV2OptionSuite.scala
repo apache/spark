@@ -171,7 +171,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       collected = df.queryExecution.executedPlan.collect {
         case CommandResultExec(
-          _, AppendDataExec(_, _, write, _, _),
+          _, AppendDataExec(_, _, write, _, _, _),
           _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
           assert(append.info.options.get("write.split-size") === "10")
@@ -304,7 +304,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case AppendDataExec(_, _, write, _, _) =>
+        case AppendDataExec(_, _, write, _, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
           assert(append.info.options.get("write.split-size") === "10")
       }
@@ -331,7 +331,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case AppendDataExec(_, _, write, _, _) =>
+        case AppendDataExec(_, _, write, _, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
           assert(append.info.options.get("write.split-size") === "10")
       }
@@ -349,7 +349,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         s"VALUES (3, 'c'), (4, 'd')")
       var collected = df.queryExecution.optimizedPlan.collect {
         case CommandResult(_,
-          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _),
+          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _, _),
           _, _) =>
           assert(relation.options.get("write.split-size") === "10")
       }
@@ -357,7 +357,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       collected = df.queryExecution.executedPlan.collect {
         case CommandResultExec(
-          _, OverwriteByExpressionExec(_, _, write, _, _),
+          _, OverwriteByExpressionExec(_, _, write, _, _, _),
           _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
           assert(append.info.options.get("write.split-size") === "10")
@@ -390,7 +390,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case OverwritePartitionsDynamicExec(_, _, write, _, _) =>
+        case OverwritePartitionsDynamicExec(_, _, write, _, _, _) =>
           val dynOverwrite = write.toBatch.asInstanceOf[InMemoryBaseTable#DynamicOverwrite]
           assert(dynOverwrite.info.options.get("write.split-size") === "10")
       }
@@ -409,7 +409,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         s"VALUES (3, 'c'), (4, 'd')")
       var collected = df.queryExecution.optimizedPlan.collect {
         case CommandResult(_,
-          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _),
+          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _, _),
           _, _) =>
           assert(relation.options.get("write.split-size") == "10")
       }
@@ -417,7 +417,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       collected = df.queryExecution.executedPlan.collect {
         case CommandResultExec(
-          _, OverwriteByExpressionExec(_, _, write, _, _),
+          _, OverwriteByExpressionExec(_, _, write, _, _, _),
           _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
           assert(append.info.options.get("write.split-size") === "10")
@@ -444,13 +444,14 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _, _) =>
+        case OverwriteByExpression(
+            _: DataSourceV2Relation, _, _, writeOptions, _, _, _, _, _) =>
           assert(writeOptions("write.split-size") === "10")
       }
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case OverwriteByExpressionExec(_, _, write, _, _) =>
+        case OverwriteByExpressionExec(_, _, write, _, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
           assert(append.info.options.get("write.split-size") === "10")
       }
@@ -474,13 +475,14 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       val qe = captured.head
 
       var collected = qe.optimizedPlan.collect {
-        case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _, _) =>
+        case OverwriteByExpression(
+            _: DataSourceV2Relation, _, _, writeOptions, _, _, _, _, _) =>
           assert(writeOptions("write.split-size") === "10")
       }
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case OverwriteByExpressionExec(_, _, write, _, _) =>
+        case OverwriteByExpressionExec(_, _, write, _, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
           assert(append.info.options.get("write.split-size") === "10")
       }

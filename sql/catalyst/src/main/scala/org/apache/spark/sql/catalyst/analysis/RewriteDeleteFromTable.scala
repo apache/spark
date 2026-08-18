@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, Extr
 object RewriteDeleteFromTable extends RewriteRowLevelCommand {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case d @ DeleteFromTable(aliasedTable, cond) if d.resolved =>
+    case d @ DeleteFromTable(aliasedTable, cond, _) if d.resolved =>
       EliminateSubqueryAliases(aliasedTable) match {
         case ExtractV2Table(_: TruncatableTable) if cond == TrueLiteral =>
           // don't rewrite as the table supports truncation

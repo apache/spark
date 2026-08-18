@@ -21,6 +21,7 @@ import java.util
 
 import org.scalatest.Assertions.assert
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
@@ -40,10 +41,28 @@ class InMemoryTableWithV2Filter(
     InMemoryTableWithV2Filter.supportsPredicates(predicates)
   }
 
-  override def deleteWhere(filters: Array[Predicate]): Unit = dataMap.synchronized {
+  override def deleteWhere(filters: Array[Predicate]): Array[InternalRow] = dataMap.synchronized {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    dataMap --= InMemoryTableWithV2Filter
+    val deleteKeys = InMemoryTableWithV2Filter
       .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
+      .toSeq
+    val numDeletedRows = deleteKeys.iterator
+      .flatMap(key => dataMap.getOrElse(key, Nil))
+      .map(_.rows.size.toLong)
+      .sum
+    dataMap --= deleteKeys
+    deletedRowsOutput(numDeletedRows)
+  }
+
+  override def truncateTable(
+      options: CaseInsensitiveStringMap,
+      operation: TableOperation): util.Optional[Array[InternalRow]] = {
+    val result = truncateTable()
+    if (result.isPresent && operation == TableOperation.TRUNCATE) {
+      util.Optional.of(affectedRowsOutput(result.get()(0).getLong(0)))
+    } else {
+      result
+    }
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {

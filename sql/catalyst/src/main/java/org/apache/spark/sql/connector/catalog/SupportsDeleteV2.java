@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Optional;
+
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.expressions.filter.AlwaysTrue;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
@@ -69,9 +72,10 @@ public interface SupportsDeleteV2 extends TruncatableTable {
    *
    * @param predicates predicate expressions, used to select rows to delete when all expressions
    *                  match
+   * @return rows produced by the delete command
    * @throws IllegalArgumentException If the delete is rejected due to required effort
    */
-  void deleteWhere(Predicate[] predicates);
+  InternalRow[] deleteWhere(Predicate[] predicates);
 
   /**
    * Delete data from a data source table that matches filter expressions, forwarding the
@@ -84,20 +88,22 @@ public interface SupportsDeleteV2 extends TruncatableTable {
    * @param predicates predicate expressions, used to select rows to delete when all expressions
    *                   match
    * @param options per-statement options from the {@code WITH} clause; empty if none were given
+   * @return rows produced by the delete command
    * @throws IllegalArgumentException If the delete is rejected due to required effort
    * @since 4.3.0
    */
-  default void deleteWhere(Predicate[] predicates, CaseInsensitiveStringMap options) {
-    deleteWhere(predicates);
+  default InternalRow[] deleteWhere(
+      Predicate[] predicates, CaseInsensitiveStringMap options) {
+    return deleteWhere(predicates);
   }
 
   @Override
-  default boolean truncateTable() {
+  default Optional<InternalRow[]> truncateTable() {
     Predicate[] predicates = new Predicate[] { new AlwaysTrue() };
     boolean canDelete = canDeleteWhere(predicates);
     if (canDelete) {
-      deleteWhere(predicates);
+      return Optional.of(deleteWhere(predicates));
     }
-    return canDelete;
+    return Optional.empty();
   }
 }

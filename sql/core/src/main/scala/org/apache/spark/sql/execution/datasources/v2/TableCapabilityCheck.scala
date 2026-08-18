@@ -56,7 +56,7 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
         if !r.table.supports(BATCH_WRITE) || !r.table.supports(OVERWRITE_DYNAMIC) =>
         throw QueryCompilationErrors.unsupportedDynamicOverwriteInBatchModeError(r.table)
 
-      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _, _, _, _) =>
+      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _, _, _, _, _) =>
         expr match {
           case Literal(true, BooleanType) =>
             if (!supportsBatchWrite(r.table) ||
