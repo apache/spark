@@ -59,7 +59,6 @@ case class ListStringCaseClass(l: Seq[String])
 @SlowHiveTest
 class HiveUDFSuite extends QueryTest with TestHiveSingleton {
   import spark.implicits._
-  import testImplicits.castToImpl
 
   import spark.udf
 
@@ -329,6 +328,22 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
       parameters = Map.empty)
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFWildcardList")
+    hiveContext.reset()
+  }
+
+  test("UDFRawSet") {
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.createOrReplaceTempView("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFRawSet " +
+      s"AS '${classOf[UDFRawSet].getName}'")
+    val err = intercept[AnalysisException](sql("SELECT testUDFRawSet(s) FROM inputTable"))
+    checkError(
+      exception = err.getCause.asInstanceOf[AnalysisException],
+      condition = "UNSUPPORTED_HIVE_FUNCTION_TYPE.UNKNOWN_TYPE",
+      parameters = Map("c" -> "interface java.util.Set"))
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawSet")
     hiveContext.reset()
   }
 

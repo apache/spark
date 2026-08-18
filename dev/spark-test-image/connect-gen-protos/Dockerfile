@@ -51,11 +51,11 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Keep these versions in sync with the pinned versions in dev/requirements.txt
-RUN python3.12 -m pip install \
-    'mypy==1.19.1' \
-    'mypy-protobuf==3.3.0' \
-    'ruff==0.14.8'
+COPY --from=root pyproject.toml ./pyproject.toml
+
+RUN python3.12 -m pip install -U pip
+
+RUN python3.12 -m pip install --group ci_lint
 
 # Mount the Spark repo at /spark
 WORKDIR /spark

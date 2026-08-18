@@ -21,7 +21,7 @@ import java.io.PrintStream
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.types._
@@ -111,5 +111,39 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     assert(outputCodegen.contains(s"Result of $inputExpr is 1"))
     assert(outputEval.contains(s"Result of $inputExpr is 1"))
+  }
+
+  test("Hmac") {
+    def bytes(hex: String): Array[Byte] =
+      hex.grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+
+    val key = Literal("key".getBytes("UTF-8"))
+    val message = Literal("message".getBytes("UTF-8"))
+
+    // Default algorithm is SHA-256.
+    checkEvaluation(
+      new Hmac(key, message),
+      bytes("6e9ef29b75fffc5b7abae527d58fdadb2fe42e7219011976917343065f58ed4a"))
+
+    // Explicit algorithm.
+    checkEvaluation(
+      Hmac(key, message, Literal("SHA-1")),
+      bytes("2088df74d5f2146b48146caf4965377e9d0be3a4"))
+
+    // Null propagation.
+    checkEvaluation(Hmac(Literal.create(null, BinaryType), message, Literal("SHA-256")), null)
+    checkEvaluation(Hmac(key, Literal.create(null, BinaryType), Literal("SHA-256")), null)
+    checkEvaluation(Hmac(key, message, Literal.create(null, StringType)), null)
+  }
+
+  test("Hmac unsupported algorithm") {
+    checkErrorInExpression[SparkRuntimeException](
+      Hmac(Literal("key".getBytes("UTF-8")), Literal("message".getBytes("UTF-8")),
+        Literal("SHA-3")),
+      "INVALID_PARAMETER_VALUE.HMAC_ALGORITHM",
+      Map(
+        "parameter" -> "`algorithm`",
+        "functionName" -> "`hmac`",
+        "algorithm" -> "'SHA-3'"))
   }
 }

@@ -438,4 +438,61 @@ class V1WriteCommandSuite extends SharedSparkSession with V1WriteCommandSuiteBas
       }
     }
   }
+
+  test("SPARK-58444: planned write should not enable concurrent writer when ordering " +
+    "already matched") {
+    // The concurrent output writer keeps one open writer per dynamic partition and falls back
+    // to the sort-based sequential writer once the number of open writers reaches
+    // `maxConcurrentOutputFileWriters`. When the input is already sorted by the required
+    // ordering, FileFormatWriter should NOT enable the concurrent writer at all, so that this
+    // wasteful fall-back never happens. This test pins that behavior via the fall-back log.
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.PLANNED_WRITE_ENABLED.key -> "true",
+      SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key -> "2") {
+      withTable("t") {
+        sql("CREATE TABLE t(i INT, k STRING) USING PARQUET PARTITIONED BY (j INT)")
+
+        // t0 has 5 distinct values of `j` (i % 5), which is greater than the
+        // maxConcurrentOutputFileWriters threshold (2), so a single-task concurrent write over
+        // all partitions would trigger the fall-back. Use an int partition column to avoid the
+        // empty2null projection that a string partition column would add.
+        val fallbackMsg = "Fall back from concurrent writers"
+        val loggerName = classOf[DynamicPartitionDataConcurrentWriter].getName
+        val expected = spark.table("t0").select($"i", $"k", $"j")
+
+        // Case 1: input already sorted by the dynamic partition column, collapsed into a single
+        // task. The output ordering matches the required ordering, so the concurrent writer must
+        // be disabled -> no fall-back log.
+        val matchedAppender = new LogAppender("ordering matched, no concurrent writer")
+        withLogAppender(matchedAppender, Seq(loggerName)) {
+          expected.repartition(1).sortWithinPartitions("j")
+            .write.mode("overwrite").insertInto("t")
+        }
+        assert(FileFormatWriter.outputOrderingMatched,
+          "Expected the output ordering to match the required ordering.")
+        assert(!matchedAppender.loggingEvents.exists(
+          _.getMessage.getFormattedMessage.contains(fallbackMsg)),
+          "Concurrent writer should be disabled when ordering already matches, " +
+            "so no fall-back to the sort-based writer should happen.")
+        checkAnswer(spark.table("t"), expected)
+
+        // Case 2 (control): input NOT sorted. Ordering does not match, so the concurrent writer
+        // stays enabled and falls back once open writers exceed the threshold. This proves the
+        // log assertion above is actually discriminating and not vacuously true.
+        val unmatchedAppender = new LogAppender("ordering not matched, concurrent writer")
+        withLogAppender(unmatchedAppender, Seq(loggerName)) {
+          expected.repartition(1)
+            .write.mode("overwrite").insertInto("t")
+        }
+        assert(!FileFormatWriter.outputOrderingMatched,
+          "Expected the output ordering NOT to match the required ordering.")
+        assert(unmatchedAppender.loggingEvents.exists(
+          _.getMessage.getFormattedMessage.contains(fallbackMsg)),
+          "Concurrent writer should fall back to the sort-based writer when ordering " +
+            "does not match.")
+        checkAnswer(spark.table("t"), expected)
+      }
+    }
+  }
 }

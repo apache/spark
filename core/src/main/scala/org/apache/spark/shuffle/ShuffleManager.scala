@@ -28,12 +28,17 @@ import org.apache.spark.util.Utils
  * and on each executor, based on the spark.shuffle.manager setting. The driver registers shuffles
  * with it, and executors (or tasks running locally in the driver) can ask to read and write data.
  *
+ * An implementation declares its kind by extending one of its two subtypes:
+ * [[BlockingShuffleManager]] (output is materialized as block-manager-addressed blocks served
+ * through a [[ShuffleBlockResolver]]) or [[PipelinedShuffleManager]] (output is read incrementally
+ * and served out-of-band).
+ *
  * NOTE:
  * 1. This will be instantiated by SparkEnv so its constructor can take a SparkConf and
  * boolean isDriver as parameters.
- * 2. This contains a method ShuffleBlockResolver which interacts with External Shuffle Service
- * when it is enabled. Need to pay attention to that, if implementing a custom ShuffleManager, to
- * make sure the custom ShuffleManager could co-exist with External Shuffle Service.
+ * 2. A [[BlockingShuffleManager]] exposes a ShuffleBlockResolver which interacts with the External
+ * Shuffle Service when it is enabled. Pay attention to this when implementing a custom shuffle
+ * manager to make sure it can coexist with the External Shuffle Service.
  */
 private[spark] trait ShuffleManager {
 
@@ -86,18 +91,45 @@ private[spark] trait ShuffleManager {
 
   /**
    * Remove a shuffle's metadata from the ShuffleManager.
+   *
+   * Implementations must treat an unknown or already-removed shuffleId as an idempotent no-op --
+   * returning false rather than throwing or mutating unrelated state. The id-only `RemoveShuffle`
+   * cleanup path cannot tell which manager owns a shuffle, so it broadcasts to every configured
+   * manager (see `SparkEnv.unregisterShuffleFromAllManagers`), including ones that never handled
+   * this shuffle.
+   *
    * @return true if the metadata removed successfully, otherwise false.
    */
   def unregisterShuffle(shuffleId: Int): Boolean
 
+  /** Shut down this ShuffleManager. */
+  def stop(): Unit
+}
+
+/**
+ * A [[ShuffleManager]] that materializes shuffle output as addressable blocks served through the
+ * block manager (reads, push-based merge, and decommission migration all go through its
+ * [[ShuffleBlockResolver]]). This is the traditional shuffle model: a consumer stage reads the
+ * producer's output only after it is fully written.
+ * [[org.apache.spark.shuffle.sort.SortShuffleManager]] is the built-in implementation. A manager's
+ * type declares its kind -- match on `BlockingShuffleManager` to reach the resolver rather than
+ * assuming every `ShuffleManager` provides one.
+ */
+private[spark] trait BlockingShuffleManager extends ShuffleManager {
   /**
    * Return a resolver capable of retrieving shuffle block data based on block coordinates.
    */
   def shuffleBlockResolver: ShuffleBlockResolver
-
-  /** Shut down this ShuffleManager. */
-  def stop(): Unit
 }
+
+/**
+ * A [[ShuffleManager]] whose output is read incrementally: a consumer stage may begin reading while
+ * the producer is still running (see [[org.apache.spark.PipelinedShuffleDependency]]). Such a
+ * manager serves its output out-of-band and does not produce block-manager-addressed blocks, so it
+ * has no [[ShuffleBlockResolver]]. [[org.apache.spark.shuffle.streaming.StreamingShuffleManager]]
+ * is the built-in implementation.
+ */
+private[spark] trait PipelinedShuffleManager extends ShuffleManager
 
 /**
  * Utility companion object to create a ShuffleManager given a spark configuration.
@@ -108,12 +140,21 @@ private[spark] object ShuffleManager {
       getShuffleManagerClassName(conf), conf, isDriver)
   }
 
-  def getShuffleManagerClassName(conf: SparkConf): String = {
+  def getShuffleManagerClassName(conf: SparkConf): String =
+    resolveShortName(conf.get(config.SHUFFLE_MANAGER))
+
+  /**
+   * Resolve a short shuffle-manager alias ("sort", "tungsten-sort", "streaming") to its
+   * fully-qualified class name, passing any other value through unchanged. Shared by the default
+   * manager (spark.shuffle.manager) and the incremental manager (spark.shuffle.manager.incremental)
+   * so the same aliases are accepted for both. "streaming" is the default for the incremental slot.
+   */
+  def resolveShortName(shuffleMgrName: String): String = {
     val shortShuffleMgrNames = Map(
       "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
-      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
+      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
+      "streaming" -> classOf[org.apache.spark.shuffle.streaming.StreamingShuffleManager].getName)
 
-    val shuffleMgrName = conf.get(config.SHUFFLE_MANAGER)
     shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
   }
 }

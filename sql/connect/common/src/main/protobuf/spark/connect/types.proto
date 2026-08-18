@@ -143,15 +143,15 @@ message DataType {
 
   // Timestamp without time zone with nanosecond-capable fractional-second precision.
   message TimestampNTZNanos {
-    // Number of fractional-second digits. Valid values are 7, 8, and 9.
-    optional uint32 precision = 1;
+    // Number of fractional-second digits. Valid values are 7, 8, and 9. If omitted, defaults to 9.
+    optional int32 precision = 1;
     uint32 type_variation_reference = 2;
   }
 
   // Timestamp with local time zone with nanosecond-capable fractional-second precision.
   message TimestampLTZNanos {
-    // Number of fractional-second digits. Valid values are 7, 8, and 9.
-    optional uint32 precision = 1;
+    // Number of fractional-second digits. Valid values are 7, 8, and 9. If omitted, defaults to 9.
+    optional int32 precision = 1;
     uint32 type_variation_reference = 2;
   }
 

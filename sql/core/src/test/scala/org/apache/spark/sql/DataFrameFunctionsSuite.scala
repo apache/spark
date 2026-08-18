@@ -664,6 +664,23 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       Row(2743272264L, 2180413220L))
   }
 
+  test("misc xxh3_64 and xxh3_128 function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
+    checkAnswer(
+      df.select(xxh3_64($"a"), xxh3_64($"b")),
+      Row(2615927343983396622L, -4044731995552965649L))
+    checkAnswer(
+      df.select(xxh3_128($"a"), xxh3_128($"b")),
+      Row("9e947f00ecd6acb2244da40f405c870e", "866737830f560dbf3e1f439d2d785f44"))
+
+    checkAnswer(
+      df.selectExpr("xxh3_64(a)", "xxh3_64(b)"),
+      Row(2615927343983396622L, -4044731995552965649L))
+    checkAnswer(
+      df.selectExpr("xxh3_128(a)", "xxh3_128(b)"),
+      Row("9e947f00ecd6acb2244da40f405c870e", "866737830f560dbf3e1f439d2d785f44"))
+  }
+
   test("misc aes function") {
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
     val encryptedEcb = "9J3iZbIxnmaG+OIA9Amd+A=="

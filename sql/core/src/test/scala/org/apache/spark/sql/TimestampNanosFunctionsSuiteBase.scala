@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.time.{Instant, LocalDateTime}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -450,6 +450,49 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  test("SPARK-57814: unix_seconds / unix_millis / unix_micros over nanosecond timestamps") {
+    // unix_* apply no zone shift; sub-microsecond digits are dropped. The nanos result equals the
+    // microsecond-timestamp result for the same instant, and is the same for every precision p.
+    val ntzStr = "2020-01-01T13:24:35.123456789"
+    val ltzStr = "2020-01-01T21:24:35.987654321Z"
+    // NTZ 13:24:35.123456 -> 1577885075123456 micros; LTZ 21:24:35.987654 UTC -> 1577913875987654.
+    val ntzExpected = Row(1577885075L, 1577885075123L, 1577885075123456L)
+    val ltzExpected = Row(1577913875L, 1577913875987L, 1577913875987654L)
+    Seq(7, 8, 9).foreach { p =>
+      val ntz = ntzNanos(ntzStr, p)
+      checkAnswer(
+        ntz.select(unix_seconds(col("c")), unix_millis(col("c")), unix_micros(col("c"))),
+        ntzExpected)
+      checkAnswer(
+        ntz.selectExpr("unix_seconds(c)", "unix_millis(c)", "unix_micros(c)"),
+        ntzExpected)
+      val ltz = ltzNanos(ltzStr, p)
+      checkAnswer(
+        ltz.select(unix_seconds(col("c")), unix_millis(col("c")), unix_micros(col("c"))),
+        ltzExpected)
+      checkAnswer(
+        ltz.selectExpr("unix_seconds(c)", "unix_millis(c)", "unix_micros(c)"),
+        ltzExpected)
+    }
+  }
+
+  test("SPARK-57814: unix_seconds / unix_millis / unix_micros over NULL nanosecond timestamps") {
+    Seq(7, 8, 9).foreach { p =>
+      val ntz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampNTZNanosType(p)))
+      val ltz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampLTZNanosType(p)))
+      checkAnswer(
+        ntz.select(unix_seconds(col("c")), unix_millis(col("c")), unix_micros(col("c"))),
+        Row(null, null, null))
+      checkAnswer(
+        ltz.select(unix_seconds(col("c")), unix_millis(col("c")), unix_micros(col("c"))),
+        Row(null, null, null))
+    }
+  }
+
   // ===== max_by / min_by over nanosecond-precision timestamps (SPARK-56822) =====
   // `MaxBy`/`MinBy` gate only on the ordering expression's orderability
   // (`MaxMinBy.checkInputDataTypes` -> `TypeUtils.checkForOrderingExpr`), which the nanosecond
@@ -664,6 +707,267 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
           )
         )
       }
+    }
+  }
+
+  // mode over nanosecond-precision timestamps (SPARK-56822). `Mode` counts frequencies in an
+  // `OpenHashMap` keyed on the physical `TimestampNanosVal` (its `equals`/`hashCode` cover the full
+  // `(epochMicros, nanosWithinMicro)` pair) and returns `child.dataType`, so the most-frequent
+  // value is selected on the full nanos value and its precision and family (NTZ/LTZ) are preserved.
+
+  test("SPARK-56822: mode over nanosecond-precision timestamps returns the most frequent value") {
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p))
+        .add("ltz", TimestampLTZNanosType(p))
+      // The frequent value (3 rows) and the rare one (1 row) differ only within the microsecond, so
+      // frequency counting must key on the full nanos value; a NULL row is ignored. The fractions
+      // are multiples of 100ns, exact at every p in [7, 9]. There is a unique most-frequent value,
+      // so the result is deterministic without a WITHIN GROUP / deterministic argument.
+      val ldtHot = LocalDateTime.parse("2020-01-01T00:00:00.000000100")
+      val ldtCold = LocalDateTime.parse("2020-01-01T00:00:00.000000900")
+      val insHot = Instant.parse("2020-01-01T00:00:00.000000100Z")
+      val insCold = Instant.parse("2020-01-01T00:00:00.000000900Z")
+      val data = Seq(
+        Row(ldtHot, insHot), Row(ldtHot, insHot), Row(ldtHot, insHot),
+        Row(ldtCold, insCold), Row(null, null))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+      val res = df.selectExpr("mode(ntz)", "mode(ltz)")
+      // The result keeps the family (NTZ/LTZ) and precision of the input.
+      assert(res.schema.map(_.dataType) === Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p)))
+      checkAnswer(res, Row(ldtHot, insHot))
+    }
+  }
+
+  // collect_set over nanosecond-precision timestamps (SPARK-56822). `CollectSet` deduplicates via a
+  // `HashSet` keyed on the physical `TimestampNanosVal`, whose `equals`/`hashCode` cover the full
+  // `(epochMicros, nanosWithinMicro)` pair, so sub-microsecond-distinct values are kept distinct;
+  // the result element type is exactly `child.dataType`.
+
+  test("SPARK-56822: collect_set over nanos deduplicates on the full sub-microsecond value") {
+    // Two values share the microsecond and differ only in the last nanosecond digit. Flooring the
+    // input to precision `p` collapses them when p < 9 (the distinguishing digit is below the
+    // grid), but keeps them apart at p = 9. collect_set must dedup on the full stored value,
+    // not on micros.
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType().add("ntz", TimestampNTZNanosType(p))
+      val data = Seq(
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.123456780")),
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.123456789")),
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.123456780")))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+      val res = df.selectExpr("collect_set(ntz)")
+      assert(res.schema.head.dataType === ArrayType(TimestampNTZNanosType(p), containsNull = false))
+
+      // Values are floored to `p` on ingestion, so the distinct set depends on `p`.
+      val expected = p match {
+        case 7 => Set(LocalDateTime.parse("2020-01-01T12:34:56.123456700"))
+        case 8 => Set(LocalDateTime.parse("2020-01-01T12:34:56.123456780"))
+        case _ => Set(
+          LocalDateTime.parse("2020-01-01T12:34:56.123456780"),
+          LocalDateTime.parse("2020-01-01T12:34:56.123456789"))
+      }
+      val collected = res.collect().head.getSeq[LocalDateTime](0).toSet
+      assert(collected === expected, s"collect_set(p=$p) expected $expected, got $collected")
+    }
+  }
+
+  test("SPARK-57816: date_format / to_char / to_varchar over nanosecond-precision timestamps") {
+    // The 9-`S` pattern is a fixed-width fraction field, so it always emits 9 digits; truncating to
+    // precision `p` zeros the low digits (floor); it does not drop them. The session zone is
+    // America/Los_Angeles: TIMESTAMP_NTZ renders its wall clock zone-independently, while the
+    // TIMESTAMP_LTZ instant (21:24:35 UTC) shifts to 13:24:35 in the session zone (UTC-8 in Jan).
+    val fmt = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS"
+    val ntzStr = "2020-01-01T13:24:35.123456789"
+    val ltzStr = "2020-01-01T21:24:35.987654321Z"
+    Seq(
+      9 -> ("2020-01-01 13:24:35.123456789", "2020-01-01 13:24:35.987654321"),
+      8 -> ("2020-01-01 13:24:35.123456780", "2020-01-01 13:24:35.987654320"),
+      7 -> ("2020-01-01 13:24:35.123456700", "2020-01-01 13:24:35.987654300")
+    ).foreach { case (p, (ntzExpected, ltzExpected)) =>
+      val ntz = ntzNanos(ntzStr, p)
+      // SQL path: date_format, to_char, to_varchar all render sub-microsecond digits.
+      checkAnswer(
+        ntz.selectExpr(
+          s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')"),
+        Row(ntzExpected, ntzExpected, ntzExpected))
+      // Column API agrees with the SQL path.
+      checkAnswer(
+        ntz.select(date_format(col("c"), fmt), to_char(col("c"), lit(fmt)),
+          to_varchar(col("c"), lit(fmt))),
+        Row(ntzExpected, ntzExpected, ntzExpected))
+
+      val ltz = ltzNanos(ltzStr, p)
+      checkAnswer(
+        ltz.selectExpr(
+          s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')"),
+        Row(ltzExpected, ltzExpected, ltzExpected))
+      checkAnswer(
+        ltz.select(date_format(col("c"), fmt), to_char(col("c"), lit(fmt)),
+          to_varchar(col("c"), lit(fmt))),
+        Row(ltzExpected, ltzExpected, ltzExpected))
+    }
+
+    // NULL nanosecond input renders NULL for all three functions.
+    Seq(7, 8, 9).foreach { p =>
+      val ntzNull = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampNTZNanosType(p)))
+      val ltzNull = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampLTZNanosType(p)))
+      checkAnswer(
+        ntzNull.selectExpr(
+          s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')"),
+        Row(null, null, null))
+      checkAnswer(
+        ltzNull.selectExpr(
+          s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')"),
+        Row(null, null, null))
+    }
+  }
+
+  test("SPARK-57816: date_format / to_char / to_varchar over nanos reject the LEGACY " +
+    "time parser policy") {
+    // date_format never sets forTimestampNTZ, so under LEGACY it builds a legacy formatter for
+    // both NTZ and LTZ nanos, whose nanos format methods raise
+    // TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER (a micros value would format fine). Mirrors the
+    // JSON-path LEGACY coverage (SPARK-57456) at the expression level.
+    def rootNanosError(e: Throwable): SparkUnsupportedOperationException = {
+      var cause = e
+      while (cause != null && !cause.isInstanceOf[SparkUnsupportedOperationException]) {
+        cause = cause.getCause
+      }
+      assert(cause != null, s"Expected TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER, but got: $e")
+      cause.asInstanceOf[SparkUnsupportedOperationException]
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      val fmt = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS"
+      val expectedParameters =
+        Map("config" -> ("\"" + SQLConf.LEGACY_TIME_PARSER_POLICY.key + "\""))
+      val dfs = Seq(
+        ntzNanos("2020-01-01T13:24:35.123456789", 9),
+        ltzNanos("2020-01-01T21:24:35.987654321Z", 9))
+      dfs.foreach { df =>
+        Seq(s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')")
+          .foreach { expr =>
+            checkError(
+              exception = rootNanosError(intercept[Exception] {
+                df.selectExpr(expr).collect()
+              }),
+              condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+              parameters = expectedParameters)
+          }
+      }
+    }
+  }
+
+  test("SPARK-57816: date_format / to_char / to_varchar over NTZ nanos reject a zone-token " +
+    "pattern with a clean error") {
+    // A zone token (`z`, `Z`, `X`, `O`, `VV`) has no meaning for the zone-less TIMESTAMP_NTZ wall
+    // clock, so rendering raises java.time.DateTimeException underneath. date_format maps it to a
+    // clean INVALID_PARAMETER_VALUE.PATTERN Spark error rather than leaking the raw java.time
+    // exception. LTZ is zone-aware, so the same pattern renders the session zone instead of
+    // erroring - hence this is NTZ-only.
+    val ntz = ntzNanos("2020-01-01T13:24:35.123456789", 9)
+    Seq("z", "Z", "X", "O", "VV").foreach { zoneToken =>
+      val fmt = s"yyyy-MM-dd HH:mm:ss $zoneToken"
+      Seq(s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')")
+        .foreach { expr =>
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              ntz.selectExpr(expr).collect()
+            },
+            condition = "INVALID_PARAMETER_VALUE.PATTERN",
+            parameters = Map(
+              "parameter" -> "`format`",
+              "functionName" -> "`date_format`",
+              "value" -> s"'$fmt'"))
+        }
+    }
+  }
+
+  test("SPARK-57837: current_timestamp(p) / now(p) return TIMESTAMP_LTZ(p)") {
+    val df = spark.range(1)
+    Seq("current_timestamp", "now").foreach { fn =>
+      Seq(7, 8, 9).foreach { p =>
+        val schema = df.selectExpr(s"$fn($p) AS c").schema
+        assert(schema.head.dataType === TimestampLTZNanosType(p),
+          s"$fn($p) should be TIMESTAMP_LTZ($p)")
+      }
+      // Precision 6 and the no-arg form keep the micro TIMESTAMP type.
+      assert(df.selectExpr(s"$fn(6) AS c").schema.head.dataType === TimestampType)
+      assert(df.selectExpr(s"$fn() AS c").schema.head.dataType === TimestampType)
+    }
+  }
+
+  test("SPARK-57837: localtimestamp(p) returns TIMESTAMP_NTZ(p)") {
+    val df = spark.range(1)
+    Seq(7, 8, 9).foreach { p =>
+      val schema = df.selectExpr(s"localtimestamp($p) AS c").schema
+      assert(schema.head.dataType === TimestampNTZNanosType(p),
+        s"localtimestamp($p) should be TIMESTAMP_NTZ($p)")
+    }
+    assert(df.selectExpr("localtimestamp(6) AS c").schema.head.dataType === TimestampNTZType)
+    assert(df.selectExpr("localtimestamp() AS c").schema.head.dataType === TimestampNTZType)
+  }
+
+  test("SPARK-57837: nanos current-timestamp values are query-stable and floored to precision") {
+    val df = spark.range(1)
+    // All references within a query see the same value.
+    checkAnswer(
+      df.selectExpr(
+        "current_timestamp(9) = current_timestamp(9)",
+        "now(9) = current_timestamp(9)",
+        "localtimestamp(9) = localtimestamp(9)"),
+      Row(true, true, true))
+
+    // Sub-precision digits are floored: the extracted DECIMAL(11, 9) second has zeros below `p`.
+    Seq(7, 8, 9).foreach { p =>
+      val secExpr = s"extract(SECOND FROM current_timestamp($p))"
+      val secondDecimal = df.selectExpr(secExpr).head().getDecimal(0)
+      val scaled = secondDecimal.movePointRight(9).longValueExact()
+      val step = math.pow(10, 9 - p).toLong
+      assert(scaled % step == 0,
+        s"extract(SECOND) of current_timestamp($p) = $secondDecimal not floored to precision $p")
+    }
+  }
+
+  test("SPARK-57837: current_timestamp(p) / localtimestamp(p) reject out-of-range precision") {
+    val df = spark.range(1)
+    Seq(
+      "current_timestamp(3)" -> "TIMESTAMP_LTZ",
+      "now(3)" -> "TIMESTAMP_LTZ",
+      "localtimestamp(10)" -> "TIMESTAMP_NTZ").foreach { case (expr, typeName) =>
+      val precision = expr.replaceAll("\\D", "")
+      checkError(
+        exception = intercept[SparkException] {
+          df.selectExpr(expr).collect()
+        },
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> precision, "type" -> typeName))
+    }
+  }
+
+  test("SPARK-57837: current_timestamp(p) / localtimestamp(p) require the nanos preview flag") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      val df = spark.range(1)
+      Seq("current_timestamp(9)", "now(8)", "localtimestamp(7)").foreach { expr =>
+        checkError(
+          exception = intercept[SparkException] {
+            df.selectExpr(expr).collect()
+          },
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"))
+      }
+      // With the flag off, precision 6 and the no-arg forms still work (micro types).
+      assert(df.selectExpr("current_timestamp(6) AS c").schema.head.dataType === TimestampType)
+      assert(df.selectExpr("localtimestamp() AS c").schema.head.dataType === TimestampNTZType)
     }
   }
 }

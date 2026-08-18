@@ -428,7 +428,7 @@ object ParquetUtils extends Logging {
           "filePath" -> filePath,
           "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
     }
-    statistics.getNumNulls;
+    statistics.getNumNulls
   }
 
   // Replaces each VariantType in the schema with the corresponding type in the shredding schema.

@@ -45,9 +45,15 @@ class ExpressionEvalHelperSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("SPARK-33619: make sure checkExceptionInExpression work as expected") {
+    // Assert on the unresolved type name rather than a compiler-specific phrasing: the
+    // codegen path's message depends on the configured compiler backend (Janino reports
+    // `Cannot determine simple type name "NoSuchElementException"`, the JDK compiler
+    // reports `cannot find symbol ... class NoSuchElementException`), while the
+    // non-codegen path throws the message defined in BadCodegenAndEvalExpression.eval.
+    // The type name is the common, meaningful token across all paths.
     checkExceptionInExpression[Exception](
       BadCodegenAndEvalExpression(),
-      "Cannot determine simple type name \"NoSuchElementException\"")
+      "NoSuchElementException")
   }
 }
 

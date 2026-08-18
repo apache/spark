@@ -27,7 +27,7 @@ import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
@@ -38,7 +38,7 @@ import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.{ArchiveReader, DataSourceUtils, OutputWriterFactory}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, OutputWriterFactory, SupportsArchiveFormat}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -91,13 +91,14 @@ private[sql] object AvroUtils extends Logging {
         // (streamed, never unpacked to disk), then any loose files. Avro has no DSv2 reader and
         // does not merge schemas, so this is V1-only and uses the first readable writer schema.
         val (archives, nonArchives) = if (fileSourceOptions.archiveFormatEnabled) {
-          files.partition(f => ArchiveReader.isArchivePath(f.getPath))
+          files.partition(f => SupportsArchiveFormat.isArchivePath(f.getPath))
         } else {
           (Seq.empty[FileStatus], files)
         }
         if (archives.nonEmpty) {
           inferAvroSchemaFromArchives(archives, nonArchives, conf, parsedOptions.ignoreExtension,
-            fileSourceOptions.ignoreCorruptFiles, fileSourceOptions.ignoreMissingFiles)
+            fileSourceOptions.ignoreCorruptFiles, fileSourceOptions.ignoreMissingFiles,
+            fileSourceOptions.archivePathFilterPattern)
         } else {
           inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
             fileSourceOptions.ignoreCorruptFiles)
@@ -250,10 +251,12 @@ private[sql] object AvroUtils extends Logging {
       conf: Configuration,
       ignoreExtension: Boolean,
       ignoreCorruptFiles: Boolean,
-      ignoreMissingFiles: Boolean): Schema = {
+      ignoreMissingFiles: Boolean,
+      archivePathFilter: Option[GlobPattern]): Schema = {
     archives.iterator
       .flatMap { f =>
-        firstArchiveEntrySchema(f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+        firstArchiveEntrySchema(
+          f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles, archivePathFilter)
       }
       .nextOption()
       .getOrElse {
@@ -274,11 +277,13 @@ private[sql] object AvroUtils extends Logging {
       path: Path,
       conf: Configuration,
       ignoreCorruptFiles: Boolean,
-      ignoreMissingFiles: Boolean): Option[Schema] = {
+      ignoreMissingFiles: Boolean,
+      archivePathFilter: Option[GlobPattern]): Option[Schema] = {
     try {
-      // `readEntries` returns a Closeable iterator; take the first entry's schema and close it so
-      // the archive stream is released without draining the remaining entries.
-      val entries = ArchiveReader(path).readEntries(conf) { (_, in) =>
+      // `readArchiveEntries` returns a Closeable iterator; take the first entry's schema and close
+      // it so the archive stream is released without draining the remaining entries.
+      val entries = SupportsArchiveFormat.readArchiveEntries(
+          path, conf, archivePathFilter = archivePathFilter) { (_, in) =>
         val stream = new DataFileStream[GenericRecord](in, new GenericDatumReader[GenericRecord]())
         try {
           Iterator.single(stream.getSchema)

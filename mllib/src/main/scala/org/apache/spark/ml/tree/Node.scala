@@ -77,9 +77,6 @@ sealed abstract class Node extends Serializable {
    * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
    */
   private[ml] def maxSplitFeatureIndex(): Int
-
-  /** Returns a deep copy of the subtree rooted at this node. */
-  private[tree] def deepCopy(): Node
 }
 
 private[ml] object Node {
@@ -146,10 +143,6 @@ class LeafNode private[ml] (
   }
 
   override private[ml] def maxSplitFeatureIndex(): Int = -1
-
-  override private[tree] def deepCopy(): Node = {
-    new LeafNode(prediction, impurity, impurityStats)
-  }
 }
 
 /**
@@ -237,11 +230,6 @@ class InternalNode private[ml] (
   override private[ml] def maxSplitFeatureIndex(): Int = {
     math.max(split.featureIndex,
       math.max(leftChild.maxSplitFeatureIndex(), rightChild.maxSplitFeatureIndex()))
-  }
-
-  override private[tree] def deepCopy(): Node = {
-    new InternalNode(prediction, impurity, gain, leftChild.deepCopy(), rightChild.deepCopy(),
-      split, impurityStats)
   }
 }
 
@@ -394,53 +382,12 @@ private[tree] object LearningNode {
   def rightChildIndex(nodeIndex: Int): Int = (nodeIndex << 1) + 1
 
   /**
-   * Get the parent index of the given node, or 0 if it is the root.
-   */
-  def parentIndex(nodeIndex: Int): Int = nodeIndex >> 1
-
-  /**
    * Return the level of a tree which the given node is in.
    */
   def indexToLevel(nodeIndex: Int): Int = if (nodeIndex == 0) {
     throw new IllegalArgumentException(s"0 is not a valid node index.")
   } else {
     java.lang.Integer.numberOfTrailingZeros(java.lang.Integer.highestOneBit(nodeIndex))
-  }
-
-  /**
-   * Returns true if this is a left child.
-   * Note: Returns false for the root.
-   */
-  def isLeftChild(nodeIndex: Int): Boolean = nodeIndex > 1 && nodeIndex % 2 == 0
-
-  /**
-   * Return the maximum number of nodes which can be in the given level of the tree.
-   * @param level  Level of tree (0 = root).
-   */
-  def maxNodesInLevel(level: Int): Int = 1 << level
-
-  /**
-   * Return the index of the first node in the given level.
-   * @param level  Level of tree (0 = root).
-   */
-  def startIndexInLevel(level: Int): Int = 1 << level
-
-  /**
-   * Traces down from a root node to get the node with the given node index.
-   * This assumes the node exists.
-   */
-  def getNode(nodeIndex: Int, rootNode: LearningNode): LearningNode = {
-    var tmpNode: LearningNode = rootNode
-    var levelsToGo = indexToLevel(nodeIndex)
-    while (levelsToGo > 0) {
-      if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
-        tmpNode = tmpNode.leftChild.get
-      } else {
-        tmpNode = tmpNode.rightChild.get
-      }
-      levelsToGo -= 1
-    }
-    tmpNode
   }
 
 }

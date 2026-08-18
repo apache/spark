@@ -3110,6 +3110,54 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 5
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "5",
+    "size" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 52,
+    "fragment" : "5"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "0",
+    "size" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 52,
+    "fragment" : "0"
+  } ]
+}
+
+
+-- !query
 table courseSales
 |> aggregate sum(earnings) group by rollup(course, `year`)
 |> where course = 'dotNET' and `year` = '2013'

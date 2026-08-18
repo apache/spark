@@ -138,7 +138,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |    '${
                       e.removeReason.map { reason =>
                         s"""<br>Reason: ${StringEscapeUtils.escapeEcmaScript(
-                          reason.replace("\n", " "))}"""
+                          Utility.escape(Utility.escape(reason.replace("\n", " "))))}"""
                       }.getOrElse("")
                    }"' +
              |    'data-bs-html="true">Executor ${e.id} removed</div>'

@@ -240,6 +240,13 @@ case class MaxMinByK(
     maximum values of `y`, sorted in descending order by `y`.
     Returns NULL if there are no non-NULL ordering values.
   """,
+  arguments = """
+    Arguments:
+      * x - The value expression to return.
+      * y - The ordering expression whose maximum selects the value of `x`.
+      * k - An optional positive integer. When present, returns an array of the `k` values
+          of `x` associated with the largest values of `y`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
@@ -274,6 +281,13 @@ object MaxByBuilder extends ExpressionBuilder {
     _FUNC_(x, y, k) - Returns an array of the `k` values of `x` associated with the
     minimum values of `y`, sorted in ascending order by `y`.
     Returns NULL if there are no non-NULL ordering values.
+  """,
+  arguments = """
+    Arguments:
+      * x - The value expression to return.
+      * y - The ordering expression whose minimum selects the value of `x`.
+      * k - An optional positive integer. When present, returns an array of the `k` values
+          of `x` associated with the smallest values of `y`.
   """,
   examples = """
     Examples:
