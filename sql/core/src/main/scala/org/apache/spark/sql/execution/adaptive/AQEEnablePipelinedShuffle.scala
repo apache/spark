@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
@@ -64,6 +66,15 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
     // Single-executor only, like v1's AQE rule: the validated transport (the in-process
     // channel manager) requires producer and consumer in one JVM.
     if (plan.session == null || !plan.session.sparkContext.isLocal) return plan
+    // The SQL flag alone does not pick a transport: the pipelined manager is set separately by
+    // spark.shuffle.manager.incremental and defaults to the RPC StreamingShuffleManager. Only the
+    // in-process channel manager is validated here; require it, else leave the plan regular (same
+    // reasoning as the non-AQE EnablePipelinedShuffle rule).
+    if (!SparkEnv.get.pipelinedShuffleManager.isInstanceOf[PipelinedChannelShuffleManager]) {
+      logDebug("AQEEnablePipelinedShuffle: spark.sql.pipelinedShuffle.enabled is on but the " +
+        "incremental shuffle manager is not the in-process channel manager; leaving regular.")
+      return plan
+    }
 
     val shared = if (conf.exchangeReuseEnabled) duplicatedShuffleForms(plan) else Set.empty[Any]
     val toFlip = mutable.HashSet.empty[ShuffleExchangeExec]
@@ -158,6 +169,14 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
   /**
    * Canonicalized forms of shuffle exchanges occurring more than once across the plan,
    * materialized stages, and subquery plans -- flipping one of these loses stage reuse.
+   *
+   * Note: `ShuffleExchangeExec.pipelined` is a plain case-class field with no doCanonicalize
+   * override, so it PARTICIPATES in the canonical form. An already-flipped (pipelined = true)
+   * exchange and a structurally identical unflipped twin therefore canonicalize DIFFERENTLY and
+   * would not be paired here. That is fine: this rule only ever runs before any flip in a given
+   * replanning round, and reuse-twins are collapsed by ReuseExchangeAndSubquery /
+   * ShuffleQueryStageExec earlier, so the counts compared here are always over pre-flip
+   * (pipelined = false) forms.
    */
   private def duplicatedShuffleForms(plan: SparkPlan): Set[Any] = {
     val counts = mutable.HashMap.empty[Any, Int]

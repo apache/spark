@@ -174,6 +174,17 @@ private[spark] class ChannelShuffleWriter[K, V](
  *
  * `numMaps` is the number of map tasks feeding this shuffle; the reader stops after it has
  * observed that many [[ChannelShuffleRendezvous.EndOfStream]] markers on its queue.
+ *
+ * ONE reduce partition per reader task ONLY: `endPartition - startPartition` must be 1. The
+ * channel transport cannot serve a coalesced multi-partition range. The reader would have to
+ * drain the range's queues in some order, but the map-side writer interleaves all partitions
+ * on ONE thread and blocks on a full bounded queue; if the reader drains partition `start` to
+ * completion before touching `start+1` while the writer has parked filling `start+1`, the two
+ * deadlock with no timeout escape. Spark never sends a coalesced spec here today -- AQE keeps a
+ * pipelined exchange out of any ShuffleQueryStage, so CoalesceShufflePartitions never coalesces
+ * it, and both the AQE and non-AQE readers use width-1 CoalescedPartitionSpec(i, i+1). The
+ * `require` below makes that a hard, fail-loud invariant rather than a silent hang if a future
+ * change ever lets a coalesced spec reach a pipelined dependency.
  */
 private[spark] class ChannelShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
@@ -183,16 +194,14 @@ private[spark] class ChannelShuffleReader[K, C](
     readMetrics: ShuffleReadMetricsReporter)
   extends ShuffleReader[K, C] {
 
-  // A reduce task may be asked to read a RANGE of reduce partitions in one go, not just one:
-  // ShuffledRowRDD's CoalescedPartitionSpec(start, end) collapses several reduce partitions
-  // into a single reader task. Drain every queue in [startPartition, endPartition); each
-  // carries numMaps EndOfStream markers (the writer puts one per map task on every partition
-  // queue), so each queue is drained independently to completion.
-  //
-  // On task completion (normal end, early stop like LIMIT, or failure) mark every partition
-  // this reader owned as abandoned, so a writer still feeding them stops and does not wedge
-  // on their bounded queues. Registered once here; fires whether or not the iterator was
-  // drained to the end.
+  require(endPartition - startPartition == 1,
+    s"ChannelShuffleReader supports exactly one reduce partition per task, got " +
+      s"[$startPartition, $endPartition); the in-process channel transport does not support " +
+      "coalesced multi-partition reads (see class doc).")
+
+  // On task completion (normal end, early stop like LIMIT, or failure) mark this reader's
+  // partition as abandoned, so a writer still feeding it stops and does not wedge on its bounded
+  // queue. Registered once here; fires whether or not the iterator was drained to the end.
   Option(TaskContext.get()).foreach { tc =>
     tc.addTaskCompletionListener[Unit] { _ =>
       var p = startPartition

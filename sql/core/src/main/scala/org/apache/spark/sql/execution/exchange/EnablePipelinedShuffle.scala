@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -49,6 +51,20 @@ case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
     // not local-only -- the RPC streaming transport is cross-executor -- but batch queries
     // over it are unexplored territory, so the rule stays conservative.)
     if (plan.session == null || !plan.session.sparkContext.isLocal) return plan
+
+    // The SQL flag alone does not pick a transport: the pipelined manager is set separately by
+    // spark.shuffle.manager.incremental, and DEFAULTS to the RPC StreamingShuffleManager. Only
+    // the in-process channel manager is validated for batch queries in local mode; flipping to
+    // pipelined while the incremental manager is still the RPC streaming one would route these
+    // exchanges to an untested transport (and, because that manager reports
+    // requiresDetachedRecords = false, also skip the row copy). So require the channel manager
+    // to be active; otherwise leave the plan regular, mirroring the reuse fallback below.
+    if (!SparkEnv.get.pipelinedShuffleManager.isInstanceOf[PipelinedChannelShuffleManager]) {
+      logDebug("EnablePipelinedShuffle: spark.sql.pipelinedShuffle.enabled is on but the " +
+        "incremental shuffle manager is not the in-process channel manager " +
+        "(spark.shuffle.manager.incremental); leaving the plan regular.")
+      return plan
+    }
 
     val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
     if (shuffles.isEmpty) return plan

@@ -1188,6 +1188,14 @@ private[spark] class DAGScheduler(
       // Materialized means every MAP partition has a registered output: the tracker counts map
       // outputs, so compare against the producer RDD's partition count (matching how
       // ShuffleMapStage.isAvailable derives completeness), not the reducer-side partitioner.
+      // This is a point-in-time check at job submission. If a materialized prefix's output were
+      // LOST after this classification but before the pipelined suffix finished (executor loss),
+      // the prefix would need to re-run while the gang holds all slots -- the very deadlock this
+      // shape check forbids. That is safe here for two reasons: (1) the only supported deployment
+      // is single-executor local mode, where executor loss does not occur in normal operation;
+      // and (2) if a FetchFailed did strip the prefix, handleTaskCompletion routes it to a
+      // WHOLE-GROUP abort (the failing stage is a pipelined group member), not a lone-stage
+      // resubmit into the held slots -- the job reruns from scratch rather than deadlocking.
       if (mapOutputTracker.getNumAvailableOutputs(sd.shuffleId) != sd.rdd.partitions.length) {
         hasUnmaterialized = true
       }
