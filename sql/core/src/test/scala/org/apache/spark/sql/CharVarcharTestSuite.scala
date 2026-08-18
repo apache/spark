@@ -1160,12 +1160,12 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
-  // Every registered function that may return a CHAR(n)/VARCHAR(n) when handed one. These are the
-  // pass-through and container cases R2/R3 require to keep the type: aggregates and ordering
-  // functions that return one of their inputs unchanged, the null-handling family, element access,
-  // and the array/map/struct constructors along with the collection functions that rearrange
-  // elements without rewriting them. Anything not listed here must reduce to plain STRING (R1), so
-  // a newly added expression that leaks a length constraint fails this test rather than shipping.
+  // Allowlist for the inventory below: R2/R3 pass-through and container cases that may keep
+  // CHAR(n)/VARCHAR(n) — aggregates/ordering that return an input unchanged, null-handling,
+  // element access, array/map/struct constructors, and collection rearrangements that keep
+  // element types. Coverage is limited to the seven fixed argumentShapes templates in the test;
+  // a leak only at another arity or nested shape would not fail here. For those shapes,
+  // anything not listed must reduce to plain STRING (R1).
   private val charVarcharPassThroughFunctions = Set(
     "any_value", "approx_top_k", "approx_top_k_accumulate", "array", "array_agg", "array_compact",
     "array_distinct", "array_max", "array_min", "array_repeat", "array_sort", "arrays_zip",
@@ -1174,7 +1174,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     "least", "map", "max", "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif",
     "nullifzero", "nvl", "reverse", "shuffle", "sort_array", "struct", "when")
 
-  test("SPARK-58794: no unlisted function returns a CHAR/VARCHAR type under standardSemantics") {
+  test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
     val argumentShapes = Seq(
       "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
       "%s(array(c), '-')")
@@ -1194,8 +1194,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           }
 
         assert(leaks.isEmpty,
-          "these calls returned a CHAR/VARCHAR type; either fix the expression to return plain " +
-            s"STRING or add it to charVarcharPassThroughFunctions: ${leaks.mkString(", ")}")
+          "these inventoried calls returned a CHAR/VARCHAR type; either fix the expression to " +
+            "return plain STRING or add it to charVarcharPassThroughFunctions: " +
+            leaks.mkString(", "))
       }
     }
   }
