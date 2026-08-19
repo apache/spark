@@ -7348,12 +7348,28 @@ object SQLConf {
     .createWithDefault(false)
 
   val PRESERVE_CHAR_VARCHAR_TYPE_INFO = buildConf("spark.sql.preserveCharVarcharTypeInfo")
-    .doc("When true, Spark does not replace CHAR/VARCHAR types the STRING type, which is the " +
-      "default behavior of Spark 3.0 and earlier versions. This means the length checks for " +
-      "CHAR/VARCHAR types is enforced and CHAR type is also properly padded.")
+    .doc("When true, Spark does not replace CHAR/VARCHAR with STRING in schemas and plans. " +
+      "This is the Spark 4.0 experimental path: types can leak through transforming string " +
+      "functions via child.dataType. Prefer spark.sql.charVarchar.standardSemantics.enabled " +
+      "for SQL standard CHAR/VARCHAR behavior (CAST/LCT/STRING-returning transforms).")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
+
+  val CHAR_VARCHAR_STANDARD_SEMANTICS =
+    buildConf("spark.sql.charVarchar.standardSemantics.enabled")
+      .doc("When true, enable SQL standard CHAR/VARCHAR semantics: first-class types in " +
+        "schemas and CAST targets; least-common-type for COALESCE/CASE/UNION may return " +
+        "CHAR/VARCHAR; transforming string functions and operators return plain STRING. " +
+        "This is a breaking change from the annotated-STRING default and from " +
+        "preserveCharVarcharTypeInfo (which keeps Char/Varchar through transforms).")
+      .version("4.4.0")
+      // PERSISTED, like ANSI mode: the flag decides the types a view body resolves to, so a view
+      // created under standard semantics must keep computing CHAR/VARCHAR regardless of the
+      // caller's session setting.
+      .withBindingPolicy(ConfigBindingPolicy.PERSISTED)
+      .booleanConf
+      .createWithDefault(false)
 
   val READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS =
     buildConf("spark.sql.legacy.readFileSourceTableCacheIgnoreOptions")
@@ -7368,7 +7384,9 @@ object SQLConf {
   val READ_SIDE_CHAR_PADDING = buildConf("spark.sql.readSideCharPadding")
     .doc("When true, Spark applies string padding when reading CHAR type columns/fields, " +
       "in addition to the write-side padding. This config is true by default to better enforce " +
-      "CHAR type semantic in cases such as external tables.")
+      "CHAR type semantic in cases such as external tables. When " +
+      s"'${CHAR_VARCHAR_STANDARD_SEMANTICS.key}' is true, this config is ignored: read-side " +
+      "CHAR/VARCHAR checks are always applied, and setting it to false logs a warning.")
     .version("3.4.0")
     .booleanConf
     .createWithDefault(true)
@@ -9625,6 +9643,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
 
   def preserveCharVarcharTypeInfo: Boolean = getConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
+
+  def charVarcharStandardSemantics: Boolean = getConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS)
 
   def avoidDoubleFilterEval: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
 

@@ -143,7 +143,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       allowTemp: Boolean,
       columns: Seq[ColumnDefinition]): ResolvedIdentifier = {
     val columnOutput = columns.map { col =>
-      val dataType = if (conf.preserveCharVarcharTypeInfo) {
+      val dataType = if (conf.charVarcharFirstClassTypes) {
         col.dataType
       } else {
         replaceCharVarcharWithString(col.dataType)
