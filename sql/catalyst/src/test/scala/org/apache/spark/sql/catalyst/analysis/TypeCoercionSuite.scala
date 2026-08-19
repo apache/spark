@@ -354,6 +354,13 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))))
     }
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(rule,
+        Concat(Seq(charLit, charLit)),
+        Concat(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+    }
   }
 
   test("type coercion for Elt") {
@@ -1083,6 +1090,13 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     ruleTest(TypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        Upper(charLit),
+        Upper(Cast(charLit, StringType)))
+    }
   }
 
   test("cast NullType for binary operators") {
