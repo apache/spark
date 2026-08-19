@@ -30,6 +30,7 @@ import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
