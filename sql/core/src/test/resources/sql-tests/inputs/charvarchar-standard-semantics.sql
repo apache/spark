@@ -182,6 +182,30 @@ SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)), cast('b' AS VARCHAR(3)));
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) = cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE);
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) IN (cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE));
 
+-- CHAR/VARCHAR vs non-string follow STRING: compare promotes the string side to the other
+-- atomic type; COALESCE uses the same STRING promotion (including vs BOOLEAN).
+SELECT typeof(coalesce(cast('123' AS CHAR(3)), 1)),
+       typeof(coalesce(cast('123' AS VARCHAR(3)), 1)),
+       typeof(coalesce(cast('123' AS STRING), 1));
+SELECT coalesce(cast('123' AS CHAR(3)), 1),
+       coalesce(cast('123' AS VARCHAR(3)), 1),
+       coalesce(cast('123' AS STRING), 1);
+SELECT cast('123' AS CHAR(3)) = 123,
+       cast('123' AS VARCHAR(3)) = 123,
+       cast('123' AS STRING) = 123;
+SELECT typeof(coalesce(cast('1.5' AS CHAR(3)), 1.5)),
+       typeof(coalesce(cast('1.5' AS VARCHAR(3)), 1.5)),
+       typeof(coalesce(cast('1.5' AS STRING), 1.5));
+SELECT cast('2020-01-02' AS CHAR(10)) = date'2020-01-02',
+       cast('2020-01-02' AS VARCHAR(10)) = date'2020-01-02',
+       cast('2020-01-02' AS STRING) = date'2020-01-02';
+SELECT cast('true' AS CHAR(4)) = true,
+       cast('true' AS VARCHAR(4)) = true,
+       cast('true' AS STRING) = true;
+SELECT typeof(coalesce(cast('true' AS CHAR(4)), true));
+SELECT typeof(coalesce(cast('true' AS VARCHAR(4)), true));
+SELECT typeof(coalesce(cast('true' AS STRING), true));
+
 -- Nested types keep CHAR/VARCHAR
 SELECT typeof(array(cast('a' AS CHAR(2)), cast('bb' AS CHAR(3))));
 SELECT typeof(struct(cast('a' AS CHAR(2)) AS f));

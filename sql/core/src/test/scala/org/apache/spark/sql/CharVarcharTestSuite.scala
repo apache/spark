@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.util.Try
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, Literal, ScalarSubquery, StringRPad}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
@@ -1289,6 +1289,61 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       val df = spark.range(1).select(coalesced.as("c"))
       assert(df.schema.head.dataType === CharType(4, "UTF8_LCASE"))
       checkAnswer(df, Row("a   "))
+    }
+  }
+
+  test("SPARK-58794: CHAR/VARCHAR vs non-string follow STRING for compare and COALESCE") {
+    // Comparisons promote the string side to the other atomic type; COALESCE uses the same
+    // STRING promotion (and the same BOOLEAN path). CHAR/VARCHAR extend StringType, so they must
+    // match the STRING analogue on schema, values, and analysis errors. Exact-length CHAR keeps
+    // padding from confounding vs the unpadded STRING value.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      def followString(cvSql: String, strSql: String): Unit = {
+        val strResult = Try {
+          val df = sql(strSql)
+          (df.schema.map(_.dataType), df.collect().toSeq)
+        }
+        val cvResult = Try {
+          val df = sql(cvSql)
+          (df.schema.map(_.dataType), df.collect().toSeq)
+        }
+        (strResult, cvResult) match {
+          case (scala.util.Success((st, sr)), scala.util.Success((ct, cr))) =>
+            assert(ct === st, s"schema:\n  $cvSql -> $ct\n  $strSql -> $st")
+            assert(cr === sr, s"rows:\n  $cvSql -> $cr\n  $strSql -> $sr")
+          case (scala.util.Failure(eStr: SparkThrowable),
+              scala.util.Failure(eCv: SparkThrowable)) =>
+            assert(eCv.getCondition === eStr.getCondition,
+              s"$cvSql vs $strSql: ${eCv.getCondition} != ${eStr.getCondition}")
+          case (s, c) =>
+            fail(s"$cvSql vs $strSql: STRING success=${s.isSuccess} CV success=${c.isSuccess}")
+        }
+      }
+
+      val combos = Seq(
+        ("cast('123' AS CHAR(3))", "cast('123' AS VARCHAR(3))", "cast('123' AS STRING)", "123"),
+        ("cast('1.5' AS CHAR(3))", "cast('1.5' AS VARCHAR(3))", "cast('1.5' AS STRING)", "1.5"),
+        ("cast('2020-01-02' AS CHAR(10))", "cast('2020-01-02' AS VARCHAR(10))",
+          "cast('2020-01-02' AS STRING)", "date'2020-01-02'"),
+        ("cast('2020-01-02 03:04:05' AS CHAR(19))", "cast('2020-01-02 03:04:05' AS VARCHAR(19))",
+          "cast('2020-01-02 03:04:05' AS STRING)", "timestamp'2020-01-02 03:04:05'"),
+        ("cast('true' AS CHAR(4))", "cast('true' AS VARCHAR(4))", "cast('true' AS STRING)", "true"),
+        // Padded CHAR vs the same padded STRING / VARCHAR bytes.
+        ("cast('123' AS CHAR(5))", "cast('123  ' AS VARCHAR(5))", "cast('123  ' AS STRING)", "123"))
+
+      val templates: Seq[(String, String) => String] = Seq(
+        (cv, other) => s"SELECT typeof(coalesce($cv, $other))",
+        (cv, other) => s"SELECT coalesce($cv, $other)",
+        (cv, other) => s"SELECT $cv = $other",
+        (cv, other) => s"SELECT $cv < $other",
+        (cv, other) => s"SELECT $cv IN ($other)")
+
+      for ((charExpr, varcharExpr, stringExpr, other) <- combos) {
+        for (mk <- templates) {
+          followString(mk(charExpr, other), mk(stringExpr, other))
+          followString(mk(varcharExpr, other), mk(stringExpr, other))
+        }
+      }
     }
   }
 
