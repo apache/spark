@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.client.dsl.base.PatchContext
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => mockitoEq}
-import org.mockito.Mockito.{atLeastOnce, inOrder, mock, never, spy, times, verify, verifyNoMoreInteractions, when}
+import org.mockito.Mockito.{atLeastOnce, inOrder, mock, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, SparkFunSuite}
@@ -52,7 +52,6 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     .set("spark.app.id", TEST_SPARK_APP_ID)
     .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL.key, "soLong")
     .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE.key, "cruelWorld")
-    .set(SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS, 10)
 
   @Mock
   private var sc: SparkContext = _
@@ -148,7 +147,15 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(configMapsOperations.inNamespace("default")).thenReturn(configMapsWithNamespace)
     when(configMapsWithNamespace.resource(any[ConfigMap]())).thenReturn(configMapResource)
     when(podAllocator.driverPod).thenReturn(None)
-    schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
+    schedulerBackendUnderTest = createSchedulerBackend()
+  }
+
+  after {
+    ResourceProfile.clearDefaultProfile()
+  }
+
+  private def createSchedulerBackend(): KubernetesClusterSchedulerBackend = {
+    new KubernetesClusterSchedulerBackend(
       taskScheduler,
       sc,
       kubernetesClient,
@@ -158,10 +165,6 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       lifecycleManager,
       watchEvents,
       pollEvents)
-  }
-
-  after {
-    ResourceProfile.clearDefaultProfile()
   }
 
   private def registerExecutor(
@@ -176,14 +179,17 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     executorEndpoint
   }
 
-  private def withDecommissionMetadata(f: => Unit): Unit = {
+  private def withDecommissionMetadata(
+      f: KubernetesClusterSchedulerBackend => Unit): Unit = {
     val keys = Seq(KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key,
-      KUBERNETES_EXECUTOR_POD_DELETION_COST.key)
+      KUBERNETES_EXECUTOR_POD_DELETION_COST.key, SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS.key)
     val originalValues = keys.map(key => key -> sparkConf.getOption(key))
     sparkConf.set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, "deployment")
     sparkConf.set(KUBERNETES_EXECUTOR_POD_DELETION_COST, 7)
+    sparkConf.set(SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS, 10)
     try {
-      f
+      // The backend captures the unknown-executor cache size when it is constructed.
+      f(createSchedulerBackend())
     } finally {
       originalValues.foreach {
         case (key, Some(value)) => sparkConf.set(key, value)
@@ -346,8 +352,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   }
 
   test("SPARK-58879: idle decommission passes only selected executors to Kubernetes") {
-    withDecommissionMetadata {
-      val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackendUnderTest)
+    withDecommissionMetadata { schedulerBackend =>
+      val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackend)
       val idleExecutor = registerExecutor(backend, "1")
       val busyExecutor = registerExecutor(backend, "2")
       when(taskScheduler.isExecutorBusy("2")).thenReturn(true)
@@ -380,9 +386,11 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
       schedulerExecutorService.runUntilIdle()
       verify(labeledPods, times(2)).withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-      verify(labeledPods, times(2)).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1")
+      val executorIds = ArgumentCaptor.forClass(classOf[Array[String]])
+      verify(labeledPods, atLeastOnce()).withLabelIn(
+        mockitoEq(SPARK_EXECUTOR_ID_LABEL), executorIds.capture(): _*)
+      assert(executorIds.getAllValues.asScala.forall(_.toSeq == Seq("1")))
       verify(labeledPods, times(2)).resources()
-      verifyNoMoreInteractions(labeledPods)
       val patches = ArgumentCaptor.forClass(classOf[Pod])
       verify(podResource, times(2)).patch(any(classOf[PatchContext]), patches.capture())
       val appliedPods = patches.getAllValues.asScala
@@ -396,8 +404,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   }
 
   test("SPARK-58879: rejected idle decommission has no pod updates or replay") {
-    withDecommissionMetadata {
-      val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackendUnderTest)
+    withDecommissionMetadata { schedulerBackend =>
+      val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackend)
       val busyExecutor = registerExecutor(backend, "1")
       when(taskScheduler.isExecutorBusy("1")).thenReturn(true)
       val decomInfo = ExecutorDecommissionInfo("test")

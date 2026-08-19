@@ -917,6 +917,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   }
 
   private def flushDecommissionBackend(backend: DecommissionTestSchedulerBackend): Unit = {
+    // Any synchronous request flushes earlier driver-endpoint messages. Ignore its result:
+    // executor "1" may not be registered or may already be retired.
     backend.driverEndpoint.askSync[Boolean](IsExecutorAlive("1"))
   }
 
@@ -964,16 +966,17 @@ private class CSMockExternalClusterManager extends ExternalClusterManager {
   override def createTaskScheduler(
       sc: SparkContext,
       masterURL: String): TaskScheduler = {
-    if (masterURL ==
-        s"coarseclustermanager[${classOf[DecommissionTestSchedulerBackend].getName}]") {
-      ts = new TaskSchedulerImpl(sc, sc.conf.get(TASK_MAX_FAILURES))
-    } else {
-      ts = mock[TaskSchedulerImpl]
-      when(ts.sc).thenReturn(sc)
-      when(ts.applicationId()).thenReturn("appid1")
-      when(ts.applicationAttemptId()).thenReturn(Some("attempt1"))
-      when(ts.schedulingMode).thenReturn(SchedulingMode.FIFO)
-      when(ts.excludedNodes()).thenReturn(Set.empty[String])
+    masterURL match {
+      case MOCK_REGEX(backendClassName)
+          if backendClassName == classOf[DecommissionTestSchedulerBackend].getName =>
+        ts = new TaskSchedulerImpl(sc, sc.conf.get(TASK_MAX_FAILURES))
+      case _ =>
+        ts = mock[TaskSchedulerImpl]
+        when(ts.sc).thenReturn(sc)
+        when(ts.applicationId()).thenReturn("appid1")
+        when(ts.applicationAttemptId()).thenReturn(Some("attempt1"))
+        when(ts.schedulingMode).thenReturn(SchedulingMode.FIFO)
+        when(ts.excludedNodes()).thenReturn(Set.empty[String])
     }
     ts
   }

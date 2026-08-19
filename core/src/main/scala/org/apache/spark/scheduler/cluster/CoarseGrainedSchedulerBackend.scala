@@ -627,10 +627,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   override def decommissionExecutorsIfIdle(
       executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
       adjustTargetNumExecutors: Boolean): Seq[String] = withLock {
-    val seen = new HashSet[String]
-    val idleExecutors = executorsAndDecomInfo.filter { case (executorId, _) =>
-      seen.add(executorId) && isExecutorActive(executorId) &&
-        !scheduler.isExecutorBusy(executorId)
+    val idleExecutors = executorsAndDecomInfo.distinctBy(_._1).filter { case (executorId, _) =>
+      isExecutorActive(executorId) && !scheduler.isExecutorBusy(executorId)
     }
     if (idleExecutors.isEmpty) {
       Seq.empty
