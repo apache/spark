@@ -104,6 +104,19 @@ private[spark] trait ExecutorAllocationClient {
       countFailures = false)
   }
 
+  /**
+   * Decommission only executors which are still idle when the request is accepted.
+   * Implementations must check for assigned tasks and stop further task assignment atomically.
+   * A client which cannot provide this guarantee must leave the executors running.
+   *
+   * @param executorsAndDecomInfo identifiers of executors and decommission information
+   * @param adjustTargetNumExecutors whether to reduce the target number of executors
+   * @return the ids of the executors accepted for decommissioning
+   */
+  def decommissionExecutorsIfIdle(
+      executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
+      adjustTargetNumExecutors: Boolean): Seq[String] = Seq.empty
+
 
   /**
    * Request that the cluster manager decommission the specified executor.
