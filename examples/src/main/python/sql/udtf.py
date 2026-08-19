@@ -22,7 +22,8 @@ Run with:
 """
 
 # NOTE that this file is imported in the tutorials in PySpark documentation.
-# The codes are referred via line numbers. See also `literalinclude` directive in Sphinx.
+# The code blocks are referred to via `$example on/off$` markers, included in the
+# docs with the `literalinclude` directive's `:start-after:`/`:end-before:` options.
 from pyspark.sql import SparkSession
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
@@ -32,13 +33,15 @@ require_minimum_pyarrow_version()
 
 
 def python_udtf_simple_example(spark: SparkSession) -> None:
-
+    # $example on:python_udtf_simple_class$
     # Define the UDTF class and implement the required `eval` method.
     class SquareNumbers:
         def eval(self, start: int, end: int):
             for num in range(start, end + 1):
                 yield (num, num * num)
+    # $example off:python_udtf_simple_class$
 
+    # $example on:python_udtf_simple_udtf$
     from pyspark.sql.functions import lit, udtf
 
     # Create a UDTF using the class definition and the `udtf` function.
@@ -53,10 +56,11 @@ def python_udtf_simple_example(spark: SparkSession) -> None:
     # |  2|      4|
     # |  3|      9|
     # +---+-------+
+    # $example off:python_udtf_simple_udtf$
 
 
 def python_udtf_decorator_example(spark: SparkSession) -> None:
-
+    # $example on:python_udtf_decorator$
     from pyspark.sql.functions import lit, udtf
 
     # Define a UDTF using the `udtf` decorator directly on the class.
@@ -75,10 +79,11 @@ def python_udtf_decorator_example(spark: SparkSession) -> None:
     # |  2|      4|
     # |  3|      9|
     # +---+-------+
+    # $example off:python_udtf_decorator$
 
 
 def python_udtf_registration(spark: SparkSession) -> None:
-
+    # $example on:python_udtf_registration$
     from pyspark.sql.functions import udtf
 
     @udtf(returnType="word: string")
@@ -114,20 +119,22 @@ def python_udtf_registration(spark: SparkSession) -> None:
     # |Apache Spark|Apache|
     # |Apache Spark| Spark|
     # +------------+------+
+    # $example off:python_udtf_registration$
 
 
 def python_udtf_arrow_example(spark: SparkSession) -> None:
-
+    # $example on:python_udtf_arrow$
     from pyspark.sql.functions import udtf
 
     @udtf(returnType="c1: int, c2: int", useArrow=True)
     class PlusOne:
         def eval(self, x: int):
             yield x, x + 1
+    # $example off:python_udtf_arrow$
 
 
 def python_udtf_date_expander_example(spark: SparkSession) -> None:
-
+    # $example on:python_udtf_date_expander$
     from datetime import datetime, timedelta
     from pyspark.sql.functions import lit, udtf
 
@@ -150,10 +157,11 @@ def python_udtf_date_expander_example(spark: SparkSession) -> None:
     # |2023-02-28|
     # |2023-03-01|
     # +----------+
+    # $example off:python_udtf_date_expander$
 
 
 def python_udtf_terminate_example(spark: SparkSession) -> None:
-
+    # $example on:python_udtf_terminate$
     from pyspark.sql.functions import udtf
 
     @udtf(returnType="cnt: int")
@@ -184,10 +192,11 @@ def python_udtf_terminate_example(spark: SparkSession) -> None:
     # |  4|  5|
     # |  9|  5|
     # +---+---+
+    # $example off:python_udtf_terminate$
 
 
 def python_udtf_table_argument(spark: SparkSession) -> None:
-
+    # $example on:python_udtf_table_argument$
     from pyspark.sql.functions import udtf
     from pyspark.sql.types import Row
 
@@ -208,10 +217,11 @@ def python_udtf_table_argument(spark: SparkSession) -> None:
     # |  8|
     # |  9|
     # +---+
+    # $example off:python_udtf_table_argument$
 
 
 def python_udtf_table_argument_with_partitioning(spark: SparkSession) -> None:
-
+    # $example on:python_udtf_table_argument_with_partitioning$
     from pyspark.sql.functions import udtf
     from pyspark.sql.types import Row
 
@@ -285,6 +295,7 @@ def python_udtf_table_argument_with_partitioning(spark: SparkSession) -> None:
 
     # Clean up.
     spark.sql("DROP TABLE values_table")
+    # $example off:python_udtf_table_argument_with_partitioning$
 
 
 if __name__ == "__main__":

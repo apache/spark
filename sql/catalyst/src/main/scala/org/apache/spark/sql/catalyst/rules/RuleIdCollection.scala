@@ -127,12 +127,14 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.CollapseRepartition" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.ColumnPruning" ::
+      "org.apache.spark.sql.catalyst.optimizer.CombineApproximatePercentiles" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineConcats" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineTypedFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineUnions" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantFolding" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
+      "org.apache.spark.sql.catalyst.optimizer.ConvertToCatalyst" ::
       "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
       "org.apache.spark.sql.catalyst.optimizer.DecimalAggregates" ::
@@ -162,6 +164,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.PruneFilters" ::
+      "org.apache.spark.sql.catalyst.optimizer.PullUpProjectAliasThroughWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownJoinThroughUnion" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::

@@ -144,11 +144,49 @@ SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ntz(9)>;
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND;
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1 00:04:00.000321' DAY TO SECOND;
 SELECT TIMESTAMP_NTZ '1960-01-02 03:04:05.123456789' + INTERVAL '0 00:00:00.000001' DAY TO SECOND;
--- SPARK-57501: nanos timestamps support only ANSI day-time intervals. A (legacy) calendar interval
--- is rejected by TimestampAddInterval's type check, and a year-month interval has no supported
--- operator overload.
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0);
+-- SPARK-57825: TIMESTAMP_NTZ(p) +/- ANSI year-month interval keeps the nanos type/precision and
+-- carries the whole fraction (including the sub-microsecond digits) through unchanged; a month
+-- shift never touches the time of day.
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' YEAR;
+-- The interval-first operand order resolves to the same addition.
+SELECT INTERVAL '1' YEAR + TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789';
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH;
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1-2' YEAR TO MONTH;
+-- Jan-31 -> Feb-29 day clamp on a pre-epoch (leap-year) value.
+SELECT TIMESTAMP_NTZ '1960-01-31 03:04:05.123456789' + INTERVAL '1' MONTH;
+-- SPARK-57501, SPARK-57825: nanos timestamps support ANSI day-time and year-month intervals; the
+-- legacy calendar interval is still rejected by TimestampAddInterval's type check.
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0);
+
+-- SPARK-57832: TIMESTAMP_NTZ(p) - TIMESTAMP_NTZ(p) yields a microsecond-grid DayTimeIntervalType.
+-- Only each operand's epochMicros participates, so the sub-microsecond remainder is truncated: the
+-- 789/111 sub-micro digits drop out and the difference is exactly 1 day + 0.123456 s.
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111';
+-- Two values inside the same microsecond subtract to zero once the remainder is truncated.
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456001';
+-- The subtraction is antisymmetric.
+SELECT TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789';
+-- Mixed precision (7 vs 9) widens to the common nanos type before subtracting; the result stays on
+-- the micros grid.
+SELECT ('2020-01-02 03:04:05.1234567' :: timestamp_ntz(7)) - ('2020-01-01 03:04:05.000000009' :: timestamp_ntz(9));
+-- Mixed with a micro TIMESTAMP_NTZ operand.
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05';
+-- A DATE operand is cast to the nanos type (midnight); the fraction below the micro grid drops.
+SELECT TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01';
+-- Pre-epoch operand exercises the negative-epoch path.
+SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' - TIMESTAMP_NTZ '1960-01-01 00:00:00.000000999';
+-- NULL operand propagates.
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS timestamp_ntz(9));
+
+-- SPARK-57818: convert_timezone over nanosecond-precision TIMESTAMP_NTZ. The sub-microsecond
+-- remainder is carried through unchanged; only the whole-microsecond part shifts with the zone
+-- offset, and the result keeps the source's exact precision.
+SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    TIMESTAMP_NTZ '2022-03-27 03:00:00.123456789');
+SELECT typeof(convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    '2022-03-27 03:00:00.1234567' :: timestamp_ntz(7)));
+-- NULL nanosecond timestamp.
+SELECT convert_timezone('America/Los_Angeles', 'UTC', CAST(NULL AS timestamp_ntz(9)));
 
 -- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_NTZ. The aggregate preserves the
 -- nanosecond type and orders by the sub-microsecond remainder (two values share the same
@@ -164,6 +202,44 @@ SELECT c, count(*) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
   GROUP BY c ORDER BY c;
+-- GROUP BY a nanosecond key with aggregates and a NULL group: exact-duplicate keys collapse, two
+-- keys sharing epochMicros but differing within the microsecond stay in separate groups, and all
+-- NULL keys group together (unlike an equi-join). Three groups: .000000001 (count 2, sum 3),
+-- .000000999 (count 1, sum 3), NULL (count 2, sum 9).
+SELECT k, count(*), sum(v) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
+  (CAST(NULL AS timestamp_ntz(9)), 4),
+  (CAST(NULL AS timestamp_ntz(9)), 5) AS t(k, v)
+  GROUP BY k ORDER BY k;
+
+-- SPARK-56822: mode over nanosecond-precision TIMESTAMP_NTZ. Frequencies are counted on the full
+-- nanos value, so the most-frequent value is selected down to the sub-microsecond and the result
+-- type stays TIMESTAMP_NTZ(9). .000000001 appears twice, .000000999 once.
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c);
+
+-- SPARK-56822: collect_set over nanosecond-precision TIMESTAMP_NTZ. It deduplicates on the full
+-- sub-microsecond value: the two .000000001 rows collapse to one, the .000000999 row stays, so the
+-- sorted set has two distinct elements and the element type stays TIMESTAMP_NTZ(9). collect_set
+-- order is non-deterministic, so the output is stabilized with sort_array.
+SELECT sort_array(collect_set(c)) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c);
+
+-- SPARK-56822: collect_list over nanosecond-precision TIMESTAMP_NTZ. The buffer holds the full
+-- nanos value, so the sub-microsecond remainder survives and the result element type stays
+-- TIMESTAMP_NTZ(9). collect_list order is non-deterministic, so the output is stabilized with
+-- sort_array; duplicates are kept and NULLs are dropped.
+SELECT sort_array(collect_list(c)) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c);
 
 -- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
 -- whole-second BIGINT; the sub-second digits are dropped and NTZ applies no zone shift, so the
@@ -185,6 +261,15 @@ SELECT max_by(v, k), min_by(v, k) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500', 2),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000007', CAST(NULL AS INT)) AS t(v, k);
+-- DISTINCT over a nanosecond column: exact duplicates are removed, two values sharing epochMicros
+-- but differing within the microsecond are both kept, and NULL survives as a single row. Three
+-- rows: .000000001, .000000999, NULL.
+SELECT DISTINCT c FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+  ORDER BY c;
 
 -- SPARK-57527: unix_nanos over nanosecond-precision values returns DECIMAL(21, 0) nanoseconds since
 -- the epoch; NTZ applies no zone shift, so the wall-clock value is read as the epoch instant. The
@@ -269,6 +354,34 @@ SELECT v, lead(v) OVER (ORDER BY v) AS next_v FROM (
     UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'
     UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') ORDER BY v;
 
+-- SPARK-57811: a string operand is coerced to the nanosecond timestamp type in comparisons and
+-- predicates (not truncated to micros, not promoted to string). The 9th fractional digit is
+-- significant, so an off-by-one-nanosecond literal does not compare equal.
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c = '2020-01-02 03:04:05.123456788',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') AS t(c);
+
+-- BETWEEN over nanosecond timestamps: only the value inside the sub-microsecond range qualifies.
+SELECT c FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-02 03:04:05.000000001'),
+  (TIMESTAMP_NTZ '2020-01-02 03:04:05.000000009') AS t(c)
+  WHERE c BETWEEN '2020-01-02 03:04:05.000000001' AND '2020-01-02 03:04:05.000000005';
+
+-- SPARK-57811: TIMESTAMP_NTZ(p) mirrors micros TimestampNTZType under legacy castDatetimeToString.
+-- Micros TimestampNTZType has no arm in findCommonTypeForBinaryComparison, so it stays config-blind
+-- and casts the string to the timestamp type even under the legacy flag; nanos NTZ has no arm
+-- either and does the same. (Only the LTZ family, like micros TimestampType, promotes the range
+-- comparison to string under this flag -- see timestamp-ltz-nanos.sql.) So with both flags set the
+-- NTZ range comparison still casts the string to the nanos type, identical to the default config.
+SET spark.sql.ansi.enabled=false;
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=true;
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') AS t(c);
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=false;
+SET spark.sql.ansi.enabled=true;
+
 -- SPARK-57814: unix_seconds / unix_millis / unix_micros over nanosecond-precision values. The result
 -- is a whole BIGINT count of the unit; sub-unit digits (incl. the sub-microsecond remainder) are
 -- dropped and NTZ applies no zone shift, so the wall-clock value is read as the epoch instant.
@@ -305,3 +418,144 @@ SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789' :: timestamp_ntz(9));
 SELECT date_trunc('DAY', '2020-06-21 23:30:00.000000123' :: timestamp_ntz(7));
 -- An unsupported (sub-microsecond) unit yields NULL; the result still carries the nanos type.
 SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');
+
+-- SPARK-57837: localtimestamp(p) with a nanosecond precision returns TIMESTAMP_NTZ(p). The values
+-- are non-deterministic, so only the (deterministic) result type and query-stable self-equality
+-- are checked. Precision 6 keeps the standard microsecond TIMESTAMP_NTZ.
+SELECT typeof(localtimestamp(9)), typeof(localtimestamp(8)), typeof(localtimestamp(7));
+SELECT typeof(localtimestamp()), typeof(localtimestamp(6));
+-- A foldable (constant) precision expression is accepted.
+SELECT typeof(localtimestamp(8 + 1));
+-- All references to localtimestamp(p) within a query see the same value.
+SELECT localtimestamp(9) = localtimestamp(9);
+-- Out-of-range precision is rejected.
+SELECT localtimestamp(3);
+SELECT localtimestamp(10);
+
+-- SPARK-57841: end-to-end coverage for operators that ride on the resolved widening (SPARK-57454)
+-- and complex-type access over nanosecond values. Every case turns on the SUB-MICROSECOND remainder
+-- (.000000001 vs .000000999 share a microsecond; only the full nanos value tells them apart) or on
+-- cross-precision widening. Multi-row queries end in a top-level ORDER BY so the golden output order
+-- is meaningful (SQLQueryTestSuite re-sorts otherwise). NTZ is zone-independent; the LTZ file mirrors
+-- these in the session zone.
+
+-- INTERSECT / EXCEPT distinguish the sub-microsecond remainder. A micro-only set op would wrongly
+-- merge .000000001 and .000000999; here INTERSECT keeps only the common value and EXCEPT removes it.
+SELECT c FROM (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' AS c
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999')
+  INTERSECT SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' ORDER BY c;
+SELECT c FROM (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' AS c
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999')
+  EXCEPT SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' ORDER BY c;
+-- Mixed-precision set op widens to the wider precision; the equal instant matches after widening.
+SELECT typeof(c), c FROM (
+    (SELECT '2020-01-01 00:00:00.0000009' :: timestamp_ntz(7) AS c)
+     INTERSECT (SELECT '2020-01-01 00:00:00.000000900' :: timestamp_ntz(9))) ORDER BY c;
+
+-- BETWEEN on a sub-microsecond boundary: the bounds share the microsecond with the probe, so only
+-- the full nanos value decides inclusivity. .000000500 is inside [.000000001, .000000999];
+-- .000001000 (next microsecond) is outside.
+SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500'
+    BETWEEN TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'
+        AND TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999';
+SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000001000'
+    BETWEEN TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'
+        AND TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999';
+-- Mixed-precision BETWEEN widens the bounds to the probe's precision.
+SELECT '2020-01-01 00:00:00.000000500' :: timestamp_ntz(9)
+    BETWEEN '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7)
+        AND TIMESTAMP_NTZ '2020-01-01 00:00:00.000001';
+
+-- if / nvl / ifnull preserve the nanos type and widen mixed-precision branches to the wider type.
+SELECT typeof(v), v FROM (SELECT if(true,
+    '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7),
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789') AS v);
+SELECT typeof(v), v FROM (SELECT nvl(
+    CAST(NULL AS timestamp_ntz(9)),
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS v);
+SELECT ifnull(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', CAST(NULL AS timestamp_ntz(9)));
+
+-- IN (subquery): the semi-join matches on the full nanos key, so only the .000000999 row qualifies.
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k;
+
+-- Scalar subquery in projection returns the nanos value and carries the nanos type;
+-- the sub-microsecond precision survives scalar-subquery result boxing.
+SELECT (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999');
+SELECT typeof((SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'));
+-- A NULL scalar subquery still carries the nanos type.
+SELECT typeof((SELECT CAST(NULL AS timestamp_ntz(9))));
+-- Scalar subquery in a WHERE comparison: the sub-microsecond value decides the match, so only
+-- the .000000999 row qualifies (not the .000000001 row).
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k = (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k;
+
+-- EXISTS (correlated on a nanos equality): the outer row is kept iff a matching nanos key exists
+-- in the subquery relation. Only the .000000999 row correlates to s.v.
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE EXISTS (SELECT 1 FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS s(v)
+    WHERE s.v = t.k) ORDER BY k;
+
+-- NOT EXISTS (correlated on a nanos equality): the opposite; the outer row is kept iff no matching
+-- nanos key exists. The subquery holds only .000000001, so the .000000999 row survives.
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE NOT EXISTS (SELECT 1 FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS s(v)
+    WHERE s.v = t.k) ORDER BY k;
+
+-- NOT IN (subquery): anti-semi-join on the full nanos key. The .000000999 row is in the subquery
+-- set (excluded); the .000000001 row is not (kept). Sub-microsecond precision decides membership --
+-- the two values differ in the nanosecond digit, not by rounding error.
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k;
+
+-- Mixed-precision NOT IN widens the probe to p=9 before the anti-join. The p=7 value .0000009
+-- becomes .000000900 at p=9, which is not .000000999, so the row is not in the set and is kept.
+SELECT k FROM VALUES
+    ('2020-01-01 00:00:00.0000009' :: timestamp_ntz(7)) AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k;
+
+-- NOT IN with a NULL in the subquery set: three-valued logic. For the row that does not equal the
+-- non-null member, the comparison against NULL is UNKNOWN, so NOT IN is UNKNOWN and the row is
+-- filtered out; the row that equals the non-null member is a definite match and also excluded.
+-- The result is therefore empty.
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'
+                  UNION ALL SELECT CAST(NULL AS timestamp_ntz(9))) ORDER BY k;
+
+-- explode(array<ts_nanos>) yields one row per element, each keeping the nanos type and value.
+SELECT typeof(col), col FROM (SELECT explode(array(
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001',
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'))) ORDER BY col;
+
+-- element_at over array<ts_nanos> (1-based) returns the addressed element unchanged.
+SELECT element_at(array(
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001',
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'), 2);
+
+-- struct-field extraction reads the nanos value back out of a struct.
+SELECT (named_struct('f', TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789')).f;
+
+-- map lookup by string key and by nanosecond key (GetMapValue / element_at over a nanos-keyed map).
+-- The nanos-keyed lookup must consult the full sub-microsecond value: looking up .000000999 returns
+-- 'b', not 'a', even though both keys share the microsecond.
+SELECT map('k', TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789')['k'];
+SELECT map(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 'a',
+           TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 'b')[
+       TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'];
+SELECT element_at(map(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 'a',
+           TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 'b'),
+       TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001');

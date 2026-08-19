@@ -50,7 +50,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.memory.{SparkOutOfMemoryError, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{CpuAmount, ResourceInformation}
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcTimeout}
 import org.apache.spark.scheduler.{DirectTaskResult, FakeTask, ResultTask, Task, TaskDescription}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
@@ -664,6 +664,20 @@ class ExecutorSuite extends SparkFunSuite
     }
   }
 
+  test("SPARK-58192: executorRunTime weights the run interval by cpus, floored at one") {
+    // cpus > 1 scales the interval so CPU-weighted process rates reflect the reservation
+    // (SPARK-51666).
+    assert(Executor.cpuWeightedNanos(1000L, BigDecimal(2)) === 2000L)
+    assert(Executor.cpuWeightedNanos(1000L, CpuAmount.normalize(BigDecimal("1.5"))) === 1500L)
+    assert(Executor.cpuWeightedNanos(1000L, BigDecimal(1)) === 1000L)
+    // A sub-core amount must not shrink the reported run time below the elapsed interval:
+    // UI/REST scheduler delay is wall-clock duration minus executorRunTime, so anything below
+    // the elapsed interval is misreported as scheduler delay.
+    assert(Executor.cpuWeightedNanos(1000L, CpuAmount.normalize(BigDecimal("0.25"))) === 1000L)
+    assert(Executor.cpuWeightedNanos(1000L, CpuAmount.normalize(BigDecimal("0.000000001")))
+      === 1000L)
+  }
+
   test(
     "SPARK-55093: launchTask should handle TaskRunner construction failures"
   ) {
@@ -856,6 +870,7 @@ class ExecutorSuite extends SparkFunSuite
       properties = new Properties,
       cpus = 1,
       resources = Map.empty,
+      None,
       serializedTask)
   }
 

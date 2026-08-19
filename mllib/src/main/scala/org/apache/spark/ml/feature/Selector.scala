@@ -257,9 +257,9 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
 
   @Since("3.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), SQLDataTypes.VectorType)
     SchemaUtils.checkNumericType(schema, $(labelCol))
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), SQLDataTypes.VectorType)
   }
 
   @Since("3.1.0")
@@ -301,7 +301,7 @@ private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
 
   @Since("3.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), SQLDataTypes.VectorType)
     val newField =
       SelectorModel.prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol),
         isNumericAttribute)

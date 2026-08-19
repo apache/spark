@@ -747,7 +747,7 @@ resource
 dmlStatementNoWith
     : insertInto (query | LEFT_PAREN query RIGHT_PAREN queryAlias=tableAlias)      #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
-    | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
+    | DELETE FROM identifierReference tableAlias optionsClause? whereClause?       #deleteFromTable
     | UPDATE identifierReference tableAlias optionsClause? setClause whereClause?  #updateTable
     | MERGE (WITH SCHEMA EVOLUTION)? INTO target=identifierReference targetAlias=tableAlias
         targetOptions=optionsClause?
@@ -771,11 +771,11 @@ autoCdcBody
 autoCdcParameters
     : FROM source=relationPrimary
         KEYS LEFT_PAREN keys=identifierSeq RIGHT_PAREN
-        autoCdcDeleteClause?
-        autoCdcSequenceByClause
-        autoCdcColumnsClause?
-        autoCdcStoredAsClause?
-        autoCdcTrackHistoryClause?
+        (autoCdcDeleteClause
+        | autoCdcSequenceByClause
+        | autoCdcColumnsClause
+        | autoCdcStoredAsClause
+        | autoCdcTrackHistoryClause)*
     ;
 
 autoCdcDeleteClause
@@ -1208,7 +1208,38 @@ relationPrimary
     | LEFT_PAREN relation RIGHT_PAREN sample?
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
+    | unnest                                                #unnestTable
+    | jsonTable                                             #jsonTableRelation
     | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
+    ;
+
+// ANSI SQL UNNEST of one or more arrays in the FROM clause, with an optional
+// trailing ordinality column (WITH ORDINALITY). Multiple arrays are expanded in
+// parallel, padded with NULLs to the length of the longest array.
+unnest
+    : UNNEST LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+      (WITH ORDINALITY)? tableAlias
+    ;
+
+// The ANSI SQL:2016 JSON_TABLE table-valued function. Because the COLUMNS clause is not a normal
+// function-argument list, it has a dedicated production rather than going through
+// tableFunctionCall. Only the flat (non-NESTED) subset is currently supported.
+jsonTable
+    : JSON_TABLE LEFT_PAREN jsonExpr=expression COMMA rowPath=stringLit
+        COLUMNS LEFT_PAREN jsonTableColumn (COMMA jsonTableColumn)* RIGHT_PAREN
+        jsonTableOnErrorClause?
+      RIGHT_PAREN tableAlias
+    ;
+
+jsonTableColumn
+    : colName=errorCapturingIdentifier FOR ORDINALITY                           #jsonTableOrdinalityColumn
+    | colName=errorCapturingIdentifier dataType
+        EXISTS (PATH path=stringLit)?                                           #jsonTableExistsColumn
+    | colName=errorCapturingIdentifier dataType (PATH path=stringLit)?          #jsonTableValueColumn
+    ;
+
+jsonTableOnErrorClause
+    : (NULL | ERROR) ON ERROR
     ;
 
 optionsClause
@@ -1431,6 +1462,12 @@ primaryExpression
     | ANY_VALUE LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                              #any_value
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
     | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
+    | JSON_VALUE LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (RETURNING returning=dataType)?
+      (emptyBehavior=jsonValueBehavior ON EMPTY)?
+      (errorBehavior=jsonValueBehavior ON ERROR)? RIGHT_PAREN                                  #jsonValue
+    | JSON_EXISTS LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (errorBehavior=jsonExistsErrorBehavior ON ERROR)? RIGHT_PAREN                             #jsonExists
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
@@ -1455,6 +1492,23 @@ primaryExpression
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
+    ;
+
+// The behavior selected by a JSON_VALUE `... ON EMPTY` / `... ON ERROR` clause. NULL and ERROR are
+// keywords; DEFAULT carries an expression evaluated in place of the missing/erroring value.
+jsonValueBehavior
+    : NULL                                                                                     #jsonValueBehaviorNull
+    | ERROR                                                                                     #jsonValueBehaviorError
+    | DEFAULT defaultExpr=expression                                                            #jsonValueBehaviorDefault
+    ;
+
+// The behavior selected by a JSON_EXISTS `... ON ERROR` clause: the boolean (or UNKNOWN, i.e. a
+// BOOLEAN NULL) to produce when the input is not a single well-formed JSON value.
+jsonExistsErrorBehavior
+    : TRUE
+    | FALSE
+    | UNKNOWN
+    | ERROR
     ;
 
 semiStructuredExtractionPath
@@ -2140,7 +2194,9 @@ ansiNonReserved
     | DOUBLE
     | DROP
     | ELSEIF
+    | EMPTY
     | ENFORCED
+    | ERROR
     | ESCAPED
     | EVOLUTION
     | EXACT
@@ -2199,6 +2255,9 @@ ansiNonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_EXISTS
+    | JSON_TABLE
+    | JSON_VALUE
     | KEY
     | KEYS
     | LANGUAGE
@@ -2254,6 +2313,7 @@ ansiNonReserved
     | OPEN
     | OPTION
     | OPTIONS
+    | ORDINALITY
     | OUT
     | OUTPUTFORMAT
     | OVER
@@ -2296,6 +2356,7 @@ ansiNonReserved
     | RESPECT
     | RESTRICT
     | RETURN
+    | RETURNING
     | RETURNS
     | REVOKE
     | RLIKE
@@ -2374,6 +2435,7 @@ ansiNonReserved
     | UNCACHE
     | UNIFORM
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL
@@ -2557,8 +2619,10 @@ nonReserved
     | DROP
     | ELSE
     | ELSEIF
+    | EMPTY
     | END
     | ENFORCED
+    | ERROR
     | ESCAPE
     | ESCAPED
     | EVOLUTION
@@ -2631,6 +2695,9 @@ nonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_EXISTS
+    | JSON_TABLE
+    | JSON_VALUE
     | KEY
     | KEYS
     | LANGUAGE
@@ -2695,6 +2762,7 @@ nonReserved
     | OPTIONS
     | OR
     | ORDER
+    | ORDINALITY
     | OUT
     | OUTER
     | OUTPUTFORMAT
@@ -2742,6 +2810,7 @@ nonReserved
     | RESPECT
     | RESTRICT
     | RETURN
+    | RETURNING
     | RETURNS
     | REVOKE
     | RLIKE
@@ -2829,6 +2898,7 @@ nonReserved
     | UNIQUE
     | UNKNOWN
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL

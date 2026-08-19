@@ -285,7 +285,7 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
         sql(s"create table t1 (id bigint) using $format")
       }
 
-      assert(e.getMessage.contains("Cannot find catalog plugin class"))
+      assert(e.getMessage.contains("cannot find the plugin class"))
       assert(e.getMessage.contains("InvalidCatalogClass"))
     } finally {
       spark.sessionState.catalogManager.reset()
@@ -383,6 +383,23 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
   private def checkTimeTravel(ds: Dataset[_], expectedTimeTravelSpec: TimeTravelSpec): Unit = {
     val relation = ds.logicalPlan.asInstanceOf[DataSourceV2Relation]
     assert(relation.timeTravelSpec.contains(expectedTimeTravelSpec))
+  }
+
+  test("read options are preserved for scans but filtered from loadTable") {
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
+    val cat = catalog(catalogName).asInstanceOf[InMemoryTableCatalog]
+    cat.resetLoadTableCalls()
+
+    // The provider uses the options to identify the table, but this catalog declares no
+    // table-state options. The relation still retains the complete option map for scan planning.
+    val df = load("t1", Some(catalogName))
+    df.collect()
+    val relation = df.logicalPlan.asInstanceOf[DataSourceV2Relation]
+    assert(relation.options.get("name") === "t1")
+
+    val opts = cat.lastLoadTableOptions
+    assert(opts.isDefined, "loadTable(context, options) was not invoked")
+    assert(opts.get.isEmpty)
   }
 
   private def load(

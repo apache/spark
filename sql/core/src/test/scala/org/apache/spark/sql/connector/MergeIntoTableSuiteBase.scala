@@ -2960,6 +2960,49 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-58330: self-merge keeps each reference's own dynamic options") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    // Target and source are the same table, so they share one per-query relation-cache entry.
+    // Each reference must keep its own options: the target keeps its write options and the source
+    // keeps its read options; neither is dropped or inherited from the other.
+    val Seq(qe) = withQueryExecutionsCaptured(spark) {
+      sql(
+        s"""MERGE INTO $tableNameAsString t WITH (`write.split-size` = 10)
+           |USING $tableNameAsString WITH (`split-size` = 5) s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN UPDATE SET t.salary = s.salary
+           |""".stripMargin)
+    }
+
+    // target write relation carries only its own option, not the source's
+    val writeRelation = qe.optimizedPlan.collectFirst {
+      case rd: ReplaceData => rd.table
+      case wd: WriteDelta => wd.table
+    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+      .asInstanceOf[DataSourceV2Relation]
+    assert(writeRelation.options.get("write.split-size") === "10", "target relation option")
+    assert(!writeRelation.options.containsKey("split-size"), "target must not see source option")
+
+    // source scan carries only its own option, not the target's
+    val sourceOptions = qe.optimizedPlan.collect {
+      case r: DataSourceV2Relation => r.options
+      case s: DataSourceV2ScanRelation => s.relation.options
+    }.filter(_.containsKey("split-size"))
+    assert(sourceOptions.nonEmpty, "source relation carrying the option was not found")
+    sourceOptions.foreach { opts =>
+      assert(opts.get("split-size") === "5", "source relation option")
+      assert(!opts.containsKey("write.split-size"), "source must not see target option")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 100, "hr") :: Row(2, 200, "software") :: Nil)
+  }
+
   test("SPARK-58007: merge with dynamic options on the target, insert-only fast path") {
     withTable(sourceNameAsString) {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",

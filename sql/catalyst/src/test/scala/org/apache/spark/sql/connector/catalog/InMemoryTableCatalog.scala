@@ -22,6 +22,7 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -47,6 +48,19 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   private var _name: Option[String] = None
   private var copyOnLoad: Boolean = false
+
+  // Records every (TableContext, table-state options) pair passed to the options-aware
+  // loadTable(), in call order, so tests can verify that the analyzer / DataFrame API correctly
+  // constructed and forwarded them -- including how many times loadTable was called when the same
+  // table is referenced more than once in a statement with different options.
+  // "loadTable" is in the name because the subclass InMemoryChangelogCatalog has an analogous
+  // `lastOptions` recording the options passed to loadChangelog(); the two must not collide.
+  private val _loadTableCalls = mutable.ArrayBuffer.empty[(TableContext, CaseInsensitiveStringMap)]
+  def loadTableCalls: Seq[(TableContext, CaseInsensitiveStringMap)] = _loadTableCalls.toSeq
+  def resetLoadTableCalls(): Unit = _loadTableCalls.clear()
+
+  def lastTableContext: Option[TableContext] = _loadTableCalls.lastOption.map(_._1)
+  def lastLoadTableOptions: Option[CaseInsensitiveStringMap] = _loadTableCalls.lastOption.map(_._2)
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = Some(name)
@@ -122,6 +136,16 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case _ =>
         throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
+  }
+
+  // Records the forwarded context/state options so tests can verify they reached the catalog, then
+  // defers to the default dispatch in TableCatalog (rather than reimplementing it here).
+  override def loadTable(
+      ident: Identifier,
+      context: TableContext,
+      stateOptions: CaseInsensitiveStringMap): Table = {
+    _loadTableCalls += ((context, stateOptions))
+    super.loadTable(ident, context, stateOptions)
   }
 
   override def invalidateTable(ident: Identifier): Unit = {

@@ -179,7 +179,8 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
     SparkConnectPluginRegistry.getStatusRegistry.flatMap { plugin =>
       try {
         plugin.processRequestExtensions(sessionHolder, requestExtensions).toScala match {
-          case Some(extensions) => extensions.asScala.toSeq
+          // Filter nulls inside the isolation boundary so a null element can't NPE addExtensions.
+          case Some(extensions) => extensions.asScala.iterator.filter(_ != null).toSeq
           case None => Seq.empty
         }
       } catch {
@@ -202,7 +203,8 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
         plugin
           .processOperationExtensions(operationId, sessionHolder, operationExtensions)
           .toScala match {
-          case Some(extensions) => extensions.asScala.toSeq
+          // Filter nulls inside the isolation boundary so a null element can't NPE addExtensions.
+          case Some(extensions) => extensions.asScala.iterator.filter(_ != null).toSeq
           case None => Seq.empty
         }
       } catch {

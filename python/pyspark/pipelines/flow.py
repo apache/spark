@@ -65,6 +65,8 @@ class AutoCdcFlow:
         history record.
     :param track_history_except_column_list: Optional SCD2-only columns excluded from history \
         tracking.
+    :param spark_conf: A dict where the keys are the Spark configuration property names and the
+        values are the property values. These properties will be set on the flow.
     :param source_code_location: The location of the source code that created this flow.
     """
 
@@ -79,4 +81,5 @@ class AutoCdcFlow:
     stored_as_scd_type: Optional[Literal[1, 2, "1", "2"]]
     track_history_column_list: Optional[List[Column]]
     track_history_except_column_list: Optional[List[Column]]
+    spark_conf: Dict[str, str]
     source_code_location: SourceCodeLocation

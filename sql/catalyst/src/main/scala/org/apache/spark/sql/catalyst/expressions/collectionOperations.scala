@@ -191,6 +191,10 @@ case class ArraySize(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(map) - Returns an unordered array containing the keys of the map.",
+  arguments = """
+    Arguments:
+      * map - A map expression whose keys are returned as an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
@@ -226,6 +230,11 @@ case class MapKeys(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(map, key) - Returns true if the map contains the key.",
+  arguments = """
+    Arguments:
+      * map - A map expression to search.
+      * key - A key to look for. Its type must match, or be coercible to, the map's key type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), 1);
@@ -488,6 +497,10 @@ object ArraysZip {
  */
 @ExpressionDescription(
   usage = "_FUNC_(map) - Returns an unordered array containing the values of the map.",
+  arguments = """
+    Arguments:
+      * map - A map expression whose values are returned as an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
@@ -522,6 +535,10 @@ case class MapValues(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(map) - Returns an unordered array of all entries in the given map.",
+  arguments = """
+    Arguments:
+      * map - A map expression whose entries are returned as an array of key-value structs.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
@@ -697,6 +714,11 @@ case class MapEntries(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(map, ...) - Returns the union of all the given maps",
+  arguments = """
+    Arguments:
+      * map - A map expression. There can be one or more of them, and all must share
+          compatible key and value types.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(3, 'c'));
@@ -825,6 +847,10 @@ case class MapConcat(children: Seq[Expression])
  */
 @ExpressionDescription(
   usage = "_FUNC_(arrayOfEntries) - Returns a map created from the given array of entries.",
+  arguments = """
+    Arguments:
+      * arrayOfEntries - An array of two-field key-value structs from which the map is built.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
@@ -1404,7 +1430,11 @@ case class Reverse(child: Expression)
       BinaryType,
       ArrayType))
 
-  override def dataType: DataType = child.dataType
+  // Reversing a string transforms its content, so a CHAR/VARCHAR input yields plain STRING (R1).
+  // Array and binary inputs are unaffected. ImplicitTypeCasts already promotes the string branch
+  // (its promotion looks inside a TypeCollection), so this covers the paths that do not go
+  // through implicit casting, such as an expression built directly.
+  override def dataType: DataType = StringHelper.transformingStringResultType(child.dataType)
 
   private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
@@ -1483,8 +1513,9 @@ case class Reverse(child: Expression)
 /**
  * Checks if the array (left) has the element (right)
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(array, value) - Returns true if the array contains the value.",
+  usage = "_FUNC_(array, value) - Returns true if the array contains the value, false if not. Returns null if the array or value is null, or if the value is not found and the array contains a null element.",
   arguments = """
     Arguments:
       * array - The array to search.
@@ -1496,9 +1527,12 @@ case class Reverse(child: Expression)
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 2);
        true
+      > SELECT _FUNC_(array(1, NULL, 3), 2);
+       NULL
   """,
   group = "array_funcs",
   since = "1.5.0")
+// scalastyle:on line.size.limit
 case class ArrayContains(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with Predicate
   with QueryErrorsBase {
@@ -1617,6 +1651,12 @@ case class ArrayContains(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(array, value) - Return index (0-based) of the search value, " +
     "if it is contained in the array; otherwise, (-<insertion point> - 1).",
+  arguments = """
+    Arguments:
+      * array - A sorted array expression to search in.
+      * value - The value to search for. Its type must match, or be coercible to, the
+          array's element type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 2);
@@ -2124,16 +2164,22 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val lengthInt = lengthVal.asInstanceOf[Int]
     val arr = xVal.asInstanceOf[ArrayData]
     val startIndex = ArrayExpressionUtils.sliceStartIndex(startInt, arr.numElements(), prettyName)
-    if (lengthInt < 0) {
-      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, lengthInt)
-    }
+    // Resolve (and validate) the result length via the shared helper, mirroring the codegen path.
+    // Besides rejecting a negative length, this clamps the length to the elements remaining after
+    // `startIndex`. For an in-range `startIndex`, this clamp keeps `startIndex + resLength` from
+    // overflowing `Int` -- the unclamped `startIndex + lengthInt` could wrap negative and make
+    // `slice` drop all elements. An out-of-range `startIndex` (a large negative `start`) can
+    // still wrap the helper's own `numElements - startIndex`, but the guard below returns before
+    // `resLength` is used.
+    val resLength =
+      ArrayExpressionUtils.sliceLength(lengthInt, arr.numElements(), startIndex, prettyName)
     // startIndex can be negative if start is negative and its absolute value is greater than the
     // number of elements in the array
     if (startIndex < 0 || startIndex >= arr.numElements()) {
       return new GenericArrayData(Array.empty[AnyRef])
     }
     val data = arr.toSeq[AnyRef](elementType)
-    new GenericArrayData(data.slice(startIndex, startIndex + lengthInt))
+    new GenericArrayData(data.slice(startIndex, startIndex + resLength))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2382,7 +2428,10 @@ case class ArrayJoin(
     }
   }
 
-  override def dataType: DataType = array.dataType.asInstanceOf[ArrayType].elementType
+  // The joined result concatenates every element plus delimiters, so it must not inherit the
+  // element's CHAR/VARCHAR length constraint (R1).
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(array.dataType.asInstanceOf[ArrayType].elementType)
 
   override def prettyName: String = "array_join"
 
@@ -3018,6 +3067,11 @@ case class TryElementAt(left: Expression, right: Expression, replacement: Expres
  */
 @ExpressionDescription(
   usage = "_FUNC_(col1, col2, ..., colN) - Returns the concatenation of col1, col2, ..., colN.",
+  arguments = """
+    Arguments:
+      * colN - An expression to concatenate. There can be one or more of them, and all must be
+          of the same type: strings, binaries, or arrays.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark', 'SQL');
@@ -3064,7 +3118,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     if (children.isEmpty) {
       StringType
     } else {
-      super.dataType
+      StringHelper.transformingStringResultType(super.dataType)
     }
   }
 
@@ -3239,6 +3293,11 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
  */
 @ExpressionDescription(
   usage = "_FUNC_(arrayOfArrays) - Transforms an array of arrays into a single array.",
+  arguments = """
+    Arguments:
+      * arrayOfArrays - An array whose elements are themselves arrays; they are concatenated
+          in order into one array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(array(1, 2), array(3, 4)));
@@ -3531,7 +3590,7 @@ case class Sequence(
       val arr = ctx.freshName("arr")
       val arrElemType = CodeGenerator.javaType(dataType.elementType)
       s"""
-         |final $arrElemType[] $arr = null;
+         |$arrElemType[] $arr = null;
          |${impl.genCode(ctx, startGen.value, stopGen.value, stepGen.value, arr, arrElemType)}
          |${ev.value} = UnsafeArrayData.fromPrimitiveArray($arr);
        """.stripMargin
@@ -3983,14 +4042,20 @@ object Sequence {
       estimatedStep: String,
       len: String): String = {
     val calcFn = classOf[Sequence].getName + ".sequenceLength"
+    // `$start` and `$stop` are numeric expressions and `$step` is numeric or a
+    // CalendarInterval reference, so they have to be converted before going into a
+    // `Map<String, String>`. Janino, which compiles the generated code, erases the type
+    // arguments and binds `put` to `put(Object, Object)`, which lets the raw values through
+    // and leaves the parameter map holding non-String values that
+    // `SparkThrowable.getMessageParameters` then hands out as Strings.
     s"""
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
        |  ($estimatedStep == 0 && $start == $stop))) {
        |  java.util.Map<String, String> params = new java.util.HashMap<String, String>();
-       |  params.put("start", $start);
-       |  params.put("stop", $stop);
-       |  params.put("step", $step);
+       |  params.put("start", String.valueOf($start));
+       |  params.put("stop", String.valueOf($stop));
+       |  params.put("step", String.valueOf($step));
        |  throw new org.apache.spark.SparkIllegalArgumentException(
        |    "_LEGACY_ERROR_TEMP_3243", params);
        |}
@@ -4463,7 +4528,7 @@ case class ArrayDistinct(child: Expression)
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
-        val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
+        val arrayBuilderClass = s"$arrayBuilder.of$ptName"
 
         // Only need to track null element index when array's element is nullable.
         val declareNullTrackVariables = if (resultArrayElementNullable) {
@@ -4664,7 +4729,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
-        val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
+        val arrayBuilderClass = s"$arrayBuilder.of$ptName"
 
         val body =
           s"""
@@ -4889,7 +4954,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val hashSet = ctx.freshName("hashSet")
         val hashSetResult = ctx.freshName("hashSetResult")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
-        val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
+        val arrayBuilderClass = s"$arrayBuilder.of$ptName"
 
         val withArray2NaNCheckCodeGenerator =
           (array: String, index: String) =>
@@ -5114,7 +5179,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
-        val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
+        val arrayBuilderClass = s"$arrayBuilder.of$ptName"
 
         val withArray2NaNCheckCodeGenerator =
           (array: String, index: String) =>

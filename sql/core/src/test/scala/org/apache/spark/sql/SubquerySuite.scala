@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, NamedExpression, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
@@ -262,6 +263,17 @@ class SubquerySuite extends SharedSparkSession
     checkAnswer(
       sql("select * from l where l.a in (select c from r) and l.a > 2 and l.b is not null"),
       Row(3, 3.0) :: Nil)
+  }
+
+  test("IN predicate subquery preserves its broadcast when replacing its plan") {
+    val subqueryPlan = SubqueryExec("subquery", spark.range(3).queryExecution.executedPlan)
+    val subquery = InSubqueryExec(
+      Literal(1L), subqueryPlan, NamedExpression.newExprId, isDynamicPruning = false)
+    subquery.updateResult()
+
+    val updatedSubquery = subquery.withNewPlan(subqueryPlan)
+    assert(updatedSubquery.values().isEmpty)
+    assert(updatedSubquery.eval(InternalRow.empty) == true)
   }
 
   test("NOT IN predicate subquery") {

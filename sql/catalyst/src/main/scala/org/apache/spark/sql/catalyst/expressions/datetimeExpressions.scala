@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, Tim
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
@@ -197,64 +197,25 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
 }
 
 /**
- * Returns the current timestamp at the start of query evaluation.
+ * Returns the current timestamp at the start of query evaluation. The no-argument micro form
+ * registered as `current_timestamp` / `now`; see [[CurrentTimestampExpressionBuilder]] for the
+ * `current_timestamp(precision)` / `now(precision)` variants.
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_() - Returns the current timestamp at the start of query evaluation. All calls of current_timestamp within the same query return the same value.
-
-    _FUNC_ - Returns the current timestamp at the start of query evaluation.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_();
-       2020-04-25 15:49:11.914
-      > SELECT _FUNC_;
-       2020-04-25 15:49:11.914
-  """,
-  note = """
-    The syntax without braces has been supported since 2.0.1.
-  """,
-  group = "datetime_funcs",
-  since = "1.5.0")
-// scalastyle:on line.size.limit
 case class CurrentTimestamp() extends CurrentTimestampLike {
   override def prettyName: String = "current_timestamp"
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_();
-       2020-04-25 15:49:11.914
-  """,
-  group = "datetime_funcs",
-  since = "1.6.0")
 case class Now() extends CurrentTimestampLike {
   override def prettyName: String = "now"
 }
 
 /**
- * Returns the current timestamp without time zone at the start of query evaluation.
+ * Returns the current timestamp without time zone at the start of query evaluation. The
+ * no-argument micro form registered as `localtimestamp`; see
+ * [[LocalTimestampExpressionBuilder]] for the `localtimestamp(precision)` variant.
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_() - Returns the current timestamp without time zone at the start of query evaluation. All calls of localtimestamp within the same query return the same value.
-
-    _FUNC_ - Returns the current local date-time at the session time zone at the start of query evaluation.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_();
-       2020-04-25 15:49:11.914
-  """,
-  group = "datetime_funcs",
-  since = "3.4.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
   with TimeZoneAwareExpression with CodegenFallback {
   def this() = this(None)
@@ -266,6 +227,228 @@ case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpress
     copy(timeZoneId = Option(timeZoneId))
   override def eval(input: InternalRow): Any = localDateTimeToMicros(LocalDateTime.now(zoneId))
   override def prettyName: String = "localtimestamp"
+}
+
+/**
+ * Returns the current timestamp with local time zone at the start of query evaluation, as a
+ * nanosecond-precision `TIMESTAMP_LTZ(precision)` (`precision` in `[7, 9]`). This is the
+ * nanosecond counterpart of [[CurrentTimestamp]] / [[Now]] and is produced by
+ * [[CurrentTimestampExpressionBuilder]] when `current_timestamp(p)` / `now(p)` is called with a
+ * nanosecond precision. Like the microsecond current-timestamp expressions it is foldable and
+ * gets constant folded by [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]]; there
+ * is no code generation.
+ */
+case class CurrentTimestampNanos(precision: Int) extends CurrentTimestampLike {
+  override def dataType: DataType = TimestampLTZNanosType(precision)
+  override def eval(input: InternalRow): Any =
+    instantToTimestampNanos(java.time.Instant.now(), precision)
+  override def prettyName: String = "current_timestamp"
+}
+
+/**
+ * Returns the current timestamp without time zone at the start of query evaluation, as a
+ * nanosecond-precision `TIMESTAMP_NTZ(precision)` (`precision` in `[7, 9]`). This is the
+ * nanosecond counterpart of [[LocalTimestamp]] and is produced by
+ * [[LocalTimestampExpressionBuilder]] when `localtimestamp(p)` is called with a nanosecond
+ * precision. Like [[LocalTimestamp]] it is time-zone aware (the session time zone determines the
+ * wall-clock value), foldable, and gets constant folded by
+ * [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]]; there is no code generation.
+ */
+case class LocalTimestampNanos(precision: Int, timeZoneId: Option[String] = None)
+  extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
+  def this(precision: Int) = this(precision, None)
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def dataType: DataType = TimestampNTZNanosType(precision)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+  override def eval(input: InternalRow): Any =
+    localDateTimeToTimestampNanos(LocalDateTime.now(zoneId), precision)
+  override def prettyName: String = "localtimestamp"
+}
+
+/**
+ * Shared precision handling for the `current_timestamp(p)` / `now(p)` / `localtimestamp(p)`
+ * expression builders.
+ */
+private[expressions] object CurrentTimestampPrecision {
+  /**
+   * Validates the foldable integer precision argument `p` of a current-timestamp function and
+   * returns it. `p == 6` selects the historical microsecond type; `p` in `[7, 9]` selects the
+   * nanosecond type (which requires `spark.sql.timestampNanosTypes.enabled`). Any other value is
+   * rejected with `INVALID_TIMESTAMP_PRECISION`. The `typeName` (`TIMESTAMP_LTZ` / `TIMESTAMP_NTZ`)
+   * is used in the precision / feature-flag error messages, matching the `TIMESTAMP(p)` type
+   * parser.
+   */
+  def validate(funcName: String, precision: Expression, typeName: String): Int = {
+    if (!precision.foldable) {
+      throw QueryCompilationErrors.nonFoldableArgumentError(
+        funcName, "precision", precision.dataType)
+    }
+    if (!precision.dataType.isInstanceOf[IntegralType]) {
+      throw QueryCompilationErrors.unexpectedInputDataTypeError(
+        funcName, 1, IntegerType, precision)
+    }
+    val value = precision.eval()
+    if (value == null) {
+      throw QueryCompilationErrors.unexpectedNullError("precision", precision)
+    }
+    val p = value.asInstanceOf[Number].intValue()
+    // Reject out-of-range precisions before the feature-flag check so the error is always
+    // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED (mirrors the TIMESTAMP(p) type parser).
+    if (p != 6 &&
+      (p < TimestampLTZNanosType.MIN_PRECISION || p > TimestampLTZNanosType.MAX_PRECISION)) {
+      throw DataTypeErrors.invalidTimestampPrecisionError(p.toString, typeName)
+    }
+    if (p != 6) {
+      DataTypeErrors.checkTimestampNanosTypesEnabled()
+    }
+    p
+  }
+}
+
+/**
+ * Builds `current_timestamp` / `now`. The no-argument form keeps the historical microsecond
+ * `TIMESTAMP` type ([[CurrentTimestamp]] / [[Now]]); the single-argument form accepts a foldable
+ * integer precision `p`, returning the microsecond `TIMESTAMP` for `p == 6` and a nanosecond
+ * `TIMESTAMP_LTZ(p)` for `p` in `[7, 9]` (gated behind `spark.sql.timestampNanosTypes.enabled`).
+ * The precision handling mirrors the `TIMESTAMP_LTZ(p)` type parser and `current_time(p)`.
+ *
+ * `now` is registered through the separate [[NowExpressionBuilder]] so it can document its own
+ * examples (`now` has no braceless form, unlike the `current_timestamp` keyword), but delegates
+ * its build logic here.
+ */
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current timestamp at the start of query evaluation. All calls of current_timestamp within the same query return the same value.
+
+    _FUNC_ - Returns the current timestamp at the start of query evaluation.
+
+    _FUNC_(precision) - Returns the current timestamp at the start of query evaluation, with the given fractional-seconds precision. A precision in [7, 9] returns a nanosecond-precision TIMESTAMP_LTZ(precision) and requires spark.sql.timestampNanosTypes.enabled to be true; precision 6 returns the standard microsecond TIMESTAMP.
+  """,
+  arguments = """
+    Arguments:
+      * precision - An optional integer literal. Either 6 (the microsecond TIMESTAMP default) or a
+                    value in [7, 9] selecting a nanosecond-precision TIMESTAMP_LTZ(precision).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+      > SELECT _FUNC_;
+       2020-04-25 15:49:11.914
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_(9);
+       2020-04-25 15:49:11.914120463
+  """,
+  note = """
+    The syntax without braces has been supported since 2.0.1.
+  """,
+  group = "datetime_funcs",
+  since = "1.5.0")
+// scalastyle:on line.size.limit line.contains.tab
+object CurrentTimestampExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions.length match {
+      case 0 =>
+        // Preserve the exact historical expression so `now` still maps to `Now` and rendering /
+        // pattern matching are unchanged.
+        if (funcName.equalsIgnoreCase("now")) Now() else CurrentTimestamp()
+      case 1 =>
+        val p = CurrentTimestampPrecision.validate(funcName, expressions.head, "TIMESTAMP_LTZ")
+        if (p == 6) {
+          if (funcName.equalsIgnoreCase("now")) Now() else CurrentTimestamp()
+        } else {
+          CurrentTimestampNanos(p)
+        }
+      case n =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(0, 1), n)
+    }
+  }
+}
+
+/**
+ * Builds `now` / `now(precision)`. Shares [[CurrentTimestampExpressionBuilder]]'s build logic but
+ * carries its own `@ExpressionDescription`: `now` is a regular function with no braceless form,
+ * so its examples must not include the `SELECT now` case that the `current_timestamp` keyword
+ * documents.
+ */
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current timestamp at the start of query evaluation. All calls of now within the same query return the same value.
+
+    _FUNC_(precision) - Returns the current timestamp at the start of query evaluation, with the given fractional-seconds precision. A precision in [7, 9] returns a nanosecond-precision TIMESTAMP_LTZ(precision) and requires spark.sql.timestampNanosTypes.enabled to be true; precision 6 returns the standard microsecond TIMESTAMP.
+  """,
+  arguments = """
+    Arguments:
+      * precision - An optional integer literal. Either 6 (the microsecond TIMESTAMP default) or a
+                    value in [7, 9] selecting a nanosecond-precision TIMESTAMP_LTZ(precision).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_(9);
+       2020-04-25 15:49:11.914120463
+  """,
+  group = "datetime_funcs",
+  since = "1.6.0")
+// scalastyle:on line.size.limit line.contains.tab
+object NowExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression =
+    CurrentTimestampExpressionBuilder.build(funcName, expressions)
+}
+
+/**
+ * Builds `localtimestamp`. The no-argument form keeps the historical microsecond `TIMESTAMP_NTZ`
+ * type ([[LocalTimestamp]]); the single-argument form accepts a foldable integer precision `p`,
+ * returning the microsecond `TIMESTAMP_NTZ` for `p == 6` and a nanosecond `TIMESTAMP_NTZ(p)` for
+ * `p` in `[7, 9]` (gated behind `spark.sql.timestampNanosTypes.enabled`). The precision handling
+ * mirrors the `TIMESTAMP_NTZ(p)` type parser and `current_time(p)`.
+ */
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current timestamp without time zone at the start of query evaluation. All calls of localtimestamp within the same query return the same value.
+
+    _FUNC_ - Returns the current local date-time at the session time zone at the start of query evaluation.
+
+    _FUNC_(precision) - Returns the current local date-time with the given fractional-seconds precision. A precision in [7, 9] returns a nanosecond-precision TIMESTAMP_NTZ(precision) and requires spark.sql.timestampNanosTypes.enabled to be true; precision 6 returns the standard microsecond TIMESTAMP_NTZ.
+  """,
+  arguments = """
+    Arguments:
+      * precision - An optional integer literal. Either 6 (the microsecond TIMESTAMP_NTZ default)
+                    or a value in [7, 9] selecting a nanosecond-precision TIMESTAMP_NTZ(precision).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_(9);
+       2020-04-25 15:49:11.914120463
+  """,
+  group = "datetime_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit line.contains.tab
+object LocalTimestampExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions.length match {
+      case 0 => LocalTimestamp()
+      case 1 =>
+        val p = CurrentTimestampPrecision.validate(funcName, expressions.head, "TIMESTAMP_NTZ")
+        if (p == 6) LocalTimestamp() else LocalTimestampNanos(p)
+      case n =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(0, 1), n)
+    }
+  }
 }
 
 /**
@@ -306,6 +489,14 @@ case class CurrentBatchTimestamp(
       case _: TimestampType => Literal(timestampUs, TimestampType)
       case _: TimestampNTZType =>
         Literal(convertTz(timestampUs, ZoneOffset.UTC, zoneId), TimestampNTZType)
+      // The batch timestamp is millisecond resolution, so nanos-within-micro is always 0.
+      // TIMESTAMP_LTZ is instant-based (zone-independent); TIMESTAMP_NTZ takes the wall clock
+      // in the session zone, mirroring the micro TimestampNTZType branch above.
+      case ltz: TimestampLTZNanosType =>
+        Literal(TimestampNanosVal.fromParts(timestampUs, 0), ltz)
+      case ntz: TimestampNTZNanosType =>
+        Literal(
+          TimestampNanosVal.fromParts(convertTz(timestampUs, ZoneOffset.UTC, zoneId), 0), ntz)
       case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
     }
   }
@@ -1126,6 +1317,10 @@ case class UnixMicros(child: Expression) extends TimestampToLongBase {
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the number of nanoseconds since 1970-01-01 00:00:00 UTC.",
+  arguments = """
+    Arguments:
+      * timestamp - A nanosecond-precision timestamp value (TIMESTAMP_LTZ or TIMESTAMP_NTZ).
+  """,
   examples = """
     Examples:
       > SET spark.sql.timestampNanosTypes.enabled=true;
@@ -2749,7 +2944,8 @@ case class TimestampAddYMInterval(
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType, YearMonthIntervalType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(AnyTimestampType, AnyTimestampNanoType), YearMonthIntervalType)
 
   override def dataType: DataType = timestamp.dataType
 
@@ -2758,16 +2954,25 @@ case class TimestampAddYMInterval(
 
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
 
-  override def nullSafeEval(micros: Any, months: Any): Any = {
-    timestampAddMonths(micros.asInstanceOf[Long], months.asInstanceOf[Int], zoneIdInEval)
+  override def nullSafeEval(start: Any, months: Any): Any = left.dataType match {
+    case _: AnyTimestampNanoType =>
+      timestampNanosAddMonths(
+        start.asInstanceOf[TimestampNanosVal], months.asInstanceOf[Int], zoneIdInEval)
+    case _ =>
+      timestampAddMonths(start.asInstanceOf[Long], months.asInstanceOf[Int], zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (micros, months) => {
-      s"""$dtu.timestampAddMonths($micros, $months, $zid)"""
-    })
+    left.dataType match {
+      case _: AnyTimestampNanoType =>
+        defineCodeGen(ctx, ev, (sd, months) =>
+          s"""$dtu.timestampNanosAddMonths($sd, $months, $zid)""")
+      case _ =>
+        defineCodeGen(ctx, ev, (micros, months) =>
+          s"""$dtu.timestampAddMonths($micros, $months, $zid)""")
+    }
   }
 
   override protected def withNewChildrenInternal(
@@ -4499,6 +4704,10 @@ object Extract {
  *     the given timestamps.
  *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in microseconds
  *     between given timestamps.
+ *
+ * Both microsecond and nanosecond-precision timestamp types are accepted as operands. Because the
+ * difference is reported on the microsecond grid in either mode, a nanosecond operand contributes
+ * only its `epochMicros`; the sub-microsecond remainder is truncated.
  */
 case class SubtractTimestamps(
     left: Expression,
@@ -4513,7 +4722,14 @@ case class SubtractTimestamps(
   def this(endTimestamp: Expression, startTimestamp: Expression) =
     this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType, AnyTimestampType)
+  // Nanosecond-precision timestamps are accepted alongside the microsecond types. The difference is
+  // always reported on the microsecond grid (both result types -- DayTimeIntervalType and, in
+  // legacy mode, CalendarIntervalType -- carry microsecond resolution), so each operand contributes
+  // only its epochMicros; the sub-microsecond remainder is truncated.
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      TypeCollection(AnyTimestampType, AnyTimestampNanoType),
+      TypeCollection(AnyTimestampType, AnyTimestampNanoType))
   override def dataType: DataType =
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
 
@@ -4521,6 +4737,13 @@ case class SubtractTimestamps(
     copy(timeZoneId = Option(timeZoneId))
 
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
+
+  // For the nanosecond carrier the child value is a boxed TimestampNanosVal, so read its
+  // epochMicros; for the microsecond timestamp types it is already a boxed Long.
+  private def toMicros(value: Any): Long = value match {
+    case v: TimestampNanosVal => v.epochMicros
+    case n => n.asInstanceOf[Long]
+  }
 
   @transient
   private lazy val evalFunc: (Long, Long) => Any = if (legacyInterval) {
@@ -4531,17 +4754,29 @@ case class SubtractTimestamps(
       subtractTimestamps(leftMicros, rightMicros, zoneIdInEval)
   }
 
-  override def nullSafeEval(leftMicros: Any, rightMicros: Any): Any = {
-    evalFunc(leftMicros.asInstanceOf[Long], rightMicros.asInstanceOf[Long])
+  override def nullSafeEval(leftTs: Any, rightTs: Any): Any = {
+    evalFunc(toMicros(leftTs), toMicros(rightTs))
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = if (legacyInterval) {
-    defineCodeGen(ctx, ev, (end, start) =>
-      s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
-  } else {
-    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (l, r) => s"""$dtu.subtractTimestamps($l, $r, $zid)""")
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // The nanosecond carrier exposes epochMicros as a public field; the microsecond types are
+    // already primitive longs. Reduce each operand to microseconds before subtracting.
+    def toMicrosCode(e: Expression): String => String = e.dataType match {
+      case _: AnyTimestampNanoType => c => s"$c.epochMicros"
+      case _ => c => c
+    }
+    val leftMicros = toMicrosCode(left)
+    val rightMicros = toMicrosCode(right)
+    if (legacyInterval) {
+      defineCodeGen(ctx, ev, (end, start) =>
+        s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, " +
+          s"${leftMicros(end)} - ${rightMicros(start)})")
+    } else {
+      val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      defineCodeGen(ctx, ev, (l, r) =>
+        s"""$dtu.subtractTimestamps(${leftMicros(l)}, ${rightMicros(r)}, $zid)""")
+    }
   }
 
   override def toString: String = s"($left - $right)"
@@ -4659,20 +4894,64 @@ case class ConvertTimezone(
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true),
-      TimestampNTZType)
-  override def dataType: DataType = TimestampNTZType
+      TypeCollection(TimestampNTZType, AnyTimestampNanoType))
 
-  override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {
-    DateTimeUtils.convertTimestampNtzToAnotherTz(
+  // sourceTs's requiredType, as actually enforced by this method: TypeCollection includes
+  // AnyTimestampNanoType (rather than an NTZ-only nanos type) only so that an LTZ(p) input is
+  // accepted here and rejected below with the friendly message, instead of being silently
+  // widened to TimestampNTZType by the generic datetime-to-datetime implicit cast rule. That
+  // makes AnyTimestampNanoType.simpleString (which lists timestamp_ltz(p)) leak into the
+  // generic super.checkInputDataTypes() mismatch message for this param when sourceTs is some
+  // unrelated type (e.g. an int), even though LTZ(p) is never actually accepted. Route both the
+  // generic mismatch and the explicit LTZ rejection through the same message so they agree.
+  private def wrongSourceTsType: DataTypeMismatch = DataTypeMismatch(
+    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "paramIndex" -> ordinalNumber(2),
+      "requiredType" -> toSQLType("(timestamp_ntz or timestamp_ntz(p) with p in [7, 9])"),
+      "inputSql" -> toSQLExpr(sourceTs),
+      "inputType" -> toSQLType(sourceTs.dataType)))
+
+  override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
+    case TypeCheckSuccess if sourceTs.dataType.isInstanceOf[TimestampLTZNanosType] =>
+      wrongSourceTsType
+    case DataTypeMismatch("UNEXPECTED_INPUT_TYPE", params)
+        if params.get("paramIndex").contains(ordinalNumber(2)) =>
+      wrongSourceTsType
+    case result => result
+  }
+
+  private def isTsNanos: Boolean = sourceTs.dataType.isInstanceOf[AnyTimestampNanoType]
+
+  // Preserves the exact source precision (7/8/9); AnyTimestampNanoType.defaultConcreteType would
+  // always widen the result to precision 9.
+  override def dataType: DataType = if (isTsNanos) sourceTs.dataType else TimestampNTZType
+
+  override def nullSafeEval(srcTz: Any, tgtTz: Any, ts: Any): Any = {
+    val micros = if (isTsNanos) ts.asInstanceOf[TimestampNanosVal].epochMicros else ts
+    val convertedTs = DateTimeUtils.convertTimestampNtzToAnotherTz(
       srcTz.asInstanceOf[UTF8String].toString,
       tgtTz.asInstanceOf[UTF8String].toString,
       micros.asInstanceOf[Long])
+    if (isTsNanos) {
+      TimestampNanosVal.fromParts(
+        convertedTs, ts.asInstanceOf[TimestampNanosVal].nanosWithinMicro)
+    } else convertedTs
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (srcTz, tgtTz, micros) =>
-      s"""$dtu.convertTimestampNtzToAnotherTz($srcTz.toString(), $tgtTz.toString(), $micros)""")
+    if (isTsNanos) {
+      defineCodeGen(ctx, ev, (srcTz, tgtTz, ts) => {
+        val convertedMicros = s"$dtu.convertTimestampNtzToAnotherTz(" +
+          s"$srcTz.toString(), $tgtTz.toString(), $ts.epochMicros)"
+        s"org.apache.spark.unsafe.types.TimestampNanosVal.fromParts(" +
+          s"$convertedMicros, $ts.nanosWithinMicro)"
+      })
+    } else {
+      defineCodeGen(ctx, ev, (srcTz, tgtTz, micros) =>
+        s"""$dtu.convertTimestampNtzToAnotherTz($srcTz.toString(), $tgtTz.toString(), $micros)""")
+    }
   }
 
   override def prettyName: String = "convert_timezone"

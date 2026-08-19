@@ -950,12 +950,13 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
         def update(rdd: RDD[LabeledPoint]) -> None:
             # LogisticRegressionWithSGD.train raises an error for an empty RDD.
             if not rdd.isEmpty():
+                assert self._model is not None
                 self._model = LogisticRegressionWithSGD.train(
                     rdd,
                     self.numIterations,
                     self.stepSize,
                     self.miniBatchFraction,
-                    self._model.weights,  # type: ignore[union-attr]
+                    self._model.weights,
                     regParam=self.regParam,
                     convergenceTol=self.convergenceTol,
                 )

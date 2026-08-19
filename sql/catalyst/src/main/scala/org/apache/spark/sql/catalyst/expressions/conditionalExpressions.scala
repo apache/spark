@@ -33,6 +33,12 @@ import org.apache.spark.util.ArrayImplicits._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`.",
+  arguments = """
+    Arguments:
+      * expr1 - A boolean expression evaluated as the condition.
+      * expr2 - The expression returned when `expr1` evaluates to true.
+      * expr3 - The expression returned when `expr1` evaluates to false or null.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1 < 2, 'a', 'b');

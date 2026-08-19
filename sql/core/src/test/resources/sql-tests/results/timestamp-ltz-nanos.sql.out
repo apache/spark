@@ -679,6 +679,46 @@ struct<TIMESTAMP_LTZ '1960-01-01 19:04:05.123456789' + INTERVAL '0 00:00:00.0000
 
 
 -- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' YEAR
+-- !query schema
+struct<TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + INTERVAL '1' YEAR:timestamp_ltz(9)>
+-- !query output
+2021-01-01 19:04:05.123456789
+
+
+-- !query
+SELECT INTERVAL '1' YEAR + TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC'
+-- !query schema
+struct<TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + INTERVAL '1' YEAR:timestamp_ltz(9)>
+-- !query output
+2021-01-01 19:04:05.123456789
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH
+-- !query schema
+struct<TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + INTERVAL '1' MONTH:timestamp_ltz(9)>
+-- !query output
+2020-02-01 19:04:05.123456789
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - INTERVAL '1-2' YEAR TO MONTH
+-- !query schema
+struct<TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' - INTERVAL '1-2' YEAR TO MONTH:timestamp_ltz(9)>
+-- !query output
+2018-11-01 19:04:05.123456789
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '1960-01-31 03:04:05.123456789 UTC' + INTERVAL '1' MONTH
+-- !query schema
+struct<TIMESTAMP_LTZ '1960-01-30 19:04:05.123456789' + INTERVAL '1' MONTH:timestamp_ltz(9)>
+-- !query output
+1960-02-29 19:04:05.123456789
+
+
+-- !query
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0)
 -- !query schema
 struct<>
@@ -705,25 +745,92 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC'
+-- !query schema
+struct<(TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' - TIMESTAMP_LTZ '2019-12-31 19:04:05.000000111'):interval day to second>
+-- !query output
+1 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05.123456001 UTC'
+-- !query schema
+struct<(TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' - TIMESTAMP_LTZ '2020-01-01 19:04:05.123456001'):interval day to second>
+-- !query output
+0 00:00:00.000000000
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC'
+-- !query schema
+struct<(TIMESTAMP_LTZ '2019-12-31 19:04:05.000000111' - TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789'):interval day to second>
+-- !query output
+-1 00:00:00.123456000
+
+
+-- !query
+SELECT ('2020-01-02 03:04:05.1234567 UTC' :: timestamp_ltz(7)) - ('2020-01-01 03:04:05.000000009 UTC' :: timestamp_ltz(9))
+-- !query schema
+struct<(CAST(2020-01-02 03:04:05.1234567 UTC AS TIMESTAMP_LTZ(7)) - CAST(2020-01-01 03:04:05.000000009 UTC AS TIMESTAMP_LTZ(9))):interval day to second>
+-- !query output
+1 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05 UTC'
+-- !query schema
+struct<(TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' - TIMESTAMP '2020-01-01 19:04:05'):interval day to second>
+-- !query output
+0 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01'
+-- !query schema
+struct<(TIMESTAMP_LTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01'):interval day to second>
+-- !query output
+1 00:00:00.000000000
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' - TIMESTAMP_LTZ '1960-01-01 00:00:00.000000999 UTC'
+-- !query schema
+struct<(TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789' - TIMESTAMP_LTZ '1959-12-31 16:00:00.000000999'):interval day to second>
+-- !query output
+21915 00:00:00.123456000
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - CAST(NULL AS timestamp_ltz(9))
+-- !query schema
+struct<(TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' - CAST(NULL AS TIMESTAMP_LTZ(9))):interval day to second>
+-- !query output
+NULL
+
+
+-- !query
+SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    '2022-03-27 03:00:00.123456789 UTC' :: timestamp_ltz(9))
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"TIMESTAMP_LTZ(9)\"",
-    "right" : "\"INTERVAL MONTH\"",
-    "sqlExpr" : "\"(TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + INTERVAL '1' MONTH)\""
+    "inputSql" : "\"CAST(2022-03-27 03:00:00.123456789 UTC AS TIMESTAMP_LTZ(9))\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"(TIMESTAMP_NTZ OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\"",
+    "sqlExpr" : "\"convert_timezone(Europe/Brussels, Europe/Moscow, CAST(2022-03-27 03:00:00.123456789 UTC AS TIMESTAMP_LTZ(9)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 77,
-    "fragment" : "TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH"
+    "stopIndex" : 120,
+    "fragment" : "convert_timezone('Europe/Brussels', 'Europe/Moscow',\n    '2022-03-27 03:00:00.123456789 UTC' :: timestamp_ltz(9))"
   } ]
 }
 
@@ -750,6 +857,56 @@ struct<c:timestamp_ltz(9),count(1):bigint>
 -- !query output
 2019-12-31 16:00:00.000000001	2
 2019-12-31 16:00:00.000000999	1
+
+
+-- !query
+SELECT k, count(*), sum(v) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 1),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 2),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 3),
+  (CAST(NULL AS timestamp_ltz(9)), 4),
+  (CAST(NULL AS timestamp_ltz(9)), 5) AS t(k, v)
+  GROUP BY k ORDER BY k
+-- !query schema
+struct<k:timestamp_ltz(9),count(1):bigint,sum(v):bigint>
+-- !query output
+NULL	2	9
+2019-12-31 16:00:00.000000001	2	3
+2019-12-31 16:00:00.000000999	1	3
+
+
+-- !query
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
+-- !query schema
+struct<mode(c):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000001
+
+
+-- !query
+SELECT sort_array(collect_set(c)) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
+-- !query schema
+struct<sort_array(collect_set(c), true):array<timestamp_ltz(9)>>
+-- !query output
+[2019-12-31 16:00:00.000000001,2019-12-31 16:00:00.000000999]
+
+
+-- !query
+SELECT sort_array(collect_list(c)) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c)
+-- !query schema
+struct<sort_array(collect_list(c), true):array<timestamp_ltz(9)>>
+-- !query output
+[2019-12-31 16:00:00.000000001,2019-12-31 16:00:00.000000001,2019-12-31 16:00:00.000000999]
 
 
 -- !query
@@ -818,6 +975,21 @@ SELECT max_by(v, k), min_by(v, k) FROM VALUES
 struct<max_by(v, k):timestamp_ltz(9),min_by(v, k):timestamp_ltz(9)>
 -- !query output
 2019-12-31 16:00:00.000000999	2019-12-31 16:00:00.000000001
+
+
+-- !query
+SELECT DISTINCT c FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c)
+  ORDER BY c
+-- !query schema
+struct<c:timestamp_ltz(9)>
+-- !query output
+NULL
+2019-12-31 16:00:00.000000001
+2019-12-31 16:00:00.000000999
 
 
 -- !query
@@ -1128,6 +1300,70 @@ struct<v:timestamp_ltz(9),next_v:timestamp_ltz(9)>
 
 
 -- !query
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c = '2020-01-02 03:04:05.123456788',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789') AS t(c)
+-- !query schema
+struct<(c = 2020-01-02 03:04:05.123456789):boolean,(c = 2020-01-02 03:04:05.123456788):boolean,(c < 2020-01-02 03:04:05.123456790):boolean>
+-- !query output
+true	false	true
+
+
+-- !query
+SELECT c FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-02 03:04:05.000000001'),
+  (TIMESTAMP_LTZ '2020-01-02 03:04:05.000000009') AS t(c)
+  WHERE c BETWEEN '2020-01-02 03:04:05.000000001' AND '2020-01-02 03:04:05.000000005'
+-- !query schema
+struct<c:timestamp_ltz(9)>
+-- !query output
+2020-01-02 03:04:05.000000001
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.typeCoercion.datetimeToString.enabled	true
+
+
+-- !query
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789') AS t(c)
+-- !query schema
+struct<(c = 2020-01-02 03:04:05.123456789):boolean,(c < 2020-01-02 03:04:05.123456790):boolean>
+-- !query output
+true	true
+
+
+-- !query
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.typeCoercion.datetimeToString.enabled	false
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
 SELECT unix_seconds(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
 -- !query schema
 struct<unix_seconds(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789'):bigint>
@@ -1285,3 +1521,231 @@ SELECT date_trunc('NANOSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC
 struct<date_trunc(NANOSECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789'):timestamp_ltz(9)>
 -- !query output
 NULL
+
+
+-- !query
+SELECT typeof(current_timestamp(9)), typeof(current_timestamp(8)), typeof(current_timestamp(7))
+-- !query schema
+struct<typeof(current_timestamp()):string,typeof(current_timestamp()):string,typeof(current_timestamp()):string>
+-- !query output
+timestamp_ltz(9)	timestamp_ltz(8)	timestamp_ltz(7)
+
+
+-- !query
+SELECT typeof(now(9)), typeof(now(6))
+-- !query schema
+struct<typeof(current_timestamp()):string,typeof(now()):string>
+-- !query output
+timestamp_ltz(9)	timestamp
+
+
+-- !query
+SELECT typeof(current_timestamp()), typeof(current_timestamp(6))
+-- !query schema
+struct<typeof(current_timestamp()):string,typeof(current_timestamp()):string>
+-- !query output
+timestamp	timestamp
+
+
+-- !query
+SELECT typeof(current_timestamp(7 + 2))
+-- !query schema
+struct<typeof(current_timestamp()):string>
+-- !query output
+timestamp_ltz(9)
+
+
+-- !query
+SELECT current_timestamp(9) = current_timestamp(9), now(9) = current_timestamp(9)
+-- !query schema
+struct<(current_timestamp() = current_timestamp()):boolean,(current_timestamp() = current_timestamp()):boolean>
+-- !query output
+true	true
+
+
+-- !query
+SELECT current_timestamp(3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "3",
+    "type" : "TIMESTAMP_LTZ"
+  }
+}
+
+
+-- !query
+SELECT current_timestamp(10)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_LTZ"
+  }
+}
+
+
+-- !query
+SELECT c FROM (SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' AS c
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC')
+  INTERSECT SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' ORDER BY c
+-- !query schema
+struct<c:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000001
+
+
+-- !query
+SELECT c FROM (SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' AS c
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC')
+  EXCEPT SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' ORDER BY c
+-- !query schema
+struct<c:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000999
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    (SELECT '2020-01-01 00:00:00.0000009 UTC' :: timestamp_ltz(7) AS c)
+     INTERSECT (SELECT '2020-01-01 00:00:00.000000900 UTC' :: timestamp_ltz(9))) ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2019-12-31 16:00:00.0000009
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC'
+    BETWEEN TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'
+        AND TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'
+-- !query schema
+struct<between(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000500', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999'):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000001000 UTC'
+    BETWEEN TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'
+        AND TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'
+-- !query schema
+struct<between(TIMESTAMP_LTZ '2019-12-31 16:00:00.000001000', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999'):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT '2020-01-01 00:00:00.000000500 UTC' :: timestamp_ltz(9)
+    BETWEEN '2020-01-01 00:00:00.0000001 UTC' :: timestamp_ltz(7)
+        AND TIMESTAMP_LTZ '2020-01-01 00:00:00.000001 UTC'
+-- !query schema
+struct<between(CAST(2020-01-01 00:00:00.000000500 UTC AS TIMESTAMP_LTZ(9)), CAST(2020-01-01 00:00:00.0000001 UTC AS TIMESTAMP_LTZ(7)), TIMESTAMP '2019-12-31 16:00:00.000001'):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT if(true,
+    '2020-01-01 00:00:00.0000001 UTC' :: timestamp_ltz(7),
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC') AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2019-12-31 16:00:00.0000001
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT nvl(
+    CAST(NULL AS timestamp_ltz(9)),
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2019-12-31 16:00:00.000000999
+
+
+-- !query
+SELECT ifnull(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', CAST(NULL AS timestamp_ltz(9)))
+-- !query schema
+struct<ifnull(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', CAST(NULL AS TIMESTAMP_LTZ(9))):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000001
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+    (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') AS t(k)
+  WHERE k IN (SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') ORDER BY k
+-- !query schema
+struct<k:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000999
+
+
+-- !query
+SELECT typeof(col), col FROM (SELECT explode(array(
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'))) ORDER BY col
+-- !query schema
+struct<typeof(col):string,col:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2019-12-31 16:00:00.000000001
+timestamp_ltz(9)	2019-12-31 16:00:00.000000999
+
+
+-- !query
+SELECT element_at(array(
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'), 2)
+-- !query schema
+struct<element_at(array(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999'), 2):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000999
+
+
+-- !query
+SELECT (named_struct('f', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')).f
+-- !query schema
+struct<named_struct(f, TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789').f:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.123456789
+
+
+-- !query
+SELECT map('k', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')['k']
+-- !query schema
+struct<map(k, TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789')[k]:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.123456789
+
+
+-- !query
+SELECT map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
+           TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 'b')[
+       TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC']
+-- !query schema
+struct<map(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', a, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999', b)[TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999']:string>
+-- !query output
+b
+
+
+-- !query
+SELECT element_at(map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
+           TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 'b'),
+       TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC')
+-- !query schema
+struct<element_at(map(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', a, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999', b), TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001'):string>
+-- !query output
+a

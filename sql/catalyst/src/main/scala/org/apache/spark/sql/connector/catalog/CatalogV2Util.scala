@@ -472,35 +472,65 @@ private[sql] object CatalogV2Util {
       catalog: CatalogPlugin,
       ident: Identifier,
       timeTravelSpec: Option[TimeTravelSpec] = None,
-      writePrivilegesString: Option[String] = None): Option[Table] =
+      writePrivilegesString: Option[String] = None,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): Option[Table] =
     try {
-      Option(getTable(catalog, ident, timeTravelSpec, writePrivilegesString))
+      Option(getTable(catalog, ident, timeTravelSpec, writePrivilegesString, options))
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
     }
 
+  /**
+   * Extracts the options that may select table state from a complete option map. These are the
+   * only options passed to `loadTable` and used to identify a pinned table state.
+   */
+  def extractTableStateOptions(
+      catalog: CatalogPlugin,
+      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val stateKeys = catalog.asTableCatalog.tableStateOptionKeys.asScala
+      .map(_.toLowerCase(Locale.ROOT))
+      .toSet
+    val projected = options.entrySet.asScala.collect {
+      case entry if stateKeys.contains(entry.getKey.toLowerCase(Locale.ROOT)) =>
+        entry.getKey -> entry.getValue
+    }.toMap
+    new CaseInsensitiveStringMap(projected.asJava)
+  }
+
+  /**
+   * Loads a table from the catalog. Callers may pass the complete option map, but only the keys the
+   * catalog declares via `tableStateOptionKeys()` are forwarded to `loadTable`, so the loaded table
+   * state stays independent of non-state options and of how many times the table is referenced.
+   */
   def getTable(
       catalog: CatalogPlugin,
       ident: Identifier,
       timeTravelSpec: Option[TimeTravelSpec] = None,
-      writePrivilegesString: Option[String] = None): Table = {
-    if (timeTravelSpec.nonEmpty) {
-      assert(writePrivilegesString.isEmpty, "Should not write to a table with time travel")
-      timeTravelSpec.get match {
-        case v: AsOfVersion =>
-          catalog.asTableCatalog.loadTable(ident, v.version)
-        case ts: AsOfTimestamp =>
-          catalog.asTableCatalog.loadTable(ident, ts.timestamp)
-      }
-    } else {
-      if (writePrivilegesString.isDefined) {
-        val writePrivileges = writePrivilegesString.get.split(",").map(_.trim)
-          .map(TableWritePrivilege.valueOf).toSet.asJava
-        catalog.asTableCatalog.loadTable(ident, writePrivileges)
-      } else {
-        catalog.asTableCatalog.loadTable(ident)
-      }
+      writePrivilegesString: Option[String] = None,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): Table = {
+    val timeTravel: TimeTravel = timeTravelSpec match {
+      case Some(v: AsOfVersion) => new TimeTravel.AsOfVersion(v.version)
+      case Some(ts: AsOfTimestamp) => new TimeTravel.AsOfTimestamp(ts.timestamp)
+      case None => null
+    }
+    val context = new TableContext(timeTravel, parseWritePrivileges(writePrivilegesString))
+    val stateOptions = extractTableStateOptions(catalog, options)
+    catalog.asTableCatalog.loadTable(ident, context, stateOptions)
+  }
+
+  /**
+   * Parses the comma-separated write-privileges string (as carried in the internal
+   * [[org.apache.spark.sql.catalyst.analysis.UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES]]
+   * option) into a set of [[TableWritePrivilege]]. Returns an empty set when absent (a read).
+   */
+  private def parseWritePrivileges(
+      writePrivilegesString: Option[String]): util.Set[TableWritePrivilege] = {
+    writePrivilegesString match {
+      case Some(str) =>
+        str.split(",").map(_.trim).map(TableWritePrivilege.valueOf).toSet.asJava
+      case None =>
+        util.Set.of()
     }
   }
 
@@ -527,25 +557,19 @@ private[sql] object CatalogV2Util {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
-  def isSameTable(
-      rel: DataSourceV2Relation,
-      catalog: CatalogPlugin,
-      ident: Identifier,
-      table: Table): Boolean = {
-    rel.catalog.contains(catalog) && rel.identifier.contains(ident) && rel.table.id == table.id
-  }
-
   def lookupCachedRelation(
       cache: RelationCache,
       catalog: CatalogPlugin,
       ident: Identifier,
       table: Table,
+      options: CaseInsensitiveStringMap,
       conf: SQLConf): Option[DataSourceV2Relation] = {
-    val nameParts = ident.toQualifiedNameParts(catalog)
-    val cached = cache.lookup(nameParts, conf.resolver)
-    cached.collect {
-      case r: DataSourceV2Relation if isSameTable(r, catalog, ident, table) => r
-    }
+    cache.lookup(
+      catalog,
+      ident,
+      Some(table.id),
+      extractTableStateOptions(catalog, options),
+      conf.resolver).collect { case r: DataSourceV2Relation => r }
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
@@ -570,6 +594,7 @@ private[sql] object CatalogV2Util {
       .withQueryColumnNames(existing.queryColumnNames)
     Option(existing.currentCatalog).foreach(builder.withCurrentCatalog)
     Option(existing.schemaMode).foreach(builder.withSchemaMode)
+    Option(existing.viewDependencies).foreach(builder.withViewDependencies)
     builder
   }
 

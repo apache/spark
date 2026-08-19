@@ -1267,6 +1267,33 @@ class ScalarArrowUDFTestsMixin:
             result = df.select(return_one("id").alias("one")).collect()
             self.assertEqual(expected, result)
 
+    def test_arrow_udf_task_context(self):
+        import pyarrow as pa
+
+        from pyspark import TaskContext
+
+        def partition_ids(size):
+            task_context = TaskContext.get()
+            assert task_context is not None
+            return pa.array([task_context.partitionId()] * size, type=pa.int32())
+
+        @arrow_udf("int")
+        def scalar_task_context(values):
+            return partition_ids(len(values))
+
+        @arrow_udf("int", ArrowUDFType.SCALAR_ITER)
+        def scalar_iter_task_context(iterator):
+            for values in iterator:
+                yield partition_ids(len(values))
+
+        for task_context_udf in [scalar_task_context, scalar_iter_task_context]:
+            rows = (
+                self.spark.range(10, numPartitions=2)
+                .select(task_context_udf("id").alias("partition_id"))
+                .collect()
+            )
+            self.assertEqual({0, 1}, {row.partition_id for row in rows})
+
 
 class ScalarArrowUDFTests(ScalarArrowUDFTestsMixin, ReusedSQLTestCase):
     @classmethod

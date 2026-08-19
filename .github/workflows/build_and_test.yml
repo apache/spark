@@ -51,6 +51,23 @@ on:
         required: false
         type: string
         default: ''
+      build_timeout_minutes:
+        description: >-
+          Timeout for each `build` matrix job. Raise it for a caller whose configuration makes the
+          tests slower, e.g. a non-default codegen compiler.
+        required: false
+        type: number
+        default: 150
+      pyspark_timeout_minutes:
+        description: Timeout for each `pyspark` matrix job. Same reason as above.
+        required: false
+        type: number
+        default: 120
+      docker_integration_tests_timeout_minutes:
+        description: Timeout for the `docker-integration-tests` job. Same reason as above.
+        required: false
+        type: number
+        default: 120
     secrets:
       codecov_token:
         description: The upload token of codecov.
@@ -113,6 +130,9 @@ jobs:
             docker=`./dev/is-changed.py -m docker-integration-tests`
             # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
             # These tests are unaffected by UI static resource modifications.
+            # Also we only run the very slow transpile changes when that logic changes
+            transpile=false
+            static_only=false
             changed_files=$(git diff --name-only "$APACHE_SPARK_REF" HEAD 2>/dev/null)
             if [ -n "$changed_files" ]; then
               static_only=true
@@ -122,8 +142,11 @@ jobs:
                   *) static_only=false; break ;;
                 esac
               done
-            else
-              static_only=false
+              for f in $changed_files; do
+                case "$f" in
+                  *transpile*) transpile=true; break ;;
+                esac
+              done
             fi
             if [ "$static_only" = "true" ]; then
               pyspark=false
@@ -150,7 +173,7 @@ jobs:
             docs=false
             java25=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
@@ -170,6 +193,7 @@ jobs:
               \"k8s-integration-tests\" : \"$kubernetes\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
+              \"transpile\": \"$transpile\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -254,7 +278,7 @@ jobs:
     needs: [precondition, precompile]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: ${{ inputs.build_timeout_minutes }}
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -276,7 +300,7 @@ jobs:
             mllib-local, mllib, graphx, profiler, pipelines, repl, examples
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
-            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
+            credential-aws, kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
           - yarn
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
@@ -461,7 +485,7 @@ jobs:
       packages: write
     steps:
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -481,15 +505,17 @@ jobs:
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
       - name: Build and push (Documentation)
         if: ${{ fromJson(needs.precondition.outputs.required).docs == 'true' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
         id: docker_build_docs
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./dev/spark-test-image/docs/
+          build-contexts: |
+            root=./
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_docs_url }}
@@ -498,9 +524,11 @@ jobs:
       - name: Build and push (Linter)
         if: ${{ fromJson(needs.precondition.outputs.required).lint == 'true' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
         id: docker_build_lint
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./dev/spark-test-image/lint/
+          build-contexts: |
+            root=./
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_lint_url }}
@@ -509,7 +537,7 @@ jobs:
       - name: Build and push (SparkR)
         if: ${{ fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
         id: docker_build_sparkr
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./dev/spark-test-image/sparkr/
           push: true
@@ -521,7 +549,7 @@ jobs:
         if: ${{ (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true') && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
         env: ${{ fromJSON(inputs.envs) }}
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./dev/spark-test-image/${{ env.PYSPARK_IMAGE_TO_TEST }}/
           build-contexts: |
@@ -594,7 +622,7 @@ jobs:
     - name: Build Spark
       run: |
         ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
-          -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Phive-thriftserver \
+          -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Pcredential-aws -Phive-thriftserver \
           -Pdocker-integration-tests -Pkubernetes-integration-tests -Pvolcano \
           Test/package streaming-kinesis-asl-assembly/assembly connect/assembly assembly/package
     - name: Package compile output
@@ -617,7 +645,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.pyspark_timeout_minutes }}
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
       options: >-
@@ -674,6 +702,11 @@ jobs:
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
+      RUN_HYPOTHESIS: ${{ fromJson(needs.precondition.outputs.required).transpile }}
+      # Each generated example runs two full Spark jobs (transpiled vs. interpreted
+      # differential), so the local default of 1000 blows past PYSPARK_TEST_TIMEOUT.
+      # Cap CI fuzz volume; the explicit @example edge seeds still always run.
+      RUN_HYPOTHESIS_MAX_EXAMPLES: 50
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v6
@@ -1121,7 +1154,7 @@ jobs:
       run: |
         export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl clean install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws clean install
 
   # Documentation build
   docs:
@@ -1315,6 +1348,7 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
+        SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.preferSortMergeJoin=true
@@ -1323,6 +1357,7 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
+        SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=10485760
     - name: Run TPC-DS queries (Shuffled hash join)
@@ -1330,12 +1365,15 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
+        SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.forceApplyShuffledHashJoin=true
     - name: Run TPC-DS queries on collated data
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
+      env:
+        SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v7
@@ -1363,7 +1401,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.docker_integration_tests_timeout_minutes }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3

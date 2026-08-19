@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
  */
 object StaticSQLConf {
 
-  import SQLConf.buildStaticConf
+  import SQLConf.{buildConfFromConfigFile, buildStaticConf}
 
   val WAREHOUSE_PATH = buildStaticConf("spark.sql.warehouse.dir")
     .doc("The default location for managed databases and tables.")
@@ -198,11 +198,7 @@ object StaticSQLConf {
     .createOptional
 
   val UI_RETAINED_EXECUTIONS =
-    buildStaticConf("spark.sql.ui.retainedExecutions")
-      .doc("Number of executions to retain in the Spark UI.")
-      .version("1.5.0")
-      .intConf
-      .createWithDefault(1000)
+    buildConfFromConfigFile[Int]("spark.sql.ui.retainedExecutions")
 
   val SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.shuffleExchange.maxThreadThreshold")
@@ -341,6 +337,18 @@ object StaticSQLConf {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
+    buildStaticConf("spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
+      .internal()
+      .doc("Allow the `copyFromLocalToFs` destination to be a local file system path on the " +
+        "driver node. This lets the caller overwrite arbitrary files on the driver node, so it " +
+        "should only be enabled for testing purposes. This is a static conf: it can only be set " +
+        "when starting the driver, and not from a session.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val REFLECT_ALLOW_LIST = buildStaticConf("spark.sql.reflect.allowList")
     .doc("A comma-separated allow list of regular expressions matched against the canonical " +

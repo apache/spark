@@ -130,3 +130,38 @@ SELECT vector_l2_distance(
     array(1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F),
     array(16.0F, 15.0F, 14.0F, 13.0F, 12.0F, 11.0F, 10.0F, 9.0F, 8.0F, 7.0F, 6.0F, 5.0F, 4.0F, 3.0F, 2.0F, 1.0F)
 );
+
+-- SPARK-58544: large magnitudes, intermediate sums of squares/products must not overflow the
+-- float range
+
+-- vector_cosine_similarity is scale invariant: identical vectors have similarity 1.0
+SELECT vector_cosine_similarity(array(3.0e19F, 4.0e19F), array(3.0e19F, 4.0e19F));
+
+-- vector_cosine_similarity: opposite vectors have similarity -1.0
+SELECT vector_cosine_similarity(array(3.0e19F, 4.0e19F), array(-3.0e19F, -4.0e19F));
+
+-- vector_inner_product: individual products overflow the float range but cancel out
+SELECT vector_inner_product(array(1.0e20F, 1.0e20F), array(1.0e20F, -1.0e20F));
+
+-- vector_l2_distance: sqrt((3e19)^2 + (4e19)^2) = 5e19
+SELECT vector_l2_distance(array(3.0e19F, 4.0e19F), array(0.0F, 0.0F));
+
+-- SPARK-58544: small magnitudes, intermediate sums of squares/products must not underflow to zero
+
+-- vector_cosine_similarity of identical tiny vectors is 1.0, not NULL
+SELECT vector_cosine_similarity(array(1.0e-23F, 0.0F), array(1.0e-23F, 0.0F));
+
+-- vector_cosine_similarity of orthogonal tiny vectors is 0.0, not NULL
+SELECT vector_cosine_similarity(array(1.0e-23F, 1.0e-23F), array(1.0e-23F, -1.0e-23F));
+
+-- SPARK-58544: elements that are already infinite still propagate to NaN or Infinity; the wider
+-- accumulators do not change that
+
+-- vector_cosine_similarity: the norm is infinite, so the similarity is NaN
+SELECT vector_cosine_similarity(array(float('inf'), 1.0F), array(1.0F, 1.0F));
+
+-- vector_inner_product: the dot product is infinite
+SELECT vector_inner_product(array(float('inf'), 1.0F), array(1.0F, 1.0F));
+
+-- vector_l2_distance: the distance is infinite
+SELECT vector_l2_distance(array(float('inf'), 1.0F), array(0.0F, 0.0F));

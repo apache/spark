@@ -572,3 +572,66 @@ SELECT vector_norm(
 -- !query analysis
 Project [vector_norm(array(1.0, 2.0, 3.0, 4.0, 5.0, cast(null as float), 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0), 2.0) AS vector_norm(array(1.0, 2.0, 3.0, 4.0, 5.0, CAST(NULL AS FLOAT), 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0), 2.0)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(3.0e19F, 4.0e19F), 2.0F)
+-- !query analysis
+Project [vector_norm(array(3.0E19, 4.0E19), 2.0) AS vector_norm(array(3.0E19, 4.0E19), 2.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_normalize(array(3.0e19F, 4.0e19F), 2.0F)
+-- !query analysis
+Project [vector_normalize(array(3.0E19, 4.0E19), 2.0) AS vector_normalize(array(3.0E19, 4.0E19), 2.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(3.0e38F, 3.0e38F), 1.0F)
+-- !query analysis
+Project [vector_norm(array(3.0E38, 3.0E38), 1.0) AS vector_norm(array(3.0E38, 3.0E38), 1.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_normalize(array(3.0e38F, 3.0e38F), 1.0F)
+-- !query analysis
+Project [vector_normalize(array(3.0E38, 3.0E38), 1.0) AS vector_normalize(array(3.0E38, 3.0E38), 1.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(1.0e-23F, 0.0F), 2.0F)
+-- !query analysis
+Project [vector_norm(array(1.0E-23, 0.0), 2.0) AS vector_norm(array(1.0E-23, 0.0), 2.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_normalize(array(1.0e-23F, 0.0F), 2.0F)
+-- !query analysis
+Project [vector_normalize(array(1.0E-23, 0.0), 2.0) AS vector_normalize(array(1.0E-23, 0.0), 2.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_normalize(array(1.0e-23F, 1.0e-23F), 2.0F)
+-- !query analysis
+Project [vector_normalize(array(1.0E-23, 1.0E-23), 2.0) AS vector_normalize(array(1.0E-23, 1.0E-23), 2.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(float('inf'), 1.0F), 2.0F)
+-- !query analysis
+Project [vector_norm(array(cast(inf as float), 1.0), 2.0) AS vector_norm(array(inf, 1.0), 2.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_normalize(array(float('inf'), 1.0F), 2.0F)
+-- !query analysis
+Project [vector_normalize(array(cast(inf as float), 1.0), 2.0) AS vector_normalize(array(inf, 1.0), 2.0)#x]
++- OneRowRelation

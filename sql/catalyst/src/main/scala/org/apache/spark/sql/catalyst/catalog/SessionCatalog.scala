@@ -1153,7 +1153,8 @@ class SessionCatalog(
     SQLConf.withExistingConf(
       View.effectiveSQLConf(
         configs = viewConfigs,
-        isTempView = false
+        isTempView = false,
+        createSparkVersion = metadata.createVersion
       )
     ) {
       CurrentOrigin.withOrigin(origin) {

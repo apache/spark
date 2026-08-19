@@ -72,11 +72,27 @@ class AutoCdcFlowConstructionTest(unittest.TestCase):
                 column_list=[col("id"), col("val")],
                 stored_as_scd_type=1,
                 name="my_flow",
+                spark_conf={"spark.sql.shuffle.partitions": "8"},
             )
 
         flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
         self.assertEqual(flow.name, "my_flow")
         self.assertEqual(flow.stored_as_scd_type, 1)
+        self.assertEqual(flow.spark_conf, {"spark.sql.shuffle.partitions": "8"})
+
+    def test_create_auto_cdc_flow_spark_conf_defaults_to_empty(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("target")
+            dp.create_auto_cdc_flow(
+                target="target",
+                source="source",
+                keys=[col("key")],
+                sequence_by=expr("seq"),
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        self.assertEqual(flow.spark_conf, {})
 
     def test_create_auto_cdc_flow_with_string_args(self):
         # Verify that string forms of column / expression arguments are normalized to

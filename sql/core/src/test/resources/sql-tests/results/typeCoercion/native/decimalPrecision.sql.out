@@ -1508,7 +1508,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(3,0))\"",
     "inputType" : "\"DECIMAL(3,0)\"",
     "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
@@ -1534,7 +1534,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(5,0))\"",
     "inputType" : "\"DECIMAL(5,0)\"",
     "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
@@ -1560,7 +1560,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(10,0))\"",
     "inputType" : "\"DECIMAL(10,0)\"",
     "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
@@ -1586,7 +1586,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(20,0))\"",
     "inputType" : "\"DECIMAL(20,0)\"",
     "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
@@ -2164,7 +2164,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(3,0))\"",
     "inputType" : "\"DECIMAL(3,0)\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) - CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
@@ -2190,7 +2190,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(5,0))\"",
     "inputType" : "\"DECIMAL(5,0)\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) - CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
@@ -2216,7 +2216,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(10,0))\"",
     "inputType" : "\"DECIMAL(10,0)\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) - CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
@@ -2242,7 +2242,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(20,0))\"",
     "inputType" : "\"DECIMAL(20,0)\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) - CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {

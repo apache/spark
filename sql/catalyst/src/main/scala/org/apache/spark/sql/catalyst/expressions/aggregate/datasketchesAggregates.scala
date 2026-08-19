@@ -243,6 +243,14 @@ object HllSketchAgg {
     _FUNC_(expr, allowDifferentLgConfigK) - Returns the merged HllSketch's updatable binary representation.
       `allowDifferentLgConfigK` (optional) Allow sketches with different lgConfigK values
        to be unioned (defaults to false).""",
+  arguments = """
+    Arguments:
+      * expr - The binary representation of an HllSketch to merge.
+          An expression that evaluates to binary.
+      * allowDifferentLgConfigK - Optional. Whether to allow sketches with different
+          lgConfigK values to be unioned. An expression that evaluates to a boolean.
+          Defaults to false.
+  """,
   examples = """
     Examples:
       > SELECT hll_sketch_estimate(_FUNC_(sketch, true)) FROM (SELECT hll_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT hll_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));
@@ -328,6 +336,30 @@ case class HllUnionAgg(
   }
 
   /**
+   * Merges `sketch` into the Union acting as the aggregation buffer, instantiating it if absent.
+   *
+   * An empty sketch holds no coupons, so it carries no precision: it is exempt from the lgConfigK
+   * check, and an empty Union is re-seeded at the lgConfigK of the first non-empty sketch. This
+   * keeps the empty sketch that `eval` emits for an all-NULL group mergeable, and makes the
+   * result independent of the order in which rows reach the aggregate.
+   *
+   * @param unionOption A previously initialized Union instance, or None
+   * @param sketch The sketch to merge in
+   */
+  private def mergeSketch(unionOption: Option[Union], sketch: HllSketch): Option[Union] = {
+    val union = unionOption match {
+      case Some(buffer) if buffer.isEmpty && !sketch.isEmpty => new Union(sketch.getLgConfigK)
+      case Some(buffer) => buffer
+      case None => new Union(sketch.getLgConfigK)
+    }
+    if (!union.isEmpty && !sketch.isEmpty) {
+      compareLgConfigK(union.getLgConfigK, sketch.getLgConfigK)
+    }
+    union.update(sketch)
+    Some(union)
+  }
+
+  /**
    * Update the Union instance with the HllSketch byte array obtained from the row.
    *
    * @param unionOption A previously initialized Union instance, or None
@@ -340,10 +372,7 @@ case class HllUnionAgg(
         case BinaryType =>
           try {
             val sketch = HllSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]]))
-            val union = unionOption.getOrElse(new Union(sketch.getLgConfigK))
-            compareLgConfigK(union.getLgConfigK, sketch.getLgConfigK)
-            union.update(sketch)
-            Some(union)
+            mergeSketch(unionOption, sketch)
           } catch {
             case _: SketchesArgumentException | _: java.lang.Error
                  | _: ArrayIndexOutOfBoundsException =>
@@ -365,10 +394,8 @@ case class HllUnionAgg(
    */
   override def merge(unionOption: Option[Union], inputOption: Option[Union]): Option[Union] = {
     (unionOption, inputOption) match {
-      case (Some(union), Some(input)) =>
-        compareLgConfigK(union.getLgConfigK, input.getLgConfigK)
-        union.update(input.getResult(targetType))
-        Some(union)
+      case (Some(_), Some(input)) =>
+        mergeSketch(unionOption, input.getResult(targetType))
       // unclear if these scenarios can ever occur
       case (Some(_), None) =>
         unionOption
