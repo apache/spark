@@ -261,28 +261,42 @@ private[spark] class ContextCleaner(
         streamingShuffleOutputTrackerMaster.foreach(_.unregisterShuffle(shuffleId))
         listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
         logDebug("Cleaned pipelined shuffle " + shuffleId)
-      } else {
-        // The shuffle is in NEITHER tracker. This is either a genuinely non-existent shuffle
-        // (already removed) OR an in-process pipelined shuffle whose manager keeps NO output
-        // tracker (PipelinedChannelShuffleManager.usesStreamingShuffleOutputTracker = false):
-        // such a shuffle registers with no tracker at all, so the two branches above miss it,
-        // yet its process-wide rendezvous queues (ChannelShuffleRendezvous) still need freeing.
-        // Call shuffleDriverComponents.removeShuffle unconditionally: the RemoveShuffle it issues
-        // routes to SparkEnv.unregisterShuffleFromAllManagers, which reaches that manager's
-        // unregisterShuffle (-> ChannelShuffleRendezvous.removeShuffle) and frees the queues.
-        // Safe for a truly non-existent id: BlockManagerMasterEndpoint.removeShuffle finds no
-        // blocks and unregisterShuffle for an unknown id is a no-op on every manager. No
-        // shuffle-manager type check here on purpose -- the cleaner stays transport-agnostic and
-        // just balances the registerShuffle the ShuffleDependency constructor issues for every
-        // shuffle.
-        logDebug("Cleaning tracker-less shuffle " + shuffleId)
+      } else if (tracklessPipelinedManagerActive) {
+        // The shuffle is in NEITHER tracker AND a pipelined manager that keeps no output tracker
+        // is configured (PipelinedChannelShuffleManager.usesStreamingShuffleOutputTracker =
+        // false). An in-process pipelined shuffle registers with no tracker at all, so the two
+        // branches above miss it, yet its process-wide rendezvous queues (ChannelShuffleRendezvous)
+        // still need freeing. Call shuffleDriverComponents.removeShuffle: the RemoveShuffle it
+        // issues routes to SparkEnv.unregisterShuffleFromAllManagers -> that manager's
+        // unregisterShuffle -> ChannelShuffleRendezvous.removeShuffle, freeing the queues. This
+        // arm is GATED on the tracker-less manager rather than run unconditionally: without the
+        // feature (the default, RPC streaming manager), an already-cleaned regular shuffle also
+        // reaches this else (RDD.cleanShuffleDependencies unregisters it from the MapOutputTracker
+        // eagerly, then its later GC re-cleans it), and firing an extra cluster-wide RemoveShuffle
+        // RPC + shuffleCleaned callback for it would be a behavior change for users who never
+        // enabled pipelining.
+        logDebug("Cleaning tracker-less pipelined shuffle " + shuffleId)
         shuffleDriverComponents.removeShuffle(shuffleId, blocking)
         listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
-        logDebug("Cleaned tracker-less shuffle " + shuffleId)
+        logDebug("Cleaned tracker-less pipelined shuffle " + shuffleId)
+      } else {
+        logDebug("Asked to cleanup non-existent shuffle (maybe it was already removed)")
       }
     } catch {
       case e: Exception => logError(log"Error cleaning shuffle ${MDC(SHUFFLE_ID, shuffleId)}", e)
     }
+  }
+
+  /**
+   * Whether a pipelined shuffle manager that keeps NO output tracker is configured -- the only
+   * case where a shuffle in neither tracker legitimately holds cleanup state (in-process
+   * rendezvous queues) that doCleanupShuffle's else arm must free. False for the default (no
+   * pipelined manager, or the RPC streaming manager, which registers in the streaming tracker),
+   * so an already-cleaned regular shuffle reaching that else stays a no-op.
+   */
+  private def tracklessPipelinedManagerActive: Boolean = {
+    val mgr = SparkEnv.get.pipelinedShuffleManager
+    mgr != null && !mgr.usesStreamingShuffleOutputTracker
   }
 
   /** Perform broadcast cleanup. */

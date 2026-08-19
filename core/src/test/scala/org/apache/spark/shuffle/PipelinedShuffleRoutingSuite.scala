@@ -246,6 +246,24 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
     assert(SparkEnv.get.streamingShuffleOutputTracker.isEmpty)
   }
 
+  test("a pipelined shuffle with a no-tracker manager registers with NO output tracker") {
+    // A pipelined manager reporting usesStreamingShuffleOutputTracker = false (the in-process
+    // channel manager) registers its shuffle with NEITHER tracker: SparkEnv creates no
+    // StreamingShuffleOutputTracker, and createShuffleMapStage takes outputTrackerMaster's None
+    // arm so the shuffle never enters the MapOutputTracker either -- its availability lives on
+    // the stage. This pins that routing (the relaxed successor to the old "fails loud when no
+    // tracker" invariant, which no longer holds now that a tracker-less manager is legitimate).
+    val env = startEnv()
+    val dep = pipelinedDep(sc)
+    assert(env.shuffleManagerFor(dep).isInstanceOf[IncrementalRecordingManager],
+      "the pipelined dep must route to the no-tracker incremental manager")
+    assert(SparkEnv.get.streamingShuffleOutputTracker.isEmpty,
+      "no StreamingShuffleOutputTracker should be created for a no-tracker manager")
+    assert(!env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      .containsShuffle(dep.shuffleId),
+      "a no-tracker pipelined shuffle must not be registered with the MapOutputTracker")
+  }
+
   test("spark.shuffle.manager.incremental resolves the same short aliases as the default manager") {
     // "sort" is a short alias the incremental slot must resolve (to SortShuffleManager) rather than
     // treat as a class name. SortShuffleManager is blocking, so it is rejected from the pipelined

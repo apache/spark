@@ -139,9 +139,12 @@ private[spark] class ChannelShuffleWriter[K, V](
         // they reach here (the producer reuses its output UnsafeRow across iterations, and the
         // consumer reads on another thread). The copy is done in the SQL layer's
         // ShuffleWriteProcessor for the pipelined path -- where InternalRow.copy() is available
-        // -- rather than here, because this class lives in `core` and cannot reference SQL rows,
-        // and the UnsafeRow serializer offers no single-object copy. So batch the pair as-is.
-        batches(pid)(sizes(pid)) = (rec._1, rec._2)
+        // -- rather than here, because this class lives in `core` and cannot reference SQL rows.
+        // `rec` is already a detached (key, value) pair, so batch it directly rather than
+        // re-wrapping it in a fresh Tuple2 -- one fewer allocation per record on the hot loop.
+        // Product2 is typed as Any; the concrete record is always a reference (a Tuple2 of the
+        // pid and the row), so store it as AnyRef. The reader casts each element back to Product2.
+        batches(pid)(sizes(pid)) = rec.asInstanceOf[AnyRef]
         sizes(pid) += 1
         if (sizes(pid) == batchSize) {
           putUnlessAbandoned(pid, batches(pid), batchSize)
@@ -242,6 +245,27 @@ private[spark] class ChannelShuffleReader[K, C](
       private var endOfStreamSeen = 0
       advance()
 
+      // Interruptibly wait for the next queue item. `LinkedBlockingQueue.take()` blocks
+      // UNINTERRUPTIBLY here: if this reader's producers die (a map task throws before emitting
+      // end-of-stream for this partition), the DAGScheduler aborts the group and kills this
+      // reduce task, but the kill sets the interrupt flag on the TaskContext WITHOUT necessarily
+      // interrupting the thread (spark.job.interruptOnCancel defaults to false), so a plain
+      // take() would park forever and pin the executor slot for the app's life. Poll with a
+      // short timeout and check the TaskContext's interrupt flag each cycle -- the symmetric
+      // cooperative escape to the writer's putUnlessAbandoned. Time spent parked here is the
+      // read-side backpressure signal (producer slower than consumer), so it is reported as
+      // fetch-wait time.
+      private def takeItem(): AnyRef = {
+        var item: AnyRef = null
+        while (item == null) {
+          Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
+          val start = System.nanoTime()
+          item = q.poll(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+          readMetrics.incFetchWaitTime((System.nanoTime() - start) / 1000000L)
+        }
+        item
+      }
+
       // Blocking-drain until the next non-empty data batch, or until every map task has
       // signalled end-of-stream for this queue (then leave `batch` null to end iteration).
       private def advance(): Unit = {
@@ -249,15 +273,15 @@ private[spark] class ChannelShuffleReader[K, C](
         pos = 0
         // A producer with zero map tasks (numMaps == 0, e.g. a pipelined shuffle over an empty
         // RDD) enqueues nothing and no end-of-stream marker ever arrives; without this guard the
-        // take() below would block forever. Terminate immediately with an empty iterator. The
+        // wait below would never terminate. Terminate immediately with an empty iterator. The
         // check is also correct for numMaps > 0 once every marker has been seen (advance is not
         // called again after batch stays null, but this keeps the invariant explicit).
         if (endOfStreamSeen >= numMaps) return
-        var item = q.take()
+        var item = takeItem()
         while (item eq ChannelShuffleRendezvous.EndOfStream) {
           endOfStreamSeen += 1
           if (endOfStreamSeen >= numMaps) return
-          item = q.take()
+          item = takeItem()
         }
         batch = item.asInstanceOf[Array[AnyRef]]
         // Count the records handed to the consumer as this batch is fetched. Local, so this

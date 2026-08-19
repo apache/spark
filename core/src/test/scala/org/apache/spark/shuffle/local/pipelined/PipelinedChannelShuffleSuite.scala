@@ -50,7 +50,7 @@ private class PipelinedShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
 class PipelinedChannelShuffleSuite extends SparkFunSuite {
 
   private def withPipelinedSparkContext(cores: Int)(body: SparkContext => Unit): Unit = {
-    ChannelShuffleRendezvous.clearForTesting()
+    ChannelShuffleRendezvous.clear()
     val conf = new SparkConf()
       .setMaster(s"local[$cores]")
       .setAppName("pipelined-channel-shuffle-test")
@@ -62,7 +62,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       body(sc)
     } finally {
       sc.stop()
-      ChannelShuffleRendezvous.clearForTesting()
+      ChannelShuffleRendezvous.clear()
     }
   }
 
@@ -94,7 +94,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
   test("result matches a regular shuffle of the same workload") {
     // Ground-truth grouping from a plain (non-pipelined) repartition.
     val expected = {
-      ChannelShuffleRendezvous.clearForTesting()
+      ChannelShuffleRendezvous.clear()
       val sc = new SparkContext(
         new SparkConf().setMaster("local[8]").setAppName("baseline"))
       try {
@@ -141,7 +141,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     // Test the manager's cleanup contract directly rather than relying on the async
     // ContextCleaner + GC to fire (which would be flaky). Populate a couple of queues for
     // a shuffle id, then confirm unregisterShuffle removes exactly those.
-    ChannelShuffleRendezvous.clearForTesting()
+    ChannelShuffleRendezvous.clear()
     try {
       ChannelShuffleRendezvous.queue(7, 0).put("a")
       ChannelShuffleRendezvous.queue(7, 1).put("b")
@@ -154,7 +154,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       // Shuffle 9's queue is untouched.
       assert(ChannelShuffleRendezvous.queue(9, 0).peek() === "c")
     } finally {
-      ChannelShuffleRendezvous.clearForTesting()
+      ChannelShuffleRendezvous.clear()
     }
   }
 
@@ -184,6 +184,36 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       sc.cleaner.get.doCleanupShuffle(shuffleId, blocking = true)
       assert(ChannelShuffleRendezvous.numQueuesForTesting === 0,
         "doCleanupShuffle must free the channel's queues for a tracker-less pipelined shuffle")
+    }
+  }
+
+  test("a failing producer map task fails the job promptly, without parking the reader forever") {
+    // If a producer map task throws before emitting end-of-stream, the reduce task for a
+    // partition it never fed would park in the queue wait. The reader polls interruptibly and
+    // checks the TaskContext interrupt flag (set when the group is aborted), so it wakes and the
+    // job fails fast with the producer's error instead of pinning the executor slot forever.
+    // Run on a background thread under a deadline: a regression (uninterruptible take) would hang
+    // here rather than fail, and the deadline turns that into a test failure, not a stuck suite.
+    val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+    val fut = pool.submit(new Runnable {
+      override def run(): Unit = withPipelinedSparkContext(cores = 8) { sc =>
+        val keyed = sc.parallelize(0 until 1000, 3).map { v =>
+          if (v == 500) throw new RuntimeException("boom in producer map task")
+          (v, v)
+        }
+        val out = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(4))
+        // The job must FAIL (the producer threw), not hang. intercept confirms it returned.
+        intercept[org.apache.spark.SparkException](out.collect())
+      }
+    })
+    try {
+      fut.get(90, java.util.concurrent.TimeUnit.SECONDS)
+    } catch {
+      case _: java.util.concurrent.TimeoutException =>
+        fut.cancel(true)
+        fail("a failing producer hung the job: the reader parked in an uninterruptible wait")
+    } finally {
+      pool.shutdownNow()
     }
   }
 
@@ -236,7 +266,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     // when a writer is blocked on put() due to a full queue, abandon() drains
     // the queue so the put() unblocks (freeing capacity). This test verifies both
     // the mark is set and the queue is drained.
-    ChannelShuffleRendezvous.clearForTesting()
+    ChannelShuffleRendezvous.clear()
     try {
       val q = ChannelShuffleRendezvous.queue(42, 0)
       // Put a few batches into the queue.
@@ -255,12 +285,12 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       // 2. The queue is drained (unblocks any parked put and cleans up).
       assert(q.isEmpty, "queue should be drained by abandon()")
     } finally {
-      ChannelShuffleRendezvous.clearForTesting()
+      ChannelShuffleRendezvous.clear()
     }
   }
 
   test("clearAbandonedForShuffle resets a run's marks; other shuffles and queues survive") {
-    ChannelShuffleRendezvous.clearForTesting()
+    ChannelShuffleRendezvous.clear()
     try {
       val shuffleId = 55
       val other = 56
@@ -298,7 +328,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1),
         "removeShuffle should clear all abandoned marks for this shuffle")
     } finally {
-      ChannelShuffleRendezvous.clearForTesting()
+      ChannelShuffleRendezvous.clear()
     }
   }
 
@@ -309,7 +339,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     // waiting for a further marker (would hang the test), nor stop early. The reader reads only
     // handle.shuffleId, so a mock handle suffices; TaskContext.get() is None here so no
     // completion listener is registered. TempShuffleReadMetrics is a no-op reporter.
-    ChannelShuffleRendezvous.clearForTesting()
+    ChannelShuffleRendezvous.clear()
     try {
       val shuffleId = 11
       val pid = 0
@@ -334,7 +364,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
         s"reader must yield every data row in order and then stop, got $values")
       assert(q.isEmpty, "the reader should have drained the queue to empty")
     } finally {
-      ChannelShuffleRendezvous.clearForTesting()
+      ChannelShuffleRendezvous.clear()
     }
   }
 }

@@ -1865,6 +1865,21 @@ package object config {
       .checkValue(_ > 0, "batch size must be positive")
       .createWithDefault(1024)
 
+  private[spark] val SHUFFLE_PIPELINED_CHANNEL_QUEUE_CAPACITY =
+    ConfigBuilder("spark.shuffle.pipelined.channel.queueCapacity")
+      .doc("Depth, in BATCHES, of each per-reduce-partition queue in the in-process pipelined " +
+        "channel shuffle. This is the backpressure bound: a producer blocks once a partition's " +
+        "queue holds this many batches. It also sets the worst-case heap the transport pins for " +
+        "one shuffle -- roughly queueCapacity * spark.shuffle.pipelined.channel.batchSize * " +
+        "numPartitions rows held as strong references (not tracked by the memory manager and not " +
+        "spilled), so raise it together with an eye on that product. Only used when " +
+        "spark.shuffle.manager.incremental is the in-process channel manager.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "queue capacity must be positive")
+      .createWithDefault(64)
+
   private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
       .doc("Whether to compute locality preferences for reduce tasks")

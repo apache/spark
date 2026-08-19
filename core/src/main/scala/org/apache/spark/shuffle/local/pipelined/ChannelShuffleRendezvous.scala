@@ -59,16 +59,22 @@ private[spark] object ChannelShuffleRendezvous {
     java.util.concurrent.ConcurrentHashMap.newKeySet[(Int, Int)]()
 
   /**
-   * Default per-queue capacity in BATCHES (not rows): with the default 1024-row batch this
-   * bounds the in-flight hand-off at ~64K rows per reduce partition.
+   * Per-queue capacity in BATCHES (not rows), the backpressure bound and the heap-residency
+   * knob (see spark.shuffle.pipelined.channel.queueCapacity). Set once by the channel manager at
+   * construction from that conf; defaults to 64 (with the default 1024-row batch, ~64K rows per
+   * reduce partition in flight) until a manager sets it. `@volatile` because the manager sets it
+   * on the driver while writer/reader threads read it.
    */
-  private val DefaultCapacity = 64
+  @volatile private var capacity = 64
+
+  /** Set the per-queue capacity in batches. Called by the channel manager from its conf. */
+  private[pipelined] def setCapacity(batches: Int): Unit = { capacity = batches }
 
   /** The queue for one `(shuffleId, reducePartitionId)`, created on first access. */
   def queue(shuffleId: Int, reducePartitionId: Int): LinkedBlockingQueue[AnyRef] =
     queues.computeIfAbsent(
       (shuffleId, reducePartitionId),
-      _ => new LinkedBlockingQueue[AnyRef](DefaultCapacity))
+      _ => new LinkedBlockingQueue[AnyRef](capacity))
 
   /** Whether this reduce partition's reader has departed (see [[abandon]]). */
   def isAbandoned(shuffleId: Int, reducePartitionId: Int): Boolean =
@@ -131,8 +137,15 @@ private[spark] object ChannelShuffleRendezvous {
     }
   }
 
-  /** Visible for testing: drop every queue AND every abandoned mark. */
-  private[pipelined] def clearForTesting(): Unit = {
+  /**
+   * Drop every queue and every abandoned mark. Called when the owning manager stops (i.e. the
+   * SparkContext stops): this object is process-wide and keyed only by (shuffleId,
+   * reducePartitionId), so without this a new SparkContext in the same JVM -- a test fork, a
+   * REPL/notebook restart -- would restart shuffle ids at 0 and its reduce tasks could drain
+   * rows or end-of-stream markers the previous context left behind. Also the reset hook used by
+   * tests between contexts.
+   */
+  private[spark] def clear(): Unit = {
     queues.clear()
     abandoned.clear()
   }

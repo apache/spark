@@ -2728,7 +2728,17 @@ private[spark] class DAGScheduler(
             // partitions live) and that operator drains every reduce partition.
             def readsShuffleByIdentity(rdd: RDD[_]): Boolean = rdd.dependencies match {
               case Seq(sd: ShuffleDependency[_, _, _]) =>
-                sd.shuffleId == sms.shuffleDep.shuffleId
+                // Reached the shuffle through OneToOneDependency hops only. Also require the
+                // reader RDD to expose exactly one partition per reduce partition: ShuffledRowRDD
+                // maps its partition i to a reducer index through partitionSpecs, which is
+                // identity only for the default CoalescedPartitionSpec(i, i + 1). An offset spec
+                // (e.g. CoalescedPartitionSpec(5, 6) at index 0) passes ChannelShuffleReader's
+                // width-1 require yet breaks the index identity, so the partition-count equality
+                // is the extra guard: nothing produces an offset spec for a pipelined shuffle
+                // today, but if that path ever opens this degrades to "all partitions live"
+                // (property unset) instead of dropping a live partition and hanging.
+                sd.shuffleId == sms.shuffleDep.shuffleId &&
+                  rdd.partitions.length == sd.partitioner.numPartitions
               case Seq(o: OneToOneDependency[_]) =>
                 readsShuffleByIdentity(o.rdd)
               case _ => false

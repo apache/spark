@@ -67,6 +67,10 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   // measured ~19x slower than a regular shuffle on a 20M-row repartition.
   private val batchSize = conf.get(config.SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE)
 
+  // Per-queue depth in batches (backpressure bound + heap-residency knob). Set the process-wide
+  // rendezvous from the conf at construction, before any writer/reader creates a queue.
+  ChannelShuffleRendezvous.setCapacity(conf.get(config.SHUFFLE_PIPELINED_CHANNEL_QUEUE_CAPACITY))
+
   override def usesStreamingShuffleOutputTracker: Boolean = false
 
   // Records cross the channel as object references read by a concurrent consumer thread; the
@@ -101,11 +105,14 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
-    // A reduce task reads the reduce-partition range [startPartition, endPartition). Core
-    // ShuffledRDD uses width 1, but SQL's ShuffledRowRDD may coalesce several reduce
-    // partitions into one reader task, so the reader must honor the whole range. Map-index
-    // bounds are irrelevant to the channel transport (all map tasks share each partition's
-    // queue). The final 5-arg getReader forwards here with the correct partition range.
+    // A reduce task reads the reduce-partition range [startPartition, endPartition). The channel
+    // transport serves exactly ONE reduce partition per reader task -- ChannelShuffleReader
+    // require()s endPartition - startPartition == 1 (its class doc explains why a coalesced
+    // multi-partition range cannot be drained safely). Core ShuffledRDD and SQL's ShuffledRowRDD
+    // both hand a width-1 spec here today (AQE keeps a pipelined exchange out of a
+    // ShuffleQueryStage, so it is never coalesced); the require makes any future wider range fail
+    // loud rather than deadlock. Map-index bounds are irrelevant (all map tasks share each
+    // partition's queue). The final 5-arg getReader forwards here with the partition range.
     //
     // numMaps -- how many end-of-stream markers to expect per queue -- was stamped into the
     // handle at registration, never kept in mutable manager state (see class scaladoc).
@@ -118,7 +125,11 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
     true
   }
 
-  override def stop(): Unit = {}
+  // Called from SparkEnv.stop() when the SparkContext stops. Drop the process-wide rendezvous
+  // state: it is keyed only by (shuffleId, reducePartitionId) with no application scoping, so a
+  // fresh SparkContext in the same JVM (a test fork, a REPL/notebook restart) would restart
+  // shuffle ids at 0 and could read rows or end-of-stream markers this context left behind.
+  override def stop(): Unit = ChannelShuffleRendezvous.clear()
 }
 
 /**

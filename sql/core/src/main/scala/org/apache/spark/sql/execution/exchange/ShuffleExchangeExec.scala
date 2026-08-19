@@ -572,10 +572,13 @@ object ShuffleExchangeExec {
           serializer,
           // Copy rows only for a transport that hands object references to a concurrent
           // consumer (the in-process channel). The RPC streaming transport detaches rows by
-          // serializing them promptly and must not pay an extra per-row copy on its path.
+          // serializing them promptly and must not pay an extra per-row copy on its path. And
+          // skip it when rddWithPartitionIds already copied: needToCopyObjectsBeforeShuffle makes
+          // that RDD emit (pid, row.copy()), so a second copy here would be redundant.
           shuffleWriterProcessor = createShuffleWriteProcessor(
             writeMetrics,
-            copyRows = SparkEnv.get.pipelinedShuffleManager.requiresDetachedRecords),
+            copyRows = SparkEnv.get.pipelinedShuffleManager.requiresDetachedRecords &&
+              !needToCopyObjectsBeforeShuffle(part)),
           rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize))
       } else {
         new ShuffleDependency[Int, InternalRow, InternalRow](
