@@ -548,7 +548,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         # Try dunder methods first. A multi-output ufunc (for example np.modf) yields a
         # 2-tuple of results rather than a single Series or Index, so both `result` and this
         # method's return type must admit that tuple.
-        result: Union[IndexOpsMixin, Tuple[IndexOpsMixin, IndexOpsMixin]] = (
+        result: Union[SeriesOrIndex, Tuple[SeriesOrIndex, SeriesOrIndex]] = (
             numpy_compat.maybe_dispatch_ufunc_to_dunder_op(self, ufunc, method, *inputs, **kwargs)
         )
 
@@ -559,7 +559,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             )
 
         if result is not NotImplemented:
-            return cast("Union[SeriesOrIndex, Tuple[SeriesOrIndex, SeriesOrIndex]]", result)
+            return result
         else:
             # TODO: support more APIs?
             raise NotImplementedError(

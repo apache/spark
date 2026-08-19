@@ -22,6 +22,7 @@ from pyspark.loose_version import LooseVersion
 from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, BooleanType
+from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
 
 
@@ -311,7 +312,7 @@ multi_output_np_spark_mappings = {
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_dunder_op(
     ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-) -> IndexOpsMixin:
+) -> SeriesOrIndex:
     special = {
         "add",
         "sub",
@@ -377,7 +378,7 @@ def maybe_dispatch_ufunc_to_dunder_op(
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_spark_func(
     ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-) -> Union[IndexOpsMixin, Tuple[IndexOpsMixin, IndexOpsMixin]]:
+) -> Union[SeriesOrIndex, Tuple[SeriesOrIndex, SeriesOrIndex]]:
     from pyspark.pandas.base import column_op
 
     op_name = ufunc.__name__
