@@ -133,7 +133,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 /**
  * Model fitted by KMeans.
  *
- * @param clusterCentersArray cluster centers.
+ * @param clusterCentersWithNorm cluster centers with their norms.
  * @param distanceMeasureName distance measure.
  * @param trainingCost training cost.
  * @param numIter number of training iterations.
@@ -141,17 +141,33 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 @Since("1.5.0")
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    private[clustering] val clusterCentersArray: Array[Vector],
+    private val clusterCentersWithNorm: Array[VectorWithNorm],
     private[clustering] val distanceMeasureName: String,
     private[clustering] val trainingCost: Double,
     private[clustering] val numIter: Int)
   extends Model[KMeansModel] with KMeansParams with GeneralMLWritable
     with HasTrainingSummary[KMeansSummary] {
 
+  private[ml] def this(
+      uid: String,
+      clusterCentersArray: Array[Vector],
+      distanceMeasureName: String,
+      trainingCost: Double,
+      numIter: Int) = {
+    this(
+      uid,
+      if (clusterCentersArray == null) null else KMeansModel.clusterCentersWithNorm(
+        clusterCentersArray),
+      distanceMeasureName,
+      trainingCost,
+      numIter)
+  }
+
   private[ml] def this(uid: String, mllibModel: MLlibKMeansModel) = {
     this(
       uid,
-      if (mllibModel == null) null else mllibModel.clusterCenters.map(_.asML),
+      if (mllibModel == null) null else KMeansModel.clusterCentersWithNorm(
+        mllibModel.clusterCenters.map(_.asML)),
       if (mllibModel == null) KMeans.EUCLIDEAN else mllibModel.distanceMeasure,
       if (mllibModel == null) 0.0 else mllibModel.trainingCost,
       if (mllibModel == null) -1 else mllibModel.numIter)
@@ -163,19 +179,16 @@ class KMeansModel private[ml] (
   @transient private lazy val distanceMeasureInstance =
     DistanceMeasure.decodeFromString(distanceMeasureName)
 
-  @transient private lazy val clusterCentersWithNorm =
-    KMeansModel.clusterCentersWithNorm(clusterCenters)
-
   @transient private lazy val statistics =
     KMeansModel.computeStatistics(clusterCentersWithNorm, distanceMeasureInstance)
 
   @Since("3.0.0")
-  lazy val numFeatures: Int = clusterCentersArray.head.size
+  lazy val numFeatures: Int = clusterCentersWithNorm.head.vector.size
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
     val copied = copyValues(new KMeansModel(
-      uid, clusterCentersArray, distanceMeasureName, trainingCost, numIter), extra)
+      uid, clusterCentersWithNorm, distanceMeasureName, trainingCost, numIter), extra)
     copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
@@ -207,7 +220,7 @@ class KMeansModel private[ml] (
     var outputSchema = validateAndTransformSchema(schema)
     if ($(predictionCol).nonEmpty) {
       outputSchema = SchemaUtils.updateNumValues(outputSchema,
-        $(predictionCol), clusterCentersArray.length)
+        $(predictionCol), clusterCentersWithNorm.length)
     }
     outputSchema
   }
@@ -218,7 +231,7 @@ class KMeansModel private[ml] (
   }
 
   @Since("2.0.0")
-  def clusterCenters: Array[Vector] = clusterCentersArray.clone()
+  def clusterCenters: Array[Vector] = clusterCentersWithNorm.map(_.vector)
 
   private[ml] def clusterCenterMatrix: Matrix =
     Matrices.fromVectors(clusterCenters.toSeq)
@@ -235,7 +248,7 @@ class KMeansModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"KMeansModel: uid=$uid, k=${clusterCentersArray.length}, " +
+    s"KMeansModel: uid=$uid, k=${clusterCentersWithNorm.length}, " +
       s"distanceMeasure=$distanceMeasureName, " +
       s"numFeatures=$numFeatures"
   }
@@ -249,13 +262,13 @@ class KMeansModel private[ml] (
 
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
-    if (clusterCentersArray != null) {
-      // clusterCenters: Array[Vector]
+    if (clusterCentersWithNorm != null) {
+      // clusterCentersWithNorm: Array[VectorWithNorm]
       // distanceMeasure: String
       // trainingCost: Double
       // numIter: Int
       size += SizeEstimator.estimate((
-        clusterCentersArray,
+        clusterCentersWithNorm,
         distanceMeasureName,
         trainingCost,
         numIter))
@@ -265,7 +278,7 @@ class KMeansModel private[ml] (
 
   private[clustering] def toMLlibModel: MLlibKMeansModel = {
     new MLlibKMeansModel(
-      clusterCentersArray.map(OldVectors.fromML), distanceMeasureName, trainingCost, numIter)
+      clusterCenters.map(OldVectors.fromML), distanceMeasureName, trainingCost, numIter)
   }
 
   private[spark] def createSummary(
