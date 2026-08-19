@@ -196,6 +196,16 @@ class MapInArrowTestsMixin:
 
         df.mapInArrow(func1, "id long", False).collect()
 
+        def func1_barrier_context_get(iterator):
+            from pyspark import BarrierTaskContext
+
+            BarrierTaskContext.get()
+            for batch in iterator:
+                yield batch
+
+        with self.assertRaisesRegex(PythonException, "\\[NOT_IN_BARRIER_STAGE\\]"):
+            df.mapInArrow(func1_barrier_context_get, "id long", False).collect()
+
         def func2(iterator):
             from pyspark import TaskContext, BarrierTaskContext
 
@@ -206,19 +216,6 @@ class MapInArrowTestsMixin:
                 yield batch
 
         df.mapInArrow(func2, "id long", True).collect()
-
-    def test_barrier_task_context_get_without_barrier_mode(self):
-        df = self.spark.range(10)
-
-        def func(iterator):
-            from pyspark import BarrierTaskContext
-
-            BarrierTaskContext.get()
-            for batch in iterator:
-                yield batch
-
-        with self.assertRaisesRegex(PythonException, "\\[NOT_IN_BARRIER_STAGE\\]"):
-            df.mapInArrow(func, "id long", False).collect()
 
     def test_negative_and_zero_batch_size(self):
         for batch_size in [0, -1]:
