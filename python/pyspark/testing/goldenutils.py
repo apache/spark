@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Optional, Union
 import inspect
 import os
 import time
@@ -332,7 +332,9 @@ class GoldenFileTestMixin:
             raise
 
     @classmethod
-    def repr_arrow_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_arrow_value(
+        cls, value: Union["pa.Array", "pa.ChunkedArray"], max_len: int = 32
+    ) -> str:
         """
         Format a PyArrow Array/ChunkedArray for golden file.
 
@@ -359,7 +361,9 @@ class GoldenFileTestMixin:
         return f"{v_str}@{cls.repr_type(value.type)}"
 
     @classmethod
-    def _repr_arrow_columns(cls, value: Any, max_len: int) -> "tuple[str, str]":
+    def _repr_arrow_columns(
+        cls, value: Union["pa.Table", "pa.RecordBatch"], max_len: int
+    ) -> "tuple[str, str]":
         """Render a Table/RecordBatch as a "{name: [scalars], ...}" body and schema string."""
         columns = []
         for name, column in zip(value.schema.names, value.columns):
@@ -373,7 +377,7 @@ class GoldenFileTestMixin:
         return v_str, schema
 
     @classmethod
-    def repr_arrow_table_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_arrow_table_value(cls, value: "pa.Table", max_len: int = 32) -> str:
         """
         Format a PyArrow Table for golden file.
 
@@ -389,7 +393,7 @@ class GoldenFileTestMixin:
         return f"{v_str}@Table[{schema}]"
 
     @classmethod
-    def repr_arrow_record_batch_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_arrow_record_batch_value(cls, value: "pa.RecordBatch", max_len: int = 32) -> str:
         """
         Format a PyArrow RecordBatch for golden file.
 
@@ -405,7 +409,7 @@ class GoldenFileTestMixin:
         return f"{v_str}@RecordBatch[{schema}]"
 
     @classmethod
-    def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_pandas_value(cls, value: "pd.DataFrame", max_len: int = 32) -> str:
         """
         Format a pandas DataFrame for golden file.
 
@@ -434,7 +438,7 @@ class GoldenFileTestMixin:
         return f"{v_str}@Dataframe[{simple_schema}]"
 
     @classmethod
-    def repr_numpy_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_numpy_value(cls, value: "np.ndarray", max_len: int = 32) -> str:
         """
         Format a numpy ndarray for golden file.
 
@@ -512,7 +516,7 @@ class GoldenFileTestMixin:
         return cls.repr_python_value(value, max_len)
 
     @classmethod
-    def repr_pandas_series_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_pandas_series_value(cls, value: "pd.Series", max_len: int = 32) -> str:
         """
         Format a pandas Series for golden file.
 
