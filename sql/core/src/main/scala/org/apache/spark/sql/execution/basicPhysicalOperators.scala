@@ -901,8 +901,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // `outputPartitioning` may reference its own input attributes (e.g. a Filter passes through
     // its child's partitioning but adjusts the output nullability), so even the first child is
     // remapped.
+    val unionOutput = output
     val attributesMap = children.map(_.output).map { childAttrs =>
-      AttributeMap(childAttrs.zip(output))
+      AttributeMap(childAttrs.zip(unionOutput))
     }
     children.map(_.outputPartitioning).zip(attributesMap).map { case (p, attributeMap) =>
       p match {
@@ -923,7 +924,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     (left, right) match {
       case (SinglePartition, SinglePartition) => true
       case (l: HashPartitioningLike, r: HashPartitioningLike) => l == r
-      // For `KeyedPartitioning`, only the partition expressions must match (the other child's
+      // For `KeyedPartitioning`, only the partition expressions must match (both sides'
       // expressions have already been remapped to this union's output attributes by
       // `prepareOutputPartitioning`). The partition keys are intentionally not compared here:
       // children typically carry different key sets, and `outputPartitioning` merges them.

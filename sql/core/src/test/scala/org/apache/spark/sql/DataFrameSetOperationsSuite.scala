@@ -1598,12 +1598,13 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
         Seq((Option(1), 10), (Option(2), 20)).toDF("id", "v").createOrReplaceTempView("t1")
         Seq((Option(1), 30), (Option(3), 40)).toDF("id", "v").createOrReplaceTempView("t2")
 
-        val union = spark.sql(
+        val sqlText =
           """
             |SELECT id, v FROM (SELECT id, v FROM t1 DISTRIBUTE BY id) WHERE id IS NOT NULL
             |UNION ALL
             |SELECT id, sum(v) AS v FROM t2 GROUP BY id
-            |""".stripMargin)
+            |""".stripMargin
+        val union = spark.sql(sqlText)
         val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
         assert(unionExec.size == 1)
 
@@ -1627,14 +1628,14 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
             s"$groupedShuffles\n${grouped.queryExecution.executedPlan}")
 
         // `UNION_OUTPUT_PARTITIONING=false` drops the pass-through so the group-by adds its own
-        // shuffle; that path is the oracle for both the raw union rows and the grouped result.
-        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
-          union.collect()
-        }
+        // shuffle; that freshly-planned path is the oracle for both the raw union rows and the
+        // grouped result.
+        val (correctResult, correctGrouped) =
+          withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+            val baseline = spark.sql(sqlText)
+            (baseline.collect(), baseline.groupBy($"id").count().collect())
+          }
         checkAnswer(union, correctResult)
-        val correctGrouped = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
-          grouped.collect()
-        }
         checkAnswer(grouped, correctGrouped)
       }
     }
