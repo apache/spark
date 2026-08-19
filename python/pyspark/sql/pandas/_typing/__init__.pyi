@@ -68,6 +68,8 @@ ArrowScalarIterUDFType = Literal[251]
 ArrowGroupedAggUDFType = Literal[252]
 ArrowWindowAggUDFType = Literal[253]
 ArrowGroupedAggIterUDFType = Literal[254]
+ArrowGroupedAggIncrementalPartialUDFType = Literal[255]
+ArrowGroupedAggIncrementalFinalUDFType = Literal[256]
 
 # Arrow stream types
 # A single group of Arrow batches (e.g., one key group in groupBy).

@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
@@ -188,9 +188,12 @@ object OrcUtils extends Logging {
     val ignoreMissingFiles =
       new FileSourceOptions(CaseInsensitiveMap(options)).ignoreMissingFiles
     val archiveFormatEnabled = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+    val archivePathFilter =
+      new FileSourceOptions(CaseInsensitiveMap(options)).archivePathFilterPattern
     files.iterator.flatMap { file =>
       if (archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.getPath)) {
-        readArchiveSchemas(conf, file, ignoreCorruptFiles, ignoreMissingFiles, stopAtFirst = true)
+        readArchiveSchemas(conf, file, ignoreCorruptFiles, ignoreMissingFiles,
+          stopAtFirst = true, archivePathFilter)
           .headOption
       } else {
         readSchema(file.getPath, conf, ignoreCorruptFiles).map { schema =>
@@ -211,9 +214,15 @@ object OrcUtils extends Logging {
     // Read outside `parmap`: its worker threads do not inherit the caller's `SQLConf` thread-local,
     // so `SQLConf.get` there would fall back to defaults and never take the archive branch.
     val archiveEnabled = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+    // The signature is fixed by `SchemaMergeUtils.mergeSchemasInParallel`'s `schemaReader` type,
+    // so the glob comes from `conf`, which that caller builds with the user options via
+    // `newHadoopConfWithOptions`.
+    val archivePathFilter = Option(conf.get(FileSourceOptions.ARCHIVE_PATH_FILTER))
+      .filter(_.nonEmpty).map(FileSourceOptions.compileArchivePathFilter)
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
       if (archiveEnabled && SupportsArchiveFormat.isArchivePath(currentFile.getPath)) {
         readArchiveSchemas(conf, currentFile, ignoreCorruptFiles, ignoreMissingFiles,
+          archivePathFilter = archivePathFilter,
           stopAtFirst = false)
       } else {
         OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
@@ -233,13 +242,15 @@ object OrcUtils extends Logging {
       archive: FileStatus,
       ignoreCorruptFiles: Boolean,
       ignoreMissingFiles: Boolean,
-      stopAtFirst: Boolean): Seq[StructType] = {
+      stopAtFirst: Boolean,
+      archivePathFilter: Option[GlobPattern]): Seq[StructType] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), "orc-archive-infer")
     // localizeEntries eagerly opens the first entry, so build it inside the try; the finally must
     // still delete tempDir when a corrupt archive throws there.
     var entries: Iterator[(String, File)] = Iterator.empty
     try {
-      entries = SupportsArchiveFormat.localizeEntries(archive.getPath, conf, tempDir, _ => true)
+      entries = SupportsArchiveFormat.localizeEntries(
+        archive.getPath, conf, tempDir, _ => true, archivePathFilter)
       // With ignore flags off, a corrupt entry throws to the per-archive catch below. `.toList`
       // reads every entry (whole archive atomic); `stopAtFirst` stays lazy and stops at the first.
       val schemas = entries.flatMap { case (_, entryFile) =>
@@ -578,7 +589,7 @@ object OrcUtils extends Logging {
 
     // Get column statistics with column name.
     def getColumnStatistics(columnName: String): ColumnStatistics = {
-      val columnIndex = dataSchema.fieldNames.indexOf(columnName)
+      val columnIndex = dataSchema.getFieldIndex(columnName).getOrElse(-1)
       columnsStatistics.get(columnIndex).getStatistics
     }
 

@@ -2807,6 +2807,70 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  // Byte 3 of the serialized sketch holds lgConfigK, so SUBSTRING(hex(...), 7, 2) reads it as a
+  // hex pair: 0x0F = 15, 0x0C = 12.
+  private val allNullGroupSketches =
+    """
+      |with sketches as (
+      |  select 'has_data' as grp, hll_sketch_agg(cast(id as string), 15) as sketch
+      |  from (select explode(sequence(1, 1000)) as id)
+      |  union all
+      |  select 'all_null' as grp, cast(null as binary) as sketch
+      |)
+      |""".stripMargin
+
+  test("hll_union_agg reports the default lgConfigK for a group with no non-NULL sketch") {
+    // hll_union_agg has no lgConfigK parameter, and the all-NULL group holds no sketch to take one
+    // from, so it cannot report the 15 the other group was built at. The estimate is correct either
+    // way; the mismatched precision is what the next test has to cope with.
+    checkAnswer(
+      sql(allNullGroupSketches +
+        """
+          |select
+          |  grp,
+          |  substring(hex(hll_union_agg(sketch)), 7, 2) as lg_config_k,
+          |  hll_sketch_estimate(hll_union_agg(sketch)) as estimate
+          |from sketches
+          |group by grp
+          |""".stripMargin),
+      Seq(Row("all_null", "0C", 0L), Row("has_data", "0F", 1000L)))
+  }
+
+  test("hll_union_agg and hll_union re-merge the empty sketch produced for an all-NULL group") {
+    // The stored sketches are now an empty lgConfigK=12 one beside a populated lgConfigK=15 one.
+    // Rolling them back up must not fail under default settings, because an empty sketch holds no
+    // coupons and so cannot cost precision at any lgConfigK.
+    val stored = sql(allNullGroupSketches +
+      "select grp, hll_union_agg(sketch) as sketch from sketches group by grp")
+      .collect()
+      .map(row => row.getString(0) -> row.getAs[Array[Byte]]("sketch"))
+      .toMap
+
+    Seq(
+      "empty sketch first" -> Seq(stored("all_null"), stored("has_data")),
+      "empty sketch last" -> Seq(stored("has_data"), stored("all_null"))
+    ).foreach { case (order, sketches) =>
+      // One partition exercises update(); two exercise the partial-to-final merge() as well.
+      Seq(1, 2).foreach { numPartitions =>
+        withClue(s"hll_union_agg, $order, $numPartitions partition(s): ") {
+          checkAnswer(
+            sketches.toDF("sketch").repartition(numPartitions).selectExpr(
+              "substring(hex(hll_union_agg(sketch)), 7, 2) as lg_config_k",
+              "hll_sketch_estimate(hll_union_agg(sketch)) as estimate"),
+            Seq(Row("0F", 1000L)))
+        }
+      }
+
+      withClue(s"hll_union, $order: ") {
+        checkAnswer(
+          Seq((sketches.head, sketches.last)).toDF("left", "right").selectExpr(
+            "substring(hex(hll_union(left, right)), 7, 2) as lg_config_k",
+            "hll_sketch_estimate(hll_union(left, right)) as estimate"),
+          Seq(Row("0F", 1000L)))
+      }
+    }
+  }
+
   test("hll_sketch_agg") {
     val df = Seq(1, 1, 2, 2, 3).toDF("col")
     checkAnswer(

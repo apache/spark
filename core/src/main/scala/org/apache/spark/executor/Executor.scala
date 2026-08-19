@@ -847,6 +847,15 @@ private[spark] class Executor(
         // requires access to properties contained within (e.g. for access control).
         Executor.taskDeserializationProps.set(taskDescription.properties)
 
+        // Apply user credentials from TaskDescription to the executor credential store.
+        // This ensures credentials are available before any task code runs, avoiding
+        // the race between RPC broadcast and task dispatch.
+        // Only apply if the version is newer than what the store already has, preventing
+        // a delayed TaskDescription from overwriting fresher credentials delivered via RPC.
+        taskDescription.userCredentials.foreach { case (version, creds) =>
+          VersionedCredentials.updateIfNewer(env.userCredentials, version, creds)
+        }
+
         updateDependencies(
           taskDescription.artifacts.files,
           taskDescription.artifacts.jars,
@@ -1602,7 +1611,7 @@ private[spark] object Executor extends Logging {
    * minus executorRunTime -- would misreport the un-consumed share of the core as scheduler
    * delay. Relative comparisons for speculation are unaffected because all tasks of a stage
    * share the same cpu amount. Trailing zeros are stripped from the scale-9 cpus so the
-   * product stays in BigDecimal's compact (long-backed) form  instead of inflating a long
+   * product stays in BigDecimal's compact (long-backed) form instead of inflating a long
    * duration into a BigInteger.
    */
   private[spark] def cpuWeightedNanos(intervalNs: Long, cpus: BigDecimal): Long = {

@@ -34,8 +34,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Tests covering AutoCDC's interaction with non-key schema evolution across pipeline runs. The
  * suite documents the supported additive cases (new top-level columns, new nested fields in
- * array-of-struct, broadening / narrowing column selection) and the cases that fail loudly
- * today (subtractive nested evolution, type-incompatible changes, case-only renames).
+ * array-of-struct, broadening / narrowing column selection, and -- under case-insensitive
+ * resolution -- a source column differing from an existing one only in case) and the cases that
+ * fail loudly today (subtractive nested evolution, type-incompatible changes).
  *
  * These behaviors are largely inherited from the lower layers (`SchemaMergingUtils` for
  * schema merge, the v2 writer's column-resolution layer for nested-field handling) rather
@@ -47,10 +48,9 @@ class AutoCdcScd1SchemaEvolutionSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
-  test("a nullable non-key column merges correctly with mixed NULL and non-NULL values") {
-    val session = spark
-    import session.implicits._
+  import testImplicits._
 
+  test("a nullable non-key column merges correctly with mixed NULL and non-NULL values") {
     // Single MemoryStream with `email` as nullable from the start. Run #1 emits a row with
     // a NULL email; run #2 emits an upsert with a non-NULL email.
     spark.sql(
@@ -86,9 +86,6 @@ class AutoCdcScd1SchemaEvolutionSuite
 
   test("widening a non-key column's type between runs fails with " +
     "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE") {
-    val session = spark
-    import session.implicits._
-
     // Changing a non-key column's type between pipeline runs is rejected by
     // `SchemaMergingUtils` with CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE even when the new type
     // is strictly wider. Users must full-refresh the target to change column types.
@@ -130,9 +127,6 @@ class AutoCdcScd1SchemaEvolutionSuite
 
   test("narrowing a non-key column's type between runs fails with " +
     "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE") {
-    val session = spark
-    import session.implicits._
-
     // Mirror image of the widening test above: changing a non-key column's type between
     // pipeline runs is rejected by SchemaMergingUtils with CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE
     // even when the new type is strictly narrower.
@@ -175,9 +169,6 @@ class AutoCdcScd1SchemaEvolutionSuite
 
   test("a new top-level nullable column appearing in the source DF between runs is " +
     "added to the target") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -223,9 +214,6 @@ class AutoCdcScd1SchemaEvolutionSuite
   }
 
   test("additive target-column evolution leaves the SCD1 auxiliary table schema unchanged") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -274,9 +262,6 @@ class AutoCdcScd1SchemaEvolutionSuite
 
   test("broadening the column selection between runs adds the newly-included column to " +
     "the target") {
-    val session = spark
-    import session.implicits._
-
     // Source DF schema is fixed at (id, name, email, version) across both runs. Only the
     // `columnSelection` knob differs: run #1 includes (id, name, version); run #2 selects
     // None (= all source columns). mergeSchemas adds `email` to the target via the same
@@ -322,9 +307,6 @@ class AutoCdcScd1SchemaEvolutionSuite
 
   test("narrowing the column selection between runs preserves the dropped column on " +
     "existing rows and leaves it NULL on new rows") {
-    val session = spark
-    import session.implicits._
-
     // Validates the additive-only column-selection contract on the narrowing side:
     // tightening `columnSelection` between runs leaves the dropped column in place at the
     // schema level (SDP's `SchemaMergingUtils.mergeSchemas` is a union, never a subtraction).
@@ -369,9 +351,6 @@ class AutoCdcScd1SchemaEvolutionSuite
 
   test("a top-level column dropped from the source DF between runs is preserved on " +
     "existing rows and left NULL on new rows") {
-    val session = spark
-    import session.implicits._
-
     // Symmetric to the new-source-column case (which exercises the source DF *gaining* a
     // column). Validates that the additive-only column-selection contract holds when the
     // narrowing is driven by the source DF's own schema shrinking, rather than by a
@@ -420,9 +399,6 @@ class AutoCdcScd1SchemaEvolutionSuite
   }
 
   test("dropping a nested struct field between runs fails with INCOMPATIBLE_DATA_FOR_TABLE") {
-    val session = spark
-    import session.implicits._
-
     // The v2 writer's column-resolution layer requires every nested target field to be
     // present in the microbatch DF. When run #2's source projection drops `b.c`, the merge
     // fails with INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA. Users who want to drop a
@@ -479,9 +455,6 @@ class AutoCdcScd1SchemaEvolutionSuite
 
   test("a new field added inside an array<struct> element between runs is added to the " +
     "target") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(key INT NOT NULL, version BIGINT NOT NULL, " +
@@ -533,9 +506,6 @@ class AutoCdcScd1SchemaEvolutionSuite
 
   test("dropping a field inside an array<struct> element between runs fails with " +
     "INCOMPATIBLE_DATA_FOR_TABLE") {
-    val session = spark
-    import session.implicits._
-
     // Symmetric to the nested-struct case, but for `array<struct>`. The v2 writer rejects
     // the merge because it cannot find data for the target's `vals.element.b.d` column
     // when run #2's projection drops `d` from the element struct. Users must full-refresh
@@ -585,18 +555,15 @@ class AutoCdcScd1SchemaEvolutionSuite
     )
   }
 
-  test("a source DF column whose name differs from the target only by case fails with " +
-    "AMBIGUOUS_REFERENCE under case-insensitive resolution") {
-    val session = spark
-    import session.implicits._
-
-    // `DatasetManager`'s schema-merge compares the existing target schema and the flow's
-    // output schema *case-sensitively*: `SchemaMergingUtils.mergeSchemas` calls
-    // `StructType.merge` without forwarding the session-level case-sensitivity. When the
-    // target has `value` and the source DF emits `Value`, the merged schema ends up with
-    // both as separate columns. Reference resolution downstream is case-insensitive
-    // (Spark's default), so the MERGE plan trips on the duplicate and reports
-    // AMBIGUOUS_REFERENCE.
+  test("a source DF column whose name differs from the target only by case is folded onto the " +
+    "existing column under case-insensitive resolution") {
+    // Under case-insensitive resolution (Spark's default), a target `value` and a source `Value`
+    // are the same column. Schema evolution honors that by threading case-sensitivity into
+    // `SchemaMergingUtils.mergeSchemas`: the merge maps `Value` onto the existing `value`, so
+    // `diffSchemas` has no case-only difference left to process. No second column is added, and
+    // the write succeeds. (Before SPARK-58517 the merge ran case-sensitively regardless of the
+    // session and added a duplicate `Value` column, after which the case-insensitive MERGE plan
+    // tripped on the ambiguous reference.)
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       spark.sql(
         s"CREATE TABLE $catalog.$namespace.target " +
@@ -605,8 +572,7 @@ class AutoCdcScd1SchemaEvolutionSuite
 
       val stream = MemoryStream[(Int, Long, String)]
       stream.addData((1, 1L, "alice"))
-      // Source DF emits `Value` (capital), differing only in case from the target's
-      // `value` column.
+      // Source DF emits `Value` (capital), differing only in case from the target's `value` column.
       val df = stream.toDF().toDF("key", "version", "Value")
       val ctx = singleAutoCdcFlowPipeline(
         flowName = "auto_cdc_flow",
@@ -615,33 +581,24 @@ class AutoCdcScd1SchemaEvolutionSuite
         keys = Seq("key"),
         sequencing = functions.col("version"))
 
-      val ex = intercept[RuntimeException] { runPipeline(ctx) }
-      // The exact `name` and `referenceNames` parameters depend on internal merge-plan
-      // synthesis; the condition match is the meaningful invariant for this test.
-      checkErrorInPipelineFailure(
-        failure = ex,
-        condition = "AMBIGUOUS_REFERENCE",
-        parameters = Map(
-          "name" -> ".*",
-          "referenceNames" -> ".*"
-        ),
-        matchPVals = true,
-        queryContext = Array(
-          ExpectedContext(
-            fragment = s"`$catalog`.`$namespace`.`target`.`Value`",
-            start = 0,
-            stop = 27
-          )
-        )
+      runPipeline(ctx)
+
+      // The target schema is unchanged (still a single `value` column, original case), and the
+      // row lands with the emitted value folded into it.
+      assert(
+        spark.table(s"$catalog.$namespace.target").schema.fieldNames.toSeq ===
+          Seq("key", "version", "value", AutoCdcReservedNames.cdcMetadataColName),
+        "the target should keep its single `value` column, not gain a `Value` column"
+      )
+      checkAnswer(
+        spark.table(s"$catalog.$namespace.target"),
+        Seq(Row(1, 1L, "alice", cdcMeta(None, Some(1L))))
       )
     }
   }
 
   test("extra columns on the target that the AutoCDC flow does not emit are preserved " +
     "across the merge") {
-    val session = spark
-    import session.implicits._
-
     // The target is wider than the AutoCDC flow's source DF: column `extra` is present on
     // the target but never produced by the flow. AutoCDC must tolerate the extra target
     // column -- pre-existing rows keep their `extra` value, and newly-inserted rows
@@ -676,9 +633,6 @@ class AutoCdcScd1SchemaEvolutionSuite
 
   test("changing a non-key column type from TIMESTAMP to STRING between runs fails with " +
     "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE") {
-    val session = spark
-    import session.implicits._
-
     // `mergeSchemas` rejects an incompatible type change between TIMESTAMP and STRING.
     // Captured alongside the type-widening / type-narrowing tests; users must full-refresh
     // the target to change a column's type.

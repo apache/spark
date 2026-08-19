@@ -365,6 +365,13 @@
     ],
     "sqlState" : "42613"
   },
+  "AVRO_CANNOT_READ_NULL_FIELD" : {
+    "message" : [
+      "Cannot read null value for <name> into a non-nullable SQL type.",
+      "To allow null values, declare the corresponding type as nullable in the read schema."
+    ],
+    "sqlState" : "22004"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
@@ -1041,6 +1048,12 @@
     ],
     "sqlState" : "42000"
   },
+  "CLUSTER_MANAGER_APPLICATION_FAILURE" : {
+    "message" : [
+      "Exiting due to an error reported by the cluster manager: <message>"
+    ],
+    "sqlState" : "56000"
+  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available."
@@ -1239,6 +1252,14 @@
       "Please use a different name for the partition column."
     ],
     "sqlState" : "KD009"
+  },
+  "CONFLICTING_PIPELINE_FLOW_CASE_SENSITIVITY" : {
+    "message" : [
+      "The flows writing to table <tableName> do not agree on '<configKey>': <flowConfigurations>.",
+      "The effective value determines whether column names that differ only in case identify the same column, so the table's schema would depend on the order the flows are evaluated in.",
+      "Set '<configKey>' to the same value for every flow writing to this table."
+    ],
+    "sqlState" : "42KD9"
   },
   "CONNECT" : {
     "message" : [
@@ -1937,6 +1958,16 @@
           "Input schema <schema> can only contain STRING as a key type for a MAP."
         ]
       },
+      "INVALID_JSON_PATH" : {
+        "message" : [
+          "<functionName> has an invalid or unsupported JSON path <path>."
+        ]
+      },
+      "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a scalar (string, numeric, boolean, or datetime) type."
+        ]
+      },
       "INVALID_JSON_SCHEMA" : {
         "message" : [
           "Input schema <schema> must be a struct, an array, a map or a variant."
@@ -2274,6 +2305,12 @@
     ],
     "sqlState" : "22003"
   },
+  "DECIMAL_SCALE_EXCEEDS_PRECISION" : {
+    "message" : [
+      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
+    ],
+    "sqlState" : "22003"
+  },
   "DEFAULT_DATABASE_NOT_EXISTS" : {
     "message" : [
       "Default database <defaultDatabase> does not exist, please create it first or change default database to `<defaultDatabase>`."
@@ -2453,6 +2490,12 @@
       "Please correct the operator logic to emit rows after current global watermark value."
     ],
     "sqlState" : "42815"
+  },
+  "EMPTY_COLLECTION_NOT_ALLOWED" : {
+    "message" : [
+      "empty collection"
+    ],
+    "sqlState" : "0A000"
   },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
@@ -3920,9 +3963,16 @@
   },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
-      "System memory <systemMemory> must be at least <minSystemMemory>.",
-      "Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+      "Insufficient driver memory:"
     ],
+    "subClass" : {
+      "SYSTEM_MEMORY" : {
+        "message" : [
+          "System memory <systemMemory> must be at least <minSystemMemory>.",
+          "Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+        ]
+      }
+    },
     "sqlState" : "F0000"
   },
   "INVALID_EMPTY_LOCATION" : {
@@ -3968,9 +4018,22 @@
   },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
-      "Executor memory <executorMemory> must be at least <minSystemMemory>.",
-      "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+      "Insufficient executor memory:"
     ],
+    "subClass" : {
+      "CONFIG_MEMORY" : {
+        "message" : [
+          "Executor memory <executorMemory> must be at least <minSystemMemory>.",
+          "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+        ]
+      },
+      "SYSTEM_MEMORY" : {
+        "message" : [
+          "System memory <systemMemory> must be at least <minSystemMemory>.",
+          "Please increase heap size using the --executor-memory option or \"<config>\" in Spark configuration."
+        ]
+      }
+    },
     "sqlState" : "F0000"
   },
   "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA" : {
@@ -4158,17 +4221,20 @@
       "SESSION_CHANGED" : {
         "message" : [
           "The existing Spark server driver instance has restarted. Please reconnect."
-        ]
+        ],
+        "sqlState" : "08003"
       },
       "SESSION_CLOSED" : {
         "message" : [
           "Session was closed."
-        ]
+        ],
+        "sqlState" : "08003"
       },
       "SESSION_NOT_FOUND" : {
         "message" : [
           "Session not found."
-        ]
+        ],
+        "sqlState" : "08003"
       }
     },
     "sqlState" : "HY000"
@@ -4725,6 +4791,11 @@
           "expects a long literal, but got <invalidValue>."
         ]
       },
+      "NORMALIZE_FORM" : {
+        "message" : [
+          "expects one of the normalization forms 'NFC', 'NFD', 'NFKC', 'NFKD', but got <form>."
+        ]
+      },
       "NULL" : {
         "message" : [
           "expects a non-NULL value."
@@ -4820,6 +4891,18 @@
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
     ],
     "sqlState" : "42602"
+  },
+  "INVALID_PYTHON_AGGREGATOR_BUFFER_SCHEMA" : {
+    "message" : [
+      "The incremental Python aggregate function <functionName> requires a struct (StructType) intermediate buffer schema, but got <bufferType>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_PYTHON_UDF_PLACEMENT" : {
+    "message" : [
+      "The Python user-defined aggregate function(s) <functionList> cannot be invoked together with other kinds of aggregate function in the same aggregation. Multiple such functions may be used together, but not mixed with SQL or differently-typed aggregate functions."
+    ],
+    "sqlState" : "0A000"
   },
   "INVALID_QUERY_MIXED_QUERY_PARAMETERS" : {
     "message" : [
@@ -5526,6 +5609,30 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ],
     "sqlState" : "42K0E"
+  },
+  "JSON_EXISTS_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not evaluate the path <path>: the input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
+    ],
+    "sqlState" : "2203G"
+  },
+  "JSON_VALUE_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not extract a scalar value at path <path>."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The path matched no value. This error was requested by the ERROR ON EMPTY clause."
+        ]
+      },
+      "ERROR" : {
+        "message" : [
+          "The input is not valid JSON, the matched value is not a scalar, or it could not be cast to the RETURNING type. This error was requested by the ERROR ON ERROR clause."
+        ]
+      }
+    },
+    "sqlState" : "2203G"
   },
   "KAFKA_DATA_SOURCE_NOT_ENABLED" : {
     "message" : [
@@ -6820,6 +6927,24 @@
     ],
     "sqlState" : "21000"
   },
+  "SCHEDULER_BACKEND_SHUTDOWN_FAILED" : {
+    "message" : [
+      "Failed to shut down the scheduler backend while the application was terminating:"
+    ],
+    "subClass" : {
+      "DRIVER_ENDPOINT" : {
+        "message" : [
+          "the driver endpoint did not stop cleanly."
+        ]
+      },
+      "EXECUTORS" : {
+        "message" : [
+          "the driver could not confirm that the executors were asked to shut down, so the later shutdown steps were skipped."
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "SCHEMA_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create schema <schemaName> because it already exists.",
@@ -7654,6 +7779,12 @@
           "The checkpointing interval for async progress tracking must be set to 0, which means each progress update is checkpointed. Set option asyncProgressTrackingCheckpointIntervalMs to 0 in DataStreamWriter options and retry your query."
         ]
       },
+      "CHECKPOINT_FORMAT_V1_NOT_SUPPORTED" : {
+        "message" : [
+          "Real-time mode does not support state store checkpoint format v1, because a re-executed batch can reuse the state file names of a partially-written failed batch and lose data. If you encountered this while switching an existing query to real-time mode, use a fresh checkpoint location.",
+          "If you must continue with your existing checkpoint and accept that doing so exposes you to the possibility of data loss on failure, set <config> to true."
+        ]
+      },
       "IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED" : {
         "message" : [
           "Real-time mode does not support union on two or more identical streaming data sources in a single query. This includes scenarios such as referencing the same source DataFrame more than once, or using two data sources with identical configurations for some sources. For Kafka, avoid reusing the same DataFrame and create different ones. Sources provided in the query: <sources>"
@@ -7677,6 +7808,16 @@
       "SINK_NOT_SUPPORTED" : {
         "message" : [
           "The <className> sink is currently not supported. See the Real-Time Mode User Guide for a list of supported sinks."
+        ]
+      },
+      "SQL_CONFIGURATION_NOT_SUPPORTED" : {
+        "message" : [
+          "The following session configuration(s) are incompatible with Real-Time Mode: <invalidReasons>. Update or remove them and restart the query."
+        ]
+      },
+      "STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming queries in real-time mode cannot include stateful operators (e.g. aggregate, deduplicate, transformWithState) before a union. Please restructure your query to apply the union before any stateful operations."
         ]
       }
     },
@@ -7798,6 +7939,12 @@
         ]
       }
     },
+    "sqlState" : "42601"
+  },
+  "TABLE_LOCATION_URI_NOT_SPECIFIED" : {
+    "message" : [
+      "Table <identifier> did not specify locationUri."
+    ],
     "sqlState" : "42601"
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
@@ -8018,7 +8165,7 @@
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
-      "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."
+      "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>.<consumerBreakdown>"
     ],
     "sqlState" : "53200"
   },
@@ -8279,6 +8426,29 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_ARRAY_KEY" : {
+    "message" : [
+      "Array keys are not supported by:"
+    ],
+    "subClass" : {
+      "HASH_PARTITIONER" : {
+        "message" : [
+          "HashPartitioner."
+        ]
+      },
+      "MAP_SIDE_COMBINE" : {
+        "message" : [
+          "map-side combining."
+        ]
+      },
+      "REDUCE_BY_KEY_LOCALLY" : {
+        "message" : [
+          "reduceByKeyLocally()."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_ARROWTYPE" : {
     "message" : [
       "Unsupported arrow type <typeName>."
@@ -8322,6 +8492,11 @@
       "FIELD_INDEX" : {
         "message" : [
           "The row shall have a schema to get an index of the field <fieldName>."
+        ]
+      },
+      "TASK_NOT_FINISHED" : {
+        "message" : [
+          "The task has not finished yet, so its duration is not available."
         ]
       },
       "WITHOUT_SUGGESTION" : {
@@ -8657,7 +8832,8 @@
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
         "message" : [
-          "Lambda function with Python UDF <funcName> in a higher order function."
+          "Cannot evaluate the Python UDF <funcName> inside the lambda of a higher-order function.",
+          "This placement is not supported. Rewrite the query so the UDF is applied outside the lambda."
         ]
       },
       "LAMBDA_FUNCTION_WITH_SQL_UDF" : {
@@ -9596,6 +9772,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WRITING_JOB_FAILED" : {
+    "message" : [
+      "Writing job failed."
+    ],
+    "sqlState" : "58030"
+  },
   "WRONG_COMMAND_FOR_OBJECT_TYPE" : {
     "message" : [
       "The operation <operation> requires a <requiredType>. But <objectName> is a <foundType>. Use <alternative> instead."
@@ -9864,11 +10046,6 @@
       "ADD COLUMN with v1 tables cannot specify NOT NULL."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1058" : {
-    "message" : [
-      "Cannot create table with both USING <provider> and <serDeInfo>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1059" : {
     "message" : [
       "STORED AS with file format '<serdeInfo>' is invalid."
@@ -9902,11 +10079,6 @@
   "_LEGACY_ERROR_TEMP_1080" : {
     "message" : [
       "Table <identifier> did not specify database."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1081" : {
-    "message" : [
-      "Table <identifier> did not specify locationUri."
     ]
   },
   "_LEGACY_ERROR_TEMP_1082" : {
@@ -10278,11 +10450,6 @@
   "_LEGACY_ERROR_TEMP_1226" : {
     "message" : [
       "The SQL config '<configName>' was removed in the version <version>. <comment>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1228" : {
-    "message" : [
-      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1232" : {
@@ -10690,11 +10857,6 @@
   "_LEGACY_ERROR_TEMP_2068" : {
     "message" : [
       "Missing database location."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2070" : {
-    "message" : [
-      "Writing job failed."
     ]
   },
   "_LEGACY_ERROR_TEMP_2071" : {
@@ -11365,21 +11527,6 @@
       "empty RDD"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3008" : {
-    "message" : [
-      "Cannot use map-side combining with array keys."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3009" : {
-    "message" : [
-      "HashPartitioner cannot partition array keys."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3010" : {
-    "message" : [
-      "reduceByKeyLocally() does not support array keys"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3011" : {
     "message" : [
       "This RDD lacks a SparkContext. It could happen in the following cases:",
@@ -11395,11 +11542,6 @@
   "_LEGACY_ERROR_TEMP_3013" : {
     "message" : [
       "Can only zip RDDs with same number of elements in each partition"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3014" : {
-    "message" : [
-      "empty collection"
     ]
   },
   "_LEGACY_ERROR_TEMP_3015" : {
@@ -11434,34 +11576,9 @@
       "Checkpoint dir must be specified."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3021" : {
-    "message" : [
-      "Error asking standalone scheduler to shut down executors"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3022" : {
-    "message" : [
-      "Error stopping standalone scheduler's driver endpoint"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3023" : {
-    "message" : [
-      "Can't run submitMapStage on RDD with 0 partitions"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3026" : {
-    "message" : [
-      "duration() called on unfinished task"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3028" : {
     "message" : [
       "<errorMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3029" : {
-    "message" : [
-      "Exiting due to error from cluster scheduler: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3033" : {

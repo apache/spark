@@ -142,7 +142,8 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       // archive reads are enabled; otherwise the file is parsed directly.
       if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         CSVDataSource(parsedOptions).readArchive(
-          conf, file, () => newParser(), getHeaderChecker, requiredSchema, ignoredPathSegmentRegex)
+          conf, file, () => newParser(), getHeaderChecker, requiredSchema, ignoredPathSegmentRegex,
+          parsedOptions.archivePathFilterPattern)
       } else {
         val parser = newParser()
         val headerChecker = getHeaderChecker(file.start == 0, s"CSV file: ${file.urlEncodedPath}")

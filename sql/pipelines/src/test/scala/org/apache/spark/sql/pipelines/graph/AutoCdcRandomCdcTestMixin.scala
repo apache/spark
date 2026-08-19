@@ -81,6 +81,8 @@ object AutoCdcRandomCdcTestMixin {
 trait AutoCdcRandomCdcTestMixin {
   self: ExecutionTest with SharedSparkSession with AutoCdcGraphExecutionTestMixin =>
 
+  import testImplicits._
+
   // Probability an event is a delete; (1 - this) is the upsert probability.
   protected val deleteEventProbability: Double = 0.20
   // Probability an event is immediately re-emitted with the same sequence and payload.
@@ -209,8 +211,6 @@ trait AutoCdcRandomCdcTestMixin {
       scdType: ScdType,
       events: Seq[SourceRow],
       numBatches: Int): Unit = {
-    val session = spark
-    import session.implicits._
 
     val stream = MemoryStream[SourceRow]
     val ctx = singleAutoCdcFlowPipeline(

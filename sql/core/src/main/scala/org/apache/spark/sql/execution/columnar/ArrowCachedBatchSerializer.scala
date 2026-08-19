@@ -144,8 +144,7 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       conf: SQLConf): RDD[ColumnarBatch] = {
     val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
     val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
-    val columnIndices =
-      selectedAttributes.map(a => cacheAttributes.map(o => o.exprId).indexOf(a.exprId)).toArray
+    val columnIndices = CachedColumnIndices(cacheAttributes, selectedAttributes)
     // Capture config on driver
     val timeZoneId = conf.sessionLocalTimeZone
     val prefetchEnabled = conf.arrowCachePrefetchEnabled
@@ -182,11 +181,6 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
     val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
     val timeZoneId = conf.sessionLocalTimeZone
-
-    // Calculate column indices for projection
-    val selectedIndices = selectedAttributes.map { attr =>
-      cacheAttributes.indexWhere(_.exprId == attr.exprId)
-    }.toArray
 
     // Check if all selected types can use the fast path.
     // Types not handled by ArrowColumnReader must use the fallback path.
@@ -227,6 +221,9 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
           }
         }
     } else {
+      // Only the fast path consumes the column indices; the fallback branch above delegates to
+      // convertCachedBatchToColumnarBatch, which resolves them itself.
+      val selectedIndices = CachedColumnIndices(cacheAttributes, selectedAttributes)
       val prefetchEnabled = conf.arrowCachePrefetchEnabled
       input.mapPartitionsInternal { batchIterator =>
         new ArrowCachedBatchToInternalRowIterator(

@@ -688,8 +688,6 @@ class DatetimeMethods:
             - 'raise' will raise an NonExistentTimeError if there are
               nonexistent times
 
-            .. note:: this option only works with pandas 0.24.0+
-
         Returns
         -------
         Series
@@ -748,8 +746,6 @@ class DatetimeMethods:
             - 'raise' will raise an NonExistentTimeError if there are
               nonexistent times
 
-            .. note:: this option only works with pandas 0.24.0+
-
         Returns
         -------
         Series
@@ -807,8 +803,6 @@ class DatetimeMethods:
             - timedelta objects will shift nonexistent times by the timedelta
             - 'raise' will raise an NonExistentTimeError if there are
               nonexistent times
-
-            .. note:: this option only works with pandas 0.24.0+
 
         Returns
         -------

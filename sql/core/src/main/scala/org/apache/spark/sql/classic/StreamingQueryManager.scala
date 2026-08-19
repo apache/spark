@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MicroBatchExecution, StreamingQueryListenerBus, StreamingQueryWrapper}
-import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
+import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStoreCoordinatorRef}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
 import org.apache.spark.sql.streaming
@@ -186,6 +186,54 @@ class StreamingQueryManager private[sql] (
           SQLConf.STREAMING_ASYNC_PROGRESS_TRACKING_REAL_TIME_MODE_ENABLED_BY_DEFAULT))
   }
 
+  /**
+   * Rejects, before the query is built, session configurations that are incompatible with
+   * Real-Time Mode. Real-Time Mode defaults these when the user has not set them
+   * (see StreamExecution.setSparkSessionConfigsForRealTimeMode), but an explicit incompatible
+   * value is a mistake worth surfacing up front rather than silently overriding or failing later
+   * mid-query. Mirrors the Databricks runtime's throwIfConfsAreRTMIncompatible, limited to the
+   * checks that apply in OSS.
+   *
+   *  - state store checkpoint format below v2 (unless the v1 escape hatch is set): Real-Time Mode
+   *    requires v2 (see the fail-fast in MicroBatchExecution.initializeExecution);
+   *  - a non-RocksDB state store provider: v2 requires RocksDB;
+   *  - sortBeforeRepartition left true: the blocking sort never completes on an unbounded stream.
+   */
+  private def throwIfConfsAreRealTimeModeIncompatible(sparkSession: SparkSession): Unit = {
+    val conf = sparkSession.sessionState.conf
+    // Preserve declaration order for a stable message.
+    val invalidReasons = new mutable.LinkedHashMap[String, String]
+
+    val allowCheckpointV1 =
+      conf.getConf(SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1)
+    if (!allowCheckpointV1 &&
+        conf.contains(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key) &&
+        conf.getConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION) < 2) {
+      invalidReasons += (SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2 or above")
+    }
+
+    if (conf.contains(SQLConf.STATE_STORE_PROVIDER_CLASS.key) &&
+        conf.getConf(SQLConf.STATE_STORE_PROVIDER_CLASS) !=
+          classOf[RocksDBStateStoreProvider].getName) {
+      invalidReasons +=
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName)
+    }
+
+    if (conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key) &&
+        conf.getConf(SQLConf.SORT_BEFORE_REPARTITION)) {
+      invalidReasons += (SQLConf.SORT_BEFORE_REPARTITION.key -> "false")
+    }
+
+    if (invalidReasons.nonEmpty) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "STREAMING_REAL_TIME_MODE.SQL_CONFIGURATION_NOT_SUPPORTED",
+        messageParameters = Map(
+          "invalidReasons" -> invalidReasons.zipWithIndex.map {
+            case ((confName, req), index) => s"${index + 1}. $confName must be $req"
+          }.mkString("; ")))
+    }
+  }
+
   // scalastyle:off argcount
   private def createQuery(
       userSpecifiedName: Option[String],
@@ -217,6 +265,7 @@ class StreamingQueryManager private[sql] (
           )
         )
       }
+      throwIfConfsAreRealTimeModeIncompatible(sparkSession)
     }
 
     val dataStreamWritePlan = WriteToStreamStatement(
