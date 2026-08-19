@@ -108,6 +108,10 @@ class DataSourceV2DataFrameSessionCatalogSuite
         .format(v2Format)
         .option("versionAsOf", "1")
         .insertInto("t")
+      verifyTable("t", df)
+
+      // SaveMode.Ignore leaves the existing V1 table unchanged, but the write must still
+      // reach the V1 fallback before Spark rejects the time-travel option.
       df.write
         .format(v2Format)
         .option("versionAsOf", "1")
