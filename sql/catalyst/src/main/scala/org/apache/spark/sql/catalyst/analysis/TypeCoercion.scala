@@ -202,6 +202,10 @@ object TypeCoercion extends TypeCoercionBase {
   private def implicitCast(inType: DataType, expectedType: AbstractDataType): Option[DataType] = {
     // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
     // We wrap immediately an Option after this.
+    // R1 CHAR/VARCHAR promotion is checked first: the acceptsType case below would otherwise
+    // accept the constrained type unchanged, since CharType and VarcharType extend StringType.
+    charVarcharToPlainString(inType, expectedType).foreach(dt => return Some(dt))
+
     @Nullable val ret: DataType = (inType, expectedType) match {
       // If the expected type is already a parent of the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => inType
