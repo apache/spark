@@ -606,6 +606,45 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(mockEndpointRef.decommissionReceived)
   }
 
+  test("SPARK-58886: requestExecutors should saturate instead of overflowing a huge" +
+    " requested total") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    sc.requestTotalExecutors(Int.MaxValue - 1, 0, Map.empty)
+    backend.requestExecutors(2)
+
+    val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+    assert(backend.getRequestedTotalExecutors()(defaultProf) === Int.MaxValue)
+
+    // Only the applied increase (1, not the requested 2) may be recorded as a pending
+    // request time. Shrink the total to 1 to consume the huge seed entry, leaving just
+    // that increment: exactly one of the two executors registered below should get a
+    // request time.
+    sc.requestTotalExecutors(1, 0, Map.empty)
+
+    val infos = mutable.ArrayBuffer[ExecutorInfo]()
+    sc.addSparkListener(new SparkListener() {
+      override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+        infos += executorAdded.executorInfo
+      }
+    })
+    val mockAddress = mock[RpcAddress]
+    Seq("1", "2").foreach { id =>
+      backend.driverEndpoint.askSync[Boolean](
+        RegisterExecutor(id, new MockExecutorRpcEndpointRef(conf), mockAddress.host, 1,
+          Map(), Map(), Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    }
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    assert(infos.size === 2)
+    assert(infos.head.requestTime.isDefined)
+    assert(infos.last.requestTime.isEmpty)
+  }
+
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {
     sc.submitJob(
       rdd,
