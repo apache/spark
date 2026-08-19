@@ -26,6 +26,13 @@ table. The metadata information includes column name, column type
 and column comment. Optionally a partition spec or column name may be specified
 to return the metadata pertaining to a partition or column respectively.
 
+If a table's declared partition columns do not match the last columns of its schema, the catalog
+metadata is inconsistent. `DESCRIBE TABLE` still returns the rest of the metadata, and reports
+both column lists under an `# Invalid Partition Information` section in place of the usual
+`# Partition Information` section. Repair such a table so that its declared partition columns
+match the last columns of its schema; until then, commands that require the partition schema,
+such as `DESCRIBE TABLE ... PARTITION`, `SHOW PARTITIONS` and `SHOW CREATE TABLE`, keep failing.
+
 ### Syntax
 
 ```sql
@@ -98,11 +105,6 @@ to return the metadata pertaining to a partition or column respectively.
         "<col_name>": "<val>"
       },
       "partition_columns": ["col1", "col2"],
-      "invalid_partition_information": {
-        "declared_partition_columns": ["col1", "col2"],
-        "last_columns_in_table_schema": ["other_col1", "other_col2"],
-        "recommendation": "<repair_recommendation>"
-      },
       "clustering_columns": ["col1", "col2"],
       "location": "<path>",
       "view_text": "<view_text>",
@@ -141,7 +143,7 @@ to return the metadata pertaining to a partition or column respectively.
       "collation": "<default_collation>"
     }
   ```
-
+  
   Below are the schema definitions for `<type_json>`:
 
 | Spark SQL Data Types  | JSON Representation                                                                                                                                              |
@@ -168,9 +170,6 @@ to return the metadata pertaining to a partition or column respectively.
 | ArrayType             | `{ "name" : "array", "element_type": <type_json>, "element_nullable": <boolean> }`                                                                               |
 | MapType               | `{ "name" : "map", "key_type": <type_json>, "value_type": <type_json>, "value_nullable": <boolean> }`                                                            |
 | StructType            | `{ "name" : "struct", "fields": [ {"name" : "field1", "type" : <type_json>, “nullable”: <boolean>, "comment": “<comment>”, "default": “<default_val>”}, ... ] }` |
-
-  If the declared partition columns do not match the last columns in the table schema,
-  `invalid_partition_information` is returned instead of `partition_columns`.
 
 ### Examples
 

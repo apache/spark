@@ -621,22 +621,6 @@ trait DescribeCommandBase {
     buffer += Row(column, dataType, comment)
   }
 }
-
-private[command] case class PartitionMetadata(table: CatalogTable) {
-  val declaredPartitionColumns: Seq[String] = table.partitionColumnNames
-  val lastSchemaFields: Seq[StructField] =
-    table.schema.takeRight(declaredPartitionColumns.size)
-  val lastSchemaColumns: Seq[String] = lastSchemaFields.map(_.name)
-
-  def isValid: Boolean = lastSchemaColumns == declaredPartitionColumns
-
-  def declaredPartitionColumnsDisplay: String = formatColumns(declaredPartitionColumns)
-
-  def lastSchemaColumnsDisplay: String = formatColumns(lastSchemaColumns)
-
-  private def formatColumns(columns: Seq[String]): String = columns.mkString("[", ", ", "]")
-}
-
 /**
  * Command that looks like
  * {{{
@@ -670,15 +654,16 @@ case class DescribeTableCommand(
       }
       describeSchema(metadata.schema, result, header = false)
     } else {
-      if (metadata.schema.isEmpty) {
+      val schema = if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
-        describeSchema(sparkSession.table(metadata.identifier).schema, result, header = false)
+        sparkSession.table(metadata.identifier).schema
       } else {
-        describeSchema(metadata.schema, result, header = false)
+        metadata.schema
       }
+      describeSchema(schema, result, header = false)
 
-      describePartitionInfo(metadata, result)
+      describePartitionInfo(metadata, schema, result)
       describeClusteringInfo(metadata, result)
 
       if (partitionSpec.nonEmpty) {
@@ -698,21 +683,28 @@ case class DescribeTableCommand(
     result.toSeq
   }
 
-  private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    if (table.partitionColumnNames.nonEmpty) {
-      val partitionMetadata = PartitionMetadata(table)
-      if (partitionMetadata.isValid) {
+  private def describePartitionInfo(
+      table: CatalogTable,
+      schema: StructType,
+      buffer: ArrayBuffer[Row]): Unit = {
+    val partitionColumnNames = table.partitionColumnNames
+    if (partitionColumnNames.nonEmpty) {
+      // Same positional convention as `CatalogTable.partitionSchema`, but reported instead of
+      // asserted so that a table with inconsistent metadata stays describable.
+      val partitionFields = schema.takeRight(partitionColumnNames.length)
+      val consistent = partitionFields.length == partitionColumnNames.length &&
+        partitionFields.map(_.name).zip(partitionColumnNames).forall {
+          case (schemaColumn, partitionColumn) => conf.resolver(schemaColumn, partitionColumn)
+        }
+      if (consistent) {
         append(buffer, "# Partition Information", "", "")
-        describeSchema(StructType(partitionMetadata.lastSchemaFields), buffer, header = true)
+        describeSchema(StructType(partitionFields), buffer, header = true)
       } else {
         append(buffer, "# Invalid Partition Information", "", "")
         append(buffer, "Declared Partition Columns",
-          partitionMetadata.declaredPartitionColumnsDisplay, "")
+          partitionColumnNames.mkString("[", ", ", "]"), "")
         append(buffer, "Last Columns in Table Schema",
-          partitionMetadata.lastSchemaColumnsDisplay, "")
-        append(buffer, "Recommendation",
-          "Repair the catalog metadata so the declared partition columns match the last " +
-            "columns in the table schema.", "")
+          partitionFields.map(_.name).mkString("[", ", ", "]"), "")
       }
     }
   }

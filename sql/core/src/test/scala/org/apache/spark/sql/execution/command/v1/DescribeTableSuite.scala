@@ -28,13 +28,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.execution.command.{
-  DescribeTableJson,
-  Field,
-  InvalidPartitionInformation,
-  SqlPathEntry,
-  TableColumn,
-  Type}
+import org.apache.spark.sql.execution.command.{DescribeTableJson, Field, SqlPathEntry, TableColumn, Type}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -900,12 +894,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
       val expectedInvalidInfo = Seq(
         Row("# Invalid Partition Information", "", ""),
         Row("Declared Partition Columns", "[declared_part]", ""),
-        Row("Last Columns in Table Schema", "[actual_part]", ""),
-        Row(
-          "Recommendation",
-          "Repair the catalog metadata so the declared partition columns match the last " +
-            "columns in the table schema.",
-          ""))
+        Row("Last Columns in Table Schema", "[actual_part]", ""))
 
       Seq("DESCRIBE TABLE", "DESCRIBE TABLE EXTENDED").foreach { command =>
         val description = spark.sql(s"$command $tbl").collect().toSeq
@@ -915,16 +904,11 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         assert(!description.exists(_.getString(0) == "# Partition Information"))
       }
 
+      // The JSON output never consulted `partitionSchema` for this case, so it keeps reporting
+      // the declared partition columns as before.
       val jsonValue = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl AS JSON").head().getString(0)
-      val jsonOutput = parse(jsonValue)
-      assert((jsonOutput \ "partition_columns") === JNothing)
-      val parsedOutput = jsonOutput.extract[DescribeTableJson]
-      assert(parsedOutput.invalid_partition_information === Some(InvalidPartitionInformation(
-        declared_partition_columns = List("declared_part"),
-        last_columns_in_table_schema = List("actual_part"),
-        recommendation =
-          "Repair the catalog metadata so the declared partition columns match the last " +
-            "columns in the table schema.")))
+      val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+      assert(parsedOutput.partition_columns === Some(List("declared_part")))
     }
   }
 

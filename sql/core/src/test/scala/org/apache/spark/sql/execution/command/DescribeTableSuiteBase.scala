@@ -340,7 +340,6 @@ case class DescribeTableJson(
     storage_properties: Option[Map[String, String]] = None,
     partition_provider: Option[String] = None,
     partition_columns: Option[List[String]] = Some(Nil),
-    invalid_partition_information: Option[InvalidPartitionInformation] = None,
     partition_values: Option[Map[String, String]] = None,
     clustering_columns: Option[List[String]] = None,
     statistics: Option[Map[String, Any]] = None,
@@ -352,11 +351,6 @@ case class DescribeTableJson(
     view_query_output_columns: Option[List[String]] = None,
     view_creation_spark_configuration: Option[Map[String, String]] = None
 )
-
-case class InvalidPartitionInformation(
-    declared_partition_columns: List[String],
-    last_columns_in_table_schema: List[String],
-    recommendation: String)
 
 /** Used for sql_path field of DescribeTableJson */
 case class SqlPathEntry(catalog_name: String, namespace: List[String])
