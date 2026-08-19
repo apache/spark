@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
 /**
- * Acceptance test for the LIMIT early-stop fix (SPARK-57399 local-repartition v2). An
+ * Acceptance test for the LIMIT early-stop fix (SPARK-57399). An
  * early-stopping reader over a pipelined channel shuffle used to hang the writer: the channel
  * queue is bounded (64 batches), so once a LIMIT's reduce task was satisfied and stopped
  * draining while the map task was still producing, the writer blocked forever on a full

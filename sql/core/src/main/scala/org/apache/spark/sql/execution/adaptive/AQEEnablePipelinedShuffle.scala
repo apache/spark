@@ -27,14 +27,14 @@ import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExcha
 import org.apache.spark.sql.execution.joins.ShuffledJoin
 
 /**
- * WIP / opt-in (SPARK-57399 local-repartition v2). Flips eligible [[ShuffleExchangeExec]]
+ * Opt-in (SPARK-57399). Flips eligible [[ShuffleExchangeExec]]
  * nodes to `pipelined = true` under AQE, the adaptive counterpart of the non-AQE
  * `EnablePipelinedShuffle` preparation rule (which is a no-op once the plan is wrapped in
  * `AdaptiveSparkPlanExec`). Runs in `AdaptiveSparkPlanExec.queryStagePreparationRules`, so
  * it is re-applied on every replanning round; the decision is deterministic on plan shape,
  * and already-flipped exchanges are left alone.
  *
- * Placement adapts v1's `AQEReplaceWithLocalRepartition` policy. A flipped exchange has no
+ * Placement policy. A flipped exchange has no
  * map output statistics (it never materializes as a query stage: the DAGScheduler
  * gang-runs it inline with its consumer in the final job -- see the pipelined case in
  * `AdaptiveSparkPlanExec.createNonResultQueryStages`), so only exchanges whose statistics
@@ -50,8 +50,7 @@ import org.apache.spark.sql.execution.joins.ShuffledJoin
  *   - everything else stays regular and materializes as usual -- those stages form the
  *     fully-materialized prefix the scheduler's mixed-job shape requires.
  *
- * Unlike v1 (whose operator replaced hash exchanges only, leaving SinglePartition
- * exchanges as transparent regular walls), a pipelined exchange supports every
+ * A pipelined exchange supports every
  * partitioning, so a SinglePartition exchange in a free position is simply a candidate
  * itself. The walk stops below a flipped candidate: exchanges underneath stay regular and
  * keep full AQE treatment. Candidates whose canonicalized form occurs more than once in
@@ -63,7 +62,7 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.pipelinedShuffleEnabled) return plan
-    // Single-executor only, like v1's AQE rule: the validated transport (the in-process
+    // Single-executor only: the validated transport (the in-process
     // channel manager) requires producer and consumer in one JVM.
     if (plan.session == null || !plan.session.sparkContext.isLocal) return plan
     // The SQL flag alone does not pick a transport: the pipelined manager is set separately by
@@ -112,13 +111,11 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
       }
       // A flipped SinglePartition exchange keeps the walk going: AQE makes no decision at
       // it (it cannot be coalesced or skew-split), so free candidates BELOW it flip too,
-      // forming a pipelined chain -- v1's "transparent SinglePartition" lesson (its AQE-on
-      // prototype numbers went from baseline-equal to 2.4-2.7x on exactly this), adapted
-      // to v2's all-pipelined constraint: where v1 could leave the single exchange regular
-      // and replace only the hash below, v2 must flip the whole chain. Below any OTHER
-      // exchange (flipped or not) the walk stops: what is underneath either materializes
-      // as the prefix or feeds a regular exchange whose stats AQE uses, and keeps full AQE
-      // treatment either way.
+      // forming a pipelined chain: all exchanges in such a chain must flip together (a
+      // SinglePartition exchange cannot be coalesced or skew-split, so AQE makes no decision
+      // at it and free candidates below it flip too). Below any OTHER exchange (flipped or
+      // not) the walk stops: what is underneath either materializes as the prefix or feeds
+      // a regular exchange whose stats AQE uses, and keeps full AQE treatment either way.
       if (flipped &&
           s.outputPartitioning == org.apache.spark.sql.catalyst.plans.physical.SinglePartition) {
         collectCandidates(s.child, blocked = false, shared, out)

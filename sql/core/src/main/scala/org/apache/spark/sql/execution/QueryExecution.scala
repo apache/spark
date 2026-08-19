@@ -796,8 +796,8 @@ object QueryExecution {
       } else {
         Seq(ReuseExchangeAndSubquery)
       }) ++
-      // WIP opt-in (SPARK-57399 local-repartition v2): runs last so it observes the final
-      // reuse decision (a reused exchange means fan-out, which it refuses to make pipelined).
+      // Opt-in (SPARK-57399): runs last so it observes the final reuse decision (a reused
+      // exchange means fan-out, which it refuses to make pipelined).
       // No-op unless spark.sql.pipelinedShuffle.enabled=true and AQE is off.
       Seq(EnablePipelinedShuffle())
   }

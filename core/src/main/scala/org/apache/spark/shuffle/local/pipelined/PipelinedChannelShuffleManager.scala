@@ -26,7 +26,7 @@ import org.apache.spark.shuffle.{BaseShuffleHandle, PipelinedShuffleManager, Shu
  * channel (see [[ChannelShuffleRendezvous]]) rather than the RPC streaming shuffle. It
  * serves a [[org.apache.spark.PipelinedShuffleDependency]] on a single executor, letting
  * the concurrent-stage scheduler run a shuffle's map and reduce stages at the same time
- * while records flow between them in memory -- the local-repartition v2 execution model.
+ * while records flow between them in memory -- the in-process pipelined shuffle execution model.
  *
  * Selected via `spark.shuffle.manager.incremental`.
  *

@@ -147,8 +147,8 @@ case class AdaptiveSparkPlanExec(
       // local sort left dangling right below the extra shuffle that skew join optimization may
       // insert between two joins.
       RemoveRedundantSorts,
-      // Flips the final unmaterialized tail's exchanges to pipelined (SPARK-57399 local
-      // repartition v2, opt-in). Runs last so skew handling and sort cleanup have settled
+      // Flips the final unmaterialized tail's exchanges to pipelined (SPARK-57399 pipelined
+      // channel, opt-in). Runs last so skew handling and sort cleanup have settled
       // before placement is decided.
       AQEEnablePipelinedShuffle()
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules

@@ -34,7 +34,7 @@ import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader, ShuffleReadMe
  * costs a lock acquisition per operation (~hundreds of ns under producer/consumer
  * contention), so handing rows across one at a time costs that PER ROW -- measured at ~19x
  * slower than a regular shuffle on a 20M-row repartition. Batching divides the lock traffic
- * by `batchSize`, the same lesson as local-repartition v1's object-batch transport. A batch
+ * by `batchSize`, the same lesson as any object-batch transport. A batch
  * array is handed off to the consumer and never touched again by the writer (a fresh array
  * is allocated after each put), so ownership transfer is clean across threads.
  */

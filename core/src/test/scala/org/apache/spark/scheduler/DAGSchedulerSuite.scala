@@ -6547,14 +6547,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: an all-pipelined group with no regular prefix classifies identically " +
-      "under the materialized-prefix relaxation (inert for RTM-style jobs)") {
+      "under the materialized-prefix relaxation (a previously-valid shape is unchanged)") {
     // The prefix relaxation (classifyJobShuffleShape) keys purely off dependency TYPE, so it is
-    // open to any PipelinedShuffleDependency, RTM's included. But the materialized-prefix mixed
-    // shape it newly admits is produced only by AQE (prior map-stage jobs materialize the prefix).
-    // An RTM-style streaming job is all-pipelined with no regular boundary, so it never hits the
-    // relaxed path: it was accepted before the relaxation and is accepted identically after. This
-    // pins the "inert for RTM" claim -- the range the relaxation opens does not overlap the shapes
-    // RTM produces -- so the change is a strict superset RTM inherits without behavior change.
+    // open to any PipelinedShuffleDependency. But the materialized-prefix mixed shape it newly
+    // admits is produced only by adaptive execution; an all-pipelined job (no regular boundary)
+    // never hits the relaxed path, so it classifies identically before and after the relaxation
+    // -- the relaxation is a strict superset that leaves every previously-valid shape unchanged.
     val producerRdd = new MyRDD(sc, 2, Nil)
     val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
     val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)

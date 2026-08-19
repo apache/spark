@@ -22,7 +22,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 
 /**
- * End-to-end coverage of the local-repartition v2 path UNDER AQE: AQEEnablePipelinedShuffle
+ * End-to-end coverage of the pipelined channel path UNDER AQE: AQEEnablePipelinedShuffle
  * flips the final unmaterialized tail's exchanges to pipelined, exchanges below the tail
  * materialize as regular query stages (keeping full AQE treatment), and the final result job
  * runs the pipelined gang over the materialized prefix -- the scheduler shape admitted by

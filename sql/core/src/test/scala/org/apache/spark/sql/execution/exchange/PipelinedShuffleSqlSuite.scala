@@ -22,7 +22,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
 /**
- * End-to-end SQL coverage of the local-repartition v2 path: a batch query whose hash
+ * End-to-end SQL coverage of the pipelined channel path: a batch query whose hash
  * exchange is rewritten to a pipelined shuffle (EnablePipelinedShuffle) and served by the
  * in-process channel manager (PipelinedChannelShuffleManager), run through the
  * concurrent-stage scheduler on a single executor. Self-manages its SparkSession because the

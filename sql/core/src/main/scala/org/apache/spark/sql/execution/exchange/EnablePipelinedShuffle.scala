@@ -23,12 +23,12 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
- * WIP / opt-in (SPARK-57399 local-repartition v2). Rewrites EVERY [[ShuffleExchangeExec]] in a
+ * Opt-in (SPARK-57399). Rewrites EVERY [[ShuffleExchangeExec]] in a
  * batch physical plan to `pipelined = true`, so each shuffle is served by the in-process
  * pipelined channel manager and the concurrent-stage scheduler runs the map and reduce stages
- * together. This is the minimal SQL entry point that lets a batch query exercise the v2
- * execution path; a production version would be a targeted, cost/shape-aware replacement
- * rather than a blanket rewrite.
+ * together. This is the minimal SQL entry point that lets a batch query exercise the
+ * pipelined channel execution path; a production version would be a targeted,
+ * cost/shape-aware replacement rather than a blanket rewrite.
  *
  * Enabled only when `spark.sql.pipelinedShuffle.enabled=true`. It runs in the non-AQE
  * `preparations` list, so it also requires AQE to be off (under AQE the plan is hidden behind
@@ -46,7 +46,7 @@ case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.pipelinedShuffleEnabled) return plan
-    // Single-executor only, like v1's rule: the validated transport (the in-process channel
+    // Single-executor only: the validated transport (the in-process channel
     // manager) requires producer and consumer in one JVM. (The pipelined machinery itself is
     // not local-only -- the RPC streaming transport is cross-executor -- but batch queries
     // over it are unexplored territory, so the rule stays conservative.)
