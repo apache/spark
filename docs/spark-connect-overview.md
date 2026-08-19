@@ -111,17 +111,19 @@ latest release in  the release drop down at the top of the page. Then choose you
 
 Now extract the Spark package you just downloaded on your computer, for example:
 
-{% highlight bash %}
+```bash
 tar -xvf spark-{{site.SPARK_VERSION_SHORT}}-bin-hadoop3.tgz
-{% endhighlight %}
+```
 
 In a terminal window, go to the `spark` folder in the location where you extracted
 Spark before and run the `start-connect-server.sh` script to start Spark server with
 Spark Connect, like in this example:
 
-{% highlight bash %}
+```bash
 ./sbin/start-connect-server.sh
-{% endhighlight %}
+```
+
+Alternatively, `./bin/spark-connect-shell` starts an interactive Scala shell with the Connect server hosted inside the shell process itself.
 
 Make sure to use the same version  of the package as the Spark version you
 downloaded previously. In this example, Spark {{site.SPARK_VERSION_SHORT}} with Scala 2.13.
@@ -479,3 +481,81 @@ APIs such as [SparkContext](api/scala/org/apache/spark/SparkContext.html)
 and [RDD](api/scala/org/apache/spark/rdd/RDD.html) are unsupported in Spark Connect.
 
 Support for more APIs is planned for upcoming Spark releases.
+
+# Routing through a shared ingress or reverse proxy
+
+When several services share a single hostname behind a Kubernetes Ingress (or another
+reverse proxy), it is tempting to give each service a URL path prefix (for example
+`sc://host/sparkConnect`) and route on that path. This does not work for gRPC: the
+gRPC method name *is* the HTTP/2 `:path` (`/spark.connect.SparkConnectService/ExecutePlan`),
+so a connection string cannot carry a separate routing path. Prepending a prefix to the
+`:path` produces an unknown method and the server responds with `UNIMPLEMENTED`, unless the
+proxy is configured to strip the prefix back off before forwarding, a two-sided contract
+that is not part of gRPC's design.
+
+The routing dimension that *is* free is the HTTP/2 `:authority` (the virtual host). Set it
+to a routing tag with the `grpc.default_authority` channel option, and route on it at the
+proxy (for example, an Ingress `host:` rule). The client still dials the shared hostname
+(`default_authority` only overrides the `:authority` header used for routing, not the address
+it connects to), and the gRPC method `:path` is never touched, so no path rewrite is needed.
+This is the approach the gRPC maintainers recommend for this scenario
+([grpc/grpc#14900](https://github.com/grpc/grpc/issues/14900)).
+
+The example below uses the Python client, which exposes gRPC channel options directly:
+
+{% highlight python %}
+from pyspark.sql.connect.session import SparkSession
+from pyspark.sql.connect.client import DefaultChannelBuilder
+
+cb = DefaultChannelBuilder("sc://myhost.com:443")
+cb.setChannelOption("grpc.default_authority", "sparkconnect")  # routing tag
+spark = SparkSession.builder.channelBuilder(cb).getOrCreate()
+{% endhighlight %}
+
+A corresponding Kubernetes Ingress routes on that tag and keeps the service at path `/`
+(no subpath, no rewrite). Note the routing tag must be a lowercase
+[RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123) name, since a Kubernetes Ingress
+`host:` requires one:
+
+{% highlight yaml %}
+spec:
+  rules:
+  - host: sparkconnect            # matches grpc.default_authority
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: spark-connect-server
+            port: { number: 15002 }
+{% endhighlight %}
+
+**Over TLS**, gRPC uses the `:authority` as the certificate-verification name by default,
+so overriding it with a routing tag would fail verification (the tag is not in the server
+certificate's SAN). Keep the two names separate: set `grpc.ssl_target_name_override` to the
+real server hostname (used for certificate verification and SNI) and `grpc.default_authority`
+to the routing tag.
+
+{% highlight python %}
+cb = DefaultChannelBuilder("sc://myhost.com:443/;use_ssl=true")
+cb.setChannelOption("grpc.ssl_target_name_override", "myhost.com")  # certificate verification / SNI
+cb.setChannelOption("grpc.default_authority", "sparkconnect")       # routing tag
+spark = SparkSession.builder.channelBuilder(cb).getOrCreate()
+{% endhighlight %}
+
+`use_ssl=true` verifies the server certificate against the system's trusted CA store. If your
+gateway's certificate is issued by a CA the client does not trust by default (a self-signed or
+internal CA), make that CA trusted on the client side (for example, via
+`GRPC_DEFAULT_SSL_ROOTS_FILE_PATH`) rather than through the connection string. Configuring the
+proxy's own TLS (which certificate it presents for which hostname) is part of your ingress
+setup and is out of scope here.
+
+Two notes on `grpc.ssl_target_name_override`:
+gRPC documents it as testing-oriented because its typical misuse is to *mask* a certificate
+name mismatch (verifying against a name the server does not actually present, which defeats
+hostname verification). Here it is set to the real, verified hostname, so the certificate is
+still checked correctly; it only prevents the routing tag from being used as the verification
+name. If you prefer to avoid the option entirely, issue the server certificate with the routing
+tag included in its SAN; then `grpc.default_authority` alone is sufficient and no override is
+needed.

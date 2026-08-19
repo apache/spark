@@ -2491,11 +2491,20 @@ class SparkContext:
         """
         return self._jsc.cancelJobsWithTag(tag)
 
-    def cancelAllJobs(self) -> None:
+    def cancelAllJobs(self, reason: Optional[str] = None) -> None:
         """
         Cancel all jobs that have been scheduled or are running.
 
         .. versionadded:: 1.1.0
+
+        Parameters
+        ----------
+        reason : str, optional
+            Reason for cancellation. It is surfaced in the error of every cancelled job, so that
+            a job aborted as collateral of a context-wide cancellation can be told apart from one
+            that failed on its own.
+
+            .. versionadded:: 4.4.0
 
         See Also
         --------
@@ -2503,7 +2512,10 @@ class SparkContext:
         :meth:`SparkContext.cancelJobsWithTag`
         :meth:`SparkContext.runJob`
         """
-        self._jsc.sc().cancelAllJobs()
+        if reason is None:
+            self._jsc.sc().cancelAllJobs()
+        else:
+            self._jsc.sc().cancelAllJobs(reason)
 
     def statusTracker(self) -> StatusTracker:
         """

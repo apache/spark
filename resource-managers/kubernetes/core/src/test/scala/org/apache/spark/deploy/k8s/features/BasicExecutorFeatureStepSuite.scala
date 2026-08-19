@@ -352,11 +352,19 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_EXECUTOR_ATTRIBUTE_EXECUTOR_ID -> KubernetesTestConf.EXECUTOR_ID))
   }
 
-  test("SPARK-53944: Support spark.kubernetes.executor.useDriverPodIP") {
-    Seq((false, "localhost"), (true, "bindAddress")).foreach {
-      case (flag, address) =>
+  test("SPARK-53944, SPARK-58748: Support spark.kubernetes.executor.useDriverPodIP") {
+    Seq(
+      (false, "10.138.148.230", "localhost"),
+      (true, "10.138.148.230", "10.138.148.230"),
+      (true, "bindAddress", "bindAddress"),
+      (true, "2001:DB8:0:0::BEEF", "[2001:db8::beef]"),
+      (true, "0.0.0.0", "localhost"),
+      (true, "::", "localhost"),
+      (true, "[::]", "localhost"),
+      (true, "0:0:0:0:0:0:0:0", "localhost")).foreach {
+      case (flag, bindAddress, address) =>
         val conf = baseConf.clone()
-          .set(DRIVER_BIND_ADDRESS, "bindAddress")
+          .set(DRIVER_BIND_ADDRESS, bindAddress)
           .set(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP, flag)
         val kconf = KubernetesTestConf.createExecutorConf(sparkConf = conf)
         val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(conf), defaultProfile)

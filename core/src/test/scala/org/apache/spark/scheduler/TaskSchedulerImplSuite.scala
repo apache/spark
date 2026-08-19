@@ -2866,4 +2866,28 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0)) === 0)
   }
 
+  test("error() with no active task sets reports a cluster manager failure") {
+    val taskScheduler = setupScheduler()
+    // No task set has been submitted, so `error` cannot abort anything and throws instead.
+    checkError(
+      exception = intercept[SparkException] {
+        taskScheduler.error("Master removed our application: FAILED")
+      },
+      condition = "CLUSTER_MANAGER_APPLICATION_FAILURE",
+      sqlState = Some("56000"),
+      parameters = Map("message" -> "Master removed our application: FAILED"))
+  }
+
+  test("error() with an active task set aborts it instead of throwing") {
+    val taskScheduler = setupScheduler()
+    taskScheduler.submitTasks(FakeTask.createTaskSet(1))
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    taskScheduler.error("Master removed our application: FAILED")
+    assert(tsm.isZombie)
+    // The zombie flag cannot show whether the reason survived the trip, so assert that the
+    // DAGScheduler was notified with the message verbatim.
+    assert(failedTaskSet)
+    assert(failedTaskSetReason === "Master removed our application: FAILED")
+  }
+
 }

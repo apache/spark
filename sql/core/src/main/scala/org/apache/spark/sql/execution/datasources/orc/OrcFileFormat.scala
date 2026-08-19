@@ -33,7 +33,7 @@ import org.apache.orc.mapreduce._
 import org.apache.spark.TaskContext
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -178,6 +178,7 @@ class OrcFileFormat
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
     val orcFilterPushDown = sqlConf.orcFilterPushDown
     val archiveFormatEnabled = sqlConf.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+    val fileSourceOptions = new FileSourceOptions(options)
 
     def readSingleFile(file: PartitionedFile): Iterator[InternalRow] = {
       val conf = broadcastedConf.value.value
@@ -257,7 +258,9 @@ class OrcFileFormat
 
     (file: PartitionedFile) => {
       if (archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
-        readLocalizedEntries(file, broadcastedConf.value.value, "orc-archive") { entryFile =>
+        readLocalizedEntries(
+            file, broadcastedConf.value.value, "orc-archive",
+            fileSourceOptions.archivePathFilterPattern) { entryFile =>
           readSingleFile(entryFile)
         }
       } else {

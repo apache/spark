@@ -56,6 +56,7 @@ private[v2] trait V2JDBCTest
       jdbcClientType: String = "STRING"): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
+    .putBoolean("preferTimestampNanos", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
     .putString("jdbcClientType", jdbcClientType)
     .build()

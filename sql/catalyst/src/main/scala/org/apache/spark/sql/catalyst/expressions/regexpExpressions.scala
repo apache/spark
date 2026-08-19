@@ -617,7 +617,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
-  override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
+  override def dataType: DataType =
+    ArrayType(StringHelper.transformingStringResultType(str.dataType), containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeBinaryLcase, StringTypeWithCollation, IntegerType)
   override def first: Expression = str
@@ -765,7 +766,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     RegExpUtils.replace(pattern, s.toString, lastReplacement, i.asInstanceOf[Int])
   }
 
-  override def dataType: DataType = subject.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(subject.dataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeBinaryLcase,
       StringTypeWithCollation, StringTypeBinaryLcase, IntegerType)
@@ -940,7 +942,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     RegExpExtractBase.extract(getLastMatcher(s, p), r.asInstanceOf[Int], prettyName)
   }
 
-  override def dataType: DataType = subject.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(subject.dataType)
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1016,7 +1019,8 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
     RegExpExtractBase.extractAll(getLastMatcher(s, p), r.asInstanceOf[Int], prettyName)
   }
 
-  override def dataType: DataType = ArrayType(subject.dataType)
+  override def dataType: DataType =
+    ArrayType(StringHelper.transformingStringResultType(subject.dataType))
   override def prettyName: String = "regexp_extract_all"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

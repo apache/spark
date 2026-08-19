@@ -22,13 +22,13 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, ResultSet, Time, Timestamp}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, NANOS_PER_MICROS}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.jdbc.JdbcDialect
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 /**
  * A `JDBCValueGetter` is responsible for getting a value from a `ResultSet` into a field of an
@@ -183,6 +183,44 @@ private[jdbc] object JDBCValueGetter {
       val t = rs.getTimestamp(pos + 1)
       if (t != null) {
         row.setLong(pos, localDateTimeToMicros(dialect.convertJavaTimestampToTimestampNTZ(t)))
+      } else {
+        row.update(pos, null)
+      }
+    }
+  }
+
+  // Reads a driver TIMESTAMP into a nanosecond-precision local date-time. Uses
+  // `getObject(LocalDateTime)` to fetch the stored wall-clock directly (mirroring `TimeGetter`),
+  // which preserves the full sub-microsecond fraction and, being time-zone independent, avoids the
+  // JVM-default-zone shift of the microsecond `getTimestamp` path. The value is then floored to the
+  // column precision.
+  final case class TimestampNTZNanosGetter(precision: Int) extends JDBCValueGetter {
+    def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
+      val localDateTime = rs.getObject(pos + 1, classOf[java.time.LocalDateTime])
+      if (localDateTime != null) {
+        val fullNanos =
+          localDateTimeToTimestampNanos(localDateTime, TimestampNTZNanosType.NANOS_PRECISION)
+        row.update(pos, truncateTimestampNanosToPrecision(fullNanos, precision))
+      } else {
+        row.update(pos, null)
+      }
+    }
+  }
+
+  // Reads a driver TIMESTAMP into a nanosecond-precision instant. Mirrors the microsecond
+  // `TimestampGetter` (including the Julian->Gregorian rebase in `fromJavaTimestamp`), then
+  // re-attaches the sub-microsecond digits from `java.sql.Timestamp.getNanos` that the micro path
+  // drops, before truncating to the column precision.
+  final case class TimestampLTZNanosGetter(dialect: JdbcDialect, precision: Int)
+      extends JDBCValueGetter {
+    def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
+      val t = rs.getTimestamp(pos + 1)
+      if (t != null) {
+        val converted = dialect.convertJavaTimestampToTimestamp(t)
+        val epochMicros = fromJavaTimestamp(converted)
+        val subMicroNanos = (converted.getNanos % NANOS_PER_MICROS).toShort
+        val fullNanos = TimestampNanosVal.fromParts(epochMicros, subMicroNanos)
+        row.update(pos, truncateTimestampNanosToPrecision(fullNanos, precision))
       } else {
         row.update(pos, null)
       }
