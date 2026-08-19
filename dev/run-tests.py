@@ -677,9 +677,8 @@ def main():
         # If APACHE_SPARK_REF is set, we are in a forked repository.
         # Otherwise if we have a list of changed files, we must be in post-merge CI.
         if not os.environ.get("APACHE_SPARK_REF", "") and changed_files:
-            # Filter out all dev_tools files because they are not relevant
             relevant_changed_files = [
-                f for f in changed_files if not modules.dev_tools.contains_file(f)
+                f for f in changed_files if not modules.is_ignored_file(f)
             ]
             # If there are relevant changed files that are not pyspark, we don't do smart test
             if any(
