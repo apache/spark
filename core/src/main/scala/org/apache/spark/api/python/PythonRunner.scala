@@ -87,6 +87,14 @@ private[spark] object PythonEvalType {
   val SQL_WINDOW_AGG_ARROW_UDF = 253
   val SQL_GROUPED_AGG_ARROW_ITER_UDF = 254
 
+  // Incremental (partial + final) Arrow aggregator. Unlike the whole-group grouped-agg UDFs
+  // above, these support true partial aggregation: the PARTIAL eval type folds input rows into a
+  // per-group buffer (via the aggregator's `reduce`) on the map side, and the FINAL eval type
+  // merges partial buffers across the shuffle (via `merge`) and produces the output (via `finish`).
+  // See PythonIncrementalAggregateExec and the Python `Aggregator` API.
+  val SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF = 255
+  val SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF = 256
+
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
   val SQL_ARROW_UDTF = 302
@@ -130,6 +138,10 @@ private[spark] object PythonEvalType {
     case SQL_GROUPED_AGG_ARROW_UDF => "SQL_GROUPED_AGG_ARROW_UDF"
     case SQL_WINDOW_AGG_ARROW_UDF => "SQL_WINDOW_AGG_ARROW_UDF"
     case SQL_GROUPED_AGG_ARROW_ITER_UDF => "SQL_GROUPED_AGG_ARROW_ITER_UDF"
+    case SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF =>
+      "SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF"
+    case SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF =>
+      "SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF"
   }
 
   // The eval types produced by ExtractPythonUDFFromLambda: a scalar UDF lifted out of a

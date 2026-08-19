@@ -212,6 +212,7 @@ ITEMS	false
 ITERATE	false
 JOIN	true
 JSON	false
+JSON_EXISTS	false
 JSON_TABLE	false
 JSON_VALUE	false
 KEY	false

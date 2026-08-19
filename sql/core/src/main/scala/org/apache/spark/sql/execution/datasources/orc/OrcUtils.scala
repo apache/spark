@@ -589,7 +589,7 @@ object OrcUtils extends Logging {
 
     // Get column statistics with column name.
     def getColumnStatistics(columnName: String): ColumnStatistics = {
-      val columnIndex = dataSchema.fieldNames.indexOf(columnName)
+      val columnIndex = dataSchema.getFieldIndex(columnName).getOrElse(-1)
       columnsStatistics.get(columnIndex).getStatistics
     }
 

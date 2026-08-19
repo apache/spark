@@ -363,11 +363,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
-      case leaf: LeafNode if !SQLConf.get.preserveCharVarcharTypeInfo &&
-        leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
+      case leaf: LeafNode
+          if !SQLConf.get.charVarcharFirstClassTypes &&
+            leaf.output.exists(attr => CharVarcharUtils.hasCharVarchar(attr.dataType)) =>
         throw SparkException.internalError(
           s"Logical plan should not have output of char/varchar type when " +
-            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is false: " + leaf)
+            s"${SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key} and " +
+            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} are both false: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.schemaNotFound(u.multipartIdentifier)
@@ -506,9 +508,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           // `ExtractPythonUDFFromLambda` rewrites the plan in the optimizer so the UDF is
           // applied to the whole array outside the lambda instead; those are allowed through
           // here. Everything else must still fail, or nothing downstream can evaluate it.
+          //
+          // Judge only at a *nest root* - a HOF that iterates real columns, not a free lambda
+          // variable. `canRewritePythonUDFInLambda` validates the whole nest below the root
+          // (a UDF in a nested lambda is lifted out one level at a time), and a root's
+          // `functions.exists` sees UDFs at every depth, so firing on inner HOFs too would
+          // double-report and reject nests the rule actually handles.
           case hof: HigherOrderFunction
               if hof.resolved && hof.functions
                 .exists(_.exists(_.isInstanceOf[PythonUDF])) &&
+                !PythonUDF.hasFreeLambdaVariable(hof) &&
                 !(conf.pythonUDFInHigherOrderFunctionEnabled &&
                   PythonUDF.canRewritePythonUDFInLambda(hof)) =>
             // Name the offending UDF: the first one of an unsupported eval type if any (e.g. a

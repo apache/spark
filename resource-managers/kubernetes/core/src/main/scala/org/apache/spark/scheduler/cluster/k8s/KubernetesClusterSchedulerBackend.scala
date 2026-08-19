@@ -111,15 +111,18 @@ private[spark] class KubernetesClusterSchedulerBackend(
     super.start()
     // Must be called before setting the executors
     podAllocator.start(applicationId(), this)
+    // SPARK-38794: Create the executor ConfigMap before requesting executors. Executor
+    // allocation is asynchronous (background thread pool), so requesting executors first
+    // can race with ConfigMap creation, causing transient "configmap ... not found" mounts.
+    if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+      setUpExecutorConfigMap(podAllocator.driverPod)
+    }
     val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
     val initExecs = Map(defaultProfile -> initialExecutors)
     podAllocator.setTotalExpectedExecutors(initExecs)
     lifecycleManager.start(this)
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
-    if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
-      setUpExecutorConfigMap(podAllocator.driverPod)
-    }
   }
 
   override def stop(): Unit = {

@@ -640,9 +640,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
 
-  override def dataType: DataType = MapType(first.dataType, first.dataType)
+  // The entries are split out of the input, so they do not carry its CHAR(n)/VARCHAR(n) length
+  // (R1). ExpectsInputTypes does not insert a cast, so the constraint has to be dropped here.
+  private lazy val entryType: DataType =
+    StringHelper.transformingStringResultType(first.dataType)
 
-  private lazy val mapBuilder = new ArrayBasedMapBuilder(first.dataType, first.dataType)
+  override def dataType: DataType = MapType(entryType, entryType)
+
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(entryType, entryType)
 
   private final lazy val collationId: Int = text.dataType.asInstanceOf[StringType].collationId
 

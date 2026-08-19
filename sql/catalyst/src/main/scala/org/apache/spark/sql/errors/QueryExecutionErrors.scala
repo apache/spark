@@ -974,7 +974,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def writingJobFailedError(cause: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2070",
+      errorClass = "WRITING_JOB_FAILED",
       messageParameters = Map.empty,
       cause = cause)
   }
@@ -1637,6 +1637,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "JSON_VALUE_ON_ERROR.ERROR",
       messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
       cause = cause)
+  }
+
+  def jsonExistsOnError(functionName: String, path: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_EXISTS_ON_ERROR",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)))
   }
 
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {

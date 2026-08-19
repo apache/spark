@@ -1430,7 +1430,11 @@ case class Reverse(child: Expression)
       BinaryType,
       ArrayType))
 
-  override def dataType: DataType = child.dataType
+  // Reversing a string transforms its content, so a CHAR/VARCHAR input yields plain STRING (R1).
+  // Array and binary inputs are unaffected. ImplicitTypeCasts already promotes the string branch
+  // (its promotion looks inside a TypeCollection), so this covers the paths that do not go
+  // through implicit casting, such as an expression built directly.
+  override def dataType: DataType = StringHelper.transformingStringResultType(child.dataType)
 
   private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
@@ -2160,16 +2164,22 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val lengthInt = lengthVal.asInstanceOf[Int]
     val arr = xVal.asInstanceOf[ArrayData]
     val startIndex = ArrayExpressionUtils.sliceStartIndex(startInt, arr.numElements(), prettyName)
-    if (lengthInt < 0) {
-      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, lengthInt)
-    }
+    // Resolve (and validate) the result length via the shared helper, mirroring the codegen path.
+    // Besides rejecting a negative length, this clamps the length to the elements remaining after
+    // `startIndex`. For an in-range `startIndex`, this clamp keeps `startIndex + resLength` from
+    // overflowing `Int` -- the unclamped `startIndex + lengthInt` could wrap negative and make
+    // `slice` drop all elements. An out-of-range `startIndex` (a large negative `start`) can
+    // still wrap the helper's own `numElements - startIndex`, but the guard below returns before
+    // `resLength` is used.
+    val resLength =
+      ArrayExpressionUtils.sliceLength(lengthInt, arr.numElements(), startIndex, prettyName)
     // startIndex can be negative if start is negative and its absolute value is greater than the
     // number of elements in the array
     if (startIndex < 0 || startIndex >= arr.numElements()) {
       return new GenericArrayData(Array.empty[AnyRef])
     }
     val data = arr.toSeq[AnyRef](elementType)
-    new GenericArrayData(data.slice(startIndex, startIndex + lengthInt))
+    new GenericArrayData(data.slice(startIndex, startIndex + resLength))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2418,7 +2428,10 @@ case class ArrayJoin(
     }
   }
 
-  override def dataType: DataType = array.dataType.asInstanceOf[ArrayType].elementType
+  // The joined result concatenates every element plus delimiters, so it must not inherit the
+  // element's CHAR/VARCHAR length constraint (R1).
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(array.dataType.asInstanceOf[ArrayType].elementType)
 
   override def prettyName: String = "array_join"
 
@@ -3105,7 +3118,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     if (children.isEmpty) {
       StringType
     } else {
-      super.dataType
+      StringHelper.transformingStringResultType(super.dataType)
     }
   }
 

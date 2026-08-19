@@ -325,6 +325,23 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     return list(dict.fromkeys(v for _, v in filtered)), warnings
 
 
+def additional_fix_versions(inferred_versions, existing_versions):
+    """Return inferred Fix Versions not already present on a JIRA issue.
+
+    Existing versions are preserved separately when the issue is updated, so this only
+    identifies the additions needed after a later backport.
+
+    >>> additional_fix_versions(["4.4.0"], ["5.0.0"])
+    ['4.4.0']
+    >>> additional_fix_versions(["4.4.0"], ["5.0.0", "4.4.0"])
+    []
+    >>> additional_fix_versions(["4.4.0", "4.3.4"], ["5.0.0", "4.4.0"])
+    ['4.3.4']
+    """
+    existing = set(existing_versions)
+    return [version for version in inferred_versions if version not in existing]
+
+
 def red(text):
     return "\033[91m%s\033[0m" % text
 
@@ -539,6 +556,16 @@ def run_cmd(cmd):
         return subprocess.check_output(cmd.split(" ")).decode("utf-8")
 
 
+class SkipCherryPick(Exception):
+    """Signals that the committer declined to resolve a conflicting cherry-pick.
+
+    A backport conflict is routine, and by the time one is hit the merge into the target
+    branch (and any earlier cherry-picks) has already been pushed. Declining it must skip
+    only that one branch -- letting the caller offer another branch and, crucially, still
+    resolve the JIRA -- instead of aborting the whole merge the way a hard `fail()` would.
+    """
+
+
 def continue_maybe(prompt, cherry=False):
     if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
@@ -546,6 +573,9 @@ def continue_maybe(prompt, cherry=False):
                 run_cmd("git cherry-pick --abort")
             except Exception:
                 print_error("Unable to abort and get back to the state before cherry-pick")
+            print("Skipping this cherry-pick; the merge continues.")
+            clean_up()
+            raise SkipCherryPick()
         fail("Okay, exiting")
 
 
@@ -637,7 +667,9 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
-    Returns the (pushed ref, pushed commit hash) pair.
+    Returns the (pushed ref, pushed commit hash) pair. Raises `SkipCherryPick` if the
+    cherry-pick conflicts and the committer declines to resolve it, after attempting to
+    abort the cherry-pick and restore the working tree.
     """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
@@ -747,7 +779,9 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     BOTH (the policy-compliant default) or branch-M.N only (treated as a
     maintenance-only bugfix). Returns the list of (ref, commit_hash) pairs actually
     picked into, so the main loop can advance its remaining-branches list correctly
-    and record each backport commit for the merge comment.
+    and record each backport commit for the merge comment. The list is empty (or, for the
+    Upstream-First two-branch path, holds only what landed) when the committer declines to
+    resolve a conflict, so the caller simply offers the next branch and still resolves JIRA.
     """
     while True:
         pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
@@ -779,17 +813,30 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             {"b": ["b", "both", ""], "o": ["o", "only"], "a": ["a", "abort"]},
         )
         if choice == "b":
-            picked_x = _do_cherry_pick(pr_num, merge_hash, sibling_x)
-            picked_n = _do_cherry_pick(pr_num, merge_hash, pick_ref)
-            return [picked_x, picked_n]
+            # Preserve any pick that was already pushed: if the branch-M.N pick is skipped after
+            # branch-M.x landed, still return branch-M.x so it's recorded and JIRA/comment
+            # reflect it.
+            picked = []
+            try:
+                picked.append(_do_cherry_pick(pr_num, merge_hash, sibling_x))
+                picked.append(_do_cherry_pick(pr_num, merge_hash, pick_ref))
+            except SkipCherryPick:
+                pass
+            return picked
         elif choice == "o":
-            return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+            try:
+                return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+            except SkipCherryPick:
+                return []
         elif choice == "a":
             fail("Aborted by user at Upstream-First policy prompt.")
         else:
             fail("Unrecognized choice %r; aborting." % choice)
 
-    return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+    try:
+        return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+    except SkipCherryPick:
+        return []
 
 
 # Common words carry no signal when comparing a PR title to a JIRA summary, so they are
@@ -1003,6 +1050,8 @@ def jira_components_from_title_tags(tags):
     ['PySpark', 'Documentation']
     >>> jira_components_from_title_tags(["SQL", "TEST"])
     ['SQL', 'Tests']
+    >>> jira_components_from_title_tags(["UDF"])
+    ['UDF']
     >>> jira_components_from_title_tags(["SQL", "FOLLOWUP", "4.X", "BOGUS"])
     ['SQL']
     >>> jira_components_from_title_tags(["SQL", "SQL"])
@@ -1061,7 +1110,7 @@ def reconcile_jira_components(issue, title_components):
         print_error("Failed to update components on JIRA %s: %s" % (issue.key, e))
 
 
-def get_jira_issue(prompt, default_jira_id=""):
+def get_jira_issue(prompt, default_jira_id="", allow_resolved=False):
     jira_id = bold_input("%s [%s]: " % (prompt, default_jira_id))
     if jira_id == "":
         jira_id = default_jira_id
@@ -1074,25 +1123,42 @@ def get_jira_issue(prompt, default_jira_id=""):
         status = issue.fields.status.name
         if status == "Resolved" or status == "Closed":
             print("JIRA issue %s already has status '%s'" % (jira_id, status))
-            return None
+            if not allow_resolved:
+                return None
         if get_input("Check if the JIRA information is as expected (y/N): ", ["y", "n", ""]) == "y":
             return issue
         else:
-            return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
+            return get_jira_issue(
+                "Enter the revised JIRA ID again or leave blank to skip",
+                allow_resolved=allow_resolved,
+            )
     except Exception as e:
         print_error("ASF JIRA could not find %s: %s" % (jira_id, e))
-        return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
+        return get_jira_issue(
+            "Enter the revised JIRA ID again or leave blank to skip",
+            allow_resolved=allow_resolved,
+        )
 
 
-def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_components=()):
-    issue = get_jira_issue("Enter a JIRA id", default_jira_id)
+def resolve_jira_issue(
+    merge_branches,
+    comment,
+    default_jira_id="",
+    title_components=(),
+    allow_resolved=False,
+):
+    issue = get_jira_issue("Enter a JIRA id", default_jira_id, allow_resolved)
     if issue is None:
         return
 
-    if issue.fields.assignee is None:
-        choose_jira_assignee(issue)
+    status = issue.fields.status.name
+    is_resolved = status == "Resolved" or status == "Closed"
 
-    reconcile_jira_components(issue, title_components)
+    if not is_resolved:
+        if issue.fields.assignee is None:
+            choose_jira_assignee(issue)
+
+        reconcile_jira_components(issue, title_components)
 
     versions = asf_jira.project_versions("SPARK")
     # Consider only x.y.z, unreleased, unarchived versions
@@ -1109,14 +1175,28 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_compon
     )
     for w in infer_warnings:
         print_error(w)
+
+    existing_fix_versions = list(issue.fields.fixVersions) if is_resolved else []
+    existing_fix_version_names = [v.name for v in existing_fix_versions]
+    if is_resolved:
+        # A later backport run must preserve the versions recorded by the original merge and
+        # only add versions inferred from the newly discovered branches.
+        default_fix_list = additional_fix_versions(default_fix_list, existing_fix_version_names)
+        if not default_fix_list:
+            print(
+                "JIRA issue %s already contains all inferred fix versions; no update needed."
+                % issue.key
+            )
+            return
     default_fix_versions = ",".join(default_fix_list)
 
     available_versions = set(list(map(lambda v: v.name, versions)))
     while True:
         try:
-            fix_versions = bold_input(
-                "Enter comma-separated fix version(s) [%s]: " % default_fix_versions
-            )
+            prompt = "Enter comma-separated fix version(s) [%s]: "
+            if is_resolved:
+                prompt = "Enter comma-separated additional fix version(s) [%s]: "
+            fix_versions = bold_input(prompt % default_fix_versions)
             if fix_versions == "":
                 fix_versions = default_fix_versions
             fix_versions = fix_versions.replace(" ", "").split(",")
@@ -1137,6 +1217,25 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_compon
         return list(filter(lambda v: v.name == version_str, versions))[0].raw
 
     jira_fix_versions = list(map(lambda v: get_version_json(v), fix_versions))
+
+    if is_resolved:
+        existing_names = set(existing_fix_version_names)
+        jira_fix_versions = [v for v in jira_fix_versions if v["name"] not in existing_names]
+        if not jira_fix_versions:
+            print("No new fix versions selected for JIRA issue %s; no update needed." % issue.key)
+            return
+        issue.update(
+            fields={"fixVersions": [v.raw for v in existing_fix_versions] + jira_fix_versions}
+        )
+        try:
+            print_jira_issue_summary(asf_jira.issue(issue.key))
+        except Exception:
+            print("Unable to fetch JIRA issue %s after updating fix versions" % issue.key)
+        print(
+            "Successfully updated %s with additional fixVersions=%s!"
+            % (issue.key, [v["name"] for v in jira_fix_versions])
+        )
+        return
 
     resolve = list(filter(lambda a: a["name"] == "Resolve Issue", asf_jira.transitions(issue.key)))[
         0
@@ -1232,13 +1331,42 @@ def assign_issue(issue: int, assignee: str) -> bool:
     return True
 
 
-def resolve_jira_issues(title, merge_branches, comment, title_components=()):
+def resolve_jira_issues(title, merge_branches, comment, title_components=(), allow_resolved=False):
     jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
 
     if len(jira_ids) == 0:
-        resolve_jira_issue(merge_branches, comment, title_components=title_components)
+        resolve_jira_issue(
+            merge_branches,
+            comment,
+            title_components=title_components,
+            allow_resolved=allow_resolved,
+        )
     for jira_id in jira_ids:
-        resolve_jira_issue(merge_branches, comment, jira_id, title_components=title_components)
+        resolve_jira_issue(
+            merge_branches,
+            comment,
+            jira_id,
+            title_components=title_components,
+            allow_resolved=allow_resolved,
+        )
+
+
+def update_jira_for_pr(pr_num, title, merge_branches, title_components, allow_resolved=False):
+    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
+    print()
+    continue_maybe("Would you like to update an associated JIRA?")
+    jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
+        pr_num,
+        GITHUB_BASE,
+        pr_num,
+    )
+    resolve_jira_issues(
+        title,
+        merge_branches,
+        jira_comment,
+        title_components,
+        allow_resolved=allow_resolved,
+    )
 
 
 class Component:
@@ -1323,6 +1451,7 @@ COMPONENTS = (
     Component("STREAMING", ("DSTREAM", "DSTREAMS"), primary=True, jira_name="DStreams"),
     Component("SUBMIT", jira_name="Spark Submit"),
     Component("TEST", ("TESTS", "TEST-ONLY", "TESTS-ONLY"), jira_name="Tests"),
+    Component("UDF", primary=True, jira_name="UDF"),
     Component("UI", ("WEBUI", "WEB_UI"), primary=True, jira_name="Web UI"),
     Component("WINDOWS", primary=True, jira_name="Windows"),
     Component("YARN", primary=True, jira_name="YARN"),
@@ -1653,6 +1782,7 @@ def main():
     # Normalized PR-title component tags, used later to reconcile JIRA components. Empty for
     # Revert/Reapply PRs, whose titles are kept verbatim and not parsed for components.
     title_components: List[str] = []
+    is_minor = False
 
     # Revert and Reapply PRs keep their title verbatim.
     if not (is_revert_pr or is_reapply_pr):
@@ -1661,6 +1791,7 @@ def main():
             parsed = Title.parse(title)
         except ValueError as e:
             fail("Malformed PR title: %s" % e)
+        is_minor = "MINOR" in parsed.leading
 
         # Normalize component tags via the registry and track primary.
         components = []
@@ -1809,6 +1940,12 @@ def main():
             # pushes have already landed.
             if picked_commits:
                 post_merge_comment(pr_num, picked_commits)
+            # Backport mode may be the first chance to resolve a JIRA after an interrupted
+            # original merge. If it was already resolved, add any newly inferred fix versions.
+            if not is_minor:
+                update_jira_for_pr(
+                    pr_num, title, picked_refs, title_components, allow_resolved=True
+                )
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -1922,15 +2059,10 @@ def main():
                 close_pr(pr_num)
             # Record every branch that successfully received the change on the PR.
             post_merge_comment(pr_num, merged_commits)
-
-    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
-    continue_maybe("Would you like to update an associated JIRA?")
-    jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
-        pr_num,
-        GITHUB_BASE,
-        pr_num,
-    )
-    resolve_jira_issues(title, merged_refs, jira_comment, title_components)
+        # This is deliberately in the finally block: once the target branch has been pushed,
+        # cancelling a later cherry-pick must not bypass the mandatory JIRA update.
+        if not is_minor:
+            update_jira_for_pr(pr_num, title, merged_refs, title_components)
 
 
 if __name__ == "__main__":

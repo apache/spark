@@ -20,6 +20,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
+from pyspark.sql import functions as F
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -263,6 +264,122 @@ class NumPyCompatTestsMixin:
 
             self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2), almost=True)
 
+    def test_floor_divide_func(self):
+        from pyspark.pandas.numpy_compat import _floor_divide_func
+
+        for pdf in (
+            pd.DataFrame(
+                {
+                    "x1": [-64, -2, -1, 0, 1, 2, 64, -1, 0],
+                    "x2": [2, 3, -2, -3, -3, 0, 2, 0, 0],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": [
+                        -np.inf,
+                        -64.0,
+                        -2.0,
+                        -0.0,
+                        0.0,
+                        2.0,
+                        64.0,
+                        np.inf,
+                        np.nan,
+                        1.0,
+                        -1.0,
+                        np.inf,
+                        -np.inf,
+                        np.inf,
+                        -np.inf,
+                        1.0,
+                    ],
+                    "x2": [
+                        2.0,
+                        3.0,
+                        -2.0,
+                        -3.0,
+                        -3.0,
+                        0.0,
+                        -np.inf,
+                        np.inf,
+                        2.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        -0.0,
+                        -0.0,
+                        np.nan,
+                    ],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": pd.array([1, None, None], dtype="Int64"),
+                    "x2": pd.array([None, 2, 0], dtype="Int64"),
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            result = (
+                psdf.spark.frame()
+                .select(_floor_divide_func(F.col("x1"), F.col("x2")).alias("result"))
+                .toPandas()["result"]
+                .rename(None)
+            )
+            self.assert_eq(result, np.floor_divide(pdf.x1, pdf.x2), almost=True)
+
+    def test_np_logaddexp(self):
+        for pdf in (
+            pd.DataFrame(
+                {
+                    "x1": [-64, -2, -1, 0, 1, 2, 64],
+                    "x2": [2, 3, -2, -3, -3, 0, 2],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": [
+                        -np.inf,
+                        -np.inf,
+                        -2.0,
+                        -2.0,
+                        -0.0,
+                        0.0,
+                        2.0,
+                        np.inf,
+                        np.inf,
+                        np.nan,
+                        -1000.0,
+                        -np.inf,
+                        -0.0,
+                    ],
+                    "x2": [
+                        -np.inf,
+                        3.0,
+                        -np.inf,
+                        2.0,
+                        0.0,
+                        -0.0,
+                        np.inf,
+                        2.0,
+                        np.inf,
+                        2.0,
+                        1000.0,
+                        -0.0,
+                        -np.inf,
+                    ],
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            for np_func in (np.logaddexp, np.logaddexp2):
+                result = np_func(psdf.x1, psdf.x2)
+                expected = np_func(pdf.x1, pdf.x2)
+                self.assert_eq(result, expected, almost=True)
+                self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+
     def test_np_fmax_fmin(self):
         for pdf in (
             pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),
@@ -300,6 +417,21 @@ class NumPyCompatTestsMixin:
             self.assert_eq(
                 np.heaviside(psdf.x1, psdf.x2), np.heaviside(pdf.x1, pdf.x2), almost=True
             )
+
+    def test_np_signbit(self):
+        # np.signbit returns the IEEE-754 sign bit, which differs from (x < 0) only
+        # at -0.0: the sign bit is set even though -0.0 is not less than zero. A
+        # missing value in a default (numpy-backed) dtype arrives as a NaN and maps
+        # to False (np.signbit(nan) is False), whereas a genuine <NA> in a nullable
+        # dtype (e.g. Int64) propagates. A nullable Float64 <NA> is indistinguishable
+        # from a NaN after from_pandas, so it is deliberately not covered here.
+        for pdf in (
+            pd.DataFrame({"a": [-0.0, 0.0, -1.0, 1.0, -np.inf, np.inf, np.nan]}),
+            pd.DataFrame({"a": [1, -2, None]}),
+            pd.DataFrame({"a": pd.array([1, -2, None], dtype="Int64")}),
+        ):
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(np.signbit(psdf.a), np.signbit(pdf.a))
 
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings

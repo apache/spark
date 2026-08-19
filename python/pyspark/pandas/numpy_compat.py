@@ -18,6 +18,7 @@ from typing import Any, Callable, no_type_check
 
 import numpy as np
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, BooleanType
@@ -86,7 +87,17 @@ unary_np_spark_mappings = {
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
-    "signbit": lambda c: F.when(c < 0, True).otherwise(False),
+    "signbit": lambda c: F.when(
+        # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-double
+        # null and must propagate. A NaN from a default (numpy-backed) dtype arrives
+        # as a double null and must map to False (np.signbit(nan) is False); it falls
+        # through to otherwise(False) below. A nullable Float64 <NA> is also a double
+        # null, indistinguishable from a NaN after from_pandas, so it cannot propagate.
+        c.isNull() & ~F.typeof(c).isin("float", "double"),
+        F.lit(None).cast("boolean"),
+    )
+    .when((c < 0) | (c.cast("string") == "-0.0"), True)
+    .otherwise(False),
     "sin": F.sin,
     "sinh": F.sinh,
     "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),  # type: ignore[call-overload]
@@ -124,6 +135,98 @@ def _fmod_func(c1: Column, c2: Column) -> Column:
     )
 
 
+def _logaddexp_func(c1: Column, c2: Column, base2: bool = False) -> Column:
+    c1_double = c1.cast("double")
+    c2_double = c2.cast("double")
+    difference = F.abs(c1_double - c2_double)
+    maximum = F.greatest(c1_double, c2_double)
+    if base2:
+        log_term = F.log1p(F.pow(F.lit(2.0), -difference)) / F.log(F.lit(2.0))
+    else:
+        log_term = F.log1p(F.exp(-difference))
+
+    return (
+        F.when(c1_double.isNull() | F.isnan(c1_double), c1_double)
+        .when(c2_double.isNull() | F.isnan(c2_double), c2_double)
+        .when((c1_double == float("inf")) | (c2_double == float("inf")), F.lit(float("inf")))
+        .when(c1_double == float("-inf"), c2_double + F.lit(0.0))
+        .when(c2_double == float("-inf"), c1_double + F.lit(0.0))
+        .otherwise(maximum + log_term)
+    )
+
+
+def _floor_divide_func(c1: Column, c2: Column) -> Column:
+    c1_double = c1.cast("double")
+    c2_double = c2.cast("double")
+
+    return F.when(
+        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(
+            c1_double.isin(float("-inf"), float("inf")),
+            F.when(
+                c2_double == 0,
+                F.when(
+                    (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
+                    F.lit(float("-inf")),
+                ).otherwise(F.lit(float("inf"))),
+            ).otherwise(F.lit(float("nan"))),
+        )
+        .when(
+            c2_double.isin(float("-inf"), float("inf")),
+            F.when(c1_double == 0, c1_double / c2_double)
+            .when((c1_double < 0) != (c2_double < 0), F.lit(-1.0))
+            .otherwise(F.lit(0.0)),
+        )
+        .when(
+            c2_double == 0,
+            F.when(c1_double == 0, F.lit(float("nan")))
+            .when(
+                (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
+                F.lit(float("-inf")),
+            )
+            .otherwise(F.lit(float("inf"))),
+        )
+        .when(c1_double == 0, c1_double / c2_double)
+        .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0))),
+    ).otherwise(
+        # np.floor_divide on pandas Series returns IEEE values for an integral zero divisor.
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(
+            c2_double == 0,
+            F.when(c1_double == 0, F.lit(float("nan")))
+            .when(c1_double < 0, F.lit(float("-inf")))
+            .otherwise(F.lit(float("inf"))),
+        )
+        .otherwise((c1_double / c2_double) - F.pmod(c1_double / c2_double, F.lit(1.0)))
+    )
+
+
+# NumPy 2.3.0 changed how fmax/fmin break a signed-zero tie: for equal operands
+# (for example +0.0 and -0.0) it returns the first operand, while older versions
+# returned the second. Track the installed NumPy so the result keeps the matching
+# sign of zero.
+_tie_returns_first_operand = LooseVersion(np.__version__) >= LooseVersion("2.3.0")
+
+
+def _fmax_func(c1: Column, c2: Column) -> Column:
+    tie = c1 if _tie_returns_first_operand else c2
+    return (
+        F.when(F.isnan(c1.cast("double")), c2)
+        .when(F.isnan(c2.cast("double")), c1)
+        .when(c1 == c2, tie)
+        .otherwise(F.greatest(c1, c2))
+        .cast("double")
+    )
+
+
+def _fmin_func(c1: Column, c2: Column) -> Column:
+    tie = c1 if _tie_returns_first_operand else c2
+    return F.when(c1 == c2, tie).otherwise(F.least(c1, c2)).cast("double")
+
+
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
@@ -133,15 +236,11 @@ binary_np_spark_mappings = {
         lambda s1, s2: np.copysign(s1, s2), DoubleType()
     ),
     "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
-    "floor_divide": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.floor_divide(s1, s2), DoubleType()
-    ),
-    "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
-    .when(F.isnan(c2.cast("double")), c1)
-    .when(c1 == c2, c1)
-    .otherwise(F.greatest(c1, c2))
-    .cast("double"),
-    "fmin": lambda c1, c2: F.when(c1 == c2, c1).otherwise(F.least(c1, c2)).cast("double"),
+    # np.floor_divide dispatches to the pandas-on-Spark floordiv dunder operation
+    # before this registry is consulted, so this mapping is not used for that case.
+    "floor_divide": _floor_divide_func,
+    "fmax": _fmax_func,
+    "fmin": _fmin_func,
     "fmod": _fmod_func,
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "heaviside": lambda c1, c2: F.when(
@@ -162,12 +261,8 @@ binary_np_spark_mappings = {
     "left_shift": lambda c1, c2: F.when((c2 < 0) | (c2 >= 64), F.lit(0)).otherwise(
         F.call_function("shiftleft", c1, c2)
     ),
-    "logaddexp": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.logaddexp(s1, s2), DoubleType()
-    ),
-    "logaddexp2": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.logaddexp2(s1, s2), DoubleType()
-    ),
+    "logaddexp": _logaddexp_func,
+    "logaddexp2": lambda c1, c2: _logaddexp_func(c1, c2, base2=True),
     "logical_and": lambda c1, c2: c1.cast(BooleanType()) & c2.cast(BooleanType()),
     "logical_or": lambda c1, c2: c1.cast(BooleanType()) | c2.cast(BooleanType()),
     "logical_xor": lambda c1, c2: (

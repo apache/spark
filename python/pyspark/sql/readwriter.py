@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 import sys
-from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
+from abc import ABC, abstractmethod
+from typing import Any, cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 
 from pyspark.util import is_remote_only
 from pyspark.sql.types import StructType
@@ -37,7 +38,10 @@ PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
-class OptionUtils:
+class OptionUtils(ABC):
+    @abstractmethod
+    def option(self, key: str, value: "OptionalPrimitiveType") -> Any: ...
+
     def _set_opts(
         self,
         schema: Optional[Union[StructType, str]] = None,
@@ -50,7 +54,7 @@ class OptionUtils:
             self.schema(schema)  # type: ignore[attr-defined]
         for k, v in options.items():
             if v is not None:
-                self.option(k, v)  # type: ignore[attr-defined]
+                self.option(k, v)
 
 
 class DataFrameReader(OptionUtils):

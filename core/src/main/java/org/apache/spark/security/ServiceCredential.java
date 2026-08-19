@@ -36,7 +36,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * <p>
  * This class is immutable and {@link Serializable}.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @DeveloperApi
 public final class ServiceCredential implements Serializable {

@@ -741,6 +741,7 @@ class PythonUDF:
         eval_type: int,
         func: Callable[..., Any],
         python_ver: str,
+        buffer_type: Optional[DataType] = None,
     ) -> None:
         self._output_type: DataType = (
             UnparsedDataType(output_type) if isinstance(output_type, str) else output_type
@@ -748,6 +749,8 @@ class PythonUDF:
         self._eval_type = eval_type
         self._func = func
         self._python_ver = python_ver
+        # Intermediate buffer schema for an incremental Python aggregator; None otherwise.
+        self._buffer_type = buffer_type
 
     def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDF:
         if isinstance(self._output_type, UnparsedDataType):
@@ -763,6 +766,8 @@ class PythonUDF:
         expr.eval_type = self._eval_type
         expr.command = CloudPickleSerializer().dumps((self._func, output_type))
         expr.python_ver = self._python_ver
+        if self._buffer_type is not None:
+            expr.buffer_type.CopyFrom(pyspark_types_to_proto_types(self._buffer_type))
         return expr
 
     def __repr__(self) -> str:
