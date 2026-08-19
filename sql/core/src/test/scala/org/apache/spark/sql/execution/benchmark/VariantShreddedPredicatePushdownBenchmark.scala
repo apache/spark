@@ -54,6 +54,16 @@ object VariantShreddedPredicatePushdownBenchmark extends SqlBasedBenchmark {
     .range(0, N, 1, 1)
     .selectExpr("parse_json('{\"a\":' || id || '}') AS v")
 
+  // Same, but every row also carries a key `z` outside the shredding schema, so the whole partial
+  // object lands in the top-level residual `v.value` (non-null on every row). `a` is still fully
+  // shredded into the typed leaf. This is the normal layout for real Variant data (the inferred
+  // shredding schema is capped, so extra keys are common), and it is where the flat
+  // `or(leaf, isNotNull(residual)...)` guard could never skip -- the tighter
+  // `or(leaf, and(anyResidualNotNull, isNull(leaf)))` guard skips via the "leaf has no nulls" arm.
+  private val dfPartialObject: DataFrame = spark
+    .range(0, N, 1, 1)
+    .selectExpr("parse_json('{\"a\":' || id || ', \"z\":\"outside\"}') AS v")
+
   // Confs to write the Variant column shredded, forcing `a` to a bigint typed leaf. A small block
   // size makes the writer emit many row groups per file.
   private val writeConf = Seq(
@@ -77,11 +87,14 @@ object VariantShreddedPredicatePushdownBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def createAndRunBenchmark(name: String, withFilter: DataFrame => DataFrame): Unit = {
+  private def createAndRunBenchmark(
+      name: String,
+      withFilter: DataFrame => DataFrame,
+      data: DataFrame = df): Unit = {
     withTempPath { tempDir =>
       val outputPath = tempDir.getCanonicalPath
       withSQLConf(writeConf: _*) {
-        df.write.mode(SaveMode.Overwrite)
+        data.write.mode(SaveMode.Overwrite)
           .option("parquet.block.size", (128 * 1024).toString)
           .parquet(outputPath)
       }
@@ -117,9 +130,20 @@ object VariantShreddedPredicatePushdownBenchmark extends SqlBasedBenchmark {
     createAndRunBenchmark("Can skip no row groups", _.filter(s"a >= 0 and a <= $N"))
   }
 
+  /**
+   * Same selective filter as `runSkipSomeRowGroups`, but on data whose objects carry a key outside
+   * the shredding schema (so the top-level residual is non-null on every row). This is the layout
+   * where the earlier flat OR guard could never skip; the tighter guard still skips here.
+   */
+  def runSkipSomeRowGroupsPartialObject(): Unit = {
+    createAndRunBenchmark("Can skip some row groups (partial object)",
+      _.filter(s"a > ${(N * 0.99).toLong}"), data = dfPartialObject)
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runSkipAllRowGroups()
     runSkipSomeRowGroups()
     runSkipNoRowGroups()
+    runSkipSomeRowGroupsPartialObject()
   }
 }
