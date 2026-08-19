@@ -75,6 +75,17 @@ SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)));
 SELECT concat('<', coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)), '>');
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS VARCHAR(4) COLLATE UTF8_LCASE)));
+-- Mixed strength, same collation: Implicit string CAST CHAR(2) vs Default
+-- non-string CAST CHAR(4). Length still widens to max(n, m); the COLLATE
+-- operator itself is STRING, so it is not used here.
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)));
+SELECT concat('<', coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>');
 
 -- Set operations and multi-row VALUES share the same LCT as COALESCE.
 SELECT typeof(c) FROM (
@@ -84,6 +95,16 @@ SELECT typeof(c) FROM (
 ) t LIMIT 1;
 SELECT typeof(c) FROM (
   SELECT cast('a' AS CHAR(2)) AS c
+  UNION ALL
+  SELECT cast('bb' AS CHAR(4)) AS c
+) t LIMIT 1;
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION ALL
+  SELECT cast('bb' AS CHAR(4)) AS c
+) t;
+SELECT typeof(c) FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
   UNION
   SELECT cast('a' AS CHAR(4)) AS c
 ) t;
@@ -102,10 +123,16 @@ SELECT concat('<', c, '>') FROM (
   INTERSECT
   SELECT cast('ab' AS CHAR(4)) AS c
 ) t;
+-- Non-empty EXCEPT: after widen, 'ab  ' is not 'xy  '.
 SELECT typeof(c) FROM (
   SELECT cast('ab' AS CHAR(2)) AS c
   EXCEPT
-  SELECT cast('ab' AS CHAR(4)) AS c
+  SELECT cast('xy' AS CHAR(4)) AS c
+) t;
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('ab' AS CHAR(2)) AS c
+  EXCEPT
+  SELECT cast('xy' AS CHAR(4)) AS c
 ) t;
 SELECT typeof(c) FROM (VALUES
   (cast('a' AS CHAR(2))),
@@ -134,6 +161,10 @@ SELECT cast('a' AS CHAR(2)) IN (cast('a' AS VARCHAR(2)));
 SELECT cast('a' AS CHAR(2)) IN (cast('a ' AS VARCHAR(2)));
 SELECT cast('a' AS CHAR(2)) IN ('a', 'b');
 SELECT cast('a' AS CHAR(2)) IN ('a ', 'b');
+-- Three-part IN: LHS CHAR(2) and list CHAR(4)/VARCHAR(3) all widen to VARCHAR(4).
+SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)), cast('b' AS VARCHAR(3)));
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) = cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE);
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) IN (cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE));
 
 -- Nested types keep CHAR/VARCHAR
 SELECT typeof(array(cast('a' AS CHAR(2)), cast('bb' AS CHAR(3))));

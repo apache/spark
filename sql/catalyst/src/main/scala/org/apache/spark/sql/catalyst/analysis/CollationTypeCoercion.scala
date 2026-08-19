@@ -417,7 +417,23 @@ object CollationTypeCoercion extends SQLConfHelper {
     }
   }
 
-  /** Determines the winning StringTypeWithContext based on the strength of the collation. */
+  /**
+   * Resolves collation strength independently of CHAR/VARCHAR length.
+   *
+   * This rule always runs. First-class CHAR/VARCHAR appear whenever
+   * `charVarcharFirstClassTypes` is true (`standardSemantics` or
+   * `preserveCharVarcharTypeInfo`), not only under `standardSemantics`.
+   *
+   * Same collation, including mixed strength: take the string-family LCT `max(n, m)`
+   * (pads, never truncates) and attach the stronger strength. Example:
+   * `coalesce(CAST('a' AS CHAR(2) COLLATE UTF8_LCASE),
+   * CAST(1 AS CHAR(4) COLLATE UTF8_LCASE))` is CHAR(4) COLLATE UTF8_LCASE
+   * (Implicit CHAR(2) from a string CAST vs Default CHAR(4) from a non-string CAST).
+   *
+   * Different collations at equal strength: mismatch (error if Explicit, else
+   * indeterminate). Different collations at unequal strength: the stronger operand
+   * wins in full, including its length (SQL collation precedence).
+   */
   private def getWinningStringType(
       left: StringTypeWithContext,
       right: StringTypeWithContext): StringTypeWithContext = {
@@ -430,24 +446,13 @@ object CollationTypeCoercion extends SQLConfHelper {
       }
     }
 
-    (left.strength.priority, right.strength.priority) match {
-      case (leftPriority, rightPriority) if leftPriority == rightPriority =>
-        if (left.sameType(right)) {
-          left
-        } else {
-          // Equal strength with differing types is only a real collation mismatch when the
-          // collations differ. Same-collation CHAR(2) and CHAR(4) differ only in length, so widen
-          // to the string-family LCT (max(n, m), which pads rather than truncates); a genuine
-          // collation mismatch has no LCT and falls through.
-          StringHelper.tightestCommonString(left.stringType, right.stringType) match {
-            case Some(lct) => StringTypeWithContext(lct, left.strength)
-            case None => handleMismatch()
-          }
-        }
+    val winner =
+      if (left.strength.priority <= right.strength.priority) left else right
 
-      case (leftPriority, rightPriority) =>
-        if (leftPriority < rightPriority) left
-        else right
+    StringHelper.tightestCommonString(left.stringType, right.stringType) match {
+      case Some(lct) => StringTypeWithContext(lct, winner.strength)
+      case None if left.strength.priority == right.strength.priority => handleMismatch()
+      case None => winner
     }
   }
 

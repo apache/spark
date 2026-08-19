@@ -339,6 +339,32 @@ Project [concat(<, coalesce(cast(a as char(4) collate UTF8_LCASE), cast(bb as ch
 
 
 -- !query
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS VARCHAR(4) COLLATE UTF8_LCASE)))
+-- !query analysis
+Project [typeof(coalesce(cast(a as varchar(4) collate UTF8_LCASE), cast(bb as varchar(4) collate UTF8_LCASE))) AS typeof(coalesce(a, CAST(bb AS VARCHAR(4) COLLATE UTF8_LCASE)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)))
+-- !query analysis
+Project [typeof(coalesce(cast(a as char(4) collate UTF8_LCASE), cast(1 as char(4) collate UTF8_LCASE))) AS typeof(coalesce(a, CAST(1 AS CHAR(4) COLLATE UTF8_LCASE)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT concat('<', coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>')
+-- !query analysis
+Project [concat(<, coalesce(cast(a as char(4) collate UTF8_LCASE), cast(1 as char(4) collate UTF8_LCASE)), >) AS concat('<' collate UTF8_LCASE, coalesce(a, CAST(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT typeof(c) FROM (
   SELECT cast('a' AS VARCHAR(3)) AS c
   UNION ALL
@@ -355,6 +381,42 @@ GlobalLimit 1
             :     +- OneRowRelation
             +- Project [cast(abcd as varchar(8)) AS c#x]
                +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c) FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION ALL
+  SELECT cast('bb' AS CHAR(4)) AS c
+) t LIMIT 1
+-- !query analysis
+GlobalLimit 1
++- LocalLimit 1
+   +- Project [typeof(c#x) AS typeof(c)#x]
+      +- SubqueryAlias t
+         +- Union false, false
+            :- Project [cast(c#x as char(4)) AS c#x]
+            :  +- Project [cast(a as char(2)) AS c#x]
+            :     +- OneRowRelation
+            +- Project [cast(bb as char(4)) AS c#x]
+               +- OneRowRelation
+
+
+-- !query
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION ALL
+  SELECT cast('bb' AS CHAR(4)) AS c
+) t
+-- !query analysis
+Project [concat(<, cast(c#x as string), >) AS concat(<, c, >)#x]
++- SubqueryAlias t
+   +- Union false, false
+      :- Project [cast(c#x as char(4)) AS c#x]
+      :  +- Project [cast(a as char(2)) AS c#x]
+      :     +- OneRowRelation
+      +- Project [cast(bb as char(4)) AS c#x]
+         +- OneRowRelation
 
 
 -- !query
@@ -431,7 +493,7 @@ Project [concat(<, cast(c#x as string), >) AS concat(<, c, >)#x]
 SELECT typeof(c) FROM (
   SELECT cast('ab' AS CHAR(2)) AS c
   EXCEPT
-  SELECT cast('ab' AS CHAR(4)) AS c
+  SELECT cast('xy' AS CHAR(4)) AS c
 ) t
 -- !query analysis
 Project [typeof(c#x) AS typeof(c)#x]
@@ -440,7 +502,24 @@ Project [typeof(c#x) AS typeof(c)#x]
       :- Project [cast(c#x as char(4)) AS c#x]
       :  +- Project [cast(ab as char(2)) AS c#x]
       :     +- OneRowRelation
-      +- Project [cast(ab as char(4)) AS c#x]
+      +- Project [cast(xy as char(4)) AS c#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('ab' AS CHAR(2)) AS c
+  EXCEPT
+  SELECT cast('xy' AS CHAR(4)) AS c
+) t
+-- !query analysis
+Project [concat(<, cast(c#x as string), >) AS concat(<, c, >)#x]
++- SubqueryAlias t
+   +- Except false
+      :- Project [cast(c#x as char(4)) AS c#x]
+      :  +- Project [cast(ab as char(2)) AS c#x]
+      :     +- OneRowRelation
+      +- Project [cast(xy as char(4)) AS c#x]
          +- OneRowRelation
 
 
@@ -550,6 +629,27 @@ Project [cast(cast(a as char(2)) as string collate UTF8_BINARY) IN (cast(a as st
 SELECT cast('a' AS CHAR(2)) IN ('a ', 'b')
 -- !query analysis
 Project [cast(cast(a as char(2)) as string collate UTF8_BINARY) IN (cast(a  as string collate UTF8_BINARY),cast(b as string collate UTF8_BINARY)) AS (CAST(a AS CHAR(2)) IN (a , b))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)), cast('b' AS VARCHAR(3)))
+-- !query analysis
+Project [cast(cast(a as char(2)) as varchar(4)) IN (cast(cast(a as char(4)) as varchar(4)),cast(cast(b as varchar(3)) as varchar(4))) AS (CAST(a AS CHAR(2)) IN (CAST(a AS CHAR(4)), CAST(b AS VARCHAR(3))))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) = cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE)
+-- !query analysis
+Project [(cast(a as varchar(2) collate UTF8_LCASE) = cast(a as varchar(2) collate UTF8_LCASE)) AS (a = CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) IN (cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE))
+-- !query analysis
+Project [cast(a as varchar(2) collate UTF8_LCASE) IN (cast(a as varchar(2) collate UTF8_LCASE)) AS (a IN (CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE)))#x]
 +- OneRowRelation
 
 

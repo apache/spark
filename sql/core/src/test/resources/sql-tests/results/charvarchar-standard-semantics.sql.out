@@ -394,6 +394,35 @@ struct<concat('<' collate UTF8_LCASE, coalesce(a, CAST(bb AS CHAR(4) COLLATE UTF
 
 
 -- !query
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS VARCHAR(4) COLLATE UTF8_LCASE)))
+-- !query schema
+struct<typeof(coalesce(a, CAST(bb AS VARCHAR(4) COLLATE UTF8_LCASE))):string>
+-- !query output
+varchar(4) collate UTF8_LCASE
+
+
+-- !query
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)))
+-- !query schema
+struct<typeof(coalesce(a, CAST(1 AS CHAR(4) COLLATE UTF8_LCASE))):string>
+-- !query output
+char(4) collate UTF8_LCASE
+
+
+-- !query
+SELECT concat('<', coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>')
+-- !query schema
+struct<concat('<' collate UTF8_LCASE, coalesce(a, CAST(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE):string collate UTF8_LCASE>
+-- !query output
+<a   >
+
+
+-- !query
 SELECT typeof(c) FROM (
   SELECT cast('a' AS VARCHAR(3)) AS c
   UNION ALL
@@ -403,6 +432,31 @@ SELECT typeof(c) FROM (
 struct<typeof(c):string>
 -- !query output
 varchar(8)
+
+
+-- !query
+SELECT typeof(c) FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION ALL
+  SELECT cast('bb' AS CHAR(4)) AS c
+) t LIMIT 1
+-- !query schema
+struct<typeof(c):string>
+-- !query output
+char(4)
+
+
+-- !query
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION ALL
+  SELECT cast('bb' AS CHAR(4)) AS c
+) t
+-- !query schema
+struct<concat(<, c, >):string>
+-- !query output
+<a   >
+<bb  >
 
 
 -- !query
@@ -457,12 +511,24 @@ struct<concat(<, c, >):string>
 SELECT typeof(c) FROM (
   SELECT cast('ab' AS CHAR(2)) AS c
   EXCEPT
-  SELECT cast('ab' AS CHAR(4)) AS c
+  SELECT cast('xy' AS CHAR(4)) AS c
 ) t
 -- !query schema
 struct<typeof(c):string>
 -- !query output
+char(4)
 
+
+-- !query
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('ab' AS CHAR(2)) AS c
+  EXCEPT
+  SELECT cast('xy' AS CHAR(4)) AS c
+) t
+-- !query schema
+struct<concat(<, c, >):string>
+-- !query output
+<ab  >
 
 
 -- !query
@@ -582,6 +648,30 @@ false
 SELECT cast('a' AS CHAR(2)) IN ('a ', 'b')
 -- !query schema
 struct<(CAST(a AS CHAR(2)) IN (a , b)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)), cast('b' AS VARCHAR(3)))
+-- !query schema
+struct<(CAST(a AS CHAR(2)) IN (CAST(a AS CHAR(4)), CAST(b AS VARCHAR(3)))):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) = cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE)
+-- !query schema
+struct<(a = CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) IN (cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE))
+-- !query schema
+struct<(a IN (CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE))):boolean>
 -- !query output
 true
 
