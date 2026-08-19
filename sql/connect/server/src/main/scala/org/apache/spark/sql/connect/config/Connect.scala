@@ -493,4 +493,29 @@ object Connect {
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(ConnectPlanCompressionAlgorithm.values.map(_.toString))
       .createWithDefault(ConnectPlanCompressionAlgorithm.ZSTD.toString)
+
+  val CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES =
+    buildStaticConf("spark.connect.execute.maxConcurrentQueries")
+      .doc(
+        "Maximum number of concurrent queries that can be executed. When this limit is reached, " +
+          "new queries will wait in a queue until a slot becomes available. Set to 0 or negative " +
+          "to disable the limit (unlimited concurrency). This only affects Spark Connect " +
+          "executions.")
+      .version("4.3.0")
+      .internal()
+      .intConf
+      .createWithDefault(0)
+
+  val CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES_TIMEOUT =
+    buildStaticConf("spark.connect.execute.maxConcurrentQueries.timeout")
+      .doc(
+        "Maximum time a query waits for an execution slot when " +
+          "spark.connect.execute.maxConcurrentQueries is reached. Waiters are served in FIFO " +
+          "order. If a slot does not become available within this time, the query fails with a " +
+          "retryable error so the client re-submits it. Set to 0 (default) to wait " +
+          "indefinitely. Has no effect when the concurrency limit is disabled.")
+      .version("4.3.0")
+      .internal()
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(0)
 }
