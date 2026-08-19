@@ -16,84 +16,142 @@
 #
 
 """
-Microbenchmarks for local Python data to Arrow conversions.
+Microbenchmarks for ``LocalDataToArrowConversion.convert``, the hot path of
+Spark Connect ``createDataFrame`` and Arrow-optimized Python UDF output.
 
-``LocalDataToArrowConversion.convert`` turns local Python rows into a
-``pyarrow.Table``; it is the hot path of Spark Connect ``createDataFrame`` and
-Arrow-optimized Python UDF / DataSource output. Scalar ``string`` and ``binary``
-columns are converted element by element through a per-element converter.
-
-The per-element converter has a fast path when the element is already the target
-Python type (``str`` / ``bytes``), and a slow path for values that need coercion
-(``None``, ``bool``, ``int``, ``bytearray``, ...). To measure both paths -- and
-guard against a fast-path optimization that merely shifts cost onto the slow path
--- these benchmarks sweep the fraction of non-target ("other") values in the
-column from all-target to all-other, for both ``None`` (a common, legitimate
-value in nullable columns) and a coerced type (``int`` for string, ``bytearray``
-for binary; a schema-vs-data type mismatch).
+``string`` / ``binary`` columns are converted element by element: the per-element
+converter is fast when the element is already the target type (``str`` /
+``bytes``) and slower when it needs coercion. Each benchmark sweeps the fraction
+of non-target ("other") values from 0% (all fast path) to 100% (all slow path),
+for a scalar column, a one-level ``array`` column, and a two-level
+``array<array<...>>`` column (which drives the inlined array fast path hardest).
 """
 
 
-class LocalDataToArrowScalarBenchmark:
-    """
-    Benchmark ``LocalDataToArrowConversion.convert`` on a single ``string`` or
-    ``binary`` column while sweeping the fraction of non-target values.
+def _build(convert, is_string, leaf, other_val, other_frac, n_rows):
+    import random
+    from pyspark.sql.types import ArrayType, BinaryType, StringType, StructField, StructType
 
-    - ``leaf``: the leaf type (``string`` / ``binary``), tested as a top-level
-      scalar column and nested one level inside an ``array``.
-    - ``other``: what the non-target values are -- ``none`` (legitimate null) or
-      ``coerce`` (a type mismatch coerced to the leaf type: ``int`` for string,
-      ``bytearray`` for binary).
-    - ``other_frac``: fraction of elements that are the non-target value, from
-      ``0`` (all fast path) to ``100`` (all slow path).
+    leaf_type = StringType() if is_string else BinaryType()
+
+    def target(i):
+        return f"s{i}" if is_string else b"s%d" % i
+
+    rnd = random.Random(0)
+
+    def elem(i):
+        return other_val(i) if rnd.random() * 100 < other_frac else target(i)
+
+    if leaf == "array2":
+        schema = StructType([StructField("c", ArrayType(ArrayType(leaf_type)), True)])
+        data = [([[elem(i), elem(i + 1)], [elem(i + 2), elem(i + 3)]],) for i in range(n_rows)]
+    elif leaf == "array":
+        schema = StructType([StructField("c", ArrayType(leaf_type), True)])
+        data = [([elem(i), elem(i + 1), elem(i + 2)],) for i in range(n_rows)]
+    else:  # scalar
+        schema = StructType([StructField("c", leaf_type, True)])
+        data = [(elem(i),) for i in range(n_rows)]
+    return data, schema
+
+
+class LocalDataToArrowStringBenchmark:
+    """
+    Benchmark ``convert`` on a ``string`` column, sweeping the kind and fraction
+    of non-target values.
+
+    - ``leaf``: ``scalar``, one-level ``array``, or two-level ``array2``
+      (``array<array<string>>``).
+    - ``other``: the non-target values -- ``none`` (null), ``int`` or ``bool``
+      (a single non-str type, isolating one coercion branch), or ``mix`` (a
+      rotation of int / float / bool / Decimal / date / datetime).
+    - ``other_frac``: fraction of elements that are non-target, ``0`` to ``100``.
     """
 
     params = [
         [1000000],
-        ["string_scalar", "string_array", "binary_scalar", "binary_array"],
-        ["none", "coerce"],
+        ["scalar", "array", "array2"],
+        ["none", "int", "bool", "mix"],
         [0, 30, 70, 100],
     ]
     param_names = ["n_rows", "leaf", "other", "other_frac"]
 
     def setup(self, n_rows, leaf, other, other_frac):
-        import random
+        import datetime
+        import decimal
         from pyspark.sql.conversion import LocalDataToArrowConversion
-        from pyspark.sql.types import ArrayType, BinaryType, StringType, StructField, StructType
 
         self.convert = LocalDataToArrowConversion.convert
-
-        is_string = leaf.startswith("string")
-        nested = leaf.endswith("array")
-        leaf_type = StringType() if is_string else BinaryType()
-
-        def target(i):
-            return f"s{i}" if is_string else b"s%d" % i
 
         if other == "none":
 
             def other_val(i):
                 return None
-        elif is_string:
+        elif other == "int":
 
             def other_val(i):
-                return i  # int coerced to string
-        else:
+                return i  # int coerced to string via str()
+        elif other == "bool":
 
             def other_val(i):
-                return bytearray(b"s%d" % i)  # bytearray coerced to bytes
+                return i % 2 == 0  # bool coerced to "true" / "false"
+        else:  # mix: a rotation of non-str types, each coerced to string
+            _pool = [
+                123,
+                4.5,
+                True,
+                False,
+                decimal.Decimal("1.50"),
+                datetime.date(2020, 1, 1),
+                datetime.datetime(2020, 1, 1, 3, 4, 5),
+            ]
 
-        rnd = random.Random(0)
+            def other_val(i):
+                return _pool[i % len(_pool)]
 
-        def elem(i):
-            return other_val(i) if rnd.random() * 100 < other_frac else target(i)
+        self.data, self.schema = _build(self.convert, True, leaf, other_val, other_frac, n_rows)
 
-        if nested:
-            self.schema = StructType([StructField("c", ArrayType(leaf_type), True)])
-            self.data = [([elem(i), elem(i + 1), elem(i + 2)],) for i in range(n_rows)]
-        else:
-            self.schema = StructType([StructField("c", leaf_type, True)])
-            self.data = [(elem(i),) for i in range(n_rows)]
+    def time_convert(self, n_rows, leaf, other, other_frac):
+        self.convert(self.data, self.schema, False)
+
+    def peakmem_convert(self, n_rows, leaf, other, other_frac):
+        self.convert(self.data, self.schema, False)
+
+
+class LocalDataToArrowBinaryBenchmark:
+    """
+    Benchmark ``convert`` on a ``binary`` column, sweeping the fraction of
+    non-target values.
+
+    - ``leaf``: ``scalar``, one-level ``array``, or two-level ``array2``
+      (``array<array<binary>>``).
+    - ``other``: ``none`` (null) or ``bytearray`` (the only non-bytes input
+      binary accepts, copied to immutable bytes).
+    - ``other_frac``: fraction of elements that are non-target, ``0`` to ``100``.
+    """
+
+    params = [
+        [1000000],
+        ["scalar", "array", "array2"],
+        ["none", "bytearray"],
+        [0, 30, 70, 100],
+    ]
+    param_names = ["n_rows", "leaf", "other", "other_frac"]
+
+    def setup(self, n_rows, leaf, other, other_frac):
+        from pyspark.sql.conversion import LocalDataToArrowConversion
+
+        self.convert = LocalDataToArrowConversion.convert
+
+        if other == "none":
+
+            def other_val(i):
+                return None
+        else:  # bytearray coerced to immutable bytes
+
+            def other_val(i):
+                return bytearray(b"s%d" % i)
+
+        self.data, self.schema = _build(self.convert, False, leaf, other_val, other_frac, n_rows)
 
     def time_convert(self, n_rows, leaf, other, other_frac):
         self.convert(self.data, self.schema, False)
