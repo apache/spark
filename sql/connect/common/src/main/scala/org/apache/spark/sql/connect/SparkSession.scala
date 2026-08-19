@@ -45,7 +45,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, PATH}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
-import org.apache.spark.sql.{AnalysisException, Column, Encoder, ExperimentalMethods, Observation, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions}
+import org.apache.spark.sql.{AnalysisException, Column, Encoder, ExperimentalMethods, Observation, ObservedAccumulator, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
@@ -97,6 +97,36 @@ class SparkSession private[sql] (
   }
 
   private[sql] val observationRegistry = new ConcurrentHashMap[Long, Observation]()
+
+  // Values for ObservedAccumulator, harvested from server-injected observed metrics as responses
+  // stream in (see executeInternal), keyed by accumulator name. Numeric deltas accumulate into a
+  // DoubleAdder; typed custom-merge accumulators accumulate their pickled/serialized partials into
+  // a queue that the driver drains and folds with the user's merge.
+  private[sql] val observedAccumulatorRegistry =
+    new ConcurrentHashMap[String, java.util.concurrent.atomic.DoubleAdder]()
+
+  private[sql] val observedAccumulatorPartialsRegistry =
+    new ConcurrentHashMap[String, java.util.concurrent.ConcurrentLinkedQueue[Array[Byte]]]()
+
+  private[sql] override def observedAccumulatorValue(name: String): Double = {
+    val a = observedAccumulatorRegistry.get(name)
+    if (a == null) 0.0 else a.sum()
+  }
+
+  private[sql] override def observedAccumulatorPartials(name: String): Array[Array[Byte]] = {
+    val q = observedAccumulatorPartialsRegistry.get(name)
+    if (q == null) {
+      Array.empty
+    } else {
+      val buf = scala.collection.mutable.ArrayBuffer.empty[Array[Byte]]
+      var e = q.poll()
+      while (e != null) {
+        buf += e
+        e = q.poll()
+      }
+      buf.toArray
+    }
+  }
 
   private[sql] def hijackServerSideSessionIdForTesting(suffix: String): Unit = {
     client.hijackServerSideSessionIdForTesting(suffix)
@@ -598,6 +628,7 @@ class SparkSession private[sql] (
       .map { response =>
         // Note, this map() is lazy.
         processRegisteredObservedMetrics(response.getObservedMetricsList)
+        processObservedAccumulators(response.getObservedMetricsList)
         response
       }
   }
@@ -769,6 +800,52 @@ class SparkSession private[sql] (
         val metricsResult = SparkResult.transformObservedMetrics(metric)
         observationOrNull.setMetricsAndNotify(metricsResult)
       }
+    }
+  }
+
+  // Harvest values from server-injected ObservedAccumulator CollectMetrics nodes (metric keys
+  // prefixed __oa_metric_, not tied to a client Observation) into the client registry that
+  // ObservedAccumulator.value reads. Cumulative across queries.
+  private def processObservedAccumulators(metrics: java.util.List[ObservedMetrics]): Unit = {
+    metrics.asScala.foreach { metric =>
+      val keys = metric.getKeysList.asScala
+      if (keys.exists(_.startsWith(ObservedAccumulator.MetricPrefix))) {
+        SparkResult.transformObservedMetrics(metric) match {
+          case scala.util.Success(row) if row != null && row.schema != null =>
+            row.schema.fieldNames.foreach { fn =>
+              if (fn.startsWith(ObservedAccumulator.MetricPrefix)) {
+                val accName = fn.substring(ObservedAccumulator.MetricPrefix.length)
+                val idx = row.fieldIndex(fn)
+                // Numeric accumulators carry a summed Number; custom-merge accumulators carry a
+                // collect_list of serialized Binary partials. A null field is ignored.
+                row.get(idx) match {
+                  case n: Number =>
+                    observedAccumulatorRegistry
+                      .computeIfAbsent(
+                        accName,
+                        _ => new java.util.concurrent.atomic.DoubleAdder())
+                      .add(n.doubleValue)
+                  case s: scala.collection.Seq[_] =>
+                    addPartials(accName, s)
+                  case arr: Array[_] =>
+                    addPartials(accName, arr.toSeq)
+                  case _ =>
+                }
+              }
+            }
+          case _ =>
+        }
+      }
+    }
+  }
+
+  private def addPartials(accName: String, partials: scala.collection.Seq[_]): Unit = {
+    val q = observedAccumulatorPartialsRegistry.computeIfAbsent(
+      accName,
+      _ => new java.util.concurrent.ConcurrentLinkedQueue[Array[Byte]]())
+    partials.foreach {
+      case b: Array[Byte] => q.add(b)
+      case _ =>
     }
   }
 

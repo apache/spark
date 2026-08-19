@@ -82,6 +82,7 @@ if TYPE_CHECKING:
     from pyspark.sql.streaming import StreamingQueryManager
     from pyspark.sql.streaming.query import StreamingCheckpointManager
     from pyspark.sql.tvf import TableValuedFunction
+    from pyspark.sql.observed_accumulator import ObservedAccumulator
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
     from pyspark.sql.datasource import DataSourceRegistration
@@ -1070,6 +1071,60 @@ class SparkSession(SparkConversionMixin):
             jdf = self._jsparkSession.range(int(start), int(end), int(step), int(numPartitions))
 
         return DataFrame(jdf, self)
+
+    def accumulator(
+        self, name: Optional[str] = None, zero: Any = 0, merge: Optional[Any] = None
+    ) -> "ObservedAccumulator":
+        """
+        Create an observe-backed accumulator for the DataFrame/UDF execution path.
+
+        Unlike a :class:`SparkContext` accumulator, the value is carried through the query
+        plan and aggregated by a ``CollectMetrics`` (see :meth:`DataFrame.observe`) node, so it
+        is exactly-once: task retries, speculation, and stage recomputation do not double count.
+
+        Reference the returned handle inside a UDF (a plain ``@udf`` -- no wrapper needed), call
+        ``add`` there, run an action, then read ``value`` on the driver. The UDF is recognized by
+        inspecting its closure for the accumulator, so no special decorator is required.
+
+        .. versionadded:: 4.4.0
+
+        Parameters
+        ----------
+        name : str, optional
+            an optional name for the accumulator (the harvest correlation key)
+        zero : int, optional
+            the initial value (default: 0); its type (int, float, or an arbitrary object with
+            ``merge``) selects the accumulation path
+        merge : function, optional
+            an associative ``merge(acc, term)`` for an arbitrary (non-numeric) accumulator; when
+            given, ``zero`` is the identity and partials are folded on the driver
+
+        Returns
+        -------
+        :class:`ObservedAccumulator`
+
+        Notes
+        -----
+        Only backs accumulation performed inside a UDF whose output flows through a plan node;
+        it cannot back ``add`` inside arbitrary RDD closures.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import udf  # doctest: +SKIP
+        >>> acc = spark.accumulator("bad")  # doctest: +SKIP
+        >>> @udf("double")  # doctest: +SKIP
+        ... def parse(s):
+        ...     try:
+        ...         return float(s)
+        ...     except ValueError:
+        ...         acc.add(1)
+        ...         return None
+        >>> df.withColumn("v", parse("raw")).count()  # doctest: +SKIP
+        >>> acc.value  # doctest: +SKIP
+        """
+        from pyspark.sql.observed_accumulator import ObservedAccumulator
+
+        return ObservedAccumulator(name, zero, self, merge)
 
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None

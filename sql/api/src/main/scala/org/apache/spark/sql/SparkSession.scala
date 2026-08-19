@@ -180,6 +180,57 @@ abstract class SparkSession extends Serializable with Closeable {
   def udf: UDFRegistration
 
   /**
+   * Creates an [[ObservedAccumulator]] for the DataFrame / UDF execution path. Unlike a
+   * `SparkContext` accumulator, its value is carried through the query plan and aggregated by a
+   * `CollectMetrics` (`Dataset.observe`) node, so it is exactly-once: task retries, speculation,
+   * and stage recomputation do not double count. Reference the returned handle inside a UDF (a
+   * plain `udf` -- no wrapper), call `add` there, run an action, then read `value` on the driver.
+   *
+   * @since 4.4.0
+   */
+  def accumulator(name: String): ObservedAccumulator = {
+    // Lazily arrange for observe-path value harvesting (idempotent, once per session).
+    ensureObservedAccumulatorListener()
+    new ObservedAccumulator(this, name, 0L)
+  }
+
+  /**
+   * Creates a typed [[TypedObservedAccumulator]] of an arbitrary `T` with a user `merge` -- the
+   * analog of a classic `AccumulatorV2` for the DataFrame / UDF path. Each task folds its rows
+   * with `merge` from `zero`; the partials are gathered through the query plan and folded on the
+   * driver, so it is exactly-once. `T` and `zero` must be Java-serializable.
+   *
+   * @since 4.4.0
+   */
+  def accumulator[T](name: String, zero: T, merge: (T, T) => T): TypedObservedAccumulator[T] = {
+    ensureObservedAccumulatorListener()
+    new TypedObservedAccumulator[T](this, name, zero, merge)
+  }
+
+  /**
+   * Runtime hook for `ObservedAccumulator`: the analyzer-rule value for the accumulator named
+   * `name`. The classic session reads its driver-side JVM registry; the Spark Connect session
+   * reads the client registry populated from server-injected observed metrics. Default 0 (the
+   * explicit observe path does not use this; it uses `Observation`).
+   */
+  private[sql] def observedAccumulatorValue(name: String): Double = 0.0
+
+  /**
+   * Runtime hook for [[TypedObservedAccumulator]]: drain and return the serialized per-task
+   * partials harvested for `name` (the caller folds them with the user `merge`). The classic
+   * session drains its JVM registry; default empty.
+   */
+  private[sql] def observedAccumulatorPartials(name: String): Array[Array[Byte]] =
+    Array.empty[Array[Byte]]
+
+  /**
+   * Runtime hook for `ObservedAccumulator`: arrange for observe-path values to be harvested. The
+   * classic session registers a `QueryExecutionListener` once per session; Spark Connect captures
+   * values from responses directly, so this is a no-op there. Default no-op.
+   */
+  private[sql] def ensureObservedAccumulatorListener(): Unit = ()
+
+  /**
    * Returns a `StreamingQueryManager` that allows managing all the `StreamingQuery`s active on
    * `this`.
    *

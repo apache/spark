@@ -2268,10 +2268,19 @@ class DataFrame(ParentDataFrame):
         profile: Optional[ResourceProfile],
     ) -> ParentDataFrame:
         from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.observed_accumulator import maybe_wrap_operator
 
         _validate_vectorized_udf(func, evalType)
         if isinstance(schema, str):
             schema = cast(StructType, self._session._parse_ddl(schema))
+
+        # Observed-accumulator support: if func captures an accumulator, emit a hidden delta
+        # column and observe it (parity with the classic map*/applyIn* path).
+        finalize = None
+        hooked = maybe_wrap_operator(self, func, schema, evalType)
+        if hooked is not None:
+            func, schema, finalize = hooked
+
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -2288,6 +2297,8 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        if finalize is not None:
+            return finalize(res)
         if isinstance(schema, StructType):
             res._cached_schema = schema
         return res

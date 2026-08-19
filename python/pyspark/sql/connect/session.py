@@ -107,6 +107,7 @@ if TYPE_CHECKING:
     import pyspark.sql.connect.proto as pb2
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
+    from pyspark.sql.observed_accumulator import ObservedAccumulator
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
     from pyspark.sql.connect.tvf import TableValuedFunction
@@ -867,6 +868,15 @@ class SparkSession:
         )
 
     range.__doc__ = PySparkSession.range.__doc__
+
+    def accumulator(
+        self, name: Optional[str] = None, zero: Any = 0, merge: Optional[Any] = None
+    ) -> "ObservedAccumulator":
+        from pyspark.sql.observed_accumulator import ObservedAccumulator
+
+        return ObservedAccumulator(name, zero, self, merge)
+
+    accumulator.__doc__ = PySparkSession.accumulator.__doc__
 
     @functools.cached_property
     def catalog(self) -> "Catalog":

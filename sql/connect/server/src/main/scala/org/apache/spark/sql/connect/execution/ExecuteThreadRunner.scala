@@ -258,14 +258,21 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           }
         }.toMap
       }
-      if (observedMetrics.nonEmpty || accumulatedInPython.nonEmpty) {
+      // Server-injected observed metrics (e.g. the ObservedAccumulator rule) that are not tied
+      // to a client-registered Observation; forwarded by metric key rather than plan id.
+      val injectedObserved: Map[String, Try[Seq[(Option[String], Any, Option[DataType])]]] = {
+        executeHolder.injectedObservedMetrics.map { case (name, row) =>
+          name -> Success(SparkConnectPlanExecution.toObservedMetricsValues(row))
+        }
+      }
+      if (observedMetrics.nonEmpty || accumulatedInPython.nonEmpty || injectedObserved.nonEmpty) {
         executeHolder.responseObserver.onNext(
           SparkConnectPlanExecution
             .createObservedMetricsResponse(
               executeHolder.sessionHolder.sessionId,
               executeHolder.sessionHolder.serverSessionId,
               executeHolder.allObservationAndPlanIds,
-              observedMetrics ++ accumulatedInPython))
+              observedMetrics ++ accumulatedInPython ++ injectedObserved))
       }
 
       // State transition should be atomic to prevent a situation in which a client of reattachable

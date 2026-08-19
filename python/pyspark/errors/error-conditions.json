@@ -707,6 +707,16 @@
       "Only allows <arg_name> to be a path without scheme, and Spark Driver should use the default scheme to determine the destination file system."
     ]
   },
+  "OBSERVED_ACCUMULATOR_DIFFERENT_SESSION": {
+    "message": [
+      "The accumulator `<name>` was created by a different SparkSession than the active one. Use and read an accumulator only with the session that created it."
+    ]
+  },
+  "OBSERVED_ACCUMULATOR_NON_INTEGER_ADD": {
+    "message": [
+      "Cannot add the non-integer value `<term>` to the integer accumulator `<name>`, which was created with an integer initial value. Create the accumulator with a floating-point initial value (for example `spark.accumulator(\"<name>\", 0.0)`) to accumulate fractional values."
+    ]
+  },
   "ONLY_ALLOWED_FOR_SINGLE_COLUMN": {
     "message": [
       "Argument `<arg_name>` can only be provided for a single column."

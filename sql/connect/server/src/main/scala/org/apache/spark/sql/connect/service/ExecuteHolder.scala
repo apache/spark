@@ -111,6 +111,11 @@ private[connect] class ExecuteHolder(
 
   val observations: mutable.Map[String, Observation] = mutable.Map.empty
 
+  // Observed metrics from server-injected CollectMetrics nodes (e.g. the ObservedAccumulator
+  // analyzer rule) that are not tied to a client-registered Observation. Captured after execution
+  // so ExecuteThreadRunner can still forward them to the client.
+  @volatile var injectedObservedMetrics: Map[String, org.apache.spark.sql.Row] = Map.empty
+
   lazy val allObservationAndPlanIds: Map[String, Long] = {
     ExecuteHolder.collectAllObservationAndPlanIds(request.getPlan).toMap
   }

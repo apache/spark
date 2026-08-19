@@ -943,6 +943,13 @@ class SparkConnectClient(object):
 
         self._profiler_collector = ConnectProfilerCollector()
 
+        # Values harvested from server-injected ObservedAccumulator CollectMetrics nodes, keyed by
+        # accumulator name; read by ObservedAccumulator.value on Connect. The numeric registry sums
+        # deltas; the custom store gathers pickled partials the driver folds with `merge`.
+        self._observed_accumulator_registry: Dict[str, float] = {}
+        self._observed_accumulator_long: Dict[str, int] = {}
+        self._observed_accumulator_custom: Dict[str, list] = {}
+
         self._progress_handlers: List[ProgressHandler] = []
 
         self._zstd_module = _import_zstandard_if_available()
@@ -1780,6 +1787,29 @@ class SparkConnectClient(object):
                                 aid, update = pickleSer.loads(LiteralExpression._to_value(metric))
                                 if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER_V2:
                                     self._profiler_collector._update(update)
+                        elif observed_metrics.name.startswith("__oa_node_"):
+                            # Numeric values from a server-injected ObservedAccumulator
+                            # CollectMetrics node (named __oa_node_*, no client Observation);
+                            # route them by metric key to the registry ObservedAccumulator.value
+                            # reads. Cumulative across queries. Custom-merge accumulators instead
+                            # ride a client Observation (handled below), so gate on the node name
+                            # here -- their __oa_metric_ value is a collect_list, not a number.
+                            for key, metric in zip(observed_metrics.keys, observed_metrics.metrics):
+                                if key.startswith("__oa_metric_"):
+                                    acc_name = key[len("__oa_metric_") :]
+                                    val = LiteralExpression._to_value(metric)
+                                    if isinstance(val, (list, tuple)):
+                                        # Custom-merge accumulator: collect_list of pickled partials
+                                        # the driver folds with `merge`.
+                                        store = self._observed_accumulator_custom
+                                        store.setdefault(acc_name, []).extend(val)
+                                    elif isinstance(val, int) and not isinstance(val, bool):
+                                        # Integer accumulator: keep it exact (arbitrary-precision int).
+                                        lstore = self._observed_accumulator_long
+                                        lstore[acc_name] = lstore.get(acc_name, 0) + val
+                                    else:
+                                        reg = self._observed_accumulator_registry
+                                        reg[acc_name] = reg.get(acc_name, 0.0) + float(val)
                         elif observed_metrics.name in observations:
                             observation_result = observations[observed_metrics.name]._result
                             assert observation_result is not None

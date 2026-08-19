@@ -189,6 +189,27 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactStateForCleanup$"),
 
+      // ObservedAccumulator server-side runtime internals: the analyzer rule, the driver-side JVM
+      // registry, the harvest listener, and the struct wrappers live in the top-level
+      // org.apache.spark.sql package (sql/core) but have no Spark Connect client counterpart. The
+      // client-facing ObservedAccumulator / TypedObservedAccumulator API lives in shared sql/api.
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.InjectObservedAccumulators"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.InjectObservedAccumulators$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.ObservedAccumulatorListener"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.ObservedAccumulatorRegistry"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.ObservedAccumulatorRegistry$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.ObservedAccumulatorStructWrapper"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.ObservedAccumulatorStructWrapper$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservedAccSpec"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservedAccSpec$"),
+
       // DataFrameNaFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.fillValue"),
 

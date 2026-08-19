@@ -223,6 +223,31 @@ class SparkSession private(
   /** @inheritdoc */
   def listenerManager: ExecutionListenerManager = sessionState.listenerManager
 
+  // Runtime hooks for the observe-backed accumulator (ObservedAccumulator). Classic reads the
+  // driver-side JVM registry and registers the harvest listener once per session.
+  private[sql] override def observedAccumulatorValue(name: String): Double = {
+    // Block until queued listener events are processed, so the value reflects every query that
+    // has completed (the harvest listener is async). Bounded; best-effort on timeout.
+    try {
+      sparkContext.listenerBus.waitUntilEmpty(10000)
+    } catch {
+      case _: Throwable =>
+    }
+    org.apache.spark.sql.ObservedAccumulatorRegistry.registryValue(sessionUUID, name)
+  }
+
+  private[sql] override def observedAccumulatorPartials(name: String): Array[Array[Byte]] = {
+    try {
+      sparkContext.listenerBus.waitUntilEmpty(10000)
+    } catch {
+      case _: Throwable =>
+    }
+    org.apache.spark.sql.ObservedAccumulatorRegistry.takeCustomPartials(sessionUUID, name)
+  }
+
+  private[sql] override def ensureObservedAccumulatorListener(): Unit =
+    org.apache.spark.sql.ObservedAccumulatorRegistry.ensureListener(this)
+
   /** @inheritdoc */
   @Experimental
   @Unstable

@@ -299,6 +299,7 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.pandas.typehints import infer_group_pandas_eval_type_from_func
+        from pyspark.sql.observed_accumulator import maybe_wrap_operator
 
         # Try to infer the eval type from type hints
         eval_type = None
@@ -309,6 +310,12 @@ class GroupedData:
 
         if eval_type is None:
             eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+
+        # Observed-accumulator support (single-DataFrame form only).
+        finalize = None
+        hooked = maybe_wrap_operator(self._df, func, schema, eval_type)
+        if hooked is not None:
+            func, schema, finalize = hooked
 
         _validate_vectorized_udf(func, eval_type)
         if isinstance(schema, str):
@@ -328,6 +335,8 @@ class GroupedData:
             ),
             session=self._df._session,
         )
+        if finalize is not None:
+            return finalize(res)
         if isinstance(schema, StructType):
             res._cached_schema = schema
         return res
@@ -487,7 +496,9 @@ class GroupedData:
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.observed_accumulator import maybe_wrap_operator
 
+        eval_type = None
         try:
             # Try to infer the eval type from type hints
             eval_type = infer_group_arrow_eval_type_from_func(func)
@@ -496,6 +507,12 @@ class GroupedData:
 
         if eval_type is None:
             eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
+
+        # Observed-accumulator support (single-Table form only).
+        finalize = None
+        hooked = maybe_wrap_operator(self._df, func, schema, eval_type)
+        if hooked is not None:
+            func, schema, finalize = hooked
 
         _validate_vectorized_udf(func, eval_type)
         if isinstance(schema, str):
@@ -515,6 +532,8 @@ class GroupedData:
             ),
             session=self._df._session,
         )
+        if finalize is not None:
+            return finalize(res)
         if isinstance(schema, StructType):
             res._cached_schema = schema
         return res

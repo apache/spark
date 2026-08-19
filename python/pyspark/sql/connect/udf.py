@@ -189,6 +189,18 @@ class UserDefinedFunction:
         # (see :class:`pyspark.sql.aggregator.Aggregator`); ``None`` otherwise. A first-class field
         # so it survives ``_wrapped()``, ``asNondeterministic()`` and ``spark.udf.register``.
         self.bufferSchema = bufferSchema
+        # Seamless observed-accumulator support: if this UDF's closure captures an
+        # ObservedAccumulator, rewrite it to emit struct(value, delta) + marker so the server-side
+        # InjectObservedAccumulators rule harvests it. Same transform as the classic path (the
+        # attributes match). No-op otherwise; never breaks ordinary UDF creation.
+        try:
+            from pyspark.sql.observed_accumulator import _maybe_transform_for_accumulator
+
+            _maybe_transform_for_accumulator(self)
+        except NotImplementedError:
+            raise  # surface unsupported accumulator usage (e.g. custom merge in a scalar UDF)
+        except Exception:
+            pass
 
     @property
     def returnType(self) -> DataType:

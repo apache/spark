@@ -301,11 +301,21 @@ class PandasGroupedOpsMixin:
         if eval_type is None:
             eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
 
+        # Observed-accumulator support (single-DataFrame form only; see
+        # observed_accumulator.maybe_wrap_operator).
+        from pyspark.sql.observed_accumulator import maybe_wrap_operator
+
+        finalize = None
+        hooked = maybe_wrap_operator(self._df, func, schema, eval_type)
+        if hooked is not None:
+            func, schema, finalize = hooked
+
         udf = pandas_udf(func, returnType=schema, functionType=eval_type)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc)
-        return DataFrame(jdf, self.session)
+        result = DataFrame(jdf, self.session)
+        return finalize(result) if finalize is not None else result
 
     def applyInPandasWithState(
         self,
@@ -942,17 +952,27 @@ class PandasGroupedOpsMixin:
             # Try to infer the eval type from type hints
             eval_type = infer_group_arrow_eval_type_from_func(func)
         except Exception:
+            eval_type = None
             warnings.warn("Cannot infer the eval type from type hints. ", UserWarning)
 
         if eval_type is None:
             eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
+
+        # Observed-accumulator support (single-Table form only).
+        from pyspark.sql.observed_accumulator import maybe_wrap_operator
+
+        finalize = None
+        hooked = maybe_wrap_operator(self._df, func, schema, eval_type)
+        if hooked is not None:
+            func, schema, finalize = hooked
 
         # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(func, returnType=schema, functionType=eval_type)  # type: ignore[call-overload]
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInArrow(udf_column._jc)
-        return DataFrame(jdf, self.session)
+        result = DataFrame(jdf, self.session)
+        return finalize(result) if finalize is not None else result
 
     def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":
         """

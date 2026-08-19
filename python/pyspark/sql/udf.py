@@ -219,6 +219,19 @@ class UserDefinedFunction:
         # ``asNondeterministic()`` and ``spark.udf.register``, and is threaded to the JVM in
         # ``_create_judf`` so ``PythonAggregate`` can plan the two-stage aggregation.
         self.bufferSchema = bufferSchema
+        # Seamless observed-accumulator support: if this UDF's closure captures an
+        # ObservedAccumulator, rewrite it in place to emit struct(value, delta) and tag it (marker
+        # name, non-deterministic) so the JVM InjectObservedAccumulators rule harvests it -- a
+        # plain @udf that calls acc.add() then "just works" with no wrapper. No-op otherwise.
+        # Runs before transpilation below, which is skipped for the resulting non-deterministic UDF.
+        try:
+            from pyspark.sql.observed_accumulator import _maybe_transform_for_accumulator
+
+            _maybe_transform_for_accumulator(self)
+        except NotImplementedError:
+            raise  # surface unsupported accumulator usage (e.g. custom merge in a scalar UDF)
+        except Exception:
+            pass  # never let the accumulator hook break ordinary UDF creation
         # Extract Python UDF details if transpilation is enabled.
         self.transpiled: list = []
         self._transpiled_param_names: list[str] = []

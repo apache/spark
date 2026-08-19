@@ -17,7 +17,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
+import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, InjectObservedAccumulators, SparkSessionExtensions, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveSetCatalogCommand, ResolveTranspose, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
@@ -228,7 +228,11 @@ abstract class BaseSessionStateBuilder(
     }
 
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      new ResolveDataSource(session) +:
+      // Runs within the Resolution batch (not postHoc) so that after an accumulator UDF is
+      // rewritten to a struct field, type coercion re-runs over the enclosing expression (e.g.
+      // `udf($"x") + 1` -> Long + Int is coerced normally).
+      InjectObservedAccumulators +:
+        new ResolveDataSource(session) +:
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:

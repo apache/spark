@@ -46,6 +46,15 @@ class PandasMapOpsMixin:
 
         assert isinstance(self, DataFrame)
 
+        # Seamless observed-accumulator support: if func captures an accumulator, emit a hidden
+        # delta column and observe it (see observed_accumulator.maybe_wrap_operator).
+        from pyspark.sql.observed_accumulator import maybe_wrap_operator
+
+        finalize = None
+        hooked = maybe_wrap_operator(self, func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
+        if hooked is not None:
+            func, schema, finalize = hooked
+
         # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
@@ -54,7 +63,8 @@ class PandasMapOpsMixin:
 
         jrp = self._build_java_profile(profile)
         jdf = self._jdf.mapInPandas(udf_column._jc, barrier, jrp)
-        return DataFrame(jdf, self.sparkSession)
+        result = DataFrame(jdf, self.sparkSession)
+        return finalize(result) if finalize is not None else result
 
     def mapInArrow(
         self,
@@ -68,6 +78,13 @@ class PandasMapOpsMixin:
 
         assert isinstance(self, DataFrame)
 
+        from pyspark.sql.observed_accumulator import maybe_wrap_operator
+
+        finalize = None
+        hooked = maybe_wrap_operator(self, func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF)
+        if hooked is not None:
+            func, schema, finalize = hooked
+
         # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF
@@ -76,7 +93,8 @@ class PandasMapOpsMixin:
 
         jrp = self._build_java_profile(profile)
         jdf = self._jdf.mapInArrow(udf_column._jc, barrier, jrp)
-        return DataFrame(jdf, self.sparkSession)
+        result = DataFrame(jdf, self.sparkSession)
+        return finalize(result) if finalize is not None else result
 
     def _build_java_profile(
         self, profile: Optional[ResourceProfile] = None

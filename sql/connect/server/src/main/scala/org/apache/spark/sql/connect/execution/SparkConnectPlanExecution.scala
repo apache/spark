@@ -86,6 +86,16 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             shuffleCleanupMode)
         responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
         processAsArrowBatches(dataframe, responseObserver, executeHolder)
+        // Capture observed metrics from server-injected CollectMetrics nodes (not tied to a
+        // client Observation, e.g. the ObservedAccumulator rule) so they can still be forwarded.
+        // Guard with Try: reading observedMetrics evaluates every CollectMetrics expression, so a
+        // client observe containing e.g. raise_error would throw here and abort the response
+        // (SPARK-55150). Such an error must instead surface through the client Observation path
+        // (see ExecuteThreadRunner), which wraps each observation result in a Try.
+        executeHolder.injectedObservedMetrics =
+          scala.util.Try(dataframe.queryExecution.observedMetrics).getOrElse(Map.empty).filter {
+            case (name, _) => name.startsWith("__oa_node_")
+          }
         responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
       case proto.Plan.OpTypeCase.COMMAND =>
         val command = request.getPlan.getCommand
