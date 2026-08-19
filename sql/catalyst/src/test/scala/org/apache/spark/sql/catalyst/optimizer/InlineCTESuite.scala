@@ -111,9 +111,10 @@ class InlineCTESuite extends PlanTest {
 
   test("SPARK-58779: optimizer InlineCTE (isAnalysis = false) fails on a ref with no definition") {
     // During analysis a CTERelationRef whose definition is not in the plan is tolerated -- it is
-    // owned by a surrounding scope (e.g. ResolveSQLTableFunctions checkAnalyzes a table-function
-    // subplan whose argument references an outer CTE). In the optimizer the plan is complete, so a
-    // missing definition indicates corruption and must fail loudly rather than be dropped.
+    // owned by a surrounding scope (e.g. when `ResolveSQLTableFunctions` runs `checkAnalysis` on a
+    // table-function subplan whose argument references an outer CTE). In the optimizer the plan is
+    // complete, so a missing definition indicates corruption and must fail loudly rather than be
+    // dropped.
     val defX = CTERelationDef(TestRelation(Seq($"a".int)).select($"a"))
     val refX = CTERelationRef(defX.id, defX.resolved, defX.output, defX.isStreaming)
     val danglingRef = CTERelationRef(defX.id + 1000, true, Seq($"a".int), false)
