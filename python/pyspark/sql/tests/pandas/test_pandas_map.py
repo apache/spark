@@ -465,12 +465,10 @@ class MapInPandasTestsMixin:
             tc = TaskContext.get()
             assert tc is not None
             assert not isinstance(tc, BarrierTaskContext)
-            BarrierTaskContext.get()
             for batch in iterator:
                 yield batch
 
-        with self.assertRaisesRegex(PythonException, "\\[NOT_IN_BARRIER_STAGE\\]"):
-            df.mapInPandas(func1, "id long", False).collect()
+        df.mapInPandas(func1, "id long", False).collect()
 
         def func2(iterator):
             from pyspark import TaskContext, BarrierTaskContext
@@ -482,6 +480,19 @@ class MapInPandasTestsMixin:
                 yield batch
 
         df.mapInPandas(func2, "id long", True).collect()
+
+    def test_barrier_task_context_get_without_barrier_mode(self):
+        df = self.spark.range(10)
+
+        def func(iterator):
+            from pyspark import BarrierTaskContext
+
+            BarrierTaskContext.get()
+            for batch in iterator:
+                yield batch
+
+        with self.assertRaisesRegex(PythonException, "\\[NOT_IN_BARRIER_STAGE\\]"):
+            df.mapInPandas(func, "id long", False).collect()
 
     def test_map_in_pandas_type_mismatch(self):
         def func(iterator):
