@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -159,6 +159,23 @@ class OptimizeExpandSuite extends PlanTest {
         "Pre-aggregate should include distinct col1")
       assert(groupByNames.contains("col2"),
         "Pre-aggregate should include distinct col2")
+    }
+  }
+
+  test("SPARK-58387: skips when a non-distinct count(1) is present") {
+    // count(1) references no attribute, so it does not force an Expand output
+    // column outside the inner GROUP BY, but it is duplicate sensitive: the
+    // pre-aggregate would make it count distinct rows instead of base rows.
+    withSQLConf(SQLConf.OPTIMIZE_EXPAND_RATIO.key -> "2") {
+      val query = testRelation
+        .groupBy($"key")(
+          countDistinct($"col1").as("cd1"),
+          countDistinct($"col2").as("cd2"),
+          count(Literal(1)).as("cnt"))
+        .analyze
+      val optimized = Optimize.execute(query)
+      assert(!hasPreAggBeforeExpand(optimized),
+        "Should skip when a non-distinct count(1) is present")
     }
   }
 
