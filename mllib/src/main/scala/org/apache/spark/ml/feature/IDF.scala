@@ -152,7 +152,7 @@ class IDFModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    val localIdf = idfModel.idf.asML.toArray
+    val localIdf = idfModel.idf.toArray
     val func = (vector: Vector) => IDFModel.predict(localIdf, vector)
 
     val transformer = udf(func)
@@ -215,7 +215,7 @@ object IDFModel extends MLReadable[IDFModel] {
     }
   }
 
-  private def predictDense(idf: Array[Double], values: Array[Double]): Array[Double] = {
+  private[spark] def predictDense(idf: Array[Double], values: Array[Double]): Array[Double] = {
     val n = values.length
     val newValues = new Array[Double](n)
     var j = 0
@@ -226,7 +226,7 @@ object IDFModel extends MLReadable[IDFModel] {
     newValues
   }
 
-  private def predictSparse(
+  private[spark] def predictSparse(
       idf: Array[Double],
       indices: Array[Int],
       values: Array[Double]): (Array[Int], Array[Double]) = {
