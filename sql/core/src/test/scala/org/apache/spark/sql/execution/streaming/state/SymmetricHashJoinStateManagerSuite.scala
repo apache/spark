@@ -1063,6 +1063,20 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
     ).map(_.getInt(1)).toSeq.sorted
   }
 
+  private def removeMatchedRowTimestamps(
+      key: Int,
+      range: Option[(Long, Long)],
+      predicate: JoinedRow => Boolean = (_: JoinedRow) => true)(
+      implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
+    val dummyRow = new GenericInternalRow(0)
+    manager.getJoinedRowsAndRemoveMatched(
+      toJoinKeyRow(key),
+      row => new JoinedRow(row, dummyRow),
+      predicate,
+      timestampRange = range
+    ).map(_.getInt(1)).toSeq.sorted
+  }
+
   test("StreamingJoinStateManager V4 - getJoinedRows with timestampRange") {
     withJoinStateManager(
       inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
@@ -1079,6 +1093,27 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
       assert(getJoinedRowTimestamps(40, Some((60L, 100L))) === Seq.empty)
       assert(getJoinedRowTimestamps(40, Some((0L, 5L))) === Seq.empty)
       assert(getJoinedRowTimestamps(40, None) === Seq(10, 20, 30, 40, 50))
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - getJoinedRowsAndRemoveMatched with timestampRange") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+
+      manager.append(toJoinKeyRow(40), toInputValue(40, 5), matched = true)
+      Seq(10, 20, 30, 40, 50).foreach(append(40, _))
+
+      assert(removeMatchedRowTimestamps(40, Some((20L, 40L))) === Seq(20, 30, 40))
+      assert(get(40) === Seq(5, 10, 50))
+
+      Seq(20, 30, 40).foreach(append(40, _))
+      val matched = removeMatchedRowTimestamps(
+        40,
+        Some((20L, 40L)),
+        joinedRow => joinedRow.getInt(1) != 30)
+      assert(matched === Seq(20, 40))
+      assert(get(40) === Seq(5, 10, 30, 50))
     }
   }
 

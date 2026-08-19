@@ -94,11 +94,14 @@ trait SymmetricHashJoinStateManager {
    *
    * It is caller's responsibility to consume the whole iterator.
    *
-   * NOTE: For the rows which already have been marked as matched in the state, this method removes
-   * them from the state without returning them. Under normal operation, this should not happen and
-   * this should not be an issue, but it can occur if the join type was changed during query
-   * restart. We do not define an expected behavior for such changes, so we just optimize it rather
-   * than trying to provide some best-effort results.
+   * @param timestampRange optional inclusive timestamp range for implementations that can prune the
+   *                       state scan by event time.
+   *
+   * NOTE: For the rows which already have been marked as matched in the scanned state, this method
+   * removes them from the state without returning them. Under normal operation, this should not
+   * happen and this should not be an issue, but it can occur if the join type was changed during
+   * query restart. We do not define an expected behavior for such changes, so we just optimize it
+   * rather than trying to provide some best-effort results.
    *
    * NOTE2: There is a further optimization opportunity -- if a row does not pass the predicate
    * (postJoinFilter), it may never match in future batches as long as expressions are
@@ -110,7 +113,8 @@ trait SymmetricHashJoinStateManager {
   def getJoinedRowsAndRemoveMatched(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow]
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow]
 
   /**
    * Provide all key-value pairs in the state manager.
@@ -518,7 +522,8 @@ class SymmetricHashJoinStateManagerV4(
   override def getJoinedRowsAndRemoveMatched(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow] = {
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)]): Iterator[JoinedRow] = {
     def getJoinedRowsFromTsAndValues(
         ts: Long,
         valuesAndMatched: Array[ValueAndMatchPair]): Iterator[JoinedRow] = {
@@ -578,7 +583,8 @@ class SymmetricHashJoinStateManagerV4(
         getJoinedRowsFromTsAndValues(ts, valuesAndMatchedIter.toArray)
 
       case _ =>
-        keyWithTsToValues.getValues(key).flatMap { result =>
+        val (minTs, maxTs) = timestampRange.getOrElse((Long.MinValue, Long.MaxValue))
+        keyWithTsToValues.getValuesInRange(key, minTs, maxTs).flatMap { result =>
           val ts = result.timestamp
           val valuesAndMatched = result.values.toArray
           getJoinedRowsFromTsAndValues(ts, valuesAndMatched)
@@ -1191,7 +1197,8 @@ abstract class SymmetricHashJoinStateManagerBase(
   override def getJoinedRowsAndRemoveMatched(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow] = {
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)]): Iterator[JoinedRow] = {
     new NextIterator[JoinedRow] {
       private var numValues: Long = keyToNumValues.get(key)
       private var index: Long = 0L

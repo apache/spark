@@ -249,9 +249,8 @@ abstract class StreamingJoinSuite
     val df1Base = leftInput.toDF().toDF("leftKey", "time")
       .select($"leftKey", timestamp_seconds($"time") as "leftTime",
         ($"leftKey" * 2) as "leftValue")
-    // The left watermark is optional for most join types; left anti requires it (a watermark on
-    // only the right side leaves the left state unevicted). Allow tests to omit it to exercise
-    // that path.
+    // Left semi/outer/anti require range bounds over watermarked attributes on both sides. Allow
+    // tests to omit the left watermark to exercise that analyzer path.
     val df1 = if (leftWatermark) df1Base.withWatermark("leftTime", watermark) else df1Base
 
     val df2 = rightInput.toDF().toDF("rightKey", "time")
@@ -274,6 +273,23 @@ abstract class StreamingJoinSuite
     }
 
     (leftInput, rightInput, select)
+  }
+
+  protected def setupEqualityJoinWithZeroWatermark(joinType: String)
+      : (MemoryStream[(String, Int)], MemoryStream[(String, Int)], DataFrame) = {
+    val leftInput = MemoryStream[(String, Int)]
+    val rightInput = MemoryStream[(String, Int)]
+
+    val left = leftInput.toDF()
+      .selectExpr("_1 AS key", "timestamp_seconds(_2) AS eventTime")
+      .withWatermark("eventTime", "0 seconds")
+    val right = rightInput.toDF()
+      .selectExpr("_1 AS key", "timestamp_seconds(_2) AS eventTime")
+      .withWatermark("eventTime", "0 seconds")
+    val joined = left.join(right, Seq("key", "eventTime"), joinType)
+      .selectExpr("key", "CAST(eventTime AS long) AS eventTime")
+
+    (leftInput, rightInput, joined)
   }
 
   protected def setupSelfJoin(joinType: String)
@@ -1987,6 +2003,57 @@ abstract class StreamingOuterJoinSuite extends StreamingOuterJoinBase {
       }
     }
   }
+
+  test("left outer join with a range condition requires watermarked bounds on both sides") {
+    // Only the right side is watermarked. With a range condition (no watermark in the join keys),
+    // the operator never builds a left-side eviction predicate, so the unmatched (null-extended)
+    // left rows would never be emitted. This must be rejected at analysis time rather than silently
+    // dropping the outer output.
+    val (_, _, joined) = setupJoinWithRangeCondition("left_outer", leftWatermark = false)
+
+    val e = intercept[AnalysisException] {
+      joined.writeStream.format("memory").queryName("leftOuterRightWatermarkOnly")
+        .outputMode(OutputMode.Append()).start()
+    }
+    assert(e.getMessage.contains(
+      "requires a range bound between watermarked attributes on both sides"))
+  }
+
+  test("left outer join with an equi join key watermarked on the left only is rejected") {
+    // The join key is watermarked on the left only, so the right side is not late-filtered on the
+    // eviction key: a late right row could match a left row already emitted as a null-extended
+    // outer row. Rejected at analysis time.
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val df1 = leftInput.toDF().toDF("key", "time")
+      .select($"key", timestamp_seconds($"time") as "leftTime")
+      .withWatermark("leftTime", "10 seconds")
+    val df2 = rightInput.toDF().toDF("key", "time")
+      .select($"key", timestamp_seconds($"time") as "rightTime")
+    val joined = df1.join(df2, expr("leftTime = rightTime"), "left_outer")
+
+    val e = intercept[AnalysisException] {
+      joined.writeStream.format("memory").queryName("leftOuterLeftKeyWatermarkOnly")
+        .outputMode(OutputMode.Append()).start()
+    }
+    assert(e.getMessage.contains("requires watermarks on both join keys used for state eviction"))
+  }
+
+  test("stricter watermark requirements can be disabled for left outer join") {
+    // With the kill switch off, the right-only range config that is otherwise rejected is accepted
+    // again (falling back to the previous, looser behavior).
+    withSQLConf(
+      SQLConf.STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED.key -> "false") {
+      val (_, _, joined) = setupJoinWithRangeCondition("left_outer", leftWatermark = false)
+      val query = joined.writeStream.format("memory")
+        .queryName("leftOuterFallback").outputMode(OutputMode.Append()).start()
+      try {
+        query.processAllAvailable()
+      } finally {
+        query.stop()
+      }
+    }
+  }
 }
 
 @SlowSQLTest
@@ -2430,6 +2497,36 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
     )
   }
 
+  testWithAppendAndUpdate("left semi join matches same-batch right row between late and " +
+      "eviction watermarks") { outputMode =>
+    withTempDir { checkpoint =>
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        val (leftInput, rightInput, joined) =
+          setupEqualityJoinWithZeroWatermark("left_semi")
+
+        testStream(joined, outputMode)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          // batch 0
+          // WM: late record = 0, eviction = 0
+          MultiAddData(
+            (leftInput, Seq(("a", 1), ("b", 2))),
+            (rightInput, Seq(("b", 2), ("c", 1)))
+          ),
+          CheckNewAnswer(("b", 2)),
+          // batch 1
+          // WM: late record = 0, eviction = 2. Right ("d", 1) is not late, but it is
+          // evicting in this batch. It still has to be visible to left ("d", 1) from the same
+          // batch before watermark cleanup removes it.
+          MultiAddData(
+            (rightInput, Seq(("d", 1))),
+            (leftInput, Seq(("d", 1)))
+          ),
+          CheckNewAnswer(("d", 1))
+        )
+      }
+    }
+  }
+
   testWithAppendAndUpdate("self left semi join") { outputMode =>
     val (inputStream, query) = setupSelfJoin("left_semi")
 
@@ -2602,6 +2699,36 @@ abstract class StreamingLeftSemiJoinSuite extends StreamingLeftSemiJoinBase {
        */
     }
   }
+
+  test("left semi join with a range condition requires watermarked bounds on both sides") {
+    // With only the right side watermarked and a range condition (no watermark in the join keys),
+    // the left state is never evicted, so never-matched left rows accumulate without bound. This is
+    // rejected at analysis time.
+    val (_, _, joined) = setupJoinWithRangeCondition("left_semi", leftWatermark = false)
+
+    val e = intercept[AnalysisException] {
+      joined.writeStream.format("memory").queryName("leftSemiRightWatermarkOnly")
+        .outputMode(OutputMode.Append()).start()
+    }
+    assert(e.getMessage.contains(
+      "requires a range bound between watermarked attributes on both sides"))
+  }
+
+  test("stricter watermark requirements can be disabled for left semi join") {
+    // With the kill switch off, the right-only range config falls back to the previous behavior and
+    // is accepted again.
+    withSQLConf(
+      SQLConf.STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED.key -> "false") {
+      val (_, _, joined) = setupJoinWithRangeCondition("left_semi", leftWatermark = false)
+      val query = joined.writeStream.format("memory")
+        .queryName("leftSemiFallback").outputMode(OutputMode.Append()).start()
+      try {
+        query.processAllAvailable()
+      } finally {
+        query.stop()
+      }
+    }
+  }
 }
 
 // Concrete single-mode suites for parallel CI execution and failure isolation.
@@ -2637,6 +2764,8 @@ class StreamingFullOuterJoinWithoutVCFSuite extends StreamingFullOuterJoinSuite 
 }
 
 abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
+
+  import testImplicits._
 
   test("windowed left anti join") {
     withTempDir { checkpointDir =>
@@ -2828,6 +2957,33 @@ abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
       CheckNewAnswer(Row(1, 30))
     )
   }
+
+  test("left anti join suppresses same-batch right row between late and eviction watermarks") {
+    withTempDir { checkpoint =>
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        val (leftInput, rightInput, joined) = setupEqualityJoinWithZeroWatermark("left_anti")
+
+        testStream(joined, OutputMode.Append())(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          // batch 0
+          // WM: late record = 0, eviction = 0
+          MultiAddData(
+            (leftInput, Seq(("a", 1), ("b", 2))),
+            (rightInput, Seq(("b", 2), ("c", 1)))
+          ),
+          CheckNewAnswer(),
+          // batch 1
+          // WM: late record = 0, eviction = 2. Right ("d", 1) is not late, but it is evicting
+          // in this batch. It must suppress left ("d", 1) from the same batch before cleanup.
+          MultiAddData(
+            (rightInput, Seq(("d", 1))),
+            (leftInput, Seq(("d", 1)))
+          ),
+          CheckNewAnswer(("a", 1))
+        )
+      }
+    }
+  }
 }
 
 abstract class StreamingLeftAntiJoinSuite extends StreamingLeftAntiJoinBase {
@@ -2843,7 +2999,7 @@ abstract class StreamingLeftAntiJoinSuite extends StreamingLeftAntiJoinBase {
       "is not supported in Update output mode, only in Append output mode"))
   }
 
-  test("left anti join with a range condition requires a watermark on the left side") {
+  test("left anti join with a range condition requires watermarked bounds on both sides") {
     // Only the right side is watermarked. With a range condition (no watermark in the join keys),
     // the operator would never build a left-side eviction predicate, so no anti row would ever be
     // emitted. This must be rejected at analysis rather than silently producing no output.
@@ -2854,7 +3010,7 @@ abstract class StreamingLeftAntiJoinSuite extends StreamingLeftAntiJoinBase {
         .outputMode(OutputMode.Append()).start()
     }
     assert(e.getMessage.contains(
-      "requires a watermark on the left side"))
+      "requires a range bound between watermarked attributes on both sides"))
   }
 }
 

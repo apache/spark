@@ -885,7 +885,8 @@ case class StreamingSymmetricHashJoinExec(
             otherSideJoiner.joinStateManager.getJoinedRowsAndRemoveMatched(
               key,
               thatRow => generateJoinedRow(thisRow, thatRow),
-              postJoinFilter).map { row =>
+              postJoinFilter,
+              timestampRange = computeTimestampRange(thisRow)).map { row =>
               numRemovedFromOtherSideDuringJoinCount += 1
               row
             }
@@ -947,13 +948,15 @@ case class StreamingSymmetricHashJoinExec(
         //   and the join type is left semi.
         //   For other cases, the input should be added, including the case it's going to be evicted
         //   in this batch. It hasn't yet evaluated with inputs from right side for this batch.
-        //   Refer to the classdoc of SteramingSymmetricHashJoinExec about how stream-stream join
+        //   Refer to the classdoc of StreamingSymmetricHashJoinExec about how stream-stream join
         //   works.
-        // - Right side: for this side, the evaluation with inputs from left side for this batch
-        //   is done at this point. That said, input can be skipped to be added to the state store
-        //   if input is going to be evicted in this batch. Though, input should be added to the
-        //   state store if it's right outer join or full outer join, as unmatched output is
-        //   handled during state eviction.
+        // - Right side: for this side, the evaluation with earlier inputs from left side for this
+        //   batch is done at this point. That said, input can be skipped to be added to the state
+        //   store if input is going to be evicted in this batch. Two join types still need to store
+        //   such rows temporarily:
+        //   - right/full outer, because unmatched output is handled during state eviction;
+        //   - left semi/anti, because the right side is processed first and later left input from
+        //     the same batch must still be able to match these non-late right rows.
         //
         // Left anti gets the same left-side skip-on-match treatment as left semi: a matched left
         // row can never be anti output, so there is no reason to keep it in state.
@@ -969,8 +972,11 @@ case class StreamingSymmetricHashJoinExec(
           // if the input is not evicted in this batch (hence need to be persisted)
           val isNotEvictingInThisBatch =
             !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
+          val isRightSideOfLeftSemiOrAnti =
+            joinType == LeftSemi || joinType == LeftAnti
 
           isNotEvictingInThisBatch ||
+            isRightSideOfLeftSemiOrAnti ||
             // if the input is producing "unmatched row" in this batch
             (
               (joinType == RightOuter && !iteratorNotEmpty) ||

@@ -34,6 +34,15 @@ import org.apache.spark.unsafe.types.CalendarInterval
  */
 object StreamingJoinHelper extends PredicateHelper with Logging {
 
+  private def isWatermarked(expression: Expression): Boolean = expression match {
+    case ne: NamedExpression => ne.metadata.contains(EventTimeWatermark.delayKey)
+    case _ => false
+  }
+
+  private def watermarkedAttributes(attributes: AttributeSet): AttributeSet = {
+    AttributeSet(attributes.filter(_.metadata.contains(delayKey)).toSeq)
+  }
+
   /**
    * Check the provided logical plan to see if its join keys contain a watermark attribute.
    *
@@ -52,35 +61,57 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
-   * Whether the watermark sits on the right equality join key at the ordinal that actually drives
-   * state-key eviction. This is stricter than [[isWatermarkInJoinKeys]] (side-insensitive) and than
-   * simply "some right key is watermarked" (ordinal-insensitive). It matters for join types (e.g.
-   * left anti) whose correctness depends on the right side being late-filtered on the *same* key
-   * dimension the left state is evicted by.
+   * Whether both equality join keys at the state-key eviction ordinal are watermarked.
    *
-   * State-key eviction uses a single key ordinal, chosen exactly as in
-   * [[org.apache.spark.sql.execution.streaming.operators.stateful.join.
-   * StreamingSymmetricHashJoinHelper.findJoinKeyOrdinalForWatermark]]: the first watermarked left
-   * key, else the first watermarked right key. The right side is late-filtered on its own
-   * watermarked column, so unless the right key at that ordinal is the watermarked one, a right row
-   * that is old on the eviction key but fresh on some other watermarked key/column would not be
-   * late-filtered and could match an already-emitted anti row. This method must stay in sync with
-   * that ordinal selection.
+   * This is required by outer-like equality joins (left outer and left anti). Eviction of left
+   * state must be aligned with late-event filtering on both sides: a right watermark drops late
+   * right rows after unmatched rows have been emitted, and a left watermark drops late left rows
+   * after the right state that could have matched them has been evicted.
+   *
+   * The eviction ordinal is chosen in the same way as
+   * StreamingSymmetricHashJoinHelper.findJoinKeyOrdinalForWatermark.
    */
-  def isWatermarkOnRightEvictionJoinKey(plan: LogicalPlan): Boolean = {
+  def isWatermarkOnBothEvictionJoinKeys(plan: LogicalPlan): Boolean = {
     plan match {
       case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
-        def watermarked(e: Expression): Boolean = e match {
-          case ne: NamedExpression => ne.metadata.contains(EventTimeWatermark.delayKey)
-          case _ => false
+        joinKeyOrdinalForWatermark(leftKeys, rightKeys).exists { ordinal =>
+          ordinal < leftKeys.length && ordinal < rightKeys.length &&
+            isWatermarked(leftKeys(ordinal)) && isWatermarked(rightKeys(ordinal))
         }
-        val ordinal = leftKeys.indexWhere(watermarked) match {
-          case i if i >= 0 => i
-          case _ => rightKeys.indexWhere(watermarked)
-        }
-        ordinal >= 0 && ordinal < rightKeys.length && watermarked(rightKeys(ordinal))
       case _ => false
     }
+  }
+
+  private def joinKeyOrdinalForWatermark(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): Option[Int] = {
+    leftKeys.indexWhere(isWatermarked) match {
+      case i if i >= 0 => Some(i)
+      case _ =>
+        rightKeys.indexWhere(isWatermarked) match {
+          case i if i >= 0 => Some(i)
+          case _ => None
+        }
+    }
+  }
+
+  /**
+   * Like [[getStateValueWatermark]], but only succeeds when the state watermark is derived from
+   * watermarked attributes on both sides. This is useful for analysis-time validation of range
+   * conditions: the runtime value-watermark predicate is applied to the watermarked attribute on
+   * the side being evicted, so accepting a range bound over some other attribute would make the
+   * predicate either ineffective or incorrect.
+   */
+  def getStateValueWatermarkOnWatermarkedAttributes(
+      attributesToFindStateWatermarkFor: AttributeSet,
+      attributesWithEventWatermark: AttributeSet,
+      joinCondition: Option[Expression],
+      eventWatermark: Option[Long]): Option[Long] = {
+    getStateValueWatermark(
+      watermarkedAttributes(attributesToFindStateWatermarkFor),
+      watermarkedAttributes(attributesWithEventWatermark),
+      joinCondition,
+      eventWatermark)
   }
 
   /**
