@@ -1118,7 +1118,7 @@ case class JsonQuery(
     wrapper match {
       case JsonQueryWrapper.Without =>
         // OMIT QUOTES reuses the string decoded during the lookup rather than re-parsing the
-        // serialized fragment; OMIT QUOTES combined with a wrapper is rejected at parse time.
+        // serialized fragment; OMIT QUOTES combined with a wrapper is rejected at analysis time.
         if (quotes == JsonQueryQuotes.Omit) unquoted else raw
       case JsonQueryWrapper.Unconditional => JsonQuery.wrapInArray(raw)
       // CONDITIONAL wraps only a scalar; an object or array is already a structural result.
@@ -1129,7 +1129,7 @@ case class JsonQuery(
     val json = child.eval(input).asInstanceOf[UTF8String]
     // NULL input propagates to NULL (not ON EMPTY / ON ERROR), matching ANSI and the other engines.
     if (json == null) return null
-    evaluator.queryLookup(json) match {
+    evaluator.queryLookup(json, omitQuotes = quotes == JsonQueryQuotes.Omit) match {
       // Malformed / non-single-value input.
       case None => onErrorResult()
       // Path matched nothing.

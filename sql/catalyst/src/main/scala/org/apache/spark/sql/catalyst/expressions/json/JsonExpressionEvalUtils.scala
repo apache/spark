@@ -411,7 +411,10 @@ object JsonQueryLookup {
    * form -- a matched JSON string's decoded content (read straight from the parser), and `raw`
    * itself for every other value (objects, arrays, numbers, booleans, and JSON `null`, for which
    * `OMIT QUOTES` is a no-op). Carrying it here lets the caller apply `OMIT QUOTES` without
-   * re-parsing the serialized fragment.
+   * re-parsing the serialized fragment. It is populated only when
+   * [[JsonTableEvaluator.queryLookup]] is called with `omitQuotes = true`; otherwise (the default
+   * `KEEP QUOTES`, which discards it) it is left equal to `raw`, so the string decode is not paid
+   * for.
    */
   case class Found(raw: UTF8String, structural: Boolean, unquoted: UTF8String)
     extends JsonQueryLookup
@@ -587,13 +590,18 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
    *     including a JSON `null`, whose text is `null`), and `unquoted` is the `OMIT QUOTES` form
    *     (a matched JSON string's decoded content; `raw` for every other value).
    *
+   * `omitQuotes` mirrors the caller's `OMIT QUOTES` clause: only a matched JSON string's `unquoted`
+   * form differs from `raw`, and only `OMIT QUOTES` consumes it, so the decode-and-allocate is done
+   * for a string only when `omitQuotes` is true -- the default `KEEP QUOTES` path leaves `unquoted`
+   * equal to `raw` and skips the work.
+   *
    * A `null` input is the caller's responsibility. Like [[lookup]] this navigates and validates
    * with a single parser: after the matched value is serialized (which consumes it),
    * [[drainToRootEnd]]
    * walks out of the enclosing containers and rejects any trailing content, so a valid prefix
    * followed by garbage is rejected exactly as a fully malformed document is.
    */
-  final def queryLookup(json: UTF8String): Option[JsonQueryLookup] = {
+  final def queryLookup(json: UTF8String, omitQuotes: Boolean): Option[JsonQueryLookup] = {
     Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       try {
         if (parser.nextToken() == null) {
@@ -611,13 +619,16 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
                 case JsonToken.START_OBJECT | JsonToken.START_ARRAY =>
                   val raw = serializeCurrentValue(parser)
                   JsonQueryLookup.Found(raw, structural = true, unquoted = raw)
-                case JsonToken.VALUE_STRING =>
+                case JsonToken.VALUE_STRING if omitQuotes =>
                   // Capture the decoded string straight from the parser so `OMIT QUOTES` need not
-                  // re-parse the serialized (re-quoted) form.
+                  // re-parse the serialized (re-quoted) form. Only decode for `OMIT QUOTES`: the
+                  // default `KEEP QUOTES` path (below) discards it, so the allocation is skipped.
                   val unquoted = UTF8String.fromString(parser.getText)
                   JsonQueryLookup.Found(serializeCurrentValue(parser), structural = false, unquoted)
                 case _ =>
-                  // A non-string scalar (number/boolean): `OMIT QUOTES` is a no-op.
+                  // A non-string scalar (number/boolean), for which `OMIT QUOTES` is a no-op, or a
+                  // string under the default `KEEP QUOTES` (its decoded form is never used): the
+                  // `unquoted` form is just `raw`, so no separate decode is needed.
                   val raw = serializeCurrentValue(parser)
                   JsonQueryLookup.Found(raw, structural = false, unquoted = raw)
               }
