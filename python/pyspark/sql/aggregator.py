@@ -22,11 +22,10 @@ Incremental user-defined aggregators for PySpark, the Python analog of Scala's
 from abc import ABC, abstractmethod
 from typing import Any, Tuple
 
-from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql.types import DataType, StructType
-from pyspark.util import PythonEvalType
 
-__all__ = ["Aggregator", "udaf"]
+__all__ = ["Aggregator"]
 
 
 class Aggregator(ABC):
@@ -52,7 +51,8 @@ class Aggregator(ABC):
     --------
     A mean aggregator::
 
-        from pyspark.sql.aggregator import Aggregator, udaf
+        from pyspark.sql.aggregator import Aggregator
+        from pyspark.sql.functions import udaf
         from pyspark.sql.types import StructType, StructField, DoubleType, LongType
 
         class Mean(Aggregator):
@@ -137,87 +137,3 @@ class Aggregator(ABC):
             errorClass="NOT_IMPLEMENTED",
             messageParameters={"feature": "calling an Aggregator directly; wrap it with udaf(...)"},
         )
-
-
-def udaf(agg: "Aggregator") -> Any:
-    """
-    Turn an :class:`Aggregator` instance into a callable usable in ``groupBy().agg(...)``, the
-    Python counterpart of Scala's ``functions.udaf``.
-
-    The aggregator is executed with true incremental (partial) aggregation and transfers its
-    intermediate buffer as Arrow; PyArrow is therefore required.
-
-    .. versionadded:: 4.4.0
-
-    Parameters
-    ----------
-    agg : :class:`Aggregator`
-        The aggregator instance.
-
-    Returns
-    -------
-    function
-        A callable that, applied to input columns, produces an aggregate :class:`Column`.
-
-    Raises
-    ------
-    :class:`PySparkImportError`
-        If a supported version of PyArrow is not installed.
-    :class:`PySparkTypeError`
-        If ``agg`` is not an :class:`Aggregator`, or its ``bufferSchema`` is not a
-        :class:`StructType`.
-    """
-    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
-    from pyspark.sql.utils import is_remote
-
-    require_minimum_pyarrow_version()
-
-    if is_remote():
-        from pyspark.sql.connect.udf import UserDefinedFunction
-    else:
-        # The classic UserDefinedFunction is a distinct class from the Connect one above;
-        # both provide the same interface used below, so silence mypy's reassignment check.
-        from pyspark.sql.udf import UserDefinedFunction  # type: ignore[assignment]
-
-    if not isinstance(agg, Aggregator):
-        raise PySparkTypeError(
-            errorClass="NOT_EXPECTED_TYPE",
-            messageParameters={
-                "arg_name": "agg",
-                "expected_type": "Aggregator",
-                "arg_type": type(agg).__name__,
-            },
-        )
-    if not isinstance(agg.bufferSchema, StructType):
-        raise PySparkTypeError(
-            errorClass="NOT_EXPECTED_TYPE",
-            messageParameters={
-                "arg_name": "bufferSchema",
-                "expected_type": "StructType",
-                "arg_type": type(agg.bufferSchema).__name__,
-            },
-        )
-    # The buffer crosses the shuffle as an Arrow struct whose children are matched by name, and the
-    # worker keys the buffer tuple back by field name. Duplicate names would silently collapse
-    # fields on the map side and then fail with an opaque Arrow error post-shuffle, so reject them
-    # up front where the aggregator is created.
-    field_names = [field.name for field in agg.bufferSchema.fields]
-    if len(field_names) != len(set(field_names)):
-        duplicates = sorted({name for name in field_names if field_names.count(name) > 1})
-        raise PySparkValueError(
-            errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
-            messageParameters={"field_names": ", ".join(duplicates)},
-        )
-
-    # ``bufferSchema`` is a first-class ``UserDefinedFunction`` field (threaded to the JVM in
-    # ``_create_judf`` so ``PythonAggregate`` can plan the two-stage aggregation), so it survives
-    # ``_wrapped()`` and ``spark.udf.register`` without being re-attached.
-    udf_obj = UserDefinedFunction(
-        agg,
-        returnType=agg.outputType,
-        name=agg.__class__.__name__,
-        evalType=PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
-        deterministic=True,
-        bufferSchema=agg.bufferSchema,
-    )
-    return udf_obj._wrapped()

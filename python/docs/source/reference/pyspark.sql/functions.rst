@@ -769,6 +769,7 @@ UDF, UDTF and UDT
     arrow_udtf
     call_udf
     pandas_udf
+    udaf
     udf
     udtf
     unwrap_udt

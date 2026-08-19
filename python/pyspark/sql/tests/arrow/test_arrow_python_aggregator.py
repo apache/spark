@@ -36,7 +36,8 @@ from pyspark.testing.utils import (
 
 
 if have_pyarrow:
-    from pyspark.sql.aggregator import Aggregator, udaf
+    from pyspark.sql.aggregator import Aggregator
+    from pyspark.sql.functions import udaf
 
     class Mean(Aggregator):
         @property
