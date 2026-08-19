@@ -59,6 +59,60 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(Optimizer.execute(plan), testRelation.select((a + a).as("col")))
   }
 
+  test("applyForExpression inlines With common expressions") {
+    val a = testRelation.output.head
+    val expr = With(a) { case Seq(ref) =>
+      ref + ref
+    }
+    val rewritten = RewriteWithExpression.applyForExpression(expr)
+    assert(!rewritten.isInstanceOf[With])
+    assert(rewritten == a + a)
+  }
+
+  test("applyForExpression always inlines non-cheap common expressions") {
+    val a = testRelation.output.head
+    val expr = With(a + a) { case Seq(ref) =>
+      ref * ref
+    }
+    val rewritten = RewriteWithExpression.applyForExpression(expr)
+    assert(!rewritten.exists(_.isInstanceOf[With]))
+    assert(rewritten == (a + a) * (a + a))
+  }
+
+  test("applyForExpression handles nested With") {
+    val a = testRelation.output.head
+    val b = testRelation.output.last
+    val inner = With(a + a) { case Seq(ref) =>
+      ref * ref
+    }
+    val outer = With(inner + b) { case Seq(ref) =>
+      ref + ref
+    }
+    val rewritten = RewriteWithExpression.applyForExpression(outer)
+    assert(!rewritten.exists(_.isInstanceOf[With]))
+    assert(!rewritten.exists(_.isInstanceOf[CommonExpressionRef]))
+  }
+
+  test("applyForExpression leaves expressions without With unchanged") {
+    val a = testRelation.output.head
+    assert(RewriteWithExpression.applyForExpression(a + a) == a + a)
+  }
+
+  test("applyForExpression defers a ref to an outer common expression to the enclosing With") {
+    // The inner `With` is rewritten first, so the outer ref it references is not yet in scope
+    // and must be left for the enclosing `With` to inline.
+    val a = testRelation.output.head
+    val outer = With(a + a) { case Seq(outerRef) =>
+      With(a * a) { case Seq(innerRef) =>
+        outerRef + innerRef
+      }
+    }
+    val rewritten = RewriteWithExpression.applyForExpression(outer)
+    assert(!rewritten.exists(_.isInstanceOf[With]))
+    assert(!rewritten.exists(_.isInstanceOf[CommonExpressionRef]))
+    assert(rewritten == (a + a) + (a * a))
+  }
+
   test("non-cheap common expression") {
     val a = testRelation.output.head
     val expr = With(a + a) { case Seq(ref) =>
@@ -248,6 +302,20 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select(Coalesce(Seq(($"_common_expr_0" * $"_common_expr_0"), a)).as("col"))
         .analyze
     )
+  }
+
+  test("WITH in a conditional branch referencing an outer common expression") {
+    val a = testRelation.output.head
+    // The conditional branch holds a nested `With` referencing the outer common expression.
+    // Both are inlined; the outer ref must survive the inner rewrite.
+    val expr = With(a + a) { case Seq(outerRef) =>
+      Coalesce(Seq(a, With(a * a) { case Seq(innerRef) =>
+        outerRef + innerRef
+      }))
+    }
+    val plan = testRelation.select(expr.as("col"))
+    val inlinedExpr = Coalesce(Seq(a, (a + a) + (a * a)))
+    comparePlans(Optimizer.execute(plan), testRelation.select(inlinedExpr.as("col")))
   }
 
   test("WITH expression in grouping exprs") {
