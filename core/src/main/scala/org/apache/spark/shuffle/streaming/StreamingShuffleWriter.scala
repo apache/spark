@@ -280,9 +280,8 @@ class StreamingShuffleWriter[K, V](
           val newFuture = future.whenComplete { (client, ex) =>
             ex match {
               case null => sendToClient(client)
-              case error =>
+              case _ =>
                 buf.release()
-                errorNotifier.markError(error)
                 done()
             }
           }
