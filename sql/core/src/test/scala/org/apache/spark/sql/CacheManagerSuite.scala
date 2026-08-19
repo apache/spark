@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class CacheManagerSuite extends SharedSparkSession {
+class CacheManagerSuite extends SessionQueryTest {
 
   test("SPARK-44199: isSubDirectory tests") {
     val cacheManager = spark.sharedState.cacheManager

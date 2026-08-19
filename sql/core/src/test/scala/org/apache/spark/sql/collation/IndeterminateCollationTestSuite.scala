@@ -20,10 +20,10 @@ package org.apache.spark.sql.collation
 import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
-class IndeterminateCollationTestSuite extends SharedSparkSession {
+class IndeterminateCollationTestSuite extends SessionQueryTest {
 
   val testTableName = "tst_table"
   val dataSource = "parquet"

@@ -32,13 +32,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.unsafe.types.VariantVal
 
 /**
  * Test shredding Variant values in the Parquet reader/writer.
  */
-class ParquetVariantShreddingSuite extends ParquetTest with SharedSparkSession {
+class ParquetVariantShreddingSuite extends ParquetTest with SessionQueryTest {
 
   private def testWithTempDir(name: String)(block: File => Unit): Unit = test(name) {
     withTempDir { dir =>
@@ -48,7 +48,7 @@ class ParquetVariantShreddingSuite extends ParquetTest with SharedSparkSession {
 
   test("timestamp physical type") {
     ParquetOutputTimestampType.values.foreach { timestampParquetType =>
-      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> timestampParquetType.toString,
+      withConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> timestampParquetType.toString,
         SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> "true") {
         withTempDir { dir =>
           val schema = "t timestamp, st struct<t timestamp>, at array<timestamp>"
@@ -69,7 +69,7 @@ class ParquetVariantShreddingSuite extends ParquetTest with SharedSparkSession {
               |   ) v, 3::timestamp t1, named_struct('t1', 4::timestamp) st1
               | from range(1)
               |""".stripMargin)
-          withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+          withConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
             SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
             SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
             df.write.mode("overwrite").parquet(dir.getAbsolutePath)
@@ -163,7 +163,7 @@ class ParquetVariantShreddingSuite extends ParquetTest with SharedSparkSession {
       Seq(false, true).foreach { shredVariant =>
         Seq(false, true).foreach { allowReadingShredded =>
           Seq(false, true).foreach { ignoreVariantAnnotation =>
-            withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> shredVariant.toString,
+            withConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> shredVariant.toString,
               SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> shredVariant.toString,
               SQLConf.VARIANT_ALLOW_READING_SHREDDED.key ->
                 (allowReadingShredded || shredVariant).toString,
@@ -232,7 +232,7 @@ class ParquetVariantShreddingSuite extends ParquetTest with SharedSparkSession {
 
   test("variant logical type annotation - ignore variant annotation") {
     Seq(true, false).foreach { ignoreVariantAnnotation =>
-      withSQLConf(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key -> "true",
+      withConf(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key -> "true",
         SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> ignoreVariantAnnotation.toString,
         SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false"
       ) {
@@ -302,7 +302,7 @@ class ParquetVariantShreddingSuite extends ParquetTest with SharedSparkSession {
     val fullSchema = "v struct<metadata binary, value binary, typed_value struct<" +
       "a struct<value binary, typed_value int>, b struct<value binary, typed_value string>," +
       "c struct<value binary, typed_value decimal(15, 1)>>>"
-    withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+    withConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
       SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
@@ -377,7 +377,7 @@ class ParquetVariantShreddingSuite extends ParquetTest with SharedSparkSession {
         |""".stripMargin)
     val fullSchema = "v struct<metadata binary, value binary, typed_value array<" +
       "struct<value binary, typed_value int>>>"
-    withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+    withConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
       SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
@@ -417,7 +417,7 @@ class ParquetVariantShreddingSuite extends ParquetTest with SharedSparkSession {
   testWithTempDir("write no shredding schema") { dir =>
     // Check that we can write and read normally when shredding is enabled if
     // we don't provide a shredding schema.
-    withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString) {
+    withConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString) {
       val df = spark.sql(
         """
           | select parse_json('{"a": ' || id || ', "b": 2}') as v,
@@ -443,7 +443,7 @@ class ParquetVariantShreddingSuite extends ParquetTest with SharedSparkSession {
       "a struct<value binary, typed_value int>>>, " +
       "arr array<struct<metadata binary, value binary>>, " +
       "m map<string, struct<metadata binary, value binary>>"
-    withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
+    withConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
       SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {

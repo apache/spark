@@ -23,10 +23,10 @@ import java.util.Properties
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.util.Utils
 
-class JDBCMetricsSuite extends SharedSparkSession {
+class JDBCMetricsSuite extends SessionQueryTest {
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"

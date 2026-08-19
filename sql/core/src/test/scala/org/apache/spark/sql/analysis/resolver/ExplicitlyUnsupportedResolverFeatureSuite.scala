@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 }
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
+class ExplicitlyUnsupportedResolverFeatureSuite extends SessionQueryTest {
   test("Unsupported table types") {
     withTable("csv_table") {
       spark.sql("CREATE TABLE csv_table (col1 INT) USING CSV;").collect()
@@ -74,7 +74,7 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
   }
 
   test("ASOF JOIN MATCH_CONDITION operands requiring element-wise ordering") {
-    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+    withConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       checkResolution(
         """SELECT t.a, r.a FROM VALUES (ARRAY(1, 3)) AS t(a)
           |ASOF JOIN VALUES (ARRAY(1, 2)) AS r(a) MATCH_CONDITION (t.a >= r.a);""".stripMargin,

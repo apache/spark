@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 /**
  * Tests for the spark.sql.function.protobufExtensions.enabled flag and its persistence in the
  * offset log.
  */
-class ProtobufExtensionsSupportOffsetLogSuite extends SharedSparkSession {
+class ProtobufExtensionsSupportOffsetLogSuite extends SessionQueryTest {
 
   test("protobuf extensions support disabled by default for new queries") {
     val offsetSeqMetadata =
@@ -37,7 +37,7 @@ class ProtobufExtensionsSupportOffsetLogSuite extends SharedSparkSession {
 
   test("protobuf extensions support enabled when session sets it to true") {
     val protobufExtConf = SQLConf.PROTOBUF_EXTENSIONS_SUPPORT_ENABLED.key
-    withSQLConf(protobufExtConf -> true.toString) {
+    withConf(protobufExtConf -> true.toString) {
       val offsetSeqMetadata =
         OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
       assert(offsetSeqMetadata.conf.get(protobufExtConf) === Some(true.toString))
@@ -47,7 +47,7 @@ class ProtobufExtensionsSupportOffsetLogSuite extends SharedSparkSession {
   test(
     "protobuf extensions support uses default false for old checkpoint when enabled in session") {
     val protobufExtConf = SQLConf.PROTOBUF_EXTENSIONS_SUPPORT_ENABLED.key
-    withSQLConf(protobufExtConf -> true.toString) {
+    withConf(protobufExtConf -> true.toString) {
       val existingChkpt = "offset-log-version-2.1.0"
       val (_, offsetSeq) = readFromResource(existingChkpt)
       val offsetSeqMetadata = offsetSeq.metadataOpt.get
@@ -78,7 +78,7 @@ class ProtobufExtensionsSupportOffsetLogSuite extends SharedSparkSession {
     val protobufExtConf = SQLConf.PROTOBUF_EXTENSIONS_SUPPORT_ENABLED.key
 
     // Enabled when checkpoint = enabled and session = disabled
-    withSQLConf(protobufExtConf -> false.toString) {
+    withConf(protobufExtConf -> false.toString) {
       val offsetSeqMetadata = OffsetSeqMetadata(
         batchWatermarkMs = 0,
         batchTimestampMs = 0,
@@ -90,7 +90,7 @@ class ProtobufExtensionsSupportOffsetLogSuite extends SharedSparkSession {
     }
 
     // Disabled when checkpoint = disabled and session = enabled
-    withSQLConf(protobufExtConf -> true.toString) {
+    withConf(protobufExtConf -> true.toString) {
       val offsetSeqMetadata = OffsetSeqMetadata(
         batchWatermarkMs = 0,
         batchTimestampMs = 0,

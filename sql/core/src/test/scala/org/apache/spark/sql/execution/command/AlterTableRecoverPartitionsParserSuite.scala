@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.RecoverPartitions
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
+class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SessionQueryTest {
 
   test("recover partitions without table") {
     val sql = "ALTER TABLE RECOVER PARTITIONS"

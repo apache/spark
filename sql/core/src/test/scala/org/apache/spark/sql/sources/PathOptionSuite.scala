@@ -23,7 +23,7 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{IntegerType, Metadata, MetadataBuilder, StructType}
 
 class TestOptionsSource extends SchemaRelationProvider with CreatableRelationProvider {
@@ -63,7 +63,7 @@ class TestOptionsRelation(val options: Map[String, String])(@transient val sessi
   }
 }
 
-class PathOptionSuite extends DataSourceTest with SharedSparkSession {
+class PathOptionSuite extends DataSourceTest with SessionQueryTest {
 
   test("path option always exist") {
     withTable("src") {

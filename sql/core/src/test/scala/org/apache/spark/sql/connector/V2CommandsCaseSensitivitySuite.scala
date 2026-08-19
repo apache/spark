@@ -27,12 +27,12 @@ import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.datasources.PreprocessTableCreation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{LongType, StringType}
 import org.apache.spark.util.ArrayImplicits._
 
 class V2CommandsCaseSensitivitySuite
-  extends SharedSparkSession
+  extends SessionQueryTest
   with AnalysisTest
   with QueryErrorsBase {
 
@@ -50,7 +50,7 @@ class V2CommandsCaseSensitivitySuite
 
   test("CreateTableAsSelect: using top level field for partitioning") {
     Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
           val tableSpec =
             UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
@@ -75,7 +75,7 @@ class V2CommandsCaseSensitivitySuite
 
   test("CreateTableAsSelect: using nested column for partitioning") {
     Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
           val tableSpec =
             UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
@@ -101,7 +101,7 @@ class V2CommandsCaseSensitivitySuite
 
   test("ReplaceTableAsSelect: using top level field for partitioning") {
     Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
           val tableSpec =
             UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
@@ -126,7 +126,7 @@ class V2CommandsCaseSensitivitySuite
 
   test("ReplaceTableAsSelect: using nested column for partitioning") {
     Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
           val tableSpec =
             UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
@@ -180,7 +180,7 @@ class V2CommandsCaseSensitivitySuite
             Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
             None)))
       Seq(true, false).foreach { caseSensitive =>
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
           assertAnalysisErrorCondition(
             inputPlan = alter,
             expectedErrorCondition = "FIELD_NOT_FOUND",
@@ -211,7 +211,7 @@ class V2CommandsCaseSensitivitySuite
           Some(UnresolvedFieldPosition(ColumnPosition.after("X"))),
           None)))
     Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisErrorCondition(
           inputPlan = alter,
           expectedErrorCondition = "FIELD_NOT_FOUND",
@@ -234,7 +234,7 @@ class V2CommandsCaseSensitivitySuite
             Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
             None)))
       Seq(true, false).foreach { caseSensitive =>
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
           assertAnalysisErrorCondition(
             inputPlan = alter,
             expectedErrorCondition = "FIELD_NOT_FOUND",
@@ -265,7 +265,7 @@ class V2CommandsCaseSensitivitySuite
           Some(UnresolvedFieldPosition(ColumnPosition.after("Z"))),
           None)))
     Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisErrorCondition(
           inputPlan = alter,
           expectedErrorCondition = "FIELD_NOT_FOUND",
@@ -421,7 +421,7 @@ class V2CommandsCaseSensitivitySuite
       expectedMessageParameters: Map[String, String],
       expectErrorOnCaseSensitive: Boolean = true): Unit = {
     Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
         if (expectError) {
           assertAnalysisErrorCondition(
@@ -439,7 +439,7 @@ class V2CommandsCaseSensitivitySuite
       messageParameters: Map[String, String],
       expectErrorOnCaseSensitive: Boolean = true): Unit = {
     Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
         if (expectError) {
           assertAnalysisErrorCondition(

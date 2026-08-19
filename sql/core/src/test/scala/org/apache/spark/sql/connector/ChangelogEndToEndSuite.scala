@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.Changelog.{
   CHANGE_TYPE_DELETE, CHANGE_TYPE_INSERT, CHANGE_TYPE_UPDATE_POSTIMAGE, CHANGE_TYPE_UPDATE_PREIMAGE}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * End-to-end tests for Change Data Capture (CDC) queries using
  * [[InMemoryChangelogCatalog]].
  */
-class ChangelogEndToEndSuite extends SharedSparkSession {
+class ChangelogEndToEndSuite extends SessionQueryTest {
 
   private val catalogName = "cdc_e2e"
   private val testTableName = "test_table"
@@ -627,7 +627,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
     val expected = Seq(
       Row(1L, "a", CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L)))
 
-    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+    withConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
       val stream = spark.readStream
         .name("my_cdc_source")
         .option("startingVersion", "1")
@@ -804,7 +804,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       // v3: insert Bob -- emits at end-of-input flush
       ppRow(2L, "Bob", 3L, CHANGE_TYPE_INSERT, 3L, 3000000L)))
 
-    withSQLConf(rocksDbProviderConf) {
+    withConf(rocksDbProviderConf) {
       val q = spark.readStream
         .option("startingVersion", "1")
         .option("deduplicationMode", "netChanges")
@@ -850,7 +850,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       ppRow(1L, "Bob", 1L, CHANGE_TYPE_UPDATE_PREIMAGE, 2L, 2000000L),
       ppRow(1L, "Robert", 2L, CHANGE_TYPE_UPDATE_POSTIMAGE, 2L, 2000000L)))
 
-    withSQLConf(rocksDbProviderConf) {
+    withConf(rocksDbProviderConf) {
       val q = spark.readStream
         .option("startingVersion", "1")
         .option("deduplicationMode", "netChanges")
@@ -950,7 +950,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L)))
 
     val e = intercept[AnalysisException] {
-      withSQLConf(rocksDbProviderConf) {
+      withConf(rocksDbProviderConf) {
         spark.readStream
           .option("startingVersion", "1")
           .option("deduplicationMode", "netChanges")
@@ -978,7 +978,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L)))
 
     val e = intercept[AnalysisException] {
-      withSQLConf(rocksDbProviderConf) {
+      withConf(rocksDbProviderConf) {
         spark.readStream
           .option("startingVersion", "1")
           .option("deduplicationMode", "netChanges")
@@ -1049,7 +1049,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       // identity 1's timer fires before end-of-input.
       ppRow(2L, "Carol", 3L, CHANGE_TYPE_INSERT, 3L, 3000000L)))
 
-    withSQLConf(rocksDbProviderConf) {
+    withConf(rocksDbProviderConf) {
       val q = spark.readStream
         .option("startingVersion", "1")
         .option("deduplicationMode", "netChanges")
@@ -1094,7 +1094,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       ppRow(1L, "Bob", 1L, CHANGE_TYPE_UPDATE_PREIMAGE, 2L, 2000000L),
       ppRow(1L, "Robert", 2L, CHANGE_TYPE_UPDATE_POSTIMAGE, 2L, 2000000L)))
 
-    withSQLConf(rocksDbProviderConf) {
+    withConf(rocksDbProviderConf) {
       val q = spark.readStream
         .option("startingVersion", "1")
         .option("deduplicationMode", "netChanges")
@@ -1144,7 +1144,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       // identities 1 and 2 fire and the netChanges output is emitted.
       ppRow(3L, "Carol", 3L, CHANGE_TYPE_INSERT, 3L, 3000000L)))
 
-    withSQLConf(rocksDbProviderConf) {
+    withConf(rocksDbProviderConf) {
       val q = spark.readStream
         .option("startingVersion", "1")
         .option("deduplicationMode", "netChanges")

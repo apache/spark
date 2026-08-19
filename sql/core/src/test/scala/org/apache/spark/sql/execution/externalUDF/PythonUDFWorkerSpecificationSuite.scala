@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.sql.IntegratedUDFTestUtils
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.udf.worker.{Cancel, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{TestDirectWorkerDispatcher, WorkerConnection}
 
@@ -81,7 +81,7 @@ private class ConnectingTestDispatcher(spec: UDFWorkerSpecification)
  * exercised here.
  */
 class PythonUDFWorkerSpecificationSuite
-    extends SharedSparkSession {
+    extends SessionQueryTest {
 
   import IntegratedUDFTestUtils.{
     isPySparkAvailable, pythonExec, pythonVer,

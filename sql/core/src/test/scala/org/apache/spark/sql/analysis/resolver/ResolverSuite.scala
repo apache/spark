@@ -27,10 +27,10 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Project}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.IntegerType
 
-class ResolverSuite extends SharedSparkSession {
+class ResolverSuite extends SessionQueryTest {
   private val col1Integer = AttributeReference("col1", IntegerType)()
 
   test("Node matched the extension") {

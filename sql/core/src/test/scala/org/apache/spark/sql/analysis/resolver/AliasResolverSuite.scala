@@ -28,9 +28,9 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AliasResolverSuite extends SharedSparkSession {
+class AliasResolverSuite extends SessionQueryTest {
   private val table = LocalRelation.fromExternalRows(
     Seq("a".attr.int),
     Seq(Row(1))

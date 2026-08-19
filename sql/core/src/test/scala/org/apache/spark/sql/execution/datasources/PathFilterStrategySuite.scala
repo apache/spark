@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class PathFilterStrategySuite extends SharedSparkSession {
+class PathFilterStrategySuite extends SessionQueryTest {
 
   test("SPARK-31962: PathFilterStrategies - modifiedAfter option") {
     val options =

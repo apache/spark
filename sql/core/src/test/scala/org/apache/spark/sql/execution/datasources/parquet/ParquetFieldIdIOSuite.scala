@@ -22,10 +22,10 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 
-class ParquetFieldIdIOSuite extends ParquetTest with SharedSparkSession  {
+class ParquetFieldIdIOSuite extends ParquetTest with SessionQueryTest  {
 
   private def withId(id: Int): Metadata =
     new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()
@@ -186,7 +186,7 @@ class ParquetFieldIdIOSuite extends ParquetTest with SharedSparkSession  {
           assert(cause.isInstanceOf[RuntimeException] &&
             cause.getMessage.contains("Parquet file schema doesn't contain any field Ids"))
           val expectedValues = (1 to schema.length).map(_ => null)
-          withSQLConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.key -> "true") {
+          withConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.key -> "true") {
             checkAnswer(
               spark.read.schema(schema).parquet(dir.getCanonicalPath),
               Row(expectedValues: _*) :: Row(expectedValues: _*) :: Nil)
@@ -214,7 +214,7 @@ class ParquetFieldIdIOSuite extends ParquetTest with SharedSparkSession  {
 
       val expectedResult = Seq(Row(null, null, null), Row(null, null, null))
 
-      withSQLConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "false",
+      withConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "false",
         SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
         spark.createDataFrame(writeData.asJava, writeSchema)
           .write.mode("overwrite").parquet(dir.getCanonicalPath)
@@ -228,7 +228,7 @@ class ParquetFieldIdIOSuite extends ParquetTest with SharedSparkSession  {
         }
       }
 
-      withSQLConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true",
+      withConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true",
         SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "false") {
         spark.createDataFrame(writeData.asJava, writeSchema)
           .write.mode("overwrite").parquet(dir.getCanonicalPath)
@@ -245,21 +245,21 @@ class ParquetFieldIdIOSuite extends ParquetTest with SharedSparkSession  {
       val readSchema = new StructType().add("id1", LongType, true, withId(1))
       val writeSchema = new StructType().add("id2", IntegerType, true, withId(1))
 
-      withSQLConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true") {
+      withConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true") {
         val writeData = Seq(Row(1), Row(2), Row(3))
         spark.createDataFrame(writeData.asJava, writeSchema)
           .write.mode("overwrite").parquet(dir.getCanonicalPath)
       }
 
       withAllParquetReaders {
-        withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "false") {
+        withConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "false") {
           checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
             Seq(Row(null), Row(null), Row(null)))
         }
         // Without the fix, the result is unpredictable when PARQUET_FIELD_ID_READ_ENABLED is
         // enabled. It could cause NPE if OnHeapColumnVector is used in the scan. It could produce
         // incorrect results if OffHeapColumnVector is used.
-        withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
+        withConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
           checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
             Seq(Row(1L), Row(2L), Row(3L)))
         }

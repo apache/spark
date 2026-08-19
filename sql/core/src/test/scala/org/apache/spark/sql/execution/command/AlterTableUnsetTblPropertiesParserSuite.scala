@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.UnsetTableProperties
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterTableUnsetTblPropertiesParserSuite extends AnalysisTest with SharedSparkSession {
+class AlterTableUnsetTblPropertiesParserSuite extends AnalysisTest with SessionQueryTest {
 
   private def parseException(sqlText: String): SparkThrowable = {
     intercept[ParseException](sql(sqlText).collect())

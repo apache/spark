@@ -23,9 +23,9 @@ import java.nio.charset.StandardCharsets._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class CompactibleFileStreamLogSuite extends SharedSparkSession {
+class CompactibleFileStreamLogSuite extends SessionQueryTest {
 
   import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog._
 

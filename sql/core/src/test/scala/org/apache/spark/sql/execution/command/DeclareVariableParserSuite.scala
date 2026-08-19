@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{Decimal, DecimalType, DoubleType, IntegerType, MapType, NullType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
+class DeclareVariableParserSuite extends AnalysisTest with SessionQueryTest {
 
   test("declare variable") {
     comparePlans(

@@ -23,11 +23,11 @@ import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identi
 import org.apache.spark.sql.connector.read.{LocalScan, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class LocalScanSuite extends SharedSparkSession {
+class LocalScanSuite extends SessionQueryTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")

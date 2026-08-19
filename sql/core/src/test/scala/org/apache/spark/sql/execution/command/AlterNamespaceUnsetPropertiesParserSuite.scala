@@ -21,9 +21,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedSparkSession {
+class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SessionQueryTest {
 
   private lazy val parser = new SparkSqlParser()
 

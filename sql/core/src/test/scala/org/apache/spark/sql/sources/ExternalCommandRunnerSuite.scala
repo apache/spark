@@ -18,9 +18,9 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class ExternalCommandRunnerSuite extends SharedSparkSession {
+class ExternalCommandRunnerSuite extends SessionQueryTest {
   test("execute command") {
     try {
       System.setProperty("command", "hello")

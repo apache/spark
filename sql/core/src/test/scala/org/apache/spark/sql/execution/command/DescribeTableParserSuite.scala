@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute
   UnresolvedPartitionSpec, UnresolvedTableOrView, UnresolvedTableOrViewSearchPathMode}
 import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumn, DescribeRelation,
   DescribeTablePartition}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
+class DescribeTableParserSuite extends SessionQueryTest with AnalysisTest {
   private def parsePlan(statement: String) = spark.sessionState.sqlParser.parsePlan(statement)
   private def unresolvedDescribeTable(name: String): UnresolvedTableOrView = {
     UnresolvedTableOrView(

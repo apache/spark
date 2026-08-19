@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.SetTableLocation
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterTableSetLocationParserSuite extends AnalysisTest with SharedSparkSession {
+class AlterTableSetLocationParserSuite extends AnalysisTest with SessionQueryTest {
 
   test("alter table: set location") {
     val sql1 = "ALTER TABLE a.b.c SET LOCATION 'new location'"

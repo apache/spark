@@ -40,10 +40,10 @@ import org.apache.spark.sql.catalyst.expressions.{
   Literal,
   OuterReference
 }
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 
-class NameScopeSuite extends SharedSparkSession {
+class NameScopeSuite extends SessionQueryTest {
   private val col1Integer = AttributeReference(name = "col1", dataType = IntegerType)()
   private val col1IntegerOther = AttributeReference(name = "col1", dataType = IntegerType)()
   private val col2Integer = AttributeReference(name = "col2", dataType = IntegerType)()

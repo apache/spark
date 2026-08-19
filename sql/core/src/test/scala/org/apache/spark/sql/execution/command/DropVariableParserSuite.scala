@@ -21,9 +21,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifie
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.DropVariable
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class DropVariableParserSuite extends AnalysisTest with SharedSparkSession {
+class DropVariableParserSuite extends AnalysisTest with SessionQueryTest {
 
   test("drop variable") {
     comparePlans(

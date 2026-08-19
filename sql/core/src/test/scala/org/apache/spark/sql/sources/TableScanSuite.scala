@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 
 class DefaultSource extends SimpleScanSource
@@ -122,7 +122,7 @@ class LegacyTimestampSource extends RelationProvider {
   }
 }
 
-class TableScanSuite extends DataSourceTest with SharedSparkSession {
+class TableScanSuite extends DataSourceTest with SessionQueryTest {
 
   private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
     Row(
@@ -260,7 +260,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
     assert(CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema) ==
       spark.table("tableWithSchema").schema)
 
-    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+    withConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
         checkAnswer(
           sql(
             """SELECT
@@ -435,7 +435,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-38437: accept java.sql.Timestamp even when Java 8 API is enabled") {
     val tableName = "relationProviderWithLegacyTimestamps"
-    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+    withConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       withTable (tableName) {
         sql(s"""
           |CREATE TABLE $tableName (col TIMESTAMP)

@@ -30,7 +30,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
  * to `Thread.interrupt()`; closing the JDBC connection from the `TaskInterruptListener`
  * unblocks the thread by causing the socket to throw.
  */
-class JdbcTaskInterruptSuite extends SharedSparkSession {
+class JdbcTaskInterruptSuite extends SessionQueryTest {
 
   private val testJdbcUrl = "jdbc:taskinterrupt:test"
 

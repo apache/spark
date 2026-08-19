@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 /**
  * Tests for enhanced partition filter pushdown with tables whose scan builder handles
@@ -53,7 +53,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  *    Pushed Down in 1st pass, NOT re-derived in 2nd pass.
  */
 class DataSourceV2EnhancedPartitionFilterSuite
-  extends SharedSparkSession with BeforeAndAfter with PredicateHelper {
+  extends SessionQueryTest with BeforeAndAfter with PredicateHelper {
 
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   protected val partFilterTableName = "testpartfilter.t"

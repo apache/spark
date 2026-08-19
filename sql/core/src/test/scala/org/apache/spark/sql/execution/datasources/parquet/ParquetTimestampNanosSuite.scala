@@ -30,13 +30,13 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64
 import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 
-class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedSparkSession {
+class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SessionQueryTest {
 
   private def withNanosEnabled(f: => Unit): Unit = {
-    withSQLConf(
+    withConf(
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true")(f)
   }
 
@@ -70,7 +70,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
   test("SPARK-57102: Spark write/read round-trips nanos value and precision") {
     withNanosEnabled {
       Seq("true", "false").foreach { vectorized =>
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        withConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
           Seq(7, 8, 9).foreach { p =>
             withTempPath { dir =>
               val frac = "123456789".take(p)
@@ -100,7 +100,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-57102: read a foreign TIMESTAMP(NANOS) file as nanosecond timestamp types") {
     withNanosEnabled {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         withAllParquetReaders {
           val values = Seq(Some(123L), Some(1000000123L), Some(-1L), None)
 
@@ -138,7 +138,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-57102: explicit lower-precision read schema truncates sub-precision nanos") {
     withNanosEnabled {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         withAllParquetReaders {
           // Foreign file with full 9-digit precision: .123456789 after the epoch, and -1ns (which
           // floors to epochMicros = -1, nanosWithinMicro = 999).
@@ -177,7 +177,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-57102: requesting a nanos type over a non-NANOS Parquet column fails clearly") {
     withNanosEnabled {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      withConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         withTempPath { dir =>
           // Write a microsecond column: the Parquet annotation is TIMESTAMP(MICROS), not NANOS.
           spark.sql("SELECT TIMESTAMP_NTZ '2020-01-01 12:34:56.123456' AS ts")
@@ -204,7 +204,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     withTempPath { dir =>
       val file = new File(dir, "foreign.parquet")
       writeForeignNanosParquet(file, isAdjustedToUTC = false, Seq(Some(123L), Some(-1L)))
-      withSQLConf(
+      withConf(
         SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
         SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true",
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
@@ -220,7 +220,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
       withTempPath { dir =>
         val file = new File(dir, "foreign.parquet")
         writeForeignNanosParquet(file, isAdjustedToUTC, Seq(Some(123L)))
-        withSQLConf(
+        withConf(
           SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false",
           SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "false") {
           checkError(
@@ -236,7 +236,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-57102: writing a timestamp outside the INT64 epoch-nanos range fails loudly") {
     withNanosEnabled {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         Seq("TIMESTAMP_NTZ", "TIMESTAMP_LTZ").foreach { typeName =>
           withTempPath { dir =>
             val df = spark.sql(s"SELECT $typeName '9999-12-31 23:59:59.999999999' AS ts")
@@ -269,7 +269,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-57102: datetime rebase configs do not affect TIMESTAMP(NANOS) reads") {
     withNanosEnabled {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         withAllParquetReaders {
           withTempPath { dir =>
             val file = new File(dir, "ltz.parquet")
@@ -279,7 +279,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
             writeForeignNanosParquet(
               file, isAdjustedToUTC = true, Seq(Some(-5364662400000000000L)))
             Seq("EXCEPTION", "CORRECTED", "LEGACY").foreach { mode =>
-              withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> mode) {
+              withConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> mode) {
                 checkAnswer(
                   spark.read.parquet(file.getCanonicalPath),
                   spark.sql(
@@ -368,7 +368,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-57102: nanos timestamps round-trip via the V2 file source") {
     withNanosEnabled {
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         withAllParquetReaders {
           withTempPath { dir =>
             val df = spark.sql(
@@ -387,7 +387,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-57828: vectorized reader produces identical results to row-based for nanos") {
     withNanosEnabled {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         // Write foreign parquet files with TIMESTAMP(NANOS) values covering edge cases:
         // positive, negative (pre-epoch), values with precision truncation, and nulls.
         val values = Seq(
@@ -409,13 +409,13 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
                 val schema = s"ts $typeName($p)"
 
                 // Row-based read
-                val rowBased = withSQLConf(
+                val rowBased = withConf(
                   SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
                   spark.read.schema(schema).parquet(file.getCanonicalPath).collect()
                 }
 
                 // Vectorized read
-                val vectorized = withSQLConf(
+                val vectorized = withConf(
                   SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
                   spark.read.schema(schema).parquet(file.getCanonicalPath).collect()
                 }

@@ -32,11 +32,11 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, Tabl
 import org.apache.spark.sql.execution.streaming.{Offset, Source}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
+class TableCapabilityCheckSuite extends AnalysisTest with SessionQueryTest {
 
   private val emptyMap = CaseInsensitiveStringMap.empty
   private def createStreamingRelation(table: Table, v1Relation: Option[StreamingRelation]) = {

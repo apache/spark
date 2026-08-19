@@ -26,11 +26,11 @@ import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class DataSourceV2StrategySuite extends SharedSparkSession {
+class DataSourceV2StrategySuite extends SessionQueryTest {
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.ANSI_ENABLED, true)
@@ -1026,7 +1026,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val expr = Abs(Literal(-5), failOnError = true)
     checkV2Conversion(expr, LiteralValue(5, IntegerType))
 
-    withSQLConf("spark.sql.optimizer.datasourceV2ExprFolding" -> "false") {
+    withConf("spark.sql.optimizer.datasourceV2ExprFolding" -> "false") {
       // when spark.sql.optimizer.datasourceV2ExprFolding = false
       // expression will be converted to V2 expressions, but not folded
       checkV2Conversion(expr,
