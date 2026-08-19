@@ -1385,6 +1385,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         val charVarDf = sql("SELECT std_char_var AS c")
         assert(charVarDf.schema.head.dataType === CharType(4))
         checkAnswer(sql("SELECT concat('<', std_char_var, '>')"), Row("<ab  >"))
+        // Oversize by trailing blanks only is trimmed to fit CHAR(n).
+        sql("SET VARIABLE std_char_var = 'abcd '")
+        checkAnswer(sql("SELECT concat('<', std_char_var, '>')"), Row("<abcd>"))
         intercept[SparkRuntimeException] {
           sql("SET VARIABLE std_char_var = 'abcde'").collect()
         }
@@ -1419,6 +1422,19 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assert(localVarDf.schema.map(_.dataType) ===
         Seq(StringType, StringType, StringType, StringType))
       checkAnswer(localVarDf, Row("char(4)", "<ab  >", "varchar(4)", "<cd>"))
+      // Trailing-blank trim on local SET into CHAR/VARCHAR.
+      checkAnswer(
+        sql(
+          """
+            |BEGIN
+            |  DECLARE c CHAR(4);
+            |  DECLARE v VARCHAR(4);
+            |  SET c = 'abcd ';
+            |  SET v = 'abcd ';
+            |  SELECT concat('<', c, '>'), v;
+            |END
+            |""".stripMargin),
+        Row("<abcd>", "abcd"))
       intercept[SparkRuntimeException] {
         sql(
           """
@@ -1458,7 +1474,22 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           sql(cursorScript),
           Row("char(4)", "<ab  >", "varchar(4)", "<cd>"))
 
-        // FETCH into a shorter CHAR pads/truncates via assignment; oversize VARCHAR errors.
+        // FETCH plain STRING into CHAR pads via assignment cast.
+        checkAnswer(
+          sql(
+            """
+              |BEGIN
+              |  DECLARE fetched CHAR(4);
+              |  DECLARE cur CURSOR FOR SELECT 'ab' AS c;
+              |  OPEN cur;
+              |  FETCH cur INTO fetched;
+              |  SELECT typeof(fetched), concat('<', fetched, '>');
+              |  CLOSE cur;
+              |END
+              |""".stripMargin),
+          Row("char(4)", "<ab  >"))
+
+        // FETCH into a wider CHAR pads; trailing blanks trim into a shorter target.
         checkAnswer(
           sql(
             """
@@ -1472,6 +1503,21 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
               |END
               |""".stripMargin),
           Row("<xy   >"))
+        checkAnswer(
+          sql(
+            """
+              |BEGIN
+              |  DECLARE fetched_c CHAR(4);
+              |  DECLARE fetched_v VARCHAR(4);
+              |  DECLARE cur CURSOR FOR
+              |    SELECT cast('abcd ' AS CHAR(5)) AS c, cast('abcd ' AS VARCHAR(5)) AS v;
+              |  OPEN cur;
+              |  FETCH cur INTO fetched_c, fetched_v;
+              |  SELECT concat('<', fetched_c, '>'), fetched_v;
+              |  CLOSE cur;
+              |END
+              |""".stripMargin),
+          Row("<abcd>", "abcd"))
         intercept[SparkRuntimeException] {
           sql(
             """
@@ -1486,8 +1532,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         }
       }
 
-      // SQL FUNCTION RETURNS CHAR applies store assignment on the returned value.
+      // SQL FUNCTION params/RETURNS apply store assignment (pad, blank-trim, overflow).
       sql("CREATE OR REPLACE TEMPORARY FUNCTION std_char_fn() RETURNS CHAR(3) RETURN 'a'")
+      sql(
+        """CREATE OR REPLACE TEMPORARY FUNCTION std_varchar_ret()
+          |RETURNS VARCHAR(3) RETURN 'ab'""".stripMargin)
+      sql(
+        """CREATE OR REPLACE TEMPORARY FUNCTION std_char_param(x CHAR(3))
+          |RETURNS CHAR(3) RETURN x""".stripMargin)
       sql(
         """CREATE OR REPLACE TEMPORARY FUNCTION std_varchar_param(x VARCHAR(3))
           |RETURNS VARCHAR(3) RETURN x""".stripMargin)
@@ -1495,14 +1547,32 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         val fnDf = sql("SELECT std_char_fn() AS c")
         assert(fnDf.schema.head.dataType === CharType(3))
         checkAnswer(sql("SELECT concat('<', std_char_fn(), '>')"), Row("<a  >"))
+        val retVarcharDf = sql("SELECT std_varchar_ret() AS v")
+        assert(retVarcharDf.schema.head.dataType === VarcharType(3))
+        checkAnswer(retVarcharDf, Row("ab"))
+
+        // STRING -> CHAR(n) param: pad; trailing blanks trim; non-blank overflow errors.
+        val charParamDf = sql("SELECT std_char_param('a') AS c")
+        assert(charParamDf.schema.head.dataType === CharType(3))
+        checkAnswer(sql("SELECT concat('<', std_char_param('a'), '>')"), Row("<a  >"))
+        checkAnswer(
+          sql("SELECT concat('<', std_char_param('abc '), '>')"),
+          Row("<abc>"))
+        intercept[SparkRuntimeException] {
+          sql("SELECT std_char_param('abcd')").collect()
+        }
+
         val paramDf = sql("SELECT std_varchar_param('ab') AS v")
         assert(paramDf.schema.head.dataType === VarcharType(3))
         checkAnswer(paramDf, Row("ab"))
+        checkAnswer(sql("SELECT std_varchar_param('abc ')"), Row("abc"))
         intercept[SparkRuntimeException] {
           sql("SELECT std_varchar_param('abcd')").collect()
         }
       } finally {
         sql("DROP TEMPORARY FUNCTION IF EXISTS std_char_fn")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS std_varchar_ret")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS std_char_param")
         sql("DROP TEMPORARY FUNCTION IF EXISTS std_varchar_param")
       }
 
