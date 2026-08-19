@@ -42,8 +42,9 @@ class Aggregator(ABC):
 
     The buffer is represented as a Python :class:`tuple` whose elements correspond, in order, to the
     fields of :attr:`bufferSchema`. An input row is likewise a tuple of the argument values passed
-    to the aggregator call. :meth:`merge` must be associative and commutative, since the framework
-    may combine partial buffers in any order.
+    to the aggregator call. :meth:`merge` must be associative and commutative (the framework may
+    combine partial buffers in any order), and :meth:`zero` must be its identity element -- see
+    :meth:`zero` for the identity law that makes the result independent of the partition count.
 
     .. versionadded:: 4.4.0
 
@@ -99,7 +100,18 @@ class Aggregator(ABC):
 
     @abstractmethod
     def zero(self) -> Tuple[Any, ...]:
-        """The initial (identity) buffer value, as a tuple matching :attr:`bufferSchema`."""
+        """The initial (identity) buffer value, as a tuple matching :attr:`bufferSchema`.
+
+        This must be the identity element for :meth:`merge`::
+
+            merge(buffer, zero()) == buffer
+            merge(zero(), buffer) == buffer
+
+        A fresh ``zero()`` seeds every partition -- and every early-flushed chunk of the map-side
+        combine -- so associativity and commutativity of :meth:`merge` alone do not guarantee a
+        partition-independent result; the identity law above is what makes the aggregate value
+        independent of how the input is split across partitions and batches.
+        """
         ...
 
     @abstractmethod
