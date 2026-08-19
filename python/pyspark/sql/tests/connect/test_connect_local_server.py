@@ -104,6 +104,26 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         with Discovery() as discovery:
             return LocalConnectServer(discovery)
 
+    def _launcher_discovery(self):
+        # A stand-in Discovery for ServerLauncher unit tests: only its directory is read
+        # (for the log dir and the seed properties file), so point it at the temp dir.
+        from unittest import mock
+
+        discovery = mock.Mock()
+        discovery.directory = self._tmpdir
+        return discovery
+
+    @contextlib.contextmanager
+    def _without_spark_testing(self):
+        # _pick_port's ephemeral branch is a no-op when SPARK_TESTING is set (as it is under
+        # the test runner), so drop it to exercise the production behavior.
+        saved = os.environ.pop("SPARK_TESTING", None)
+        try:
+            yield
+        finally:
+            if saved is not None:
+                os.environ["SPARK_TESTING"] = saved
+
     def test_discovery_location(self) -> None:
         self.assertEqual(Discovery().path, self._discovery_path)
         # Without the override the file lives in a per-user 0700 dir under the temp dir.
@@ -113,6 +133,170 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         if os.name == "posix":
             self.assertIn("spark-connect-{}".format(getpass.getuser()), default.directory)
             self.assertEqual(os.stat(default.directory).st_mode & 0o777, 0o700)
+
+    def test_startup_seed_conf(self) -> None:
+        from unittest import mock
+
+        initial = {
+            "spark.sql.shuffle.partitions": "8",
+            "spark.master": "local[1]",
+        }
+        opts = {
+            "spark.sql.warehouse.dir": os.path.join(self._tmpdir, "warehouse"),
+            "spark.local.connect.reuse": "true",
+            "spark.connect.grpc.binding.port": "0",
+        }
+        env = {
+            "PYSPARK_REMOTE_INIT_CONF_LEN": "1",
+            "PYSPARK_REMOTE_INIT_CONF_0": json.dumps(initial),
+        }
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(
+                local_server.startup_seed_conf(opts),
+                {
+                    "spark.sql.shuffle.partitions": "8",
+                    "spark.sql.warehouse.dir": opts["spark.sql.warehouse.dir"],
+                },
+            )
+
+    def test_start_delegates_launch_options(self) -> None:
+        from unittest import mock
+
+        discovery = mock.Mock()
+        discovery.load.side_effect = [
+            None,
+            {
+                "host": "localhost",
+                "port": 15002,
+                "token": "t",
+                "pid": os.getpid(),
+                "spark_version": __version__,
+            },
+        ]
+        server = LocalConnectServer(discovery)
+        seed_conf = {"spark.sql.shuffle.partitions": "4"}
+        with mock.patch.object(local_server, "ServerLauncher") as launcher:
+            server.start(
+                "local[2]",
+                {"spark.local.connect.reuse": "true"},
+                use_ephemeral_port=True,
+                seed_conf=seed_conf,
+            )
+
+        launcher.assert_called_once_with(
+            "local[2]",
+            {"spark.local.connect.reuse": "true"},
+            discovery,
+            use_ephemeral_port=True,
+            seed_conf=seed_conf,
+        )
+        launcher.return_value.launch.assert_called_once_with()
+        self.assertEqual(server.port, 15002)
+
+    def test_pick_port_uses_ephemeral_port_when_requested(self) -> None:
+        # This is the production path for pool attendants, which run without SPARK_TESTING.
+        # A non-integer configured port would raise int() in the configured/default branch;
+        # the ephemeral branch never reads it, so returning a clean OS-assigned port proves
+        # the free-port path was taken even with SPARK_TESTING unset.
+        launcher = local_server.ServerLauncher(
+            "local[2]",
+            {"spark.local.connect.server.port": "not-a-port"},
+            self._launcher_discovery(),
+            use_ephemeral_port=True,
+        )
+        with self._without_spark_testing():
+            port = launcher._pick_port()
+        self.assertGreater(port, 0)
+
+    def test_pick_port_honors_configured_port_without_testing(self) -> None:
+        # With neither the ephemeral flag nor SPARK_TESTING, a free configured port is used
+        # as-is rather than replaced by an OS-assigned one.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("localhost", 0))
+            free = sock.getsockname()[1]
+        launcher = local_server.ServerLauncher(
+            "local[2]",
+            {"spark.local.connect.server.port": str(free)},
+            self._launcher_discovery(),
+            use_ephemeral_port=False,
+        )
+        with self._without_spark_testing():
+            self.assertEqual(launcher._pick_port(), free)
+
+    def test_seed_conf_override_is_used_and_sanitized(self) -> None:
+        # The override is taken verbatim except for launcher-managed keys, which are stripped
+        # so raw builder opts passed as a seed cannot land in --properties-file.
+        launcher = local_server.ServerLauncher(
+            "local[2]",
+            {},
+            self._launcher_discovery(),
+            seed_conf={
+                "spark.sql.shuffle.partitions": "4",
+                "spark.master": "local[9]",
+                "spark.local.connect.reuse": "true",
+            },
+        )
+        self.assertEqual(launcher._seed_conf(), {"spark.sql.shuffle.partitions": "4"})
+
+    def test_seed_conf_empty_override_does_not_fall_through_to_env(self) -> None:
+        from unittest import mock
+
+        # Load-bearing for the pool attendant: an empty override means "seed nothing", and
+        # must not silently pick up PYSPARK_REMOTE_INIT_CONF_* the way opts=None would.
+        env = {
+            "PYSPARK_REMOTE_INIT_CONF_LEN": "1",
+            "PYSPARK_REMOTE_INIT_CONF_0": json.dumps({"spark.sql.shuffle.partitions": "8"}),
+        }
+        launcher = local_server.ServerLauncher(
+            "local[2]", {}, self._launcher_discovery(), seed_conf={}
+        )
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(launcher._seed_conf(), {})
+
+    def test_seed_conf_none_override_merges_env_and_opts(self) -> None:
+        from unittest import mock
+
+        # No override: the env-plus-opts merge (minus launcher-managed keys) is used.
+        env = {
+            "PYSPARK_REMOTE_INIT_CONF_LEN": "1",
+            "PYSPARK_REMOTE_INIT_CONF_0": json.dumps({"spark.sql.shuffle.partitions": "8"}),
+        }
+        launcher = local_server.ServerLauncher(
+            "local[2]",
+            {"spark.sql.warehouse.dir": os.path.join(self._tmpdir, "wh")},
+            self._launcher_discovery(),
+            seed_conf=None,
+        )
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(
+                launcher._seed_conf(),
+                {
+                    "spark.sql.shuffle.partitions": "8",
+                    "spark.sql.warehouse.dir": os.path.join(self._tmpdir, "wh"),
+                },
+            )
+
+    def test_seed_properties_file_reflects_seed_conf(self) -> None:
+        # An empty seed yields no properties file, so start-connect-server.sh gets no
+        # --properties-file; a non-empty seed writes a 0600 file with the seeded confs.
+        launcher = local_server.ServerLauncher(
+            "local[2]", {}, self._launcher_discovery(), seed_conf={}
+        )
+        with launcher._seed_properties_file() as path:
+            self.assertIsNone(path)
+
+        launcher = local_server.ServerLauncher(
+            "local[2]",
+            {},
+            self._launcher_discovery(),
+            seed_conf={"spark.sql.shuffle.partitions": "4"},
+        )
+        with launcher._seed_properties_file() as path:
+            self.assertIsNotNone(path)
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+            with open(path) as f:
+                contents = f.read()
+        self.assertIn("spark.sql.shuffle.partitions=4", contents)
 
     def test_discovery_roundtrip(self) -> None:
         with Discovery() as discovery:
@@ -192,10 +376,76 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             discovery.save(
                 {k: getattr(server, k) for k in ("host", "port", "token", "pid", "spark_version")}
             )
-        with mock.patch.object(os, "kill") as kill:
+        # Avoid inspecting or signaling a real process while exercising the stop path.
+        ps_result = subprocess.CompletedProcess([], 0, stdout=local_server._SERVER_CLASS)
+        with (
+            mock.patch.object(subprocess, "run", return_value=ps_result) as run,
+            mock.patch.object(os, "kill") as kill,
+        ):
             self.assertTrue(local_server.stop_local_connect_server())
+        run.assert_called_once_with(
+            ["ps", "-ww", "-p", "12345", "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         kill.assert_called_once_with(12345, signal.SIGTERM)
         self.assertIsNone(self._discovered_server().pid)
+
+    def test_stop_does_not_signal_reused_pid(self) -> None:
+        from unittest import mock
+
+        with Discovery() as discovery:
+            server = self._server(pid=12345)
+            discovery.save(
+                {k: getattr(server, k) for k in ("host", "port", "token", "pid", "spark_version")}
+            )
+        # Model a recycled pid without depending on host process state.
+        ps_result = subprocess.CompletedProcess([], 0, stdout="unrelated process")
+        with (
+            mock.patch.object(subprocess, "run", return_value=ps_result),
+            mock.patch.object(os, "kill") as kill,
+        ):
+            self.assertFalse(local_server.stop_local_connect_server())
+        kill.assert_not_called()
+        self.assertIsNone(self._discovered_server().pid)
+
+    def test_stop_preserves_discovery_when_process_cannot_be_inspected(self) -> None:
+        from unittest import mock
+
+        with Discovery() as discovery:
+            server = self._server(pid=12345)
+            discovery.save(
+                {k: getattr(server, k) for k in ("host", "port", "token", "pid", "spark_version")}
+            )
+        with (
+            mock.patch.object(subprocess, "run", side_effect=subprocess.TimeoutExpired("ps", 5)),
+            mock.patch.object(os, "kill") as kill,
+        ):
+            self.assertIsNone(local_server.stop_local_connect_server())
+        kill.assert_not_called()
+        self.assertEqual(self._discovered_server().pid, 12345)
+        with Discovery() as discovery:
+            discovery.clear()
+
+    def test_server_launcher_binds_to_loopback(self) -> None:
+        from unittest import mock
+
+        with Discovery() as discovery:
+            launcher = local_server.ServerLauncher("local[2]", {}, discovery)
+            # Capture the launcher argv without starting an external daemon.
+            with (
+                mock.patch.dict(os.environ, {"SPARK_HOME": self._tmpdir}),
+                mock.patch.object(os.path, "isfile", return_value=True) as isfile,
+                mock.patch.object(
+                    subprocess, "run", return_value=subprocess.CompletedProcess([], 0)
+                ) as run,
+            ):
+                launcher._run_script(15002, "token", None)
+        isfile.assert_called_once_with(
+            os.path.join(self._tmpdir, "sbin", "start-connect-server.sh")
+        )
+        self.assertIn("spark.connect.grpc.binding.address=127.0.0.1", run.call_args.args[0])
 
     def test_stop_cli_reports_when_no_server(self) -> None:
         result = subprocess.run(
@@ -207,6 +457,17 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("No running persistent local Spark Connect server", result.stdout)
+
+    def test_stop_cli_fails_when_process_cannot_be_inspected(self) -> None:
+        from unittest import mock
+
+        with (
+            mock.patch.object(sys, "argv", ["local_server", "--stop"]),
+            mock.patch.object(local_server, "stop_local_connect_server", return_value=None),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            local_server.main()
+        self.assertEqual(raised.exception.code, 1)
 
     def test_reuse_or_start_requires_posix(self) -> None:
         from unittest import mock

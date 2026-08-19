@@ -513,6 +513,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
       // Apply initial user credentials to the executor credential store.
+      // Uses unconditional set() rather than updateIfNewer() because the store is guaranteed
+      // null at this point (executor startup, before any RPC or task is received).
+      // Note: there is a narrow window where a renewal broadcast (vN+1) could arrive between
+      // the SparkAppConfig reply (vN) and executor registration in executorDataMap, leaving
+      // this executor on vN until vN+2. The TaskDescription path covers this case since
+      // every dispatched task carries the latest credentials.
       cfg.userCredentials.foreach { case (version, credentials) =>
         env.userCredentials.set(VersionedCredentials(version, credentials))
       }

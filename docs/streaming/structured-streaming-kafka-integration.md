@@ -1045,7 +1045,7 @@ For experimenting on `spark-shell`, you can also use `--packages` to add `spark-
 
     ./bin/spark-shell --packages org.apache.spark:spark-sql-kafka-0-10_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} ...
 
-See [Application Submission Guide](submitting-applications.html) for more details about submitting
+See [Application Submission Guide](../submitting-applications.html) for more details about submitting
 applications with external dependencies.
 
 ## Security

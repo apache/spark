@@ -452,9 +452,18 @@ class SparkContext(config: SparkConf) extends Logging {
     // instead of relying on the default value of the config constant.
     if (SparkMasterRegex.isK8s(master) &&
         _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", true)) {
-      logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
-        "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
-      _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_BIND_ADDRESS))
+      val bindAddress = _conf.get(DRIVER_BIND_ADDRESS)
+      if (Utils.isAnyLocalAddress(bindAddress)) {
+        val driverHost = _conf.get(DRIVER_HOST_ADDRESS)
+        logInfo(log"spark.kubernetes.executor.useDriverPodIP is true but bind address " +
+          log"${MDC(LogKeys.BIND_ADDRESS, bindAddress)} is a wildcard; " +
+          log"preserving advertised driver host ${MDC(LogKeys.HOST, driverHost)}")
+        _conf.set(DRIVER_HOST_ADDRESS, driverHost)
+      } else {
+        logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
+          "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
+        _conf.set(DRIVER_HOST_ADDRESS, Utils.normalizeIpIfNeeded(bindAddress))
+      }
     } else {
       _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
     }
@@ -2778,6 +2787,20 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Cancel all jobs that have been scheduled or are running.
+   *
+   * @param reason reason for cancellation. It is surfaced in the error of every cancelled job, so
+   *               that a job aborted as collateral of a context-wide cancellation can be told
+   *               apart from one that failed on its own.
+   *
+   * @since 4.4.0
+   */
+  def cancelAllJobs(reason: String): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelAllJobs(Option(reason))
+  }
+
+  /**
    * Cancel a given job if it's scheduled or running.
    *
    * @param jobId the job ID to cancel
@@ -2903,8 +2926,34 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private val nextRddId = new AtomicInteger(0)
 
-  /** Register a new RDD, returning its RDD ID */
-  private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+  /**
+   * Testing helper: set the next value that [[newRddId]] will return.
+   */
+  private[spark] def setNextRddIdForTesting(value: Int): Unit = nextRddId.set(value)
+
+  /**
+   * Register a new RDD, returning its RDD ID.
+   *
+   * Fails if the 32-bit counter would wrap to a negative value. Continuing with
+   * wrapped ids can break BlockManager, UI, and other id-keyed state.
+   * [[org.apache.spark.storage.BlockId]] still parses negative RDD names as a
+   * safety net for any in-flight or pre-upgrade cached blocks.
+   */
+  private[spark] def newRddId(): Int = {
+    val id = nextRddId.getAndIncrement()
+    if (id < 0) {
+      // Stay pegged so subsequent allocations keep failing clearly.
+      nextRddId.set(Int.MinValue)
+      throw new SparkException(
+        "RDD id counter overflowed Int.MaxValue (" + Int.MaxValue +
+          "). This application has created too many RDDs; restart it.")
+    }
+    if (id == Int.MaxValue) {
+      logWarning("Allocated the last valid RDD id (Int.MaxValue). " +
+        "Further RDD creation will fail.")
+    }
+    id
+  }
 
   /**
    * Registers listeners specified in spark.extraListeners, then starts the listener bus.

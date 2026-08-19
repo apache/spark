@@ -86,10 +86,17 @@ if typing.TYPE_CHECKING:
         ArrowScalarIterUDFType,
         ArrowGroupedAggUDFType,
         ArrowGroupedAggIterUDFType,
+        ArrowGroupedAggIncrementalPartialUDFType,
+        ArrowGroupedAggIncrementalFinalUDFType,
         ArrowWindowAggUDFType,
     )
     from pyspark.sql._typing import (
         SQLArrowBatchedUDFType,
+        SQLArrowElementwiseUDFType,
+        SQLScalarPandasElementwiseUDFType,
+        SQLScalarPandasIterElementwiseUDFType,
+        SQLScalarArrowElementwiseUDFType,
+        SQLScalarArrowIterElementwiseUDFType,
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
@@ -662,6 +669,11 @@ class PythonEvalType:
 
     SQL_BATCHED_UDF: "SQLBatchedUDFType" = 100
     SQL_ARROW_BATCHED_UDF: "SQLArrowBatchedUDFType" = 101
+    SQL_ARROW_ELEMENTWISE_UDF: "SQLArrowElementwiseUDFType" = 102
+    SQL_SCALAR_PANDAS_ELEMENTWISE_UDF: "SQLScalarPandasElementwiseUDFType" = 103
+    SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF: "SQLScalarPandasIterElementwiseUDFType" = 104
+    SQL_SCALAR_ARROW_ELEMENTWISE_UDF: "SQLScalarArrowElementwiseUDFType" = 105
+    SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF: "SQLScalarArrowIterElementwiseUDFType" = 106
 
     SQL_SCALAR_PANDAS_UDF: "PandasScalarUDFType" = 200
     SQL_GROUPED_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 201
@@ -688,6 +700,13 @@ class PythonEvalType:
     SQL_GROUPED_AGG_ARROW_UDF: "ArrowGroupedAggUDFType" = 252
     SQL_WINDOW_AGG_ARROW_UDF: "ArrowWindowAggUDFType" = 253
     SQL_GROUPED_AGG_ARROW_ITER_UDF: "ArrowGroupedAggIterUDFType" = 254
+
+    # Incremental (partial + final) Arrow aggregator. See ``pyspark.sql.aggregator``.
+    # PARTIAL folds input rows into a per-group buffer via ``Aggregator.reduce`` on the map side;
+    # FINAL merges partial buffers via ``Aggregator.merge`` and produces output via
+    # ``Aggregator.finish`` after the shuffle.
+    SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF: "ArrowGroupedAggIncrementalPartialUDFType" = 255
+    SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF: "ArrowGroupedAggIncrementalFinalUDFType" = 256
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
