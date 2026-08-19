@@ -1177,7 +1177,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("explicit time travel specs on internal write targets use qualified names") {
+  test("SPARK-58389: explicit time travel specs on internal write targets use qualified names") {
     withStateAwareTable { (_, tableName) =>
       val resolver = new RelationResolution(
         spark.sessionState.catalogManager,

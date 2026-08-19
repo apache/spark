@@ -66,7 +66,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     assert(table.lastWriteInfo.options().get(targetWriteOption) === targetWriteValue)
   }
 
-  test("transaction catalog honors time travel context") {
+  test("SPARK-58389: transaction catalog honors time travel context") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }""")
     val pinnedVersion = catalog.loadTable(ident).version()

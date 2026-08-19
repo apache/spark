@@ -109,12 +109,12 @@ class DataSourceV2DataFrameSessionCatalogSuite
         .option("versionAsOf", "1")
         .insertInto("t")
       df.write
-        .format("csv")
+        .format(v2Format)
         .option("versionAsOf", "1")
-        .mode(SaveMode.Append)
+        .mode(SaveMode.Ignore)
         .saveAsTable("t")
 
-      verifyTable("t", df.union(df))
+      verifyTable("t", df)
     }
   }
 }
