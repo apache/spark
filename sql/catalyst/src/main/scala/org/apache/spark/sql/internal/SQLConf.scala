@@ -3796,6 +3796,7 @@ object SQLConf {
         "sides) are rejected. Set this to false to restore the previous, looser behavior for " +
         "left semi and left outer joins. Left anti joins always use the stricter requirements.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
