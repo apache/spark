@@ -100,8 +100,15 @@ class _PyArrowFromPandasFrameTestBase(GoldenFileTestMixin, unittest.TestCase):
                 "t": pd.Series([dt, None, dt], dtype="datetime64[ns]"),
             }
         )
+        # Multiple columns but zero rows (an empty object column is omitted -- it would
+        # infer to Arrow ``null`` rather than a concrete type).
         frames["multi-column:no-rows"] = pd.DataFrame(
-            {"i": pd.Series([], dtype="int64"), "f": pd.Series([], dtype="float64")}
+            {
+                "i": pd.Series([], dtype="int64"),
+                "f": pd.Series([], dtype="float64"),
+                "b": pd.Series([], dtype=bool),
+                "t": pd.Series([], dtype="datetime64[ns]"),
+            }
         )
         return frames
 
