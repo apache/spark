@@ -251,6 +251,20 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       KMeansSuite.allParamSettings, checkModelData)
   }
 
+  test("SPARK-58868: Load KMeansModel from Spark 3.0") {
+    val path = testFile("ml-models/kmeans-3.0.3")
+    val model = KMeansModel.load(path)
+    assert(model.clusterCenters === Array(
+      Vectors.dense(0.05, 0.0),
+      Vectors.dense(9.05, 9.0)))
+    assert(model.predict(Vectors.dense(0.0, 0.0)) === 0)
+    assert(model.predict(Vectors.dense(9.1, 9.0)) === 1)
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "3.0.3")
+  }
+
   test("pmml export") {
     val clusterCenters = Array(
       MLlibVectors.dense(1.0, 2.0, 6.0),
