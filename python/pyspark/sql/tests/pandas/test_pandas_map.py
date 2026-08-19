@@ -96,6 +96,30 @@ class MapInPandasTestsMixin:
             expected = df.collect()
             self.assertEqual(actual, expected)
 
+    def test_map_in_pandas_legacy_accept_sequence_protocol(self):
+        # A sequence-protocol object (implements __getitem__ but not __iter__) is iterable via
+        # iter(...) even though it is not a collections.abc.Iterable, so the legacy flag must
+        # accept it too.
+        class SequenceOnly:
+            def __init__(self, items):
+                self._items = items
+
+            def __getitem__(self, index):
+                return self._items[index]
+
+        self.assertFalse(hasattr(SequenceOnly([]), "__iter__"))
+
+        def returns_sequence(iterator):
+            return SequenceOnly([pdf for pdf in iterator])
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled": True}
+        ):
+            df = self.spark.range(10, numPartitions=3)
+            actual = df.mapInPandas(returns_sequence, "id long").collect()
+            expected = df.collect()
+            self.assertEqual(actual, expected)
+
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
         df = self.spark.createDataFrame(data, "a int, b string")
