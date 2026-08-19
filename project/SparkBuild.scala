@@ -261,17 +261,19 @@ object SparkBuild extends PomBuild {
     scalaStyleOnTest := cachedScalaStyle(Test).value
   )
 
+  private val scalaInitializationCheckOptions = Seq(
+    // Detect reads of uninitialized vals, such as eager trait initializers.
+    "-Xcheckinit")
+
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     (Compile / scalacOptions) ++= {
-      Seq(
+      scalaInitializationCheckOptions ++ Seq(
         // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
         // verbose warning on deprecation, error on all others
         // see `scalac -Wconf:help` for details
         // since 2.13.15, "-Wconf:cat=deprecation:wv,any:e" no longer takes effect and needs to
         // be changed to "-Wconf:any:e", "-Wconf:cat=deprecation:wv",
         // please refer to the details: https://github.com/scala/scala/pull/10708
-        // Detect reads of uninitialized vals, such as eager trait initializers.
-        "-Xcheckinit",
         "-Wconf:any:e",
         "-Wconf:cat=deprecation:wv",
         // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
@@ -293,7 +295,8 @@ object SparkBuild extends PomBuild {
         // SPARK-49937 ban call the method `SparkThrowable#getErrorClass`
         "-Wconf:cat=deprecation&msg=method getErrorClass in trait SparkThrowable is deprecated:e"
       )
-    }
+    },
+    (Test / scalacOptions) ++= scalaInitializationCheckOptions
   )
 
   lazy val sharedSettings = checkJavaVersionSettings ++
