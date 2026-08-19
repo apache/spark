@@ -1264,6 +1264,7 @@ object SQLConf {
       "pipelined stage group cannot fit the local task-concurrency limit fails with an " +
       "explicit CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT error. Experimental.")
     .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)
 

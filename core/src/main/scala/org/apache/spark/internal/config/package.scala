@@ -1860,6 +1860,7 @@ package object config {
         "and per-partition buffering. Only used when spark.shuffle.manager.incremental is the " +
         "in-process channel manager.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ > 0, "batch size must be positive")
       .createWithDefault(1024)
