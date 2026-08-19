@@ -1559,6 +1559,93 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("SPARK-58887: a barrier job can be cancelled while its slot check is being retried") {
+    // 3 barrier tasks on the local[2] backend fail the max concurrent tasks check, so the
+    // submission enters the retry window during which the job is registered nowhere but
+    // `deferredBarrierJobs`. A cancellation in that window must fail the job immediately
+    // instead of silently no-oping until the retries run out.
+    val barrierRdd = new MyRDD(sc, 3, Nil).barrier().mapPartitions(iter => iter)
+    val failure = new AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    val jobId = submit(barrierRdd, Array(0, 1, 2), listener = failListener)
+    assert(failure.get() === null, "a barrier job in its slot-check retry window must wait")
+    assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+    assert(scheduler.barrierJobIdToNumTasksCheckFailures.containsKey(jobId))
+    cancel(jobId)
+    assert(failure.get() !== null, "cancelling a deferred barrier job must fail its listener")
+    assert(failure.get().getMessage.contains(s"Job $jobId cancelled"),
+      "the listener must fail with the cancellation error, not the exhausted-retries one")
+    assert(!scheduler.barrierJobIdToNumTasksCheckFailures.containsKey(jobId),
+      "a cancelled deferral must not leak its slot-check failure count")
+    // The pending re-post fires regardless of the cancellation; simulate its arrival and check
+    // it is dropped instead of resurrecting the cancelled job.
+    runEvent(JobSubmitted(jobId, barrierRdd, jobComputeFunc, Array(0, 1, 2), CallSite("", ""),
+      failListener, JobArtifactSet.getActiveOrDefault(sc), null))
+    assert(scheduler.deferredBarrierJobs.isEmpty,
+      "a re-post arriving after the cancellation must be dropped, not re-deferred")
+    assert(scheduler.barrierJobIdToNumTasksCheckFailures.isEmpty)
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58887: cancelAllJobs also fails a barrier job deferred for a slot-check retry") {
+    val barrierRdd = new MyRDD(sc, 3, Nil).barrier().mapPartitions(iter => iter)
+    val failure = new AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    val jobId = submit(barrierRdd, Array(0, 1, 2), listener = failListener)
+    assert(failure.get() === null)
+    assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+    runEvent(AllJobsCancelled())
+    assert(failure.get() !== null, "cancelAllJobs must fail a deferred barrier job's listener")
+    assert(failure.get().getMessage.contains(s"Job $jobId cancelled"))
+    assert(!scheduler.barrierJobIdToNumTasksCheckFailures.containsKey(jobId))
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58887: cancelJobGroup also fails a barrier job deferred for a slot-check retry") {
+    val barrierRdd = new MyRDD(sc, 3, Nil).barrier().mapPartitions(iter => iter)
+    val failure = new AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    val props = new Properties()
+    props.setProperty(SparkContext.SPARK_JOB_GROUP_ID, "deferredGroup")
+    val jobId = submit(barrierRdd, Array(0, 1, 2), listener = failListener, properties = props)
+    assert(failure.get() === null)
+    assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+    runEvent(JobGroupCancelled("deferredGroup", cancelFutureJobs = false, None))
+    assert(failure.get() !== null, "cancelJobGroup must fail a deferred barrier job's listener")
+    assert(failure.get().getMessage.contains(s"Job $jobId cancelled"))
+    assert(!scheduler.barrierJobIdToNumTasksCheckFailures.containsKey(jobId))
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-58887: cancelJobsWithTag also fails a deferred barrier job") {
+    val barrierRdd = new MyRDD(sc, 3, Nil).barrier().mapPartitions(iter => iter)
+    val failure = new AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    val props = new Properties()
+    props.setProperty(SparkContext.SPARK_JOB_TAGS, "deferredTag")
+    val jobId = submit(barrierRdd, Array(0, 1, 2), listener = failListener, properties = props)
+    assert(failure.get() === null)
+    assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+    runEvent(JobTagCancelled("deferredTag", None, None))
+    assert(failure.get() !== null,
+      "cancelJobsWithTag must fail a deferred barrier job's listener")
+    assert(failure.get().getMessage.contains(s"Job $jobId cancelled"))
+    assert(!scheduler.barrierJobIdToNumTasksCheckFailures.containsKey(jobId))
+    assertDataStructuresEmpty()
+  }
+
   test("Fail the job if a barrier ResultTask failed") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))

@@ -407,6 +407,35 @@ private[spark] class DAGScheduler(
   private[scheduler] val barrierJobIdToNumTasksCheckFailures = new ConcurrentHashMap[Int, Int]
 
   /**
+   * The barrier jobs deferred while their max concurrent tasks check is being retried (the
+   * submission is re-posted on a timer), keyed by job id. A deferred job is registered nowhere
+   * else, so this is what lets a cancellation fail it: the cancellation swaps in
+   * `deferredJobCancelledMarker` and `handleJobSubmitted` drops the re-posted submission when
+   * it finds the marker.
+   */
+  private[scheduler] val deferredBarrierJobs =
+    new ConcurrentHashMap[Int, DAGScheduler.DeferredBarrierJob]
+
+  /**
+   * Marker left in `deferredBarrierJobs` when a deferred job is cancelled. The entry is
+   * replaced rather than removed so that the decision to drop the pending re-post is made on
+   * the event loop (in `handleJobSubmitted`), atomically with respect to the cancellation; the
+   * re-post itself always fires and is what finally clears the entry.
+   */
+  private val deferredJobCancelledMarker = DAGScheduler.DeferredBarrierJob(null, null)
+
+  /** Ids of the deferred barrier jobs whose submission-time properties match `p`. */
+  private def deferredJobsMatching(p: Properties => Boolean): Seq[Int] = {
+    val matched = mutable.ArrayBuffer[Int]()
+    deferredBarrierJobs.forEach { (jobId, deferred) =>
+      if ((deferred ne deferredJobCancelledMarker) && p(deferred.properties)) {
+        matched += jobId
+      }
+    }
+    matched.toSeq
+  }
+
+  /**
    * Time in seconds to wait between a max concurrent tasks check failure and the next check.
    */
   private val timeIntervalNumTasksCheck = sc.conf
@@ -1652,6 +1681,11 @@ private[spark] class DAGScheduler(
     // the caller supplied one.
     val updatedReason = reason.getOrElse(DAGScheduler.DEFAULT_CANCEL_ALL_JOBS_REASON)
     runningStages.map(_.firstJobId).foreach(handleJobCancellation(_, Option(updatedReason)))
+    // Also fail the barrier jobs deferred for a slot-check retry: they are registered nowhere
+    // else, and their pending re-posts are dropped once the entries are marked cancelled.
+    deferredBarrierJobs.keySet().forEach { jobId =>
+      handleJobCancellation(jobId, Option(updatedReason))
+    }
     activeJobs.clear() // These should already be empty by this point,
     jobIdToActiveJob.clear() // but just in case we lost track of some jobs...
   }
@@ -1926,11 +1960,16 @@ private[spark] class DAGScheduler(
         _.getProperty(SparkContext.SPARK_JOB_GROUP_ID) == groupId
       }
     }
-    if (activeInGroup.isEmpty && !cancelFutureJobs) {
+    // A barrier job deferred for a slot-check retry is not in `activeJobs` yet, so match it by
+    // the properties captured at submission.
+    val deferredInGroup = deferredJobsMatching { properties =>
+      Option(properties).exists(_.getProperty(SparkContext.SPARK_JOB_GROUP_ID) == groupId)
+    }
+    if (activeInGroup.isEmpty && deferredInGroup.isEmpty && !cancelFutureJobs) {
       logWarning(log"Failed to cancel job group ${MDC(GROUP_ID, groupId)}. " +
         log"Cannot find active jobs for it.")
     }
-    val jobIds = activeInGroup.map(_.jobId)
+    val jobIds = activeInGroup.map(_.jobId) ++ deferredInGroup
     val updatedReason = reason.getOrElse("part of cancelled job group %s".format(groupId))
     jobIds.foreach(handleJobCancellation(_, Option(updatedReason)))
   }
@@ -1942,15 +1981,25 @@ private[spark] class DAGScheduler(
     // Cancel all jobs that have all provided tags.
     // First finds all active jobs with this group id, and then kill stages for them.
     val jobsToBeCancelled = activeJobs.filter { activeJob =>
-      Option(activeJob.properties).exists { properties =>
-        Option(properties.getProperty(SparkContext.SPARK_JOB_TAGS)).getOrElse("")
-          .split(SparkContext.SPARK_JOB_TAGS_SEP).filter(!_.isEmpty).toSet.contains(tag)
-      }
+      hasJobTag(activeJob.properties, tag)
     }
+    // A barrier job deferred for a slot-check retry is not in `activeJobs` yet (and thus is not
+    // reported through `cancelledJobs` either), so match it by the properties captured at
+    // submission.
+    val deferredTagged = deferredJobsMatching(hasJobTag(_, tag))
     val updatedReason =
       reason.getOrElse("part of cancelled job tags %s".format(tag))
-    jobsToBeCancelled.map(_.jobId).foreach(handleJobCancellation(_, Option(updatedReason)))
+    (jobsToBeCancelled.map(_.jobId) ++ deferredTagged)
+      .foreach(handleJobCancellation(_, Option(updatedReason)))
     cancelledJobs.map(_.success(jobsToBeCancelled.toSeq))
+  }
+
+  /** Whether the job properties carry the given job tag. */
+  private def hasJobTag(properties: Properties, tag: String): Boolean = {
+    Option(properties).exists { props =>
+      Option(props.getProperty(SparkContext.SPARK_JOB_TAGS)).getOrElse("")
+        .split(SparkContext.SPARK_JOB_TAGS_SEP).filter(!_.isEmpty).toSet.contains(tag)
+    }
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo): Unit = {
@@ -2005,6 +2054,15 @@ private[spark] class DAGScheduler(
       }
       listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
     }
+    // Also complete the waiters of the barrier jobs deferred for a slot-check retry: they are
+    // in `activeJobs` above only once re-processed, which will never happen now.
+    deferredBarrierJobs.forEach { (jobId, deferred) =>
+      if (deferred ne deferredJobCancelledMarker) {
+        deferred.listener.jobFailed(
+          new SparkException(s"Job $jobId cancelled because SparkContext was shut down"))
+      }
+    }
+    deferredBarrierJobs.clear()
   }
 
   private[scheduler] def handleGetTaskResult(taskInfo: TaskInfo): Unit = {
@@ -2032,6 +2090,11 @@ private[spark] class DAGScheduler(
       listener: JobListener,
       artifacts: JobArtifactSet,
       properties: Properties): Unit = {
+    // The job is being (re-)processed, so it is no longer merely deferred. The marker means it
+    // was cancelled while deferred: its listener has already been failed, so drop this re-post.
+    if (deferredBarrierJobs.remove(jobId) eq deferredJobCancelledMarker) {
+      return
+    }
     // If this job belongs to a cancelled job group, skip running it
     val jobGroupIdOpt = Option(properties).map(_.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
     if (jobGroupIdOpt.exists(cancelledJobGroups.contains(_))) {
@@ -2103,6 +2166,7 @@ private[spark] class DAGScheduler(
           log"more times")
 
         if (numCheckFailures <= maxFailureNumTasksCheck) {
+          deferredBarrierJobs.put(jobId, DAGScheduler.DeferredBarrierJob(listener, properties))
           messageScheduler.schedule(
             new Runnable {
               override def run(): Unit = eventProcessLoop.post(JobSubmitted(jobId, finalRDD, func,
@@ -4284,7 +4348,18 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler] def handleJobCancellation(jobId: Int, reason: Option[String]): Unit = {
-    if (!jobIdToStageIds.contains(jobId)) {
+    val deferred = deferredBarrierJobs.get(jobId)
+    if (deferred != null) {
+      if (deferred ne deferredJobCancelledMarker) {
+        // A barrier job deferred for a slot-check retry is registered nowhere else, so fail its
+        // listener directly. Leave the marker in place instead of removing the entry: the
+        // pending re-post always fires, and handleJobSubmitted drops it on finding the marker.
+        deferredBarrierJobs.put(jobId, deferredJobCancelledMarker)
+        barrierJobIdToNumTasksCheckFailures.remove(jobId)
+        deferred.listener.jobFailed(
+          SparkCoreErrors.sparkJobCancelled(jobId, reason.getOrElse(""), null))
+      }
+    } else if (!jobIdToStageIds.contains(jobId)) {
       logDebug("Trying to cancel unregistered job " + jobId)
     } else {
       failJobAndIndependentStages(
@@ -4765,6 +4840,13 @@ private[spark] object DAGScheduler {
   // Fallback reason used when a context-wide cancellation does not supply a more specific one.
   // Kept as the historical wording so existing log and error consumers are unaffected.
   val DEFAULT_CANCEL_ALL_JOBS_REASON = "as part of cancellation of all jobs"
+
+  /**
+   * A barrier job deferred while its max concurrent tasks check is being retried, tracked in
+   * `deferredBarrierJobs`. The submission-time properties are kept so group/tag cancellations
+   * can match the job.
+   */
+  private[scheduler] case class DeferredBarrierJob(listener: JobListener, properties: Properties)
 }
 
 /**
