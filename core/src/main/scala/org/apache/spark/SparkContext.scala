@@ -2739,16 +2739,17 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
    * @param reason reason for cancellation.
-   * @return A future with [[ActiveJob]]s, allowing extraction of information such as Job ID and
-   *   tags.
+   * @return A future with the cancelled jobs' [[CancelledJobInfo]], allowing extraction of
+   *   information such as Job ID and tags. Covers active jobs and barrier jobs cancelled while
+   *   deferred for their slot-check retry (which have no [[ActiveJob]]).
    */
   private[spark] def cancelJobsWithTagWithFuture(
       tag: String,
-      reason: String): Future[Seq[ActiveJob]] = {
+      reason: String): Future[Seq[CancelledJobInfo]] = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
 
-    val cancelledJobs = Promise[Seq[ActiveJob]]()
+    val cancelledJobs = Promise[Seq[CancelledJobInfo]]()
     dagScheduler.cancelJobsWithTag(tag, Some(reason), Some(cancelledJobs))
     cancelledJobs.future
   }
