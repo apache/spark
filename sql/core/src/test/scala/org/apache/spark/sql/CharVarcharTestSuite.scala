@@ -1383,6 +1383,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) IN " +
           "(CAST('a' AS CHAR(4) COLLATE UTF8_LCASE))"),
         Row(true))
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) = " +
+          "CAST('a' AS VARCHAR(2) COLLATE UTF8_LCASE)"),
+        Row(false))
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) IN " +
+          "(CAST('a' AS VARCHAR(2) COLLATE UTF8_LCASE))"),
+        Row(false))
 
       val mixedCharUnion = sql(
         """SELECT CAST('a' AS CHAR(2)) AS c

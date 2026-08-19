@@ -163,6 +163,9 @@ SELECT cast('a' AS CHAR(2)) IN ('a', 'b');
 SELECT cast('a' AS CHAR(2)) IN ('a ', 'b');
 -- Three-part IN: LHS CHAR(2) and list CHAR(4)/VARCHAR(3) all widen to VARCHAR(4).
 SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)), cast('b' AS VARCHAR(3)));
+-- Same CHAR-pad rule under a non-RTRIM collation: UTF8_LCASE must not make
+-- CHAR 'a' equal VARCHAR 'a'. The analyzer must nest CHAR then VARCHAR, not
+-- retarget CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) to VARCHAR(2).
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) = cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE);
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) IN (cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE));
 

@@ -397,7 +397,7 @@ struct<concat('<' collate UTF8_LCASE, coalesce(a, CAST(bb AS CHAR(4) COLLATE UTF
 SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS VARCHAR(4) COLLATE UTF8_LCASE)))
 -- !query schema
-struct<typeof(coalesce(a, CAST(bb AS VARCHAR(4) COLLATE UTF8_LCASE))):string>
+struct<typeof(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS VARCHAR(4) COLLATE UTF8_LCASE))):string>
 -- !query output
 varchar(4) collate UTF8_LCASE
 
@@ -663,17 +663,17 @@ false
 -- !query
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) = cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE)
 -- !query schema
-struct<(a = CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE)):boolean>
+struct<(CAST(a AS CHAR(2) COLLATE UTF8_LCASE) = CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE)):boolean>
 -- !query output
-true
+false
 
 
 -- !query
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) IN (cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE))
 -- !query schema
-struct<(a IN (CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE))):boolean>
+struct<(CAST(a AS CHAR(2) COLLATE UTF8_LCASE) IN (CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE))):boolean>
 -- !query output
-true
+false
 
 
 -- !query

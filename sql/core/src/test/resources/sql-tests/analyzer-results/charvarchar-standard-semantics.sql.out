@@ -342,7 +342,7 @@ Project [concat(<, coalesce(cast(a as char(4) collate UTF8_LCASE), cast(bb as ch
 SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS VARCHAR(4) COLLATE UTF8_LCASE)))
 -- !query analysis
-Project [typeof(coalesce(cast(a as varchar(4) collate UTF8_LCASE), cast(bb as varchar(4) collate UTF8_LCASE))) AS typeof(coalesce(a, CAST(bb AS VARCHAR(4) COLLATE UTF8_LCASE)))#x]
+Project [typeof(coalesce(cast(cast(a as char(2) collate UTF8_LCASE) as varchar(4) collate UTF8_LCASE), cast(bb as varchar(4) collate UTF8_LCASE))) AS typeof(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS VARCHAR(4) COLLATE UTF8_LCASE)))#x]
 +- OneRowRelation
 
 
@@ -642,14 +642,14 @@ Project [cast(cast(a as char(2)) as varchar(4)) IN (cast(cast(a as char(4)) as v
 -- !query
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) = cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE)
 -- !query analysis
-Project [(cast(a as varchar(2) collate UTF8_LCASE) = cast(a as varchar(2) collate UTF8_LCASE)) AS (a = CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE))#x]
+Project [(cast(cast(a as char(2) collate UTF8_LCASE) as varchar(2) collate UTF8_LCASE) = cast(a as varchar(2) collate UTF8_LCASE)) AS (CAST(a AS CHAR(2) COLLATE UTF8_LCASE) = CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) IN (cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE))
 -- !query analysis
-Project [cast(a as varchar(2) collate UTF8_LCASE) IN (cast(a as varchar(2) collate UTF8_LCASE)) AS (a IN (CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE)))#x]
+Project [cast(cast(a as char(2) collate UTF8_LCASE) as varchar(2) collate UTF8_LCASE) IN (cast(a as varchar(2) collate UTF8_LCASE)) AS (CAST(a AS CHAR(2) COLLATE UTF8_LCASE) IN (CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE)))#x]
 +- OneRowRelation
 
 
