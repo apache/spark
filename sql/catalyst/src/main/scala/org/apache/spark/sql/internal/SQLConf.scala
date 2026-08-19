@@ -4766,8 +4766,8 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("When true, the optimizer collapses two adjacent windows with the same partition " +
         "spec into one when the window with the empty order spec is the child (inner) window. " +
-        "This saves a WindowExec pass but can disable the WindowGroupLimit optimization for " +
-        "top-k queries.")
+        "This saves a WindowExec pass but can disable the WindowGroupLimit and the LocalLimit " +
+        "push-down optimizations for top-k queries.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(false)

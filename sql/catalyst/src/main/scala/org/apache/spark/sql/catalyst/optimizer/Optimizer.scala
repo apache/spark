@@ -1796,8 +1796,9 @@ object CollapseWindow extends Rule[LogicalPlan] {
       // operator then keeps the non-empty order spec while the merged-in expressions keep their
       // own empty order spec; this divergence is safe because after analysis only
       // OptimizeWindowFunctions reads an expression's own order spec, and it is a no-op without
-      // one. Merging an empty-order child into an ordered parent can disable InferWindowGroupLimit,
-      // so that direction is gated by conf.collapseWindowWithEmptyOrderSpecInChild.
+      // one. Merging an empty-order child into an ordered parent can disable
+      // InferWindowGroupLimit and LimitPushDownThroughWindow, so that direction is gated by
+      // conf.collapseWindowWithEmptyOrderSpecInChild.
       (specCompatible(w1.orderSpec, w2.orderSpec) ||
         (w1.orderSpec.isEmpty && w2.orderSpec.nonEmpty &&
           w1.windowExpressions.forall(canEvaluateUnderAnyOrder)) ||

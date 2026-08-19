@@ -390,4 +390,32 @@ class CollapseWindowSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("collapse windows with a Project between them, empty order spec as parent") {
+    // The empty-order window is the parent here, so this merges by default without the config.
+    val rk = windowExpr(
+      RowNumber(),
+      windowSpec(partitionSpec1, orderSpec1,
+        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("rk")
+    val cnt = windowExpr(
+      AggregateExpression(Count(c), Complete, isDistinct = false, None),
+      windowSpec(partitionSpec1, Nil,
+        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing))).as("cnt")
+
+    val query = testRelation
+      .window(Seq(rk), partitionSpec1, orderSpec1)
+      .select($"a", $"b", $"c", $"rk")
+      .window(Seq(cnt), partitionSpec1, Nil)
+      .select($"a", $"b", $"c", $"rk", $"cnt")
+
+    val optimized = Optimize.execute(query.analyze)
+    assert(query.analyze.output === optimized.output)
+
+    val correctAnswer = testRelation
+      .window(Seq(rk, cnt), partitionSpec1, orderSpec1)
+      .select(a, b, c, $"rk", $"cnt")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }
