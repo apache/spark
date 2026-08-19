@@ -906,7 +906,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Service account that is used when running the driver pod. The driver pod uses this service account when requesting
     executor pods from the API server. Note that this cannot be specified alongside a CA cert file, client key file,
-    client cert file, and/or OAuth token. In client mode, use <code>spark.kubernetes.authenticate.serviceAccountName</code> instead.
+    client cert file, and/or OAuth token: those take precedence, and the driver pod is then left with the service
+    account its spec already names, or the namespace's default. Spark logs a warning when that happens.
+    In client mode, use <code>spark.kubernetes.authenticate.serviceAccountName</code> instead.
   </td>
   <td>2.3.0</td>
 </tr>

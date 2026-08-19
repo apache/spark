@@ -24,6 +24,7 @@ import java.util.Base64
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.Secret
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
@@ -125,6 +126,62 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
     assert(driverContainerVolumeMount.size === 1)
     assert(driverContainerVolumeMount.head.getName === DRIVER_CREDENTIALS_SECRET_VOLUME_NAME)
     assert(driverContainerVolumeMount.head.getMountPath === DRIVER_CREDENTIALS_SECRETS_BASE_DIR)
+  }
+
+  test("SPARK-58872: warn when driver credentials drop the driver service account") {
+    val serviceAccountConf = KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME.key
+    val caCertConf = s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX"
+    val caCertFile = writeCredentials("sa-ca.pem", "ca-cert")
+    val submissionSparkConf = new SparkConf(false)
+      .set(serviceAccountConf, "spark")
+      .set(caCertConf, caCertFile.getAbsolutePath)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = submissionSparkConf)
+    val stepUnderTest = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
+    val logAppender = new LogAppender
+    val configuredPod = withLogAppenderReturning(logAppender) {
+      stepUnderTest.configurePod(BASE_DRIVER_POD)
+    }
+    // The documented behavior the warning describes: the credentials win, so the account is
+    // never applied.
+    assert(configuredPod.pod.getSpec.getServiceAccount === null)
+    assert(configuredPod.pod.getSpec.getServiceAccountName === null)
+    val warnings = warningsFrom(logAppender)
+    val named = warnings.filter(w => w.contains(serviceAccountConf) && w.contains(caCertConf))
+    assert(named.size === 1, s"expected one warning naming both $serviceAccountConf and " +
+      s"$caCertConf, got: $warnings")
+    // Only the credentials actually submitted are named, so a message that lists all four fails.
+    Seq(OAUTH_TOKEN_CONF_SUFFIX, CLIENT_KEY_FILE_CONF_SUFFIX, CLIENT_CERT_FILE_CONF_SUFFIX)
+      .map(suffix => s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$suffix")
+      .foreach(conf => assert(!named.head.contains(conf),
+        s"warning names $conf, which was not set: ${named.head}"))
+
+    // With the account alone there is nothing to mount, so it is applied and nothing is warned.
+    val saOnlyConf = KubernetesTestConf.createDriverConf(
+      sparkConf = new SparkConf(false).set(serviceAccountConf, "spark"))
+    val saOnlyStep = new DriverKubernetesCredentialsFeatureStep(saOnlyConf)
+    val saOnlyAppender = new LogAppender
+    val saOnlyPod = withLogAppenderReturning(saOnlyAppender) {
+      saOnlyStep.configurePod(BASE_DRIVER_POD)
+    }
+    assert(saOnlyPod.pod.getSpec.getServiceAccount === "spark")
+    assert(saOnlyPod.pod.getSpec.getServiceAccountName === "spark")
+    assert(!warningsFrom(saOnlyAppender).exists(_.contains(serviceAccountConf)))
+  }
+
+  private def warningsFrom(appender: LogAppender): Seq[String] =
+    appender.loggingEvents
+      .filter(_.getLevel === Level.WARN)
+      .map(_.getMessage.getFormattedMessage)
+      .toSeq
+
+  /** `withLogAppender` returns Unit, so carry the block's value out of it. */
+  private def withLogAppenderReturning[T](appender: LogAppender)(f: => T): T = {
+    val stepLogger = classOf[DriverKubernetesCredentialsFeatureStep].getName
+    var result: Option[T] = None
+    withLogAppender(appender, loggerNames = Seq(stepLogger)) {
+      result = Some(f)
+    }
+    result.get
   }
 
   private def writeCredentials(credentialsFileName: String, credentialsContents: String): File = {

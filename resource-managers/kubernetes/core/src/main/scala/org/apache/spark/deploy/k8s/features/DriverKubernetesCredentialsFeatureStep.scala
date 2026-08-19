@@ -29,9 +29,11 @@ import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.buildPodWithServiceAccount
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, CONFIGS, VALUE}
 
 private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf)
-  extends KubernetesFeatureConfigStep {
+  extends KubernetesFeatureConfigStep with Logging {
 
   private val maybeMountedOAuthTokenFile = kubernetesConf.getOption(
     s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$OAUTH_TOKEN_FILE_CONF_SUFFIX")
@@ -59,10 +61,16 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX",
     "Driver client cert file")
 
-  private val shouldMountSecret = oauthTokenBase64.isDefined ||
-    caCertDataBase64.isDefined ||
-    clientKeyDataBase64.isDefined ||
-    clientCertDataBase64.isDefined
+  private val submittedCredentialConfs = Seq(
+    OAUTH_TOKEN_CONF_SUFFIX -> oauthTokenBase64,
+    CA_CERT_FILE_CONF_SUFFIX -> caCertDataBase64,
+    CLIENT_KEY_FILE_CONF_SUFFIX -> clientKeyDataBase64,
+    CLIENT_CERT_FILE_CONF_SUFFIX -> clientCertDataBase64)
+    .collect { case (suffix, credential) if credential.isDefined =>
+      s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$suffix"
+    }
+
+  private val shouldMountSecret = submittedCredentialConfs.nonEmpty
 
   private val driverCredentialsSecretName =
     s"${kubernetesConf.resourceNamePrefix}-kubernetes-credentials"
@@ -71,6 +79,26 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     if (!shouldMountSecret) {
       pod.copy(pod = buildPodWithServiceAccount(driverServiceAccount, pod).getOrElse(pod.pod))
     } else {
+      // Driver-side credentials win over the driver's service account: this branch never applies
+      // the account, so the pod is left with whatever its spec already names, a pod template's
+      // account or the namespace's default, and whatever RBAC that carries. The docs have said
+      // since 2.3.0 that the two cannot be combined, but nothing enforced or reported it, so a
+      // submission setting both looked like it had been honored. `caCertFile` is the easiest of the
+      // four to trip over, since it only establishes TLS trust in the API server rather than
+      // authenticating the driver, yet it is enough on its own to drop the account. Warn rather
+      // than fail: these submissions are accepted today, and rejecting them needs a release note.
+      // Point at the `mounted.*` prefix, which is the one way to have both -- it does not feed
+      // `shouldMountSecret`, so the account survives -- rather than telling the user to drop one.
+      driverServiceAccount.foreach { account =>
+        logWarning(log"Not applying " +
+          log"${MDC(CONFIG, KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME.key)}=${MDC(VALUE, account)} " +
+          log"to the driver pod, because " +
+          log"${MDC(CONFIGS, submittedCredentialConfs.mkString(", "))} take precedence: the pod " +
+          log"keeps the service account its spec already names, or the namespace's default. To " +
+          log"have both, point " +
+          log"${MDC(CONFIG2, s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.*")} at paths inside " +
+          log"the driver pod instead, which leaves the service account in place.")
+      }
       val driverPodWithMountedKubernetesCredentials =
         new PodBuilder(pod.pod)
           .editOrNewSpec()
