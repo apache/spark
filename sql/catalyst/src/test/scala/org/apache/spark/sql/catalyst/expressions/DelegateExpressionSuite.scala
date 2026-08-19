@@ -216,11 +216,14 @@ class DelegateExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   // ---- input-type markers are transient, unevaluable, and transparent in type ----
 
-  test("input-type markers are Unevaluable and delegate type/nullability to their child") {
+  test("input-type markers are Unevaluable and use the expected type after a failed check") {
     val marker = ImplicitCastInput(BoundReference(0, IntegerType, nullable = true), StringType)
-    assert(marker.dataType == IntegerType) // delegates to child until coercion casts it
+    assert(marker.dataType == StringType)
     assert(marker.nullable)
     intercept[Exception](marker.eval(InternalRow(1)))
+
+    val valid = ImplicitCastInput(BoundReference(0, StringType, nullable = true), StringType)
+    assert(valid.dataType == StringType)
   }
 
   // ---- MultiGetJsonObject: the optimizer-constructed delegate ----

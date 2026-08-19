@@ -188,7 +188,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
             // pull the common expressions into a project which will always be evaluated. Inline it.
             val refToExpr = defs.map(d => d.id -> d.child).toMap
             child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-              case ref: CommonExpressionRef => refToExpr(ref.id)
+              // A nested With may refer to a common expression from an outer scope. Leave that
+              // reference for the outer With to replace.
+              case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)
             }
         }
 

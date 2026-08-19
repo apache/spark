@@ -89,6 +89,10 @@ class DelegateExpressionQuerySuite
       Row(null))
   }
 
+  test("right() supports constant inline-table values") {
+    checkAnswer(spark.sql("VALUES (right('abc', 1))"), Row("c"))
+  }
+
   test("right() extracts a window input only once") {
     val df = spark.sql(
       """SELECT right(

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees.TreePattern.RUNTIME_REPLACEABLE
+import org.apache.spark.sql.catalyst.trees.TreePattern.COMMON_EXPR_REF
 
 /**
  * Helper methods for evaluating expressions.
@@ -25,8 +25,17 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.RUNTIME_REPLACEABLE
 trait EvalHelper {
 
   def prepareForEval(e: Expression): Expression = {
-    e.transformWithPruning(_.containsAnyPattern(RUNTIME_REPLACEABLE)) {
-      case r: RuntimeReplaceable => r.replacement
+    def prepare(expr: Expression): Expression = expr match {
+      case r: RuntimeReplaceable => prepare(r.replacement)
+      case d: DelegateExpression => prepare(d.definition)
+      case With(child, defs) =>
+        val refToExpr = defs.map(d => d.id -> prepare(d.child)).toMap
+        prepare(child).transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+          // Nested With expressions can contain references defined by an outer scope.
+          case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)
+        }
+      case other => other.mapChildren(prepare)
     }
+    prepare(e)
   }
 }
