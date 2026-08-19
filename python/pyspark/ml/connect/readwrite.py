@@ -14,6 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+# TODO: The type design of RemoteMLWriter is not very good. In saveInstance,
+# we try to call session() with a connect session, but the session() method
+# accepts a classic session. What's make it worse is that mypy considers some
+# of the branches as unreachable. We need a full re-design of this module.
+# mypy: disable-error-code="arg-type"
+
 from typing import TYPE_CHECKING, Any, Dict, Type, Union, cast
 
 import pyspark.sql.connect.proto as pb2
@@ -119,14 +126,14 @@ class RemoteMLWriter(MLWriter):
 
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             pl_writer = PipelineWriter(instance)
-            pl_writer.session(session)  # type: ignore[arg-type]
+            pl_writer.session(session)
             pl_writer.save(path)
         elif isinstance(instance, PipelineModel):
             from pyspark.ml.pipeline import PipelineModelWriter
 
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             plm_writer = PipelineModelWriter(instance)
-            plm_writer.session(session)  # type: ignore[arg-type]
+            plm_writer.session(session)
             plm_writer.save(path)
         elif isinstance(instance, CrossValidator):
             from pyspark.ml.tuning import CrossValidatorWriter
@@ -162,14 +169,14 @@ class RemoteMLWriter(MLWriter):
 
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             ovr_writer = OneVsRestWriter(instance)
-            ovr_writer.session(session)  # type: ignore[arg-type]
+            ovr_writer.session(session)
             ovr_writer.save(path)
         elif isinstance(instance, OneVsRestModel):
             from pyspark.ml.classification import OneVsRestModelWriter
 
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             ovrm_writer = OneVsRestModelWriter(instance)
-            ovrm_writer.session(session)  # type: ignore[arg-type]
+            ovrm_writer.session(session)
             ovrm_writer.save(path)
 
         elif isinstance(instance, PowerIterationClustering):
@@ -179,7 +186,7 @@ class RemoteMLWriter(MLWriter):
             transformer._resetUid(instance.uid)
             transformer._paramMap = instance._paramMap
             RemoteMLWriter.saveInstance(
-                transformer,  # type: ignore[arg-type]
+                transformer,
                 path,
                 session,
                 shouldOverwrite,
