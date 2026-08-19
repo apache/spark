@@ -1362,10 +1362,29 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     # contains "UDF" (so the "UDF" substring is unreliable).
     # ------------------------------------------------------------------
 
+    def _transpiled_udf(self, func, return_type):
+        """A UDF built with transpilation on, asserting it produced options.
+
+        ``udf.py`` reports WHY a UDF fell back only as a warning, so capture those
+        and name them in the failure message. Without this an empty ``transpiled``
+        asserts as bare "[] is not true", which says nothing about the cause -- and
+        from CI the warning text is only in a log artifact that needs credentials
+        to read, so the reason is effectively unavailable where it is needed most.
+        """
+        import warnings
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            u = UserDefinedFunction(func, return_type)
+        self.assertTrue(
+            u.transpiled,
+            f"{func} produced no transpiled options; warnings: {[str(w.message) for w in caught]}",
+        )
+        return u
+
     def _vals(self, func, return_type, schema, rows, require_lowered=True):
         with self.sql_conf(_TRANSPILE_ON):
-            u = UserDefinedFunction(func, return_type)
-            self.assertTrue(u.transpiled, str(func))
+            u = self._transpiled_udf(func, return_type)
             df = self.spark.createDataFrame(rows, schema)
             projected = df.select(u(*df.columns))
             # ``u.transpiled`` only says options were PRODUCED; the JVM may still
@@ -1378,8 +1397,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def _raises(self, func, schema, rows, needle="numeric"):
         with self.sql_conf(_TRANSPILE_ON):
-            u = UserDefinedFunction(func, LongType())
-            self.assertTrue(u.transpiled, str(func))
+            u = self._transpiled_udf(func, LongType())
             df = self.spark.createDataFrame(rows, schema)
             with self.assertRaises(Exception) as ctx:
                 df.select(u(*df.columns)).collect()
