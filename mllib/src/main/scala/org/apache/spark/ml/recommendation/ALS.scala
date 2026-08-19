@@ -461,9 +461,9 @@ class ALSModel private[ml] (
         var idxOrd: GuavaOrdering[Int] = null
         iter.flatMap { case (srcIds, srcMat, dstIds, dstMat) =>
           require(srcMat.length == srcIds.length * rank,
-            s"srcMat must have ${srcIds.length * rank} entries but has ${srcMat.length}."
+            s"srcMat must have ${srcIds.length * rank} entries but has ${srcMat.length}.")
           require(dstMat.length == dstIds.length * rank,
-            s"dstMat must have ${dstIds.length * rank} entries but has ${dstMat.length}."
+            s"dstMat must have ${dstIds.length * rank} entries but has ${dstMat.length}.")
           val m = srcIds.length
           val n = dstIds.length
           if (scores == null || scores.length < n) {
@@ -894,7 +894,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         initialized = true
       } else {
         require(this.rank == rank,
-          s"NNLSSolver was initialized with rank ${this.rank} but got $rank."
+          s"NNLSSolver was initialized with rank ${this.rank} but got $rank.")
       }
     }
 
@@ -1334,9 +1334,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     /** Size of the block. */
     def size: Int = ratings.length
     require(dstEncodedIndices.length == size,
-      s"dstEncodedIndices must have $size entries but has ${dstEncodedIndices.length}."
+      s"dstEncodedIndices must have $size entries but has ${dstEncodedIndices.length}.")
     require(dstPtrs.length == srcIds.length + 1,
-      s"dstPtrs must have ${srcIds.length + 1} entries but has ${dstPtrs.length}."
+      s"dstPtrs must have ${srcIds.length + 1} entries but has ${dstPtrs.length}.")
   }
 
   /**
@@ -1379,9 +1379,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     /** Size of the block. */
     def size: Int = srcIds.length
     require(dstIds.length == srcIds.length,
-      s"dstIds must have ${srcIds.length} entries but has ${dstIds.length}."
+      s"dstIds must have ${srcIds.length} entries but has ${dstIds.length}.")
     require(ratings.length == srcIds.length,
-      s"ratings must have ${srcIds.length} entries but has ${ratings.length}."
+      s"ratings must have ${srcIds.length} entries but has ${ratings.length}.")
   }
 
   /**
@@ -1505,7 +1505,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         ratings: Array[Float]): this.type = {
       val sz = srcIds.length
       require(dstLocalIndices.length == sz,
-        s"dstLocalIndices must have $sz entries but has ${dstLocalIndices.length}."
+        s"dstLocalIndices must have $sz entries but has ${dstLocalIndices.length}.")
       require(ratings.length == sz, s"ratings must have $sz entries but has ${ratings.length}.")
       this.srcIds ++= srcIds
       this.ratings ++= ratings
@@ -1888,7 +1888,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     def encode(blockId: Int, localIndex: Int): Int = {
       require(blockId < numBlocks, s"blockId $blockId must be less than numBlocks $numBlocks.")
       require((localIndex & ~localIndexMask) == 0,
-        s"localIndex $localIndex must be in [0, $localIndexMask]."
+        s"localIndex $localIndex must be in [0, $localIndexMask].")
       (blockId << numLocalIndexBits) | localIndex
     }
 
