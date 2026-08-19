@@ -22,7 +22,7 @@ import java.io.{DataInputStream, DataOutputStream}
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, JObject, JValue}
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.LogKeys.{COST, INIT_MODE, NUM_ITERATIONS, TOTAL_TIME}
@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SizeEstimator
-import org.apache.spark.util.VersionUtils.{majorMinorVersion, majorVersion}
+import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
  * Common params for KMeans and KMeansModel
@@ -443,13 +443,21 @@ object KMeansModel extends MLReadable[KMeansModel] {
     }
 
     private def loadDistanceMeasure(metadata: DefaultParamsReader.Metadata): String = {
-      val (major, minor) = majorMinorVersion(metadata.sparkVersion)
-      if (major > 2 || (major == 2 && minor >= 4)) {
-        implicit val format: DefaultFormats.type = DefaultFormats
-        metadata.getParamValue("distanceMeasure").extract[String]
-      } else {
-        KMeans.EUCLIDEAN
+      implicit val format: DefaultFormats.type = DefaultFormats
+
+      def getDistanceMeasure(params: JValue): Option[String] = {
+        params match {
+          case JObject(pairs) =>
+            pairs.collectFirst {
+              case ("distanceMeasure", value) => value.extract[String]
+            }
+          case _ => None
+        }
       }
+
+      getDistanceMeasure(metadata.params)
+        .orElse(getDistanceMeasure(metadata.defaultParams))
+        .getOrElse(KMeans.EUCLIDEAN)
     }
   }
 }
