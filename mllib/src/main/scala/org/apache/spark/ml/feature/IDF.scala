@@ -153,7 +153,7 @@ class IDFModel private[ml] (
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val localIdf = idfModel.idf.asML
-    val func = (vector: Vector) => IDFModel.transform(localIdf, vector)
+    val func = (vector: Vector) => IDFModel.predict(localIdf, vector)
 
     val transformer = udf(func)
     dataset.withColumn($(outputCol), transformer(col($(inputCol))),
@@ -201,13 +201,13 @@ class IDFModel private[ml] (
 object IDFModel extends MLReadable[IDFModel] {
   private[ml] case class Data(idf: Vector, docFreq: Array[Long], numDocs: Long)
 
-  private def transform(idf: Vector, v: Vector): Vector = {
+  private def predict(idf: Vector, v: Vector): Vector = {
     v match {
       case SparseVector(size, indices, values) =>
-        val (newIndices, newValues) = transformSparse(idf, indices, values)
+        val (newIndices, newValues) = predictSparse(idf, indices, values)
         Vectors.sparse(size, newIndices, newValues)
       case DenseVector(values) =>
-        val newValues = transformDense(idf, values)
+        val newValues = predictDense(idf, values)
         Vectors.dense(newValues)
       case other =>
         throw new UnsupportedOperationException(
@@ -215,7 +215,7 @@ object IDFModel extends MLReadable[IDFModel] {
     }
   }
 
-  private def transformDense(idf: Vector, values: Array[Double]): Array[Double] = {
+  private def predictDense(idf: Vector, values: Array[Double]): Array[Double] = {
     val n = values.length
     val newValues = new Array[Double](n)
     var j = 0
@@ -226,7 +226,7 @@ object IDFModel extends MLReadable[IDFModel] {
     newValues
   }
 
-  private def transformSparse(
+  private def predictSparse(
       idf: Vector,
       indices: Array[Int],
       values: Array[Double]): (Array[Int], Array[Double]) = {
