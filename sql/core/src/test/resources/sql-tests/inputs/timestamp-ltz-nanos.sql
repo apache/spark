@@ -339,9 +339,11 @@ SELECT months_between('1997-02-28 10:30:00.000000000 UTC' :: timestamp_ltz(9),
 -- from the remainder=0 case above.
 SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
     '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9), false);
+-- Same pair with roundOff left at its default (true).
 SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
     '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9));
--- A nanos operand paired with a plain (microsecond) TIMESTAMP_LTZ operand.
+-- A nanos operand paired with a plain (microsecond) TIMESTAMP_LTZ operand: both are in the
+-- TIMESTAMP_LTZ family, so both are evaluated in the session zone.
 SELECT months_between('1997-02-28 10:30:00.000000000 UTC' :: timestamp_ltz(9),
     TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC');
 -- NULL nanosecond timestamp.

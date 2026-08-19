@@ -3032,9 +3032,12 @@ case class MonthsBetween(
   override def second: Expression = date2
   override def third: Expression = roundOff
 
+  // Nanosecond-precision timestamps are accepted alongside the microsecond types. The result is a
+  // fraction of a month derived from the whole-day and whole-second parts of each operand, so the
+  // sub-microsecond remainder cannot move it and each operand contributes only its epochMicros.
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(TimestampType, AnyTimestampNanoType),
-    TypeCollection(TimestampType, AnyTimestampNanoType),
+    TypeCollection(AnyTimestampType, AnyTimestampNanoType),
+    TypeCollection(AnyTimestampType, AnyTimestampNanoType),
     BooleanType)
 
   override def dataType: DataType = DoubleType
@@ -3042,31 +3045,33 @@ case class MonthsBetween(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  private def date1IsNanos: Boolean = date1.dataType.isInstanceOf[AnyTimestampNanoType]
-  private def date2IsNanos: Boolean = date2.dataType.isInstanceOf[AnyTimestampNanoType]
-
-  // The nanosWithinMicro remainder cannot move the result at the whole-day / whole-second
-  // granularity this computation already operates at, so a nanos operand only needs its
-  // epochMicros; TIMESTAMP_NTZ(p) carries wall-clock fields (evaluated in UTC), mirroring the
-  // zone derivation other multi-timestamp-argument expressions use (e.g. SubtractTimestamps).
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(date1.dataType)
 
+  // For the nanosecond carrier the child value is a boxed TimestampNanosVal, so read its
+  // epochMicros; for the microsecond timestamp types it is already a boxed Long.
+  private def toMicros(value: Any): Long = value match {
+    case v: TimestampNanosVal => v.epochMicros
+    case n => n.asInstanceOf[Long]
+  }
+
   override def nullSafeEval(t1: Any, t2: Any, roundOff: Any): Any = {
-    val micros1 =
-      if (date1IsNanos) t1.asInstanceOf[TimestampNanosVal].epochMicros else t1.asInstanceOf[Long]
-    val micros2 =
-      if (date2IsNanos) t2.asInstanceOf[TimestampNanosVal].epochMicros else t2.asInstanceOf[Long]
-    DateTimeUtils.monthsBetween(micros1, micros2, roundOff.asInstanceOf[Boolean], zoneIdInEval)
+    DateTimeUtils.monthsBetween(
+      toMicros(t1), toMicros(t2), roundOff.asInstanceOf[Boolean], zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // The nanosecond carrier exposes epochMicros as a public field; the microsecond types are
+    // already primitive longs. Reduce each operand to microseconds before taking the difference.
+    def toMicrosCode(e: Expression): String => String = e.dataType match {
+      case _: AnyTimestampNanoType => c => s"$c.epochMicros"
+      case _ => c => c
+    }
+    val micros1 = toMicrosCode(date1)
+    val micros2 = toMicrosCode(date2)
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (d1, d2, roundOff) => {
-      val d1Expr = if (date1IsNanos) s"$d1.epochMicros" else d1
-      val d2Expr = if (date2IsNanos) s"$d2.epochMicros" else d2
-      s"""$dtu.monthsBetween($d1Expr, $d2Expr, $roundOff, $zid)"""
-    })
+    defineCodeGen(ctx, ev, (d1, d2, roundOff) =>
+      s"""$dtu.monthsBetween(${micros1(d1)}, ${micros2(d2)}, $roundOff, $zid)""")
   }
 
   override def prettyName: String = "months_between"
