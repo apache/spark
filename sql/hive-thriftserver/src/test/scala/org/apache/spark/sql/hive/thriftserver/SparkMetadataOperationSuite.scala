@@ -316,6 +316,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
          |using parquet""".stripMargin
 
     withJdbcStatement(tableName) { statement =>
+      statement.execute(s"SET ${SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key}=true")
       statement.execute(ddl)
 
       val databaseMetaData = statement.getConnection.getMetaData
@@ -340,7 +341,18 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         schema(pos).dataType match {
           case StringType | BinaryType | _: ArrayType | _: MapType =>
             assert(colSize === 0)
+          case c: CharType => assert(colSize === c.length)
+          case v: VarcharType => assert(colSize === v.length)
           case o => assert(colSize === o.defaultSize)
+        }
+        if (schema(pos).name == "c17") assert(colSize === 255)
+        if (schema(pos).name == "c18") assert(colSize === 1024)
+
+        val octetLength = rowSet.getInt("CHAR_OCTET_LENGTH")
+        schema(pos).dataType match {
+          case c: CharType => assert(octetLength === c.length)
+          case v: VarcharType => assert(octetLength === v.length)
+          case _ => assert(octetLength === 0) // JDBC getInt on SQL NULL
         }
 
         assert(rowSet.getInt("BUFFER_LENGTH") === 0) // not used

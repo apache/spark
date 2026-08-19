@@ -126,10 +126,11 @@ private[hive] class SparkGetColumnsOperation(
   }
 
   /**
-   * For boolean, numeric and datetime types, it returns the default size of its catalyst type
+   * For boolean, numeric and datetime types, it returns the default size of its catalyst type.
+   * For CHAR(n) and VARCHAR(n), it returns the declared character length n.
    * For struct type, when its elements are fixed-size, the summation of all element sizes will be
    * returned.
-   * For array, map, string, and binaries, the column size is variable, return null as unknown.
+   * For array, map, unbounded string, and binaries, the column size is variable, return null.
    */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
     case dt @ (BooleanType | _: NumericType | DateType | TimestampType | TimestampNTZType |
@@ -145,6 +146,17 @@ private[hive] class SparkGetColumnsOperation(
         Some(sizeArr.map(_.get).sum)
       }
     case other => None
+  }
+
+  /**
+   * JDBC CHAR_OCTET_LENGTH. Spark CHAR/VARCHAR lengths are in characters; report n so
+   * clients that size buffers from this column see the declared width. Unbounded STRING
+   * and non-character types stay null (not applicable).
+   */
+  private def getCharOctetLength(typ: DataType): Option[Int] = typ match {
+    case c: CharType => Some(c.length)
+    case v: VarcharType => Some(v.length)
+    case _ => None
   }
 
   /**
@@ -223,7 +235,7 @@ private[hive] class SparkGetColumnsOperation(
           null, // COLUMN_DEF
           null, // SQL_DATA_TYPE
           null, // SQL_DATETIME_SUB
-          null, // CHAR_OCTET_LENGTH
+          getCharOctetLength(column.dataType).map(_.asInstanceOf[AnyRef]).orNull,
           ordinal.asInstanceOf[AnyRef], // ORDINAL_POSITION, 1-based
           (if (column.nullable) "YES" else "NO"), // IS_NULLABLE
           null, // SCOPE_CATALOG

@@ -886,17 +886,19 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
               Option(rs.getObject("NUM_PREC_RADIX")).map(_.asInstanceOf[Integer].toInt))
         }.toSeq
 
-        // results are ordered by DATA_TYPE
+        // results are ordered by DATA_TYPE, then TYPE_NAME
         assert(types.map(t => (t.name, t.dataType)) === Seq(
           ("TINYINT", Types.TINYINT),
           ("BIGINT", Types.BIGINT),
           ("BINARY", Types.VARBINARY),
+          ("CHAR", Types.CHAR),
           ("DECIMAL", Types.DECIMAL),
           ("INT", Types.INTEGER),
           ("SMALLINT", Types.SMALLINT),
           ("FLOAT", Types.FLOAT),
           ("DOUBLE", Types.DOUBLE),
           ("STRING", Types.VARCHAR),
+          ("VARCHAR", Types.VARCHAR),
           ("BOOLEAN", Types.BOOLEAN),
           ("DATE", Types.DATE),
           ("TIMESTAMP", Types.TIMESTAMP)))
@@ -904,12 +906,15 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
         // every type is nullable and searchable
         assert(types.forall(_.nullable == DatabaseMetaData.typeNullable))
         assert(types.forall(_.searchable == DatabaseMetaData.typeSearchable))
-        // only STRING is case-sensitive
-        assert(types.filter(_.caseSensitive).map(_.name) === Seq("STRING"))
+        // CHAR, VARCHAR and STRING are case-sensitive
+        assert(types.filter(_.caseSensitive).map(_.name) ===
+          Seq("CHAR", "STRING", "VARCHAR"))
 
         // string-like types are quoted with a single quote on both sides, except BINARY,
         // whose literals use the hex syntax X'...'. Numeric types carry no literal quote.
         val quoted = Map(
+          "CHAR" -> ("'", "'"),
+          "VARCHAR" -> ("'", "'"),
           "STRING" -> ("'", "'"),
           "DATE" -> ("'", "'"),
           "TIMESTAMP" -> ("'", "'"),
@@ -923,14 +928,18 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
         // PRECISION mirrors JdbcTypeUtils.getPrecision for every type
         val precisions = Map(
           "BOOLEAN" -> 1, "TINYINT" -> 3, "SMALLINT" -> 5, "INT" -> 10, "BIGINT" -> 19,
-          "FLOAT" -> 7, "DOUBLE" -> 15, "DECIMAL" -> 38, "STRING" -> Int.MaxValue,
+          "FLOAT" -> 7, "DOUBLE" -> 15, "DECIMAL" -> 38,
+          "CHAR" -> Int.MaxValue, "VARCHAR" -> Int.MaxValue, "STRING" -> Int.MaxValue,
           "BINARY" -> Int.MaxValue, "DATE" -> 10, "TIMESTAMP" -> 29)
         types.foreach { t =>
           assert(t.precision === precisions(t.name), s"unexpected PRECISION for ${t.name}")
         }
 
         // CREATE_PARAMS is set only for the parameterized types
-        val createParams = Map("DECIMAL" -> "precision,scale")
+        val createParams = Map(
+          "DECIMAL" -> "precision,scale",
+          "CHAR" -> "length",
+          "VARCHAR" -> "length")
         types.foreach { t =>
           assert(t.createParams === createParams.getOrElse(t.name, null),
             s"unexpected CREATE_PARAMS for ${t.name}")

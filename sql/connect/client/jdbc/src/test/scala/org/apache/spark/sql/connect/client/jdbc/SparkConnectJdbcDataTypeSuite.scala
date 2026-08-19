@@ -253,6 +253,36 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     }
   }
 
+  test("SPARK-58794: getColumns for CHAR/VARCHAR table") {
+    val table = "char_varchar_jdbc_cols"
+    withStatement { statement =>
+      statement.execute("SET spark.sql.charVarchar.standardSemantics.enabled=true")
+      statement.execute(s"DROP TABLE IF EXISTS $table")
+      statement.execute(
+        s"CREATE TABLE $table (c CHAR(4), v VARCHAR(6)) USING parquet")
+      try {
+        Using.resource(
+            statement.getConnection.getMetaData.getColumns(null, null, table, null)) { rs =>
+          assert(rs.next())
+          assert(rs.getString("COLUMN_NAME") === "c")
+          assert(rs.getInt("DATA_TYPE") === Types.CHAR)
+          assert(rs.getString("TYPE_NAME") === "CHAR(4)")
+          assert(rs.getInt("COLUMN_SIZE") === 4)
+          assert(rs.getInt("CHAR_OCTET_LENGTH") === 4)
+          assert(rs.next())
+          assert(rs.getString("COLUMN_NAME") === "v")
+          assert(rs.getInt("DATA_TYPE") === Types.VARCHAR)
+          assert(rs.getString("TYPE_NAME") === "VARCHAR(6)")
+          assert(rs.getInt("COLUMN_SIZE") === 6)
+          assert(rs.getInt("CHAR_OCTET_LENGTH") === 6)
+          assert(!rs.next())
+        }
+      } finally {
+        statement.execute(s"DROP TABLE IF EXISTS $table")
+      }
+    }
+  }
+
   test("get decimal type") {
     withStatement { stmt =>
       Seq(

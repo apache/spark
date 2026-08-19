@@ -173,6 +173,17 @@ private[jdbc] object JdbcTypeUtils {
   }
 
   /**
+   * JDBC `CHAR_OCTET_LENGTH`. Spark CHAR/VARCHAR lengths are in characters; report `n` so
+   * clients that size buffers from this column see the declared width instead of 0.
+   * Unbounded STRING and non-character types keep 0 (not applicable / unknown).
+   */
+  def getCharOctetLength(field: StructField): Int = field.dataType match {
+    case c: CharType => c.length
+    case v: VarcharType => v.length
+    case _ => 0
+  }
+
+  /**
    * Converts a value materialized by the Spark Connect client (Scala Seq / Map / Row for
    * complex types) into the corresponding standard JDBC object, recursively:
    * ARRAY -> java.sql.Array, STRUCT -> java.sql.Struct, MAP -> java.util.Map. Scalar values
