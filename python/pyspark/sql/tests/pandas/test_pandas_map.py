@@ -470,7 +470,7 @@ class MapInPandasTestsMixin:
 
         df.mapInPandas(func1, "id long", False).collect()
 
-        def func1_barrier_context_get(iterator):
+        def func0(iterator):
             from pyspark import BarrierTaskContext
 
             BarrierTaskContext.get()
@@ -478,7 +478,7 @@ class MapInPandasTestsMixin:
                 yield batch
 
         with self.assertRaisesRegex(PythonException, "\\[NOT_IN_BARRIER_STAGE\\]"):
-            df.mapInPandas(func1_barrier_context_get, "id long", False).collect()
+            df.mapInPandas(func0, "id long", False).collect()
 
         def func2(iterator):
             from pyspark import TaskContext, BarrierTaskContext
