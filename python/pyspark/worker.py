@@ -679,6 +679,7 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     if eval_type in (
         PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
     ):
         return chained_func, args_offsets, kwargs_offsets, return_type
 
@@ -2066,6 +2067,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
     ):
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         if eval_type in (
@@ -2083,6 +2085,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
         ):
             ser = ArrowStreamGroupSerializer(write_start_stream=True)
         elif eval_type in (
@@ -2635,6 +2638,86 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                             }
                             results.append(udf_func(*slices, **kw_slices))
                         result_arrays.append(pa.array(results))
+                    else:
+                        raise PySparkRuntimeError(
+                            errorClass="INVALID_WINDOW_BOUND_TYPE",
+                            messageParameters={"window_bound_type": bound_type},
+                        )
+
+                batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
+                yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
+
+        # profiling is not supported for UDF
+        return grouped_func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF:
+        import pyarrow as pa
+
+        # Window aggregation with an incremental ``Aggregator``. The operator sends each frame --
+        # the whole partition for an unbounded frame, or per-row ``[begin, end)`` slices for a
+        # bounded one -- and the worker folds the frame's rows with ``reduce`` (from a fresh
+        # ``zero``) and produces the value with ``finish``, one output value per input row. A window
+        # has no shuffle, so the intermediate buffer never leaves the worker (unlike the two-stage
+        # groupBy path); ``merge`` is not used here.
+        window_bound_types_str = runner_conf.get("window_bound_types")
+        window_bound_types = [t.strip().lower() for t in window_bound_types_str.split(",")]
+
+        col_names = ["_%d" % i for i in range(len(udfs))]
+        return_schema = to_arrow_schema(
+            StructType([StructField(name, rt) for name, (_, _, _, rt) in zip(col_names, udfs)]),
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+
+        def aggregate_frame(agg: Any, value_cols: list, num_rows: int) -> Any:
+            # Fold ``num_rows`` rows (each a tuple across ``value_cols``, matching the call-site
+            # argument order) into a buffer, then finish. An empty frame yields ``finish(zero())``.
+            buffer = agg.zero()
+            for r in range(num_rows):
+                buffer = agg.reduce(buffer, tuple(c[r] for c in value_cols))
+            return agg.finish(buffer)
+
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
+            for group in data:
+                batch_list = list(group)
+                if not batch_list:
+                    continue
+                if hasattr(pa, "concat_batches"):
+                    concatenated = pa.concat_batches(batch_list)
+                else:
+                    # pyarrow.concat_batches not supported before 19.0.0
+                    # remove this once we drop support for old versions
+                    concatenated = pa.RecordBatch.from_struct_array(
+                        pa.concat_arrays([b.to_struct_array() for b in batch_list])
+                    )
+                num_rows = concatenated.num_rows
+
+                result_arrays = []
+                for udf_index, (agg, args_offsets, kwargs_offsets, _) in enumerate(udfs):
+                    bound_type = window_bound_types[udf_index]
+                    result_type = return_schema.field(udf_index).type
+                    if bound_type == "unbounded":
+                        # One frame spanning the whole partition: compute once, repeat per row.
+                        value_cols = [concatenated.column(o).to_pylist() for o in args_offsets] + [
+                            concatenated.column(v).to_pylist() for v in kwargs_offsets.values()
+                        ]
+                        result = aggregate_frame(agg, value_cols, num_rows)
+                        result_arrays.append(pa.array([result] * num_rows, type=result_type))
+                    elif bound_type == "bounded":
+                        # Per-row frame: slice the batch to ``[begin, end)`` and fold its rows.
+                        begin_col = concatenated.column(args_offsets[0])
+                        end_col = concatenated.column(args_offsets[1])
+                        data_offsets = list(args_offsets[2:]) + list(kwargs_offsets.values())
+                        results = []
+                        for i in range(num_rows):
+                            offset = begin_col[i].as_py()
+                            length = end_col[i].as_py() - offset
+                            frame = concatenated.slice(offset=offset, length=length)
+                            value_cols = [frame.column(o).to_pylist() for o in data_offsets]
+                            results.append(aggregate_frame(agg, value_cols, length))
+                        result_arrays.append(pa.array(results, type=result_type))
                     else:
                         raise PySparkRuntimeError(
                             errorClass="INVALID_WINDOW_BOUND_TYPE",

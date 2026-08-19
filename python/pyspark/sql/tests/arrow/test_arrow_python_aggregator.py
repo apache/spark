@@ -280,12 +280,47 @@ class ArrowPythonAggregatorTestsMixin:
         with self.assertRaises(AnalysisException):
             df.groupBy("k").pivot("p").agg(udaf(Mean())(sf.col("v"))).collect()
 
-    def test_window_rejected(self):
-        # The incremental aggregator has no window operator; using it over a window must fail
-        # analysis rather than crash with an internal error at execution.
+    def test_window_unbounded(self):
+        # Unbounded partition frame: every row gets its whole group's aggregate. Cross-checked
+        # against the equivalent SQL window aggregate.
         df = self._data()
-        with self.assertRaises(AnalysisException):
-            df.select(udaf(Mean())(sf.col("v")).over(Window.partitionBy("k"))).collect()
+        w = Window.partitionBy("k")
+        result = df.withColumn("m", udaf(Mean())(sf.col("v")).over(w)).orderBy("k", "v").collect()
+        expected = df.withColumn("m", sf.avg("v").over(w)).orderBy("k", "v").collect()
+        self.assertEqual(len(result), len(expected))
+        for r, e in zip(result, expected):
+            self.assertAlmostEqual(r["m"], e["m"], places=6)
+
+    def test_window_running_frame(self):
+        # Ordered, growing frame (unbounded preceding .. current row): a running aggregate that
+        # exercises the per-row bounded-frame path in the worker.
+        df = self._data()
+        w = (
+            Window.partitionBy("k")
+            .orderBy("v")
+            .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+        )
+        result = df.withColumn("m", udaf(Mean())(sf.col("v")).over(w)).orderBy("k", "v").collect()
+        expected = df.withColumn("m", sf.avg("v").over(w)).orderBy("k", "v").collect()
+        self.assertEqual(len(result), len(expected))
+        for r, e in zip(result, expected):
+            self.assertAlmostEqual(r["m"], e["m"], places=6)
+
+    def test_window_sliding_frame(self):
+        # Sliding frame (1 preceding .. 1 following) with a custom single-field buffer aggregator.
+        df = self._data()
+        w = Window.partitionBy("k").orderBy("v").rowsBetween(-1, 1)
+        result = (
+            df.withColumn("s", udaf(SumSquares())(sf.col("v")).over(w)).orderBy("k", "v").collect()
+        )
+        expected = (
+            df.withColumn("s", sf.sum(sf.col("v") * sf.col("v")).over(w))
+            .orderBy("k", "v")
+            .collect()
+        )
+        self.assertEqual(len(result), len(expected))
+        for r, e in zip(result, expected):
+            self.assertAlmostEqual(r["s"], e["s"], places=4)
 
     def test_mixed_with_other_aggregate_rejected(self):
         # An incremental aggregator mixed with another aggregate in one Aggregate is unsupported;

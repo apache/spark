@@ -127,7 +127,8 @@ case class ArrowWindowPythonExec(
   private def supportedPythonEvalTypes: Array[Int] =
     Array(
       PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
-      PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF)
+      PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+      PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF)
 }
 
 object ArrowWindowPythonExec {
