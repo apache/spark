@@ -280,9 +280,7 @@ class StreamingShuffleWriter[K, V](
           val newFuture = future.whenComplete { (client, ex) =>
             ex match {
               case null => sendToClient(client)
-              case _ =>
-                buf.release()
-                done()
+              case _ => buf.release(); done()
             }
           }
           // Once the future is completed, stop accumulating CompletionStages.
