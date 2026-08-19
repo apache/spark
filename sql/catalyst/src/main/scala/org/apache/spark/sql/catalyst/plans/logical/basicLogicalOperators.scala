@@ -191,9 +191,14 @@ object Project {
     }
   }
 
-  // Store assignment must not use character-to-character CAST truncation (ISO 6.13).
-  // Cast to unconstrained STRING first, then apply the write-side length check.
-  // Avoid replaceCharVarcharWithString: first-class types keep CHAR/VARCHAR.
+  /**
+   * Cast `col` for ANSI store assignment without using character-to-character CAST
+   * truncation (ISO 6.13).
+   *
+   * For CHAR/VARCHAR targets the plan is Cast to unconstrained STRING, then
+   * `stringLengthCheck` (write-side overflow). Avoid replaceCharVarcharWithString
+   * so first-class types stay CHAR/VARCHAR.
+   */
   private def storeAssignCast(
       col: Expression,
       other: DataType,

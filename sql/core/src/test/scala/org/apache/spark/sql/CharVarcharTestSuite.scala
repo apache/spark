@@ -21,7 +21,7 @@ import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, ScalarSubquery, StringRPad}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, Literal, ScalarSubquery, StringRPad}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Project}
@@ -1275,6 +1275,20 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         assert(sql(mixedStrength).schema.head.dataType === CharType(4, "UTF8_LCASE"),
           s"$key=$value Implicit CHAR(2) vs Default CHAR(4) must widen, not narrow")
       }
+    }
+  }
+
+  test("SPARK-58794: typed CHAR Literal is re-padded when LCT widens the length") {
+    // CollationTypeCoercion.changeType used to `copy(dataType)` on Literal, which would
+    // leave CHAR(2) "a " as a CHAR(4) value without the extra pad. SQL CAST is a Cast
+    // node so goldens do not cover this; Literal.create does.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val c2 = Column(Literal.create("a", CharType(2, "UTF8_LCASE")))
+      val c4 = Column(Literal.create("bb", CharType(4, "UTF8_LCASE")))
+      val coalesced = functions.coalesce(c2, c4)
+      val df = spark.range(1).select(coalesced.as("c"))
+      assert(df.schema.head.dataType === CharType(4, "UTF8_LCASE"))
+      checkAnswer(df, Row("a   "))
     }
   }
 

@@ -114,6 +114,9 @@ object CollationTypeCoercion extends SQLConfHelper {
    * Never retarget an existing Cast (`cast.copy(dataType = ...)`). Explicit CAST
    * truncation / overflow (ISO 6.13) and CHAR padding must stay on the inner node;
    * LCT is an outer Cast. Uncollated TypeCoercion already nests.
+   *
+   * Literals: `copy(dataType)` is enough when only collation changes. When a string
+   * constraint changes (CHAR(2) to CHAR(4)), wrap in Cast so padding is re-applied.
    */
   private def changeType(expr: Expression, newType: DataType): Expression = {
     mergeTypes(expr.dataType, newType) match {
@@ -121,6 +124,8 @@ object CollationTypeCoercion extends SQLConfHelper {
         assert(!newDataType.existsRecursively(_.isInstanceOf[StringTypeWithContext]))
 
         expr match {
+          case lit: Literal if stringConstraintChanged(lit.dataType, newDataType) =>
+            Cast(lit, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
           case lit: Literal => lit.copy(dataType = newDataType)
           case cast: Cast =>
             Cast(cast, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
@@ -132,6 +137,24 @@ object CollationTypeCoercion extends SQLConfHelper {
 
       case _ =>
         expr
+    }
+  }
+
+  /**
+   * True when CHAR/VARCHAR length (or nested length) differs between `from` and `to`.
+   * Collation-only differences are not a constraint change.
+   */
+  private def stringConstraintChanged(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      case (f: StringType, t: StringType) => f.constraint != t.constraint
+      case (ArrayType(fe, _), ArrayType(te, _)) => stringConstraintChanged(fe, te)
+      case (MapType(fk, fv, _), MapType(tk, tv, _)) =>
+        stringConstraintChanged(fk, tk) || stringConstraintChanged(fv, tv)
+      case (fs: StructType, ts: StructType) if fs.length == ts.length =>
+        fs.fields.zip(ts.fields).exists { case (a, b) =>
+          stringConstraintChanged(a.dataType, b.dataType)
+        }
+      case _ => false
     }
   }
 
