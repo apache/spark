@@ -136,7 +136,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
       inputAttrs: Seq[Attribute],
       inputExprCode: Seq[ExprCode]): String = {
     val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
-      case IsNotNull(a) => isNullIntolerant(a) && a.references.subsetOf(AttributeSet(inputAttrs))
+      case IsNotNull(a: Attribute) => isNullIntolerant(a) && a.references.subsetOf(AttributeSet(inputAttrs))
       case _ => false
     }
     val nonNullAttrExprIds = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
@@ -237,7 +237,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
-    case IsNotNull(a) => isNullIntolerant(a) && a.references.subsetOf(child.outputSet)
+    case IsNotNull(a: Attribute) => isNullIntolerant(a) && a.references.subsetOf(child.outputSet)
     case _ => false
   }
 

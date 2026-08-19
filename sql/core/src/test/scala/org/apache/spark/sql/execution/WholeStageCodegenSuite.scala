@@ -35,6 +35,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType}
 
+case class Spark51356Inner(d: Int)
+case class Spark51356Mid(c: Spark51356Inner = null)
+case class Spark51356Outer(b: Spark51356Mid = null)
+
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 class WholeStageCodegenSuite extends SharedSparkSession
   with DisableAdaptiveExecutionSuite {
@@ -1616,5 +1620,30 @@ class WholeStageCodegenSuite extends SharedSparkSession
       "switch/case bodies should stay inline with a large methodSplitThreshold")
     assert(sinhPattern.findAllIn(inlineCode).length == 1,
       "sinh(v) should be evaluated only once per input row without function splitting")
+  }
+
+  test("SPARK-51356: FilterExec incorrectly reorders IsNotNull predicates for nested access") {
+    import testImplicits._
+    val data = Seq(
+      Spark51356Outer(null),
+      Spark51356Outer(Spark51356Mid(null)),
+      Spark51356Outer(Spark51356Mid(Spark51356Inner(0))),
+      Spark51356Outer(Spark51356Mid(Spark51356Inner(1))))
+    val isDZero = udf((c: Spark51356Inner) => c.d == 0)
+
+    val mids = spark.createDataset(data).map(identity)
+      .where(col("b").isNotNull).select(col("b").as[Spark51356Mid])
+    val df = mids.filter(col("c").isNotNull).filter(not(isDZero(col("c"))))
+
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      checkAnswer(df.toDF(), Row(Row(1)) :: Nil)
+    }
+
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      checkAnswer(df.toDF(), Row(Row(1)) :: Nil)
+    }
   }
 }
