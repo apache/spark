@@ -1542,8 +1542,9 @@ case class JsonArray(
       }
     }.mkString(", ")
     // Use reference identity, not value equality: an explicit `RETURNING STRING COLLATE ...`
-    // produces a distinct StringType instance that `==` the default companion `StringType`, so `==`
-    // would drop it. Only the omitted default (the companion, by reference) should render nothing.
+    // produces a distinct StringType instance that compares equal (`==`) to the default companion
+    // `StringType`, so `==` would drop it. Only the omitted default (the companion, by reference)
+    // should render nothing.
     val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
     val nullSQL = nullBehavior match {
       case JsonConstructorNullBehavior.Null => " NULL ON NULL"

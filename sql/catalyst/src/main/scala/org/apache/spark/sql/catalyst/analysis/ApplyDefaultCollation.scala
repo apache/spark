@@ -425,9 +425,9 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
         cast.copy(child = e.withNewChildren(e.children.map(inner)))
 
       // Add cast on top of [[DefaultStringProducingExpression]], unless it already carries an
-      // explicit (non-default) string collation -- e.g. `JSON_ARRAY(... RETURNING STRING COLLATE
-      // UTF8_BINARY)` -- which the user chose deliberately and the object/view default must not
-      // override.
+      // explicitly written string type -- e.g. `JSON_ARRAY(... RETURNING STRING COLLATE
+      // UTF8_BINARY)`, explicit even though UTF8_BINARY is the default collation -- which the user
+      // chose deliberately and the object/view default must not override.
       case e: DefaultStringProducingExpression if !hasExplicitStringCollation(e.dataType) =>
         Cast(e.withNewChildren(e.children.map(inner)), newType)
 
@@ -444,10 +444,11 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
     dataType.existsRecursively(isDefaultStringCharOrVarcharType)
 
   /**
-   * A [[StringType]] carrying an explicit, non-default collation (distinguished from the default
-   * `StringType` companion by reference identity, matching the convention documented in the
-   * single-pass resolver's `DefaultCollationTypeCoercion`). Such a type reflects a collation the
-   * user chose explicitly, so the object/view default collation must not overwrite it.
+   * A [[StringType]] that was written explicitly -- a distinct instance rather than the default
+   * `StringType` companion (distinguished by reference identity, matching the convention
+   * documented in the single-pass resolver's `DefaultCollationTypeCoercion`), even when its
+   * collation is the default UTF8_BINARY. Such a type reflects a choice the user made explicitly,
+   * so the object/view default collation must not overwrite it.
    */
   private def hasExplicitStringCollation(dataType: DataType): Boolean = dataType match {
     case st: StringType => !st.eq(StringType)
