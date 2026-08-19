@@ -891,6 +891,57 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       )
       checkAnswer(sql("SELECT CAST(12345 AS VARCHAR(5)) AS v"), Row("12345"))
       checkAnswer(sql("SELECT try_cast(12345 AS VARCHAR(4)) AS v"), Row(null))
+
+      // LCT must wrap the inner CAST, not retarget it (truncation / overflow stay).
+      checkAnswer(
+        sql("SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4))) AS c"),
+        Row("ab"))
+      checkAnswer(
+        sql("""SELECT CASE WHEN true THEN CAST('abcdef' AS VARCHAR(2))
+          |ELSE CAST('x' AS VARCHAR(4)) END AS c""".stripMargin),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT CAST('abcdef' AS VARCHAR(2)) IN (CAST('ab' AS VARCHAR(4)))"),
+        Row(true))
+      checkAnswer(
+        sql("""SELECT coalesce(
+          |  CAST('abcdef' AS VARCHAR(2) COLLATE UTF8_LCASE),
+          |  CAST('x' AS VARCHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT coalesce(try_cast(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5))) AS c"),
+        Row("x"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("SELECT coalesce(CAST(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5)))").collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "4")
+      )
+    }
+  }
+
+  test("SPARK-58797: store assignment with standardSemantics and charVarcharAsString") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      val wide = new StructType().add("c", CharType(10))
+      val df = spark.createDataFrame(java.util.Arrays.asList(Row("spark")), wide)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          df.to(new StructType().add("c", CharType(3))).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+      withTable("std_and_as_string") {
+        sql("CREATE TABLE std_and_as_string (v VARCHAR(2)) USING parquet")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql("INSERT INTO std_and_as_string VALUES ('abc')")
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "2"))
+      }
     }
   }
 
@@ -1295,6 +1346,17 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assert(sql("SELECT try_cast('abcdef' AS CHAR(2)) AS c").schema.head.dataType ===
         CharType(2))
       checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS c"), Row("ab"))
+      checkAnswer(
+        sql("SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4))) AS c"),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT CAST('abcdef' AS VARCHAR(2)) IN (CAST('ab' AS VARCHAR(4)))"),
+        Row(true))
+      checkAnswer(
+        sql("""SELECT coalesce(
+          |  CAST('abcdef' AS VARCHAR(2) COLLATE UTF8_LCASE),
+          |  CAST('x' AS VARCHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("ab"))
 
       // Least common type (R2): COALESCE / CASE / NULL / CHAR+VARCHAR / CHAR+STRING.
       assert(sql(

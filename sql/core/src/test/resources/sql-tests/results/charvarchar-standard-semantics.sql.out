@@ -95,6 +95,63 @@ NULL
 
 
 -- !query
+SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4)))
+-- !query schema
+struct<coalesce(CAST(abcdef AS VARCHAR(2)), CAST(x AS VARCHAR(4))):varchar(4)>
+-- !query output
+ab
+
+
+-- !query
+SELECT CASE WHEN true THEN CAST('abcdef' AS VARCHAR(2)) ELSE CAST('x' AS VARCHAR(4)) END
+-- !query schema
+struct<CASE WHEN true THEN CAST(abcdef AS VARCHAR(2)) ELSE CAST(x AS VARCHAR(4)) END:varchar(4)>
+-- !query output
+ab
+
+
+-- !query
+SELECT CAST('abcdef' AS VARCHAR(2)) IN (CAST('ab' AS VARCHAR(4)))
+-- !query schema
+struct<(CAST(abcdef AS VARCHAR(2)) IN (CAST(ab AS VARCHAR(4)))):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT coalesce(
+  CAST('abcdef' AS VARCHAR(2) COLLATE UTF8_LCASE),
+  CAST('x' AS VARCHAR(4) COLLATE UTF8_LCASE))
+-- !query schema
+struct<coalesce(CAST(abcdef AS VARCHAR(2) COLLATE UTF8_LCASE), CAST(x AS VARCHAR(4) COLLATE UTF8_LCASE)):varchar(4) collate UTF8_LCASE>
+-- !query output
+ab
+
+
+-- !query
+SELECT coalesce(try_cast(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5)))
+-- !query schema
+struct<coalesce(TRY_CAST(12345 AS VARCHAR(4)), CAST(x AS VARCHAR(5))):varchar(5)>
+-- !query output
+x
+
+
+-- !query
+SELECT coalesce(CAST(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "EXCEED_LIMIT_LENGTH",
+  "sqlState" : "54006",
+  "messageParameters" : {
+    "limit" : "4"
+  }
+}
+
+
+-- !query
 SELECT typeof(coalesce(cast('hello' AS VARCHAR(5)), cast('world' AS VARCHAR(10))))
 -- !query schema
 struct<typeof(coalesce(CAST(hello AS VARCHAR(5)), CAST(world AS VARCHAR(10)))):string>
@@ -396,7 +453,7 @@ char(2) collate UTF8_LCASE
 SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)))
 -- !query schema
-struct<typeof(coalesce(a, CAST(bb AS CHAR(4) COLLATE UTF8_LCASE))):string>
+struct<typeof(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS CHAR(4) COLLATE UTF8_LCASE))):string>
 -- !query output
 char(4) collate UTF8_LCASE
 
@@ -405,7 +462,7 @@ char(4) collate UTF8_LCASE
 SELECT concat('<', coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)), '>')
 -- !query schema
-struct<concat('<' collate UTF8_LCASE, coalesce(a, CAST(bb AS CHAR(4) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE):string collate UTF8_LCASE>
+struct<concat('<' collate UTF8_LCASE, coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS CHAR(4) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 <a   >
 
@@ -424,7 +481,7 @@ SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
   cast(1 AS CHAR(4) COLLATE UTF8_LCASE)))
 -- !query schema
-struct<typeof(coalesce(a, CAST(1 AS CHAR(4) COLLATE UTF8_LCASE))):string>
+struct<typeof(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(1 AS CHAR(4) COLLATE UTF8_LCASE))):string>
 -- !query output
 char(4) collate UTF8_LCASE
 
@@ -434,7 +491,7 @@ SELECT concat('<', coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
   cast(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>')
 -- !query schema
-struct<concat('<' collate UTF8_LCASE, coalesce(a, CAST(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE):string collate UTF8_LCASE>
+struct<concat('<' collate UTF8_LCASE, coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 <a   >
 
@@ -624,7 +681,7 @@ true
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) =
   cast('a' AS CHAR(4) COLLATE UTF8_BINARY_RTRIM)
 -- !query schema
-struct<(a = CAST(a AS CHAR(4) COLLATE UTF8_BINARY_RTRIM)):boolean>
+struct<(CAST(a AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = CAST(a AS CHAR(4) COLLATE UTF8_BINARY_RTRIM)):boolean>
 -- !query output
 true
 

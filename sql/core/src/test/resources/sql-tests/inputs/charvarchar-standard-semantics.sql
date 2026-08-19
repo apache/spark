@@ -15,6 +15,16 @@ SELECT CAST(12345 AS VARCHAR(4));
 SELECT CAST(12345 AS VARCHAR(5));
 SELECT try_cast(12345 AS VARCHAR(4));
 
+-- Explicit CAST inside LCT must keep inner truncation / overflow (do not retarget).
+SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4)));
+SELECT CASE WHEN true THEN CAST('abcdef' AS VARCHAR(2)) ELSE CAST('x' AS VARCHAR(4)) END;
+SELECT CAST('abcdef' AS VARCHAR(2)) IN (CAST('ab' AS VARCHAR(4)));
+SELECT coalesce(
+  CAST('abcdef' AS VARCHAR(2) COLLATE UTF8_LCASE),
+  CAST('x' AS VARCHAR(4) COLLATE UTF8_LCASE));
+SELECT coalesce(try_cast(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5)));
+SELECT coalesce(CAST(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5)));
+
 -- R2: least common type (COALESCE / CASE)
 SELECT typeof(coalesce(cast('hello' AS VARCHAR(5)), cast('world' AS VARCHAR(10))));
 SELECT typeof(coalesce(cast('hello' AS VARCHAR(5)), cast('world!' AS CHAR(6))));

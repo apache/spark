@@ -35,6 +35,13 @@ import org.apache.spark.util.SparkStringUtils
 
 trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
+  /**
+   * ISO 6.13 truncation applies only to user-written CAST / TRY_CAST. Implicit and
+   * store-assignment Casts keep the write-side length check. [[ToPrettyString]] is never
+   * a CAST, so it stays false.
+   */
+  protected def truncateCharVarcharOnCast: Boolean = false
+
   private lazy val dateFormatter = DateFormatter()
   private lazy val timeFormatter = new FractionTimeFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
@@ -59,9 +66,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   protected final def castToString(
       from: DataType, to: StringConstraint = NoConstraint): Any => UTF8String =
     (to, from) match {
-      case (FixedLength(length), _: StringType) if SQLConf.get.charVarcharStandardSemantics =>
+      case (FixedLength(length), _: StringType)
+          if SQLConf.get.charVarcharStandardSemantics && truncateCharVarcharOnCast =>
         s => CharVarcharCodegenUtils.charTypeCast(castToString(from)(s), length)
-      case (MaxLength(length), _: StringType) if SQLConf.get.charVarcharStandardSemantics =>
+      case (MaxLength(length), _: StringType)
+          if SQLConf.get.charVarcharStandardSemantics && truncateCharVarcharOnCast =>
         s => CharVarcharCodegenUtils.varcharTypeCast(castToString(from)(s), length)
       case (FixedLength(length), _) =>
         s => CharVarcharCodegenUtils.charTypeWriteSideCheck(castToString(from)(s), length)
@@ -202,11 +211,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       val castToString = castToStringCode(from, ctx)(c, tmpVar)
       val maintainConstraint = (to, from) match {
         case (FixedLength(length), _: StringType)
-            if SQLConf.get.charVarcharStandardSemantics =>
+            if SQLConf.get.charVarcharStandardSemantics && truncateCharVarcharOnCast =>
           code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
                 .charTypeCast($tmpVar, $length);""".stripMargin
         case (MaxLength(length), _: StringType)
-            if SQLConf.get.charVarcharStandardSemantics =>
+            if SQLConf.get.charVarcharStandardSemantics && truncateCharVarcharOnCast =>
           code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
                 .varcharTypeCast($tmpVar, $length);""".stripMargin
         case (FixedLength(length), _) =>

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{
-  ArrayType, CharType, DataType, IndeterminateStringType, MapType, NullType, StringHelper,
+  ArrayType, DataType, IndeterminateStringType, MapType, NullType, StringHelper,
   StringType, StructType
 }
 import org.apache.spark.sql.util.SchemaUtils
@@ -111,10 +111,9 @@ object CollationTypeCoercion extends SQLConfHelper {
   /**
    * Changes the data type of the expression to the given `newType`.
    *
-   * An existing Cast is retargeted when the rewrite still materializes CHAR padding
-   * (CHAR to a wider CHAR). If the source is CHAR and the LCT is not, retargeting
-   * would skip the pad: CAST('a' AS CHAR(2)) rewritten as CAST('a' AS VARCHAR(2))
-   * is 'a', not 'a '. Nest a new Cast in that case, matching uncollated TypeCoercion.
+   * Never retarget an existing Cast (`cast.copy(dataType = ...)`). Explicit CAST
+   * truncation / overflow (ISO 6.13) and CHAR padding must stay on the inner node;
+   * LCT is an outer Cast. Uncollated TypeCoercion already nests.
    */
   private def changeType(expr: Expression, newType: DataType): Expression = {
     mergeTypes(expr.dataType, newType) match {
@@ -123,9 +122,8 @@ object CollationTypeCoercion extends SQLConfHelper {
 
         expr match {
           case lit: Literal => lit.copy(dataType = newDataType)
-          case cast: Cast if needsCharPaddingCast(cast.dataType, newDataType) =>
+          case cast: Cast =>
             Cast(cast, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
-          case cast: Cast => cast.copy(dataType = newDataType)
           case subquery: SubqueryExpression =>
             changeTypeInSubquery(subquery, newType)
 
@@ -134,24 +132,6 @@ object CollationTypeCoercion extends SQLConfHelper {
 
       case _ =>
         expr
-    }
-  }
-
-  /**
-   * True when rewriting `from` to `to` would drop CHAR padding if an existing Cast
-   * were retargeted instead of nested.
-   */
-  private def needsCharPaddingCast(from: DataType, to: DataType): Boolean = {
-    (from, to) match {
-      case (_: CharType, t) if !t.isInstanceOf[CharType] => true
-      case (ArrayType(lf, _), ArrayType(rt, _)) => needsCharPaddingCast(lf, rt)
-      case (MapType(lk, lv, _), MapType(rk, rv, _)) =>
-        needsCharPaddingCast(lk, rk) || needsCharPaddingCast(lv, rv)
-      case (StructType(lf), StructType(rt)) =>
-        lf.zip(rt).exists { case (l, r) =>
-          needsCharPaddingCast(l.dataType, r.dataType)
-        }
-      case _ => false
     }
   }
 

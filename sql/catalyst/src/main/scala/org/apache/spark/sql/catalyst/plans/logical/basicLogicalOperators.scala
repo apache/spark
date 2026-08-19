@@ -184,27 +184,36 @@ object Project {
         if (other == target) {
           col
         } else if (Cast.canANSIStoreAssign(other, target)) {
-          // Store assignment must not use character-to-character CAST truncation (ISO 6.13).
-          // Cast to unconstrained STRING first, then apply the write-side length check.
-          // Avoid replaceCharVarcharWithString: first-class types keep CHAR/VARCHAR.
-          val (castTarget, lengthCheckType) = target match {
-            case c: CharType => (c.toStringType, Some(c: DataType))
-            case v: VarcharType => (v.toStringType, Some(v: DataType))
-            case otherType => (otherType, None)
-          }
-          val casted = if (other == castTarget) {
-            col
-          } else {
-            Cast(col, castTarget, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
-          }
-          if (lengthCheckType.isDefined && !conf.charVarcharAsString) {
-            CharVarcharUtils.stringLengthCheck(casted, lengthCheckType.get)
-          } else {
-            casted
-          }
+          storeAssignCast(col, other, target, conf)
         } else {
           throw QueryCompilationErrors.invalidColumnOrFieldDataTypeError(columnPath, other, target)
         }
+    }
+  }
+
+  // Store assignment must not use character-to-character CAST truncation (ISO 6.13).
+  // Cast to unconstrained STRING first, then apply the write-side length check.
+  // Avoid replaceCharVarcharWithString: first-class types keep CHAR/VARCHAR.
+  private def storeAssignCast(
+      col: Expression,
+      other: DataType,
+      target: DataType,
+      conf: SQLConf): Expression = {
+    val (castTarget, lengthCheckType) = target match {
+      case c: CharType => (c.toStringType, Some(c: DataType))
+      case v: VarcharType => (v.toStringType, Some(v: DataType))
+      case otherType => (otherType, None)
+    }
+    val casted = if (other == castTarget) {
+      col
+    } else {
+      Cast(col, castTarget, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
+    }
+    lengthCheckType match {
+      case Some(dt) if CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) =>
+        CharVarcharUtils.stringLengthCheck(casted, dt)
+      case _ =>
+        casted
     }
   }
 
