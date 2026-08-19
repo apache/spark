@@ -80,7 +80,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     inputFiles.zipWithIndex.foreach { case (path, i) =>
       val expectedFileName = ReliableCheckpointRDD.checkpointFileName(i)
       if (path.getName != expectedFileName) {
-        throw SparkCoreErrors.invalidCheckpointFileError(path, expectedFileName)
+        throw SparkCoreErrors.invalidCheckpointDirectoryError(path, expectedFileName)
       }
     }
     Array.tabulate(inputFiles.length)(i => new CheckpointRDDPartition(i))

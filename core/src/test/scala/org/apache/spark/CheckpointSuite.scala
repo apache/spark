@@ -709,7 +709,7 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       val recovered = sc.checkpointFile[Int](checkpointPath.toString)
       checkError(
         exception = intercept[SparkException](recovered.partitions),
-        condition = "INVALID_CHECKPOINT_FILE",
+        condition = "INVALID_CHECKPOINT_DIRECTORY",
         sqlState = Some("58030"),
         parameters = Map(
           "path" -> checkpointPath.toString,

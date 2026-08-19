@@ -163,13 +163,15 @@ private[spark] object SparkCoreErrors {
     )
   }
 
-  def invalidCheckpointFileError(path: Path, expectedFileName: String): Throwable = {
+  def invalidCheckpointDirectoryError(
+      partitionFilePath: Path,
+      expectedFileName: String): Throwable = {
     new SparkException(
-      errorClass = "INVALID_CHECKPOINT_FILE",
+      errorClass = "INVALID_CHECKPOINT_DIRECTORY",
       messageParameters = Map(
-        "path" -> s"${path.getParent}",
+        "path" -> s"${partitionFilePath.getParent}",
         "expectedFileName" -> expectedFileName,
-        "fileName" -> path.getName
+        "fileName" -> partitionFilePath.getName
       ),
       cause = null
     )

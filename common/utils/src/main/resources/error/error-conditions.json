@@ -3778,7 +3778,7 @@
     },
     "sqlState" : "42K03"
   },
-  "INVALID_CHECKPOINT_FILE" : {
+  "INVALID_CHECKPOINT_DIRECTORY" : {
     "message" : [
       "Cannot read the checkpoint directory <path>: expected the partition file <expectedFileName> but found <fileName>. The partition files must be numbered contiguously from part-00000, one per partition."
     ],
