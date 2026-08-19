@@ -98,12 +98,16 @@ case class ParseSql(child: Expression)
 }
 
 object ParseSql {
-  /** Register the builtin with a session function registry. */
+  /** Register the builtin with a session function registry and the global builtin set. */
   def register(registry: FunctionRegistry): Unit = {
     val (info, builder) = FunctionRegistryBase.build[ParseSql]("parse_sql", Some("5.0.0"))
+    // Keep the session registry in sync for the first session (cloned before this runs).
     registry.registerFunction(
       FunctionRegistry.builtinFunctionIdentifier("parse_sql"),
       info,
       builder)
+    // Also publish into FunctionRegistry.builtin / functionSet so SHOW USER/SYSTEM
+    // FUNCTIONS classify parse_sql as SYSTEM rather than a user/temp function.
+    FunctionRegistry.registerExtraBuiltin("parse_sql", info, builder)
   }
 }
