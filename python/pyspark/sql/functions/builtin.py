@@ -32956,7 +32956,7 @@ def bitmap_construct_agg(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def bitmap_contains(bitmap: "ColumnOrName", bit_position: "ColumnOrName") -> Column:
     """
-    Returns true if the bit at the given position is set in the bitmap.
+    Returns true if the bit at the given bucket-local position is set in the bitmap.
 
     .. versionadded:: 4.4.0
 
@@ -32972,6 +32972,13 @@ def bitmap_contains(bitmap: "ColumnOrName", bit_position: "ColumnOrName") -> Col
     -------
     :class:`~pyspark.sql.Column`
         A boolean column. A NULL bitmap or position produces a NULL result.
+
+    Notes
+    -----
+    ``bit_position`` is local to one bitmap bucket. To query an original value, use
+    :func:`bitmap_bit_position` and separately match :func:`bitmap_bucket_number` to the bitmap
+    bucket. A negative position, a position at or above 32768, or a position beyond the actual
+    bitmap length produces false.
 
     See Also
     --------

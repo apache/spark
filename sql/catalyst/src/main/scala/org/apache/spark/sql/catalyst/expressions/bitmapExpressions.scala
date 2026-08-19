@@ -168,16 +168,18 @@ case class BitmapCount(child: Expression)
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(bitmap, bit_position) - Returns true if the bit at the given position is set in the
-    bitmap, false otherwise.
+    _FUNC_(bitmap, bit_position) - Returns true if the bit at the given bucket-local position is
+    set in the bitmap, false otherwise.
   """,
   arguments = """
     Arguments:
       * bitmap - The bitmap to test.
         An expression that evaluates to a binary. A NULL bitmap produces a NULL result.
-      * bit_position - The bit position to test.
+      * bit_position - The bucket-local bit position to test.
         An expression that evaluates to a numeric value and is cast to a long. A NULL position
-        produces a NULL result.
+        produces a NULL result. A negative position, a position at or above 32768, or a position
+        beyond the actual bitmap length returns false. To query an original value, use
+        bitmap_bit_position(value) and match bitmap_bucket_number(value) to the bitmap bucket.
   """,
   examples = """
     Examples:

@@ -7327,13 +7327,16 @@ object functions {
     Column.fn("bitmap_construct_agg", col)
 
   /**
-   * Returns true if the bit at the given position is set in the bitmap.
+   * Returns true if the bit at the given bucket-local position is set in the bitmap. When
+   * querying an original value, use bitmap_bit_position(value) and separately match
+   * bitmap_bucket_number(value) to the bitmap bucket.
    *
    * @param bitmap
    *   A column that evaluates to a binary bitmap. A NULL bitmap produces a NULL result.
    * @param bitPosition
    *   A numeric column whose value is cast to a long bit position. A NULL position produces a
-   *   NULL result.
+   *   NULL result. A negative position, a position at or above 32768, or a position beyond the
+   *   actual bitmap length produces false.
    * @group misc_funcs
    * @since 4.4.0
    * @return

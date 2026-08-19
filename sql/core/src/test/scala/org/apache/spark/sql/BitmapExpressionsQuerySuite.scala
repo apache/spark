@@ -258,16 +258,23 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
     checkAnswer(result, Seq(Row("set")))
   }
 
-  test("bitmap_contains in a join condition") {
+  test("bitmap_contains in a bucketed join condition") {
     val result = spark.sql(
       """
-        |SELECT b.bucket, p.position
-        |FROM VALUES (0, X'01'), (1, X'02') AS b(bucket, bitmap)
-        |JOIN VALUES (0, 0L), (0, 1L), (1, 0L), (1, 1L) AS p(bucket, position)
-        |  ON b.bucket = p.bucket AND bitmap_contains(b.bitmap, p.position)
-        |ORDER BY b.bucket, p.position
+        |WITH bitmaps AS (
+        |  SELECT bitmap_bucket_number(value) AS bucket,
+        |    bitmap_construct_agg(bitmap_bit_position(value)) AS bitmap
+        |  FROM VALUES (1L), (32769L) AS src(value)
+        |  GROUP BY bitmap_bucket_number(value)
+        |)
+        |SELECT probe.value
+        |FROM bitmaps
+        |JOIN VALUES (1L), (2L), (32769L), (32770L) AS probe(value)
+        |  ON bitmaps.bucket = bitmap_bucket_number(probe.value)
+        |  AND bitmap_contains(bitmaps.bitmap, bitmap_bit_position(probe.value))
+        |ORDER BY probe.value
         |""".stripMargin)
-    checkAnswer(result, Seq(Row(0, 0L), Row(1, 1L)))
+    checkAnswer(result, Seq(Row(1L), Row(32769L)))
   }
 
   test("bitmap_contains with NULL inputs and codegen") {
