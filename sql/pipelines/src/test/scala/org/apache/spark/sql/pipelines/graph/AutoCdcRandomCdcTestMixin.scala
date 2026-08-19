@@ -181,7 +181,7 @@ trait AutoCdcRandomCdcTestMixin {
   protected def generateRandomCdcEventStream(rand: Random): Seq[SourceRow] = {
     val numDistinctKeys = resolveNumDistinctKeys()
     val maxUniqueEventsPerKey = resolveMaxUniqueEventsPerKey()
-    
+  
     var nextSequence: Long = 0L
     val events = ArrayBuffer.empty[SourceRow]
     (0 until numDistinctKeys).foreach { key =>
