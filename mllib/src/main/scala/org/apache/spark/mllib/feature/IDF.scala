@@ -223,25 +223,14 @@ private[spark] object IDFModel {
   private def transform(idf: Array[Double], v: Vector): Vector = {
     v match {
       case SparseVector(size, indices, values) =>
-        val (newIndices, newValues) = transformSparse(idf, indices, values)
+        val (newIndices, newValues) = NewIDFModel.predictSparse(idf, indices, values)
         Vectors.sparse(size, newIndices, newValues)
       case DenseVector(values) =>
-        val newValues = transformDense(idf, values)
+        val newValues = NewIDFModel.predictDense(idf, values)
         Vectors.dense(newValues)
       case other =>
         throw new UnsupportedOperationException(
           s"Only sparse and dense vectors are supported but got ${other.getClass}.")
     }
   }
-
-  private[spark] def transformDense(
-      idf: Array[Double],
-      values: Array[Double]): Array[Double] =
-    NewIDFModel.predictDense(idf, values)
-
-  private[spark] def transformSparse(
-      idf: Array[Double],
-      indices: Array[Int],
-      values: Array[Double]): (Array[Int], Array[Double]) =
-    NewIDFModel.predictSparse(idf, indices, values)
 }
