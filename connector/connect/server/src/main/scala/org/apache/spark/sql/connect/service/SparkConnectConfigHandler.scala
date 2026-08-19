@@ -18,12 +18,15 @@
 package org.apache.spark.sql.connect.service
 
 import scala.collection.JavaConverters._
+import scala.util.matching.Regex
 
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
 import org.apache.spark.sql.RuntimeConfig
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigResponse])
@@ -35,17 +38,24 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
         .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
         .session
 
+    // Read the pattern from the SparkConf rather than from the session config. The session config
+    // is writable by the client, so taking the pattern from there would let a client widen its own
+    // view of the configuration before reading it back.
+    val redactionPattern = session.sparkContext.conf.get(SECRET_REDACTION_PATTERN)
     val builder = request.getOperation.getOpTypeCase match {
       case proto.ConfigRequest.Operation.OpTypeCase.SET =>
         handleSet(request.getOperation.getSet, session.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.GET =>
-        handleGet(request.getOperation.getGet, session.conf)
+        handleGet(request.getOperation.getGet, session.conf, redactionPattern)
       case proto.ConfigRequest.Operation.OpTypeCase.GET_WITH_DEFAULT =>
-        handleGetWithDefault(request.getOperation.getGetWithDefault, session.conf)
+        handleGetWithDefault(
+          request.getOperation.getGetWithDefault,
+          session.conf,
+          redactionPattern)
       case proto.ConfigRequest.Operation.OpTypeCase.GET_OPTION =>
-        handleGetOption(request.getOperation.getGetOption, session.conf)
+        handleGetOption(request.getOperation.getGetOption, session.conf, redactionPattern)
       case proto.ConfigRequest.Operation.OpTypeCase.GET_ALL =>
-        handleGetAll(request.getOperation.getGetAll, session.conf)
+        handleGetAll(request.getOperation.getGetAll, session.conf, redactionPattern)
       case proto.ConfigRequest.Operation.OpTypeCase.UNSET =>
         handleUnset(request.getOperation.getUnset, session.conf)
       case proto.ConfigRequest.Operation.OpTypeCase.IS_MODIFIABLE =>
@@ -72,10 +82,15 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
 
   private def handleGet(
       operation: proto.ConfigRequest.Get,
-      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+      conf: RuntimeConfig,
+      redactionPattern: Regex): proto.ConfigResponse.Builder = {
     val builder = proto.ConfigResponse.newBuilder()
     operation.getKeysList.asScala.iterator.foreach { key =>
       val value = conf.get(key)
+      if (SparkConnectConfigHandler.isRedacted(key, Option(value), redactionPattern)) {
+        // This operation reports an unset key by failing, so a redacted key fails the same way.
+        throw QueryExecutionErrors.sqlConfigNotFoundError(key)
+      }
       builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value)))
       getWarning(key).foreach(builder.addWarnings)
     }
@@ -84,12 +99,19 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
 
   private def handleGetWithDefault(
       operation: proto.ConfigRequest.GetWithDefault,
-      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+      conf: RuntimeConfig,
+      redactionPattern: Regex): proto.ConfigResponse.Builder = {
     val builder = proto.ConfigResponse.newBuilder()
     operation.getPairsList.asScala.iterator.foreach { pair =>
       val (key, default) = SparkConnectConfigHandler.toKeyValue(pair)
-      val value = conf.get(key, default.orNull)
-      builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value)))
+      val stored = Option(conf.get(key, default.orNull))
+      // A redacted entry falls back to the caller's default, as an unset key does.
+      val value = if (SparkConnectConfigHandler.isRedacted(key, stored, redactionPattern)) {
+        default
+      } else {
+        stored
+      }
+      builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, value))
       getWarning(key).foreach(builder.addWarnings)
     }
     builder
@@ -97,10 +119,16 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
 
   private def handleGetOption(
       operation: proto.ConfigRequest.GetOption,
-      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+      conf: RuntimeConfig,
+      redactionPattern: Regex): proto.ConfigResponse.Builder = {
     val builder = proto.ConfigResponse.newBuilder()
     operation.getKeysList.asScala.iterator.foreach { key =>
-      val value = conf.getOption(key)
+      val stored = conf.getOption(key)
+      val value = if (SparkConnectConfigHandler.isRedacted(key, stored, redactionPattern)) {
+        None
+      } else {
+        stored
+      }
       builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, value))
       getWarning(key).foreach(builder.addWarnings)
     }
@@ -109,15 +137,22 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
 
   private def handleGetAll(
       operation: proto.ConfigRequest.GetAll,
-      conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+      conf: RuntimeConfig,
+      redactionPattern: Regex): proto.ConfigResponse.Builder = {
     val builder = proto.ConfigResponse.newBuilder()
+    // Drop redacted entries before the prefix is stripped below. Matching afterwards would let a
+    // GetAll with prefix `spark.my.secret.` return `spark.my.secret.value` as `value`, which no
+    // longer matches the pattern.
+    val visible = conf.getAll.iterator.filterNot { case (key, value) =>
+      SparkConnectConfigHandler.isRedacted(key, Option(value), redactionPattern)
+    }
     val results = if (operation.hasPrefix) {
       val prefix = operation.getPrefix
-      conf.getAll.iterator
+      visible
         .filter { case (key, _) => key.startsWith(prefix) }
         .map { case (key, value) => (key.substring(prefix.length), value) }
     } else {
-      conf.getAll.iterator
+      visible
     }
     results.foreach { case (key, value) =>
       builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value)))
@@ -161,6 +196,21 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
 object SparkConnectConfigHandler {
 
   private[connect] val unsupportedConfigurations = Set("spark.sql.execution.arrow.enabled")
+
+  /**
+   * Whether a configuration entry is considered sensitive and must not be disclosed by the Config
+   * RPC. Follows `spark.redaction.regex` and matches the key or the value, the way `Utils.redact`
+   * does for the environment UI and event logs and `SetCommand` does for `SET`. Matching the
+   * value is what covers a secret carried by an innocuous key, such as a password inside a JDBC
+   * URL.
+   */
+  private[connect] def isRedacted(
+      key: String,
+      value: Option[String],
+      redactionPattern: Regex): Boolean = {
+    redactionPattern.findFirstIn(key).isDefined ||
+    value.exists(redactionPattern.findFirstIn(_).isDefined)
+  }
 
   def toKeyValue(pair: proto.KeyValue): (String, Option[String]) = {
     val key = pair.getKey
