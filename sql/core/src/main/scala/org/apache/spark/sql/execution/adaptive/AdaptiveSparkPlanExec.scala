@@ -81,6 +81,14 @@ case class AdaptiveSparkPlanExec(
   // Access is serialized by the execution context's stage lifecycle lock.
   @transient private val uncancelledObsoleteStageIds = mutable.HashSet.empty[Int]
 
+  // Remember every local alias because each registers its own materialization callback.
+  @transient private val stageIdsByResult =
+    mutable.HashMap.empty[AtomicReference[Option[Any]], mutable.LinkedHashSet[Int]]
+
+  // A failed native cancellation can leave its exchange marked cancelled while its job still runs.
+  @transient private val failedStageCancellationResults =
+    mutable.HashSet.empty[AtomicReference[Option[Any]]]
+
   @transient private val logOnLevel: ( => MessageWithContext) => Unit =
     logBasedOnLevel(conf.adaptiveExecutionLogLevel)
 
@@ -459,20 +467,34 @@ case class AdaptiveSparkPlanExec(
         retainedStageResults += stage.resultOption
       case _ =>
     }
-    val obsoleteStages = candidateStages.collect {
+    val obsoleteStages = mutable.LinkedHashMap.empty[
+      AtomicReference[Option[Any]], mutable.ArrayBuffer[ExchangeQueryStageExec]]
+    candidateStages.foreach {
       case stage: ExchangeQueryStageExec
           if !retainedStageIds.contains(stage.id) &&
-            !retainedStageResults.contains(stage.resultOption) => stage
+            !retainedStageResults.contains(stage.resultOption) =>
+        obsoleteStages.getOrElseUpdate(stage.resultOption, mutable.ArrayBuffer.empty) += stage
+      case _ =>
     }
-    obsoleteStages.flatMap { stage =>
+    obsoleteStages.values.toSeq.flatMap { stages =>
+      val stage = stages.head
       val reservation = context.withStageLifecycleLock {
         if (!stage.isMaterialized && !context.isSharedStageResult(stage.resultOption)) {
-          context.reserveStageCancellation(stage.resultOption)
+          val recordedStageIds = stageIdsByResult.get(stage.resultOption).toSeq.flatten
+          val obsoleteStageIds = (recordedStageIds ++ stages.map(_.id)).distinct
+          if (failedStageCancellationResults.contains(stage.resultOption)) {
+            uncancelledObsoleteStageIds ++= obsoleteStageIds
+            None
+          } else {
+            context.reserveStageCancellation(stage.resultOption).map { cancellation =>
+              (cancellation, obsoleteStageIds)
+            }
+          }
         } else {
           None
         }
       }
-      reservation.flatMap { cancellation =>
+      reservation.toSeq.flatMap { case (cancellation, obsoleteStageIds) =>
         try {
           withShuffleCancellationLock(stage) {
             val shouldCancel = context.withStageLifecycleLock {
@@ -482,7 +504,7 @@ case class AdaptiveSparkPlanExec(
                 true
               } else {
                 if (canTrackObsoleteStageFailure(stage)) {
-                  uncancelledObsoleteStageIds += stage.id
+                  uncancelledObsoleteStageIds ++= obsoleteStageIds
                 }
                 false
               }
@@ -495,17 +517,18 @@ case class AdaptiveSparkPlanExec(
                 context.withStageLifecycleLock {
                   removeStageFromCache(stage)
                 }
-                Some(stage.id)
+                obsoleteStageIds
               } catch {
                 case NonFatal(t) =>
                   context.withStageLifecycleLock {
-                    uncancelledObsoleteStageIds += stage.id
+                    failedStageCancellationResults += stage.resultOption
+                    uncancelledObsoleteStageIds ++= obsoleteStageIds
                   }
                   logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
-                  None
+                  Seq.empty
               }
             } else {
-              None
+              Seq.empty
             }
           }
         } finally {
@@ -587,10 +610,19 @@ case class AdaptiveSparkPlanExec(
 
   /** Record only submitted shuffles, avoiding initialization of an unsubmitted lazy dependency. */
   private def recordSubmittedShuffleIds(stage: ExchangeQueryStageExec): Unit = {
-    stage.plan.foreach {
-      case shuffle: ShuffleExchangeLike if shuffle.futureAction.get().isDefined =>
+    def record(shuffle: ShuffleExchangeLike): Unit = {
+      if (shuffle.futureAction.get().isDefined) {
         context.shuffleIds.put(shuffle.shuffleId, true)
+      }
+    }
+    stage match {
+      // A reuse instance wraps its exchange in ReusedExchangeExec, which is a leaf node.
+      case shuffleStage: ShuffleQueryStageExec => record(shuffleStage.shuffle)
       case _ =>
+        stage.plan.foreach {
+          case shuffle: ShuffleExchangeLike => record(shuffle)
+          case _ =>
+        }
     }
   }
 
@@ -840,6 +872,8 @@ case class AdaptiveSparkPlanExec(
                 case Some(queryStage) =>
                   newStage = reuseQueryStage(queryStage, e)
                 case None =>
+                  context.registerStageOwner(newStage.resultOption, this)
+                  recordStageId(newStage)
                   context.stageCache.put(cacheKey, newStage)
               }
             }
@@ -955,11 +989,17 @@ case class AdaptiveSparkPlanExec(
   private def reuseQueryStage(
       existing: ExchangeQueryStageExec,
       exchange: Exchange): ExchangeQueryStageExec = {
-    context.markSharedStageResult(existing.resultOption)
+    context.markSharedStageResult(existing.resultOption, this)
     val queryStage = existing.newReuseInstance(currentStageId, exchange.output)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, exchange)
+    recordStageId(queryStage)
     queryStage
+  }
+
+  /** Track local reuse aliases whose materialization may report the same eventual failure. */
+  private def recordStageId(stage: ExchangeQueryStageExec): Unit = {
+    stageIdsByResult.getOrElseUpdate(stage.resultOption, mutable.LinkedHashSet.empty) += stage.id
   }
 
   /**
@@ -1241,19 +1281,40 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
   }
 
   /**
-   * Results reused anywhere in this execution context, including independently planned subqueries.
-   * Entries intentionally remain for the context's lifetime: once a result is shared, neither its
-   * original stage nor a reuse instance can subsequently be cancelled as obsolete.
+   * The adaptive plan that first cached each result. Identity, rather than case-class equality,
+   * distinguishes independently planned subqueries with equivalent physical input plans.
+   */
+  private val stageResultOwners =
+    new ConcurrentHashMap[AtomicReference[Option[Any]], AdaptiveSparkPlanExec]()
+
+  /** Record the original owner atomically with exchange-cache insertion. */
+  private[adaptive] def registerStageOwner(
+      resultOption: AtomicReference[Option[Any]], owner: AdaptiveSparkPlanExec): Unit = {
+    stageResultOwners.putIfAbsent(resultOption, owner)
+  }
+
+  /**
+   * Results reused by another adaptive plan in this execution context. Cross-plan protection
+   * remains for the context's lifetime; aliases within one plan are not considered shared.
    */
   private val sharedStageResults =
     new ConcurrentHashMap[AtomicReference[Option[Any]], Boolean]()
 
-  /** Permanently protect a result once an exchange is reused elsewhere in this execution. */
+  /** Conservatively protect a result whose owner is unknown or explicitly forced by a test. */
   private[adaptive] def markSharedStageResult(resultOption: AtomicReference[Option[Any]]): Unit = {
     sharedStageResults.put(resultOption, true)
   }
 
-  /** Return whether another stage or adaptive subquery has reused this result. */
+  /** Protect a result only when another adaptive plan, rather than a local alias, reuses it. */
+  private[adaptive] def markSharedStageResult(
+      resultOption: AtomicReference[Option[Any]], owner: AdaptiveSparkPlanExec): Unit = {
+    val originalOwner = stageResultOwners.get(resultOption)
+    if (originalOwner == null || (originalOwner ne owner)) {
+      markSharedStageResult(resultOption)
+    }
+  }
+
+  /** Return whether an independently owned adaptive plan has reused this result. */
   private[adaptive] def isSharedStageResult(resultOption: AtomicReference[Option[Any]]): Boolean = {
     sharedStageResults.containsKey(resultOption)
   }
