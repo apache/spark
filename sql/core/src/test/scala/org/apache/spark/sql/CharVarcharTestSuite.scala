@@ -1379,26 +1379,131 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
       // Session variables: DECLARE / SET keep the type and apply CAST assignment.
       sql("DECLARE OR REPLACE VARIABLE std_char_var CHAR(4)")
+      sql("DECLARE OR REPLACE VARIABLE std_varchar_var VARCHAR(4)")
       try {
         sql("SET VARIABLE std_char_var = 'ab'")
-        val varDf = sql("SELECT std_char_var AS c")
-        assert(varDf.schema.head.dataType === CharType(4))
+        val charVarDf = sql("SELECT std_char_var AS c")
+        assert(charVarDf.schema.head.dataType === CharType(4))
         checkAnswer(sql("SELECT concat('<', std_char_var, '>')"), Row("<ab  >"))
         intercept[SparkRuntimeException] {
           sql("SET VARIABLE std_char_var = 'abcde'").collect()
         }
+
+        sql("SET VARIABLE std_varchar_var = 'ab'")
+        val varcharVarDf = sql("SELECT std_varchar_var AS v")
+        assert(varcharVarDf.schema.head.dataType === VarcharType(4))
+        checkAnswer(sql("SELECT concat('<', std_varchar_var, '>')"), Row("<ab>"))
+        // Oversize by trailing blanks only is trimmed to fit.
+        sql("SET VARIABLE std_varchar_var = 'abcd '")
+        checkAnswer(sql("SELECT std_varchar_var"), Row("abcd"))
+        intercept[SparkRuntimeException] {
+          sql("SET VARIABLE std_varchar_var = 'abcde'").collect()
+        }
       } finally {
         sql("DROP TEMPORARY VARIABLE IF EXISTS std_char_var")
+        sql("DROP TEMPORARY VARIABLE IF EXISTS std_varchar_var")
+      }
+
+      // SQL scripting local variables keep CHAR/VARCHAR inside a compound statement.
+      val localVarScript =
+        """
+          |BEGIN
+          |  DECLARE c CHAR(4);
+          |  DECLARE v VARCHAR(4);
+          |  SET c = 'ab';
+          |  SET v = 'cd';
+          |  SELECT typeof(c), concat('<', c, '>'), typeof(v), concat('<', v, '>');
+          |END
+          |""".stripMargin
+      val localVarDf = sql(localVarScript)
+      assert(localVarDf.schema.map(_.dataType) ===
+        Seq(StringType, StringType, StringType, StringType))
+      checkAnswer(localVarDf, Row("char(4)", "<ab  >", "varchar(4)", "<cd>"))
+      intercept[SparkRuntimeException] {
+        sql(
+          """
+            |BEGIN
+            |  DECLARE c CHAR(4);
+            |  SET c = 'abcde';
+            |END
+            |""".stripMargin).collect()
+      }
+      intercept[SparkRuntimeException] {
+        sql(
+          """
+            |BEGIN
+            |  DECLARE v VARCHAR(4);
+            |  SET v = 'abcde';
+            |END
+            |""".stripMargin).collect()
+      }
+
+      // Cursor FETCH INTO CHAR/VARCHAR locals applies store assignment (pad / length).
+      withSQLConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED.key -> "true") {
+        val cursorScript =
+          """
+            |BEGIN
+            |  DECLARE fetched_c CHAR(4);
+            |  DECLARE fetched_v VARCHAR(4);
+            |  DECLARE cur CURSOR FOR
+            |    SELECT cast('ab' AS CHAR(4)) AS c, cast('cd' AS VARCHAR(4)) AS v;
+            |  OPEN cur;
+            |  FETCH cur INTO fetched_c, fetched_v;
+            |  SELECT typeof(fetched_c), concat('<', fetched_c, '>'),
+            |         typeof(fetched_v), concat('<', fetched_v, '>');
+            |  CLOSE cur;
+            |END
+            |""".stripMargin
+        checkAnswer(
+          sql(cursorScript),
+          Row("char(4)", "<ab  >", "varchar(4)", "<cd>"))
+
+        // FETCH into a shorter CHAR pads/truncates via assignment; oversize VARCHAR errors.
+        checkAnswer(
+          sql(
+            """
+              |BEGIN
+              |  DECLARE fetched CHAR(5);
+              |  DECLARE cur CURSOR FOR SELECT cast('xy' AS CHAR(2)) AS c;
+              |  OPEN cur;
+              |  FETCH cur INTO fetched;
+              |  SELECT concat('<', fetched, '>');
+              |  CLOSE cur;
+              |END
+              |""".stripMargin),
+          Row("<xy   >"))
+        intercept[SparkRuntimeException] {
+          sql(
+            """
+              |BEGIN
+              |  DECLARE fetched VARCHAR(2);
+              |  DECLARE cur CURSOR FOR SELECT cast('abcd' AS VARCHAR(4)) AS v;
+              |  OPEN cur;
+              |  FETCH cur INTO fetched;
+              |  CLOSE cur;
+              |END
+              |""".stripMargin).collect()
+        }
       }
 
       // SQL FUNCTION RETURNS CHAR applies store assignment on the returned value.
       sql("CREATE OR REPLACE TEMPORARY FUNCTION std_char_fn() RETURNS CHAR(3) RETURN 'a'")
+      sql(
+        """CREATE OR REPLACE TEMPORARY FUNCTION std_varchar_param(x VARCHAR(3))
+          |RETURNS VARCHAR(3) RETURN x""".stripMargin)
       try {
         val fnDf = sql("SELECT std_char_fn() AS c")
         assert(fnDf.schema.head.dataType === CharType(3))
         checkAnswer(sql("SELECT concat('<', std_char_fn(), '>')"), Row("<a  >"))
+        val paramDf = sql("SELECT std_varchar_param('ab') AS v")
+        assert(paramDf.schema.head.dataType === VarcharType(3))
+        checkAnswer(paramDf, Row("ab"))
+        intercept[SparkRuntimeException] {
+          sql("SELECT std_varchar_param('abcd')").collect()
+        }
       } finally {
         sql("DROP TEMPORARY FUNCTION IF EXISTS std_char_fn")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS std_varchar_param")
       }
 
       // ORC catalog tables stamp the catalyst type so typeof survives write/read.
