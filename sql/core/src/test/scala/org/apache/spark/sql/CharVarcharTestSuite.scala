@@ -1366,6 +1366,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       }
 
       // ALTER COLUMN equal-length CHAR/VARCHAR remains supported with first-class types.
+      // VARCHAR widen / CHAR->VARCHAR are allowed by CheckAnalysis on V2 tables
+      // (see DSV2CharVarcharDDLTestSuite); V1 file-source ALTER only evolves collation
+      // (same StringConstraint), so length changes stay rejected there.
       withTable("std_alter") {
         sql("CREATE TABLE std_alter (c CHAR(4), v VARCHAR(4)) USING parquet")
         sql("ALTER TABLE std_alter CHANGE COLUMN c TYPE CHAR(4)")
@@ -1374,6 +1377,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           Seq(CharType(4), VarcharType(4)))
         intercept[AnalysisException] {
           sql("ALTER TABLE std_alter CHANGE COLUMN c TYPE CHAR(5)")
+        }
+        intercept[AnalysisException] {
+          sql("ALTER TABLE std_alter CHANGE COLUMN v TYPE VARCHAR(5)")
         }
       }
 
@@ -2121,6 +2127,27 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
     super.sparkConf
       .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
       .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
+  }
+
+  test("SPARK-58794: VARCHAR widen and CHAR->VARCHAR under standardSemantics") {
+    // V2 CheckAnalysis allows length-preserving CHAR->VARCHAR and VARCHAR widen;
+    // V1 file-source ALTER does not (collation-only evolution).
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("std_v2_alter") {
+        sql(s"CREATE TABLE std_v2_alter (c CHAR(4), v VARCHAR(4)) USING $format")
+        sql("ALTER TABLE std_v2_alter CHANGE COLUMN v TYPE VARCHAR(5)")
+        assert(spark.table("std_v2_alter").schema("v").dataType === VarcharType(5))
+        sql("ALTER TABLE std_v2_alter CHANGE COLUMN c TYPE VARCHAR(5)")
+        assert(spark.table("std_v2_alter").schema.map(_.dataType) ===
+          Seq(VarcharType(5), VarcharType(5)))
+        intercept[AnalysisException] {
+          sql("ALTER TABLE std_v2_alter CHANGE COLUMN v TYPE VARCHAR(4)")
+        }
+        intercept[AnalysisException] {
+          sql("ALTER TABLE std_v2_alter CHANGE COLUMN c TYPE CHAR(5)")
+        }
+      }
+    }
   }
 
   test("char/varchar type values length check: partitioned columns of other types") {
