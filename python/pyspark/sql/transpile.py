@@ -1216,10 +1216,11 @@ def _resolve_lambda(
                 "generated), or it no longer contains any lambda"
             )
         return None
-    # A lambda's code object starts on the line its ``lambda`` keyword is on
-    # (verified on 3.11/3.12/3.13, including multi-line bodies and defaults; 3.14 is
-    # in Spark's CI matrix but was NOT checked -- if it ever differs, every lambda
-    # silently stops lowering), so narrow by line before the enclosure test.
+    # A lambda's code object starts on the line its ``lambda`` keyword is on, so
+    # narrow by line before the enclosure test. Verified on 3.11/3.12/3.13/3.14 for
+    # a multi-line body, a multi-line default, a lambda in a dict/tuple, one wrapped
+    # in a call, and two sharing a line. If it ever stops holding, every lambda
+    # silently stops lowering.
     located = [
         node
         for node in candidates
