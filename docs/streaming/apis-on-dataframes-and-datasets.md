@@ -1507,8 +1507,10 @@ Additional details on supported joins:
 
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
-- Inner and left semi joins support Append and Update output modes. Left outer, right outer, full
-  outer, and left anti joins support Append output mode only. Complete output mode is not supported.
+- For stream-stream joins, inner and left semi joins support Append and Update output modes.
+  Stream-stream left outer, right outer, full outer, and left anti joins support Append output mode
+  only. Complete output mode is not supported for stream-stream joins. Supported stream-static joins
+  are not stateful and follow the general output-mode rules for non-aggregation queries.
 
 - You cannot use mapGroupsWithState and flatMapGroupsWithState before and after joins.
 
@@ -2146,7 +2148,9 @@ Here is the compatibility matrix.
       <td colspan="2" style="vertical-align: middle;">Queries with <code>joins</code></td>
       <td style="vertical-align: middle;">Append, Update</td>
       <td style="vertical-align: middle;">
-        Update mode is supported only for inner and left semi joins. Complete mode is not supported.
+        For stream-stream joins, Update mode is supported only for inner and left semi joins.
+        Supported stream-static joins are not stateful and follow the general output-mode rules for
+        non-aggregation queries. Complete mode is not supported.
         See the
         <a href="#support-matrix-for-joins-in-streaming-queries">support matrix in the Join Operations section</a>
          for more details on what types of joins are supported.

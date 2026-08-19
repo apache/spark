@@ -84,6 +84,23 @@ trait SymmetricHashJoinStateManager {
       skipUpdatingMatchedFlag: Boolean = false): Iterator[JoinedRow]
 
   /**
+   * Return whether any joined row for the given key satisfies the provided predicate.
+   *
+   * This method does not update matched flags and may stop at the first matching row. It is
+   * suitable for join paths that only need match existence, such as probing the right side for a
+   * left anti join input row.
+   *
+   * @param timestampRange Optional optimization hint as (minTimestamp, maxTimestamp), both
+   *   inclusive. Derived classes may use it to reduce scan scope but are free to ignore it.
+   *   The predicate must produce correct output regardless of whether this hint is leveraged.
+   */
+  def existsJoinedRow(
+      key: UnsafeRow,
+      generateJoinedRow: InternalRow => JoinedRow,
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Boolean
+
+  /**
    * Retrieve all joined rows for the given key and remove the matched rows from state. The joined
    * rows are generated with the provided generateJoinedRow function and filtered with the provided
    * predicate.
@@ -517,6 +534,37 @@ class SymmetricHashJoinStateManagerV4(
         }
     }
     ret.filter(_ != null)
+  }
+
+  override def existsJoinedRow(
+      key: UnsafeRow,
+      generateJoinedRow: InternalRow => JoinedRow,
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)]): Boolean = {
+    def existsInValues(valuesAndMatched: Iterator[ValueAndMatchPair]): Boolean = {
+      valuesAndMatched.exists { vmp =>
+        predicate(generateJoinedRow(vmp.value))
+      }
+    }
+
+    extractEventTimeFnFromKey(key) match {
+      case Some(ts) =>
+        existsInValues(keyWithTsToValues.get(key, ts))
+
+      case _ =>
+        val (minTs, maxTs) = timestampRange.getOrElse((Long.MinValue, Long.MaxValue))
+        val valuesByTimestamp = keyWithTsToValues.getValuesInRange(key, minTs, maxTs)
+        try {
+          valuesByTimestamp.exists { result =>
+            existsInValues(result.values.iterator)
+          }
+        } finally {
+          valuesByTimestamp match {
+            case nextIterator: NextIterator[_] => nextIterator.closeIfNeeded()
+            case _ =>
+          }
+        }
+    }
   }
 
   override def getJoinedRowsAndRemoveMatched(
@@ -1268,6 +1316,17 @@ abstract class SymmetricHashJoinStateManagerBase(
         null
       }
     }.filter(_ != null)
+  }
+
+  override def existsJoinedRow(
+      key: UnsafeRow,
+      generateJoinedRow: InternalRow => JoinedRow,
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)]): Boolean = {
+    val numValues = keyToNumValues.get(key)
+    keyWithIndexToValue.getAll(key, numValues).exists { keyIdxToValue =>
+      predicate(generateJoinedRow(keyIdxToValue.value))
+    }
   }
 
   /** Remove using a predicate on keys. */

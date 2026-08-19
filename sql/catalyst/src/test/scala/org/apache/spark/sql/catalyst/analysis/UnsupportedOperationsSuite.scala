@@ -456,6 +456,20 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       Seq("is not supported in Update output mode"))
   }
 
+  // Supported stream-static joins are not stateful and follow the general output-mode rules for
+  // non-aggregation queries, even when the corresponding stream-stream join is Append-only.
+  Seq((LeftOuter, "LeftOuter join"), (LeftAnti, "LeftAnti join")).foreach {
+    case (joinType, name) =>
+      assertSupportedInStreamingPlan(
+        s"$name with stream-batch relations and update mode",
+        streamRelation.join(batchRelation, joinType = joinType),
+        OutputMode.Update())
+  }
+  assertSupportedInStreamingPlan(
+    "RightOuter join with batch-stream relations and update mode",
+    batchRelation.join(streamRelation, joinType = RightOuter),
+    OutputMode.Update())
+
   // LeftSemi join: Update mode allowed (equivalent to Append mode for non-outer joins)
   assertSupportedInStreamingPlan(
     s"LeftSemi join with stream-stream relations and update mode",

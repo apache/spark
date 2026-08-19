@@ -881,23 +881,26 @@ case class StreamingSymmetricHashJoinExec(
           // If the join type is Left Semi or Left Anti and this is the right side, we can remove
           // the matched row from the other (left) side's state, since the row won't be produced
           // anymore for the following input rows.
-          val joinedRowIter: Iterator[JoinedRow] = if (removeMatchedFromOtherSideState) {
-            otherSideJoiner.joinStateManager.getJoinedRowsAndRemoveMatched(
-              key,
-              thatRow => generateJoinedRow(thisRow, thatRow),
-              postJoinFilter,
-              timestampRange = computeTimestampRange(thisRow)).map { row =>
-              numRemovedFromOtherSideDuringJoinCount += 1
-              row
+          val joinedRowIter: Iterator[JoinedRow] =
+            if (joinType == LeftAnti && joinSide == LeftSide) {
+              Iterator.empty
+            } else if (removeMatchedFromOtherSideState) {
+              otherSideJoiner.joinStateManager.getJoinedRowsAndRemoveMatched(
+                key,
+                thatRow => generateJoinedRow(thisRow, thatRow),
+                postJoinFilter,
+                timestampRange = computeTimestampRange(thisRow)).map { row =>
+                numRemovedFromOtherSideDuringJoinCount += 1
+                row
+              }
+            } else {
+              otherSideJoiner.joinStateManager.getJoinedRows(
+                key,
+                thatRow => generateJoinedRow(thisRow, thatRow),
+                postJoinFilter,
+                timestampRange = computeTimestampRange(thisRow),
+                skipUpdatingMatchedFlag)
             }
-          } else {
-            otherSideJoiner.joinStateManager.getJoinedRows(
-              key,
-              thatRow => generateJoinedRow(thisRow, thatRow),
-              postJoinFilter,
-              timestampRange = computeTimestampRange(thisRow),
-              skipUpdatingMatchedFlag)
-          }
           if (joinType == LeftAnti) {
             // Left anti join emits nothing while joining, on either side; unmatched left rows are
             // emitted later during watermark-based eviction of the left side state. The match
@@ -905,15 +908,24 @@ case class StreamingSymmetricHashJoinExec(
             // output iterator: on the left side it drives skip-on-match (a matched left row is not
             // stored), mirroring left semi.
             //
-            // The iterator must be drained fully rather than short-circuited on the first match.
-            // On the right side it is the `getJoinedRowsAndRemoveMatched` iterator, so draining is
-            // what removes the matched left rows from state; on the left side draining is required
-            // by the state manager API. Either way, draining is also needed to detect a match at
-            // all, since the anti output produces no rows to observe.
-            var matched = false
-            while (joinedRowIter.hasNext) {
-              joinedRowIter.next()
-              matched = true
+            val matched = if (joinSide == LeftSide) {
+              // On the left-side probe path, anti semantics only need to know whether any right
+              // state row matches. Do not use getJoinedRows here: it may scan all rows for the key
+              // and update right-side matched flags that left anti never consults.
+              otherSideJoiner.joinStateManager.existsJoinedRow(
+                key,
+                thatRow => generateJoinedRow(thisRow, thatRow),
+                postJoinFilter,
+                timestampRange = computeTimestampRange(thisRow))
+            } else {
+              // On the right-side input path, draining is required because the iterator removes all
+              // matched left rows from state; those rows can no longer become anti output.
+              var foundMatch = false
+              while (joinedRowIter.hasNext) {
+                joinedRowIter.next()
+                foundMatch = true
+              }
+              foundMatch
             }
             new AddingProcessedRowToStateCompletionIterator(
               key, thisRow, Iterator.empty, Some(matched))
