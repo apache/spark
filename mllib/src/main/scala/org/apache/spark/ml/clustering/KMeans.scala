@@ -142,9 +142,9 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val clusterCentersWithNorm: Array[VectorWithNorm],
-    private[clustering] val distanceMeasureInstance: DistanceMeasure,
-    private[clustering] val trainingCost: Double,
-    private[clustering] val numIter: Int)
+    private val distanceMeasureInstance: DistanceMeasure,
+    private val trainingCost: Double,
+    private val numIter: Int)
   extends Model[KMeansModel] with KMeansParams with GeneralMLWritable
     with HasTrainingSummary[KMeansSummary] {
 
