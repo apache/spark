@@ -719,6 +719,80 @@ Project [cast(cast(a as char(2) collate UTF8_LCASE) as varchar(2) collate UTF8_L
 
 
 -- !query
+SELECT typeof(coalesce(cast('123' AS CHAR(3)), 1)),
+       typeof(coalesce(cast('123' AS VARCHAR(3)), 1)),
+       typeof(coalesce(cast('123' AS STRING), 1))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(123 as char(3)) as bigint), cast(1 as bigint))) AS typeof(coalesce(CAST(123 AS CHAR(3)), 1))#x, typeof(coalesce(cast(cast(123 as varchar(3)) as bigint), cast(1 as bigint))) AS typeof(coalesce(CAST(123 AS VARCHAR(3)), 1))#x, typeof(coalesce(cast(cast(123 as string) as bigint), cast(1 as bigint))) AS typeof(coalesce(CAST(123 AS STRING), 1))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT coalesce(cast('123' AS CHAR(3)), 1),
+       coalesce(cast('123' AS VARCHAR(3)), 1),
+       coalesce(cast('123' AS STRING), 1)
+-- !query analysis
+Project [coalesce(cast(cast(123 as char(3)) as bigint), cast(1 as bigint)) AS coalesce(CAST(123 AS CHAR(3)), 1)#xL, coalesce(cast(cast(123 as varchar(3)) as bigint), cast(1 as bigint)) AS coalesce(CAST(123 AS VARCHAR(3)), 1)#xL, coalesce(cast(cast(123 as string) as bigint), cast(1 as bigint)) AS coalesce(CAST(123 AS STRING), 1)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT cast('123' AS CHAR(3)) = 123,
+       cast('123' AS VARCHAR(3)) = 123,
+       cast('123' AS STRING) = 123
+-- !query analysis
+Project [(cast(cast(123 as char(3)) as bigint) = cast(123 as bigint)) AS (CAST(123 AS CHAR(3)) = 123)#x, (cast(cast(123 as varchar(3)) as bigint) = cast(123 as bigint)) AS (CAST(123 AS VARCHAR(3)) = 123)#x, (cast(cast(123 as string) as bigint) = cast(123 as bigint)) AS (CAST(123 AS STRING) = 123)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce(cast('1.5' AS CHAR(3)), 1.5)),
+       typeof(coalesce(cast('1.5' AS VARCHAR(3)), 1.5)),
+       typeof(coalesce(cast('1.5' AS STRING), 1.5))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(1.5 as char(3)) as double), cast(1.5 as double))) AS typeof(coalesce(CAST(1.5 AS CHAR(3)), 1.5))#x, typeof(coalesce(cast(cast(1.5 as varchar(3)) as double), cast(1.5 as double))) AS typeof(coalesce(CAST(1.5 AS VARCHAR(3)), 1.5))#x, typeof(coalesce(cast(cast(1.5 as string) as double), cast(1.5 as double))) AS typeof(coalesce(CAST(1.5 AS STRING), 1.5))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT cast('2020-01-02' AS CHAR(10)) = date'2020-01-02',
+       cast('2020-01-02' AS VARCHAR(10)) = date'2020-01-02',
+       cast('2020-01-02' AS STRING) = date'2020-01-02'
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT cast('true' AS CHAR(4)) = true,
+       cast('true' AS VARCHAR(4)) = true,
+       cast('true' AS STRING) = true
+-- !query analysis
+Project [(cast(cast(true as char(4)) as boolean) = true) AS (CAST(true AS CHAR(4)) = true)#x, (cast(cast(true as varchar(4)) as boolean) = true) AS (CAST(true AS VARCHAR(4)) = true)#x, (cast(cast(true as string) as boolean) = true) AS (CAST(true AS STRING) = true)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce(cast('true' AS CHAR(4)), true))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(true as char(4)) as boolean), true)) AS typeof(coalesce(CAST(true AS CHAR(4)), true))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce(cast('true' AS VARCHAR(4)), true))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(true as varchar(4)) as boolean), true)) AS typeof(coalesce(CAST(true AS VARCHAR(4)), true))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce(cast('true' AS STRING), true))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(true as string) as boolean), true)) AS typeof(coalesce(CAST(true AS STRING), true))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT typeof(array(cast('a' AS CHAR(2)), cast('bb' AS CHAR(3))))
 -- !query analysis
 Project [typeof(array(cast(cast(a as char(2)) as char(3)), cast(bb as char(3)))) AS typeof(array(CAST(a AS CHAR(2)), CAST(bb AS CHAR(3))))#x]
