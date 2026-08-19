@@ -152,20 +152,8 @@ class IDFModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    val func = { vector: Vector =>
-      vector match {
-        case SparseVector(size, indices, values) =>
-          val (newIndices, newValues) = feature.IDFModel.transformSparse(idfModel.idf,
-            indices, values)
-          Vectors.sparse(size, newIndices, newValues)
-        case DenseVector(values) =>
-          val newValues = feature.IDFModel.transformDense(idfModel.idf, values)
-          Vectors.dense(newValues)
-        case other =>
-          throw new UnsupportedOperationException(
-            s"Only sparse and dense vectors are supported but got ${other.getClass}.")
-      }
-    }
+    val localIdf = idfModel.idf
+    val func = (vector: Vector) => IDFModel.transformVector(vector, localIdf)
 
     val transformer = udf(func)
     dataset.withColumn($(outputCol), transformer(col($(inputCol))),
@@ -212,6 +200,20 @@ class IDFModel private[ml] (
 @Since("1.6.0")
 object IDFModel extends MLReadable[IDFModel] {
   private[ml] case class Data(idf: Vector, docFreq: Array[Long], numDocs: Long)
+
+  private def transformVector(vector: Vector, idf: OldVector): Vector = {
+    vector match {
+      case SparseVector(size, indices, values) =>
+        val (newIndices, newValues) = feature.IDFModel.transformSparse(idf, indices, values)
+        Vectors.sparse(size, newIndices, newValues)
+      case DenseVector(values) =>
+        val newValues = feature.IDFModel.transformDense(idf, values)
+        Vectors.dense(newValues)
+      case other =>
+        throw new UnsupportedOperationException(
+          s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+    }
+  }
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
     import ReadWriteUtils._
