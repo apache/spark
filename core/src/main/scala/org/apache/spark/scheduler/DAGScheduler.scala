@@ -2704,12 +2704,36 @@ private[spark] class DAGScheduler(
     // So set the property only on the result-feeding producer.
     stage match {
       case sms: ShuffleMapStage if isPipelinedProducer(stage) =>
+        // Notify the pipelined manager that this producer stage is being (re)submitted, before
+        // any of its map tasks start. A transport with per-run state keyed by shuffleId resets it
+        // here -- the one point with no live task of the new run, so the reset cannot race the
+        // run's own writers/readers. The in-process channel transport clears a prior run's
+        // abandoned-partition marks; the RPC streaming manager keeps no such state (no-op default).
+        // The scheduler stays transport-agnostic: it calls the PipelinedShuffleManager trait, not
+        // a concrete transport.
+        SparkEnv.get.pipelinedShuffleManager
+          .onPipelinedProducerStageSubmit(sms.shuffleDep.shuffleId)
         jobIdToActiveJob.get(jobId).map(_.finalStage).collect { case rs: ResultStage => rs }
           .foreach { rs =>
-            val resultReadsThisShuffle =
-              getShuffleDependenciesAndResourceProfiles(rs.rdd)._1
-                .exists(_.shuffleId == sms.shuffleDep.shuffleId)
-            if (resultReadsThisShuffle) {
+            // The live set is the result stage's partition ids. Those are the shuffle's reduce
+            // partition ids -- so partition i means reduce partition i -- ONLY when the result RDD
+            // reaches this shuffle through an IDENTITY-PRESERVING chain: every hop a 1:1,
+            // same-index OneToOneDependency (e.g. the mapPartitions wrapper executeTake/collect
+            // adds over the ShuffledRowRDD, which preserves partition count and index). It is NOT
+            // enough for the shuffle to be merely reachable: a narrow operator that REMAPS
+            // partitions (coalesce -> a custom NarrowDependency, union -> a RangeDependency offset)
+            // makes result partition ids differ from reduce partition ids, and treating them as
+            // the live set would drop partitions a downstream operator still pulls -- hanging the
+            // reader. When the chain is not identity-preserving the property is left unset (all
+            // partitions live) and that operator drains every reduce partition.
+            def readsShuffleByIdentity(rdd: RDD[_]): Boolean = rdd.dependencies match {
+              case Seq(sd: ShuffleDependency[_, _, _]) =>
+                sd.shuffleId == sms.shuffleDep.shuffleId
+              case Seq(o: OneToOneDependency[_]) =>
+                readsShuffleByIdentity(o.rdd)
+              case _ => false
+            }
+            if (readsShuffleByIdentity(rs.rdd)) {
               properties.setProperty(
                 SparkContext.SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS, rs.partitions.mkString(","))
             }

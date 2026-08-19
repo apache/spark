@@ -259,41 +259,43 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
-  test("clearAbandoned resets mark and removeShuffle drops both queues and marks") {
+  test("clearAbandonedForShuffle resets a run's marks; other shuffles and queues survive") {
     ChannelShuffleRendezvous.clearForTesting()
     try {
       val shuffleId = 55
+      val other = 56
       val pid1 = 0
       val pid2 = 1
 
-      // Create queues and abandon them.
+      // Abandon two partitions of `shuffleId` and one of another shuffle.
       ChannelShuffleRendezvous.queue(shuffleId, pid1).put("data1")
       ChannelShuffleRendezvous.queue(shuffleId, pid2).put("data2")
       ChannelShuffleRendezvous.abandon(shuffleId, pid1)
       ChannelShuffleRendezvous.abandon(shuffleId, pid2)
+      ChannelShuffleRendezvous.abandon(other, pid1)
 
       assert(ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1))
       assert(ChannelShuffleRendezvous.isAbandoned(shuffleId, pid2))
-      assert(ChannelShuffleRendezvous.numQueuesForTesting === 2)
 
-      // Test clearAbandoned: clears a single partition's mark, re-usable for a re-run.
-      ChannelShuffleRendezvous.clearAbandoned(shuffleId, pid1)
+      // clearAbandonedForShuffle resets ALL of a shuffle's marks (the whole-shuffle reset the
+      // scheduler triggers when re-submitting a producer stage), leaving queues and OTHER
+      // shuffles' marks intact.
+      ChannelShuffleRendezvous.clearAbandonedForShuffle(shuffleId)
       assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1),
-        "clearAbandoned should reset the mark")
-      assert(ChannelShuffleRendezvous.isAbandoned(shuffleId, pid2),
-        "other partitions' marks should persist")
+        "the shuffle's marks must be reset")
+      assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid2),
+        "the shuffle's marks must be reset")
+      assert(ChannelShuffleRendezvous.isAbandoned(other, pid1),
+        "a different shuffle's marks must survive")
+      assert(ChannelShuffleRendezvous.numQueuesForTesting === 2,
+        "clearAbandonedForShuffle must not drop queues")
 
-      // Re-abandon pid1, then test removeShuffle: clears both queues and all marks
-      // for this shuffle.
+      // removeShuffle drops both queues and all marks for the shuffle.
       ChannelShuffleRendezvous.abandon(shuffleId, pid1)
-      assert(ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1))
-
       ChannelShuffleRendezvous.removeShuffle(shuffleId)
       assert(ChannelShuffleRendezvous.numQueuesForTesting === 0,
         "removeShuffle should drop all queues for this shuffle")
       assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1),
-        "removeShuffle should clear all abandoned marks for this shuffle")
-      assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid2),
         "removeShuffle should clear all abandoned marks for this shuffle")
     } finally {
       ChannelShuffleRendezvous.clearForTesting()

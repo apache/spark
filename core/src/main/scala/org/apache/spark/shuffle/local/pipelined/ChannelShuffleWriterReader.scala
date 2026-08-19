@@ -66,13 +66,23 @@ private[spark] class ChannelShuffleWriter[K, V](
         Option(tc.getLocalProperty(SparkContext.SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS)))
       .map(_.split(",").filter(_.nonEmpty).map(_.toInt).toSet)
 
-  // A partition is worth writing only while a consumer still wants its data: it must be in
-  // the job's live set (Half 1: no-reader partitions), AND its reader must not have departed
-  // (Half 2: a live reader that stopped early, e.g. LIMIT). `wants` is re-checked as data
-  // flows because abandonment happens at runtime when the reader task completes.
-  private def wants(pid: Int): Boolean =
-    liveReducePartitions.forall(_.contains(pid)) &&
-      !ChannelShuffleRendezvous.isAbandoned(shuffleId, pid)
+  // Per-partition liveness, precomputed ONCE from the (static) live set: true iff a consumer
+  // reads this reduce partition at all. This is the hot-path gate -- checked per input record --
+  // so it is a plain Array[Boolean] load, not a boxed Set lookup: on a large repartition the
+  // per-record path must not allocate (the transport's whole point is amortizing per-row cost).
+  // Absent property means every partition is live. The OTHER half of "worth writing" --
+  // abandonment, which happens at runtime when a reader departs early (e.g. LIMIT) -- is dynamic
+  // and is checked where it matters (at hand-off, in putUnlessAbandoned), NOT per record:
+  // accumulating a few more rows into an in-memory batch for a since-abandoned partition is
+  // harmless because that batch is never put (putUnlessAbandoned drops it).
+  private val liveMask: Array[Boolean] = {
+    val mask = Array.fill(numPartitions)(true)
+    liveReducePartitions.foreach { live =>
+      var p = 0
+      while (p < numPartitions) { mask(p) = live.contains(p); p += 1 }
+    }
+    mask
+  }
 
   // Hand a batch to a partition's queue, but do NOT block forever if its reader departs:
   // poll with a short timeout and bail out the moment the partition becomes abandoned. This
@@ -108,15 +118,12 @@ private[spark] class ChannelShuffleWriter[K, V](
   }
 
   override def write(records: Iterator[Product2[K, V]]): Unit = {
-    // This is a fresh producer attempt. Clear any abandoned marks left on our partitions by
-    // an EARLIER job that reused this shuffleId (RangePartitioner sampling job -> main job;
-    // executeTake batches) so we do not mistake a prior reader's departure for our own
-    // partitions being dead. Only abandonment happening during THIS attempt then counts.
-    var pc = 0
-    while (pc < numPartitions) {
-      ChannelShuffleRendezvous.clearAbandoned(shuffleId, pc)
-      pc += 1
-    }
+    // Abandoned marks left by an EARLIER run of this shuffleId (a RangePartitioner sampling job
+    // then the main job; executeTake batches) are reset by the DAGScheduler when it submits this
+    // producer stage -- before any map task of this run starts (see
+    // ChannelShuffleRendezvous.clearAbandonedForShuffle). The writer must NOT clear them itself:
+    // map tasks of the same run are concurrent, and a late one clearing a mark would erase a
+    // departure a sibling's reader had already recorded for this run, re-hanging the writer.
 
     // One in-progress batch per reduce partition, plus its fill count.
     val batches = Array.fill(numPartitions)(new Array[AnyRef](batchSize))
@@ -125,8 +132,9 @@ private[spark] class ChannelShuffleWriter[K, V](
     while (records.hasNext) {
       val rec = records.next()
       val pid = partitioner.getPartition(rec._1)
-      // Only accumulate for partitions a consumer still wants (see `wants`).
-      if (wants(pid)) {
+      // Only accumulate for partitions a consumer reads (liveMask). Abandonment is not checked
+      // here -- it is handled at hand-off in putUnlessAbandoned (see liveMask's comment).
+      if (liveMask(pid)) {
         // Records must already be detached from the producer's reused row buffers by the time
         // they reach here (the producer reuses its output UnsafeRow across iterations, and the
         // consumer reads on another thread). The copy is done in the SQL layer's
@@ -150,7 +158,7 @@ private[spark] class ChannelShuffleWriter[K, V](
     // queue is left for removeShuffle to drop.
     var p = 0
     while (p < numPartitions) {
-      if (wants(p)) {
+      if (liveMask(p)) {
         if (sizes(p) > 0) {
           putUnlessAbandoned(p, Arrays.copyOf(batches(p), sizes(p)), sizes(p))
         }

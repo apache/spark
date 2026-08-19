@@ -149,6 +149,18 @@ private[spark] trait PipelinedShuffleManager extends ShuffleManager {
    * channel transport shares object references across threads and overrides this to true.
    */
   def requiresDetachedRecords: Boolean = false
+
+  /**
+   * Called by the DAGScheduler when it submits a pipelined PRODUCER stage for `shuffleId`,
+   * before any map task of that stage attempt has started. A transport that carries per-run
+   * transient state keyed by shuffleId can reset it here: this is the one point with no live
+   * task of the new run, so a reset cannot race the run's own concurrent writers or readers.
+   * The in-process channel transport uses it to clear a prior run's abandoned-partition marks
+   * (a shuffleId is re-run within one query -- a RangePartitioner sample job then the main job,
+   * or executeTake's per-batch jobs). Defaults to a no-op; the RPC streaming manager keeps no
+   * such per-run state and does not override it.
+   */
+  def onPipelinedProducerStageSubmit(shuffleId: Int): Unit = {}
 }
 
 /**

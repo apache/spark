@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import java.util.concurrent.{Executors, TimeUnit}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -31,6 +33,14 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelper {
 
   private def withPipelinedSession(body: SparkSession => Unit): Unit = {
+    // sql/core suites share a JVM. If an earlier suite left an active/default SparkSession behind,
+    // getOrCreate() below would return THAT session and silently ignore every .config() here
+    // (spark.shuffle.manager.incremental, spark.sql.pipelinedShuffle.enabled), so no exchange
+    // would be flipped and the assertions would fail pointing nowhere near the cause. Stop and
+    // clear any pre-existing session first so this harness gets a fresh one with its own configs.
+    SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession).foreach(_.stop())
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
     val spark = SparkSession.builder()
       // High task-concurrency cap so the pipelined group's whole-group slot demand (the sum
       // of every concurrent stage's partitions) is admitted. This is a correctness harness,
@@ -305,6 +315,37 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
       // 142.86) and key 6 has 142.
       assert(df.collect().length === 6)
       assert(df2.collect().length === 6)
+    }
+  }
+
+  test("a narrow operator between the shuffle and the result does not truncate the live set") {
+    // The DAGScheduler tells the pipelined producer which reduce partitions the job reads, using
+    // the result stage's partition ids -- but those are reduce partition ids ONLY when the result
+    // RDD reads the shuffle DIRECTLY. A narrow operator that changes the partition count (here a
+    // coalesce) makes the result ids (0,1) differ from the reduce ids (0..N). If the producer
+    // treated the result ids as the live set it would drop every reduce partition >= 2, emit no
+    // end-of-stream for them, and the coalesced reader -- which still pulls ALL reduce partitions
+    // -- would block forever. The fix requires a DIRECT dependency before setting the live set, so
+    // here it stays unset (all live) and the coalesce drains every partition. Guard with a
+    // deadline so a regression surfaces as a failure, not a hung suite.
+    val pool = Executors.newSingleThreadExecutor()
+    val fut = pool.submit(new Runnable {
+      override def run(): Unit = withPipelinedSession { spark =>
+        import spark.implicits._
+        val n = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 10))
+          .groupBy($"k").count().coalesce(2).collect().length
+        require(n == 10, s"expected 10 groups, got $n")
+      }
+    })
+    try {
+      fut.get(90, TimeUnit.SECONDS)
+    } catch {
+      case _: java.util.concurrent.TimeoutException =>
+        fut.cancel(true)
+        fail("coalesce over a pipelined shuffle hung: the live set was truncated to the " +
+          "coalesced partition ids and reduce partitions with no end-of-stream stalled the reader")
+    } finally {
+      pool.shutdownNow()
     }
   }
 }

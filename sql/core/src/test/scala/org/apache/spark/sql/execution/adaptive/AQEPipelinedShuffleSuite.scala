@@ -32,6 +32,11 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 class AQEPipelinedShuffleSuite extends SparkFunSuite with AdaptiveSparkPlanHelper {
 
   private def withAqePipelinedSession(body: SparkSession => Unit): Unit = {
+    // Stop and clear any session an earlier sql/core suite left in this JVM, or getOrCreate()
+    // would return it and silently ignore this harness's .config() (see PipelinedShuffleSqlSuite).
+    SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession).foreach(_.stop())
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
     val spark = SparkSession.builder()
       // High cap purely for gang admission headroom; correctness harness, not perf.
       .master("local[16]")

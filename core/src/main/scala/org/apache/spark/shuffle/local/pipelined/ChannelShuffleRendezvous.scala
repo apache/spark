@@ -75,15 +75,25 @@ private[spark] object ChannelShuffleRendezvous {
     abandoned.contains((shuffleId, reducePartitionId))
 
   /**
-   * Clear an abandoned mark. A pipelined producer is RE-RUN for the same shuffleId within one
-   * query (a RangePartitioner sampling job then the main job; executeTake's per-batch jobs),
-   * and abandonment is a PER-JOB fact -- a mark left by a previous job's reader must not make
-   * the re-run's fresh writer think the partition is dead. So a writer clears the marks for
-   * the partitions it is about to (re)produce at the start of its attempt; only abandonment
-   * that happens DURING this attempt (its own concurrent reader departing) then applies.
+   * Clear ALL abandoned marks for a shuffle. A pipelined producer is RE-RUN for the same
+   * shuffleId within one query (a RangePartitioner sampling job then the main job; executeTake's
+   * per-batch jobs), and abandonment is a PER-JOB fact -- a mark left by a previous run's reader
+   * must not make the re-run's fresh writers think a partition is dead.
+   *
+   * This is called ONCE by the DAGScheduler when it submits the producer stage, i.e. BEFORE any
+   * map task of the new run has started, so it can never race a concurrently running writer or
+   * reader of the SAME run. (An earlier design cleared marks from inside each writer's write();
+   * that raced across the run's own map tasks -- a late-starting map task erased a departure a
+   * sibling's reader had legitimately recorded, re-hanging the writer. Clearing at the stage's
+   * submission, the one point with no live task of that run, removes the race by construction.)
+   * Queues are left intact -- only the marks are reset.
    */
-  def clearAbandoned(shuffleId: Int, reducePartitionId: Int): Unit =
-    abandoned.remove((shuffleId, reducePartitionId))
+  def clearAbandonedForShuffle(shuffleId: Int): Unit = {
+    val it = abandoned.iterator()
+    while (it.hasNext) {
+      if (it.next()._1 == shuffleId) it.remove()
+    }
+  }
 
   /**
    * Mark a reduce partition abandoned: its reader task has finished and will drain no more.
