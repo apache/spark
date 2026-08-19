@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010.benchmark
 
 import java.io.File
 import java.time.{Duration => JavaDuration}
-import java.util.{Properties, Timer, TimerTask}
+import java.util.{Locale, Properties, Timer, TimerTask}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
 import scala.concurrent.duration._
@@ -48,9 +48,8 @@ import org.apache.spark.util.Utils
  *
  * Latency is measured in the same way as [[RTMKafkaKafkaBenchmark]]: the input Kafka record
  * timestamp is carried through the stateful operator in a `source-timestamp` header, then
- * subtracted from the output Kafka record timestamp. The output batch timestamp is carried in a
- * second header. RTM filters the first two output-producing batches, while MBM filters the first.
- * Both modes also filter the first five minutes before calculating latency percentiles.
+ * subtracted from the output Kafka record timestamp. Both modes filter the first ten minutes
+ * based on the source record timestamp before calculating latency percentiles.
  * As in the stateless benchmark, the output timestamp is Kafka CreateTime, so the measurement ends
  * when the sink producer creates the output record rather than when a consumer can observe it.
  *
@@ -58,8 +57,8 @@ import org.apache.spark.util.Utils
  * development runs can override the observation and warm-up windows with
  * `SPARK_RTM_STATEFUL_BENCHMARK_OBSERVATION_SECONDS` and
  * `SPARK_RTM_STATEFUL_BENCHMARK_WARMUP_SECONDS`. The observation window must remain longer than
- * two five-minute RTM batches so that samples remain after the initial batches are removed. A
- * published comparison should use the defaults.
+ * two five-minute RTM batches so that every run crosses at least two batch boundaries. A published
+ * comparison should use the defaults.
  * Input production stops at the observation deadline. The query then drains to the recorded Kafka
  * end offsets, so delayed output from those inputs remains part of the latency distribution.
  * `SPARK_RTM_STATEFUL_BENCHMARK_MODE_ORDER` may be set to `MBM,RTM` to check for run-order bias.
@@ -101,7 +100,7 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
     30.minutes)
   private val warmupWindow = durationFromEnv(
     "SPARK_RTM_STATEFUL_BENCHMARK_WARMUP_SECONDS",
-    5.minutes,
+    10.minutes,
     allowZero = true)
   private val maximumUnprocessedTail = 5.seconds
   private val expectedRecords = recordsPerSecond * observationWindow.toMillis / 1000L
@@ -164,7 +163,7 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
     require(
       observationWindow > 2 * rtmBatchDuration,
       s"observationWindow ($observationWindow) must exceed two RTM batch durations " +
-        s"(${2 * rtmBatchDuration}) to retain samples after filtering the first two batches")
+        s"(${2 * rtmBatchDuration})")
     testUtils = new KafkaTestUtils(Map.empty)
     try {
       testUtils.setup()
@@ -222,7 +221,7 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
     val names = sys.env
       .getOrElse("SPARK_RTM_STATEFUL_BENCHMARK_MODE_ORDER", "RTM,MBM")
       .split(",")
-      .map(_.trim.toUpperCase)
+      .map(_.trim.toUpperCase(Locale.ROOT))
       .toSeq
     require(
       names.length == 2 && names.toSet == modesByName.keySet,
@@ -252,6 +251,14 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
       s"RTM and MBM input counts differ by more than $maximumCountDifference: " +
         runs.map(run => s"${run.mode.name}=${run.recordsProduced}").mkString(", "))
     val results = runs.map(getLatencies)
+    val sampleCounts = results.map(_.numSamples)
+    val maximumSampleCountDifference = math.max(100L, sampleCounts.max / 50L)
+    if (percentileRatiosAreComparable) {
+      require(
+        sampleCounts.max - sampleCounts.min <= maximumSampleCountDifference,
+        s"RTM and MBM sample counts differ by more than $maximumSampleCountDifference: " +
+          results.map(result => s"${result.mode.name}=${result.numSamples}").mkString(", "))
+    }
     printComparison(configuredModeOrder, results)
   }
 
@@ -271,22 +278,19 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
       .load()
 
     val outputWithHeaders = buildStatefulQuery(kafkaStream)
-      .withColumn("outputBatchTimestampMs", toUnixMillis(current_timestamp()))
       .withColumn(
         "headers",
         array(
           struct(
             lit("source-timestamp").as("key"),
-            col("sourceTimestampMs").cast("STRING").cast("BINARY").as("value")),
-          struct(
-            lit("output-batch-timestamp").as("key"),
-            col("outputBatchTimestampMs").cast("STRING").cast("BINARY").as("value"))))
+            col("sourceTimestampMs").cast("STRING").cast("BINARY").as("value"))))
       .select(
         col("key").cast("BINARY").as("key"),
         col("value").cast("BINARY").as("value"),
         col("headers"))
 
-    val queryName = s"${mode.name.toLowerCase}-${getClass.getSimpleName.stripSuffix("$")}"
+    val queryName =
+      s"${mode.name.toLowerCase(Locale.ROOT)}-${getClass.getSimpleName.stripSuffix("$")}"
     val writer = outputWithHeaders.writeStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -319,7 +323,7 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
             case t: Throwable => producerFailure.compareAndSet(null, t)
           }
         },
-        s"${mode.name.toLowerCase}-stateful-benchmark-data-generator")
+        s"${mode.name.toLowerCase(Locale.ROOT)}-stateful-benchmark-data-generator")
       dataGenThread.setDaemon(true)
       dataGenThread.start()
 
@@ -502,13 +506,12 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
               }
             })
           currentTime = System.nanoTime()
-
-          val sleepTimeNs = math.max(0L, nextDeadline - currentTime)
-          if (sleepTimeNs > 0) {
-            val sleepTimeMs = sleepTimeNs.nanos.toMillis
-            val sleepTimeNanos = (sleepTimeNs - sleepTimeMs.millis.toNanos).toInt
-            Thread.sleep(sleepTimeMs, sleepTimeNanos)
-          }
+        }
+        val sleepTimeNs = math.max(0L, nextDeadline - currentTime)
+        if (sleepTimeNs > 0) {
+          val sleepTimeMs = sleepTimeNs.nanos.toMillis
+          val sleepTimeNanos = (sleepTimeNs - sleepTimeMs.millis.toNanos).toInt
+          Thread.sleep(sleepTimeMs, sleepTimeNanos)
         }
       }
     } catch {
@@ -558,17 +561,12 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
       .withColumn(
         "source-timestamp",
         col("headers-map.source-timestamp").cast("STRING").cast("BIGINT"))
-      .withColumn(
-        "output-batch-timestamp",
-        col("headers-map.output-batch-timestamp").cast("STRING").cast("BIGINT"))
       .withColumn("sink-timestamp", toUnixMillis(col("timestamp")))
 
     val sinkStats = kafkaSinkData
       .agg(
         count(lit(1)).as("num-sink-records"),
         count(col("source-timestamp")).as("num-timestamped-sink-records"),
-        count(col("output-batch-timestamp")).as("num-batch-timestamped-sink-records"),
-        min("output-batch-timestamp").as("first-output-batch-timestamp"),
         max("source-timestamp").as("maximum-processed-source-timestamp"))
       .collect()(0)
     val numRecordsInSink = sinkStats.getLong(0)
@@ -581,19 +579,13 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
       numTimestampedSinkRecords == numRecordsInSink,
       s"[${run.mode.name}] $numTimestampedSinkRecords of $numRecordsInSink sink rows contain " +
         "a source timestamp")
-    val numBatchTimestampedSinkRecords = sinkStats.getLong(2)
-    require(
-      numBatchTimestampedSinkRecords == numRecordsInSink,
-      s"[${run.mode.name}] $numBatchTimestampedSinkRecords of $numRecordsInSink sink rows " +
-        "contain an output batch timestamp")
     expectedSinkRecordCount(numSourceRecords).foreach { expectedSinkRecords =>
       require(
         numRecordsInSink == expectedSinkRecords,
         s"[${run.mode.name}] sink contains $numRecordsInSink rows for $numSourceRecords inputs; " +
           s"expected exactly $expectedSinkRecords")
     }
-    val firstOutputBatchTimestamp = sinkStats.getLong(3)
-    val maximumProcessedSourceTimestamp = sinkStats.getLong(4)
+    val maximumProcessedSourceTimestamp = sinkStats.getLong(2)
     val unprocessedTailMs = maximumSourceTimestamp - maximumProcessedSourceTimestamp
     require(
       unprocessedTailMs >= 0 && unprocessedTailMs <= maximumUnprocessedTail.toMillis,
@@ -606,31 +598,16 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
       kafkaSourceData,
       kafkaSinkData)
 
-    // MicroBatchExecution replaces current_timestamp() with one timestamp per executed batch.
-    // Batch 1 includes rows queued while RTM closes its first batch, so exclude it as well.
-    val lastFilteredOutputBatchTimestamp = if (run.mode.isRtm) {
-      val secondOutputBatch = kafkaSinkData
-        .filter(col("output-batch-timestamp") > firstOutputBatchTimestamp)
-        .agg(min("output-batch-timestamp"))
-        .collect()(0)
-      require(!secondOutputBatch.isNullAt(0), "[RTM] fewer than two output-producing batches")
-      secondOutputBatch.getLong(0)
-    } else {
-      firstOutputBatchTimestamp
-    }
-    val afterInitialBatches = kafkaSinkData.filter(
-      col("output-batch-timestamp") > lastFilteredOutputBatchTimestamp)
     val filteredSink = if (warmupWindow.toMillis == 0) {
-      afterInitialBatches
+      kafkaSinkData
     } else {
-      afterInitialBatches.filter(
+      kafkaSinkData.filter(
         col("source-timestamp") - minimumSourceTimestamp > warmupWindow.toMillis)
     }
     val numSamples = filteredSink.count()
     if (numSamples == 0) {
       throw new RuntimeException(
-        s"[${run.mode.name}] no records remained after filtering the initial output-producing " +
-          s"batch(es) and $warmupWindow of warm-up")
+        s"[${run.mode.name}] no records remained after filtering $warmupWindow of warm-up")
     }
 
     val percentiles = filteredSink
@@ -672,7 +649,6 @@ private[benchmark] abstract class RTMKafkaStatefulBenchmarkBase
     sb.append("MBM trigger=ProcessingTime(0ms)\n")
     sb.append(s"modeOrder=${configuredModeOrder.map(_.name).mkString(",")} ")
     sb.append(s"observationWindow=${observationWindow.toSeconds}s ")
-    sb.append("rtmOutputBatchesFiltered=2 mbmOutputBatchesFiltered=1 ")
     sb.append(s"warmupFiltered=${warmupWindow.toSeconds}s ")
     sb.append(s"recordsPerSecond=$recordsPerSecond\n")
     sb.append(s"master=$sparkMaster inputPartitions=$numPartitions ")
