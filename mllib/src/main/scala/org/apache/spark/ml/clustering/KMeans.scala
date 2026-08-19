@@ -134,7 +134,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
  * Model fitted by KMeans.
  *
  * @param clusterCentersWithNorm cluster centers with their norms.
- * @param distanceMeasureName distance measure.
+ * @param distanceMeasureInstance distance measure.
  * @param trainingCost training cost.
  * @param numIter number of training iterations.
  */
@@ -142,11 +142,26 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val clusterCentersWithNorm: Array[VectorWithNorm],
-    private[clustering] val distanceMeasureName: String,
+    private[clustering] val distanceMeasureInstance: DistanceMeasure,
     private[clustering] val trainingCost: Double,
     private[clustering] val numIter: Int)
   extends Model[KMeansModel] with KMeansParams with GeneralMLWritable
     with HasTrainingSummary[KMeansSummary] {
+
+  private[ml] def this(
+      uid: String,
+      clusterCentersArray: Array[Vector],
+      distanceMeasureInstance: DistanceMeasure,
+      trainingCost: Double,
+      numIter: Int) = {
+    this(
+      uid,
+      if (clusterCentersArray == null) null else KMeansModel.clusterCentersWithNorm(
+        clusterCentersArray),
+      distanceMeasureInstance,
+      trainingCost,
+      numIter)
+  }
 
   private[ml] def this(
       uid: String,
@@ -158,7 +173,7 @@ class KMeansModel private[ml] (
       uid,
       if (clusterCentersArray == null) null else KMeansModel.clusterCentersWithNorm(
         clusterCentersArray),
-      distanceMeasureName,
+      DistanceMeasure.decodeFromString(distanceMeasureName),
       trainingCost,
       numIter)
   }
@@ -168,16 +183,14 @@ class KMeansModel private[ml] (
       uid,
       if (mllibModel == null) null else KMeansModel.clusterCentersWithNorm(
         mllibModel.clusterCenters.map(_.asML)),
-      if (mllibModel == null) KMeans.EUCLIDEAN else mllibModel.distanceMeasure,
+      DistanceMeasure.decodeFromString(
+        if (mllibModel == null) KMeans.EUCLIDEAN else mllibModel.distanceMeasure),
       if (mllibModel == null) 0.0 else mllibModel.trainingCost,
       if (mllibModel == null) -1 else mllibModel.numIter)
   }
 
   // For ml connect only
   private[ml] def this() = this("", null.asInstanceOf[MLlibKMeansModel])
-
-  private def distanceMeasureInstance: DistanceMeasure =
-    DistanceMeasure.decodeFromString(distanceMeasureName)
 
   @transient private lazy val statistics =
     KMeansModel.computeStatistics(clusterCentersWithNorm, distanceMeasureInstance)
@@ -188,7 +201,7 @@ class KMeansModel private[ml] (
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
     val copied = copyValues(new KMeansModel(
-      uid, clusterCentersWithNorm, distanceMeasureName, trainingCost, numIter), extra)
+      uid, clusterCentersWithNorm, distanceMeasureInstance, trainingCost, numIter), extra)
     copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
@@ -249,7 +262,7 @@ class KMeansModel private[ml] (
   @Since("3.0.0")
   override def toString: String = {
     s"KMeansModel: uid=$uid, k=${clusterCentersWithNorm.length}, " +
-      s"distanceMeasure=$distanceMeasureName, " +
+      s"distanceMeasure=${distanceMeasureInstance.name}, " +
       s"numFeatures=$numFeatures"
   }
 
@@ -264,12 +277,12 @@ class KMeansModel private[ml] (
     var size = estimateMatadataSize
     if (clusterCentersWithNorm != null) {
       // clusterCentersWithNorm: Array[VectorWithNorm]
-      // distanceMeasure: String
+      // distanceMeasureInstance: DistanceMeasure
       // trainingCost: Double
       // numIter: Int
       size += SizeEstimator.estimate((
         clusterCentersWithNorm,
-        distanceMeasureName,
+        distanceMeasureInstance,
         trainingCost,
         numIter))
     }
@@ -278,7 +291,7 @@ class KMeansModel private[ml] (
 
   private[clustering] def toMLlibModel: MLlibKMeansModel = {
     new MLlibKMeansModel(
-      clusterCenters.map(OldVectors.fromML), distanceMeasureName, trainingCost, numIter)
+      clusterCenters.map(OldVectors.fromML), distanceMeasureInstance.name, trainingCost, numIter)
   }
 
   private[spark] def createSummary(
@@ -442,7 +455,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
       model
     }
 
-    private def loadDistanceMeasure(metadata: DefaultParamsReader.Metadata): String = {
+    private def loadDistanceMeasure(metadata: DefaultParamsReader.Metadata): DistanceMeasure = {
       implicit val format: DefaultFormats.type = DefaultFormats
 
       def getDistanceMeasure(params: JValue): Option[String] = {
@@ -457,7 +470,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
 
       getDistanceMeasure(metadata.params)
         .orElse(getDistanceMeasure(metadata.defaultParams))
-        .getOrElse(KMeans.EUCLIDEAN)
+        .map(DistanceMeasure.decodeFromString)
+        .getOrElse(EuclideanDistanceMeasure)
     }
   }
 }
@@ -465,6 +479,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
 private case class VectorWithNorm(vector: Vector, norm: Double)
 
 private abstract class DistanceMeasure extends Serializable {
+
+  def name: String
 
   def computeStatistics(distance: Double): Double
 
@@ -552,6 +568,8 @@ private object DistanceMeasure {
 }
 
 private object EuclideanDistanceMeasure extends DistanceMeasure {
+
+  override def name: String = KMeans.EUCLIDEAN
 
   override def computeStatistics(distance: Double): Double = {
     0.25 * distance * distance
@@ -647,6 +665,8 @@ private object EuclideanDistanceMeasure extends DistanceMeasure {
 }
 
 private object CosineDistanceMeasure extends DistanceMeasure {
+
+  override def name: String = KMeans.COSINE
 
   override def computeStatistics(distance: Double): Double = {
     1 - math.sqrt(1 - distance / 2)
