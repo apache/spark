@@ -37,6 +37,12 @@ class RewriteWithExpressionSuite extends PlanTest {
   private val testRelation = LocalRelation($"a".int, $"b".int)
   private val testRelation2 = LocalRelation($"x".int, $"y".int)
 
+  // The guard of a pre-evaluated definition asks whether a condition held, which for a nullable
+  // condition is not the same as the condition itself: a null condition does not take the branch.
+  private def isTrue(cond: Expression): Expression =
+    EqualNullSafe(cond, Literal.TrueLiteral)
+  private def notTrue(cond: Expression): Expression = Not(isTrue(cond))
+
   private def normalizeCommonExpressionIds(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressions {
       case a: Alias if a.name.startsWith("_common_expr") =>
@@ -258,7 +264,9 @@ class RewriteWithExpressionSuite extends PlanTest {
       With(input) { case Seq(ref) => ref >= lower && ref <= upper }
 
     // Inlining a nondeterministic common expression draws an independent value per reference,
-    // which is what `With` exists to prevent, so it is pre-evaluated in a project instead.
+    // which is what `With` exists to prevent, so it is pre-evaluated in a project instead. The
+    // guard keeps the draw from happening on the rows that take another branch, so `rand()` is
+    // advanced exactly on the rows that would have advanced it before.
     val rand = Rand(Literal(1L))
     val plan = testRelation.select(
       CaseWhen(Seq((a > 0, Literal(true))), Some(between(rand, Literal(0.4), Literal(0.6))))
@@ -266,7 +274,8 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan),
       testRelation
-        .select((testRelation.output :+ rand.as("_common_expr_0")): _*)
+        .select((testRelation.output :+
+          If(notTrue(a > 0), rand, Literal(0.0d)).as("_common_expr_0")): _*)
         .select(
           CaseWhen(
             Seq((a > 0, Literal(true))),
@@ -334,13 +343,110 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan6),
       testRelation
-        .select((testRelation.output :+ rand.as("_common_expr_0")): _*)
+        .select((testRelation.output :+
+          If(notTrue(a > 0), rand, Literal(0.0d)).as("_common_expr_0")): _*)
         .select(
           CaseWhen(
             Seq((a > 0, Literal(true))),
             Some(($"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6)) &&
               (randStr >= Literal("a") && randStr <= Literal("z")))).as("col"))
         .analyze)
+  }
+
+  test("SPARK-58818: the guard on a pre-evaluated definition tracks the branch reached") {
+    val a = testRelation.output.head
+    val rand = Rand(Literal(1L))
+    def between(input: Expression, lower: Expression, upper: Expression): Expression =
+      With(input) { case Seq(ref) => ref >= lower && ref <= upper }
+    def guarded(guard: Expression): NamedExpression =
+      If(guard, rand, Literal(0.0d)).as("_common_expr_0")
+
+    // A later branch is only reached when no preceding condition held, so its guard accumulates
+    // them. A nullable condition needs `<=> true`, since a null condition does not take the branch
+    // either. `b` is nullable here while `a > 0` is not.
+    val b = testRelation.output.last
+    val plan = testRelation.select(
+      CaseWhen(
+        Seq(
+          (a > 0, Literal(true)),
+          (b > 0, between(rand, Literal(0.4), Literal(0.6)))),
+        Some(Literal(false))).as("col"))
+    comparePlans(
+      Optimizer.execute(plan),
+      testRelation
+        .select((testRelation.output :+
+          guarded(notTrue(a > 0) && isTrue(b > 0))): _*)
+        .select(
+          CaseWhen(
+            Seq(
+              (a > 0, Literal(true)),
+              (b > 0, $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6))),
+            Some(Literal(false))).as("col"))
+        .analyze)
+
+    // A `With` in a condition is reached when no preceding condition held, and does not depend on
+    // its own condition.
+    val plan2 = testRelation.select(
+      CaseWhen(
+        Seq(
+          (a > 0, Literal(true)),
+          (between(rand, Literal(0.4), Literal(0.6)), Literal(true))),
+        Some(Literal(false))).as("col"))
+    comparePlans(
+      Optimizer.execute(plan2),
+      testRelation
+        .select((testRelation.output :+ guarded(notTrue(a > 0))): _*)
+        .select(
+          CaseWhen(
+            Seq(
+              (a > 0, Literal(true)),
+              ($"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6),
+                Literal(true))),
+            Some(Literal(false))).as("col"))
+        .analyze)
+
+    // `If` guards each of its two branches with the predicate and its negation.
+    val plan3 = testRelation.select(
+      If(a > 0, between(rand, Literal(0.4), Literal(0.6)), Literal(false)).as("col"))
+    comparePlans(
+      Optimizer.execute(plan3),
+      testRelation
+        .select((testRelation.output :+ guarded(isTrue(a > 0))): _*)
+        .select(
+          If(
+            a > 0,
+            $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6),
+            Literal(false)).as("col"))
+        .analyze)
+
+    // `Coalesce` reaches a child only when every preceding child returned null.
+    val pid = SparkPartitionID()
+    val plan4 = testRelation.select(
+      Coalesce(Seq(b, With(pid) { case Seq(ref) => ref + ref })).as("col"))
+    comparePlans(
+      Optimizer.execute(plan4),
+      testRelation
+        .select((testRelation.output :+
+          If(IsNull(b), pid, Literal(0)).as("_common_expr_0")): _*)
+        .select(Coalesce(Seq(b, $"_common_expr_0" + $"_common_expr_0")).as("col"))
+        .analyze)
+
+    // A nondeterministic preceding condition cannot be restated as a guard: evaluating it a second
+    // time in the project would draw its own value and disagree with the branch. Inline instead.
+    val plan5 = testRelation.select(
+      CaseWhen(
+        Seq(
+          (Rand(Literal(2L)) > Literal(0.5d), Literal(true)),
+          (b > 0, between(rand, Literal(0.4), Literal(0.6)))),
+        Some(Literal(false))).as("col"))
+    comparePlans(
+      Optimizer.execute(plan5),
+      testRelation.select(
+        CaseWhen(
+          Seq(
+            (Rand(Literal(2L)) > Literal(0.5d), Literal(true)),
+            (b > 0, rand >= Literal(0.4) && rand <= Literal(0.6))),
+          Some(Literal(false))).as("col")))
   }
 
   test("WITH expression in grouping exprs") {

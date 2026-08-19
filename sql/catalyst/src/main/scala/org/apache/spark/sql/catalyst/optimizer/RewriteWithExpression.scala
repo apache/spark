@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
@@ -99,17 +100,48 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   }
 
   /**
+   * Whether a branch condition can be restated as a guard on the pre-evaluated column. The guard is
+   * evaluated a second time, in the project, so the condition must give the same answer there:
+   * it has to be deterministic, and it cannot carry a `With` or a `CommonExpressionRef`, neither of
+   * which survives outside the expression it belongs to.
+   */
+  private def canGuardOn(cond: Expression): Boolean = {
+    cond.deterministic &&
+      !cond.containsAnyPattern(WITH_EXPRESSION, COMMON_EXPR_REF)
+  }
+
+  /** The predicate that holds exactly for the rows where `cond` evaluates to true. */
+  private def isTrue(cond: Expression): Expression = {
+    if (cond.nullable) EqualNullSafe(cond, Literal.TrueLiteral) else cond
+  }
+
+  /** The predicate that holds exactly for the rows where `cond` evaluates to false or null. */
+  private def isNotTrue(cond: Expression): Expression = {
+    if (cond.nullable) Not(EqualNullSafe(cond, Literal.TrueLiteral)) else Not(cond)
+  }
+
+  /**
+   * The predicate that holds exactly for the rows where every one of `preds` holds. An empty
+   * `preds` means the branch is always evaluated, so the guard is trivially true.
+   */
+  private def conjunction(preds: Seq[Expression]): Expression = {
+    preds.reduceOption(And(_, _)).getOrElse(Literal.TrueLiteral)
+  }
+
+  /**
    * Whether pre-evaluating this common expression in a conditional branch is safe, where inlining
    * is otherwise preferred because the branch may not be evaluated at all.
    *
-   * It is safe only when the expression cannot raise. Pre-evaluating happens for every row,
-   * including the rows whose branch is not taken, so an expression that raises would turn a wrong
-   * result into a spurious error. That rules out more than it may seem: `randstr(-1, 0)` raises on
-   * its constant length and `reflect(...)` raises on constant arguments, so neither a
-   * nondeterministic root nor foldable children are enough. The generators below produce a value
-   * from a seed or from the task context, evaluate no argument beyond a foldable seed, and so have
-   * nothing to raise on. Any other nondeterministic expression, say `rand() / col`, keeps the
-   * existing inlining and its existing wrong result.
+   * The `guard` in [[preEvaluateInChildProject]] confines the evaluation to the rows that reach the
+   * branch, but not to the rows that reach this particular reference: a reference behind a
+   * short-circuiting operator, say the second one in `a > 0 AND rand() BETWEEN 0.4 AND 0.6`, is not
+   * read on every row of the branch. So pre-evaluating is safe only when the expression cannot
+   * raise, or it would turn a wrong result into a spurious error. That rules out more than it may
+   * seem: `randstr(-1, 0)` raises on its constant length and `reflect(...)` raises on constant
+   * arguments, so neither a nondeterministic root nor foldable children are enough. The generators
+   * below produce a value from a seed or from the task context, evaluate no argument beyond a
+   * foldable seed, and so have nothing to raise on. Any other nondeterministic expression, say
+   * `rand() / col`, keeps the existing inlining and its existing wrong result.
    *
    * Only nondeterministic expressions are worth pre-evaluating here at all: inlining a
    * deterministic one repeats the work but returns the same value, so the branch keeps deciding
@@ -129,36 +161,90 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   }
 
   /**
-   * Adds `child` to the input plan that supplies its references as a pre-evaluated column, and
-   * returns the attribute referring to it. Falls back to `child` itself when it cannot be placed in
-   * a project, matching the main `With` rewrite.
+   * Adds `child`, guarded by `guard`, as a pre-evaluated column to the input plan that supplies the
+   * references of both, and returns the attribute referring to it. The guard keeps `child` from
+   * being evaluated on the rows that do not reach its branch, which for a stateful generator such
+   * as `rand()` is what keeps the pre-evaluation from advancing the generator on those rows. The
+   * column holds a default value there; no reference reads it, since a reference is only reached
+   * when the guard holds.
+   *
+   * Returns `None` when the guarded expression cannot be placed in a project, so that the caller
+   * inlines it instead, matching the main `With` rewrite. Also returns `None` when this definition
+   * already has a pre-evaluated column under a different guard, since that column is not computed
+   * on the rows this branch is reached on.
    */
   private def preEvaluateInChildProject(
       child: Expression,
+      guard: Expression,
       id: CommonExpressionId,
       index: Int,
       inputPlans: Seq[LogicalPlan],
-      commonExprsPerChild: Array[mutable.ListBuffer[(Alias, Long)]]): Expression = {
-    val childPlanIndex = inputPlans.indexWhere(c => child.references.subsetOf(c.outputSet))
-    if (childPlanIndex == -1) {
-      child
-    } else {
-      val commonExprs = commonExprsPerChild(childPlanIndex)
-      commonExprs.find(_._2 == id.id).map(_._1.toAttribute).getOrElse {
-        val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
-          s"_common_expr_${id.id}"
-        } else {
-          s"_common_expr_$index"
-        }
-        val alias = Alias(child, aliasName)()
-        val fakeProj = Project(Seq(alias), inputPlans(childPlanIndex))
-        if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
-          child
-        } else {
-          commonExprs.append((alias, id.id))
-          alias.toAttribute
+      commonExprsPerChild: Array[mutable.ListBuffer[(Alias, Long)]]): Option[Expression] = {
+    // `Literal.default` has no value for a few exotic types; inline those.
+    val guarded = guard match {
+      case Literal.TrueLiteral => Some(child)
+      case _ => Try(If(guard, child, Literal.default(child.dataType))).toOption
+    }
+    guarded.flatMap { guarded =>
+      val childPlanIndex = inputPlans.indexWhere(c => guarded.references.subsetOf(c.outputSet))
+      if (childPlanIndex == -1) {
+        None
+      } else {
+        val commonExprs = commonExprsPerChild(childPlanIndex)
+        commonExprs.find(_._2 == id.id) match {
+          case Some((existing, _)) =>
+            Some(existing.toAttribute).filter(_ => existing.child.semanticEquals(guarded))
+          case None =>
+            val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
+              s"_common_expr_${id.id}"
+            } else {
+              s"_common_expr_$index"
+            }
+            val alias = Alias(guarded, aliasName)()
+            val fakeProj = Project(Seq(alias), inputPlans(childPlanIndex))
+            if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
+              None
+            } else {
+              commonExprs.append((alias, id.id))
+              Some(alias.toAttribute)
+            }
         }
       }
+    }
+  }
+
+  /**
+   * Rewrites the `With` expressions of one conditional branch, which `guard` holds for. Inlines the
+   * common expressions, since the branch may not be evaluated at all and a project always is,
+   * except for the nondeterministic definitions that inlining would break; those are pre-evaluated
+   * under the guard. See [[canPreEvaluateInBranch]] and [[preEvaluateInChildProject]].
+   */
+  private def rewriteWithInBranch(
+      branch: Expression,
+      guard: Option[Expression],
+      inputPlans: Seq[LogicalPlan],
+      commonExprsPerChild: Array[mutable.ListBuffer[(Alias, Long)]],
+      commonExprIdSet: Set[CommonExpressionId]): Expression = {
+    // Use transformUp to handle nested With.
+    branch.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case With(child, defs) =>
+        // Each definition is decided on its own, so a definition that has to stay inline does not
+        // drag its siblings along, nor is it dragged along by them.
+        val refToExpr = defs.zipWithIndex.map { case (d, index) =>
+          val canPreEvaluate =
+            commonExprIdSet.contains(d.id) && canPreEvaluateInBranch(d.child)
+          val preEvaluated = if (canPreEvaluate) {
+            guard.flatMap(
+              preEvaluateInChildProject(
+                d.child, _, d.id, index, inputPlans, commonExprsPerChild))
+          } else {
+            None
+          }
+          d.id -> preEvaluated.getOrElse(d.child)
+        }.toMap
+        child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+          case ref: CommonExpressionRef => refToExpr(ref.id)
+        }
     }
   }
 
@@ -245,26 +331,54 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           rewriteWithExprAndInputPlans(
             _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith))
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
-        // Use transformUp to handle nested With.
-        newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          case With(child, defs) =>
-            // For With in the conditional branches, they may not be evaluated at all and we can't
-            // pull the common expressions into a project which will always be evaluated, so inline
-            // them. The exception is a nondeterministic definition that is referenced more than
-            // once, which inlining would evaluate once per reference and hand each reference a
-            // different value; see `canPreEvaluateInBranch`. Each definition is decided on its own,
-            // so an unsafe sibling keeps its inlining instead of being dragged into the project.
-            val refToExpr = defs.zipWithIndex.map { case (d, index) =>
-              val expr = if (commonExprIdSet.contains(d.id) && canPreEvaluateInBranch(d.child)) {
-                preEvaluateInChildProject(d.child, d.id, index, inputPlans, commonExprsPerChild)
-              } else {
-                d.child
-              }
-              d.id -> expr
-            }.toMap
-            child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-              case ref: CommonExpressionRef => refToExpr(ref.id)
+        def rewriteBranch(branch: Expression, guard: Option[Expression]): Expression = {
+          rewriteWithInBranch(branch, guard, inputPlans, commonExprsPerChild, commonExprIdSet)
+        }
+        newExpr match {
+          case i @ If(pred, trueValue, falseValue) =>
+            val (trueGuard, falseGuard) = if (canGuardOn(pred)) {
+              (Some(isTrue(pred)), Some(isNotTrue(pred)))
+            } else {
+              (None, None)
             }
+            i.copy(
+              trueValue = rewriteBranch(trueValue, trueGuard),
+              falseValue = rewriteBranch(falseValue, falseGuard))
+
+          case cw @ CaseWhen(branches, elseValue) =>
+            // A condition is only evaluated when no preceding condition held, and a value only when
+            // its own condition held on top of that. Accumulate the preceding conditions left to
+            // right, dropping the whole chain at the first one that cannot be restated as a guard.
+            // The chain is a left-to-right `And` of non-nullable predicates, so it short-circuits
+            // exactly where `CaseWhen` stops looking, and a condition that can raise raises on the
+            // same rows as before.
+            val precedingNotTrue = branches.map(_._1).scanLeft(Option(Seq.empty[Expression])) {
+              case (preceding, cond) =>
+                preceding.filter(_ => canGuardOn(cond)).map(_ :+ isNotTrue(cond))
+            }
+            val newBranches = branches.zip(precedingNotTrue).map {
+              case ((cond, value), preceding) =>
+                val valueGuard = preceding
+                  .filter(_ => canGuardOn(cond))
+                  .map(p => conjunction(p :+ isTrue(cond)))
+                (rewriteBranch(cond, preceding.map(conjunction)), rewriteBranch(value, valueGuard))
+            }
+            cw.copy(
+              branches = newBranches,
+              elseValue = elseValue.map(rewriteBranch(_, precedingNotTrue.last.map(conjunction))))
+
+          case co @ Coalesce(children) =>
+            // A child is only evaluated when every preceding child returned null.
+            val precedingNull = children.scanLeft(Option(Seq.empty[Expression])) {
+              case (preceding, child) =>
+                preceding.filter(_ => canGuardOn(child)).map(_ :+ IsNull(child))
+            }
+            co.copy(children = children.zip(precedingNull).map { case (child, preceding) =>
+              rewriteBranch(child, preceding.map(conjunction))
+            })
+
+          // Any other conditional expression: no guard, so every definition is inlined.
+          case other => rewriteBranch(other, None)
         }
 
       case other => other.mapChildren(

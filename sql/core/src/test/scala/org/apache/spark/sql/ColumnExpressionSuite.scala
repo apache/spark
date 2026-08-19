@@ -441,6 +441,18 @@ class ColumnExpressionSuite extends SharedSparkSession {
     // own counter, so the second one advanced only on the rows where the first predicate passed.
     checkAnswer(df.selectExpr(inBranch), expected)
     checkAnswer(df.selectExpr("monotonically_increasing_id() BETWEEN 3 AND 5"), expected)
+
+    // The pre-evaluated column is guarded by the branch condition, so the rows that take another
+    // branch do not advance the counter: the ids the ELSE rows see are 0, 1, 2, ... over those rows
+    // alone, exactly as they are when the branch is the only one.
+    val someRowsSkipBranch = "CASE WHEN id % 2 = 0 THEN NULL " +
+      "ELSE monotonically_increasing_id() BETWEEN 1 AND 2 END"
+    checkAnswer(
+      df.selectExpr(someRowsSkipBranch),
+      (0 until 10).map { i =>
+        // The odd rows are the 0th, 1st, 2nd, ... rows that reach the branch.
+        if (i % 2 == 0) Row(null) else Row(i / 2 >= 1 && i / 2 <= 2)
+      })
   }
 
   test("in") {
