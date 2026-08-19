@@ -54,6 +54,24 @@ public class CharVarcharCodegenUtils {
     }
   }
 
+  /**
+   * Applies the SQL explicit-cast rules for a character string source and CHAR target.
+   *
+   * Unlike store assignment, an explicit character-to-character cast truncates non-space
+   * characters instead of raising a right-truncation exception.
+   */
+  public static UTF8String charTypeCast(UTF8String inputStr, int limit) {
+    UTF8String truncated = varcharTypeCast(inputStr, limit);
+    return truncated.numChars() < limit ? truncated.rpad(limit, SPACE) : truncated;
+  }
+
+  /**
+   * Applies the SQL explicit-cast rules for a character string source and VARCHAR target.
+   */
+  public static UTF8String varcharTypeCast(UTF8String inputStr, int limit) {
+    return inputStr.numChars() > limit ? inputStr.substring(0, limit) : inputStr;
+  }
+
   public static UTF8String readSidePadding(UTF8String inputStr, int limit) {
     int numChars = inputStr.numChars();
     if (numChars == limit) {

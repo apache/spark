@@ -868,25 +868,29 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assert(varcharDf.schema.head.dataType === VarcharType(5))
       checkAnswer(varcharDf, Row("hello"))
 
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          sql("SELECT CAST('hello!' AS VARCHAR(5))").collect()
-        },
-        condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "5")
-      )
+      // ISO 6.13: character-to-character CAST truncates rather than erroring.
+      checkAnswer(sql("SELECT CAST('hello!' AS VARCHAR(5)) AS v"), Row("hello"))
+      checkAnswer(sql("SELECT CAST('abcdef' AS CHAR(2)) AS c"), Row("ab"))
+      checkAnswer(sql("SELECT CAST('abcdef' AS VARCHAR(2)) AS v"), Row("ab"))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS CHAR(2)) AS c"), Row("ab"))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS v"), Row("ab"))
 
       // Multi-byte characters: length is in characters, not octets.
       // scalastyle:off nonascii
       checkAnswer(sql("SELECT CAST('你好' AS VARCHAR(2)) AS v"), Row("你好"))
+      checkAnswer(sql("SELECT CAST('你好啊' AS VARCHAR(2)) AS v"), Row("你好"))
+      // scalastyle:on nonascii
+
+      // ISO 6.13 numeric-to-character CAST still errors when the literal does not fit.
       checkError(
         exception = intercept[SparkRuntimeException] {
-          sql("SELECT CAST('你好啊' AS VARCHAR(2))").collect()
+          sql("SELECT CAST(12345 AS VARCHAR(4))").collect()
         },
         condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "2")
+        parameters = Map("limit" -> "4")
       )
-      // scalastyle:on nonascii
+      checkAnswer(sql("SELECT CAST(12345 AS VARCHAR(5)) AS v"), Row("12345"))
+      checkAnswer(sql("SELECT try_cast(12345 AS VARCHAR(4)) AS v"), Row(null))
     }
   }
 
@@ -1236,12 +1240,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
       val varcharDf = spark.sql("SELECT cast('hello' AS VARCHAR(?)) AS c", Array(5))
       assert(varcharDf.schema.head.dataType === VarcharType(5))
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          spark.sql("SELECT cast('abcdef' AS VARCHAR(?))", Array(2)).collect()
-        },
-        condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "2"))
+      checkAnswer(
+        spark.sql("SELECT cast('abcdef' AS VARCHAR(?))", Array(2)),
+        Row("ab"))
 
       withTable("param_varchar", "param_char") {
         spark.sql(
@@ -1293,7 +1294,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         VarcharType(5))
       assert(sql("SELECT try_cast('abcdef' AS CHAR(2)) AS c").schema.head.dataType ===
         CharType(2))
-      checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS c"), Row(null))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS c"), Row("ab"))
 
       // Least common type (R2): COALESCE / CASE / NULL / CHAR+VARCHAR / CHAR+STRING.
       assert(sql(

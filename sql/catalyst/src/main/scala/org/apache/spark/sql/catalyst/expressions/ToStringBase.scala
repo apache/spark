@@ -58,12 +58,16 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
   protected final def castToString(
       from: DataType, to: StringConstraint = NoConstraint): Any => UTF8String =
-    to match {
-      case FixedLength(length) =>
+    (to, from) match {
+      case (FixedLength(length), _: StringType) if SQLConf.get.charVarcharStandardSemantics =>
+        s => CharVarcharCodegenUtils.charTypeCast(castToString(from)(s), length)
+      case (MaxLength(length), _: StringType) if SQLConf.get.charVarcharStandardSemantics =>
+        s => CharVarcharCodegenUtils.varcharTypeCast(castToString(from)(s), length)
+      case (FixedLength(length), _) =>
         s => CharVarcharCodegenUtils.charTypeWriteSideCheck(castToString(from)(s), length)
-      case MaxLength(length) =>
+      case (MaxLength(length), _) =>
         s => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(castToString(from)(s), length)
-      case NoConstraint => castToString(from)
+      case (NoConstraint, _) => castToString(from)
     }
 
   // The Types Framework is the single integration point for framework types' cast-to-string, via
@@ -196,14 +200,22 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     (c, evPrim) => {
       val tmpVar = ctx.freshVariable("tmp", classOf[UTF8String])
       val castToString = castToStringCode(from, ctx)(c, tmpVar)
-      val maintainConstraint = to match {
-        case FixedLength(length) =>
+      val maintainConstraint = (to, from) match {
+        case (FixedLength(length), _: StringType)
+            if SQLConf.get.charVarcharStandardSemantics =>
+          code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+                .charTypeCast($tmpVar, $length);""".stripMargin
+        case (MaxLength(length), _: StringType)
+            if SQLConf.get.charVarcharStandardSemantics =>
+          code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+                .varcharTypeCast($tmpVar, $length);""".stripMargin
+        case (FixedLength(length), _) =>
           code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
                 .charTypeWriteSideCheck($tmpVar, $length);""".stripMargin
-        case MaxLength(length) =>
+        case (MaxLength(length), _) =>
           code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
                 .varcharTypeWriteSideCheck($tmpVar, $length);""".stripMargin
-        case NoConstraint => code"$evPrim = $tmpVar;"
+        case (NoConstraint, _) => code"$evPrim = $tmpVar;"
       }
       code"""
             UTF8String $tmpVar;

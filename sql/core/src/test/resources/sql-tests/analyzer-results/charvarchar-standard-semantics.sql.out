@@ -56,6 +56,27 @@ Project [try_cast(abcdef as varchar(2)) AS TRY_CAST(abcdef AS VARCHAR(2))#x]
 
 
 -- !query
+SELECT CAST(12345 AS VARCHAR(4))
+-- !query analysis
+Project [cast(12345 as varchar(4)) AS CAST(12345 AS VARCHAR(4))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(12345 AS VARCHAR(5))
+-- !query analysis
+Project [cast(12345 as varchar(5)) AS CAST(12345 AS VARCHAR(5))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_cast(12345 AS VARCHAR(4))
+-- !query analysis
+Project [try_cast(12345 as varchar(4)) AS TRY_CAST(12345 AS VARCHAR(4))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT typeof(coalesce(cast('hello' AS VARCHAR(5)), cast('world' AS VARCHAR(10))))
 -- !query analysis
 Project [typeof(coalesce(cast(cast(hello as varchar(5)) as varchar(10)), cast(world as varchar(10)))) AS typeof(coalesce(CAST(hello AS VARCHAR(5)), CAST(world AS VARCHAR(10))))#x]

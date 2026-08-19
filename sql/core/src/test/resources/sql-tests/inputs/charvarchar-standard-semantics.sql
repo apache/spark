@@ -5,12 +5,15 @@ SELECT typeof(CAST('ab' AS CHAR(5)));
 SELECT typeof(CAST('hello' AS VARCHAR(5)));
 SELECT 'X' || CAST('5' AS CHAR(5)) || 'X';
 
--- CAST length enforcement: trailing spaces are trimmed, real overflow errors
+-- CAST length: character-to-character truncates (ISO 6.13); numeric overflow errors
 SELECT CAST('ab   ' AS CHAR(2));
 SELECT CAST('abcdef' AS CHAR(2));
 SELECT CAST('abcdef' AS VARCHAR(2));
 SELECT try_cast('abcdef' AS CHAR(2));
 SELECT try_cast('abcdef' AS VARCHAR(2));
+SELECT CAST(12345 AS VARCHAR(4));
+SELECT CAST(12345 AS VARCHAR(5));
+SELECT try_cast(12345 AS VARCHAR(4));
 
 -- R2: least common type (COALESCE / CASE)
 SELECT typeof(coalesce(cast('hello' AS VARCHAR(5)), cast('world' AS VARCHAR(10))));

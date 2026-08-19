@@ -34,31 +34,17 @@ ab
 -- !query
 SELECT CAST('abcdef' AS CHAR(2))
 -- !query schema
-struct<>
+struct<CAST(abcdef AS CHAR(2)):char(2)>
 -- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "EXCEED_LIMIT_LENGTH",
-  "sqlState" : "54006",
-  "messageParameters" : {
-    "limit" : "2"
-  }
-}
+ab
 
 
 -- !query
 SELECT CAST('abcdef' AS VARCHAR(2))
 -- !query schema
-struct<>
+struct<CAST(abcdef AS VARCHAR(2)):varchar(2)>
 -- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "EXCEED_LIMIT_LENGTH",
-  "sqlState" : "54006",
-  "messageParameters" : {
-    "limit" : "2"
-  }
-}
+ab
 
 
 -- !query
@@ -66,13 +52,44 @@ SELECT try_cast('abcdef' AS CHAR(2))
 -- !query schema
 struct<TRY_CAST(abcdef AS CHAR(2)):char(2)>
 -- !query output
-NULL
+ab
 
 
 -- !query
 SELECT try_cast('abcdef' AS VARCHAR(2))
 -- !query schema
 struct<TRY_CAST(abcdef AS VARCHAR(2)):varchar(2)>
+-- !query output
+ab
+
+
+-- !query
+SELECT CAST(12345 AS VARCHAR(4))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "EXCEED_LIMIT_LENGTH",
+  "sqlState" : "54006",
+  "messageParameters" : {
+    "limit" : "4"
+  }
+}
+
+
+-- !query
+SELECT CAST(12345 AS VARCHAR(5))
+-- !query schema
+struct<CAST(12345 AS VARCHAR(5)):varchar(5)>
+-- !query output
+12345
+
+
+-- !query
+SELECT try_cast(12345 AS VARCHAR(4))
+-- !query schema
+struct<TRY_CAST(12345 AS VARCHAR(4)):varchar(4)>
 -- !query output
 NULL
 
