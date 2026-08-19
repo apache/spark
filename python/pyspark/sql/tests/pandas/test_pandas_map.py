@@ -465,6 +465,12 @@ class MapInPandasTestsMixin:
             tc = TaskContext.get()
             assert tc is not None
             assert not isinstance(tc, BarrierTaskContext)
+            try:
+                BarrierTaskContext.get()
+            except Exception:
+                pass
+            else:
+                raise AssertionError("BarrierTaskContext.get() should fail outside barrier mode")
             for batch in iterator:
                 yield batch
 
