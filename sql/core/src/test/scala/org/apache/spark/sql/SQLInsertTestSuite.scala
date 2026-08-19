@@ -592,7 +592,7 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
     }
   }
 
-    test("SPARK-58816: insert with column list resolves structs inside arrays positionally") {
+  test("SPARK-58816: insert with column list resolves structs inside arrays positionally") {
     withTable("t") {
       createTable("t", Seq("arr"), Seq("ARRAY<STRUCT<x: INT, y: INT>>"))
       sql("INSERT INTO t (arr) SELECT array(named_struct('y', 20, 'x', 10))")
@@ -616,7 +616,8 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-58816: insert with column list resolves structs positionally at all nesting levels") {
+  test("SPARK-58816: insert with column list resolves structs positionally " +
+    "at all nesting levels") {
     withTable("t") {
       createTable(
         "t",
@@ -638,7 +639,8 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-58816: insert with column list resolves deeply nested mixed collections positionally") {
+  test("SPARK-58816: insert with column list resolves deeply nested mixed " +
+    "collections positionally") {
     withTable("t") {
       createTable("t", Seq("arr_map"), Seq("ARRAY<MAP<STRING, STRUCT<x: INT, y: INT>>>"))
       sql("INSERT INTO t (arr_map) SELECT array(map('k', named_struct('y', 20, 'x', 10)))")
