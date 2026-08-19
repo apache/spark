@@ -2804,6 +2804,8 @@
               <arg>-explaintypes</arg>
               <arg>-release</arg>
               <arg>17</arg>
+              <!-- Detect reads of uninitialized vals, such as eager trait initializers. -->
+              <arg>-Xcheckinit</arg>
               <arg>-Wconf:any:e</arg>
               <arg>-Wconf:cat=deprecation:wv</arg>
               <arg>-Wunused:imports</arg>

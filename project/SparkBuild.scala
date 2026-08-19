@@ -270,6 +270,8 @@ object SparkBuild extends PomBuild {
         // since 2.13.15, "-Wconf:cat=deprecation:wv,any:e" no longer takes effect and needs to
         // be changed to "-Wconf:any:e", "-Wconf:cat=deprecation:wv",
         // please refer to the details: https://github.com/scala/scala/pull/10708
+        // Detect reads of uninitialized vals, such as eager trait initializers.
+        "-Xcheckinit",
         "-Wconf:any:e",
         "-Wconf:cat=deprecation:wv",
         // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
