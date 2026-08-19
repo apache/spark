@@ -4897,7 +4897,7 @@ case class ConvertTimezone(
       TypeCollection(TimestampNTZType, AnyTimestampNanoType))
 
   // sourceTs's requiredType, as actually enforced by this method: TypeCollection includes
-  // AnyTimestampNanoType (rather than an NTZ-only nanos type) only so that a LTZ(p) input is
+  // AnyTimestampNanoType (rather than an NTZ-only nanos type) only so that an LTZ(p) input is
   // accepted here and rejected below with the friendly message, instead of being silently
   // widened to TimestampNTZType by the generic datetime-to-datetime implicit cast rule. That
   // makes AnyTimestampNanoType.simpleString (which lists timestamp_ltz(p)) leak into the

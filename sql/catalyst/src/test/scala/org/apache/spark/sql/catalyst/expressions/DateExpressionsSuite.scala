@@ -2576,7 +2576,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // LTZ(p) nanos values are rejected: this function is NTZ-only, matching the existing
-    // TimestampNTZType-only micro path. Unlike that micro path -- which does implicit-cast a
+    // TimestampNTZType-only micro path. Unlike that micro path -- which implicitly casts a
     // plain LTZ TimestampType argument down to TimestampNTZType -- a nanos source must not be
     // silently reinterpreted from LTZ to NTZ, since that would drop the source time zone
     // information without the user asking for it.
@@ -2587,9 +2587,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .checkInputDataTypes().asInstanceOf[DataTypeMismatch]
     assert(ltzMismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
 
-    // A wholly-invalid source type (not any kind of timestamp) hits the generic type check
+    // A wholly invalid source type (not any kind of timestamp) hits the generic type check
     // instead of the explicit LTZ guard above; both paths must report the same requiredType,
-    // since neither actually accepts a LTZ(p) source.
+    // since neither actually accepts an LTZ(p) source.
     val wrongTypeMismatch = ConvertTimezone(
       Literal("Europe/Brussels"), Literal("Europe/Moscow"), Literal(1))
       .checkInputDataTypes().asInstanceOf[DataTypeMismatch]

@@ -187,11 +187,6 @@ SELECT typeof(convert_timezone('Europe/Brussels', 'Europe/Moscow',
     '2022-03-27 03:00:00.1234567' :: timestamp_ntz(7)));
 -- NULL nanosecond timestamp.
 SELECT convert_timezone('America/Los_Angeles', 'UTC', CAST(NULL AS timestamp_ntz(9)));
--- convert_timezone is NTZ-only; a nanosecond LTZ(p) source is rejected rather than silently
--- reinterpreted, unlike the microsecond path, which does implicit-cast a plain LTZ TimestampType
--- argument down to TIMESTAMP_NTZ.
-SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
-    '2022-03-27 03:00:00.123456789 UTC' :: timestamp_ltz(9));
 
 -- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_NTZ. The aggregate preserves the
 -- nanosecond type and orders by the sub-microsecond remainder (two values share the same
