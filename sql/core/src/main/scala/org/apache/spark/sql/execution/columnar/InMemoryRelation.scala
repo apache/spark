@@ -205,8 +205,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       conf: SQLConf): RDD[ColumnarBatch] = {
     val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
     val outputSchema = DataTypeUtils.fromAttributes(selectedAttributes)
-    val columnIndices =
-      selectedAttributes.map(a => cacheAttributes.map(o => o.exprId).indexOf(a.exprId)).toArray
+    val columnIndices = CachedColumnIndices(cacheAttributes, selectedAttributes)
 
     def createAndDecompressColumn(cb: CachedBatch): ColumnarBatch = {
       val cachedColumnarBatch = cb.asInstanceOf[DefaultCachedBatch]
@@ -239,21 +238,18 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {
     // Find the ordinals and data types of the requested columns.
-    val (requestedColumnIndices, requestedColumnDataTypes) =
-      selectedAttributes.map { a =>
-        cacheAttributes.map(_.exprId).indexOf(a.exprId) -> a.dataType
-      }.unzip
+    val requestedColumnIndices = CachedColumnIndices(cacheAttributes, selectedAttributes)
 
-    val columnTypes = requestedColumnDataTypes.map {
+    val columnTypes = selectedAttributes.map(_.dataType match {
       case udt: UserDefinedType[_] => udt.sqlType
       case other => other
-    }.toArray
+    }).toArray
 
     input.mapPartitionsInternal { cachedBatchIterator =>
       val columnarIterator = GenerateColumnAccessor.generate(columnTypes.toImmutableArraySeq)
       columnarIterator.initialize(cachedBatchIterator.asInstanceOf[Iterator[DefaultCachedBatch]],
         columnTypes,
-        requestedColumnIndices.toArray)
+        requestedColumnIndices)
       columnarIterator
     }
   }

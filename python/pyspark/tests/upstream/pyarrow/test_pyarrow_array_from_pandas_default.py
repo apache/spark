@@ -89,16 +89,15 @@ if have_numpy:
     import numpy as np
 
 
-@unittest.skipIf(
-    not have_pyarrow or not have_pandas or not have_numpy,
-    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
-)
-class PyArrowArrayFromPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
+class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
     """
-    Tests pa.Array.from_pandas() with default arguments via golden file comparison.
+    Shared machinery for pa.Array.from_pandas() golden file tests.
 
-    Three group methods build the source Series so the non-default tests can reuse the whole
-    inventory or one group.  Groups are disjoint and their order fixes the row order.
+    Owns the source Series inventory: three disjoint group methods unioned by
+    ``_build_source_arrays``, whose order fixes the row order.  The default test below and
+    the non-default tests in ``test_pyarrow_array_from_pandas_non_default.py`` subclass this
+    to reuse the whole inventory or one group, along with ``repr_from_pandas_result``.  This
+    base defines no ``test_*`` methods, so it contributes no tests itself.
     """
 
     @staticmethod
@@ -114,6 +113,16 @@ class PyArrowArrayFromPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase)
             values, _, arrow_type = rendered.rpartition("@")
             return f"{values}@chunked<{arrow_type}>"
         return rendered
+
+    def _from_pandas_cell(self, series, **from_pandas_kwargs) -> str:
+        """
+        Convert ``series`` via ``from_pandas(**from_pandas_kwargs)`` and format the result
+        as a golden-file cell, returning ``ERR@<ExceptionClass>`` if the conversion raises.
+        """
+        try:
+            return self.repr_from_pandas_result(pa.Array.from_pandas(series, **from_pandas_kwargs))
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
 
     def _numpy_backed_sources(self):
         """
@@ -287,6 +296,12 @@ class PyArrowArrayFromPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase)
         sources["string[pyarrow]:standard"] = pd.Series(["hello", "world"], dtype="string[pyarrow]")
         sources["string[pyarrow]:nullable"] = pd.Series(["hello", None], dtype="string[pyarrow]")
         sources["string[pyarrow]:empty"] = pd.Series([], dtype="string[pyarrow]")
+        # Binary is not auto-promoted to large_binary the way string is, so large_binary
+        # has to be requested explicitly.  This is the binary counterpart of the string
+        # rows, and lets the type tests exercise the binary half of SPARK-46776.
+        sources["large_binary[pyarrow]:standard"] = pd.Series(
+            [b"hello", b"world"], dtype="large_binary[pyarrow]"
+        )
         sources["timestamp[us][pyarrow]:standard"] = pd.Series(
             [datetime.datetime(2024, 1, 1, 12, 0, 0)], dtype="timestamp[us][pyarrow]"
         )
@@ -352,6 +367,14 @@ class PyArrowArrayFromPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase)
             sources.update(group)
         return sources
 
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas or not have_numpy,
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
+)
+class PyArrowArrayFromPandasDefaultTests(_PyArrowFromPandasTestBase):
+    """Tests pa.Array.from_pandas() with default arguments via golden file comparison."""
+
     def test_from_pandas_default(self):
         """Test pa.Array.from_pandas() with default arguments against golden file."""
         sources = self._build_source_arrays()
@@ -392,10 +415,7 @@ class PyArrowArrayFromPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase)
             if col_name == "pandas series":
                 return self.repr_value(series, max_len=0)
             else:
-                try:
-                    return self.repr_from_pandas_result(pa.Array.from_pandas(series))
-                except Exception as e:
-                    return f"ERR@{type(e).__name__}"
+                return self._from_pandas_cell(series)
 
         self.compare_or_generate_golden_matrix(
             row_names=row_names,
@@ -410,4 +430,4 @@ class PyArrowArrayFromPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase)
 if __name__ == "__main__":
     from pyspark.testing import main
 
-    main(globals()["__file__"])
+    main()

@@ -44,6 +44,10 @@ import org.apache.spark.unsafe.types.UTF8String
 object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private def nameOfCorruptRecord = conf.columnNameOfCorruptRecord
 
+  /** Whether the field this extracts is the corrupt record column of its `JsonToStructs`. */
+  private def selectsCorruptRecord(g: GetStructField): Boolean =
+    g.childSchema(g.ordinal).name == nameOfCorruptRecord
+
   private type SimpleJsonPath = Seq[GetJsonObject.SimpleJsonPathSegment]
   private type SharedJsonCandidate = (GetJsonObject, SimpleJsonPath, String)
   private type SharedJsonCandidateUnit = Seq[SharedJsonCandidate]
@@ -414,9 +418,18 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       // `JsonToStructs` does not support parsing json with duplicated field names.
       val duplicateFields = c.names.map(_.toString).distinct.length != c.names.length
 
+      // Dropping a field stops the parser from converting it, so the parser never records the
+      // row when a dropped field contains a malformed value, and the corrupt record column comes
+      // back null. Selecting as many fields as the schema has drops nothing: with `sameFieldName`
+      // and no duplicates the selected names are distinct names of the schema, so the counts
+      // match only when every field is selected.
+      val fields = c.valExprs.map(_.asInstanceOf[GetStructField])
+      val prunesCorruptRecord = fields.exists(selectsCorruptRecord) &&
+        fields.length != fields.head.childSchema.length
+
       // If we create struct from various fields of the same `JsonToStructs` and we don't
       // alias field names and there is no duplicated field in the struct.
-      if (sameFieldName && !duplicateFields) {
+      if (sameFieldName && !duplicateFields && !prunesCorruptRecord) {
         val fromJson = jsonToStructs.head.asInstanceOf[JsonToStructs].copy(schema = c.dataType)
         val nullFields = c.children.grouped(2).flatMap {
           case Seq(name, value) => Seq(name, Literal(null, value.dataType))
@@ -440,12 +453,15 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       child
 
     case g @ GetStructField(j @ JsonToStructs(schema: StructType, _, _, _), ordinal, _)
-        if schema.length > 1 && j.options.isEmpty =>
+        if schema.length > 1 && j.options.isEmpty && !selectsCorruptRecord(g) =>
         // Options here should be empty because the optimization should not be enabled
         // for some options. For example, when the parse mode is failfast it should not
         // optimize, and should force to parse the whole input JSON with failing fast for
         // an invalid input.
         // To be more conservative, it does not optimize when any option is set for now.
+        // Pruning to the corrupt record column alone is excluded as well: it leaves the
+        // parser nothing to convert, so the parser never records the row when a dropped
+        // field contains a malformed value, and the column comes back null.
       val prunedSchema = StructType(Array(schema(ordinal)))
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0)
 

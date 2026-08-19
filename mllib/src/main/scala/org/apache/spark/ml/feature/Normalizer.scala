@@ -20,11 +20,10 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, SQLDataTypes, Vector, Vectors,
+  VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamValidators}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql.types._
 
 /**
@@ -56,8 +55,42 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def setP(value: Double): this.type = set(p, value)
 
   override protected def createTransformFunc: Vector => Vector = {
-    val normalizer = new feature.Normalizer($(p))
-    vector => normalizer.transform(OldVectors.fromML(vector)).asML
+    val localP = $(p)
+    vector => {
+      val norm = Vectors.norm(vector, localP)
+      if (norm != 0.0) {
+        val scale = 1.0 / norm
+        // For dense vector, we've to allocate new memory for new output vector.
+        // However, for sparse vector, the `index` array will not be changed,
+        // so we can re-use it to save memory.
+        vector match {
+          case DenseVector(vs) =>
+            val values = vs.clone()
+            val size = values.length
+            var i = 0
+            while (i < size) {
+              values(i) *= scale
+              i += 1
+            }
+            Vectors.dense(values)
+          case SparseVector(size, ids, vs) =>
+            val values = vs.clone()
+            val nnz = values.length
+            var i = 0
+            while (i < nnz) {
+              values(i) *= scale
+              i += 1
+            }
+            Vectors.sparse(size, ids, values)
+          case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+        }
+      } else {
+        // Since the norm is zero, return the input vector object itself.
+        // Note that it's safe since we always assume that the data in RDD
+        // should be immutable.
+        vector
+      }
+    }
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {

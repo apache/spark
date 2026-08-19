@@ -803,8 +803,8 @@ private[spark] class MockExecutorRpcEndpointRef(conf: SparkConf) extends RpcEndp
   import scala.concurrent.ExecutionContext.Implicits.global
   // scalastyle:on executioncontextglobal
 
-  var decommissionReceived = false
-  var receivedUserCredentials: Option[(Long, Array[Byte])] = None
+  @volatile var decommissionReceived = false
+  @volatile var receivedUserCredentials: Option[(Long, Array[Byte])] = None
 
   override def address: RpcAddress = null
   override def name: String = "executor"

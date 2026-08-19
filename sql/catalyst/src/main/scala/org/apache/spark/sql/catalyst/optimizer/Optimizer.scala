@@ -2194,6 +2194,10 @@ object PushDownPredicates extends Rule[LogicalPlan] {
  * 2) the predicate is deterministic and the operator will not change any of rows.
  * 3) We don't add double evaluation OR double evaluation would be cheap OR we're configured to.
  *
+ * Note: if a new push-through case is added here, or the translation applied to pushed
+ * conditions changes (e.g. how aliases are substituted), also update
+ * `removePushedDownFilter` in [[PushdownPredicatesAndPruneColumnsForCTEDef]], which mirrors
+ * this rule's cases to locate and remove filters previously pushed into CTE definitions.
  */
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally

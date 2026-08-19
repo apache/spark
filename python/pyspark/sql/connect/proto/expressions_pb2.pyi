@@ -1826,6 +1826,7 @@ class PythonUDF(google.protobuf.message.Message):
     COMMAND_FIELD_NUMBER: builtins.int
     PYTHON_VER_FIELD_NUMBER: builtins.int
     ADDITIONAL_INCLUDES_FIELD_NUMBER: builtins.int
+    BUFFER_TYPE_FIELD_NUMBER: builtins.int
     @property
     def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) Output type of the Python UDF"""
@@ -1840,6 +1841,11 @@ class PythonUDF(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Additional includes for the Python UDF."""
+    @property
+    def buffer_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) Intermediate buffer schema for an incremental Python aggregator
+        (see PythonAggregate). Set only for the incremental aggregator eval types.
+        """
     def __init__(
         self,
         *,
@@ -1848,15 +1854,28 @@ class PythonUDF(google.protobuf.message.Message):
         command: builtins.bytes = ...,
         python_ver: builtins.str = ...,
         additional_includes: collections.abc.Iterable[builtins.str] | None = ...,
+        buffer_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["output_type", b"output_type"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_buffer_type",
+            b"_buffer_type",
+            "buffer_type",
+            b"buffer_type",
+            "output_type",
+            b"output_type",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_buffer_type",
+            b"_buffer_type",
             "additional_includes",
             b"additional_includes",
+            "buffer_type",
+            b"buffer_type",
             "command",
             b"command",
             "eval_type",
@@ -1867,6 +1886,9 @@ class PythonUDF(google.protobuf.message.Message):
             b"python_ver",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_buffer_type", b"_buffer_type"]
+    ) -> typing_extensions.Literal["buffer_type"] | None: ...
 
 global___PythonUDF = PythonUDF
 

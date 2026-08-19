@@ -59,11 +59,10 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=23.0.0 pandas==2.3.3 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2 pystack>=1.6.0 psutil"
-ARG TEST_PIP_PKGS="coverage unittest-xml-reporting"
+COPY --from=root pyproject.toml ./pyproject.toml
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
-RUN python3.12 -m pip install $BASIC_PIP_PKGS $TEST_PIP_PKGS && \
-    python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
-    python3.12 -m pip install deepspeed torcheval && \
+RUN python3.12 -m pip install -U pip
+
+RUN python3.12 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install --group ci_classic_standard && \
     python3.12 -m pip cache purge
