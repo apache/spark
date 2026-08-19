@@ -581,4 +581,32 @@ class UserCredentialManagerSuite extends SparkFunSuite {
       manager.stop()
     }
   }
+
+  test("start() succeeds when a provider throws from additionalSparkProperties") {
+    // AnotherFakeCredentialProvider is configured to throw; FakeCredentialProvider should
+    // still have its properties applied (exception isolation via NonFatal catch).
+    val conf = createSparkConf()
+    conf.set("spark.security.oidc.provider.fake",
+      "org.apache.spark.security.FakeCredentialProvider")
+    conf.set("spark.security.oidc.provider.shared",
+      "org.apache.spark.security.AnotherFakeCredentialProvider")
+    val ctx = createUserContext()
+
+    AnotherFakeCredentialProvider.throwOnProperties = true
+    try {
+      val manager = new UserCredentialManager(
+        conf, createIngestor(ctx), (_, _) => ())
+      try {
+        // start() must not fail even though AnotherFakeCredentialProvider throws
+        manager.start()
+        // FakeCredentialProvider's property must still be applied
+        assert(conf.get("spark.hadoop.fs.fake.credentials.provider") ===
+          "org.apache.spark.security.FakeExecutorCredentialProvider")
+      } finally {
+        manager.stop()
+      }
+    } finally {
+      AnotherFakeCredentialProvider.throwOnProperties = false
+    }
+  }
 }

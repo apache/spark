@@ -123,7 +123,8 @@ public interface CredentialProvider extends AutoCloseable {
    * <p>
    * The default implementation returns an empty map (no additional properties).
    *
-   * @return an unmodifiable map of property key-value pairs (never null)
+   * @return an unmodifiable map of property key-value pairs (never null).
+   *         Keys and values within the map must not be {@code null}.
    * @since 4.4.0
    */
   default Map<String, String> additionalSparkProperties() {
