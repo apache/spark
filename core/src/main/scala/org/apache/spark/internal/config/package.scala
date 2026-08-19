@@ -1936,7 +1936,7 @@ package object config {
       .createWithDefault(50)
 
   private[spark] val STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS =
-    ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeoutMs")
+    ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeout")
       .doc("Maximum time a streaming shuffle writer waits for each reader to connect. " +
         "Set to -1 to wait indefinitely.")
       .version("4.4.0")

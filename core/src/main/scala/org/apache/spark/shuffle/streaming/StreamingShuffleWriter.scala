@@ -282,25 +282,12 @@ class StreamingShuffleWriter[K, V](
               case null => sendToClient(client)
               case error =>
                 buf.release()
-                errorNotifier.markError(error match {
-                  case completionException: CompletionException
-                      if completionException.getCause != null =>
-                    completionException.getCause
-                  case _ => error
-                })
+                errorNotifier.markError(error)
                 done()
             }
           }
           // Once the future is completed, stop accumulating CompletionStages.
-          if (newFuture.isDone) {
-            if (newFuture.isCompletedExceptionally) {
-              // Surface the categorized error instead of the CompletionException from join().
-              throwErrorIfExists()
-            }
-            client = Left(newFuture.join())
-          } else {
-            client = Right(newFuture)
-          }
+          client = if (newFuture.isDone) Left(newFuture.join()) else Right(newFuture)
       }
     }
 
@@ -434,6 +421,11 @@ class StreamingShuffleWriter[K, V](
       System.currentTimeMillis() - cleanupStartTime)} ms")
   }
 
+  private def unwrapCompletionException(error: Throwable): Throwable = error match {
+    case e: CompletionException if e.getCause != null => e.getCause
+    case _ => error
+  }
+
   private def throwErrorIfExists(): Unit = {
     context.getTaskFailure.foreach { throw _ }
     errorNotifier.throwErrorIfExists()
@@ -469,7 +461,7 @@ class StreamingShuffleWriter[K, V](
       Try {
         while (!isWriteFinished.await(MAX_BUFFERING_TIME_MS, TimeUnit.MILLISECONDS))
           shards.foreach(_.send())
-      }.recover { case e => errorNotifier.markError(e) }
+      }.recover { case e => errorNotifier.markError(unwrapCompletionException(e)) }
       , "time-based-flush-for-shuffle-writer-" +
         s"${streamingShuffleHandle.shuffleId}-${shuffleWriterId}")
     try {
@@ -547,6 +539,9 @@ class StreamingShuffleWriter[K, V](
       logInfo(log"Received all termination acks for shuffle writer ${MDC(
         LogKeys.SHUFFLE_WRITER_ID, shuffleWriterId)}. Closing server channel.")
       throwErrorIfExists()
+    } catch {
+      case e: CompletionException =>
+        throw unwrapCompletionException(e)
     } finally {
       isWriteFinished.countDown() // Duplicate countDowns are a no-op.
       flushThread.join()
