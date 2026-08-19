@@ -1624,6 +1624,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
   test("SPARK-51356: FilterExec incorrectly reorders IsNotNull predicates for nested access") {
     import testImplicits._
+    import WholeStageCodegenSuite._
+
     val data = Seq(
       Spark51356Outer(null),
       Spark51356Outer(Spark51356Mid(null)),
@@ -1631,19 +1633,25 @@ class WholeStageCodegenSuite extends SharedSparkSession
       Spark51356Outer(Spark51356Mid(Spark51356Inner(1))))
     val isDZero = udf((c: Spark51356Inner) => c.d == 0)
 
-    val mids = spark.createDataset(data).map(identity)
-      .where(col("b").isNotNull).select(col("b").as[Spark51356Mid])
-    val df = mids.filter(col("c").isNotNull).filter(not(isDZero(col("c"))))
+    val df = spark.createDataset(data)
+      .filter(col("b").isNotNull && col("b.c").isNotNull && not(isDZero(col("b.c"))))
+      .select(col("b.c.d"))
 
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       val plan = df.queryExecution.executedPlan
       assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
         "Filter should be in whole-stage codegen")
-      checkAnswer(df.toDF(), Row(Row(1)) :: Nil)
+      checkAnswer(df, Row(1) :: Nil)
     }
 
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      checkAnswer(df.toDF(), Row(Row(1)) :: Nil)
+      checkAnswer(df, Row(1) :: Nil)
     }
   }
+}
+
+object WholeStageCodegenSuite {
+  case class Spark51356Inner(d: Int)
+  case class Spark51356Mid(c: Spark51356Inner = null)
+  case class Spark51356Outer(b: Spark51356Mid = null)
 }
