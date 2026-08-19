@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.util
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, LinkedBlockingQueue}
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.concurrent.TrieMap
@@ -77,6 +77,9 @@ case class AdaptiveSparkPlanExec(
   extends LeafExecNode {
 
   @transient private val lock = new Object()
+
+  // Access is serialized by the execution context's stage lifecycle lock.
+  @transient private val uncancelledObsoleteStageIds = mutable.HashSet.empty[Int]
 
   @transient private val logOnLevel: ( => MessageWithContext) => Unit =
     logBasedOnLevel(conf.adaptiveExecutionLogLevel)
@@ -358,7 +361,7 @@ case class AdaptiveSparkPlanExec(
               stage.resultOption.set(Some(res))
             case StageFailure(stage, ex) =>
               stage.error.set(Some(ex))
-              if (!obsoleteCancelledStageIds.contains(stage.id)) {
+              if (!shouldIgnoreObsoleteStageFailure(stage, ex, obsoleteCancelledStageIds)) {
                 errors.append(ex)
               }
           }
@@ -402,7 +405,8 @@ case class AdaptiveSparkPlanExec(
                 logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
                 cleanUpTempTags(newPhysicalPlan)
                 obsoleteCancelledStageIds ++=
-                  cancelObsoleteStages(newPhysicalPlan, stagesToReplace)
+                  cancelObsoleteStages(
+                    newPhysicalPlan, obsoleteStageCandidates(currentPhysicalPlan, stagesToReplace))
                 currentPhysicalPlan = newPhysicalPlan
                 currentLogicalPlan = newLogicalPlan
                 stagesToReplace = Seq.empty[QueryStageExec]
@@ -426,41 +430,176 @@ case class AdaptiveSparkPlanExec(
       .get.asInstanceOf[T]
   }
 
+  /** Include stages retained by earlier adopted plans as well as newly created query stages. */
+  private def obsoleteStageCandidates(
+      oldPhysicalPlan: SparkPlan,
+      stagesToReplace: Seq[QueryStageExec]): Seq[QueryStageExec] = {
+    val visitedStageIds = mutable.HashSet.empty[Int]
+    (oldPhysicalPlan.collect { case stage: QueryStageExec => stage } ++ stagesToReplace)
+      .filter(stage => visitedStageIds.add(stage.id))
+  }
+
+  /**
+   * Cancel unfinished exchange stages that are no longer referenced by the adopted plan.
+   *
+   * An unfinished stage cannot be hidden inside another stage's plan because parent stages are
+   * created only after all child stages have materialized. Results reused by another adaptive
+   * plan, such as a subquery, are separately protected by the context's shared-result tracking.
+   * A failed or unsafe cancellation leaves the stage cached until its eventual materialization
+   * event proves whether the stage is still required.
+   */
   private def cancelObsoleteStages(
       newPhysicalPlan: SparkPlan,
-      stagesToReplace: Seq[QueryStageExec]): Seq[Int] = {
-    val newStages = newPhysicalPlan.collect {
-      case stage: QueryStageExec => stage
+      candidateStages: Seq[QueryStageExec]): Seq[Int] = {
+    val retainedStageIds = mutable.HashSet.empty[Int]
+    val retainedStageResults = mutable.HashSet.empty[AtomicReference[Option[Any]]]
+    newPhysicalPlan.foreach {
+      case stage: QueryStageExec =>
+        retainedStageIds += stage.id
+        retainedStageResults += stage.resultOption
+      case _ =>
     }
-    val obsoleteStages = stagesToReplace.collect {
+    val obsoleteStages = candidateStages.collect {
       case stage: ExchangeQueryStageExec
-          if !newStages.exists(newStage =>
-            newStage.id == stage.id || newStage.resultOption.eq(stage.resultOption)) => stage
+          if !retainedStageIds.contains(stage.id) &&
+            !retainedStageResults.contains(stage.resultOption) => stage
     }
     obsoleteStages.flatMap { stage =>
-      context.withStageLifecycleLock {
+      val reservation = context.withStageLifecycleLock {
         if (!stage.isMaterialized && !context.isSharedStageResult(stage.resultOption)) {
-          removeStageFromCache(stage)
-          try {
-            stage.cancel("The query stage is no longer referenced by the current adaptive plan.")
-            Some(stage.id)
-          } catch {
-            case NonFatal(t) =>
-              logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
-              None
-          }
+          context.reserveStageCancellation(stage.resultOption)
         } else {
           None
+        }
+      }
+      reservation.flatMap { cancellation =>
+        try {
+          withShuffleCancellationLock(stage) {
+            val shouldCancel = context.withStageLifecycleLock {
+              if (stage.isMaterialized || context.isSharedStageResult(stage.resultOption)) {
+                false
+              } else if (canCancelStage(stage)) {
+                true
+              } else {
+                if (canTrackObsoleteStageFailure(stage)) {
+                  uncancelledObsoleteStageIds += stage.id
+                }
+                false
+              }
+            }
+            if (shouldCancel) {
+              try {
+                recordSubmittedShuffleIds(stage)
+                stage.cancel(
+                  "The query stage is no longer referenced by the current adaptive plan.")
+                context.withStageLifecycleLock {
+                  removeStageFromCache(stage)
+                }
+                Some(stage.id)
+              } catch {
+                case NonFatal(t) =>
+                  context.withStageLifecycleLock {
+                    uncancelledObsoleteStageIds += stage.id
+                  }
+                  logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
+                  None
+              }
+            } else {
+              None
+            }
+          }
+        } finally {
+          context.withStageLifecycleLock {
+            context.finishStageCancellation(stage.resultOption, cancellation)
+          }
         }
       }
     }
   }
 
+  /** Serialize shuffle eligibility and cancellation with the exchange's job submission. */
+  private def withShuffleCancellationLock[T](
+      stage: ExchangeQueryStageExec)(body: => T): T = stage match {
+    case shuffleStage: ShuffleQueryStageExec => shuffleStage.shuffle.synchronized(body)
+    case _ => body
+  }
+
+  /**
+   * Broadcast cancellation cannot prevent its supplier from submitting another job afterward.
+   * Delegating shuffles may conceal an already submitted job behind an empty futureAction, and
+   * submitted shuffle cancellation is asynchronous, so removing its files can race map writers.
+   */
+  private def canCancelStage(stage: ExchangeQueryStageExec): Boolean = stage match {
+    case _: BroadcastQueryStageExec => false
+    case shuffleStage: ShuffleQueryStageExec =>
+      val shuffle = shuffleStage.shuffle
+      val submitted = shuffle.futureAction.get().isDefined
+      (shuffle.isInstanceOf[ShuffleExchangeExec] || submitted) &&
+        (!submitted || context.qe.shuffleCleanupMode != RemoveShuffleFiles)
+    case _ => true
+  }
+
+  /** Opaque delegated shuffles can conceal submitted jobs and their required cleanup IDs. */
+  private def canTrackObsoleteStageFailure(stage: ExchangeQueryStageExec): Boolean = stage match {
+    case shuffleStage: ShuffleQueryStageExec =>
+      shuffleStage.shuffle.isInstanceOf[ShuffleExchangeExec] ||
+        shuffleStage.shuffle.futureAction.get().isDefined
+    case _ => true
+  }
+
+  /** Never hide fatal stage failures, even when their stage was cancelled as obsolete. */
+  private def shouldIgnoreObsoleteStageFailure(
+      stage: QueryStageExec,
+      error: Throwable,
+      obsoleteCancelledStageIds: scala.collection.Set[Int]): Boolean = {
+    !error.isInstanceOf[SparkFatalException] && NonFatal(error) &&
+      (obsoleteCancelledStageIds.contains(stage.id) || ignoreFailedObsoleteStageFailure(stage))
+  }
+
+  /**
+   * Suppress an uncancelled obsolete stage's later failure only while its result remains private
+   * and absent from the current physical plan. This covers failed cancellation and stages whose
+   * cancellation would be unsafe. Reused stages must still fail their consumers; otherwise, the
+   * failed cache entry can now be safely discarded.
+   */
+  private def ignoreFailedObsoleteStageFailure(stage: QueryStageExec): Boolean = stage match {
+    case exchangeStage: ExchangeQueryStageExec =>
+      context.withStageLifecycleLock {
+        if (!uncancelledObsoleteStageIds.remove(stage.id)) {
+          false
+        } else {
+          val stillReferenced = currentPhysicalPlan.exists {
+            case retainedStage: QueryStageExec =>
+              retainedStage.id == stage.id || retainedStage.resultOption.eq(stage.resultOption)
+            case _ => false
+          }
+          if (!stillReferenced && !context.isSharedStageResult(stage.resultOption)) {
+            recordSubmittedShuffleIds(exchangeStage)
+            removeStageFromCache(exchangeStage)
+            true
+          } else {
+            false
+          }
+        }
+      }
+    case _ => false
+  }
+
+  /** Record only submitted shuffles, avoiding initialization of an unsubmitted lazy dependency. */
+  private def recordSubmittedShuffleIds(stage: ExchangeQueryStageExec): Unit = {
+    stage.plan.foreach {
+      case shuffle: ShuffleExchangeLike if shuffle.futureAction.get().isDefined =>
+        context.shuffleIds.put(shuffle.shuffleId, true)
+      case _ =>
+    }
+  }
+
+  /** Remove the exact canonical exchange-cache entry only when it still owns this result. */
   private def removeStageFromCache(stage: ExchangeQueryStageExec): Unit = {
-    context.stageCache.foreach { case (plan, cachedStage) =>
-      if (cachedStage.resultOption.eq(stage.resultOption) &&
-          context.stageCache.get(plan).exists(_ eq cachedStage)) {
-        context.stageCache.remove(plan)
+    val cacheKey = stage.plan.canonicalized
+    context.stageCache.get(cacheKey).foreach { cachedStage =>
+      if (cachedStage.resultOption.eq(stage.resultOption)) {
+        context.stageCache.remove(cacheKey)
       }
     }
   }
@@ -669,8 +808,8 @@ case class AdaptiveSparkPlanExec(
     case e: Exchange =>
       // First have a quick check in the `stageCache` without having to traverse down the node.
       val reusedStage = if (conf.exchangeReuseEnabled) {
-        context.withStageLifecycleLock {
-          context.stageCache.get(e.canonicalized).map { existingStage =>
+        withStageCacheEntry(e.canonicalized) {
+          _.map { existingStage =>
             reuseQueryStage(existingStage, e)
           }
         }
@@ -696,12 +835,12 @@ case class AdaptiveSparkPlanExec(
               // Check the `stageCache` again for reuse. If a match is found, ditch the new stage
               // and reuse the existing stage found in the `stageCache`, otherwise update the
               // `stageCache` with the new stage.
-              context.withStageLifecycleLock {
-                val queryStage = context.stageCache.getOrElseUpdate(
-                  newStage.plan.canonicalized, newStage)
-                if (queryStage.ne(newStage)) {
+              val cacheKey = newStage.plan.canonicalized
+              withStageCacheEntry(cacheKey) {
+                case Some(queryStage) =>
                   newStage = reuseQueryStage(queryStage, e)
-                }
+                case None =>
+                  context.stageCache.put(cacheKey, newStage)
               }
             }
             val isMaterialized = newStage.isMaterialized
@@ -739,6 +878,26 @@ case class AdaptiveSparkPlanExec(
           allChildStagesMaterialized = results.forall(_.allChildStagesMaterialized),
           newStages = results.flatMap(_.newStages))
       }
+  }
+
+  /** Wait for cancellation of this result without blocking unrelated exchange-cache access. */
+  @scala.annotation.tailrec
+  private def withStageCacheEntry[T](
+      cacheKey: SparkPlan)(
+      useStage: Option[ExchangeQueryStageExec] => T): T = {
+    val result: Either[CompletableFuture[Unit], T] = context.withStageLifecycleLock {
+      val cachedStage = context.stageCache.get(cacheKey)
+      cachedStage.flatMap(stage => context.pendingStageCancellation(stage.resultOption)) match {
+        case Some(cancellation) => Left(cancellation)
+        case None => Right(useStage(cachedStage))
+      }
+    }
+    result match {
+      case Left(cancellation) =>
+        cancellation.join()
+        withStageCacheEntry(cacheKey)(useStage)
+      case Right(value) => value
+    }
   }
 
   private def newResultQueryStage(
@@ -1044,18 +1203,58 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
 
   private val stageLifecycleLock = new Object
 
+  /**
+   * Serialize exchange-cache lookup, reuse, and cancellation reservations across subqueries.
+   * Blocking cancellation and waits for a particular result happen outside this query-wide lock.
+   */
   private[adaptive] def withStageLifecycleLock[T](body: => T): T = {
     stageLifecycleLock.synchronized(body)
   }
 
+  /** Stage-scoped reservations keep a cancelling result cached without blocking other stages. */
+  private val stageCancellationReservations =
+    new ConcurrentHashMap[AtomicReference[Option[Any]], CompletableFuture[Unit]]()
+
+  /** Claim a result before waiting for its shuffle monitor or cancelling its exchange. */
+  private[adaptive] def reserveStageCancellation(
+      resultOption: AtomicReference[Option[Any]]): Option[CompletableFuture[Unit]] = {
+    val cancellation = new CompletableFuture[Unit]()
+    if (stageCancellationReservations.putIfAbsent(resultOption, cancellation) == null) {
+      Some(cancellation)
+    } else {
+      None
+    }
+  }
+
+  /** Return the cancellation that a potential consumer of this particular result must await. */
+  private[adaptive] def pendingStageCancellation(
+      resultOption: AtomicReference[Option[Any]]): Option[CompletableFuture[Unit]] = {
+    Option(stageCancellationReservations.get(resultOption))
+  }
+
+  /** Publish the final cache state before allowing consumers of this result to retry lookup. */
+  private[adaptive] def finishStageCancellation(
+      resultOption: AtomicReference[Option[Any]],
+      cancellation: CompletableFuture[Unit]): Unit = {
+    stageCancellationReservations.remove(resultOption, cancellation)
+    cancellation.complete(())
+  }
+
+  /**
+   * Results reused anywhere in this execution context, including independently planned subqueries.
+   * Entries intentionally remain for the context's lifetime: once a result is shared, neither its
+   * original stage nor a reuse instance can subsequently be cancelled as obsolete.
+   */
   private val sharedStageResults =
     new ConcurrentHashMap[AtomicReference[Option[Any]], Boolean]()
 
-  def markSharedStageResult(resultOption: AtomicReference[Option[Any]]): Unit = {
+  /** Permanently protect a result once an exchange is reused elsewhere in this execution. */
+  private[adaptive] def markSharedStageResult(resultOption: AtomicReference[Option[Any]]): Unit = {
     sharedStageResults.put(resultOption, true)
   }
 
-  def isSharedStageResult(resultOption: AtomicReference[Option[Any]]): Boolean = {
+  /** Return whether another stage or adaptive subquery has reused this result. */
+  private[adaptive] def isSharedStageResult(resultOption: AtomicReference[Option[Any]]): Boolean = {
     sharedStageResults.containsKey(resultOption)
   }
 

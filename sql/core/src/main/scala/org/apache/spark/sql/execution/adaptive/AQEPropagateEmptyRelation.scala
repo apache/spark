@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJo
 import org.apache.spark.sql.catalyst.plans.logical.EmptyRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
-import org.apache.spark.sql.execution.{BaseLimitExec, ColumnarToRowExec, ProjectExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{BaseLimitExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
@@ -65,17 +65,8 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     case stage: QueryStageExec if stage.isMaterialized =>
       stage.getRuntimeStatistics.rowCount
 
-    case read: AQEShuffleReadExec =>
-      getEstimatedRowCount(read.child)
-
     case sort: SortExec =>
       getEstimatedRowCount(sort.child)
-
-    case project: ProjectExec =>
-      getEstimatedRowCount(project.child)
-
-    case columnarToRow: ColumnarToRowExec =>
-      getEstimatedRowCount(columnarToRow.child)
 
     // A global limit can also drop rows through an offset, so only propagate
     // proven emptiness; a zero limit is unconditionally empty.
@@ -86,6 +77,8 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
         getEstimatedRowCount(limit.child).filter(_ == 0)
       }
 
+    // Match the global-aggregate invariant in LogicalQueryStage.computeStats without adopting
+    // its logical-statistics fallback or its unrestricted physical-plan traversal.
     case aggregate: BaseAggregateExec if aggregate.groupingExpressions.isEmpty =>
       getEstimatedRowCount(aggregate.child).map { rowCount =>
         if (rowCount == 0) BigInt(1) else rowCount

@@ -19,11 +19,9 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.io.File
 import java.net.URI
-import java.util.Locale
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
@@ -32,14 +30,14 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{JobFailed, SparkListener, SparkListenerEvent, SparkListenerJobEnd, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, EqualTo, IsNull, Or, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EmptyRelation, Join, JoinHint, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.{CoalescedNullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution._
@@ -65,8 +63,8 @@ import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.{SparkFatalException, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 @SlowSQLTest
 class AdaptiveQueryExecSuite
@@ -368,43 +366,43 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("empty materialized stage short-circuits AQE through sort wrappers") {
+  test("non-empty global aggregate stage eliminates conditionless semi joins") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
-      val jobEndEvents = new mutable.ArrayBuffer[SparkListenerJobEnd]
-      val listener = new SparkListener {
-        override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = jobEndEvents.synchronized {
-          jobEndEvents += jobEnd
-        }
-      }
-      spark.sparkContext.addSparkListener(listener)
-      try {
-        val left = spark.range(0, 1, 1, 1).where("id < 0").select($"id".as("k"))
-        val right = spark.range(0, 200, 1, 20).as[Long].map { id =>
-          Thread.sleep(200)
-          id
-        }.select($"value".as("k"))
-        val df = left.join(right, Seq("k"))
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      val globalAggregate = spark.range(1).where("id < 0").repartition(2)
+        .agg(count("*").as("c"))
+      val df = testData.join(globalAggregate, Seq.empty[String], "left_semi")
 
-        checkAnswer(df, Seq.empty)
+      val logicalJoin = df.queryExecution.optimizedPlan.collectFirst {
+        case join: Join => join
+      }.getOrElse(fail("expected a conditionless semi join before adaptive execution"))
+      assert(logicalJoin.joinType == LeftSemi)
+      assert(logicalJoin.condition.isEmpty)
 
-        val finalPlan = df.queryExecution.executedPlan
-          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-        assert(collect(finalPlan) { case s: SortMergeJoinExec => s }.isEmpty)
+      val initialPlan = df.queryExecution.executedPlan
+        .asInstanceOf[AdaptiveSparkPlanExec].initialPlan
+      assert(findTopLevelBaseJoin(initialPlan).size == 1)
 
-        spark.sparkContext.listenerBus.waitUntilEmpty()
-        assert(jobEndEvents.synchronized {
-          jobEndEvents.exists {
-            case SparkListenerJobEnd(_, _, JobFailed(e)) =>
-              e.getMessage.toLowerCase(Locale.ROOT).contains("cancel")
-            case _ => false
-          }
-        })
-      } finally {
-        spark.sparkContext.removeSparkListener(listener)
-      }
+      val aggregate = collect(initialPlan) {
+        case aggregate: BaseAggregateExec if aggregate.groupingExpressions.isEmpty => aggregate
+      }.headOption.getOrElse(fail("expected a global aggregate in the initial adaptive plan"))
+      val emptyStage = TestExchangeQueryStageExec(
+        0,
+        aggregate.child,
+        aggregate.child.canonicalized,
+        runtimeRowCount = Some(BigInt(0)))
+      emptyStage.resultOption.set(Some(()))
+      val aggregateStage = LogicalQueryStage(
+        logicalJoin.right, aggregate.withNewChildren(Seq(emptyStage)))
+      val rewrittenJoin = AQEPropagateEmptyRelation(logicalJoin.copy(right = aggregateStage))
+      assert(rewrittenJoin.fastEquals(logicalJoin.left), rewrittenJoin)
+
+      checkAnswer(df, testData.collect().toSeq)
+
+      val finalPlan = stripAQEPlan(df.queryExecution.executedPlan)
+      assert(findTopLevelBaseJoin(finalPlan).isEmpty, finalPlan)
     }
   }
 
@@ -433,7 +431,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("limit wrappers propagate only provably empty query stages") {
+  test("sort and limit wrappers propagate only provably empty query stages") {
     val getEstimatedRowCount =
       PrivateMethod[Option[BigInt]](Symbol("getEstimatedRowCount"))
     val scan = LocalTableScanExec(Nil, Nil, None)
@@ -461,6 +459,40 @@ class AdaptiveQueryExecSuite
     assert(estimatedRowCount(GlobalLimitExec(5, unknownStage)).isEmpty)
     assert(estimatedRowCount(LocalLimitExec(1, nonEmptyStage)).isEmpty)
     assert(estimatedRowCount(GlobalLimitExec(1, nonEmptyStage, offset = 99)).isEmpty)
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1",
+      SQLConf.ORDERING_AWARE_LIMIT_OFFSET.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+      val sorted = spark.range(0, 10, 1, numPartitions = 2)
+        .where("id < 0")
+        .orderBy($"id" % 8)
+        .limit(2)
+        .distinct()
+      val initialPlan = sorted.queryExecution.executedPlan
+        .asInstanceOf[AdaptiveSparkPlanExec].initialPlan
+      val (plannedSort, plannedShuffle) = initialPlan.collectFirst {
+        case GlobalLimitExec(_, sort @ SortExec(_, false, shuffle: ShuffleExchangeExec, _), _)
+            if sort.logicalLink.exists(logical =>
+              shuffle.logicalLink.exists(_ eq logical)) => (sort, shuffle)
+      }.getOrElse(fail("expected a logically linked sort above the middle-limit shuffle"))
+
+      val emptySortStage = TestExchangeQueryStageExec(
+        3,
+        plannedShuffle,
+        plannedShuffle.canonicalized,
+        runtimeRowCount = Some(BigInt(0)))
+      emptySortStage.resultOption.set(Some(()))
+      val sortedEmptyStage = plannedSort.withNewChildren(Seq(emptySortStage))
+
+      Seq(sortedEmptyStage, LocalLimitExec(5, sortedEmptyStage)).foreach { physicalPlan =>
+        val logicalStage = LogicalQueryStage(plannedSort.logicalLink.get, physicalPlan)
+        assert(AQEPropagateEmptyRelation(logicalStage).isInstanceOf[EmptyRelation])
+      }
+
+      checkAnswer(sorted.toDF(), Seq.empty)
+    }
   }
 
   test("obsolete stage cancellation preserves shared reused exchange stages") {
@@ -505,24 +537,296 @@ class AdaptiveQueryExecSuite
 
       val unsharedStage = TestExchangeQueryStageExec(
         5, LocalTableScanExec(Nil, Nil, None), LocalTableScanExec(Nil, Nil, None))
+      adaptivePlan.context.stageCache.put(unsharedStage.plan.canonicalized, unsharedStage)
       val unsharedCancelledIds = adaptivePlan.invokePrivate(
         cancelObsoleteStages(replacementPlan, Seq(unsharedStage)))
       assert(unsharedCancelledIds == Seq(unsharedStage.id))
       assert(unsharedStage.cancelled)
+      assert(!adaptivePlan.context.stageCache.contains(unsharedStage.plan.canonicalized))
 
       val failedStage = TestExchangeQueryStageExec(
         6,
         LocalTableScanExec(Nil, Nil, None),
         LocalTableScanExec(Nil, Nil, None),
         cancelFailure = Some(new IllegalStateException("test stage cancellation failed")))
+      adaptivePlan.context.stageCache.put(failedStage.plan.canonicalized, failedStage)
       val failedCancelledIds = adaptivePlan.invokePrivate(
         cancelObsoleteStages(replacementPlan, Seq(failedStage)))
       assert(failedCancelledIds.isEmpty)
       assert(!failedStage.cancelled)
+      assert(adaptivePlan.context.stageCache.get(failedStage.plan.canonicalized)
+        .exists(_ eq failedStage))
     }
   }
 
-  test("concurrent exchange reuse and obsolete cancellation use the same lifecycle lock") {
+  test("obsolete stage cancellation includes stages from previous adaptive plan adoptions") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+      val adaptivePlan = spark.sql("SELECT * FROM testData JOIN testData2 ON key = a")
+        .queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val exchanges = adaptivePlan.initialPlan.collect {
+        case exchange: ShuffleExchangeExec => exchange
+      }
+      assert(exchanges.size >= 2, "expected two shuffle exchanges in the initial adaptive plan")
+      val previousExchange = exchanges.head
+      val latestExchange = exchanges.find(exchange =>
+        !exchange.canonicalized.fastEquals(previousExchange.canonicalized))
+        .getOrElse(fail("expected independently cached shuffle exchanges"))
+
+      val previouslyRetainedStage = TestExchangeQueryStageExec(
+        410, previousExchange, previousExchange.canonicalized)
+      val latestStage = TestExchangeQueryStageExec(
+        411, latestExchange, latestExchange.canonicalized)
+      val oldPhysicalPlan = UnionExec(Seq(previouslyRetainedStage, latestStage))
+      val latestStages = Seq(latestStage)
+      adaptivePlan.context.stageCache.put(previousExchange.canonicalized, previouslyRetainedStage)
+      adaptivePlan.context.stageCache.put(latestExchange.canonicalized, latestStage)
+
+      val obsoleteStageCandidates =
+        PrivateMethod[Seq[QueryStageExec]](Symbol("obsoleteStageCandidates"))
+      val candidates = adaptivePlan.invokePrivate(
+        obsoleteStageCandidates(oldPhysicalPlan, latestStages))
+
+      assert(!latestStages.exists(_.id == previouslyRetainedStage.id))
+      assert(candidates.map(_.id).toSet == Set(previouslyRetainedStage.id, latestStage.id))
+      assert(candidates.count(_.id == latestStage.id) == 1)
+
+      val cancelObsoleteStages =
+        PrivateMethod[Seq[Int]](Symbol("cancelObsoleteStages"))
+      val cancelledIds = adaptivePlan.invokePrivate(cancelObsoleteStages(latestStage, candidates))
+      assert(cancelledIds == Seq(previouslyRetainedStage.id))
+      assert(previouslyRetainedStage.cancelled)
+      assert(!latestStage.cancelled)
+      assert(!adaptivePlan.context.stageCache.contains(previousExchange.canonicalized))
+      assert(adaptivePlan.context.stageCache.get(latestExchange.canonicalized)
+        .exists(_ eq latestStage))
+
+      val shouldIgnoreObsoleteStageFailure =
+        PrivateMethod[Boolean](Symbol("shouldIgnoreObsoleteStageFailure"))
+      val stageFailure = new IllegalStateException("obsolete stage failed after cancellation")
+      assert(adaptivePlan.invokePrivate(shouldIgnoreObsoleteStageFailure(
+        previouslyRetainedStage, stageFailure, cancelledIds.toSet)))
+      assert(!adaptivePlan.invokePrivate(shouldIgnoreObsoleteStageFailure(
+        latestStage, stageFailure, cancelledIds.toSet)))
+    }
+  }
+
+  test("obsolete broadcast stages are not cancelled or initialized") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = spark.sql(
+        "SELECT /*+ BROADCAST(r) */ * FROM testData l JOIN testData2 r ON l.key = r.a")
+      val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val exchange = adaptivePlan.initialPlan.collectFirst {
+        case broadcast: BroadcastExchangeExec => broadcast
+      }.getOrElse(fail("expected an uninitialized broadcast exchange"))
+
+      val stage = BroadcastQueryStageExec(400, exchange, exchange.canonicalized)
+      adaptivePlan.context.stageCache.put(exchange.canonicalized, stage)
+      val cancelObsoleteStages =
+        PrivateMethod[Seq[Int]](Symbol("cancelObsoleteStages"))
+      val replacementPlan = LocalTableScanExec(Nil, Nil, None)
+
+      assert(adaptivePlan.invokePrivate(cancelObsoleteStages(replacementPlan, Seq(stage))).isEmpty)
+      assert(stage.resultOption.get().isEmpty)
+      assert(adaptivePlan.context.stageCache.get(exchange.canonicalized).exists(_ eq stage))
+    }
+  }
+
+  test("fatal obsolete stage failures are never ignored") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val df = spark.sql("SELECT * FROM testData JOIN testData2 ON key = a")
+      val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val shouldIgnoreObsoleteStageFailure =
+        PrivateMethod[Boolean](Symbol("shouldIgnoreObsoleteStageFailure"))
+      val scan = LocalTableScanExec(Nil, Nil, None)
+      val stage = TestExchangeQueryStageExec(401, scan, scan)
+      val cancelledStageIds = Set(stage.id)
+      val wrappedFatal = new SparkFatalException(new OutOfMemoryError("fatal stage failure"))
+      val rawFatal = new OutOfMemoryError("fatal stage failure")
+      val cancellationFailure = new java.util.concurrent.CancellationException("stage cancelled")
+
+      assert(!adaptivePlan.invokePrivate(
+        shouldIgnoreObsoleteStageFailure(stage, wrappedFatal, cancelledStageIds)))
+      assert(!adaptivePlan.invokePrivate(
+        shouldIgnoreObsoleteStageFailure(stage, rawFatal, cancelledStageIds)))
+      assert(adaptivePlan.invokePrivate(
+        shouldIgnoreObsoleteStageFailure(stage, cancellationFailure, cancelledStageIds)))
+      assert(!adaptivePlan.invokePrivate(
+        shouldIgnoreObsoleteStageFailure(stage, cancellationFailure, Set.empty[Int])))
+
+      val failedStage = TestExchangeQueryStageExec(
+        402,
+        scan,
+        scan,
+        cancelFailure = Some(new IllegalStateException("stage cancellation failed")))
+      adaptivePlan.context.stageCache.put(scan.canonicalized, failedStage)
+      val cancelObsoleteStages =
+        PrivateMethod[Seq[Int]](Symbol("cancelObsoleteStages"))
+      assert(adaptivePlan.invokePrivate(cancelObsoleteStages(scan, Seq(failedStage))).isEmpty)
+
+      failedStage.error.set(Some(wrappedFatal))
+      assert(!adaptivePlan.invokePrivate(
+        shouldIgnoreObsoleteStageFailure(failedStage, wrappedFatal, Set.empty[Int])))
+      assert(!adaptivePlan.invokePrivate(
+        shouldIgnoreObsoleteStageFailure(failedStage, rawFatal, Set.empty[Int])))
+      assert(adaptivePlan.context.stageCache.get(scan.canonicalized).exists(_ eq failedStage))
+
+      failedStage.error.set(Some(cancellationFailure))
+      assert(adaptivePlan.invokePrivate(
+        shouldIgnoreObsoleteStageFailure(failedStage, cancellationFailure, Set.empty[Int])))
+      assert(!adaptivePlan.context.stageCache.contains(scan.canonicalized))
+    }
+  }
+
+  test("obsolete shuffle stage cancellation records only submitted shuffles for cleanup") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      val cancelObsoleteStages =
+        PrivateMethod[Seq[Int]](Symbol("cancelObsoleteStages"))
+      val replacementPlan = LocalTableScanExec(Nil, Nil, None)
+
+      val unsubmitted = spark.range(8).repartition(2)
+      val unsubmittedPlan =
+        unsubmitted.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val unsubmittedExchange = unsubmittedPlan.initialPlan.collectFirst {
+        case exchange: ShuffleExchangeExec => exchange
+      }.getOrElse(fail("expected an unsubmitted shuffle exchange"))
+      val unsubmittedStage = TestExchangeQueryStageExec(
+        200, unsubmittedExchange, unsubmittedExchange.canonicalized)
+      unsubmittedPlan.context.stageCache.put(unsubmittedExchange.canonicalized, unsubmittedStage)
+
+      assert(unsubmittedExchange.futureAction.get().isEmpty)
+      assert(unsubmittedPlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(unsubmittedStage))) == Seq(unsubmittedStage.id))
+      assert(unsubmittedPlan.context.shuffleIds.isEmpty)
+      assert(unsubmittedExchange.futureAction.get().isEmpty)
+
+      val submitted = spark.range(8).repartition(2)
+      submitted.collect()
+      val submittedPlan = submitted.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val submittedExchange = collect(submittedPlan) {
+        case stage: ShuffleQueryStageExec if stage.shuffle.futureAction.get().isDefined =>
+          stage.shuffle
+      }.headOption.getOrElse(fail("expected a submitted shuffle exchange"))
+      val submittedShuffleId = submittedExchange.shuffleId
+      submittedPlan.context.shuffleIds.remove(submittedShuffleId)
+      val submittedStage = TestExchangeQueryStageExec(
+        201, submittedExchange, submittedExchange.canonicalized)
+      submittedPlan.context.stageCache.put(submittedExchange.canonicalized, submittedStage)
+
+      assert(submittedPlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(submittedStage))) == Seq(submittedStage.id))
+      assert(submittedPlan.context.shuffleIds.containsKey(submittedShuffleId))
+
+      submittedPlan.context.shuffleIds.remove(submittedShuffleId)
+      val failedSubmittedStage = TestExchangeQueryStageExec(
+        202,
+        submittedExchange,
+        submittedExchange.canonicalized,
+        cancelFailure = Some(new IllegalStateException("submitted stage cancellation failed")))
+      submittedPlan.context.stageCache.put(submittedExchange.canonicalized, failedSubmittedStage)
+
+      assert(submittedPlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(failedSubmittedStage))).isEmpty)
+      assert(submittedPlan.context.shuffleIds.containsKey(submittedShuffleId))
+      assert(submittedPlan.context.stageCache.get(submittedExchange.canonicalized)
+        .exists(_ eq failedSubmittedStage))
+
+      val delegatedExchange = org.apache.spark.sql.MyShuffleExchangeExec(
+        submittedExchange.asInstanceOf[ShuffleExchangeExec])
+      val delegatedStage = ShuffleQueryStageExec(
+        203, delegatedExchange, delegatedExchange.canonicalized)
+      submittedPlan.context.stageCache.put(delegatedExchange.canonicalized, delegatedStage)
+
+      assert(submittedExchange.futureAction.get().isDefined)
+      assert(delegatedExchange.futureAction.get().isEmpty)
+      assert(submittedPlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(delegatedStage))).isEmpty)
+      assert(submittedPlan.context.stageCache.get(delegatedExchange.canonicalized)
+        .exists(_ eq delegatedStage))
+
+      submittedPlan.context.shuffleIds.remove(submittedShuffleId)
+      val shouldIgnoreObsoleteStageFailure =
+        PrivateMethod[Boolean](Symbol("shouldIgnoreObsoleteStageFailure"))
+      val delegatedFailure = new IllegalStateException("opaque delegated shuffle failed")
+      delegatedStage.error.set(Some(delegatedFailure))
+      assert(!submittedPlan.invokePrivate(shouldIgnoreObsoleteStageFailure(
+        delegatedStage, delegatedFailure, Set.empty[Int])))
+      assert(!submittedPlan.context.shuffleIds.containsKey(submittedShuffleId))
+      assert(submittedExchange.futureAction.get().exists(!_.isCancelled))
+      assert(submittedPlan.context.stageCache.get(delegatedExchange.canonicalized)
+        .exists(_ eq delegatedStage))
+    }
+  }
+
+  test("obsolete submitted shuffle stages are not cancelled before shuffle-file cleanup") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      val cancelObsoleteStages =
+        PrivateMethod[Seq[Int]](Symbol("cancelObsoleteStages"))
+      val replacementPlan = LocalTableScanExec(Nil, Nil, None)
+
+      val submitted = spark.range(8).repartition(2)
+      submitted.collect()
+      val submittedPlan = submitted.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val submittedExchange = collect(submittedPlan) {
+        case stage: ShuffleQueryStageExec if stage.shuffle.futureAction.get().isDefined =>
+          stage.shuffle
+      }.headOption.getOrElse(fail("expected a submitted shuffle exchange"))
+      val submittedAction = submittedExchange.futureAction.get().get
+
+      val cleanup = org.apache.spark.sql.classic.Dataset.ofRows(
+        spark, spark.range(16).repartition(2).logicalPlan, RemoveShuffleFiles)
+      val cleanupPlan = cleanup.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      assert(cleanupPlan.context.qe.shuffleCleanupMode == RemoveShuffleFiles)
+
+      val submittedStage = ShuffleQueryStageExec(
+        300, submittedExchange, submittedExchange.canonicalized)
+      cleanupPlan.context.stageCache.put(submittedExchange.canonicalized, submittedStage)
+
+      assert(!submittedAction.isCancelled)
+      assert(cleanupPlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(submittedStage))).isEmpty)
+      assert(!submittedAction.isCancelled)
+      assert(cleanupPlan.context.stageCache.get(submittedExchange.canonicalized)
+        .exists(_ eq submittedStage))
+
+      val shouldIgnoreObsoleteStageFailure =
+        PrivateMethod[Boolean](Symbol("shouldIgnoreObsoleteStageFailure"))
+      val fatalFailure = new SparkFatalException(new OutOfMemoryError("fatal shuffle failure"))
+      assert(!cleanupPlan.invokePrivate(shouldIgnoreObsoleteStageFailure(
+        submittedStage, fatalFailure, Set.empty[Int])))
+
+      val stageFailure = new IllegalStateException("obsolete submitted shuffle failed")
+      submittedStage.error.set(Some(stageFailure))
+      assert(cleanupPlan.invokePrivate(shouldIgnoreObsoleteStageFailure(
+        submittedStage, stageFailure, Set.empty[Int])))
+      assert(cleanupPlan.context.shuffleIds.containsKey(submittedExchange.shuffleId))
+      assert(!cleanupPlan.context.stageCache.contains(submittedExchange.canonicalized))
+      assert(!submittedAction.isCancelled)
+
+      val unsubmittedExchange = cleanupPlan.initialPlan.collectFirst {
+        case exchange: ShuffleExchangeExec => exchange
+      }.getOrElse(fail("expected an unsubmitted shuffle exchange"))
+      val unsubmittedStage = ShuffleQueryStageExec(
+        301, unsubmittedExchange, unsubmittedExchange.canonicalized)
+      cleanupPlan.context.stageCache.put(unsubmittedExchange.canonicalized, unsubmittedStage)
+
+      assert(unsubmittedExchange.futureAction.get().isEmpty)
+      assert(cleanupPlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(unsubmittedStage))) == Seq(unsubmittedStage.id))
+      assert(unsubmittedExchange.futureAction.get().isEmpty)
+      assert(!cleanupPlan.context.stageCache.contains(unsubmittedExchange.canonicalized))
+    }
+  }
+
+  test("concurrent exchange reuse and obsolete cancellation coordinate by stage") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
@@ -531,6 +835,8 @@ class AdaptiveQueryExecSuite
         PrivateMethod[Any](Symbol("createNonResultQueryStages"))
       val cancelObsoleteStages =
         PrivateMethod[Seq[Int]](Symbol("cancelObsoleteStages"))
+      val ignoreFailedObsoleteStageFailure =
+        PrivateMethod[Boolean](Symbol("ignoreFailedObsoleteStageFailure"))
       val replacementPlan = LocalTableScanExec(Nil, Nil, None)
 
       def newPlanAndExchange(): (AdaptiveSparkPlanExec, ShuffleExchangeExec) = {
@@ -629,6 +935,10 @@ class AdaptiveQueryExecSuite
 
       {
         val (adaptivePlan, exchange) = newPlanAndExchange()
+        val unrelatedExchange = adaptivePlan.initialPlan.collectFirst {
+          case candidate: ShuffleExchangeExec
+              if !candidate.canonicalized.fastEquals(exchange.canonicalized) => candidate
+        }.getOrElse(fail("expected an unrelated shuffle exchange in the initial adaptive plan"))
         val cancellationEntered = new CountDownLatch(1)
         val releaseCancellation = new CountDownLatch(1)
         val obsoleteStage = TestExchangeQueryStageExec(
@@ -643,12 +953,15 @@ class AdaptiveQueryExecSuite
         adaptivePlan.context.stageCache.put(exchange.canonicalized, obsoleteStage)
 
         val acquiredStage = new AtomicReference[ExchangeQueryStageExec]()
+        val unrelatedStage = new AtomicReference[ExchangeQueryStageExec]()
+        val unrelatedAcquired = new CountDownLatch(1)
         val cancelledIds = new AtomicReference[Seq[Int]]()
         val cancellationWorker = startWorker("aqe-stage-cancellation-first") {
           cancelledIds.set(adaptivePlan.invokePrivate(
             cancelObsoleteStages(replacementPlan, Seq(obsoleteStage))))
         }
         var reuseWorker: Option[LifecycleWorker] = None
+        var unrelatedWorker: Option[LifecycleWorker] = None
 
         try {
           assert(cancellationEntered.await(30, TimeUnit.SECONDS),
@@ -657,7 +970,132 @@ class AdaptiveQueryExecSuite
             acquiredStage.set(acquireStage(adaptivePlan, exchange))
           })
           eventually(timeout(10.seconds), interval(10.milliseconds)) {
-            assert(reuseWorker.get._1.getState == Thread.State.BLOCKED)
+            assert(Set(Thread.State.BLOCKED, Thread.State.WAITING, Thread.State.TIMED_WAITING)
+              .contains(reuseWorker.get._1.getState))
+            assert(acquiredStage.get() == null)
+          }
+
+          unrelatedWorker = Some(startWorker("aqe-unrelated-stage-during-cancellation") {
+            unrelatedStage.set(acquireStage(adaptivePlan, unrelatedExchange))
+            unrelatedAcquired.countDown()
+          })
+          assert(unrelatedAcquired.await(10, TimeUnit.SECONDS),
+            "an unrelated exchange was blocked while stage cancellation was running")
+          assert(unrelatedStage.get().resultOption.ne(obsoleteStage.resultOption))
+          assert(acquiredStage.get() == null)
+        } finally {
+          releaseCancellation.countDown()
+          waitForWorker(cancellationWorker)
+          reuseWorker.foreach(waitForWorker)
+          unrelatedWorker.foreach(waitForWorker)
+        }
+
+        checkWorker(cancellationWorker)
+        reuseWorker.foreach(checkWorker)
+        unrelatedWorker.foreach(checkWorker)
+        assert(cancelledIds.get() == Seq(obsoleteStage.id))
+        assert(obsoleteStage.cancelled)
+        assert(acquiredStage.get().resultOption.ne(obsoleteStage.resultOption))
+        assert(adaptivePlan.context.stageCache.get(acquiredStage.get().plan.canonicalized)
+          .exists(_ eq acquiredStage.get()))
+        assert(adaptivePlan.context.stageCache.get(unrelatedStage.get().plan.canonicalized)
+          .exists(_ eq unrelatedStage.get()))
+      }
+
+      {
+        val (adaptivePlan, obsoleteExchange) = newPlanAndExchange()
+        val unrelatedExchange = adaptivePlan.initialPlan.collectFirst {
+          case exchange: ShuffleExchangeExec
+              if !exchange.canonicalized.fastEquals(obsoleteExchange.canonicalized) => exchange
+        }.getOrElse(fail("expected an unrelated shuffle exchange in the initial adaptive plan"))
+        val obsoleteStage = ShuffleQueryStageExec(
+          104, obsoleteExchange, obsoleteExchange.canonicalized)
+        adaptivePlan.context.stageCache.put(obsoleteExchange.canonicalized, obsoleteStage)
+
+        val monitorEntered = new CountDownLatch(1)
+        val releaseMonitor = new CountDownLatch(1)
+        val monitorWorker = startWorker("aqe-obsolete-shuffle-monitor-held") {
+          obsoleteExchange.synchronized {
+            monitorEntered.countDown()
+            assert(releaseMonitor.await(30, TimeUnit.SECONDS),
+              "obsolete shuffle monitor was not released")
+          }
+        }
+
+        val cancelledIds = new AtomicReference[Seq[Int]]()
+        val acquiredStage = new AtomicReference[ExchangeQueryStageExec]()
+        val unrelatedAcquired = new CountDownLatch(1)
+        var cancellationWorker: Option[LifecycleWorker] = None
+        var unrelatedWorker: Option[LifecycleWorker] = None
+
+        try {
+          assert(monitorEntered.await(30, TimeUnit.SECONDS),
+            "obsolete shuffle monitor was not acquired")
+          cancellationWorker = Some(startWorker("aqe-shuffle-cancellation-waits-for-monitor") {
+            cancelledIds.set(adaptivePlan.invokePrivate(
+              cancelObsoleteStages(replacementPlan, Seq(obsoleteStage))))
+          })
+          eventually(timeout(10.seconds), interval(10.milliseconds)) {
+            assert(cancellationWorker.get._1.getState == Thread.State.BLOCKED)
+          }
+
+          unrelatedWorker = Some(startWorker("aqe-unrelated-stage-acquisition") {
+            acquiredStage.set(acquireStage(adaptivePlan, unrelatedExchange))
+            unrelatedAcquired.countDown()
+          })
+          assert(unrelatedAcquired.await(10, TimeUnit.SECONDS),
+            "an unrelated exchange was blocked by obsolete shuffle cancellation")
+          assert(acquiredStage.get().resultOption.ne(obsoleteStage.resultOption))
+          assert(adaptivePlan.context.stageCache.get(acquiredStage.get().plan.canonicalized)
+            .exists(_ eq acquiredStage.get()))
+        } finally {
+          releaseMonitor.countDown()
+          waitForWorker(monitorWorker)
+          cancellationWorker.foreach(waitForWorker)
+          unrelatedWorker.foreach(waitForWorker)
+        }
+
+        checkWorker(monitorWorker)
+        cancellationWorker.foreach(checkWorker)
+        unrelatedWorker.foreach(checkWorker)
+        assert(cancelledIds.get() == Seq(obsoleteStage.id))
+        assert(!adaptivePlan.context.stageCache.contains(obsoleteExchange.canonicalized))
+      }
+
+      {
+        val (adaptivePlan, exchange) = newPlanAndExchange()
+        val cancellationEntered = new CountDownLatch(1)
+        val releaseCancellation = new CountDownLatch(1)
+        val obsoleteStage = TestExchangeQueryStageExec(
+          105,
+          exchange,
+          exchange.canonicalized,
+          cancelCallback = Some(() => {
+            cancellationEntered.countDown()
+            assert(releaseCancellation.await(30, TimeUnit.SECONDS),
+              "failed stage cancellation was not released")
+            throw new IllegalStateException("test concurrent stage cancellation failed")
+          }))
+        adaptivePlan.context.stageCache.put(exchange.canonicalized, obsoleteStage)
+
+        val cancelledIds = new AtomicReference[Seq[Int]]()
+        val acquiredStage = new AtomicReference[ExchangeQueryStageExec]()
+        val cancellationWorker = startWorker("aqe-failed-stage-cancellation") {
+          cancelledIds.set(adaptivePlan.invokePrivate(
+            cancelObsoleteStages(replacementPlan, Seq(obsoleteStage))))
+        }
+        var reuseWorker: Option[LifecycleWorker] = None
+
+        try {
+          assert(cancellationEntered.await(30, TimeUnit.SECONDS),
+            "failing stage cancellation did not start")
+          reuseWorker = Some(startWorker("aqe-stage-reuse-after-failed-cancellation") {
+            acquiredStage.set(acquireStage(adaptivePlan, exchange))
+          })
+          eventually(timeout(10.seconds), interval(10.milliseconds)) {
+            assert(Set(Thread.State.BLOCKED, Thread.State.WAITING, Thread.State.TIMED_WAITING)
+              .contains(reuseWorker.get._1.getState))
+            assert(acquiredStage.get() == null)
           }
         } finally {
           releaseCancellation.countDown()
@@ -667,11 +1105,58 @@ class AdaptiveQueryExecSuite
 
         checkWorker(cancellationWorker)
         reuseWorker.foreach(checkWorker)
-        assert(cancelledIds.get() == Seq(obsoleteStage.id))
-        assert(obsoleteStage.cancelled)
-        assert(acquiredStage.get().resultOption.ne(obsoleteStage.resultOption))
-        assert(adaptivePlan.context.stageCache.get(acquiredStage.get().plan.canonicalized)
-          .exists(_ eq acquiredStage.get()))
+        assert(cancelledIds.get().isEmpty)
+        assert(!obsoleteStage.cancelled)
+        assert(acquiredStage.get().resultOption.eq(obsoleteStage.resultOption))
+        assert(adaptivePlan.context.isSharedStageResult(obsoleteStage.resultOption))
+        assert(adaptivePlan.context.stageCache.get(exchange.canonicalized)
+          .exists(_ eq obsoleteStage))
+      }
+
+      {
+        val (adaptivePlan, exchange) = newPlanAndExchange()
+        val obsoleteStage = TestExchangeQueryStageExec(
+          102,
+          exchange,
+          exchange.canonicalized,
+          cancelFailure = Some(new IllegalStateException("test stage cancellation failed")))
+        adaptivePlan.context.stageCache.put(exchange.canonicalized, obsoleteStage)
+
+        val cancelledIds = adaptivePlan.invokePrivate(
+          cancelObsoleteStages(replacementPlan, Seq(obsoleteStage)))
+        assert(cancelledIds.isEmpty)
+        assert(!obsoleteStage.cancelled)
+        assert(adaptivePlan.context.stageCache.get(exchange.canonicalized)
+          .exists(_ eq obsoleteStage))
+
+        val reusedStage = acquireStage(adaptivePlan, exchange)
+        assert(reusedStage.resultOption.eq(obsoleteStage.resultOption))
+        assert(adaptivePlan.context.isSharedStageResult(obsoleteStage.resultOption))
+
+        obsoleteStage.error.set(Some(new IllegalStateException("shared stage failed")))
+        assert(!adaptivePlan.invokePrivate(ignoreFailedObsoleteStageFailure(obsoleteStage)))
+        assert(adaptivePlan.context.stageCache.get(exchange.canonicalized)
+          .exists(_ eq obsoleteStage))
+      }
+
+      {
+        val (adaptivePlan, exchange) = newPlanAndExchange()
+        val obsoleteStage = TestExchangeQueryStageExec(
+          103,
+          exchange,
+          exchange.canonicalized,
+          cancelFailure = Some(new IllegalStateException("test stage cancellation failed")))
+        adaptivePlan.context.stageCache.put(exchange.canonicalized, obsoleteStage)
+
+        val cancelledIds = adaptivePlan.invokePrivate(
+          cancelObsoleteStages(replacementPlan, Seq(obsoleteStage)))
+        assert(cancelledIds.isEmpty)
+        assert(adaptivePlan.context.stageCache.get(exchange.canonicalized)
+          .exists(_ eq obsoleteStage))
+
+        obsoleteStage.error.set(Some(new IllegalStateException("obsolete stage failed")))
+        assert(adaptivePlan.invokePrivate(ignoreFailedObsoleteStageFailure(obsoleteStage)))
+        assert(!adaptivePlan.context.stageCache.contains(exchange.canonicalized))
       }
     }
   }
