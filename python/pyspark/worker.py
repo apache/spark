@@ -2161,15 +2161,19 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             # invoke the UDF
             output_batches = udf_func(input_batches)
 
-            # The declared signature is Iterator[...], so a strict iterator is required. The
-            # legacy flag restores the pre-4.3.0 behavior of accepting any iterable (e.g. list)
+            # The declared signature is Iterator[...], so a strict iterator is required by
+            # default. With the legacy flag, accept any object Python can iterate over -- via
+            # iter(...), which honors both __iter__ and the sequence protocol (__getitem__) --
             # by adapting it into an iterator before the shared element-type verification.
-            if (
-                runner_conf.map_in_batch_legacy_accept_any_iterable
-                and not isinstance(output_batches, Iterator)
-                and hasattr(output_batches, "__iter__")
+            if runner_conf.map_in_batch_legacy_accept_any_iterable and not isinstance(
+                output_batches, Iterator
             ):
-                output_batches = iter(output_batches)
+                try:
+                    output_batches = iter(output_batches)
+                except TypeError:
+                    # Not iterable at all; leave it so verify_return_type below raises the
+                    # standard UDF_RETURN_TYPE error.
+                    pass
 
             # Post-processing
             verified_iter = verify_return_type(
@@ -3208,12 +3212,18 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     )[0]
 
             result = map_udf(dataframe_iter())
-            # The declared signature is Iterator[...], so a strict iterator is required. The
-            # legacy flag restores the pre-4.3.0 behavior of accepting any iterable (e.g. list).
-            is_iterator = isinstance(result, Iterator)
-            if runner_conf.map_in_batch_legacy_accept_any_iterable:
-                is_iterator = is_iterator or hasattr(result, "__iter__")
-            if not is_iterator:
+            # The declared signature is Iterator[...], so a strict iterator is required by
+            # default. With the legacy flag, accept any object Python can iterate over -- via
+            # iter(...), which honors both __iter__ and the sequence protocol (__getitem__) --
+            # by adapting it into an iterator.
+            if runner_conf.map_in_batch_legacy_accept_any_iterable and not isinstance(
+                result, Iterator
+            ):
+                try:
+                    result = iter(result)
+                except TypeError:
+                    pass  # Not iterable; fall through to the UDF_RETURN_TYPE error below.
+            if not isinstance(result, Iterator):
                 raise PySparkTypeError(
                     errorClass="UDF_RETURN_TYPE",
                     messageParameters={
