@@ -162,7 +162,7 @@
     -->
     <codahale.metrics.version>4.2.37</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <avro.version>1.12.1</avro.version>
+    <avro.version>1.12.2</avro.version>
     <aws.kinesis.client.version>2.7.2</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.v2.version>2.35.4</aws.java.sdk.v2.version>
@@ -2906,6 +2906,7 @@
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
               <hive.conf.validation>false</hive.conf.validation>
+              <org.apache.avro.SERIALIZABLE_PACKAGES>org.apache.spark</org.apache.avro.SERIALIZABLE_PACKAGES>
             </systemPropertyVariables>
             <failIfNoTests>false</failIfNoTests>
             <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
@@ -2961,6 +2962,7 @@
               <spark.test.docker.removePulledImage>${spark.test.docker.removePulledImage}</spark.test.docker.removePulledImage>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
+              <org.apache.avro.SERIALIZABLE_PACKAGES>org.apache.spark</org.apache.avro.SERIALIZABLE_PACKAGES>
             </systemProperties>
             <tagsToExclude>${test.exclude.tags},${test.default.exclude.tags}</tagsToExclude>
             <tagsToInclude>${test.include.tags}</tagsToInclude>
