@@ -176,7 +176,7 @@ class KMeansModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", null.asInstanceOf[MLlibKMeansModel])
 
-  @transient private lazy val distanceMeasureInstance =
+  private def distanceMeasureInstance: DistanceMeasure =
     DistanceMeasure.decodeFromString(distanceMeasureName)
 
   @transient private lazy val statistics =
@@ -538,8 +538,8 @@ private abstract class DistanceMeasure extends Serializable {
 private object DistanceMeasure {
   def decodeFromString(distanceMeasure: String): DistanceMeasure = {
     distanceMeasure match {
-      case KMeans.EUCLIDEAN => new EuclideanDistanceMeasure
-      case KMeans.COSINE => new CosineDistanceMeasure
+      case KMeans.EUCLIDEAN => EuclideanDistanceMeasure
+      case KMeans.COSINE => CosineDistanceMeasure
       case _ => throw new IllegalArgumentException(s"distanceMeasure must be one of: " +
         s"${KMeans.EUCLIDEAN}, ${KMeans.COSINE}. $distanceMeasure provided.")
     }
@@ -551,7 +551,7 @@ private object DistanceMeasure {
     k.toLong * k * numFeatures < 1000000
 }
 
-private class EuclideanDistanceMeasure extends DistanceMeasure {
+private object EuclideanDistanceMeasure extends DistanceMeasure {
 
   override def computeStatistics(distance: Double): Double = {
     0.25 * distance * distance
@@ -613,9 +613,7 @@ private class EuclideanDistanceMeasure extends DistanceMeasure {
   override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
     math.sqrt(EuclideanDistanceMeasure.fastSquaredDistance(v1, v2))
   }
-}
 
-private object EuclideanDistanceMeasure {
   private lazy val epsilon = {
     var eps = 1.0
     while ((1.0 + (eps / 2.0)) != 1.0) {
@@ -648,7 +646,7 @@ private object EuclideanDistanceMeasure {
   }
 }
 
-private class CosineDistanceMeasure extends DistanceMeasure {
+private object CosineDistanceMeasure extends DistanceMeasure {
 
   override def computeStatistics(distance: Double): Double = {
     1 - math.sqrt(1 - distance / 2)
