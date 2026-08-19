@@ -69,13 +69,16 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   /**
    * Rewrites the `With` expressions in a single expression tree by inlining their common
    * expressions. Uses `transformUp` to handle nested `With`.
+   *
+   * Does not descend into subquery plans (e.g. `ScalarSubquery`). A caller whose expression
+   * may contain a subquery must rewrite those plans separately.
    */
   def applyForExpression(expression: Expression): Expression = {
     expression.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
       case With(child, defs) =>
         val refToExpr = defs.map(commonExprDef => commonExprDef.id -> commonExprDef.child).toMap
         child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-          case ref: CommonExpressionRef => refToExpr(ref.id)
+          case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)
         }
     }
   }

@@ -127,6 +127,9 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
   /**
    * Rewrites the current date/time functions in a single expression tree using `instant`. Callers
    * reducing several expressions that must observe the same wall clock pass one shared instant.
+   *
+   * Does not descend into subquery plans (e.g. `ScalarSubquery`). A caller whose expression
+   * may contain a subquery must rewrite those plans separately, reusing the same `instant`.
    */
   def applyForExpression(expression: Expression, instant: Instant): Expression = {
     val snapshot = new TimeSnapshot(instant)
@@ -246,7 +249,12 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE))(currentLikeRewrite)
   }
 
-  /** Replaces the current catalog/database/path/user expressions in a single expression tree. */
+  /**
+   * Replaces the current catalog/database/path/user expressions in a single expression tree.
+   *
+   * Does not descend into subquery plans (e.g. `ScalarSubquery`). A caller whose expression
+   * may contain a subquery must rewrite those plans separately.
+   */
   def applyForExpression(expression: Expression): Expression = {
     expression.transformWithPruning(_.containsPattern(CURRENT_LIKE))(currentLikeRewrite)
   }
@@ -284,7 +292,12 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
     plan.transformAllExpressionsWithPruning(_.containsPattern(CAST))(specialDatetimeRewrite)
   }
 
-  /** Replaces casts of foldable special datetime strings in a single expression tree. */
+  /**
+   * Replaces casts of foldable special datetime strings in a single expression tree.
+   *
+   * Does not descend into subquery plans (e.g. `ScalarSubquery`). A caller whose expression
+   * may contain a subquery must rewrite those plans separately.
+   */
   def applyForExpression(expression: Expression): Expression = {
     expression.transformWithPruning(_.containsPattern(CAST))(specialDatetimeRewrite)
   }
