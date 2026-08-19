@@ -18,16 +18,20 @@
 package org.apache.spark.sql.collation
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class CollationAggregationSuite
   extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
+
+  import testImplicits._
 
   private def assertUsesHashAggregate(df: DataFrame): Unit = {
     val plan = df.queryExecution.executedPlan
@@ -82,6 +86,67 @@ class CollationAggregationSuite
         assertUsesHashAggregate(result)
         checkAnswer(result, Seq(Row("hello", 6L), Row(null, 4L)))
       }
+    }
+  }
+
+  test("HashAggregateExec preserves binary semantics for stable sibling keys") {
+    withTempView("interval_keys") {
+      Seq(
+        ("hello", new CalendarInterval(1, 2, 3), 1),
+        ("HELLO", new CalendarInterval(1, 2, 3), 2))
+        .toDF("key", "calendar_interval", "value")
+        .selectExpr(
+          "CAST(key AS STRING COLLATE UTF8_LCASE) AS key",
+          "calendar_interval",
+          "value")
+        .repartition(1)
+        .createOrReplaceTempView("interval_keys")
+
+      withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+        val result = sql(
+          """
+            |SELECT LOWER(key) AS normalized_key, SUM(value) AS total
+            |FROM interval_keys
+            |GROUP BY key, calendar_interval
+            |""".stripMargin)
+        assertUsesHashAggregate(result)
+        checkAnswer(result, Row("hello", 3L))
+
+        val objectResult = sql(
+          """
+            |SELECT LOWER(key) AS normalized_key, ARRAY_SORT(COLLECT_LIST(value)) AS values
+            |FROM interval_keys
+            |GROUP BY key, calendar_interval
+            |""".stripMargin)
+        assertUsesObjectHashAggregate(objectResult)
+        checkAnswer(objectResult, Row("hello", Seq(1, 2)))
+      }
+    }
+
+    withTempView("geometry_keys") {
+      sql(
+        """
+          |SELECT
+          |  CAST(key AS STRING COLLATE UTF8_LCASE) AS key,
+          |  ST_GeomFromWKB(wkb) AS geometry,
+          |  value
+          |FROM VALUES
+          |  ('hello', X'0101000000000000000000F03F0000000000000040', 1),
+          |  ('HELLO', X'0101000000000000000000F03F0000000000000040', 2)
+          |AS data(key, wkb, value)
+          |""".stripMargin)
+        .repartition(1)
+        .createOrReplaceTempView("geometry_keys")
+
+      val result = sql(
+        """
+          |SELECT LOWER(key) AS normalized_key, SUM(value) AS total
+          |FROM geometry_keys
+          |GROUP BY key, geometry
+          |""".stripMargin)
+      assertUsesHashAggregate(result)
+      checkAnswer(result, Row("hello", 3L))
     }
   }
 
@@ -231,7 +296,6 @@ class CollationAggregationSuite
       checkAnswer(binary, Seq(Row("a", 3L), Row("b", 3L)))
       val binaryCode = generatedCode(binary)
       assert(binaryCode.contains("FastHashMap"))
-      assert(!binaryCode.contains("getAggregationBufferFromUnsafeRowWithKeyOperations"))
 
       val collated = sql(
         """
@@ -246,7 +310,7 @@ class CollationAggregationSuite
       checkAnswer(collated, Row("a", 3L))
       val collatedCode = generatedCode(collated)
       assert(!collatedCode.contains("FastHashMap"))
-      assert(collatedCode.contains("getAggregationBufferFromUnsafeRowWithKeyOperations"))
+      assert(collatedCode.contains("getAggregationBufferFromUnsafeRow"))
     }
   }
 

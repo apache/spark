@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BooleanType, Decimal, DecimalType, IntegerType, LongType, MapType, StringType, StructField, StructType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, CalendarIntervalType, Decimal, DecimalType, GeographyType, GeometryType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, UTF8String}
 
 class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
 
@@ -171,9 +171,12 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
     assert(Aggregate.supportsHashAggregateGroupingKey(
       StructType(StructField("s", collatedString) :: Nil)))
     assert(!Aggregate.supportsHashAggregateGroupingKey(MapType(collatedString, IntegerType)))
-    assert(!Aggregate.supportsHashAggregateGroupingKey(StructType(Seq(
+    assert(Aggregate.supportsHashAggregateGroupingKey(StructType(Seq(
       StructField("s", collatedString),
       StructField("m", MapType(StringType, IntegerType))))))
+    assert(!Aggregate.supportsHashAggregateGroupingKey(StructType(Seq(
+      StructField("s", collatedString),
+      StructField("m", MapType(collatedString, IntegerType))))))
   }
 
   test("UnsafeRowKeyOperations equality and hash contract") {
@@ -196,6 +199,8 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
     val unicodeCI = collatedString("UNICODE_CI")
     val binaryRtrim = collatedString("UTF8_BINARY_RTRIM")
     val lcaseRtrim = collatedString("UTF8_LCASE_RTRIM")
+    val geometry = GeometryType(4326)
+    val geography = GeographyType(4326)
     val nestedType = StructType(Seq(
       StructField("id", IntegerType),
       StructField("label", lcaseRtrim)))
@@ -240,7 +245,33 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
         StructType(Seq(StructField("s", unicodeCI), StructField("id", IntegerType))),
         InternalRow(null, 1),
         InternalRow(null, 1),
-        InternalRow(utf8("value"), 1)))
+        InternalRow(utf8("value"), 1)),
+      KeyContractCase(
+        "collated string with opaque binary-stable fields",
+        StructType(Seq(
+          StructField("s", lcase),
+          StructField("interval", CalendarIntervalType),
+          StructField("geometry", geometry),
+          StructField("geography", geography),
+          StructField("payload", BinaryType))),
+        InternalRow(
+          utf8("HELLO"),
+          new CalendarInterval(1, 2, 3),
+          BinaryView.fromBytes(Array[Byte](1, 2, 3)),
+          BinaryView.fromBytes(Array[Byte](4, 5, 6)),
+          Array[Byte](7, 8, 9)),
+        InternalRow(
+          utf8("hello"),
+          new CalendarInterval(1, 2, 3),
+          BinaryView.fromBytes(Array[Byte](1, 2, 3)),
+          BinaryView.fromBytes(Array[Byte](4, 5, 6)),
+          Array[Byte](7, 8, 9)),
+        InternalRow(
+          utf8("hello"),
+          new CalendarInterval(1, 2, 4),
+          BinaryView.fromBytes(Array[Byte](1, 2, 3)),
+          BinaryView.fromBytes(Array[Byte](4, 5, 6)),
+          Array[Byte](7, 8, 9))))
 
     Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN).foreach {
       codegenMode =>

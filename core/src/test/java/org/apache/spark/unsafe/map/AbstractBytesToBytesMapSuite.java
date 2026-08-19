@@ -180,7 +180,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     byte[] value = new byte[8];
 
     try {
-      BytesToBytesMap.Location location = map.lookupWithKeyOperations(
+      BytesToBytesMap.Location location = map.lookup(
         storedKey, Platform.BYTE_ARRAY_OFFSET, storedKey.length);
       assertFalse(location.isDefined());
       assertTrue(location.append(
@@ -191,16 +191,17 @@ public abstract class AbstractBytesToBytesMapSuite {
         Platform.BYTE_ARRAY_OFFSET,
         value.length));
 
-      location = map.lookupWithKeyOperations(
+      location = map.lookup(
         equivalentKey, Platform.BYTE_ARRAY_OFFSET, equivalentKey.length);
       assertTrue(location.isDefined());
       assertEquals(storedKey.length, location.getKeyLength());
 
-      assertThrows(AssertionError.class, () -> map.lookup(
+      location = map.lookup(
         equivalentKey,
         Platform.BYTE_ARRAY_OFFSET,
         equivalentKey.length,
-        Integer.MAX_VALUE));
+        Integer.MAX_VALUE);
+      assertTrue(location.isDefined());
       assertEquals(1, map.numKeys());
 
       CountDownLatch ready = new CountDownLatch(2);
@@ -210,7 +211,7 @@ public abstract class AbstractBytesToBytesMapSuite {
         ready.countDown();
         start.await();
         for (int i = 0; i < 100; i++) {
-          map.safeLookupWithKeyOperations(
+          map.safeLookup(
             equivalentKey,
             Platform.BYTE_ARRAY_OFFSET,
             equivalentKey.length,

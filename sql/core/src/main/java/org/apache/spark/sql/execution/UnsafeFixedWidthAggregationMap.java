@@ -130,7 +130,10 @@ public final class UnsafeFixedWidthAggregationMap {
   public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key) {
     return keyOperations == null ?
       getAggregationBufferFromUnsafeRow(key, key.hashCode()) :
-      getAggregationBufferFromUnsafeRowWithKeyOperations(key);
+      getAggregationBufferFromLocation(key, map.lookup(
+        key.getBaseObject(),
+        key.getBaseOffset(),
+        key.getSizeInBytes()));
   }
 
   public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key, int hash) {
@@ -140,14 +143,6 @@ public final class UnsafeFixedWidthAggregationMap {
       key.getBaseOffset(),
       key.getSizeInBytes(),
       hash);
-    return getAggregationBufferFromLocation(key, loc);
-  }
-
-  public UnsafeRow getAggregationBufferFromUnsafeRowWithKeyOperations(UnsafeRow key) {
-    final BytesToBytesMap.Location loc = map.lookupWithKeyOperations(
-      key.getBaseObject(),
-      key.getBaseOffset(),
-      key.getSizeInBytes());
     return getAggregationBufferFromLocation(key, loc);
   }
 

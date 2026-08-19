@@ -551,14 +551,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Looks up a key, and return a {@link Location} handle that can be used to test existence
    * and read/write values.
    *
-   * This method is only valid for maps without configured key operations.
-   *
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
-    safeLookup(keyBase, keyOffset, keyLength, loc,
-      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+    safeLookup(keyBase, keyOffset, keyLength, loc);
     return loc;
   }
 
@@ -566,7 +563,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Looks up a key, and return a {@link Location} handle that can be used to test existence
    * and read/write values.
    *
-   * This method is only valid for maps without configured key operations.
+   * The provided hash is ignored when this map has configured key operations.
    *
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
@@ -577,16 +574,36 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Looks up a key, and saves the result in provided `loc`.
-   *
-   * This method is only valid for maps without configured key operations.
+   * Looks up a key and saves the result in the provided `loc`.
    *
    * This is a thread-safe version of `lookup`, provided that each thread supplies its own
    * {@link Location}. The map must not be modified concurrently.
    */
+  public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
+    if (keyOperationsFactory == null) {
+      safeLookup(
+        keyBase,
+        keyOffset,
+        keyLength,
+        loc,
+        Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+    } else {
+      safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
+    }
+  }
+
+  /**
+   * Looks up a key with a precomputed hash and saves the result in the provided `loc`.
+   *
+   * The provided hash is ignored when this map has configured key operations. Each thread must
+   * supply its own {@link Location}, and the map must not be modified concurrently.
+   */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
-    assert(keyOperationsFactory == null);
+    if (keyOperationsFactory != null) {
+      safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
+      return;
+    }
 
     numKeyLookups++;
 
@@ -622,24 +639,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
   }
 
-  /**
-   * Looks up a key using the configured semantic key operations.
-   *
-   * This function always returns the same {@link Location} instance to avoid object allocation.
-   * This function is not thread-safe.
-   */
-  public Location lookupWithKeyOperations(Object keyBase, long keyOffset, int keyLength) {
-    safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
-    return loc;
-  }
-
-  /**
-   * Looks up a key using the configured semantic key operations and saves the result in `loc`.
-   *
-   * Each thread must supply its own {@link Location}, and the map must not be modified
-   * concurrently.
-   */
-  public void safeLookupWithKeyOperations(
+  private void safeLookupWithKeyOperations(
       Object keyBase, long keyOffset, int keyLength, Location loc) {
     assert(longArray != null);
     assert(keyOperationsFactory != null);
@@ -688,19 +688,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
   }
 
-  /**
-   * Handle returned by {@link BytesToBytesMap#lookup(Object, long, int)} function.
-   */
+  /** Handle returned by this map's lookup methods. */
   public final class Location {
     /** An index into the hash map's Long array */
     private int pos;
     /** True if this location points to a position where a key is defined, false otherwise */
     private boolean isDefined;
-    /**
-     * The hashcode of the most recent key passed to
-     * {@link BytesToBytesMap#lookup(Object, long, int, int)}. Caching this hashcode here allows us
-     * to avoid re-hashing the key when storing a value for that key.
-     */
+    /** The hash code computed by the most recent lookup. */
     private int keyHashcode;
     private Object baseObject;  // the base object for key and value
     private long keyOffset;
@@ -867,7 +861,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * The return value indicates whether the put succeeded or whether it failed because additional
      * memory could not be acquired.
      * <p>
-     * It is only valid to call this method immediately after calling `lookup()` using the same key.
+     * It is only valid to call this method immediately after looking up the same key.
      * </p>
      * <p>
      * The key and value must be word-aligned (that is, their sizes must be a multiple of 8).

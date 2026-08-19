@@ -36,7 +36,7 @@ private[aggregate] object ObjectAggregationMap {
     override def hashCode(): Int = keyOperations.hash(row)
 
     override def equals(other: Any): Boolean = other match {
-      case that: SemanticKey => keyOperations.areEqual(row, that.row)
+      case that: SemanticKey => row.equals(that.row) || keyOperations.areEqual(row, that.row)
       case _ => false
     }
   }

@@ -966,8 +966,7 @@ case class HashAggregateExec(
             s"$hashMapTerm.getAggregationBufferFromUnsafeRow(" +
               s"$unsafeRowKeys, $unsafeRowKeyHash)")
         } else {
-          ("", s"$hashMapTerm.getAggregationBufferFromUnsafeRowWithKeyOperations(" +
-            s"$unsafeRowKeys)")
+          ("", s"$hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys)")
         }
       val probeRegularMap =
         s"""

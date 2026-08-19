@@ -17,44 +17,40 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, Murmur3HashFunction, RowOrdering, UnsafeRow}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeRow}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
 
-/** Schema-aware hashing and equality operations for row keys. */
+/** Hashes and compares unsafe grouping keys containing non-binary collated strings. */
 final class UnsafeRowKeyOperations(val schema: StructType)
     extends BytesToBytesMap.KeyOperationsFactory {
+  import UnsafeRowKeyOperations._
 
-  private def createOrdering(): BaseOrdering = {
-    RowOrdering.createNaturalAscendingOrdering(schema.map(_.dataType).toSeq)
-  }
+  require(
+    schema.forall(field => supportsDataType(field.dataType)),
+    s"Unsupported grouping key schema: $schema")
 
-  val ordering: BaseOrdering =
-    createOrdering()
+  private val operations = new RowOperations(schema)
 
-  def hash(row: InternalRow): Int = {
-    Murmur3HashFunction.hash(
-      row,
-      schema,
-      42L,
-      isCollationAware = true,
-      // This flag only affects hashing when isCollationAware is false.
-      legacyCollationAwareHashing = false).toInt
-  }
+  def hash(row: UnsafeRow): Int = operations.hash(row, HASH_SEED)
 
-  def areEqual(left: InternalRow, right: InternalRow): Boolean = {
-    ordering.compare(left, right) == 0
+  def areEqual(left: UnsafeRow, right: UnsafeRow): Boolean = {
+    operations.areEqual(left, right)
   }
 
   override def create(): BytesToBytesMap.KeyOperations = new BytesToBytesMap.KeyOperations {
-    private val localOrdering = createOrdering()
+    private val localOperations = new RowOperations(schema)
     private val left = new UnsafeRow(schema.length)
     private val right = new UnsafeRow(schema.length)
 
     override def hash(base: AnyRef, offset: Long, length: Int): Int = {
       left.pointTo(base, offset, length)
-      UnsafeRowKeyOperations.this.hash(left)
+      localOperations.hash(left, HASH_SEED)
     }
 
     override def equals(
@@ -66,7 +62,223 @@ final class UnsafeRowKeyOperations(val schema: StructType)
         rightLength: Int): Boolean = {
       left.pointTo(leftBase, leftOffset, leftLength)
       right.pointTo(rightBase, rightOffset, rightLength)
-      localOrdering.compare(left, right) == 0
+      localOperations.areEqual(left, right)
     }
+  }
+}
+
+object UnsafeRowKeyOperations {
+  private val HASH_SEED = 42
+
+  /** Returns whether this type can be hashed and compared as part of an unsafe row key. */
+  def supportsDataType(dataType: DataType): Boolean = {
+    if (UnsafeRowUtils.isBinaryStable(dataType)) {
+      true
+    } else {
+      dataType match {
+        case st: StringType => !st.supportsBinaryEquality
+        case ArrayType(elementType, _) => supportsDataType(elementType)
+        case StructType(fields) => fields.forall(field => supportsDataType(field.dataType))
+        case _ => false
+      }
+    }
+  }
+
+  private final class BinaryRegion {
+    var base: AnyRef = _
+    var offset: Long = 0L
+    var length: Int = 0
+  }
+
+  private sealed trait FieldOperations {
+    final def hash(input: SpecializedGetters, ordinal: Int, seed: Int): Int = {
+      if (input.isNullAt(ordinal)) seed else hashNonNull(input, ordinal, seed)
+    }
+
+    final def areEqual(
+        left: SpecializedGetters,
+        leftOrdinal: Int,
+        right: SpecializedGetters,
+        rightOrdinal: Int): Boolean = {
+      val leftIsNull = left.isNullAt(leftOrdinal)
+      val rightIsNull = right.isNullAt(rightOrdinal)
+      if (leftIsNull || rightIsNull) {
+        leftIsNull == rightIsNull
+      } else {
+        areEqualNonNull(left, leftOrdinal, right, rightOrdinal)
+      }
+    }
+
+    protected def hashNonNull(input: SpecializedGetters, ordinal: Int, seed: Int): Int
+
+    protected def areEqualNonNull(
+        left: SpecializedGetters,
+        leftOrdinal: Int,
+        right: SpecializedGetters,
+        rightOrdinal: Int): Boolean
+  }
+
+  private final class BinaryStableOperations(dataType: DataType) extends FieldOperations {
+    private val leftRegion = new BinaryRegion
+    private val rightRegion = new BinaryRegion
+
+    override protected def hashNonNull(
+        input: SpecializedGetters, ordinal: Int, seed: Int): Int = {
+      setRegion(input, ordinal, leftRegion)
+      Murmur3_x86_32.hashUnsafeBytes(
+        leftRegion.base, leftRegion.offset, leftRegion.length, seed)
+    }
+
+    override protected def areEqualNonNull(
+        left: SpecializedGetters,
+        leftOrdinal: Int,
+        right: SpecializedGetters,
+        rightOrdinal: Int): Boolean = {
+      setRegion(left, leftOrdinal, leftRegion)
+      setRegion(right, rightOrdinal, rightRegion)
+      leftRegion.length == rightRegion.length && ByteArrayMethods.arrayEquals(
+        leftRegion.base,
+        leftRegion.offset,
+        rightRegion.base,
+        rightRegion.offset,
+        leftRegion.length)
+    }
+
+    private def setRegion(
+        input: SpecializedGetters, ordinal: Int, region: BinaryRegion): Unit = input match {
+      case row: UnsafeRow =>
+        region.base = row.getBaseObject
+        if (UnsafeRow.isFixedLength(dataType)) {
+          region.offset = row.getBaseOffset +
+            UnsafeRow.calculateBitSetWidthInBytes(row.numFields()) + ordinal * 8L
+          region.length = 8
+        } else {
+          setVariableLengthRegion(row.getBaseOffset, row.getLong(ordinal), region)
+        }
+
+      case other =>
+        throw SparkException.internalError(
+          s"Expected unsafe grouping-key storage, found ${other.getClass.getName}")
+    }
+  }
+
+  private final class CollatedStringOperations(dataType: StringType) extends FieldOperations {
+    private val collation = CollationFactory.fetchCollation(dataType.collationId)
+
+    override protected def hashNonNull(
+        input: SpecializedGetters, ordinal: Int, seed: Int): Int = {
+      val key = collation.sortKeyFunction.apply(input.getUTF8String(ordinal))
+      Murmur3_x86_32.hashUnsafeBytes(key, Platform.BYTE_ARRAY_OFFSET, key.length, seed)
+    }
+
+    override protected def areEqualNonNull(
+        left: SpecializedGetters,
+        leftOrdinal: Int,
+        right: SpecializedGetters,
+        rightOrdinal: Int): Boolean = {
+      collation.equalsFunction.apply(
+        left.getUTF8String(leftOrdinal), right.getUTF8String(rightOrdinal))
+    }
+  }
+
+  private final class ArrayOperations(elementType: DataType) extends FieldOperations {
+    private val elementOperations = createFieldOperations(elementType)
+
+    override protected def hashNonNull(
+        input: SpecializedGetters, ordinal: Int, seed: Int): Int = {
+      val array = input.getArray(ordinal)
+      var result = seed
+      var index = 0
+      while (index < array.numElements()) {
+        result = elementOperations.hash(array, index, result)
+        index += 1
+      }
+      result
+    }
+
+    override protected def areEqualNonNull(
+        left: SpecializedGetters,
+        leftOrdinal: Int,
+        right: SpecializedGetters,
+        rightOrdinal: Int): Boolean = {
+      val leftArray = left.getArray(leftOrdinal)
+      val rightArray = right.getArray(rightOrdinal)
+      if (leftArray.numElements() != rightArray.numElements()) {
+        return false
+      }
+      var index = 0
+      while (index < leftArray.numElements()) {
+        if (!elementOperations.areEqual(leftArray, index, rightArray, index)) {
+          return false
+        }
+        index += 1
+      }
+      true
+    }
+  }
+
+  private final class StructOperations(dataType: StructType) extends FieldOperations {
+    private val operations = new RowOperations(dataType)
+
+    override protected def hashNonNull(
+        input: SpecializedGetters, ordinal: Int, seed: Int): Int = {
+      operations.hash(input.getStruct(ordinal, dataType.length), seed)
+    }
+
+    override protected def areEqualNonNull(
+        left: SpecializedGetters,
+        leftOrdinal: Int,
+        right: SpecializedGetters,
+        rightOrdinal: Int): Boolean = {
+      operations.areEqual(
+        left.getStruct(leftOrdinal, dataType.length),
+        right.getStruct(rightOrdinal, dataType.length))
+    }
+  }
+
+  private final class RowOperations(dataType: StructType) {
+    private val fieldOperations =
+      dataType.fields.map(field => createFieldOperations(field.dataType))
+
+    def hash(row: InternalRow, seed: Int): Int = {
+      var result = seed
+      var ordinal = 0
+      while (ordinal < fieldOperations.length) {
+        result = fieldOperations(ordinal).hash(row, ordinal, result)
+        ordinal += 1
+      }
+      result
+    }
+
+    def areEqual(left: InternalRow, right: InternalRow): Boolean = {
+      var ordinal = 0
+      while (ordinal < fieldOperations.length) {
+        if (!fieldOperations(ordinal).areEqual(left, ordinal, right, ordinal)) {
+          return false
+        }
+        ordinal += 1
+      }
+      true
+    }
+  }
+
+  private def createFieldOperations(dataType: DataType): FieldOperations = {
+    if (UnsafeRowUtils.isBinaryStable(dataType)) {
+      new BinaryStableOperations(dataType)
+    } else {
+      dataType match {
+        case stringType: StringType => new CollatedStringOperations(stringType)
+        case ArrayType(elementType, _) => new ArrayOperations(elementType)
+        case structType: StructType => new StructOperations(structType)
+        case _ =>
+          throw SparkException.internalError(s"Unsupported grouping key type: $dataType")
+      }
+    }
+  }
+
+  private def setVariableLengthRegion(
+      baseOffset: Long, offsetAndSize: Long, region: BinaryRegion): Unit = {
+    region.offset = baseOffset + (offsetAndSize >> 32).toInt
+    region.length = offsetAndSize.toInt
   }
 }

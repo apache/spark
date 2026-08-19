@@ -1296,15 +1296,7 @@ object Aggregate {
    * operations in hash aggregation.
    */
   def supportsHashAggregateGroupingKey(dataType: DataType): Boolean = {
-    def supportsSemanticEquality(dataType: DataType): Boolean = dataType match {
-      case _: StringType => true
-      case _: MapType => false
-      case ArrayType(elementType, _) => supportsSemanticEquality(elementType)
-      case StructType(fields) => fields.forall(f => supportsSemanticEquality(f.dataType))
-      case other => UnsafeRowUtils.isBinaryStable(other)
-    }
-
-    UnsafeRowUtils.isBinaryStable(dataType) || supportsSemanticEquality(dataType)
+    UnsafeRowKeyOperations.supportsDataType(dataType)
   }
 
   def supportsHashAggregate(

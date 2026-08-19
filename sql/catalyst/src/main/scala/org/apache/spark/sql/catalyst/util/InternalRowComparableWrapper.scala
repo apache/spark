@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, Expression}
+import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, Expression, Murmur3HashFunction, RowOrdering}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.NonFateSharingCache
@@ -34,10 +34,8 @@ import org.apache.spark.util.NonFateSharingCache
 class InternalRowComparableWrapper private (
     val row: InternalRow,
     val dataTypes: Seq[DataType],
-    val keyOperations: UnsafeRowKeyOperations) {
-
-  val structType: StructType = keyOperations.schema
-  val ordering: BaseOrdering = keyOperations.ordering
+    val structType: StructType,
+    val ordering: BaseOrdering) {
 
   /**
    * Previous constructor for binary compatibility. Prefer using
@@ -48,9 +46,16 @@ class InternalRowComparableWrapper private (
   def this(row: InternalRow, dataTypes: Seq[DataType]) = this(
     row,
     dataTypes,
-    InternalRowComparableWrapper.keyOperationsCache.get(dataTypes))
+    InternalRowComparableWrapper.structTypeCache.get(dataTypes),
+    InternalRowComparableWrapper.orderingCache.get(dataTypes))
 
-  override def hashCode(): Int = keyOperations.hash(row)
+  override def hashCode(): Int = Murmur3HashFunction.hash(
+    row,
+    structType,
+    42L,
+    isCollationAware = true,
+    // legacyCollationAwareHashing only matters when isCollationAware is false.
+    legacyCollationAwareHashing = false).toInt
 
   override def equals(other: Any): Boolean = {
     if (!other.isInstanceOf[InternalRowComparableWrapper]) {
@@ -60,16 +65,23 @@ class InternalRowComparableWrapper private (
     if (!otherWrapper.dataTypes.equals(this.dataTypes)) {
       return false
     }
-    keyOperations.areEqual(row, otherWrapper.row)
+    ordering.compare(row, otherWrapper.row) == 0
   }
 }
 
 object InternalRowComparableWrapper {
   private final val MAX_CACHE_ENTRIES = 1024
 
-  private val keyOperationsCache = {
+  private val orderingCache = {
     val loadFunc = (dataTypes: Seq[DataType]) => {
-      new UnsafeRowKeyOperations(StructType(dataTypes.map(t => StructField("f", t))))
+      RowOrdering.createNaturalAscendingOrdering(dataTypes)
+    }
+    NonFateSharingCache(loadFunc, MAX_CACHE_ENTRIES)
+  }
+
+  private val structTypeCache = {
+    val loadFunc = (dataTypes: Seq[DataType]) => {
+      StructType(dataTypes.map(t => StructField("f", t)))
     }
     NonFateSharingCache(loadFunc, MAX_CACHE_ENTRIES)
   }
@@ -90,7 +102,8 @@ object InternalRowComparableWrapper {
   /** Creates a shared factory method for a given row schema to avoid excessive cache lookups. */
   def getInternalRowComparableWrapperFactory(
       dataTypes: Seq[DataType]): InternalRow => InternalRowComparableWrapper = {
-    val keyOperations = keyOperationsCache.get(dataTypes)
-    row: InternalRow => new InternalRowComparableWrapper(row, dataTypes, keyOperations)
+    val structType = structTypeCache.get(dataTypes)
+    val ordering = orderingCache.get(dataTypes)
+    row: InternalRow => new InternalRowComparableWrapper(row, dataTypes, structType, ordering)
   }
 }
