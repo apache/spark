@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.{UnsafeRowKeyOperations, UnsafeRowUtil
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.types.StructType
 
-private object ObjectAggregationMap {
+private[aggregate] object ObjectAggregationMap {
   private final class SemanticKey(
       val keyOperations: UnsafeRowKeyOperations,
       var row: UnsafeRow) {
@@ -40,6 +40,49 @@ private object ObjectAggregationMap {
       case _ => false
     }
   }
+
+  def create(groupingSchema: StructType): ObjectAggregationMap = {
+    if (UnsafeRowUtils.isBinaryStable(groupingSchema)) {
+      new ObjectAggregationMap()
+    } else {
+      new SemanticObjectAggregationMap(groupingSchema)
+    }
+  }
+
+  private final class SemanticObjectAggregationMap(groupingSchema: StructType)
+      extends ObjectAggregationMap {
+    private val keyOperations = new UnsafeRowKeyOperations(groupingSchema)
+    private val hashMap = new ju.LinkedHashMap[SemanticKey, InternalRow]
+    private val reusableLookupKey = new SemanticKey(keyOperations, null)
+
+    override def getAggregationBuffer(groupingKey: UnsafeRow): InternalRow = {
+      reusableLookupKey.row = groupingKey
+      hashMap.get(reusableLookupKey)
+    }
+
+    override def putAggregationBuffer(groupingKey: UnsafeRow, aggBuffer: InternalRow): Unit = {
+      hashMap.put(new SemanticKey(keyOperations, groupingKey), aggBuffer)
+    }
+
+    override def size: Int = hashMap.size()
+
+    override def destructiveIterator(): Iterator[AggregationBufferEntry] = {
+      val iter = hashMap.entrySet().iterator()
+      new Iterator[AggregationBufferEntry] {
+        override def hasNext: Boolean = iter.hasNext
+
+        override def next(): AggregationBufferEntry = {
+          val entry = iter.next()
+          iter.remove()
+          new AggregationBufferEntry(entry.getKey.row, entry.getValue)
+        }
+      }
+    }
+
+    override def clear(): Unit = {
+      hashMap.clear()
+    }
+  }
 }
 
 /**
@@ -47,47 +90,15 @@ private object ObjectAggregationMap {
  * we can support storing arbitrary Java objects as aggregate function states in the aggregation
  * buffers. This class is only used together with [[ObjectHashAggregateExec]].
  */
-class ObjectAggregationMap(groupingSchema: StructType) {
-  import ObjectAggregationMap.SemanticKey
-
-  def this() = this(StructType(Nil))
-
-  private val keyOperations = if (UnsafeRowUtils.isBinaryStable(groupingSchema)) {
-    None
-  } else {
-    Some(new UnsafeRowKeyOperations(groupingSchema))
-  }
-
-  private val hashMap = new ju.LinkedHashMap[AnyRef, InternalRow]
-  private val reusableLookupKey =
-    keyOperations.map(operations => new SemanticKey(operations, null))
-
-  private def lookupKey(groupingKey: UnsafeRow): AnyRef = reusableLookupKey match {
-    case Some(key) =>
-      key.row = groupingKey
-      key
-    case None => groupingKey
-  }
-
-  private def storedKey(groupingKey: UnsafeRow): AnyRef = {
-    val copiedKey = groupingKey.copy()
-    keyOperations match {
-      case Some(operations) => new SemanticKey(operations, copiedKey)
-      case None => copiedKey
-    }
-  }
-
-  private def groupingKey(mapKey: AnyRef): UnsafeRow = mapKey match {
-    case key: SemanticKey => key.row
-    case key: UnsafeRow => key
-  }
+class ObjectAggregationMap() {
+  private[this] val hashMap = new ju.LinkedHashMap[UnsafeRow, InternalRow]
 
   def getAggregationBuffer(groupingKey: UnsafeRow): InternalRow = {
-    hashMap.get(lookupKey(groupingKey))
+    hashMap.get(groupingKey)
   }
 
   def putAggregationBuffer(groupingKey: UnsafeRow, aggBuffer: InternalRow): Unit = {
-    hashMap.put(storedKey(groupingKey), aggBuffer)
+    hashMap.put(groupingKey, aggBuffer)
   }
 
   def size: Int = hashMap.size()
@@ -106,7 +117,7 @@ class ObjectAggregationMap(groupingSchema: StructType) {
       override def next(): AggregationBufferEntry = {
         val entry = iter.next()
         iter.remove()
-        new AggregationBufferEntry(groupingKey(entry.getKey), entry.getValue)
+        new AggregationBufferEntry(entry.getKey, entry.getValue)
       }
     }
   }
@@ -148,7 +159,7 @@ class ObjectAggregationMap(groupingSchema: StructType) {
       )
     }
 
-    hashMap.clear()
+    clear()
     sorter
   }
 

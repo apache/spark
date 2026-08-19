@@ -1292,9 +1292,8 @@ object Aggregate {
   }
 
   /**
-   * Returns whether hash aggregation can compare grouping keys of this type. Binary-stable types
-   * retain their raw UnsafeRow path. For binary-unstable types, only collated strings and nested
-   * arrays or structs containing them have semantic key operations.
+   * Returns whether grouping keys of this type can use raw binary equality or schema-aware key
+   * operations in hash aggregation.
    */
   def supportsHashAggregateGroupingKey(dataType: DataType): Boolean = {
     def supportsSemanticEquality(dataType: DataType): Boolean = dataType match {

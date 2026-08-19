@@ -901,7 +901,6 @@ case class HashAggregateExec(
     val fastRowKeys = ctx.generateExpressions(
       bindReferences[Expression](groupingExpressions, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
-    val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
     val fastRowBuffer = ctx.freshName("fastAggBuffer")
 
@@ -960,13 +959,22 @@ case class HashAggregateExec(
       // per regular-map row (see below); emitting it in more than one runtime branch is unsafe
       // because the projection's subexpression/writer state assigned in one branch would be read
       // stale from another (e.g. the adaptive pass-through path would reuse the last probed key).
+      val (computeKeyHash, lookupBuffer) =
+        if (UnsafeRowUtils.isBinaryStable(groupingKeySchema)) {
+          val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
+          (s"int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();",
+            s"$hashMapTerm.getAggregationBufferFromUnsafeRow(" +
+              s"$unsafeRowKeys, $unsafeRowKeyHash)")
+        } else {
+          ("", s"$hashMapTerm.getAggregationBufferFromUnsafeRowWithKeyOperations(" +
+            s"$unsafeRowKeys)")
+        }
       val probeRegularMap =
         s"""
-           |int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();
+           |$computeKeyHash
            |if ($checkFallbackForBytesToBytesMap) {
            |  // try to get the buffer from hash map
-           |  $unsafeRowBuffer =
-           |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowKeyHash);
+           |  $unsafeRowBuffer = $lookupBuffer;
            |}
          """.stripMargin
 
@@ -980,8 +988,7 @@ case class HashAggregateExec(
            |$resetCounter
            |// the hash map had been spilled, so it should have enough memory now,
            |// try to allocate buffer again.
-           |$unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
-           |  $unsafeRowKeys, $unsafeRowKeyHash);
+           |$unsafeRowBuffer = $lookupBuffer;
            |if ($unsafeRowBuffer == null) {
            |  // failed to allocate the first page
            |  throw QueryExecutionErrors.aggregateOutOfMemoryError();

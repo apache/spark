@@ -163,7 +163,7 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
         StructType(StructField("sub", nonBinaryStringType) :: Nil)) :: Nil)))
   }
 
-  test("hash aggregate grouping key support is limited to collated arrays and structs") {
+  test("hash aggregate grouping key support for binary-unstable types") {
     val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
 
     assert(Aggregate.supportsHashAggregateGroupingKey(collatedString))

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, Murmur3HashFunct
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.map.BytesToBytesMap
 
-/** Hashing and equality operations for rows whose schema may contain collated strings. */
+/** Schema-aware hashing and equality operations for row keys. */
 final class UnsafeRowKeyOperations(val schema: StructType)
     extends BytesToBytesMap.KeyOperationsFactory {
 

@@ -70,7 +70,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   /**
    * Hashes and compares keys whose semantics cannot be determined from their raw bytes.
-   * Implementations must assign the same hash code to equal keys.
+   * Implementations must assign the same hash code to equal keys, and byte-identical keys must
+   * compare equal.
    */
   public interface KeyOperations {
     int hash(Object base, long offset, int length);
@@ -86,7 +87,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   /**
    * Creates independent key operations for a single {@link Location}, allowing each instance to
-   * reuse mutable state.
+   * reuse mutable state. All instances must implement the same key semantics. Maps configured
+   * with this factory must use the key-operations lookup methods exclusively.
    */
   @FunctionalInterface
   public interface KeyOperationsFactory {
@@ -549,13 +551,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Looks up a key, and return a {@link Location} handle that can be used to test existence
    * and read/write values.
    *
+   * This method is only valid for maps without configured key operations.
+   *
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
-    final int hash = keyOperationsFactory == null ?
-      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42) : 0;
-    safeLookup(keyBase, keyOffset, keyLength, loc, hash);
+    safeLookup(keyBase, keyOffset, keyLength, loc,
+      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
     return loc;
   }
 
@@ -563,9 +566,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Looks up a key, and return a {@link Location} handle that can be used to test existence
    * and read/write values.
    *
+   * This method is only valid for maps without configured key operations.
+   *
    * This function always returns the same {@link Location} instance to avoid object allocation.
-   * This function is not thread-safe. If key operations are configured, the supplied hash is
-   * ignored and recomputed by those operations.
+   * This function is not thread-safe.
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
     safeLookup(keyBase, keyOffset, keyLength, loc, hash);
@@ -575,17 +579,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Looks up a key, and saves the result in provided `loc`.
    *
+   * This method is only valid for maps without configured key operations.
+   *
    * This is a thread-safe version of `lookup`, provided that each thread supplies its own
-   * {@link Location}. The map must not be modified concurrently. If key operations are configured,
-   * the supplied hash is ignored and recomputed by those operations.
+   * {@link Location}. The map must not be modified concurrently.
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
-
-    final KeyOperations keyOperations = loc.getKeyOperations();
-    if (keyOperations != null) {
-      hash = keyOperations.hash(keyBase, keyOffset, keyLength);
-    }
+    assert(keyOperationsFactory == null);
 
     numKeyLookups++;
 
@@ -602,16 +603,76 @@ public final class BytesToBytesMap extends MemoryConsumer {
         if ((int) (stored) == hash) {
           // Full hash code matches.  Let's compare the keys for equality.
           loc.with(pos, hash, true);
-          if (loc.getKeyLength() == keyLength &&
-              ByteArrayMethods.arrayEquals(
+          if (loc.getKeyLength() == keyLength) {
+            final boolean areEqual = ByteArrayMethods.arrayEquals(
               keyBase,
               keyOffset,
               loc.getKeyBase(),
               loc.getKeyOffset(),
-              keyLength)) {
+              keyLength
+            );
+            if (areEqual) {
+              return;
+            }
+          }
+        }
+      }
+      pos = (pos + step) & mask;
+      step++;
+    }
+  }
+
+  /**
+   * Looks up a key using the configured semantic key operations.
+   *
+   * This function always returns the same {@link Location} instance to avoid object allocation.
+   * This function is not thread-safe.
+   */
+  public Location lookupWithKeyOperations(Object keyBase, long keyOffset, int keyLength) {
+    safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
+    return loc;
+  }
+
+  /**
+   * Looks up a key using the configured semantic key operations and saves the result in `loc`.
+   *
+   * Each thread must supply its own {@link Location}, and the map must not be modified
+   * concurrently.
+   */
+  public void safeLookupWithKeyOperations(
+      Object keyBase, long keyOffset, int keyLength, Location loc) {
+    assert(longArray != null);
+    assert(keyOperationsFactory != null);
+
+    final KeyOperations keyOperations = loc.getKeyOperations();
+    assert(keyOperations != null);
+    final int hash = keyOperations.hash(keyBase, keyOffset, keyLength);
+
+    numKeyLookups++;
+
+    int pos = hash & mask;
+    int step = 1;
+    while (true) {
+      numProbes++;
+      if (longArray.get(pos * 2) == 0) {
+        // This is a new key.
+        loc.with(pos, hash, false);
+        return;
+      } else {
+        long stored = longArray.get(pos * 2 + 1);
+        if ((int) (stored) == hash) {
+          // Full hash code matches. Let's compare the keys for equality.
+          loc.with(pos, hash, true);
+          if (loc.getKeyLength() == keyLength &&
+              ByteArrayMethods.arrayEquals(
+                keyBase,
+                keyOffset,
+                loc.getKeyBase(),
+                loc.getKeyOffset(),
+                keyLength)) {
             return;
           }
-          if (keyOperations != null && keyOperations.equals(
+          if (keyOperations.equals(
               keyBase,
               keyOffset,
               keyLength,

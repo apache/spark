@@ -193,21 +193,27 @@ class CollationAggregationSuite
           |AS data(key, value)
           |""".stripMargin).createOrReplaceTempView("spill_keys")
 
-      withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" -> "0, 1") {
-        val result = sql(
-          """
-            |SELECT LOWER(RTRIM(key)) AS normalized_key, SUM(value) AS total
-            |FROM spill_keys
-            |GROUP BY key
-            |ORDER BY normalized_key
-            |""".stripMargin)
-        assertUsesHashAggregate(result)
-        checkAnswer(result, Seq(Row("hello", 6L), Row("world", 15L)))
-        assert(exists(result.queryExecution.executedPlan) {
-          case aggregate: HashAggregateExec =>
-            aggregate.metrics("numTasksFallBacked").value > 0
-          case _ => false
-        })
+      Seq(true, false).foreach { wholeStage =>
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "0, 1") {
+          withClue(s"wholeStage=$wholeStage: ") {
+            val result = sql(
+              """
+                |SELECT LOWER(RTRIM(key)) AS normalized_key, SUM(value) AS total
+                |FROM spill_keys
+                |GROUP BY key
+                |ORDER BY normalized_key
+                |""".stripMargin)
+            assertUsesHashAggregate(result)
+            checkAnswer(result, Seq(Row("hello", 6L), Row("world", 15L)))
+            assert(exists(result.queryExecution.executedPlan) {
+              case aggregate: HashAggregateExec =>
+                aggregate.metrics("numTasksFallBacked").value > 0
+              case _ => false
+            })
+          }
+        }
       }
     }
   }
@@ -223,7 +229,9 @@ class CollationAggregationSuite
           |""".stripMargin)
       assertUsesHashAggregate(binary)
       checkAnswer(binary, Seq(Row("a", 3L), Row("b", 3L)))
-      assert(generatedCode(binary).contains("FastHashMap"))
+      val binaryCode = generatedCode(binary)
+      assert(binaryCode.contains("FastHashMap"))
+      assert(!binaryCode.contains("getAggregationBufferFromUnsafeRowWithKeyOperations"))
 
       val collated = sql(
         """
@@ -236,7 +244,9 @@ class CollationAggregationSuite
           |""".stripMargin)
       assertUsesHashAggregate(collated)
       checkAnswer(collated, Row("a", 3L))
-      assert(!generatedCode(collated).contains("FastHashMap"))
+      val collatedCode = generatedCode(collated)
+      assert(!collatedCode.contains("FastHashMap"))
+      assert(collatedCode.contains("getAggregationBufferFromUnsafeRowWithKeyOperations"))
     }
   }
 

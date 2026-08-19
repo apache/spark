@@ -55,7 +55,6 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   private final UnsafeProjection groupingKeyProjection;
 
-  /** Semantic key operations for grouping schemas containing collated strings. */
   private final UnsafeRowKeyOperations keyOperations;
 
   /**
@@ -129,15 +128,31 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key) {
-    return getAggregationBufferFromUnsafeRow(
-      key, keyOperations == null ? key.hashCode() : 0);
+    return keyOperations == null ?
+      getAggregationBufferFromUnsafeRow(key, key.hashCode()) :
+      getAggregationBufferFromUnsafeRowWithKeyOperations(key);
   }
 
   public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key, int hash) {
     // Probe our map using the serialized key
-    final BytesToBytesMap.Location loc = keyOperations == null ?
-      map.lookup(key.getBaseObject(), key.getBaseOffset(), key.getSizeInBytes(), hash) :
-      map.lookup(key.getBaseObject(), key.getBaseOffset(), key.getSizeInBytes());
+    final BytesToBytesMap.Location loc = map.lookup(
+      key.getBaseObject(),
+      key.getBaseOffset(),
+      key.getSizeInBytes(),
+      hash);
+    return getAggregationBufferFromLocation(key, loc);
+  }
+
+  public UnsafeRow getAggregationBufferFromUnsafeRowWithKeyOperations(UnsafeRow key) {
+    final BytesToBytesMap.Location loc = map.lookupWithKeyOperations(
+      key.getBaseObject(),
+      key.getBaseOffset(),
+      key.getSizeInBytes());
+    return getAggregationBufferFromLocation(key, loc);
+  }
+
+  private UnsafeRow getAggregationBufferFromLocation(
+      UnsafeRow key, BytesToBytesMap.Location loc) {
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:

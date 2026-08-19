@@ -140,7 +140,7 @@ class ObjectAggregationIterator(
 
     if (aggBuffer == null) {
       aggBuffer = createNewAggregationBuffer()
-      hashMap.putAggregationBuffer(groupingKey, aggBuffer)
+      hashMap.putAggregationBuffer(groupingKey.copy(), aggBuffer)
     }
 
     aggBuffer
@@ -153,7 +153,7 @@ class ObjectAggregationIterator(
   private def processInputs(): Unit = {
     // In-memory map to store aggregation buffer for hash-based aggregation.
     val groupingSchema = DataTypeUtils.fromAttributes(groupingExpressions.map(_.toAttribute))
-    val hashMap = new ObjectAggregationMap(groupingSchema)
+    val hashMap = ObjectAggregationMap.create(groupingSchema)
 
     // If in-memory map is unable to stores all aggregation buffer, fallback to sort-based
     // aggregation backed by sorted physical storage.
