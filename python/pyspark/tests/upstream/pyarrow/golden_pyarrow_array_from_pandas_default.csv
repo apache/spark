@@ -87,6 +87,7 @@ bool[pyarrow]:nullable	[True, <NA>]@Series[bool[pyarrow]]	[True, None]@bool
 string[pyarrow]:standard	['hello', 'world']@Series[string]	[hello, world]@large_string
 string[pyarrow]:nullable	['hello', <NA>]@Series[string]	[hello, None]@large_string
 string[pyarrow]:empty	[]@Series[string]	[]@large_string
+large_binary[pyarrow]:standard	[b'hello', b'world']@Series[large_binary[pyarrow]]	[b'hello', b'world']@large_binary
 timestamp[us][pyarrow]:standard	[Timestamp('2024-01-01 12:00:00')]@Series[timestamp[us][pyarrow]]	[2024-01-01 12:00:00]@timestamp[us]
 int64[pyarrow]:single-chunk	[1, 2]@Series[int64[pyarrow]]	[1, 2]@int64
 int64[pyarrow]:multi-chunk	[1, 2, 3]@Series[int64[pyarrow]]	[1, 2, 3]@chunked<int64>

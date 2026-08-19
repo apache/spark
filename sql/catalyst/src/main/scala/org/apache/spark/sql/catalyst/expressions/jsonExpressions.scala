@@ -286,8 +286,13 @@ case class JsonTuple(children: Seq[Expression])
     }.toArray
   }
 
+  // The extracted fields are values from inside the JSON document, so they do not carry the
+  // CHAR(n)/VARCHAR(n) length of the document itself (R1).
+  private lazy val fieldType: DataType =
+    StringHelper.transformingStringResultType(children.head.dataType)
+
   override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
-    case (_, idx) => StructField(s"c$idx", children.head.dataType, nullable = true)
+    case (_, idx) => StructField(s"c$idx", fieldType, nullable = true)
   })
 
   override def prettyName: String = "json_tuple"
