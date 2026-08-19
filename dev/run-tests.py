@@ -700,9 +700,17 @@ def main():
 
 def _test():
     import doctest
+    import sparktestsupport.modules
     import sparktestsupport.utils
 
-    failure_count = doctest.testmod(sparktestsupport.utils)[0] + doctest.testmod()[0]
+    test_results = (
+        doctest.testmod(sparktestsupport.modules),
+        doctest.testmod(sparktestsupport.utils),
+        doctest.testmod(),
+    )
+    failure_count = sum([
+        num_failures for (num_failures, num_tests) in test_results
+    ])
     if failure_count:
         sys.exit(-1)
 

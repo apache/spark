@@ -19,6 +19,7 @@ from functools import total_ordering
 import itertools
 import os
 import re
+import sys
 from pathlib import Path, PurePath
 
 all_modules = []
@@ -68,6 +69,24 @@ def is_ignored_file(filename: str) -> bool:
     """
     Return whether a repository-relative path should be ignored when selecting
     test modules.
+
+    Bare patterns match a file name at any depth:
+    >>> is_ignored_file("python/README.md")
+    True
+
+    Leading slashes anchor at the repository root:
+    >>> is_ignored_file("SECURITY.md")
+    True
+    >>> is_ignored_file("docs/SECURITY.md")
+    False
+
+    A trailing slash ignores a directory subtree:
+    >>> is_ignored_file("dev/create-release/spark-rm/Dockerfile")
+    True
+
+    Non-matches fall through:
+    >>> is_ignored_file("xasfZyaml")
+    False
     """
     path = PurePath("/") / filename
     for pattern in ignored_file_patterns:
@@ -1811,3 +1830,15 @@ root = Module(
     should_run_r_tests=True,
     should_run_build_tests=True,
 )
+
+
+def _test():
+    import doctest
+
+    failure_count = doctest.testmod()[0]
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

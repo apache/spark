@@ -41,10 +41,6 @@ def determine_modules_for_files(filenames):
     ['root']
     >>> [x.name for x in determine_modules_for_files(["python/README.md"])]
     []
-    >>> [x.name for x in determine_modules_for_files(["dev/create-release/spark-rm/Dockerfile"])]
-    []
-    >>> [x.name for x in determine_modules_for_files(["xasfZyaml"])]
-    ['root']
     """
     changed_modules = set()
     for filename in filenames:
