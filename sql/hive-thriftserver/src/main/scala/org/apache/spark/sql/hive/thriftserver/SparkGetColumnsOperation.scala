@@ -136,6 +136,7 @@ private[hive] class SparkGetColumnsOperation(
                CalendarIntervalType | NullType | _: AnsiIntervalType) =>
       Some(dt.defaultSize)
     case c: CharType => Some(c.length)
+    case v: VarcharType => Some(v.length)
     case StructType(fields) =>
       val sizeArr = fields.map(f => getColumnSize(f.dataType))
       if (sizeArr.contains(None)) {
