@@ -58,6 +58,8 @@ class AutoCdcOutOfOrderConvergenceSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  import testImplicits._
+
   // Distinct keys in the generated event stream.
   private val numDistinctKeys: Int = 5
   // Upper bound on unique events (one per sequence) generated per key, before intentionally
@@ -177,9 +179,6 @@ class AutoCdcOutOfOrderConvergenceSuite
   }
 
   private def runConvergenceTest(seed: Long, scdType: ScdType): Unit = {
-    val session = spark
-    import session.implicits._
-
     val rand = new Random(seed)
     val sortedEventStream = generateRandomCdcEventStream(rand)
     val shuffledEventStream = rand.shuffle(sortedEventStream)

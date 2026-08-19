@@ -243,7 +243,8 @@ class ApplyInPandasTestsMixin:
                     "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
                     "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
                     "SQL_GROUPED_AGG_PANDAS_UDF, SQL_GROUPED_AGG_ARROW_UDF, "
-                    "SQL_GROUPED_AGG_PANDAS_ITER_UDF or SQL_GROUPED_AGG_ARROW_ITER_UDF"
+                    "SQL_GROUPED_AGG_PANDAS_ITER_UDF, SQL_GROUPED_AGG_ARROW_ITER_UDF "
+                    "or SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF"
                 },
             )
 

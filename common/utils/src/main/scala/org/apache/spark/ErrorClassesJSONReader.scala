@@ -124,10 +124,15 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   }
 
   def getSqlState(errorClass: String): String = {
-    Option(errorClass)
-      .flatMap(_.split('.').headOption)
-      .flatMap(errorInfoMap.get)
-      .flatMap(_.sqlState)
+    val errorClasses = Option(errorClass).map(_.split('.')).getOrElse(Array.empty[String])
+    val errorInfo = errorClasses.headOption.flatMap(errorInfoMap.get)
+    val subClassSqlState = errorClasses match {
+      case Array(_, subClass) =>
+        errorInfo.flatMap(_.subClass).flatMap(_.get(subClass)).flatMap(_.sqlState)
+      case _ => None
+    }
+    subClassSqlState
+      .orElse(errorInfo.flatMap(_.sqlState))
       .orNull
   }
 
@@ -192,10 +197,13 @@ private case class ErrorInfo(
  *
  * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
+ * @param sqlState SQLSTATE associated with this subclass. If absent, the subclass inherits
+ *                 the SQLSTATE of its main error class.
  * @param breakingChangeInfo Additional metadata if the error is due to a breaking change.
  */
 private case class ErrorSubInfo(
     message: Seq[String],
+    sqlState: Option[String] = None,
     breakingChangeInfo: Option[BreakingChangeInfo] = None) {
   // For compatibility with multi-line error messages
   @JsonIgnore

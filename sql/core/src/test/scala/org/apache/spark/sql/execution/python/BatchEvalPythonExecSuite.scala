@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -366,4 +366,32 @@ class MyDummyScalarPandasUDF extends UserDefinedPythonFunction(
   func = new DummyUDF,
   dataType = BooleanType,
   pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+  udfDeterministic = true)
+
+class MyDummyScalarArrowUDF extends UserDefinedPythonFunction(
+  name = "dummyScalarArrowUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_SCALAR_ARROW_UDF,
+  udfDeterministic = true)
+
+class MyDummyScalarPandasIterUDF extends UserDefinedPythonFunction(
+  name = "dummyScalarPandasIterUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+  udfDeterministic = true)
+
+class MyDummyScalarArrowIterUDF extends UserDefinedPythonFunction(
+  name = "dummyScalarArrowIterUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+  udfDeterministic = true)
+
+class MyDummyUDTPythonUDF extends UserDefinedPythonFunction(
+  name = "dummyUDTUDF",
+  func = new DummyUDF,
+  dataType = new ExamplePointUDT,
+  pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
   udfDeterministic = true)

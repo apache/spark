@@ -18,6 +18,8 @@ SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read 
 
 Spark Connect protocol is defined in proto files under `sql/connect/common/src/main/protobuf/`. Read the README there before modifying proto definitions.
 
+When adding a member to an existing class or object, follow the sectioning the file already uses and put the new member with the code it belongs with. The common failure mode is dropping it wherever it is first used without checking how the file is organized, splitting a section of unrelated code in the process. Beyond grouping related code there is no prescribed order -- the Databricks Scala guide, which Spark follows, asks only that a long class group its members into logical sections with comment headers. Do not reorganize existing members unless the change requires it.
+
 Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
 
 Keep source lines within 100 characters — the linters enforce this for Scala, Java, and Python, and LLMs commonly overrun it in comments and long expressions. A quick scan of just the changed files catches most cases in seconds, far cheaper than a CI round trip:
@@ -100,6 +102,9 @@ These are combined with a base above rather than used on their own:
 ## Build and Test
 
 Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
+
+For build and test setup, including how to run tests and troubleshoot common
+local failures, see `docs/building-spark.md`.
 
 Prefer SBT over Maven for faster incremental compilation. Module names are defined in `project/SparkBuild.scala`.
 

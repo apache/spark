@@ -2103,6 +2103,95 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
+  // Nanosecond-precision timestamp values used to exercise ColumnarRow/ColumnarBatchRow
+  // dispatch. They cover a null (index 3), the sub-microsecond boundaries (0 and 999), and
+  // several pre-epoch instants; nanosWithinMicro must survive the round-trip unchanged.
+  private val nanosTestValues: Seq[Option[TimestampNanosVal]] = Seq(
+    Some(TimestampNanosVal.fromParts(0L, 0.toShort)),                  // epoch, no sub-micro
+    Some(TimestampNanosVal.fromParts(1L, 1.toShort)),
+    Some(TimestampNanosVal.fromParts(1000000L, 999.toShort)),         // max sub-micro
+    None,                                                             // null slot
+    Some(TimestampNanosVal.fromParts(-1L, 500.toShort)),             // pre-epoch
+    Some(TimestampNanosVal.fromParts(-1000000000000L, 1.toShort)),   // pre-epoch, far
+    Some(TimestampNanosVal.fromParts(1234567890123456L, 789.toShort)),
+    Some(TimestampNanosVal.fromParts(-42L, 999.toShort)),            // pre-epoch, max sub-micro
+    Some(TimestampNanosVal.fromParts(Long.MaxValue, 0.toShort)),
+    Some(TimestampNanosVal.fromParts(Long.MinValue, 123.toShort)))
+
+  // Populates a nanos-typed vector (child 0 = epochMicros Long, child 1 = nanosWithinMicro
+  // Short) from `nanosTestValues`, writing a null for the None slot.
+  private def putNanosTestValues(column: WritableColumnVector, isLtz: Boolean): Unit = {
+    nanosTestValues.zipWithIndex.foreach {
+      case (Some(v), i) =>
+        if (isLtz) column.putTimestampLTZNanos(i, v) else column.putTimestampNTZNanos(i, v)
+      case (None, i) =>
+        column.putNull(i)
+    }
+  }
+
+  // Verifies the typed leaf accessor, get(ordinal, dataType) and the copy() round-trip for a
+  // single nanosecond-timestamp field at ordinal 0 of `row`.
+  private def assertNanosRow(
+      row: InternalRow,
+      dt: DataType,
+      isLtz: Boolean,
+      expected: Option[TimestampNanosVal]): Unit = {
+    def leaf(r: InternalRow): TimestampNanosVal =
+      if (isLtz) r.getTimestampLTZNanos(0) else r.getTimestampNTZNanos(0)
+    expected match {
+      case Some(v) =>
+        assert(!row.isNullAt(0))
+        assert(leaf(row) === v)
+        assert(leaf(row).nanosWithinMicro == v.nanosWithinMicro)
+        // get(ordinal, dataType) must return a TimestampNanosVal, not a boxed Long.
+        val got = row.get(0, dt)
+        assert(got.isInstanceOf[TimestampNanosVal])
+        assert(got === v)
+        // copy() must yield a GenericInternalRow whose nanos field matches the source.
+        val copied = row.copy()
+        assert(copied.isInstanceOf[GenericInternalRow])
+        assert(!copied.isNullAt(0))
+        assert(leaf(copied) === v)
+        assert(copied.get(0, dt) === v)
+      case None =>
+        assert(row.isNullAt(0))
+        assert(row.get(0, dt) == null)
+        assert(row.copy().isNullAt(0))
+    }
+  }
+
+  Seq(7, 8, 9).foreach { p =>
+    Seq(
+      (TimestampNTZNanosType(p): DataType, false),
+      (TimestampLTZNanosType(p): DataType, true)).foreach { case (dt, isLtz) =>
+      val family = if (isLtz) "LTZ" else "NTZ"
+
+      testVector(
+        s"ColumnarBatchRow nanos $family(precision=$p) round-trips copy()/get()",
+        nanosTestValues.length,
+        dt) { column =>
+        putNanosTestValues(column, isLtz)
+        val batchRow = new ColumnarBatchRow(Array(column))
+        nanosTestValues.zipWithIndex.foreach { case (expected, i) =>
+          batchRow.rowId = i
+          assertNanosRow(batchRow, dt, isLtz, expected)
+        }
+      }
+
+      // ColumnarRow is produced by getStruct on a struct-typed vector, so nest the nanos
+      // column inside a struct to exercise ColumnarRow's copy()/get() dispatch.
+      testVector(
+        s"ColumnarRow nanos $family(precision=$p) round-trips copy()/get()",
+        nanosTestValues.length,
+        new StructType().add("ts", dt)) { column =>
+        putNanosTestValues(column.getChild(0), isLtz)
+        nanosTestValues.zipWithIndex.foreach { case (expected, i) =>
+          assertNanosRow(column.getStruct(i), dt, isLtz, expected)
+        }
+      }
+    }
+  }
+
   testVector("WritableColumnVector.reserve(): requested capacity is negative", 1024, ByteType) {
     column =>
       val ex = intercept[RuntimeException] { column.reserve(-1) }

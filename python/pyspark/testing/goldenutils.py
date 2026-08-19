@@ -311,12 +311,33 @@ class GoldenFileTestMixin:
             #   "halffloat" -> "float16", "float" -> "float32", "double" -> "float64"
             return _ARROW_FLOAT_ALIASES.get(s, s)
 
+    @staticmethod
+    def _scalar_str(scalar: Any) -> str:
+        """
+        Render one PyArrow scalar for a golden cell via PyArrow's own ``str(scalar)``.
+
+        A temporal value can be valid in Arrow yet outside Python's ``datetime`` range
+        (e.g. a date32 past year 9999), where ``str`` builds a Python datetime and
+        raises ``OverflowError``.  Record ``temporal overflow`` for those instead of
+        failing.  A non-temporal ``OverflowError`` is unexpected, so it propagates.
+        """
+        try:
+            return str(scalar).replace("\x00", "\\0")
+        except OverflowError:
+            # A valid Arrow temporal value can exceed Python's datetime range (e.g. a
+            # date32 past year 9999); record ``temporal overflow`` rather than fail.
+            # A non-temporal overflow is unexpected, so re-raise.
+            if pa.types.is_temporal(scalar.type):
+                return "temporal overflow"
+            raise
+
     @classmethod
     def repr_arrow_value(cls, value: Any, max_len: int = 32) -> str:
         """
         Format a PyArrow Array/ChunkedArray for golden file.
 
-        Each element uses str(scalar) from PyArrow's own scalar formatting.
+        Each element is rendered by ``_scalar_str`` (PyArrow's scalar formatting, with
+        an out-of-range temporal fallback).
 
         Parameters
         ----------
@@ -331,16 +352,46 @@ class GoldenFileTestMixin:
             "[val1, val2, None]@arrow_type"
         """
         # Escape NULL bytes so the value can be safely stored in CSV files.
-        elements = [str(scalar).replace("\x00", "\\0") for scalar in value]
+        elements = [cls._scalar_str(scalar) for scalar in value]
         v_str = "[" + ", ".join(elements) + "]"
         if max_len > 0:
             v_str = v_str[:max_len]
         return f"{v_str}@{cls.repr_type(value.type)}"
 
     @classmethod
+    def repr_arrow_table_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a PyArrow Table for golden file.
+
+        Renders each column with PyArrow's scalar formatting (as ``repr_arrow_value``
+        does for an Array), keyed by column name, plus the Arrow schema.
+
+        Returns
+        -------
+        str
+            "{col: [val1, val2, None], ...}@Table[name: type, ...]"
+        """
+        columns = []
+        for name, column in zip(value.column_names, value.columns):
+            # Escape NULL bytes so the value can be safely stored in CSV files.
+            elements = [cls._scalar_str(scalar) for scalar in column]
+            columns.append(f"{name}: [" + ", ".join(elements) + "]")
+        v_str = "{" + ", ".join(columns) + "}"
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        schema = ", ".join(f"{f.name}: {cls.repr_type(f.type)}" for f in value.schema)
+        return f"{v_str}@Table[{schema}]"
+
+    @classmethod
     def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
         """
         Format a pandas DataFrame for golden file.
+
+        Renders each column with tolist() (as ``repr_pandas_series_value`` does for a
+        Series), keyed by column name, plus the schema. tolist() gives a stable
+        Python-native representation and avoids ``DataFrame.to_json``'s epoch date
+        serialization, which overflows on out-of-nanosecond-range dates (year 9999
+        with the default date_as_object=True) and misreads non-ns units on pandas 2.
 
         Parameters
         ----------
@@ -352,9 +403,9 @@ class GoldenFileTestMixin:
         Returns
         -------
         str
-            "value@Dataframe[schema]"
+            "{col: [val1, val2], ...}@Dataframe[schema]"
         """
-        v_str = value.to_json().replace("\n", " ")
+        v_str = str({name: col.tolist() for name, col in value.items()}).replace("\n", " ")
         if max_len > 0:
             v_str = v_str[:max_len]
         simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
@@ -404,6 +455,7 @@ class GoldenFileTestMixin:
         based on the value's type.
 
         - PyArrow Array/ChunkedArray -> repr_arrow_value
+        - PyArrow Table -> repr_arrow_table_value
         - pandas DataFrame -> repr_pandas_value
         - numpy ndarray -> repr_numpy_value
         - Everything else -> repr_python_value
@@ -422,6 +474,8 @@ class GoldenFileTestMixin:
         """
         if have_pyarrow and isinstance(value, (pa.Array, pa.ChunkedArray)):
             return cls.repr_arrow_value(value, max_len)
+        if have_pyarrow and isinstance(value, pa.Table):
+            return cls.repr_arrow_table_value(value, max_len)
 
         if have_pandas and isinstance(value, pd.DataFrame):
             return cls.repr_pandas_value(value, max_len)

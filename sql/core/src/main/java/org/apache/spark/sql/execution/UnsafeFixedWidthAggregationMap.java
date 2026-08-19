@@ -228,6 +228,14 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
+   * Returns the number of distinct keys currently stored in the underlying `BytesToBytesMap`.
+   * Used by adaptive partial aggregation to estimate the pre-shuffle reduction ratio.
+   */
+  public int getNumKeys() {
+    return map.numKeys();
+  }
+
+  /**
    * Sorts the map's records in place, spill them to disk, and returns an [[UnsafeKVExternalSorter]]
    *
    * Note that the map will be reset for inserting new records, and the returned sorter can NOT be

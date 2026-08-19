@@ -1081,6 +1081,7 @@ class SparkConnectClient(object):
         name: Optional[str] = None,
         eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
+        buffer_type: Optional["DataType"] = None,
     ) -> str:
         """
         Create a temporary UDF in the session catalog on the other side. We generate a
@@ -1096,6 +1097,8 @@ class SparkConnectClient(object):
             eval_type=eval_type,
             func=function,
             python_ver="%d.%d" % sys.version_info[:2],
+            # Set for the incremental aggregator (see pyspark.sql.aggregator).
+            buffer_type=buffer_type,
         )
 
         # construct a CommonInlineUserDefinedFunction

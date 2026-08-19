@@ -64,6 +64,11 @@ RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], pyspark.sql.types.Row)
 
 SQLBatchedUDFType = Literal[100]
 SQLArrowBatchedUDFType = Literal[101]
+SQLArrowElementwiseUDFType = Literal[102]
+SQLScalarPandasElementwiseUDFType = Literal[103]
+SQLScalarPandasIterElementwiseUDFType = Literal[104]
+SQLScalarArrowElementwiseUDFType = Literal[105]
+SQLScalarArrowIterElementwiseUDFType = Literal[106]
 SQLTableUDFType = Literal[300]
 SQLArrowTableUDFType = Literal[301]
 SQLArrowUDTFType = Literal[302]

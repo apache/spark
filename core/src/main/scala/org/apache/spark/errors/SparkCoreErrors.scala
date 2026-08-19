@@ -107,19 +107,25 @@ private[spark] object SparkCoreErrors {
 
   def cannotUseMapSideCombiningWithArrayKeyError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3008", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.MAP_SIDE_COMBINE",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
   def hashPartitionerCannotPartitionArrayKeyError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3009", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
   def reduceByKeyLocallyNotSupportArrayKeysError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3010", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.REDUCE_BY_KEY_LOCALLY",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
@@ -140,7 +146,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def emptyCollectionError(): Throwable = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3014")
+    new SparkUnsupportedOperationException("EMPTY_COLLECTION_NOT_ALLOWED")
   }
 
   def countByValueApproxNotSupportArraysError(): Throwable = {
@@ -201,13 +207,15 @@ private[spark] object SparkCoreErrors {
 
   def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3021", messageParameters = Map.empty, cause = e
+      errorClass = "SCHEDULER_BACKEND_SHUTDOWN_FAILED.EXECUTORS",
+      messageParameters = Map.empty, cause = e
     )
   }
 
   def stopStandaloneSchedulerDriverEndpointError(e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3022", messageParameters = Map.empty, cause = e
+      errorClass = "SCHEDULER_BACKEND_SHUTDOWN_FAILED.DRIVER_ENDPOINT",
+      messageParameters = Map.empty, cause = e
     )
   }
 
@@ -242,9 +250,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def cannotRunSubmitMapStageOnZeroPartitionRDDError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3023", messageParameters = Map.empty, cause = null
-    )
+    SparkException.internalError("Can't run submitMapStage on RDD with 0 partitions.")
   }
 
   def accessNonExistentAccumulatorError(id: Long): Throwable = {
@@ -260,8 +266,10 @@ private[spark] object SparkCoreErrors {
     new TimeoutException(s"The event queue is not empty after $timeoutMillis ms.")
   }
 
-  def durationCalledOnUnfinishedTaskError(): Throwable = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3026")
+  def durationCalledOnUnfinishedTaskError(className: String, methodName: String): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_CALL.TASK_NOT_FINISHED",
+      messageParameters = Map("className" -> className, "methodName" -> methodName))
   }
 
   def sparkError(errorMsg: String): Throwable = {
@@ -274,7 +282,7 @@ private[spark] object SparkCoreErrors {
 
   def clusterSchedulerError(message: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3029",
+      errorClass = "CLUSTER_MANAGER_APPLICATION_FAILURE",
       messageParameters = Map("message" -> message),
       cause = null
     )
@@ -420,12 +428,16 @@ private[spark] object SparkCoreErrors {
       cause = null)
   }
 
-  def outOfMemoryError(requestedBytes: Long, receivedBytes: Long): OutOfMemoryError = {
+  def outOfMemoryError(
+      requestedBytes: Long,
+      receivedBytes: Long,
+      consumerBreakdown: String): OutOfMemoryError = {
     new SparkOutOfMemoryError(
       "UNABLE_TO_ACQUIRE_MEMORY",
       Map(
         "requestedBytes" -> requestedBytes.toString,
-        "receivedBytes" -> receivedBytes.toString).asJava)
+        "receivedBytes" -> receivedBytes.toString,
+        "consumerBreakdown" -> consumerBreakdown).asJava)
   }
 
   def failedRenameTempFileError(srcFile: File, dstFile: File): Throwable = {
