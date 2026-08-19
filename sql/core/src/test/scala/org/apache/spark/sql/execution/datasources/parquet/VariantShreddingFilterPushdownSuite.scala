@@ -87,7 +87,7 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
       jsonExpr: String,
       numRows: Int,
       blockSize: Int = 512,
-      annotate: Boolean = false): Unit = {
+      annotate: Boolean = true): Unit = {
     withSQLConf(writeConf(forceSchema, annotate): _*) {
       spark.sql(
         s"""SELECT parse_json($jsonExpr) AS v
@@ -128,33 +128,38 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     }
   }
 
-  test("overflow fallback: matching row in residual is not dropped") {
-    withTempDir { dir =>
-      // `a` shredded as tinyint. id 0..49 -> a=id (fits, typed). id 50 -> a=1500 (overflows
-      // tinyint, stored in the residual with typed_value NULL). All 51 rows fit one row group
-      // (blockSize large enough), so the typed leaf stats are min=0,max=49; a leaf-only `a > 999`
-      // would drop the row group and lose the 1500 row.
-      val jsonExpr =
-        "case when id = 50 then '{\"a\":1500}' else '{\"a\":' || id || '}' end"
-      writeShredded(dir, "a tinyint", jsonExpr, numRows = 51, blockSize = 1024 * 1024)
+  test("residual fallback beyond the leaf's min/max is not dropped") {
+    // The guard is load-bearing only when (a) the fallback row is the sole match and (b) the leaf
+    // min/max cannot match the literal on its own. `a` is shredded as bigint; id 0..49 -> a = id
+    // (typed leaf, min 0 max 49). id 50 -> a = 1500.5, a decimal the int64 leaf cannot hold, so it
+    // lands in v.typed_value.a.value with typed_value NULL. One row group: `a > 999` matches only
+    // that row, and the leaf min/max (<=49) cannot match it, so only the guard keeps the row group.
+    // A leaf-only predicate would drop it and lose the row (the #54598 bug).
+    Seq(
+      // Different fallback encodings that all miss the int64 leaf.
+      "'{\"a\":1500.5}'" -> Row(1500L),   // non-integral decimal
+      "'{\"a\":\"1500\"}'" -> Row(1500L)  // string
+    ).foreach { case (fallbackJson, want) =>
+      withTempDir { dir =>
+        val jsonExpr = s"case when id = 50 then $fallbackJson else '{\"a\":' || id || '}' end"
+        writeShredded(dir, "a bigint", jsonExpr, numRows = 51, blockSize = 1024 * 1024)
 
-      def read: DataFrame = spark.read.parquet(dir.getAbsolutePath)
-        .selectExpr("variant_get(v, '$.a', 'bigint') AS a")
-        .where("a > 999")
-      val expected = baseline(read)
-      assert(expected == Seq(Row(1500L)), s"baseline should return the overflow row, got $expected")
+        def read: DataFrame = spark.read.parquet(dir.getAbsolutePath)
+          .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a")
+          .where("a > 999")
+        val expected = baseline(read)
+        assert(expected == Seq(want), s"baseline should return the fallback row, got $expected")
 
-      forEachReader { (dsv1, vectorized) =>
-        // The single row group has a non-null residual (the overflow row), so the IS NOT NULL
-        // guard must keep it: results include the residual row. On DSv1 with the vectorized
-        // reader we also assert the row group is not skipped -- this directly validates the
-        // Parquet or(leaf, notEq(residual, null)) semantics.
-        checkAnswer(read, expected)
-        if (dsv1 && vectorized) {
-          val all = spark.read.parquet(dir.getAbsolutePath)
-            .selectExpr("variant_get(v, '$.a', 'bigint') AS a")
-          assert(countRowGroupsRead(read) == countRowGroupsRead(all),
-            "Row group with a non-null residual must NOT be skipped")
+        forEachReader { (dsv1, vectorized) =>
+          // The row group's only match is in the residual with a NULL leaf, so the guard must keep
+          // it: results include the fallback row and the row group is not skipped.
+          checkAnswer(read, expected)
+          if (dsv1 && vectorized) {
+            val all = spark.read.parquet(dir.getAbsolutePath)
+              .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a")
+            assert(countRowGroupsRead(read) == countRowGroupsRead(all),
+              "Row group whose only match is a residual fallback must NOT be skipped")
+          }
         }
       }
     }
@@ -162,19 +167,20 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
 
   test("negated predicate over an all-fallback row group is not dropped") {
     withTempDir { dir =>
-      // `a` shredded as tinyint. Both rows overflow tinyint, so both are stored in the residual
-      // (typed leaf entirely NULL, residual nullCount = 0). A naive negated push would rewrite
+      // `a` shredded as bigint. Both rows are non-integral decimals the int64 leaf cannot hold, so
+      // both land in the residual (typed leaf entirely NULL, residual has no nulls). The path is
+      // still pushable (bigint extraction over a bigint leaf). A naive negated push would rewrite
       // `!= 700` into and(notEq(leaf), eq(residual, null)) and skip the row group -- losing both
-      // rows. The negation guard must prevent pushing, so {500, 600} are returned.
-      val jsonExpr = "case when id = 0 then '{\"a\":500}' else '{\"a\":600}' end"
-      writeShredded(dir, "a tinyint", jsonExpr, numRows = 2, blockSize = 1024 * 1024)
+      // rows. The negation guard must prevent pushing, so {500, 600} come back.
+      val jsonExpr = "case when id = 0 then '{\"a\":500.5}' else '{\"a\":600.5}' end"
+      writeShredded(dir, "a bigint", jsonExpr, numRows = 2, blockSize = 1024 * 1024)
 
       Seq(
-        "variant_get(v, '$.a', 'bigint') != 700" -> Seq(Row(500L), Row(600L)),
-        "variant_get(v, '$.a', 'bigint') NOT IN (700, 800)" -> Seq(Row(500L), Row(600L))
+        "try_variant_get(v, '$.a', 'bigint') != 700" -> Seq(Row(500L), Row(600L)),
+        "try_variant_get(v, '$.a', 'bigint') NOT IN (700, 800)" -> Seq(Row(500L), Row(600L))
       ).foreach { case (predicate, want) =>
         def read: DataFrame = spark.read.parquet(dir.getAbsolutePath)
-          .selectExpr("variant_get(v, '$.a', 'bigint') AS a")
+          .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a")
           .where(predicate)
         assert(baseline(read).sortBy(_.getLong(0)) == want, s"baseline for $predicate")
         forEachReader { (_, _) =>
@@ -249,6 +255,30 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     }
   }
 
+  test("partial object with a non-shredded sibling key still skips (leaf has no nulls)") {
+    withTempDir { dir =>
+      // Every row also carries a key `z` outside the shredding schema, so the whole partial object
+      // lands in the top-level residual v.value -- it is non-null on every row. `a` is still fully
+      // shredded into the typed leaf (no nulls). The flat OR guard could never skip here (v.value
+      // never all-null); the tighter guard skips via the "leaf has no nulls" arm. Sorted on `a`
+      // across two row groups so `a > 999` can drop the first.
+      val jsonExpr = "'{\"a\":' || id || ', \"z\":\"outside\"}'"
+      writeShredded(dir, "a bigint", jsonExpr, numRows = 2000, blockSize = 512)
+
+      forEachReader { (dsv1, vectorized) =>
+        val filtered = spark.read.parquet(dir.getAbsolutePath)
+          .selectExpr("variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
+        val all = spark.read.parquet(dir.getAbsolutePath)
+          .selectExpr("variant_get(v, '$.a', 'bigint') AS a")
+        checkAnswer(filtered.orderBy("a"), (1000L to 1999L).map(Row(_)))
+        if (dsv1 && vectorized) {
+          assert(countRowGroupsRead(filtered) < countRowGroupsRead(all),
+            "Expected skipping despite a non-null top-level residual (partial object)")
+        }
+      }
+    }
+  }
+
   test("multi-level $.a.b: skip fires on DSv1 and results are correct") {
     withTempDir { dir =>
       // `a` shredded as struct<b bigint>. Homogeneous nested typed data across two row groups so
@@ -297,12 +327,13 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     }
   }
 
-  test("annotated variant layout: skip fires on DSv1 and fallback is not dropped") {
-    // The production default writes the variant group with the VARIANT logical-type annotation.
-    // Exercise both a skip-eligible query and an overflow-fallback query against that layout.
+  test("unannotated variant layout: skip and fallback still work") {
+    // The suite writes the production-default annotated layout everywhere else; this test covers
+    // the unannotated physical layout explicitly. Both a skip-eligible query and a residual
+    // fallback must behave correctly.
     withTempDir { dir =>
       writeShredded(dir, "a bigint", "'{\"a\":' || id || '}'", numRows = 2000, blockSize = 512,
-        annotate = true)
+        annotate = false)
       forEachReader { (dsv1, vectorized) =>
         val filtered = spark.read.parquet(dir.getAbsolutePath)
           .selectExpr("variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
@@ -311,18 +342,19 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
         checkAnswer(filtered.orderBy("a"), (1000L to 1999L).map(Row(_)))
         if (dsv1 && vectorized) {
           assert(countRowGroupsRead(filtered) < countRowGroupsRead(all),
-            "Expected a row group to be skipped on the annotated layout")
+            "Expected a row group to be skipped on the unannotated layout")
         }
       }
     }
 
     withTempDir { dir =>
-      // Overflow fallback under the annotated layout: the residual row must survive.
-      writeShredded(dir, "a tinyint",
-        "case when id = 50 then '{\"a\":1500}' else '{\"a\":' || id || '}' end",
-        numRows = 51, blockSize = 1024 * 1024, annotate = true)
+      // Residual fallback under the unannotated layout: the row whose only match is in the residual
+      // (NULL leaf) must survive.
+      writeShredded(dir, "a bigint",
+        "case when id = 50 then '{\"a\":1500.5}' else '{\"a\":' || id || '}' end",
+        numRows = 51, blockSize = 1024 * 1024, annotate = false)
       def read: DataFrame = spark.read.parquet(dir.getAbsolutePath)
-        .selectExpr("variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
+        .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
       assert(baseline(read) == Seq(Row(1500L)))
       forEachReader { (_, _) =>
         checkAnswer(read, Seq(Row(1500L)))

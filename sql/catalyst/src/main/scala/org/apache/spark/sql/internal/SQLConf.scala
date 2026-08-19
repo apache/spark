@@ -7120,7 +7120,7 @@ object SQLConf {
         "spark.sql.variant.pushVariantIntoScan.deferCastError is true (the extraction is " +
         "rewritten into a form that is not translated to a pushable filter). Results are " +
         "unaffected either way; this only controls whether row groups can be skipped.")
-      .version("4.3.0")
+      .version("4.4.0")
       // Physical scan optimization only: it changes which Parquet row groups are read, not the
       // resolved plan of a view/UDF/procedure body, so it does not participate in binding.
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)

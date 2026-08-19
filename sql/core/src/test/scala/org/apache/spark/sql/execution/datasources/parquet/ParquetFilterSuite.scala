@@ -2464,12 +2464,14 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     val filter = pf.createFilter(sources.GreaterThan("v.`0`", 999L))
     assert(filter.isDefined, "Expected shredded variant predicate to be created")
     val s = filter.get.toString
-    // Leaf predicate on the typed_value leaf.
+    // Guarded shape: or(gt(leaf), and(or(notEq(residual)...), eq(leaf, null))).
     assert(s.contains("v.typed_value.a.typed_value"),
       s"Expected leaf column v.typed_value.a.typed_value in $s")
-    // Residual IS NULL guards: leaf-level sibling and top-level residual.
     assert(s.contains("v.typed_value.a.value"), s"Expected L1 residual guard in $s")
     assert(s.contains("v.value"), s"Expected top-level residual guard in $s")
+    // The leaf-is-null arm must be present (this is what keeps the guard sound and effective).
+    assert(s.contains("eq(v.typed_value.a.typed_value, null)"),
+      s"Expected an isNull(leaf) guard arm in $s")
   }
 
   test("shredded variant filter: without variantExtractionSchema the logical path is unknown") {
@@ -2763,6 +2765,35 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
         "$.a"))))
     assert(exact.createFilter(sources.GreaterThan("v.`0`", 5)).isDefined,
       "An int extraction against an int leaf should be pushed")
+  }
+
+  test("shredded variant filter: extraction type wider than the leaf is pushed (safe widening)") {
+    // Physical leaf is a plain int (INT32); a bigint extraction is sound to push because every int
+    // value casts to bigint losslessly and ordering is preserved.
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int32 typed_value (INTEGER(32,true));
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val pf = createParquetFilters(
+      MessageTypeParser.parseMessageType(parquetSchema),
+      variantExtractionSchema = Some(variantExtractionSchema("v", variantField("0", LongType,
+        "$.a"))))
+    // A long literal within int range widens to the int leaf and is pushed.
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 5L))
+    assert(filter.isDefined, "A bigint extraction over an int leaf should push (safe widening)")
+    assert(filter.get.toString.contains("v.typed_value.a.typed_value"),
+      s"Expected the int leaf column in ${filter.get}")
+    // A long literal outside int range is still rejected by valueMatchesParquetType.
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", Int.MaxValue.toLong + 1L)).isEmpty,
+      "An out-of-int-range literal must not be pushed against an int leaf")
   }
 
   test("shredded variant filter: large In above threshold still pushes") {

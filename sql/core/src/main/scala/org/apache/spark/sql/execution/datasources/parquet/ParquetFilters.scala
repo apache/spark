@@ -135,9 +135,8 @@ class ParquetFilters(
    *                           top-level residual down to the leaf's own-level sibling. Each is a
    *                           physical field-name array. Only residuals that exist in this file's
    *                           schema are included; a value for the path can only be hiding in one
-   *                           of these residuals when the typed leaf is NULL, so the pushed
-   *                           predicate OR-s in an IS NOT NULL guard on each (see
-   *                           `makeShreddedFilter`).
+   *                           of these residuals when the typed leaf is NULL, which is what the
+   *                           pushed predicate's guard checks (see `makeShreddedFilter`).
    */
   private case class ShreddedVariantField(
       leaf: ParquetPrimitiveField,
@@ -151,10 +150,9 @@ class ParquetFilters(
   // shredded type (type mismatch or overflow), or whose field is not shredded in this file, is
   // stored in an untyped `value` residual with `typed_value` NULL. Parquet min/max excludes NULLs,
   // so pushing the predicate on the typed leaf alone could skip a row group that still holds a
-  // matching row in a residual. To stay sound we push `or(leafPredicate, isNotNull(residual)...)`
-  // over every residual `value` column along the path: Parquet drops the row group only when the
-  // leaf cannot match AND every residual is entirely NULL, so a row group is skipped only when
-  // every value for the path is provably in the typed leaf. See `makeShreddedFilter`.
+  // matching row in a residual. To stay sound we push a guarded predicate that skips a row group
+  // only when the leaf cannot match AND every value for the path is provably in the typed leaf.
+  // See `makeShreddedFilter`.
   //
   // Lazy so it is computed after the `Parquet*Type` vals below are initialized (resolution reads
   // them via `expectedLeafType`); a strict val here would see them as null under Scala's
@@ -179,28 +177,25 @@ class ParquetFilters(
     }
   }
 
-  // Look up a child of `group` by name. When `exact` is true the match is always case-sensitive,
-  // regardless of `caseSensitive`; otherwise it honors `caseSensitive`. Returns the child type
-  // together with its actual physical name so callers build paths from the on-disk names.
+  // Look up a child of `group` by name, always case-sensitively. Returns the child type together
+  // with its actual physical name so callers build paths from the on-disk names.
   //
-  // Variant object keys must be matched `exact = true`: they are data, not Spark identifiers, and
+  // The match is always exact-case because every caller resolves either a variant object key or a
+  // structural `typed_value`/`value` name. Variant object keys are data, not Spark identifiers, and
   // the reader resolves them case-sensitively (VariantSchema.objectSchemaMap and
   // Variant.getFieldByKey use exact equals). A file may legally shred sibling keys differing only
   // in case (e.g. `A` and `a`), so a case-insensitive first-match could bind the predicate to the
   // wrong physical subtree and skip a row group that holds matching rows -- silent data loss. The
-  // top-level variant column name is a Spark identifier and is matched by `caseSensitive` (in
-  // `shreddedVariantEntries`); the structural `typed_value`/`value` names are fixed, so `exact` is
-  // used for them too.
-  private def findChild(group: GroupType, name: String, exact: Boolean): Option[Type] = {
-    group.getFields.asScala.find { f =>
-      if (exact || caseSensitive) f.getName == name else f.getName.equalsIgnoreCase(name)
-    }
+  // top-level variant column name is a Spark identifier and is matched by `caseSensitive`
+  // separately, in `shreddedVariantEntries`.
+  private def findChild(group: GroupType, name: String): Option[Type] = {
+    group.getFields.asScala.find(_.getName == name)
   }
 
   // Look up the untyped `value` residual sibling in `group`, if it exists as a non-REPEATED
   // primitive. Returns the physical field name. `value` is a fixed structural name; matched exact.
   private def residualIn(group: GroupType): Option[String] =
-    findChild(group, VALUE, exact = true).collect {
+    findChild(group, VALUE).collect {
       case p: PrimitiveType if p.getRepetition != Repetition.REPEATED => p.getName
     }
 
@@ -246,13 +241,13 @@ class ParquetFilters(
     var namePath = physColPath
     var idx = 0
     while (idx < keys.length) {
-      val typedChild = findChild(group, TYPED_VALUE, exact = true) match {
+      val typedChild = findChild(group, TYPED_VALUE) match {
         case Some(g: GroupType) => g
         case _ => return None
       }
       val typedName = typedChild.getName
       // Variant object keys are data, matched case-sensitively (see `findChild`).
-      val keyChild = findChild(typedChild, keys(idx), exact = true) match {
+      val keyChild = findChild(typedChild, keys(idx)) match {
         case Some(g: GroupType) => g
         case _ => return None
       }
@@ -262,23 +257,44 @@ class ParquetFilters(
       idx += 1
     }
     // The leaf is the typed_value of the last key group.
-    findChild(group, TYPED_VALUE, exact = true) match {
+    findChild(group, TYPED_VALUE) match {
       case Some(p: PrimitiveType) if p.getRepetition != Repetition.REPEATED =>
         val leafType =
           ParquetSchemaType(getNormalizedLogicalType(p), p.getPrimitiveTypeName, p.getTypeLength)
-        // Require the extraction's target type to map to the exact physical leaf type. Comparing on
-        // representation alone (as `valueMatchesParquetType` does for the literal) would push a
-        // narrower extraction such as smallint against an int leaf: the leaf min/max is over int
-        // values, so a row group holding only out-of-range values (residuals null) would be
-        // skipped, changing an eager INVALID_VARIANT_CAST into an empty result. Requiring an exact
-        // type match keeps the optimization result-preserving.
-        if (!expectedLeafType(targetType).contains(leafType)) {
+        // Accept the leaf when the extraction's target type maps to it exactly, or when the leaf is
+        // a narrower signed integer than the target (safe widening). Narrowing must be rejected:
+        // for a narrower extraction such as smallint over an int leaf, the leaf min/max is over int
+        // values, so a row group holding only out-of-int16-range values (residuals null) would be
+        // skipped, changing an eager INVALID_VARIANT_CAST into an empty result. Widening is sound:
+        // every value in a narrower leaf casts to the wider target losslessly and ordering is
+        // preserved, so the leaf stats bound the target predicate; `valueMatchesParquetType` still
+        // rejects a literal outside the leaf's representable range at push time.
+        if (!expectedLeafType(targetType).contains(leafType) &&
+            !isSafeIntegerWidening(leafType, targetType)) {
           None
         } else {
           val leaf = ParquetPrimitiveField(namePath :+ p.getName, leafType)
           Some(ShreddedVariantField(leaf, residuals.toSeq))
         }
       case _ => None
+    }
+  }
+
+  // Whether an extraction of `targetType` may be pushed against a physical `leafType` that is a
+  // narrower signed integer (e.g. bigint extraction over an int/smallint/tinyint leaf). Only the
+  // integer family widens soundly here.
+  private def isSafeIntegerWidening(
+      leafType: ParquetSchemaType, targetType: DataType): Boolean = {
+    def intRank(t: ParquetSchemaType): Option[Int] = t match {
+      case ParquetByteType => Some(0)
+      case ParquetShortType => Some(1)
+      case ParquetIntegerType => Some(2)
+      case ParquetLongType => Some(3)
+      case _ => None
+    }
+    (intRank(leafType), expectedLeafType(targetType).flatMap(intRank)) match {
+      case (Some(leafRank), Some(targetRank)) => leafRank < targetRank
+      case _ => false
     }
   }
 
@@ -970,19 +986,28 @@ class ParquetFilters(
     predicate.references.exists(nameToShreddedVariantField.contains)
 
   // Build the sound shredded-variant predicate:
-  //   or(leafPredicate, isNotNull(residual_0), ..., isNotNull(residual_n))
-  // where each isNotNull is `notEq(residual, null)`.
+  //   or(leafPredicate, and(anyResidualNotNull, isNull(leaf)))
+  // where `anyResidualNotNull` is `or(notEq(residual_0, null), ..., notEq(residual_n, null))` and
+  // `isNull(leaf)` is `eq(leaf, null)`.
   //
-  // Parquet's statistics drop logic is: `or(a, b)` is row-group-droppable iff BOTH `a` and `b` are
-  // droppable, and `notEq(col, null)` (IS NOT NULL) is droppable iff the column is entirely NULL in
-  // the row group (no non-nulls). So the whole `or` drops the row group iff the leaf predicate is
-  // droppable (leaf min/max cannot match) AND every residual is entirely NULL (no value for the
-  // path is hiding in a residual). If any residual holds a non-null, its isNotNull conjunct is not
-  // droppable, so the row group is kept -- we never drop a row group that could contain a matching
-  // residual value.
+  // Parquet's statistics drop logic: `or(a, b)` is row-group-droppable iff BOTH `a` and `b` are
+  // droppable; `and(a, b)` iff EITHER is; `notEq(col, null)` (IS NOT NULL) iff the column is
+  // entirely NULL (no non-nulls); `eq(col, null)` (IS NULL) iff the column has no nulls. So the
+  // whole `or` drops the row group iff the leaf min/max cannot match AND (every residual is
+  // entirely NULL OR the leaf column has no nulls). The second arm is what makes this sound and
+  // still effective: a value for the path can be outside the typed leaf only on a row where the
+  // leaf is NULL, so a leaf with zero nulls means every value is provably in the typed leaf and the
+  // leaf min/max is a complete summary -- regardless of what the residual columns hold (they may be
+  // non-null because a sibling key outside the shredding schema landed in the level's `value`,
+  // which is the normal layout for real Variant data). Per record it still keeps every row that
+  // could match: a row whose value fell back to a residual has a NULL leaf and a non-null residual,
+  // so `and(anyResidualNotNull, isNull(leaf))` holds for it.
   //
   // The naive `and(leafPredicate, isNull(residual))` is UNSOUND: `and` drops iff EITHER conjunct is
-  // droppable, so the leaf predicate alone would drop the row group regardless of the residual.
+  // droppable, so the leaf predicate alone would drop the row group regardless of the residual. The
+  // earlier flat `or(leaf, isNotNull(residual)...)` was sound but could never drop a row group once
+  // any residual was non-null (e.g. a partial object), i.e. it paid the pushdown cost without ever
+  // skipping on that common layout.
   //
   // `makeLeaf` produces the leaf predicate from the leaf's field-name array; it returns None if the
   // leaf type has no comparison encoding.
@@ -992,8 +1017,23 @@ class ParquetFilters(
       ): Option[FilterPredicate] = {
     val field = nameToShreddedVariantField(name)
     makeLeaf(field.leaf.fieldType, field.leaf.fieldNames).map { leafPredicate =>
-      field.residualFieldNames.foldLeft(leafPredicate) { (acc, residualNames) =>
-        FilterApi.or(acc, FilterApi.notEq(binaryColumn(residualNames), null.asInstanceOf[Binary]))
+      val anyResidualNotNull = field.residualFieldNames
+        .map(n => FilterApi.notEq(binaryColumn(n), null.asInstanceOf[Binary]))
+        .reduceLeftOption[FilterPredicate](FilterApi.or)
+      val leafIsNull = makeEq.lift(field.leaf.fieldType)
+        .map(_(field.leaf.fieldNames, null))
+      (anyResidualNotNull, leafIsNull) match {
+        case (Some(residual), Some(isNull)) =>
+          FilterApi.or(leafPredicate, FilterApi.and(residual, isNull))
+        case (Some(residual), None) =>
+          // Leaf type has no null-equality encoding; fall back to the sound flat OR (drops only
+          // when every residual is entirely NULL).
+          field.residualFieldNames.foldLeft(leafPredicate) { (acc, n) =>
+            FilterApi.or(acc, FilterApi.notEq(binaryColumn(n), null.asInstanceOf[Binary]))
+          }
+        case (None, _) =>
+          // No residuals exist in this file for the path, so the leaf is a complete summary.
+          leafPredicate
       }
     }
   }
