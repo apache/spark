@@ -277,12 +277,10 @@ class KMeansModel private[ml] (
     var size = estimateMatadataSize
     if (clusterCentersWithNorm != null) {
       // clusterCentersWithNorm: Array[VectorWithNorm]
-      // distanceMeasureInstance: DistanceMeasure
       // trainingCost: Double
       // numIter: Int
       size += SizeEstimator.estimate((
         clusterCentersWithNorm,
-        distanceMeasureInstance,
         trainingCost,
         numIter))
     }
