@@ -14394,7 +14394,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # NDArray Compat
     def __array_ufunc__(
         self, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-    ) -> Union["DataFrame", Tuple["DataFrame", ...]]:
+    ) -> Union["DataFrame", Tuple["DataFrame", "DataFrame"]]:
         # TODO: is it possible to deduplicate it with '_map_series_op'?
         if all(isinstance(inp, DataFrame) for inp in inputs) and any(
             not same_anchor(inp, inputs[0]) for inp in inputs
@@ -14431,13 +14431,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 for label in column_labels
             ]
             if outputs and isinstance(outputs[0], tuple):
-                # A multi-output ufunc (for example np.modf) yields a tuple per column;
-                # regroup into one DataFrame per output, matching numpy/pandas.
-                dataframes: List["DataFrame"] = []
-                for i in range(len(outputs[0])):
-                    columns = [out[i].rename(label) for out, label in zip(outputs, column_labels)]
-                    dataframes.append(DataFrame(this._internal.with_new_columns(columns)))
-                return tuple(dataframes)
+                # A multi-output ufunc (for example np.modf) yields a two-element tuple per
+                # column; regroup into one DataFrame per output, matching numpy/pandas.
+                first_cols = [out[0].rename(label) for out, label in zip(outputs, column_labels)]
+                second_cols = [out[1].rename(label) for out, label in zip(outputs, column_labels)]
+                first_df: DataFrame = DataFrame(this._internal.with_new_columns(first_cols))
+                second_df: DataFrame = DataFrame(this._internal.with_new_columns(second_cols))
+                return first_df, second_df
             else:
                 applied = [out.rename(label) for out, label in zip(outputs, column_labels)]
                 internal = this._internal.with_new_columns(applied)

@@ -298,11 +298,9 @@ def _modf_fractional_func(c: Column) -> Column:
     )
 
 
-# Multi-output ufuncs (nout > 1) cannot be realized by a single Column->Column entry
-# in the tables above, since the dispatch turns one such function into one Series. Each
-# entry here is a tuple of one Column->Column function per output, applied independently
-# and returned as a tuple that numpy's __array_ufunc__ protocol unpacks (for example
-# `fractional, integral = np.modf(series)`).
+# Every multi-output ufunc numpy ships (modf, frexp) has exactly two outputs, so each entry
+# maps to a pair of Column->Column functions applied independently and returned as a 2-tuple
+# that numpy's __array_ufunc__ unpacks (for example `fractional, integral = np.modf(series)`).
 multi_output_np_spark_mappings = {
     # np.modf(x) -> (fractional part, integral part); the integral part is exactly trunc.
     "modf": (_modf_fractional_func, unary_np_spark_mappings["trunc"]),
@@ -379,7 +377,7 @@ def maybe_dispatch_ufunc_to_dunder_op(
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_spark_func(
     ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-) -> Union[IndexOpsMixin, Tuple[IndexOpsMixin, ...]]:
+) -> Union[IndexOpsMixin, Tuple[IndexOpsMixin, IndexOpsMixin]]:
     from pyspark.pandas.base import column_op
 
     op_name = ufunc.__name__
@@ -391,9 +389,9 @@ def maybe_dispatch_ufunc_to_spark_func(
     ):
         # These ufuncs are unary in their input, so the single input is always a Series
         # that column_op unwraps to a Column -- no literal wrapping needed. Build one
-        # Series per output and return them as a tuple (see the mapping's docstring).
-        output_funcs = multi_output_np_spark_mappings[op_name]
-        return tuple(column_op(f)(*inputs) for f in output_funcs)
+        # Series per output and return them as a 2-tuple (see the mapping's docstring).
+        first_func, second_func = multi_output_np_spark_mappings[op_name]
+        return column_op(first_func)(*inputs), column_op(second_func)(*inputs)
 
     if (
         method == "__call__"
