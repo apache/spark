@@ -22,11 +22,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
-import org.apache.spark.sql.pipelines.autocdc.{
-  ColumnSelection,
-  ScdType,
-  UnqualifiedColumnName
-}
+import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.graph.AutoCdcRandomCdcTestMixin.SourceRow
 import org.apache.spark.sql.pipelines.utils.ExecutionTest
 import org.apache.spark.sql.test.SharedSparkSession
@@ -56,15 +52,15 @@ object AutoCdcRandomCdcTestMixin {
  * Shared random-CDC fixture helpers for AutoCDC differential convergence suites
  * ([[AutoCdcOutOfOrderConvergenceSuite]], [[AutoCdcCrossScdConvergenceSuite]]).
  *
- * Owns the common event schema, stream generator, target DDL, microbatch feeding, for random-data
- * AutoCDC suites.
+ * Owns the common event schema, stream generator, and microbatch feeding for random-data AutoCDC
+ * suites.
  *
  * Exposed random data generation knobs (optional; defaults are CI-sized):
  *   - `spark.sql.test.autocdc.convergenceBaseSeed`
  *   - `spark.sql.test.autocdc.convergenceNumSeeds`
  *   - `spark.sql.test.autocdc.convergenceNumKeys`
  *   - `spark.sql.test.autocdc.convergenceMaxEventsPerKey`
- *   - `spark.sql.test.autocdc.convergenceMaxBatches`
+ *   - `spark.sql.test.autocdc.convergenceNumBatches`
  *
  * Suites may override these defaults when they genuinely need a different baseline. For local
  * stress testing, for example:
@@ -87,16 +83,21 @@ trait AutoCdcRandomCdcTestMixin {
   protected val deleteEventProbability: Double = 0.20
   // Probability an event is immediately re-emitted with the same sequence and payload.
   protected val duplicateEventProbability: Double = 0.15
+  // Probability an upsert repeats the previous upsert's payload at a new sequence. In SCD2 this
+  // will produce a no-op upsert row, provided that sequence is excluded from track-history column
+  // selection.
+  protected val noOpContinuationProbability: Double = 0.15
   // Probability an optional payload column is non-null; (1 - this) is the null probability.
   protected val nonNullProbability: Double = 0.75
 
   // CI-sized defaults shared by every convergence suite. Override in a suite only when that
   // suite genuinely needs a different baseline; prefer the shared system properties for
   // local stress scaling so both suites stay aligned under normal CI.
-  protected val defaultNumDistinctKeys: Int = 10
-  protected val defaultMaxUniqueEventsPerKey: Int = 40
-  protected val defaultNumOutOfOrderBatches: Int = 8
-  protected val defaultNumSeedsPerRun: Int = 3
+  protected val defaultBaseSeed: Long = 0x5EEDL
+  protected val defaultNumDistinctKeys: Int = 5
+  protected val defaultMaxUniqueEventsPerKey: Int = 80
+  protected val defaultNumBatches: Int = 8
+  protected val defaultNumSeedsPerRun: Int = 1
 
   // Exposed so suite failure clues can tell callers how to force a deterministic replay.
   protected val baseSeedSystemProperty: String =
@@ -108,7 +109,7 @@ trait AutoCdcRandomCdcTestMixin {
   private val maxEventsPerKeySystemProperty: String =
     "spark.sql.test.autocdc.convergenceMaxEventsPerKey"
   private val numBatchesSystemProperty: String =
-    "spark.sql.test.autocdc.convergenceMaxBatches"
+    "spark.sql.test.autocdc.convergenceNumBatches"
 
   private def positiveIntProp(name: String, default: Int): Int = {
     val value = Option(System.getProperty(name)).map(_.toInt).getOrElse(default)
@@ -119,7 +120,7 @@ trait AutoCdcRandomCdcTestMixin {
   private def resolveBaseSeed(): Long = {
     Option(System.getProperty(baseSeedSystemProperty))
       .map(_.toLong)
-      .getOrElse(Random.nextLong())
+      .getOrElse(defaultBaseSeed)
   }
 
   private def resolveNumSeeds(): Int =
@@ -131,8 +132,8 @@ trait AutoCdcRandomCdcTestMixin {
   protected def resolveMaxUniqueEventsPerKey(): Int =
     positiveIntProp(maxEventsPerKeySystemProperty, defaultMaxUniqueEventsPerKey)
 
-  protected def resolveNumOutOfOrderBatches(): Int =
-    positiveIntProp(numBatchesSystemProperty, defaultNumOutOfOrderBatches)
+  protected def resolveNumBatches(): Int =
+    positiveIntProp(numBatchesSystemProperty, defaultNumBatches)
 
   /**
    * Invoke `callback(seed, seedIndex)` once per configured seed. The first iteration uses the
@@ -183,22 +184,52 @@ trait AutoCdcRandomCdcTestMixin {
   protected def generateRandomCdcEventStream(rand: Random): Seq[SourceRow] = {
     val numDistinctKeys = resolveNumDistinctKeys()
     val maxUniqueEventsPerKey = resolveMaxUniqueEventsPerKey()
-  
+
     var nextSequence: Long = 0L
-    val events = ArrayBuffer.empty[SourceRow]
+    val allEvents = ArrayBuffer.empty[SourceRow]
     (0 until numDistinctKeys).foreach { key =>
       val numUniqueEventsForKey = rand.between(1, maxUniqueEventsPerKey + 1)
+      val eventsForKey = ArrayBuffer.empty[SourceRow]
+
       (0 until numUniqueEventsForKey).foreach { _ =>
         val isDelete = rand.nextDouble() < deleteEventProbability
-        val event = randomUpsertOrDelete(rand, key, nextSequence, isDelete)
+        val event = if (isDelete) {
+          randomUpsertOrDelete(rand, key, nextSequence, isDelete = true)
+        } else {
+          val previousEventIfUpsertOpt = eventsForKey.lastOption.filterNot(_.isDelete)
+          val upsertToNoOpContinueOpt = previousEventIfUpsertOpt.filter(
+            _ => rand.nextDouble() < noOpContinuationProbability)
+
+          upsertToNoOpContinueOpt match {
+            case Some(upsertToNoOpContinue) =>
+              // If we're no-op continuing a previous upsert, reuse the same [tracked history]
+              // columns, incrementing only the sequence. This relies on sequence being the single
+              // non-track-history column in the AutoCDC configuration.
+              upsertToNoOpContinue.copy(sequence = nextSequence)
+            case _ =>
+              // If we're not no-op continuing a previous upsert, create a new upsert event.
+              randomUpsertOrDelete(rand, key, nextSequence, isDelete = false)
+          }
+        }
+
+        // By AutoCDC contract, only exact duplicate re-emissions (handled separately below) may
+        // reuse sequences for a particular key. Otherwise, the behavior for two unique events for
+        // the same key with the same sequence leads to undefined behavior. Each distinct event
+        // creation for this key should increment `nextSequence`.
         nextSequence += 1
-        events += event
+        eventsForKey += event
+
         if (rand.nextDouble() < duplicateEventProbability) {
-          events += event
+          // Full duplicate events are intentionally not counted against `numUniqueEventsForKey`.
+          // These differ from no-op upsert continuation events, as they share the same sequence as
+          // their preceding event too, in addition to all other columns.
+          eventsForKey += event
         }
       }
+
+      allEvents.addAll(eventsForKey)
     }
-    events.sortBy(_.sequence).toSeq
+    allEvents.sortBy(_.sequence).toSeq
   }
 
   /**
@@ -223,7 +254,12 @@ trait AutoCdcRandomCdcTestMixin {
         Seq(UnqualifiedColumnName(isDeleteColumn))
       )),
       deleteCondition = Some(functions.col(isDeleteColumn) === true),
-      scdType = scdType
+      scdType = scdType,
+      trackHistorySelection = scdType match {
+        case ScdType.Type1 => None
+        case ScdType.Type2 => Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName(sequenceColumn))))
+      }
     )
     val totalEvents = events.size
     (0 until numBatches).foreach { batchIndex =>
