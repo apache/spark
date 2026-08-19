@@ -20,6 +20,7 @@ package org.apache.spark
 class ScalaInitializationCheckSuite extends SparkFunSuite {
 
   test("SPARK-58867: -Xcheckinit detects eager reads of uninitialized vals") {
+    assume(ScalaInitializationCheckSuite.scalaInitializationCheckEnabled)
     intercept[UninitializedFieldError] {
       new ScalaInitializationCheckSuite.BrokenInitialization
     }
@@ -27,6 +28,14 @@ class ScalaInitializationCheckSuite extends SparkFunSuite {
 }
 
 private object ScalaInitializationCheckSuite {
+
+  private val scalaInitializationCheckEnabled =
+    sys.env.get("SPARK_SCALA_CHECKINIT").exists(ScalaInitializationCheckSuite.isTruthy) ||
+      sys.props.get("spark.scala.checkinit").exists(ScalaInitializationCheckSuite.isTruthy)
+
+  private def isTruthy(value: String): Boolean = {
+    Set("1", "true", "yes").contains(value.toLowerCase(java.util.Locale.ROOT))
+  }
 
   private trait EagerTraitInitializer {
     protected val eagerlyReadValue: String

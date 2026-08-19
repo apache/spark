@@ -51,6 +51,18 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
   private val mockTaskInfo = mock[TaskInfo]
   private val mockProperties = new Properties
 
+  private def getPrivateField(instance: AnyRef, name: String): java.lang.reflect.Field = {
+    val field = Iterator.iterate(instance.getClass)(_.getSuperclass)
+      .takeWhile(_ != null)
+      .flatMap(_.getDeclaredFields)
+      .find { field =>
+        field.getName == name || field.getName.endsWith("$$" + name)
+      }
+      .getOrElse(fail(s"Could not find field $name in ${instance.getClass}"))
+    field.setAccessible(true)
+    field
+  }
+
   // Set mock attempt for mock Task, TaskInfo and RDD
   // that can be used with mergeLastAttempt.
   // stageId and stageAttemptId are passed directly to mergeLastAttempt.
@@ -200,26 +212,16 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
       slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 10, mockProperties)
     }
     val rddVals = mapGetMethod.invoke(rddsMap, Int.box(1)).asInstanceOf[Option[Object]].get
-    val rddValsClass = rddVals.getClass
-    // @specialized var fields are emitted with `org$apache$spark$util$LastAttemptRDDVals$$`
-    // prefix so specialized subclasses can override them.
-    val fieldPrefix = "org$apache$spark$util$LastAttemptRDDVals$$"
-    val commonStageIdFld = rddValsClass.getDeclaredField(fieldPrefix + "commonStageId")
-    commonStageIdFld.setAccessible(true)
+    val commonStageIdFld = getPrivateField(rddVals, "commonStageId")
     val commonStageAttemptIdFld =
-      rddValsClass.getDeclaredField(fieldPrefix + "commonStageAttemptId")
-    commonStageAttemptIdFld.setAccessible(true)
+      getPrivateField(rddVals, "commonStageAttemptId")
     val commonTaskAttemptNumberFld =
-      rddValsClass.getDeclaredField(fieldPrefix + "commonTaskAttemptNumber")
-    commonTaskAttemptNumberFld.setAccessible(true)
-    val overrideStageIdsFld = rddValsClass.getDeclaredField(fieldPrefix + "overrideStageIds")
-    overrideStageIdsFld.setAccessible(true)
+      getPrivateField(rddVals, "commonTaskAttemptNumber")
+    val overrideStageIdsFld = getPrivateField(rddVals, "overrideStageIds")
     val overrideStageAttemptIdsFld =
-      rddValsClass.getDeclaredField(fieldPrefix + "overrideStageAttemptIds")
-    overrideStageAttemptIdsFld.setAccessible(true)
+      getPrivateField(rddVals, "overrideStageAttemptIds")
     val overrideTaskAttemptNumbersFld =
-      rddValsClass.getDeclaredField(fieldPrefix + "overrideTaskAttemptNumbers")
-    overrideTaskAttemptNumbersFld.setAccessible(true)
+      getPrivateField(rddVals, "overrideTaskAttemptNumbers")
 
     // No retries: common is set, none of the override arrays are allocated.
     assert(commonStageIdFld.getInt(rddVals) === 10)
