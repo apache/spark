@@ -58,7 +58,7 @@ import org.apache.spark.unsafe.types.UTF8String
        PARSE_SYNTAX_ERROR
   """,
   group = "misc_funcs",
-  since = "5.0.0")
+  since = "4.4.0")
 // scalastyle:on line.size.limit
 case class ParseSql(child: Expression)
   extends UnaryExpression
@@ -100,7 +100,7 @@ case class ParseSql(child: Expression)
 object ParseSql {
   /** Register the builtin with a session function registry and the global builtin set. */
   def register(registry: FunctionRegistry): Unit = {
-    val (info, builder) = FunctionRegistryBase.build[ParseSql]("parse_sql", Some("5.0.0"))
+    val (info, builder) = FunctionRegistryBase.build[ParseSql]("parse_sql", Some("4.4.0"))
     // Keep the session registry in sync for the first session (cloned before this runs).
     registry.registerFunction(
       FunctionRegistry.builtinFunctionIdentifier("parse_sql"),
