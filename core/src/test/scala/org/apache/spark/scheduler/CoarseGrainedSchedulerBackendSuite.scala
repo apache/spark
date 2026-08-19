@@ -606,6 +606,22 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(mockEndpointRef.decommissionReceived)
   }
 
+  test("SPARK-58886: requestExecutors should saturate instead of overflowing a huge" +
+    " requested total") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    sc.requestTotalExecutors(Int.MaxValue, 0, Map.empty)
+    backend.requestExecutors(1)
+
+    val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+    assert(backend.getRequestedTotalExecutors()(defaultProf) === Int.MaxValue)
+  }
+
   test("UpdateUserCredentials is broadcast to all registered executors") {
     val conf = new SparkConf()
       .setMaster("local-cluster[0, 3, 1024]")
