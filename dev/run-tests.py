@@ -677,9 +677,7 @@ def main():
         # If APACHE_SPARK_REF is set, we are in a forked repository.
         # Otherwise if we have a list of changed files, we must be in post-merge CI.
         if not os.environ.get("APACHE_SPARK_REF", "") and changed_files:
-            relevant_changed_files = [
-                f for f in changed_files if not modules.is_ignored_file(f)
-            ]
+            relevant_changed_files = [f for f in changed_files if not modules.is_ignored_file(f)]
             # If there are relevant changed files that are not pyspark, we don't do smart test
             if any(
                 not (f.endswith(".py") and f.startswith("python/pyspark/"))
@@ -708,9 +706,7 @@ def _test():
         doctest.testmod(sparktestsupport.utils),
         doctest.testmod(),
     )
-    failure_count = sum([
-        num_failures for (num_failures, num_tests) in test_results
-    ])
+    failure_count = sum([num_failures for (num_failures, num_tests) in test_results])
     if failure_count:
         sys.exit(-1)
 
