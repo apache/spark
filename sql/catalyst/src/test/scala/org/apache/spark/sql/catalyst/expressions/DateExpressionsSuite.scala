@@ -834,6 +834,31 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal.create(ltz2, ltzType), Literal.FalseLiteral, Some("UTC")),
       3.9495967741935485)
 
+    // Each timestamp family keeps its own wall-clock semantics when the session zone is not UTC:
+    // the TIMESTAMP_NTZ family (micros and nanos alike) is evaluated in UTC, so pairing a nanos
+    // NTZ operand with a microsecond NTZ operand matches the all-micros NTZ result rather than
+    // shifting one side by the session offset.
+    checkEvaluation(
+      MonthsBetween(Literal.create(ntz1, ntzType),
+        Literal(LocalDateTime.parse("1996-10-30T00:00:00")), Literal.FalseLiteral, Some(LA.getId)),
+      3.9495967741935485)
+    checkEvaluation(
+      MonthsBetween(Literal(LocalDateTime.parse("1997-02-28T10:30:00")),
+        Literal.create(ntz2, ntzType), Literal.FalseLiteral, Some(LA.getId)),
+      3.9495967741935485)
+    // The TIMESTAMP_LTZ family is evaluated in the session zone, so an LTZ nanos operand tracks
+    // the session offset the same way its microsecond counterpart does.
+    val laLtz1 = DateTimeUtils.instantToTimestampNanos(Instant.parse("1997-02-28T18:30:00Z"), 9)
+    val laLtz2 = DateTimeUtils.instantToTimestampNanos(Instant.parse("1996-10-30T08:00:00Z"), 9)
+    checkEvaluation(
+      MonthsBetween(Literal.create(laLtz1, ltzType), Literal.create(laLtz2, ltzType),
+        Literal.FalseLiteral, Some(LA.getId)),
+      3.9495967741935485)
+    checkEvaluation(
+      MonthsBetween(Literal.create(laLtz1, ltzType),
+        Literal(Instant.parse("1996-10-30T08:00:00Z")), Literal.FalseLiteral, Some(LA.getId)),
+      3.9495967741935485)
+
     checkConsistencyBetweenInterpretedAndCodegen(
       (time1: Expression, time2: Expression, roundOff: Expression) =>
         MonthsBetween(time1, time2, roundOff, Some("UTC")),
@@ -846,6 +871,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (time1: Expression, time2: Expression, roundOff: Expression) =>
         MonthsBetween(time1, time2, roundOff, Some("UTC")),
       ntzType, TimestampType, BooleanType)
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (time1: Expression, time2: Expression, roundOff: Expression) =>
+        MonthsBetween(time1, time2, roundOff, Some("UTC")),
+      TimestampNTZType, ntzType, BooleanType)
 
     checkEvaluation(
       MonthsBetween(Literal.create(null, ntzType), Literal.create(ntz2, ntzType),
