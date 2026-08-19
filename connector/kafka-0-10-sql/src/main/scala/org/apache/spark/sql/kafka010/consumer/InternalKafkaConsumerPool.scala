@@ -98,6 +98,7 @@ private[consumer] class InternalKafkaConsumerPool(
   /** Invalidates all idle consumers for the key */
   def invalidateKey(key: CacheKey): Unit = {
     pool.clear(key)
+    objectFactory.keyToKafkaParams.remove(key)
   }
 
   /**
@@ -115,6 +116,7 @@ private[consumer] class InternalKafkaConsumerPool(
     // this is the best-effort of clearing up. otherwise we should close the pool and create again
     // but we don't want to make it "var" only because of tests.
     pool.clear()
+    objectFactory.keyToKafkaParams.clear()
   }
 
   def numIdle: Int = pool.getNumIdle
