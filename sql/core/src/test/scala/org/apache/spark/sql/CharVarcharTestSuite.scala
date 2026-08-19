@@ -1998,6 +1998,55 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
+  test("SPARK-58794: EXTERNAL TABLE CHAR/VARCHAR pad, assignment, and oversize") {
+    // D14: external file tables use the same store assignment on write and pad +
+    // length-check on scan. Hive TRANSFORM is out of scope for this epic.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // Pre-existing short file values: CHAR pads on scan; types stay first-class.
+        sql("SELECT 'ab' AS c, 'cd' AS v").write.format(format).save(path)
+        withTable("std_ext") {
+          sql(
+            s"""CREATE EXTERNAL TABLE std_ext (c CHAR(5), v VARCHAR(5))
+               |USING $format LOCATION '$path'""".stripMargin)
+          assert(spark.table("std_ext").schema.map(_.dataType) ===
+            Seq(CharType(5), VarcharType(5)))
+          checkAnswer(
+            sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_ext"),
+            Row("<ab   >", "<cd>"))
+
+          // INSERT into EXTERNAL applies write-side assignment (pad / length).
+          sql("INSERT INTO std_ext VALUES ('x', 'yz')")
+          checkAnswer(
+            sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_ext " +
+              "WHERE c LIKE 'x%'"),
+            Row("<x    >", "<yz>"))
+          intercept[SparkRuntimeException] {
+            sql("INSERT INTO std_ext VALUES ('too-long', 'ok')").collect()
+          }
+        }
+      }
+      // Bypass-writer oversize non-blank values fail on scan (D12).
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sql("SELECT 'abcdef' AS c").write.format(format).save(path)
+        withTable("std_ext_oversize") {
+          sql(
+            s"""CREATE EXTERNAL TABLE std_ext_oversize (c CHAR(3))
+               |USING $format LOCATION '$path'""".stripMargin)
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql("SELECT * FROM std_ext_oversize").collect()
+            },
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "3")
+          )
+        }
+      }
+    }
+  }
+
   test("alter table set location w/ fit length values") {
     withTempPath { dir =>
       withTable("t") {
