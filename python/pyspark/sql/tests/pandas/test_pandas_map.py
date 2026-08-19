@@ -465,16 +465,12 @@ class MapInPandasTestsMixin:
             tc = TaskContext.get()
             assert tc is not None
             assert not isinstance(tc, BarrierTaskContext)
-            try:
-                BarrierTaskContext.get()
-            except Exception:
-                pass
-            else:
-                raise AssertionError("BarrierTaskContext.get() should fail outside barrier mode")
+            BarrierTaskContext.get()
             for batch in iterator:
                 yield batch
 
-        df.mapInPandas(func1, "id long", False).collect()
+        with self.assertRaisesRegex(PythonException, "\\[NOT_IN_BARRIER_STAGE\\]"):
+            df.mapInPandas(func1, "id long", False).collect()
 
         def func2(iterator):
             from pyspark import TaskContext, BarrierTaskContext
