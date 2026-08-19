@@ -17,36 +17,35 @@
 
 from typing import final
 
-from pyspark.loose_version import LooseVersion
-
 import matplotlib as mat
 import numpy as np
+import pandas as pd
 from matplotlib.axes._base import _process_plot_format  # type: ignore[attr-defined]
 from matplotlib.figure import Figure
-import pandas as pd
 from pandas.core.dtypes.inference import is_list_like
 from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
-from pandas.plotting._matplotlib import (  # type: ignore[import-not-found]
-    BarPlot as PandasBarPlot,
-    BoxPlot as PandasBoxPlot,
-    HistPlot as PandasHistPlot,
-    PiePlot as PandasPiePlot,
-    AreaPlot as PandasAreaPlot,
-    LinePlot as PandasLinePlot,
-    BarhPlot as PandasBarhPlot,
-    ScatterPlot as PandasScatterPlot,
-    KdePlot as PandasKdePlot,
-)
 from pandas.plotting._core import PlotAccessor
-from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot  # type: ignore[import-not-found]
+from pandas.plotting._matplotlib import AreaPlot as PandasAreaPlot  # type: ignore[import-not-found]
+from pandas.plotting._matplotlib import BarhPlot as PandasBarhPlot
+from pandas.plotting._matplotlib import BarPlot as PandasBarPlot
+from pandas.plotting._matplotlib import BoxPlot as PandasBoxPlot
+from pandas.plotting._matplotlib import HistPlot as PandasHistPlot
+from pandas.plotting._matplotlib import KdePlot as PandasKdePlot
+from pandas.plotting._matplotlib import LinePlot as PandasLinePlot
+from pandas.plotting._matplotlib import PiePlot as PandasPiePlot
+from pandas.plotting._matplotlib import ScatterPlot as PandasScatterPlot
+from pandas.plotting._matplotlib.core import (  # type: ignore[import-not-found]
+    MPLPlot as PandasMPLPlot,
+)
 
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.plot import (
-    TopNPlotBase,
-    SampledPlotBase,
-    HistogramPlotBase,
     BoxPlotBase,
-    unsupported_function,
+    HistogramPlotBase,
     KdePlotBase,
+    SampledPlotBase,
+    TopNPlotBase,
+    unsupported_function,
 )
 from pyspark.pandas.series import Series, first_series
 

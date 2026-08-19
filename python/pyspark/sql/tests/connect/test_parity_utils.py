@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.sql.tests.test_utils import UtilsTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class UtilsParityTests(UtilsTestsMixin, ReusedConnectTestCase):

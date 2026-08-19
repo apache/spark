@@ -14,23 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import List, Sequence, TypeVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Sequence, TypeVar
 
 from pyspark import since
+from pyspark.ml.common import inherit_doc
 from pyspark.ml.linalg import Vector
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import (
     HasCheckpointInterval,
+    HasMaxIter,
     HasSeed,
+    HasStepSize,
+    HasValidationIndicatorCol,
     HasWeightCol,
     Param,
     TypeConverters,
-    HasMaxIter,
-    HasStepSize,
-    HasValidationIndicatorCol,
 )
 from pyspark.ml.wrapper import JavaPredictionModel
-from pyspark.ml.common import inherit_doc
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import P

@@ -19,7 +19,7 @@
 A collections of builtin avro functions
 """
 
-from typing import Dict, Optional, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Dict, Optional, cast
 
 from pyspark.errors import PySparkTypeError
 from pyspark.sql.column import Column
@@ -78,6 +78,7 @@ def from_avro(
     [Row(value=Row(avro=Row(age=2, name='Alice')))]
     """
     from py4j.java_gateway import JVMView
+
     from pyspark.sql.classic.column import _to_java_column
 
     if not isinstance(data, (Column, str)):
@@ -148,6 +149,7 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     [Row(suite=b'\\x02\\x00')]
     """
     from py4j.java_gateway import JVMView
+
     from pyspark.sql.classic.column import _to_java_column
 
     if not isinstance(data, (Column, str)):
@@ -184,6 +186,7 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
 def _test() -> None:
     import os
     import sys
+
     from pyspark.testing.sqlutils import search_jar
 
     avro_jar = search_jar("connector/avro", "spark-avro", "spark-avro")
@@ -201,8 +204,9 @@ def _test() -> None:
         os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
 
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.avro.functions
+    from pyspark.sql import SparkSession
 
     globs = pyspark.sql.avro.functions.__dict__.copy()
     spark = (

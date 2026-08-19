@@ -14,14 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from abc import ABC, abstractmethod
-from io import StringIO
 import cProfile
 import os
 import pstats
+import warnings
+from abc import ABC, abstractmethod
+from io import StringIO
 from threading import RLock
 from types import CodeType, TracebackType
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -30,10 +32,8 @@ from typing import (
     Optional,
     Tuple,
     Union,
-    TYPE_CHECKING,
     overload,
 )
-import warnings
 
 import pyspark.memory_profiler_ext
 from pyspark.accumulators import (

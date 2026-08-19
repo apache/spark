@@ -15,13 +15,12 @@
 # limitations under the License.
 #
 
+from abc import ABC, abstractmethod
 from enum import Enum
 from functools import wraps
 from typing import BinaryIO, Callable, TypeVar
-from abc import ABC, abstractmethod
 
 from pyspark.messages.zero_copy_byte_stream import ZeroCopyByteStream
-
 
 T = TypeVar("T", bound="SparkMessageReceiver")
 R = TypeVar("R")

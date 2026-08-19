@@ -24,9 +24,9 @@ from typing import IO, TYPE_CHECKING, Iterable, Iterator, List, Tuple
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.serializers import (
     Serializer,
+    UTF8Deserializer,
     read_int,
     write_int,
-    UTF8Deserializer,
 )
 
 if TYPE_CHECKING:

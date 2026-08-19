@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas import set_option, reset_option
+from pyspark.pandas import reset_option, set_option
 from pyspark.sql import functions as F
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -434,7 +434,7 @@ class NumPyCompatTestsMixin:
             self.assert_eq(np.signbit(psdf.a), np.signbit(pdf.a))
 
     def test_np_spark_compat_series(self):
-        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+        from pyspark.pandas.numpy_compat import binary_np_spark_mappings, unary_np_spark_mappings
 
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
@@ -484,7 +484,7 @@ class NumPyCompatTestsMixin:
             reset_option("compute.ops_on_diff_frames")
 
     def test_np_spark_compat_frame(self):
-        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+        from pyspark.pandas.numpy_compat import binary_np_spark_mappings, unary_np_spark_mappings
 
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(

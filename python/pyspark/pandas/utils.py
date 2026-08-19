@@ -19,11 +19,13 @@ Commonly used utils in pandas-on-Spark.
 """
 
 import functools
-from contextlib import contextmanager
 import json
 import os
 import threading
+import warnings
+from contextlib import contextmanager
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -33,33 +35,33 @@ from typing import (
     Optional,
     Tuple,
     Union,
-    TYPE_CHECKING,
     cast,
     no_type_check,
     overload,
 )
-import warnings
 
 import pandas as pd
 from pandas.api.types import is_list_like
 
-from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
-from pyspark.sql.types import DoubleType
-from pyspark.sql.utils import is_remote
-from pyspark.errors import PySparkTypeError, UnsupportedOperationException
 from pyspark import pandas as ps
+from pyspark.errors import PySparkTypeError, UnsupportedOperationException
 from pyspark.pandas._typing import (
     Axis,
+    DataFrameOrSeries,
     Label,
     Name,
-    DataFrameOrSeries,
 )
 from pyspark.pandas.typedef.typehints import as_spark_type
+from pyspark.sql import Column, SparkSession
+from pyspark.sql import DataFrame as PySparkDataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.types import DoubleType
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
-    from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.base import IndexOpsMixin
     from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.internal import InternalFrame
     from pyspark.pandas.series import Series
 
@@ -133,11 +135,11 @@ def combine_frames(
     from pyspark.pandas.config import get_option
     from pyspark.pandas.frame import DataFrame
     from pyspark.pandas.internal import (
-        InternalField,
-        InternalFrame,
         HIDDEN_COLUMNS,
         NATURAL_ORDER_COLUMN_NAME,
         SPARK_INDEX_NAME_FORMAT,
+        InternalField,
+        InternalFrame,
     )
     from pyspark.pandas.series import Series
 
@@ -1153,8 +1155,8 @@ def ansi_mode_context(spark: SparkSession) -> Iterator[None]:
 def is_ansi_mode_enabled(spark: SparkSession) -> bool:
     def _is_ansi_mode_enabled() -> bool:
         if is_remote():
-            from pyspark.sql.connect.session import SparkSession as ConnectSession
             from pyspark.pandas.config import _key_format, _options_dict
+            from pyspark.sql.connect.session import SparkSession as ConnectSession
 
             client = cast(ConnectSession, spark).client
             ansi_mode_support, ansi_enabled = client.get_config_with_defaults(
@@ -1186,11 +1188,12 @@ def is_ansi_mode_enabled(spark: SparkSession) -> bool:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.utils
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

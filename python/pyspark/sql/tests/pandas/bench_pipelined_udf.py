@@ -45,7 +45,6 @@ import os
 import subprocess
 import sys
 
-
 SPARK_HOME = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../..")
 PIPELINED_CONF = "spark.python.udf.pipelined.enabled"
 QUEUE_DEPTH_CONF = "spark.python.udf.pipelined.queueDepth"

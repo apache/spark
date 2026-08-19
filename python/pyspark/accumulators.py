@@ -15,21 +15,22 @@
 # limitations under the License.
 #
 
-import os
-import sys
 import hmac
+import os
 import select
-import struct
 import socketserver
+import struct
+import sys
 import threading
-from typing import Callable, Dict, Generic, Tuple, Type, TYPE_CHECKING, TypeVar, Union, Optional
+from typing import TYPE_CHECKING, Callable, Dict, Generic, Optional, Tuple, Type, TypeVar, Union
 
-from pyspark.serializers import read_int, CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
+from pyspark.serializers import CPickleSerializer, read_int
 
 if TYPE_CHECKING:
-    from pyspark._typing import SupportsIAdd
     from socketserver import BaseRequestHandler
+
+    from pyspark._typing import SupportsIAdd
 
 
 __all__ = ["Accumulator", "AccumulatorParam"]

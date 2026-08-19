@@ -21,13 +21,14 @@ num_epochs = 3
 momentum = 0.5
 log_interval = 100
 
+import shutil
+import tempfile
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
-import tempfile
-import shutil
 
 
 class Net(nn.Module):

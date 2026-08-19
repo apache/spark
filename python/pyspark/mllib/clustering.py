@@ -15,25 +15,26 @@
 # limitations under the License.
 #
 
-import sys
 import array as pyarray
-from math import exp, log
+import sys
 from collections import namedtuple
-from typing import Any, List, Optional, Tuple, TypeVar, Union, overload, TYPE_CHECKING
+from math import exp, log
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple, TypeVar, Union, overload
 
 import numpy as np
 from numpy import array, random, tile
 
 from pyspark import SparkContext, since
 from pyspark.core.rdd import RDD
-from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector  # noqa: F401
+from pyspark.mllib.common import JavaModelWrapper, _java2py, _py2java, callJavaFunc, callMLlibFunc
+from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector  # noqa: F401
 from pyspark.mllib.stat.distribution import MultivariateGaussian
-from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
+from pyspark.mllib.util import JavaLoader, JavaSaveable, Loader, Saveable, inherit_doc
 from pyspark.streaming import DStream
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.mllib._typing import VectorLike
 
 T = TypeVar("T")
@@ -1285,7 +1286,9 @@ class LDA:
 
 def _test() -> None:
     import doctest
+
     import numpy
+
     import pyspark.mllib.clustering
 
     try:

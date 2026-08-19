@@ -25,8 +25,8 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     @classmethod
     def setUpClass(cls):
         # test_udf uses UserDefinedFunction so we need to monkeypatch it
-        from pyspark.sql.connect.udf import UserDefinedFunction
         import pyspark.sql.tests.test_udf
+        from pyspark.sql.connect.udf import UserDefinedFunction
 
         pyspark.sql.tests.test_udf.UserDefinedFunction = UserDefinedFunction
 

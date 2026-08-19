@@ -19,13 +19,13 @@
 Util functions for workers.
 """
 
-from contextlib import contextmanager
 import importlib
-from inspect import currentframe, getframeinfo
 import os
 import sys
-from typing import Any, Generator, IO, Optional, Union, overload
 import warnings
+from contextlib import contextmanager
+from inspect import currentframe, getframeinfo
+from typing import IO, Any, Generator, Optional, Union, overload
 
 from pyspark.messages import ZeroCopyByteStream
 
@@ -42,17 +42,16 @@ except ImportError:
     has_resource_module = False
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.util import is_remote_only
 from pyspark.errors import PySparkRuntimeError
-from pyspark.util import local_connect_and_auth
 from pyspark.serializers import (
+    CPickleSerializer,
+    FramedSerializer,
+    UTF8Deserializer,
     read_int,
     read_long,
     write_int,
-    FramedSerializer,
-    UTF8Deserializer,
-    CPickleSerializer,
 )
+from pyspark.util import is_remote_only, local_connect_and_auth
 
 pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()

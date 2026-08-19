@@ -19,11 +19,11 @@ from typing import Any, Callable, no_type_check
 import numpy as np
 
 from pyspark.loose_version import LooseVersion
-from pyspark.sql import Column, functions as F
-from pyspark.sql.pandas.functions import pandas_udf
-from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
-
+from pyspark.sql import Column
+from pyspark.sql import functions as F
+from pyspark.sql.pandas.functions import pandas_udf
+from pyspark.sql.types import BooleanType, DoubleType
 
 unary_np_spark_mappings = {
     "abs": F.abs,
@@ -379,11 +379,12 @@ def maybe_dispatch_ufunc_to_spark_func(
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.numpy_compat
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

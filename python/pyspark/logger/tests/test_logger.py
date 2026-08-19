@@ -14,13 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import logging
 import json
+import logging
 import tempfile
 from io import StringIO
+
 from pyspark.errors import ArithmeticException
-from pyspark.logger.logger import PySparkLogger, SPARK_LOG_SCHEMA
-from pyspark.sql import Row, functions as sf
+from pyspark.logger.logger import SPARK_LOG_SCHEMA, PySparkLogger
+from pyspark.sql import Row
+from pyspark.sql import functions as sf
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 

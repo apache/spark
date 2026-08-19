@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-import numpy as np
-
 from typing import List
+
+import numpy as np
 
 
 def print_percentiles(values: List[float], percentiles: List[float]) -> None:

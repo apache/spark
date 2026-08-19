@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-from functools import total_ordering
 import itertools
 import os
 import re
+from functools import total_ordering
 from pathlib import Path
 
 all_modules = []

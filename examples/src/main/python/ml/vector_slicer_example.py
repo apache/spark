@@ -18,9 +18,10 @@
 # $example on$
 from pyspark.ml.feature import VectorSlicer
 from pyspark.ml.linalg import Vectors
-from pyspark.sql.types import Row
+
 # $example off$
 from pyspark.sql import SparkSession
+from pyspark.sql.types import Row
 
 if __name__ == "__main__":
     spark = SparkSession\

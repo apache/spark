@@ -19,7 +19,6 @@ import array as pyarray
 
 from numpy import arange, array, array_equal, inf, ones, tile, zeros
 
-from pyspark.serializers import CPickleSerializer
 from pyspark.ml.linalg import (
     DenseMatrix,
     DenseVector,
@@ -27,12 +26,13 @@ from pyspark.ml.linalg import (
     SparseMatrix,
     SparseVector,
     Vector,
-    VectorUDT,
     Vectors,
+    VectorUDT,
 )
-from pyspark.testing.mllibutils import MLlibTestCase
+from pyspark.serializers import CPickleSerializer
 from pyspark.sql import Row
 from pyspark.sql.functions import unwrap_udt
+from pyspark.testing.mllibutils import MLlibTestCase
 
 
 class VectorTests(MLlibTestCase):

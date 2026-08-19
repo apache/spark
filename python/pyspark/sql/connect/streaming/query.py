@@ -17,26 +17,28 @@
 import json
 import sys
 import warnings
-from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional, Union, Iterator
-from threading import Thread, Lock
+from threading import Lock, Thread
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Union, cast
 
-from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
+from pyspark.errors import PySparkValueError, StreamingQueryException
+from pyspark.errors.exceptions.connect import (
+    StreamingQueryException as CapturedStreamingQueryException,
+)
 from pyspark.sql.connect import proto
 from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.streaming.listener import (
-    QueryStartedEvent,
-    QueryProgressEvent,
     QueryIdleEvent,
+    QueryProgressEvent,
+    QueryStartedEvent,
     QueryTerminatedEvent,
     StreamingQueryProgress,
 )
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
-    StreamingQueryManager as PySparkStreamingQueryManager,
 )
-from pyspark.errors.exceptions.connect import (
-    StreamingQueryException as CapturedStreamingQueryException,
+from pyspark.sql.streaming.query import (
+    StreamingQueryManager as PySparkStreamingQueryManager,
 )
 
 if TYPE_CHECKING:
@@ -432,8 +434,9 @@ class StreamingQueryListenerBus:
 def _test() -> None:
     import doctest
     import os
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.streaming.query
+    from pyspark.sql import SparkSession as PySparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

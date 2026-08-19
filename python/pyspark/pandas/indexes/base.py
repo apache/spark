@@ -15,8 +15,10 @@
 # limitations under the License.
 #
 
+import warnings
 from functools import partial
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Iterator,
@@ -26,62 +28,61 @@ from typing import (
     Union,
     cast,
     no_type_check,
-    TYPE_CHECKING,
 )
-import warnings
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+from pandas._libs import lib
 from pandas.api.types import (
-    is_list_like,
+    CategoricalDtype,
     is_bool_dtype,
-    is_integer_dtype,
     is_float_dtype,
+    is_hashable,
+    is_integer_dtype,
+    is_list_like,
     is_numeric_dtype,
     is_object_dtype,
 )
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
 from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
-from pandas.api.types import CategoricalDtype, is_hashable
-from pandas._libs import lib
 
-from pyspark.loose_version import LooseVersion
-from pyspark.sql.column import Column
-from pyspark.sql import functions as F
-from pyspark.sql.types import (
-    DayTimeIntervalType,
-    IntegralType,
-    TimestampType,
-    TimestampNTZType,
-)
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import Dtype, Label, Name, Scalar
-from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.base import IndexOpsMixin
+from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.frame import DataFrame
+from pyspark.pandas.internal import (
+    DEFAULT_SERIES_NAME,
+    SPARK_DEFAULT_INDEX_NAME,
+    SPARK_INDEX_NAME_FORMAT,
+    InternalField,
+    InternalFrame,
+)
 from pyspark.pandas.missing.indexes import MissingPandasLikeIndex
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.spark.accessors import SparkIndexMethods
 from pyspark.pandas.utils import (
+    ERROR_MESSAGE_CANNOT_COMBINE,
     is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
+    log_advice,
     name_like_string,
     same_anchor,
     scol_for,
-    verify_temp_column_name,
     validate_bool_kwarg,
     validate_index_loc,
-    ERROR_MESSAGE_CANNOT_COMBINE,
-    log_advice,
+    verify_temp_column_name,
     xor,
 )
-from pyspark.pandas.internal import (
-    InternalField,
-    InternalFrame,
-    DEFAULT_SERIES_NAME,
-    SPARK_DEFAULT_INDEX_NAME,
-    SPARK_INDEX_NAME_FORMAT,
+from pyspark.sql import functions as F
+from pyspark.sql.column import Column
+from pyspark.sql.types import (
+    DayTimeIntervalType,
+    IntegralType,
+    TimestampNTZType,
+    TimestampType,
 )
 
 if TYPE_CHECKING:
@@ -1847,8 +1848,8 @@ class Index(IndexOpsMixin):
                     ('b', 'y')],
                    )
         """
-        from pyspark.pandas.indexes.multi import MultiIndex
         from pyspark.pandas.indexes.category import CategoricalIndex
+        from pyspark.pandas.indexes.multi import MultiIndex
 
         if isinstance(self, MultiIndex) != isinstance(other, MultiIndex):
             raise NotImplementedError(
@@ -2652,12 +2653,14 @@ class Index(IndexOpsMixin):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
-    import pyspark.pandas.indexes.base
+
     from pandas.util.version import Version
+
+    import pyspark.pandas.indexes.base
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 
