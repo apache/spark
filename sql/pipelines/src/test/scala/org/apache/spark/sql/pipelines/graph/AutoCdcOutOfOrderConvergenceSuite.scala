@@ -44,7 +44,7 @@ class AutoCdcOutOfOrderConvergenceSuite
   private def runConvergenceTest(scdType: ScdType): Unit = {
     val numDistinctKeys = resolveNumDistinctKeys()
     val maxUniqueEventsPerKey = resolveMaxUniqueEventsPerKey()
-    val numOutOfOrderBatches = resolveNumOutOfOrderBatches()
+    val numBatches = resolveNumBatches()
 
     forEachConvergenceSeed { (seed, seedIndex) =>
       val rand = new Random(seed)
@@ -58,7 +58,7 @@ class AutoCdcOutOfOrderConvergenceSuite
         s"(rerun with -D$baseSeedSystemProperty=$seed " +
         s"-D$numSeedsSystemProperty=1 to reproduce)\n" +
         s"keys=$numDistinctKeys maxEventsPerKey=$maxUniqueEventsPerKey " +
-        s"outOfOrderBatches=$numOutOfOrderBatches events=${sortedEventStream.size}\n"
+        s"numBatches=$numBatches events=${sortedEventStream.size}\n"
       ) {
         val inOrderTable = s"inorder_target_$seedIndex"
         val outOfOrderTable = s"outoforder_target_$seedIndex"
@@ -66,8 +66,7 @@ class AutoCdcOutOfOrderConvergenceSuite
         // In-order baseline: one microbatch with the sequence-sorted stream.
         runRandomCdcPipeline(inOrderTable, scdType, sortedEventStream, numBatches = 1)
         // Out-of-order: same events shuffled across the configured number of microbatches.
-        runRandomCdcPipeline(
-          outOfOrderTable, scdType, shuffledEventStream, numOutOfOrderBatches)
+        runRandomCdcPipeline(outOfOrderTable, scdType, shuffledEventStream, numBatches)
 
         // Only the user-visible target must converge. The auxiliary tables legitimately differ by
         // arrival order (e.g. deletedByBatchId stamps and cross-batch GC depend on how events are

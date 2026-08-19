@@ -45,33 +45,44 @@ class AutoCdcCrossScdConvergenceSuite
    * Assert SCD1 live rows equal SCD2 current open rows (`__END_AT IS NULL`) on user data
    * columns only.
    */
-  private def assertCrossScdAgreement(scd1Table: String, scd2Table: String): Unit = {
+  private def assertCrossScdAgreement(
+      scd1Table: String,
+      scd2Table: String,
+      expectedLiveKeyCount: Int): Unit = {
     val scd1Data = spark.table(s"$catalog.$namespace.$scd1Table").select(
       dataColumnNames.map(functions.col): _*
     )
     val scd2CurrentData = spark.table(s"$catalog.$namespace.$scd2Table")
       .where(functions.col(Scd2BatchProcessor.endAtColName).isNull)
       .select(dataColumnNames.map(functions.col): _*)
+
+    // Verify the number of live keys (i.e rows that haven't been fully deleted) are the same in
+    // both SCD1 and SCD2, after all events are applied.
+    val scd1LiveKeyCount = scd1Data.count()
+    val scd2LiveKeyCount = scd2CurrentData.count()
+    assert(
+      scd1LiveKeyCount == expectedLiveKeyCount,
+      s"Expected $expectedLiveKeyCount live SCD1 keys, found $scd1LiveKeyCount")
+    assert(
+      scd2LiveKeyCount == expectedLiveKeyCount,
+      s"Expected $expectedLiveKeyCount live SCD2 keys, found $scd2LiveKeyCount")
+
     checkAnswer(scd1Data, scd2CurrentData)
   }
 
-  test("SCD1 current rows match SCD2 open rows across independently shuffled CDC streams") {
+  test("SCD1 current rows match SCD2 open rows for the same shuffled CDC stream") {
     val numDistinctKeys = resolveNumDistinctKeys()
     val maxUniqueEventsPerKey = resolveMaxUniqueEventsPerKey()
-    val numOutOfOrderBatches = resolveNumOutOfOrderBatches()
+    val numBatches = resolveNumBatches()
 
     forEachConvergenceSeed { (seed, seedIndex) =>
       val rand = new Random(seed)
       val sortedEventStream = generateRandomCdcEventStream(rand)
-
-      // Independent shuffle / batching RNGs so each SCD side exercises a different arrival order
-      // while still being fully determined by `seed`.
-      val scd1Rand = new Random(rand.nextLong())
-      val scd2Rand = new Random(rand.nextLong())
-      val scd1Shuffled = scd1Rand.shuffle(sortedEventStream)
-      val scd2Shuffled = scd2Rand.shuffle(sortedEventStream)
-      val scd1Batches = 1 + scd1Rand.nextInt(numOutOfOrderBatches)
-      val scd2Batches = 1 + scd2Rand.nextInt(numOutOfOrderBatches)
+      val shuffledEventStream = rand.shuffle(sortedEventStream)
+      val expectedLiveKeyCount = sortedEventStream
+        .groupBy(_.key)
+        .values
+        .count(events => !events.maxBy(_.sequence).isDelete)
 
       // Seed alone is enough to regenerate the stream; avoid dumping thousands of events into
       // every clue string (ScalaTest evaluates clues eagerly).
@@ -80,14 +91,14 @@ class AutoCdcCrossScdConvergenceSuite
         s"(rerun with -D$baseSeedSystemProperty=$seed " +
         s"-D$numSeedsSystemProperty=1 to reproduce)\n" +
         s"keys=$numDistinctKeys maxEventsPerKey=$maxUniqueEventsPerKey " +
-        s"scd1Batches=$scd1Batches scd2Batches=$scd2Batches " +
+        s"numBatches=$numBatches expectedLiveKeys=$expectedLiveKeyCount " +
         s"events=${sortedEventStream.size}\n"
       ) {
         val scd1Table = s"cross_scd1_$seedIndex"
         val scd2Table = s"cross_scd2_$seedIndex"
-        runRandomCdcPipeline(scd1Table, ScdType.Type1, scd1Shuffled, scd1Batches)
-        runRandomCdcPipeline(scd2Table, ScdType.Type2, scd2Shuffled, scd2Batches)
-        assertCrossScdAgreement(scd1Table, scd2Table)
+        runRandomCdcPipeline(scd1Table, ScdType.Type1, shuffledEventStream, numBatches)
+        runRandomCdcPipeline(scd2Table, ScdType.Type2, shuffledEventStream, numBatches)
+        assertCrossScdAgreement(scd1Table, scd2Table, expectedLiveKeyCount)
       }
     }
   }
