@@ -103,6 +103,7 @@ case class DescribeRelationJsonCommand(
             sparkSession, sparkSession.sessionState.catalog, metadata, jsonMap)
         } else {
           describeFormattedTableInfoJson(metadata, jsonMap)
+          describeInvalidPartitionInfoJson(metadata, jsonMap)
         }
 
       case _ => throw QueryCompilationErrors.describeAsJsonNotSupportedForV2TablesError()
@@ -297,10 +298,30 @@ case class DescribeRelationJsonCommand(
       addKeyValueToMap(key, value, jsonMap)
     }
 
-    val filteredTableInfo = table.toJsonLinkedHashMap
+    val partitionMetadata = PartitionMetadata(table)
+    val filteredTableInfo = table.toJsonLinkedHashMap.filterNot { case (key, _) =>
+      key == "Partition Columns" && !partitionMetadata.isValid
+    }
 
     filteredTableInfo.map { case (key, value) =>
       addKeyValueToMap(key, value, jsonMap)
+    }
+  }
+
+  private def describeInvalidPartitionInfoJson(
+      table: CatalogTable,
+      jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
+    val partitionMetadata = PartitionMetadata(table)
+    if (partitionMetadata.declaredPartitionColumns.nonEmpty && !partitionMetadata.isValid) {
+      val invalidPartitionInfo = JObject(List(
+        "declared_partition_columns" ->
+          JArray(partitionMetadata.declaredPartitionColumns.map(JString).toList),
+        "last_columns_in_table_schema" ->
+          JArray(partitionMetadata.lastSchemaColumns.map(JString).toList),
+        "recommendation" -> JString(
+          "Repair the catalog metadata so the declared partition columns match the last " +
+            "columns in the table schema.")))
+      addKeyValueToMap("invalid_partition_information", invalidPartitionInfo, jsonMap)
     }
   }
 

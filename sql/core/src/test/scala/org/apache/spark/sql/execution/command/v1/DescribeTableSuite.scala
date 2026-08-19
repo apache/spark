@@ -28,7 +28,13 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.execution.command.{DescribeTableJson, Field, SqlPathEntry, TableColumn, Type}
+import org.apache.spark.sql.execution.command.{
+  DescribeTableJson,
+  Field,
+  InvalidPartitionInformation,
+  SqlPathEntry,
+  TableColumn,
+  Type}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -824,29 +830,6 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
 class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[DescribeTableSuiteBase].commandVersion
 
-  test("DESCRIBE TABLE EXTENDED is resilient to corrupt partition metadata") {
-    withNamespaceAndTable("ns", "table") { tbl =>
-      // Simulate corrupt metadata where the declared partition column does not match the
-      // trailing field in the table schema.
-      val table = CatalogTable(
-        identifier = TableIdentifier("table", Some("ns")),
-        tableType = CatalogTableType.MANAGED,
-        storage = CatalogStorageFormat.empty,
-        schema = new StructType()
-          .add("id", IntegerType)
-          .add("actual_part", StringType),
-        provider = Some(getProvider()),
-        partitionColumnNames = Seq("declared_part"))
-      spark.sessionState.catalog.createTable(table, ignoreIfExists = false)
-
-      val description = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl").collect().toSeq
-      assert(description.contains(Row("id", "int", null)))
-      assert(description.contains(Row("actual_part", "string", null)))
-      assert(!description.exists(_.getString(0) == "# Partition Information"))
-      assert(description.exists(_.getString(0) == "# Detailed Table Information"))
-    }
-  }
-
   test("DESCRIBE TABLE EXTENDED of a partitioned table") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
@@ -896,6 +879,52 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         .collect().head.getString(1).trim
 
       assert(timeRegex.matches(createdTimeValue))
+    }
+  }
+
+  test("DESCRIBE TABLE is resilient to corrupt partition metadata") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      // Simulate corrupt metadata where the declared partition column does not match the
+      // last field in the table schema.
+      val table = CatalogTable(
+        identifier = TableIdentifier("table", Some("ns")),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType()
+          .add("id", IntegerType)
+          .add("actual_part", StringType),
+        provider = Some(getProvider()),
+        partitionColumnNames = Seq("declared_part"))
+      spark.sessionState.catalog.createTable(table, ignoreIfExists = false)
+
+      val expectedInvalidInfo = Seq(
+        Row("# Invalid Partition Information", "", ""),
+        Row("Declared Partition Columns", "[declared_part]", ""),
+        Row("Last Columns in Table Schema", "[actual_part]", ""),
+        Row(
+          "Recommendation",
+          "Repair the catalog metadata so the declared partition columns match the last " +
+            "columns in the table schema.",
+          ""))
+
+      Seq("DESCRIBE TABLE", "DESCRIBE TABLE EXTENDED").foreach { command =>
+        val description = spark.sql(s"$command $tbl").collect().toSeq
+        assert(description.contains(Row("id", "int", null)))
+        assert(description.contains(Row("actual_part", "string", null)))
+        assert(description.containsSlice(expectedInvalidInfo))
+        assert(!description.exists(_.getString(0) == "# Partition Information"))
+      }
+
+      val jsonValue = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl AS JSON").head().getString(0)
+      val jsonOutput = parse(jsonValue)
+      assert((jsonOutput \ "partition_columns") === JNothing)
+      val parsedOutput = jsonOutput.extract[DescribeTableJson]
+      assert(parsedOutput.invalid_partition_information === Some(InvalidPartitionInformation(
+        declared_partition_columns = List("declared_part"),
+        last_columns_in_table_schema = List("actual_part"),
+        recommendation =
+          "Repair the catalog metadata so the declared partition columns match the last " +
+            "columns in the table schema.")))
     }
   }
 

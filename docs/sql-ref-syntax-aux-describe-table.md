@@ -98,6 +98,11 @@ to return the metadata pertaining to a partition or column respectively.
         "<col_name>": "<val>"
       },
       "partition_columns": ["col1", "col2"],
+      "invalid_partition_information": {
+        "declared_partition_columns": ["col1", "col2"],
+        "last_columns_in_table_schema": ["other_col1", "other_col2"],
+        "recommendation": "<repair_recommendation>"
+      },
       "clustering_columns": ["col1", "col2"],
       "location": "<path>",
       "view_text": "<view_text>",
@@ -136,7 +141,10 @@ to return the metadata pertaining to a partition or column respectively.
       "collation": "<default_collation>"
     }
   ```
-  
+
+  If the declared partition columns do not match the last columns in the table schema,
+  `invalid_partition_information` is returned instead of `partition_columns`.
+
   Below are the schema definitions for `<type_json>`:
 
 | Spark SQL Data Types  | JSON Representation                                                                                                                                              |

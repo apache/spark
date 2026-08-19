@@ -21,7 +21,6 @@ import java.net.{URI, URISyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
@@ -622,6 +621,22 @@ trait DescribeCommandBase {
     buffer += Row(column, dataType, comment)
   }
 }
+
+private[command] case class PartitionMetadata(table: CatalogTable) {
+  val declaredPartitionColumns: Seq[String] = table.partitionColumnNames
+  val lastSchemaFields: Seq[StructField] =
+    table.schema.takeRight(declaredPartitionColumns.size)
+  val lastSchemaColumns: Seq[String] = lastSchemaFields.map(_.name)
+
+  def isValid: Boolean = lastSchemaColumns == declaredPartitionColumns
+
+  def declaredPartitionColumnsDisplay: String = formatColumns(declaredPartitionColumns)
+
+  def lastSchemaColumnsDisplay: String = formatColumns(lastSchemaColumns)
+
+  private def formatColumns(columns: Seq[String]): String = columns.mkString("[", ", ", "]")
+}
+
 /**
  * Command that looks like
  * {{{
@@ -685,9 +700,19 @@ case class DescribeTableCommand(
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (table.partitionColumnNames.nonEmpty) {
-      Try(table.partitionSchema).foreach { partitionSchema =>
+      val partitionMetadata = PartitionMetadata(table)
+      if (partitionMetadata.isValid) {
         append(buffer, "# Partition Information", "", "")
-        describeSchema(partitionSchema, buffer, header = true)
+        describeSchema(StructType(partitionMetadata.lastSchemaFields), buffer, header = true)
+      } else {
+        append(buffer, "# Invalid Partition Information", "", "")
+        append(buffer, "Declared Partition Columns",
+          partitionMetadata.declaredPartitionColumnsDisplay, "")
+        append(buffer, "Last Columns in Table Schema",
+          partitionMetadata.lastSchemaColumnsDisplay, "")
+        append(buffer, "Recommendation",
+          "Repair the catalog metadata so the declared partition columns match the last " +
+            "columns in the table schema.", "")
       }
     }
   }
