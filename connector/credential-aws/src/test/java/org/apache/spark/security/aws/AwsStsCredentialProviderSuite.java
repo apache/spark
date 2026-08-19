@@ -1002,4 +1002,33 @@ public class AwsStsCredentialProviderSuite {
         .thenReturn(response);
     return mockSts;
   }
+
+  // ========== additionalSparkProperties() ==========
+
+  @Test
+  public void testAdditionalSparkPropertiesReturnsS3aProviderMapping() {
+    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    Map<String, String> props = provider.additionalSparkProperties();
+    assertEquals(1, props.size());
+    assertEquals(
+        "org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider",
+        props.get("spark.hadoop.fs.s3a.aws.credentials.provider"));
+  }
+
+  @Test
+  public void testAdditionalSparkPropertiesKeyIncludesSparkHadoopPrefix() {
+    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    Map<String, String> props = provider.additionalSparkProperties();
+    props.keySet().forEach(key ->
+        assertTrue(key.startsWith("spark.hadoop."),
+            "Key must include spark.hadoop. prefix: " + key));
+  }
+
+  @Test
+  public void testAdditionalSparkPropertiesIsUnmodifiable() {
+    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    Map<String, String> props = provider.additionalSparkProperties();
+    assertThrows(UnsupportedOperationException.class,
+        () -> props.put("foo", "bar"));
+  }
 }
