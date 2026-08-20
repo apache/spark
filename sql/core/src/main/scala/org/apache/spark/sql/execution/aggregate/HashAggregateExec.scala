@@ -171,9 +171,11 @@ case class HashAggregateExec(
    *     `PartialMerge` phase (the de-duplication on keys ++ distinct columns) must not bypass, or
    *     duplicate (key, distinct column) rows would over-count DISTINCT. The built-in planner
    *     never emits such a phase without a required distribution, so the
-   *     `requiredChildDistributionExpressions` check below already keeps it out; the
-   *     `exists(_.mode == Partial)` check is a defensive guard against third-party or future
-   *     planners that might.
+   *     `requiredChildDistributionExpressions` check below already keeps it out. The
+   *     `exists(_.mode == Partial)` check is a defensive guard on top of it, and only for a
+   *     de-duplication phase that carries non-distinct aggregates: one with none at all has an
+   *     empty `aggregateExpressions`, is admitted by the `isEmpty` disjunct, and still relies on
+   *     the distribution check alone.
    *   - grouping keys present: a global aggregation produces a single output row, so partial
    *     aggregation achieves the maximum reduction and must never be bypassed.
    *   - no required distribution: with no aggregate functions (a group-by-only aggregate) the

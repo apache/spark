@@ -222,8 +222,12 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
     }.groupBy(_._1).map { case (n, pairs) => n -> pairs.map(_._2).sum }
     // The pure `PartialMerge` de-duplication phase (grouping on key + distinct columns) is the one
-    // phase the `exists(_.mode == Partial)` guard exists to exclude. It shares the 2-key bucket
-    // above with the leading `Partial` phase, so pin its ineligibility directly.
+    // phase the `exists(_.mode == Partial)` guard exists to exclude, and only when it carries
+    // non-distinct aggregates: with none at all its `aggregateExpressions` is empty, so the guard's
+    // `isEmpty` disjunct admits it and only its required distribution keeps it out, and
+    // `dedupPhases` below (which requires a non-empty `aggregateExpressions`) does not collect it.
+    // It shares the 2-key bucket above with the leading `Partial` phase, so pin its ineligibility
+    // directly.
     val dedupPhases = collect(df.queryExecution.executedPlan) {
       case agg: HashAggregateExec if agg.aggregateExpressions.nonEmpty &&
         agg.aggregateExpressions.forall(_.mode == PartialMerge) => agg
