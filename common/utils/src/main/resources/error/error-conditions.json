@@ -8886,6 +8886,11 @@
           "Multiple bucket TRANSFORMs."
         ]
       },
+      "MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW" : {
+        "message" : [
+          "Cannot use Python user-defined functions of different types together over a single window: <functionList>. Use a separate window specification for each."
+        ]
+      },
       "MULTI_ACTION_ALTER" : {
         "message" : [
           "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."

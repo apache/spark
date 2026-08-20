@@ -147,7 +147,10 @@ object ArrowWindowPythonExec {
     // `WindowFunctionType.Python` type, so they pass the check in `PhysicalWindow`, but cannot run
     // in a single operator; surface a clear analysis error rather than an internal AssertionError.
     if (evalTypes.distinct.size != 1) {
-      throw QueryCompilationErrors.foundDifferentWindowFunctionTypeError(windowExpression)
+      val functionNames = windowExpression.flatMap(_.collect {
+        case e: PythonFuncExpression => e.name
+      }).distinct
+      throw QueryCompilationErrors.multiplePythonUDFTypesInWindowError(functionNames)
     }
     ArrowWindowPythonExec(windowExpression, partitionSpec, orderSpec, child, evalTypes.head)
   }

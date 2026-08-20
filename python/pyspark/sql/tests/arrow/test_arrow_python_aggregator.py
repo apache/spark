@@ -361,8 +361,12 @@ class ArrowPythonAggregatorTestsMixin:
 
         df = self._data()
         w = Window.partitionBy("k")
-        with self.assertRaises(AnalysisException):
+        with self.assertRaises(AnalysisException) as ctx:
             df.select(udaf(Mean())(sf.col("v")).over(w), pandas_mean(sf.col("v")).over(w)).collect()
+        self.assertEqual(
+            ctx.exception.getCondition(),
+            "UNSUPPORTED_FEATURE.MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW",
+        )
 
     def test_mixed_with_other_aggregate_rejected(self):
         # An incremental aggregator mixed with another aggregate in one Aggregate is unsupported;
