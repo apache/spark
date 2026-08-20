@@ -65,8 +65,11 @@ from pyspark.sql.types import (
     ArrayType,
     MapType,
     StringType,
-    UserDefinedType,
+    UserDefinedType as _UserDefinedType,
 )
+
+if TYPE_CHECKING:
+    from pyspark.sql.types import UserDefinedType
 from pyspark.sql.utils import enum_to_value as _enum_to_value
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
@@ -5724,8 +5727,8 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
 
 
-def wrap_udt(col: "ColumnOrName", udt: Union[UserDefinedType, Column]) -> Column:
-    if isinstance(udt, UserDefinedType):
+def wrap_udt(col: "ColumnOrName", udt: "Union[UserDefinedType, Column]") -> Column:
+    if isinstance(udt, _UserDefinedType):
         udt_col = lit(udt.json())
     elif isinstance(udt, Column):
         udt_col = udt

@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.types.{DataType, StringType, UserDefinedType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Wrap a column with a UDT whose underlying SQL type matches the column data type.

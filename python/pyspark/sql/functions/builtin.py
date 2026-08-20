@@ -52,8 +52,11 @@ from pyspark.sql.types import (
     MapType,
     NumericType,
     _from_numpy_type,
-    UserDefinedType,
+    UserDefinedType as _UserDefinedType,
 )
+
+if TYPE_CHECKING:
+    from pyspark.sql.types import UserDefinedType
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
@@ -29193,7 +29196,7 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def wrap_udt(col: "ColumnOrName", udt: Union[UserDefinedType, Column]) -> Column:
+def wrap_udt(col: "ColumnOrName", udt: "Union[UserDefinedType, Column]") -> Column:
     """
     Wrap a column as a user-defined type.
 
@@ -29228,11 +29231,11 @@ def wrap_udt(col: "ColumnOrName", udt: Union[UserDefinedType, Column]) -> Column
     ...     [(Row(type=1, size=None, indices=None, values=[1.0, 2.0, 3.0]),)],
     ...     vector_schema)
     >>> df.select("*", sf.wrap_udt("vec", VectorUDT())).show()
-    +--------------------+-------------+
-    |                 vec|wrap_udt(vec)|
-    +--------------------+-------------+
-    |{1, NULL, NULL, [...|[1.0,2.0,3.0]|
-    +--------------------+-------------+
+    +--------------------+...+
+    |                 vec|wrap_udt(vec...|
+    +--------------------+...+
+    |{1, NULL, NULL, [...|...[1.0,2.0,3.0]|
+    +--------------------+...+
     >>> row = df.select(sf.wrap_udt("vec", VectorUDT())).first()
     >>> type(row[0])
     <class 'pyspark.ml.linalg.DenseVector'>
@@ -29269,14 +29272,14 @@ def wrap_udt(col: "ColumnOrName", udt: Union[UserDefinedType, Column]) -> Column
      |    |-- values: array (nullable = true)
      |    |    |-- element: double (containsNull = false)
      |    |-- isTransposed: boolean (nullable = false)
-     |-- wrap_udt(mat): matrix (nullable = true)
+     |-- wrap_udt(mat...: matrix... (nullable = true)
     >>> row = df.select(sf.wrap_udt("mat", MatrixUDT())).first()
     >>> type(row[0])
     <class 'pyspark.mllib.linalg.DenseMatrix'>
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    if isinstance(udt, UserDefinedType):
+    if isinstance(udt, _UserDefinedType):
         udt_col = lit(udt.json())
     elif isinstance(udt, Column):
         udt_col = udt
