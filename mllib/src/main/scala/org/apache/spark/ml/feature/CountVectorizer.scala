@@ -214,25 +214,27 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     }
     require(maxDf >= minDf, "maxDF must be >= minDF.")
     val filteringRequired = isSet(minDF) || isSet(maxDF)
-    val termCounts = input
-      .select(explode(col($(inputCol))).as("word"))
-      .groupBy("word")
-      .count()
-
     val wordCounts = if (filteringRequired) {
-      val documentCounts = input
-        .select(explode(array_distinct(col($(inputCol)))).as("word"))
+      input
+        .select(
+          monotonically_increasing_id().as("docId"),
+          col($(inputCol)).as("tokens"))
+        .select(
+          col("docId"),
+          explode(col("tokens")).as("word"))
+        .groupBy("docId", "word")
+        .agg(count("*").as("termCountInDoc"))
         .groupBy("word")
-        .count()
-        .withColumnRenamed("count", "documentCount")
-      termCounts.as("termCounts")
-        .join(
-          documentCounts.as("documentCounts"),
-          col("termCounts.word") <=> col("documentCounts.word"))
+        .agg(
+          sum("termCountInDoc").as("count"),
+          count("*").as("documentCount"))
         .filter(col("documentCount") >= minDf && col("documentCount") <= maxDf)
-        .select(col("termCounts.word").as("word"), col("termCounts.count"))
+        .select("word", "count")
     } else {
-      termCounts
+      input
+        .select(explode(col($(inputCol))).as("word"))
+        .groupBy("word")
+        .agg(count("*").as("count"))
     }
 
     val vocab = wordCounts
