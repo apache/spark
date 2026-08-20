@@ -1408,15 +1408,21 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(
           sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_ctas"),
           Row("<ab   >", "<ab>"))
+        val cteDf = sql(
+          "WITH t AS (SELECT c, v FROM std_src) SELECT typeof(c), typeof(v) FROM t")
+        checkAnswer(cteDf, Row("char(5)", "varchar(5)"))
       }
       withTable("std_view_src") {
-        withView("std_cv_view") {
-          sql("CREATE TABLE std_view_src (c CHAR(4)) USING parquet")
-          sql("INSERT INTO std_view_src VALUES ('xy')")
+        withView("std_cv_view", "std_cv_view_v") {
+          sql("CREATE TABLE std_view_src (c CHAR(4), v VARCHAR(4)) USING parquet")
+          sql("INSERT INTO std_view_src VALUES ('xy', 'ab')")
           sql("CREATE VIEW std_cv_view AS SELECT c FROM std_view_src")
+          sql("CREATE VIEW std_cv_view_v AS SELECT v FROM std_view_src")
           assert(spark.table("std_cv_view").schema.head.dataType === CharType(4))
+          assert(spark.table("std_cv_view_v").schema.head.dataType === VarcharType(4))
           checkAnswer(
             sql("SELECT concat('<', c, '>') FROM std_cv_view"), Row("<xy  >"))
+          checkAnswer(sql("SELECT v FROM std_cv_view_v"), Row("ab"))
         }
       }
 
@@ -1656,14 +1662,98 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         val orcDf = spark.read.orc(path)
         assert(orcDf.schema.head.dataType === CharType(4))
         checkAnswer(orcDf.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+        // Reading with first-class types off replaces CHAR with STRING even if the
+        // file was stamped under standardSemantics.
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+          val readOff = spark.read.orc(path)
+          assert(readOff.schema.head.dataType === StringType)
+        }
+      }
+      // First-class types off: CAST CHAR is STRING before the writer, so ORC does not stamp CHAR.
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
+            .write.mode("overwrite").orc(path)
+          assert(spark.read.orc(path).schema.head.dataType === StringType)
+        }
+      }
+      // preserveCharVarcharTypeInfo also keeps first-class types, so write still stamps CHAR.
+      withSQLConf(
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
+            .write.mode("overwrite").orc(path)
+          assert(spark.read.orc(path).schema.head.dataType === CharType(4))
+        }
       }
 
-      // Avro schema conversion round-trips CHAR/VARCHAR via the catalyst type property.
-      // (Full Avro data-source E2E lives in the avro module.)
+      // Avro conversion stamps CHAR/VARCHAR (including nested fields and CHAR map keys).
+      // The avro data source lives in connector/avro; sql/core still owns toAvroType,
+      // serializer, and deserializer, so round-trip them here with a DataFileWriter.
+      val converters = org.apache.spark.sql.avro.SchemaConverters
       Seq(CharType(5), VarcharType(7)).foreach { dt =>
-        val avro = org.apache.spark.sql.avro.SchemaConverters.toAvroType(dt, nullable = false)
-        val back = org.apache.spark.sql.avro.SchemaConverters.toSqlType(avro).dataType
+        val avro = converters.toAvroType(dt, nullable = false)
+        val back = converters.toSqlType(avro).dataType
         assert(back === dt, s"Avro round-trip lost $dt, got $back")
+      }
+      val nestedSchema = new StructType()
+        .add("c", CharType(4))
+        .add("s", new StructType().add("f", VarcharType(3)))
+        .add("m", MapType(CharType(2), VarcharType(3)))
+      val nestedAvro = converters.toAvroType(nestedSchema, nullable = false)
+      assert(converters.toSqlType(nestedAvro).dataType === nestedSchema)
+      val badStamp = org.apache.avro.SchemaBuilder.builder().stringType()
+      badStamp.addProp("spark.sql.catalyst.type", "int")
+      val badStampErr = intercept[Exception] {
+        converters.toSqlType(badStamp)
+      }
+      assert(badStampErr.getMessage.contains("STRING subtype") ||
+        Option(badStampErr.getCause).exists(_.getMessage.contains("STRING subtype")))
+      // Flag-off replace happens before Avro sees the type, so CHAR is not stamped.
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val replaced = CharVarcharUtils.replaceCharVarcharWithString(CharType(4))
+        assert(replaced === StringType)
+        val replacedAvro = converters.toAvroType(replaced, nullable = false)
+        assert(replacedAvro.getProp("spark.sql.catalyst.type") === null)
+        assert(converters.toSqlType(replacedAvro).dataType === StringType)
+      }
+
+      withTempPath { file =>
+        val ser = new org.apache.spark.sql.avro.AvroSerializer(
+          nestedSchema, nestedAvro, nullable = false)
+        val row = org.apache.spark.sql.catalyst.InternalRow(
+          org.apache.spark.unsafe.types.UTF8String.fromString("ab  "),
+          org.apache.spark.sql.catalyst.InternalRow(
+            org.apache.spark.unsafe.types.UTF8String.fromString("xy")),
+          new org.apache.spark.sql.catalyst.util.ArrayBasedMapData(
+            new org.apache.spark.sql.catalyst.util.GenericArrayData(Array(
+              org.apache.spark.unsafe.types.UTF8String.fromString("k "))),
+            new org.apache.spark.sql.catalyst.util.GenericArrayData(Array(
+              org.apache.spark.unsafe.types.UTF8String.fromString("v")))))
+        val record = ser.serialize(row)
+          .asInstanceOf[org.apache.avro.generic.GenericRecord]
+        val writer = new org.apache.avro.file.DataFileWriter(
+          new org.apache.avro.generic.GenericDatumWriter[org.apache.avro.generic.GenericRecord](
+            nestedAvro))
+        writer.create(nestedAvro, file)
+        writer.append(record)
+        writer.close()
+        val reader = new org.apache.avro.file.DataFileReader(
+          file,
+          new org.apache.avro.generic.GenericDatumReader[org.apache.avro.generic.GenericRecord]())
+        try {
+          assert(converters.toSqlType(reader.getSchema).dataType === nestedSchema)
+          val deser = new org.apache.spark.sql.avro.AvroDeserializer(
+            nestedAvro, nestedSchema, "CORRECTED", false, "", -1)
+          val back = deser.deserialize(reader.next()).get
+            .asInstanceOf[org.apache.spark.sql.catalyst.InternalRow]
+          assert(back.getUTF8String(0).toString === "ab  ")
+        } finally {
+          reader.close()
+        }
       }
 
       // JSON / CSV keep a user-specified CHAR/VARCHAR schema under the flag.

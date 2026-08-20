@@ -223,11 +223,15 @@ CREATE TABLE char_varchar_std_ctas USING parquet AS SELECT c, v FROM char_varcha
 SELECT typeof(c), typeof(v) FROM char_varchar_std_ctas;
 CREATE VIEW char_varchar_std_view AS SELECT c FROM char_varchar_std;
 SELECT typeof(c) FROM char_varchar_std_view;
+CREATE VIEW char_varchar_std_view_v AS SELECT v FROM char_varchar_std;
+SELECT typeof(v) FROM char_varchar_std_view_v;
+WITH t AS (SELECT c, v FROM char_varchar_std) SELECT typeof(c), typeof(v) FROM t;
 CREATE TABLE char_varchar_std_orc (c CHAR(5), v VARCHAR(5)) USING orc;
 INSERT INTO char_varchar_std_orc VALUES ('ab', 'cd');
 SELECT typeof(c), typeof(v) FROM char_varchar_std_orc;
 SELECT concat('[', c, ']'), concat('[', v, ']') FROM char_varchar_std_orc;
 
+DROP VIEW char_varchar_std_view_v;
 DROP VIEW char_varchar_std_view;
 DROP TABLE char_varchar_std_ctas;
 DROP TABLE char_varchar_std_orc;

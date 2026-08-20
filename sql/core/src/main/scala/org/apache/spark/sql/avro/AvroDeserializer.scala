@@ -345,8 +345,8 @@ private[sql] class AvroDeserializer(
 
           updater.set(ordinal, result)
 
-      case (MAP, MapType(keyType, valueType, valueContainsNull)) if keyType == StringType =>
-        val keyWriter = newWriter(SchemaBuilder.builder().stringType(), StringType,
+      case (MAP, MapType(keyType: StringType, valueType, valueContainsNull)) =>
+        val keyWriter = newWriter(SchemaBuilder.builder().stringType(), keyType,
           avroPath :+ "key", catalystPath :+ "key")
         val valueWriter = newWriter(avroType.getValueType, valueType,
           avroPath :+ "value", catalystPath :+ "value")

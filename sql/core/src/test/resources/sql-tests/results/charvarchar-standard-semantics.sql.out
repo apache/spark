@@ -931,6 +931,30 @@ char(5)
 
 
 -- !query
+CREATE VIEW char_varchar_std_view_v AS SELECT v FROM char_varchar_std
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT typeof(v) FROM char_varchar_std_view_v
+-- !query schema
+struct<typeof(v):string>
+-- !query output
+varchar(5)
+
+
+-- !query
+WITH t AS (SELECT c, v FROM char_varchar_std) SELECT typeof(c), typeof(v) FROM t
+-- !query schema
+struct<typeof(c):string,typeof(v):string>
+-- !query output
+char(5)	varchar(5)
+
+
+-- !query
 CREATE TABLE char_varchar_std_orc (c CHAR(5), v VARCHAR(5)) USING orc
 -- !query schema
 struct<>
@@ -960,6 +984,14 @@ SELECT concat('[', c, ']'), concat('[', v, ']') FROM char_varchar_std_orc
 struct<concat([, c, ]):string,concat([, v, ]):string>
 -- !query output
 [ab   ]	[cd]
+
+
+-- !query
+DROP VIEW char_varchar_std_view_v
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

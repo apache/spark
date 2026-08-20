@@ -259,7 +259,7 @@ private[sql] class AvroSerializer(
       case (LongType, UNION) if nonNullUnionTypes(avroType) == Set(INT, LONG) =>
         (getter, ordinal) => getter.getLong(ordinal)
 
-      case (MapType(kt, vt, valueContainsNull), MAP) if kt == StringType =>
+      case (MapType(_: StringType, vt, valueContainsNull), MAP) =>
         val valueConverter = newConverter(
           vt, resolveNullableType(avroType.getValueType, valueContainsNull),
           catalystPath :+ "value", avroPath :+ "value")

@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FIELD_NAME, FIELD_TYPE, RECURSIVE_DEPTH}
 import org.apache.spark.sql.avro.AvroOptions.RECURSIVE_FIELD_MAX_DEPTH_LIMIT
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.minBytesForPrecision
 
@@ -95,6 +96,33 @@ object SchemaConverters extends Logging {
 
   // The property specifies Catalyst type of the given field
   private val CATALYST_TYPE_PROP_NAME = "spark.sql.catalyst.type"
+  // Avro map keys are always STRING; stamp CHAR/VARCHAR key types on the map schema.
+  private val CATALYST_MAP_KEY_TYPE_PROP_NAME = "spark.sql.catalyst.mapKey.type"
+
+  private def avroStringSchema(catalystType: StringType): Schema = {
+    val stringSchema = SchemaBuilder.builder().stringType()
+    CharVarcharUtils.charVarcharTypeName(catalystType).foreach { name =>
+      stringSchema.addProp(CATALYST_TYPE_PROP_NAME, name)
+    }
+    stringSchema
+  }
+
+  private def avroMapSchema(keyType: StringType, valueSchema: Schema): Schema = {
+    val mapSchema = SchemaBuilder.builder().map().values(valueSchema)
+    CharVarcharUtils.charVarcharTypeName(keyType).foreach { name =>
+      mapSchema.addProp(CATALYST_MAP_KEY_TYPE_PROP_NAME, name)
+    }
+    mapSchema
+  }
+
+  private def parseStampedStringType(catalystTypeAttrValue: String): StringType = {
+    CatalystSqlParser.parseDataType(catalystTypeAttrValue) match {
+      case s: StringType => s
+      case other =>
+        throw new IncompatibleSchemaException(
+          s"Avro $CATALYST_TYPE_PROP_NAME for STRING must be a STRING subtype, got $other")
+    }
+  }
 
   private def toSqlTypeHelper(
       avroSchema: Schema,
@@ -119,7 +147,7 @@ object SchemaConverters extends Logging {
         val catalystType = if (catalystTypeAttrValue == null) {
           StringType
         } else {
-          CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+          parseStampedStringType(catalystTypeAttrValue)
         }
         SchemaType(catalystType, nullable = false)
       case BOOLEAN => SchemaType(BooleanType, nullable = false)
@@ -251,8 +279,14 @@ object SchemaConverters extends Logging {
           )
           null
         } else {
+          val keyAttr = avroSchema.getProp(CATALYST_MAP_KEY_TYPE_PROP_NAME)
+          val keyType = if (keyAttr == null) {
+            StringType
+          } else {
+            parseStampedStringType(keyAttr)
+          }
           SchemaType(
-            MapType(StringType, schemaType.dataType, valueContainsNull = schemaType.nullable),
+            MapType(keyType, schemaType.dataType, valueContainsNull = schemaType.nullable),
             nullable = false)
         }
 
@@ -376,17 +410,9 @@ object SchemaConverters extends Logging {
 
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
-      // CharType/VarcharType are not equal to the StringType singleton; stamp the catalyst
-      // type so file-schema inference restores the length constraint.
-      case c: CharType =>
-        val stringSchema = builder.stringType()
-        stringSchema.addProp(CATALYST_TYPE_PROP_NAME, c.typeName)
-        stringSchema
-      case v: VarcharType =>
-        val stringSchema = builder.stringType()
-        stringSchema.addProp(CATALYST_TYPE_PROP_NAME, v.typeName)
-        stringSchema
-      case StringType => builder.stringType()
+      // CharType/VarcharType are StringType subclasses, not the StringType singleton.
+      // Stamp spark.sql.catalyst.type so inference restores the length constraint.
+      case s: StringType => avroStringSchema(s)
       case NullType => builder.nullType()
       case d: DecimalType =>
         val avroType = LogicalTypes.decimal(d.precision, d.scale)
@@ -402,9 +428,8 @@ object SchemaConverters extends Logging {
       case ArrayType(et, containsNull) =>
         builder.array()
           .items(toAvroType(et, containsNull, recordName, nameSpace))
-      case MapType(StringType, vt, valueContainsNull) =>
-        builder.map()
-          .values(toAvroType(vt, valueContainsNull, recordName, nameSpace))
+      case MapType(kt: StringType, vt, valueContainsNull) =>
+        avroMapSchema(kt, toAvroType(vt, valueContainsNull, recordName, nameSpace))
       case st: StructType =>
         val childNameSpace = if (nameSpace != "") s"$nameSpace.$recordName" else recordName
         val fieldsAssembler = builder.record(recordName).namespace(nameSpace).fields()
@@ -506,15 +531,7 @@ object SchemaConverters extends Logging {
       case LongType => builder.longType()
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
-      case c: CharType =>
-        val stringSchema = builder.stringType()
-        stringSchema.addProp(CATALYST_TYPE_PROP_NAME, c.typeName)
-        stringSchema
-      case v: VarcharType =>
-        val stringSchema = builder.stringType()
-        stringSchema.addProp(CATALYST_TYPE_PROP_NAME, v.typeName)
-        stringSchema
-      case StringType => builder.stringType()
+      case s: StringType => avroStringSchema(s)
       case NullType => builder.nullType()
       case DateType => LogicalTypes.date().addToSchema(builder.intType())
       case TimestampType => LogicalTypes.timestampMicros().addToSchema(builder.longType())
@@ -547,9 +564,10 @@ object SchemaConverters extends Logging {
         // Make array types nullable
         Schema.createUnion(nullSchema, arraySchema)
 
-      case MapType(StringType, valueType, _) =>
-        val mapSchema = builder.map()
-          .values(toAvroTypeWithDefaults(valueType, recordName = recordName,
+      case MapType(kt: StringType, valueType, _) =>
+        val mapSchema = avroMapSchema(
+          kt,
+          toAvroTypeWithDefaults(valueType, recordName = recordName,
             namespace = namespace, nestingLevel = nestingLevel + 1))
         // Make map types nullable
         Schema.createUnion(nullSchema, mapSchema)
