@@ -178,6 +178,16 @@ SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' - TIMESTAMP_NTZ '1960-01-01
 -- NULL operand propagates.
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS timestamp_ntz(9));
 
+-- SPARK-57818: convert_timezone over nanosecond-precision TIMESTAMP_NTZ. The sub-microsecond
+-- remainder is carried through unchanged; only the whole-microsecond part shifts with the zone
+-- offset, and the result keeps the source's exact precision.
+SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    TIMESTAMP_NTZ '2022-03-27 03:00:00.123456789');
+SELECT typeof(convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    '2022-03-27 03:00:00.1234567' :: timestamp_ntz(7)));
+-- NULL nanosecond timestamp.
+SELECT convert_timezone('America/Los_Angeles', 'UTC', CAST(NULL AS timestamp_ntz(9)));
+
 -- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_NTZ. The aggregate preserves the
 -- nanosecond type and orders by the sub-microsecond remainder (two values share the same
 -- microsecond and differ only within it); NULLs are ignored.

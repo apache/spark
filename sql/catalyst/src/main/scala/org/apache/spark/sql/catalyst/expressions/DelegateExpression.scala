@@ -118,6 +118,7 @@ case class DelegateExpression(
 // needed to win the override would violate the superclass constraint.
 trait InputTypeMarker extends Unevaluable {
   self: UnaryExpression with ExpectsInputTypes =>
+  def child: Expression
   def expectedType: AbstractDataType
   def funcName: String
   def argIndex: Int

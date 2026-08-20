@@ -23,8 +23,13 @@ import org.apache.spark.sql.connect.{SparkConnectServerTest, SparkSession}
 import org.apache.spark.sql.connect.service.SparkConnectService
 
 class SparkConnectAuthSuite extends SparkConnectServerTest {
+  private val tokenKey = "spark.connect.authenticate.token"
+  private val markerKey = "spark.connect.test.marker"
+
   override protected def sparkConf = {
-    super.sparkConf.set("spark.connect.authenticate.token", "deadbeef")
+    super.sparkConf
+      .set(tokenKey, "deadbeef")
+      .set(markerKey, "visible")
   }
 
   test("Test local authentication") {
@@ -42,5 +47,20 @@ class SparkConnectAuthSuite extends SparkConnectServerTest {
       invalidSession.range(5).collect()
     }
     assert(exception.getMessage.contains("Invalid authentication token"))
+  }
+
+  test("Test the authentication token is not readable through the Config RPC") {
+    val session = SparkSession
+      .builder()
+      .remote(s"sc://localhost:${SparkConnectService.localPort}/;token=deadbeef")
+      .create()
+
+    assert(session.conf.getOption(tokenKey).isEmpty)
+    assert(session.conf.get(tokenKey, "absent") === "absent")
+    intercept[NoSuchElementException](session.conf.get(tokenKey))
+    assert(!session.conf.getAll.contains(tokenKey))
+
+    // Server-side configurations that are not sensitive stay readable.
+    assert(session.conf.get(markerKey) === "visible")
   }
 }

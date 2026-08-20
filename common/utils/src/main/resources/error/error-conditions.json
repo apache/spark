@@ -4892,6 +4892,18 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_PYTHON_AGGREGATOR_BUFFER_SCHEMA" : {
+    "message" : [
+      "The incremental Python aggregate function <functionName> requires a struct (StructType) intermediate buffer schema, but got <bufferType>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_PYTHON_UDF_PLACEMENT" : {
+    "message" : [
+      "The Python user-defined aggregate function(s) <functionList> cannot be invoked together with other kinds of aggregate function in the same aggregation. Multiple such functions may be used together, but not mixed with SQL or differently-typed aggregate functions."
+    ],
+    "sqlState" : "0A000"
+  },
   "INVALID_QUERY_MIXED_QUERY_PARAMETERS" : {
     "message" : [
       "Parameterized query must either use positional, or named parameters, but not both."
@@ -8872,6 +8884,11 @@
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
           "Multiple bucket TRANSFORMs."
+        ]
+      },
+      "MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW" : {
+        "message" : [
+          "Cannot use Python user-defined functions of different types together over a single window: <functionList>. Use a separate window specification for each."
         ]
       },
       "MULTI_ACTION_ALTER" : {

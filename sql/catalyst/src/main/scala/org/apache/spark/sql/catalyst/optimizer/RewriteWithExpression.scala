@@ -39,6 +39,19 @@ import org.apache.spark.util.Utils
  *       usage, we should support aggregate/window functions as well.
  */
 object RewriteWithExpression extends Rule[LogicalPlan] {
+  private def inlineWithExpressions(e: Expression): Expression = {
+    def inline(
+        expr: Expression,
+        outerDefs: Map[CommonExpressionId, Expression]): Expression = expr match {
+      case With(child, defs) =>
+        val currentDefs = defs.map(d => d.id -> inline(d.child, outerDefs)).toMap
+        inline(child, outerDefs ++ currentDefs)
+      case ref: CommonExpressionRef if outerDefs.contains(ref.id) => outerDefs(ref.id)
+      case other => other.mapChildren(inline(_, outerDefs))
+    }
+    inline(e, Map.empty)
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformUpWithSubqueriesAndPruning(_.containsPattern(WITH_EXPRESSION)) {
       // For aggregates, separate the computation of the aggregations themselves from the final
@@ -193,6 +206,14 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)
             }
         }
+
+      // A delegate can be nested under an expression that conditionally evaluates its children,
+      // even when that parent is not a ConditionalExpression (for example, a higher-order
+      // function or a null-intolerant binary expression). Pulling the delegate's common
+      // expressions into a child Project would cross that evaluation boundary. The With nodes
+      // have already served their analysis-time purpose, such as deduplicating extracted window
+      // expressions, so inline them within the delegate definition instead.
+      case d: DelegateExpression => d.mapChildren(inlineWithExpressions)
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(

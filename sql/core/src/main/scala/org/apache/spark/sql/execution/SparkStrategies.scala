@@ -579,7 +579,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        if (aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF])) {
+        if (aggregateExpressions.exists(ae =>
+            ae.aggregateFunction.isInstanceOf[PythonUDAF] ||
+            ae.aggregateFunction.isInstanceOf[PythonAggregate])) {
           throw new AnalysisException(
             errorClass = "_LEGACY_ERROR_TEMP_3067",
             messageParameters = Map.empty)
@@ -719,7 +721,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
-        if !aggExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF]) =>
+        if !aggExpressions.exists(ae => ae.aggregateFunction.isInstanceOf[PythonUDAF] ||
+          ae.aggregateFunction.isInstanceOf[PythonAggregate]) =>
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggExpressions.partition(_.isDistinct)
         val distinctAggChildSets = functionsWithDistinct.map { ae =>
@@ -798,13 +801,40 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           resultExpressions,
           planLater(child)))
 
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+          if aggExpressions.forall(_.aggregateFunction.isInstanceOf[PythonAggregate]) =>
+        // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
+        // `groupingExpressions` is not extracted during logical phase. Without this, 0.0/-0.0 (and
+        // distinct NaN bit patterns) would split one logical group across output rows.
+        val normalizedGroupingExpressions = groupingExpressions.map { e =>
+          NormalizeFloatingNumbers.normalize(e) match {
+            case n: NamedExpression => n
+            // Keep the name of the original expression.
+            case other => Alias(other, e.name)(exprId = e.exprId)
+          }
+        }
+        Seq(execution.python.PythonIncrementalAggregateExec.plan(
+          normalizedGroupingExpressions,
+          aggExpressions,
+          resultExpressions,
+          planLater(child)))
+
       case PhysicalAggregation(_, aggExpressions, _, _) =>
-        val groupAggPandasUDFNames = aggExpressions
-          .map(_.aggregateFunction)
-          .filter(_.isInstanceOf[PythonUDAF])
-          .map(_.asInstanceOf[PythonUDAF].name)
-        // If cannot match the two cases above, then it's an error
-        throw QueryCompilationErrors.invalidPandasUDFPlacementError(groupAggPandasUDFNames.distinct)
+        // Reached when Python aggregate UDFs cannot be planned by the two cases above -- e.g. a
+        // grouped-agg pandas/arrow UDF or an incremental Python aggregator is mixed with other
+        // (SQL or differently-typed Python) aggregate functions in the same Aggregate.
+        val aggFunctions = aggExpressions.map(_.aggregateFunction)
+        val incrementalNames = aggFunctions.collect { case p: PythonAggregate => p.name }
+        val pandasUDFNames = aggFunctions.collect { case p: PythonUDAF => p.name }
+        if (incrementalNames.nonEmpty) {
+          // The message for pandas UDFs is misleading for an Arrow-based incremental aggregator, so
+          // report the dedicated, aggregator-neutral error. Name every offending Python aggregate
+          // function -- both the incremental aggregators and any grouped-agg pandas/arrow UDAFs
+          // mixed in -- so the diagnostic is complete rather than dropping the co-offenders.
+          throw QueryCompilationErrors.invalidPythonAggregatePlacementError(
+            (incrementalNames ++ pandasUDFNames).distinct)
+        }
+        throw QueryCompilationErrors.invalidPandasUDFPlacementError(pandasUDFNames.distinct)
 
       case _ => Nil
     }

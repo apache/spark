@@ -99,7 +99,8 @@ case class ConcatWs(children: Seq[Expression])
       Seq.fill(children.size - 1)(arrayOrStr)
   }
 
-  override def dataType: DataType = children.head.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(children.head.dataType)
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
@@ -453,7 +454,8 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 
   def convert(v: UTF8String): UTF8String
 
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(child.dataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
@@ -1073,7 +1075,8 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
       CollationSupport.StringReplace.genCode(src, search, replace, collationId))
   }
 
-  override def dataType: DataType = srcExpr.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(srcExpr.dataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
@@ -1167,7 +1170,8 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     this(str, replace, pos, Literal.create(-1, IntegerType))
   }
 
-  override def dataType: DataType = input.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(input.dataType)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     TypeCollection(
@@ -1356,7 +1360,8 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     })
   }
 
-  override def dataType: DataType = srcExpr.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(srcExpr.dataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
@@ -1436,7 +1441,8 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   protected def direction: String
 
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
-  override def dataType: DataType = srcStr.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(srcStr.dataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq.fill(children.size)(StringTypeWithCollation(supportsTrimCollation = true))
 
@@ -1993,7 +1999,8 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
-  override def dataType: DataType = strExpr.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(strExpr.dataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
@@ -2206,7 +2213,8 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
   override def second: Expression = len
   override def third: Expression = pad
 
-  override def dataType: DataType = str.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(str.dataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -2302,7 +2310,8 @@ case class StringRPad(
   override def second: Expression = len
   override def third: Expression = pad
 
-  override def dataType: DataType = str.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(str.dataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -2358,7 +2367,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   override def foldable: Boolean = children.forall(_.foldable)
   override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def nullable: Boolean = children(0).nullable
-  override def dataType: DataType = children(0).dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(children(0).dataType)
 
   override def inputTypes: Seq[AbstractDataType] =
     StringTypeWithCollation(supportsTrimCollation = true) ::
@@ -2480,7 +2490,8 @@ case class InitCap(child: Expression)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(child.dataType)
 
   override def nullSafeEval(string: Any): Any = {
     CollationSupport.InitCap.exec(string.asInstanceOf[UTF8String], collationId, useICU)
@@ -2517,7 +2528,8 @@ case class StringRepeat(str: Expression, times: Expression)
   override def nullIntolerant: Boolean = true
   override def left: Expression = str
   override def right: Expression = times
-  override def dataType: DataType = str.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(str.dataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -2629,7 +2641,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     this(str, pos, Literal(Integer.MAX_VALUE))
   }
 
-  override def dataType: DataType = str.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(str.dataType)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
@@ -2707,20 +2720,17 @@ object Right extends DelegateFunction {
   override def lower(args: Seq[Expression]): Expression = {
     val str = args(0)
     val len = args(1)
-    val litType = str.dataType match {
-      case _: StringType | _: CharType | _: VarcharType => str.dataType
-      case _ => StringType
-    }
+    val resultType = StringHelper.transformingStringResultType(str.dataType)
     // Keep both arguments single-use while the analyzer extracts window expressions. The length
     // is bound inside the non-null branch so right's null short-circuit is preserved.
     With(str) { case Seq(strRef) =>
       If(
         IsNull(strRef),
-        Literal(null, litType),
+        Literal(null, resultType),
         With(len) { case Seq(lenRef) =>
           If(
             LessThanOrEqual(lenRef, Literal(0)),
-            Literal(UTF8String.EMPTY_UTF8, litType),
+            Literal(UTF8String.EMPTY_UTF8, resultType),
             new Substring(strRef, UnaryMinus(lenRef, failOnError = false)))
         })
     }
@@ -4077,8 +4087,10 @@ case class Sentences(
   def this(str: Expression, language: Expression) = this(str, language, Literal(""))
 
   override def nullable: Boolean = true
-  override def dataType: DataType =
-    ArrayType(ArrayType(str.dataType, containsNull = false), containsNull = false)
+  override def dataType: DataType = {
+    val elementType = StringHelper.transformingStringResultType(str.dataType)
+    ArrayType(ArrayType(elementType, containsNull = false), containsNull = false)
+  }
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -4113,7 +4125,8 @@ case class Sentences(
 case class StringSplitSQL(
     str: Expression,
     delimiter: Expression) extends BinaryExpression {
-  override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
+  override def dataType: DataType =
+    ArrayType(StringHelper.transformingStringResultType(str.dataType), containsNull = false)
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
   override def left: Expression = str
   override def right: Expression = delimiter
@@ -4200,6 +4213,11 @@ case class SplitPart (
  */
 case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
   override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
+
+  // Not a transforming function: every non-empty value is returned unchanged, so this keeps the
+  // child's type rather than taking the plain-STRING result that String2StringExpression gives
+  // its transforming implementations (R1).
+  override def dataType: DataType = child.dataType
 
   override def nullable: Boolean = true
 

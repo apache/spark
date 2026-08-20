@@ -28,6 +28,10 @@ trait EvalHelper {
     def prepare(expr: Expression): Expression = expr match {
       case r: RuntimeReplaceable => prepare(r.replacement)
       case d: DelegateExpression => prepare(d.definition)
+      // Successful markers are removed in a later analysis batch. Constant-expression consumers
+      // run before that batch, so unwrap resolved markers here while retaining failed markers for
+      // CheckAnalysis to report against the high-level delegate call.
+      case m: InputTypeMarker if m.resolved => prepare(m.child)
       case With(child, defs) =>
         val refToExpr = defs.map(d => d.id -> prepare(d.child)).toMap
         prepare(child).transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {

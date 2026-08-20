@@ -91,6 +91,33 @@ class DelegateExpressionQuerySuite
 
   test("right() supports constant inline-table values") {
     checkAnswer(spark.sql("VALUES (right('abc', 1))"), Row("c"))
+    checkAnswer(
+      spark.sql("SELECT IDENTIFIER(right('xxa', 1)) FROM VALUES (1) AS t(a)"),
+      Row(1))
+  }
+
+  test("right() stays within enclosing evaluation boundaries") {
+    Seq("true", "false").foreach { codegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+        checkAnswer(
+          spark.sql(
+            """SELECT transform(
+              |  IF(id = 0, array(), array('x')),
+              |  x -> right(
+              |    IF(id = 0, CAST(raise_error('boom') AS STRING), 'b'),
+              |    1))
+              |FROM range(2)""".stripMargin),
+          Seq(Row(Seq.empty[String]), Row(Seq("b"))))
+
+        checkAnswer(
+          spark.sql(
+            """SELECT instr(
+              |  IF(id = 0, CAST(NULL AS STRING), 'b'),
+              |  right(IF(id = 0, CAST(raise_error('boom') AS STRING), 'b'), 1))
+              |FROM range(2)""".stripMargin),
+          Seq(Row(null), Row(1)))
+      }
+    }
   }
 
   test("right() extracts a window input only once") {
@@ -280,6 +307,6 @@ class DelegateExpressionQuerySuite
         "inputSql" -> "\"array(1)\"",
         "inputType" -> "\"ARRAY<INT>\""),
       queryContext = Array(ExpectedContext(
-        fragment = "right(array(1), 1)", start = 7, stop = 23)))
+        fragment = "right(array(1), 1)", start = 7, stop = 24)))
   }
 }
