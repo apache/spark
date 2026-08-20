@@ -1754,6 +1754,10 @@ object OptimizeWindowFunctions extends Rule[LogicalPlan] {
  * Collapse Adjacent Window Expression.
  * - If the partition specs and order specs are the same and the window expression are
  *   independent and are of the same window function type, collapse into the parent.
+ * - If the partition specs are the same and one of the order specs is empty, collapse into the
+ *   parent when the window expressions of the empty-order window can be evaluated under any row
+ *   order. The merged window keeps the non-empty order spec. Merging an empty-order child is
+ *   gated by `spark.sql.optimizer.collapseWindowWithEmptyOrderSpecInChild`.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
   private def specCompatible(s1: Seq[Expression], s2: Seq[Expression]): Boolean = {
@@ -1761,9 +1765,46 @@ object CollapseWindow extends Rule[LogicalPlan] {
       s1.zip(s2).forall(e => e._1.semanticEquals(e._2))
   }
 
+  /**
+   * Returns true if the given window expression can still be evaluated correctly when the rows
+   * of the partition are reordered, so that it can be merged into another window with a different
+   * (non-empty) order spec.
+   *
+   * The frame determines whether reordering is safe. When the frame is the whole partition
+   * (`UNBOUNDED PRECEDING` to `UNBOUNDED FOLLOWING`), it always covers all the rows of the
+   * partition regardless of the ordering, so reordering changes only the order in which the rows
+   * are seen, never which rows are in the frame. Since the order spec of the window is empty,
+   * the query does not fix the row order, so evaluating its expressions under any ordering
+   * yields a valid result, even though the value may differ for order-dependent expressions
+   * such as `first`, `collect_list`, or floating-point `sum`/`avg`. On the other hand, a bounded
+   * frame (e.g. `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`) is order-sensitive: which
+   * rows are in the frame depends on the ordering, so even `count` or `sum` would change value,
+   * and such a window must not be merged.
+   */
+  private def canEvaluateUnderAnyOrder(windowExpression: NamedExpression): Boolean =
+    windowExpression match {
+      case Alias(WindowExpression(_, WindowSpecDefinition(_, _,
+          SpecifiedWindowFrame(_, UnboundedPreceding, UnboundedFollowing))), _) => true
+      case _ => false
+    }
+
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
     specCompatible(w1.partitionSpec, w2.partitionSpec) &&
-      specCompatible(w1.orderSpec, w2.orderSpec) &&
+      // The order specs can differ when one of them is empty, as long as the window expressions
+      // of the window with the empty order spec are safe to evaluate under any row order. In that
+      // case, they can be evaluated under the non-empty order spec of the other window. The
+      // operator then keeps the non-empty order spec while the merged-in expressions keep their
+      // own empty order spec; this divergence is safe because after analysis only
+      // OptimizeWindowFunctions reads an expression's own order spec, and it is a no-op without
+      // one. Merging an empty-order child into an ordered parent can disable
+      // InferWindowGroupLimit and LimitPushDownThroughWindow, so that direction is gated by
+      // conf.collapseWindowWithEmptyOrderSpecInChild.
+      (specCompatible(w1.orderSpec, w2.orderSpec) ||
+        (w1.orderSpec.isEmpty && w2.orderSpec.nonEmpty &&
+          w1.windowExpressions.forall(canEvaluateUnderAnyOrder)) ||
+        (conf.collapseWindowWithEmptyOrderSpecInChild && w2.orderSpec.isEmpty &&
+          w1.orderSpec.nonEmpty &&
+          w2.windowExpressions.forall(canEvaluateUnderAnyOrder))) &&
       w1.references.intersect(w2.windowOutputSet).isEmpty &&
       w1.windowExpressions.nonEmpty && w2.windowExpressions.nonEmpty &&
       // This assumes Window contains the same type of window expressions. This is ensured
@@ -1776,13 +1817,19 @@ object CollapseWindow extends Rule[LogicalPlan] {
     _.containsPattern(WINDOW), ruleId) {
     case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild, _), _)
         if windowsCompatible(w1, w2) =>
-      w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+      w1.copy(
+        orderSpec = if (w1.orderSpec.nonEmpty) w1.orderSpec else w2.orderSpec,
+        windowExpressions = we2 ++ we1,
+        child = grandChild)
 
     case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild, _)), _)
         if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
-        w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
+        w1.copy(
+          orderSpec = if (w1.orderSpec.nonEmpty) w1.orderSpec else w2.orderSpec,
+          windowExpressions = we2 ++ we1,
+          child = grandChild))
   }
 }
 
