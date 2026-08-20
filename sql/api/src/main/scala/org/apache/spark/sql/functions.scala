@@ -7371,8 +7371,7 @@ object functions {
    * input column should be bitmaps created from bitmap_construct_agg().
    *
    * @param col
-   *   The input column should be bitmaps created from bitmap_construct_agg(). A column that
-   *   evaluates to a binary.
+   *   A column containing bitmaps created by bitmap_construct_agg() and evaluating to binary data.
    * @group agg_funcs
    * @since 4.4.0
    * @return
