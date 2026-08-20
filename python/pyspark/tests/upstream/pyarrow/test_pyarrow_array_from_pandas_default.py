@@ -187,6 +187,14 @@ class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         sources["struct<struct>:standard"] = pd.Series([{"a": {"b": 1}}])
         sources["struct<list<int64>>:standard"] = pd.Series([{"a": [1, 2]}])
 
+        # These feed the nested type tests (non_default): a child value that overflows a
+        # narrower element type, and homogeneous-value dicts, which infer as ``struct`` but
+        # convert to ``map`` when the requested type asks for one.
+        sources["list<int64>:overflow"] = pd.Series([[300, 2], [3]])
+        sources["struct:overflow"] = pd.Series([{"a": 300, "b": "x"}])
+        sources["struct<int64>:standard"] = pd.Series([{"a": 1, "b": 2}])
+        sources["struct<int64>:overflow"] = pd.Series([{"a": 300, "b": 2}])
+
         # =====================================================================
         # Temporal types
         # =====================================================================

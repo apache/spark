@@ -279,6 +279,103 @@ class PyArrowArrayFromPandasTypeScalarTests(
         )
 
 
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas or not have_numpy,
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
+)
+class PyArrowArrayFromPandasTypeNestedTests(
+    test_pyarrow_array_from_pandas_default._PyArrowFromPandasTestBase
+):
+    """
+    Tests pa.Array.from_pandas(series, type=..., safe=...) for NESTED target types
+    (list / map / struct) via golden file comparison; scalar targets are covered by
+    PyArrowArrayFromPandasTypeScalarTests.
+
+    Targets are the container types ``to_arrow_type`` builds, spelled to match it
+    (``list<element: ...>``).  The behavior recorded is that from_pandas does NOT propagate
+    safe= into a nested child: an overflowing child value raises for both safe settings,
+    whereas the same overflow at the top level (the scalar tests) raises only under
+    safe=True.  The safe and unsafe goldens therefore match; both are kept so a future
+    pyarrow that honors safe= in children fails loudly.  safe=True/False are two methods and
+    two goldens; ``mask`` stays None.
+    """
+
+    @staticmethod
+    def _get_target_types():
+        """Nested to_arrow_type targets, each at a clean child type and a narrower one it can
+        overflow, so the safe= non-propagation is observable against the scalar goldens."""
+        return [
+            pa.list_(pa.field("element", pa.int64())),
+            pa.list_(pa.field("element", pa.int8())),
+            pa.list_(pa.field("element", pa.string())),
+            pa.map_(pa.string(), pa.int64()),
+            pa.map_(pa.string(), pa.int8()),
+            pa.struct([("a", pa.int64()), ("b", pa.string())]),
+            pa.struct([("a", pa.int8()), ("b", pa.string())]),
+        ]
+
+    def _type_source_arrays(self):
+        """
+        Nested source Series cherry-picked from the shared inventory: clean list/struct rows,
+        a child-overflow row per container, and homogeneous dicts for the map targets (a dict
+        Series infers as struct but converts to map when the type asks for one).
+        """
+        pool = self._numpy_backed_sources()
+        selected = [
+            "list<int64>:standard",
+            "list<int64>:overflow",
+            "list<int64>:nullable",
+            "list<int64>:null-element",
+            "list<string>:standard",
+            "struct:standard",
+            "struct:overflow",
+            "struct:nullable",
+            "struct<int64>:standard",
+            "struct<int64>:overflow",
+        ]
+        return {name: pool[name] for name in selected}
+
+    def _compare_type_matrix(self, safe, golden_file_prefix, overrides):
+        sources = self._type_source_arrays()
+        target_types = self._get_target_types()
+        target_names = [self.repr_type(t) for t in target_types]
+        target_lookup = dict(zip(target_names, target_types))
+
+        self.compare_or_generate_golden_matrix(
+            row_names=list(sources.keys()),
+            col_names=target_names,
+            compute_cell=lambda src, tgt: self._from_pandas_cell(
+                sources[src], type=target_lookup[tgt], safe=safe
+            ),
+            golden_file_prefix=golden_file_prefix,
+            overrides=overrides,
+        )
+
+    def test_from_pandas_type_nested_safe(self):
+        """Test pa.Array.from_pandas(type=<nested>, safe=True) against golden file."""
+        # No version-conditional cells: the nested sources are explicit list/dict object
+        # Series (not inference-sensitive), so the matrix holds across the pyarrow/pandas
+        # sweep. Entries would land here only if a future version changed a cell.
+        overrides: dict[tuple[str, str], str] = {}
+        self._compare_type_matrix(
+            safe=True,
+            golden_file_prefix="golden_pyarrow_array_from_pandas_type_nested_safe",
+            overrides=overrides,
+        )
+
+    def test_from_pandas_type_nested_unsafe(self):
+        """Test pa.Array.from_pandas(type=<nested>, safe=False) against golden file."""
+        # Same empty overrides as the safe method, and version-stable for the same reason;
+        # since from_pandas does not propagate safe= into children, this golden also matches
+        # the safe one.
+        overrides: dict[tuple[str, str], str] = {}
+        self._compare_type_matrix(
+            safe=False,
+            golden_file_prefix="golden_pyarrow_array_from_pandas_type_nested_unsafe",
+            overrides=overrides,
+        )
+
+
 if __name__ == "__main__":
     from pyspark.testing import main
 
