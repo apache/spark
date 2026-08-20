@@ -30,6 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -230,13 +231,14 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
     Seq[HasMetadata]() ++ {
       krb5File.map { path =>
         val file = new File(path)
+        val fileMap = Map(file.getName() -> Files.readString(file.toPath))
+        KubernetesClientUtils.validateConfigMapSize(fileMap, kubernetesConf.sparkConf)
         new ConfigMapBuilder()
           .withNewMetadata()
             .withName(newConfigMapName)
             .endMetadata()
           .withImmutable(true)
-          .addToData(
-            Map(file.getName() -> Files.readString(file.toPath)).asJava)
+          .addToData(fileMap.asJava)
           .build()
       }
     } ++ {

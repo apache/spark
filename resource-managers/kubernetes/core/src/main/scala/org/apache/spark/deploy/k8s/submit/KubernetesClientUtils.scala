@@ -34,7 +34,7 @@ import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH, KUBERNETES_NAMESPACE}
 import org.apache.spark.deploy.k8s.Constants.ENV_SPARK_CONF_DIR
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CONFIG, PATH, PATHS}
+import org.apache.spark.internal.LogKeys.{PATH, PATHS}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -147,34 +147,42 @@ object KubernetesClientUtils extends Logging {
       .build()
   }
 
-  private def orderFilesBySize(confFiles: Seq[File]): Seq[File] = {
-    val fileToFileSizePairs = confFiles.map(f => (f, f.getName.length + f.length()))
-    // sort first by name and then by length, so that during tests we have consistent results.
-    fileToFileSizePairs.sortBy(f => f._1).sortBy(f => f._2).map(_._1)
+  /**
+   * Validate the total size of a config map's data against
+   * `spark.kubernetes.configMap.maxSize`.
+   *
+   * Kubernetes rejects ConfigMaps whose serialized size exceeds a server-side limit
+   * (by default ~1MiB, see https://etcd.io/docs/v3.4.0/dev-guide/limit/). Rather than
+   * silently dropping configuration files to stay under that limit -- which can leave
+   * an application running with missing or unexpected configuration -- callers should
+   * invoke this method before building the config map so that Spark fails fast with a
+   * clear error instead.
+   */
+  @Since("5.0.0")
+  def validateConfigMapSize(confFileMap: Map[String, String], sparkConf: SparkConf): Unit = {
+    val maxSize = sparkConf.get(Config.CONFIG_MAP_MAXSIZE)
+    val mapSize = confFileMap.map { case (k, v) => k.length + v.length }.sum
+    if (mapSize > maxSize) {
+      throw new IllegalArgumentException(
+        s"Data for config map with size $mapSize bytes exceeds the maximum config map " +
+          s"size of $maxSize bytes. Please see config: `${Config.CONFIG_MAP_MAXSIZE.key}` " +
+          "for more details.")
+    }
   }
 
   // exposed for testing
   private[submit] def loadSparkConfDirFiles(conf: SparkConf): Map[String, String] = {
     val confDir = Option(conf.getenv(ENV_SPARK_CONF_DIR)).orElse(
       conf.getOption("spark.home").map(dir => s"$dir/conf"))
-    val maxSize = conf.get(Config.CONFIG_MAP_MAXSIZE)
     if (confDir.isDefined) {
-      val confFiles: Seq[File] = listConfFiles(confDir.get, maxSize)
-      val orderedConfFiles = orderFilesBySize(confFiles)
-      var truncatedMapSize: Long = 0
-      val truncatedMap = mutable.HashMap[String, String]()
-      val skippedFiles = mutable.HashSet[String]()
+      val confFiles: Seq[File] = listConfFiles(confDir.get)
+      val confFileMap = mutable.HashMap[String, String]()
       var source: Source = Source.fromString("") // init with empty source.
-      for (file <- orderedConfFiles) {
+      for (file <- confFiles) {
         try {
           source = Source.fromFile(file)(Codec.UTF8)
           val (fileName, fileContent) = file.getName -> source.mkString
-          if ((truncatedMapSize + fileName.length + fileContent.length) < maxSize) {
-            truncatedMap.put(fileName, fileContent)
-            truncatedMapSize = truncatedMapSize + (fileName.length + fileContent.length)
-          } else {
-            skippedFiles.add(fileName)
-          }
+          confFileMap.put(fileName, fileContent)
         } catch {
           case e: MalformedInputException =>
             logWarning(log"Unable to read a non UTF-8 encoded file " +
@@ -183,27 +191,20 @@ object KubernetesClientUtils extends Logging {
           source.close()
         }
       }
-      if (truncatedMap.nonEmpty) {
+      if (confFileMap.nonEmpty) {
         logInfo(log"Spark configuration files loaded from ${MDC(PATH, confDir)} : " +
-          log"${MDC(PATHS, truncatedMap.keys.mkString(","))}")
+          log"${MDC(PATHS, confFileMap.keys.mkString(","))}")
       }
-      if (skippedFiles.nonEmpty) {
-        logWarning(log"Skipped conf file(s) ${MDC(PATHS, skippedFiles.mkString(","))}, due to " +
-          log"size constraint. Please see, config: " +
-          log"`${MDC(CONFIG, Config.CONFIG_MAP_MAXSIZE.key)}` for more details.")
-      }
-      truncatedMap.toMap
+      confFileMap.toMap
     } else {
       Map.empty[String, String]
     }
   }
 
-  private def listConfFiles(confDir: String, maxSize: Long): Seq[File] = {
-    // At the moment configmaps do not support storing binary content (i.e. skip jar,tar,gzip,zip),
-    // and configMaps do not allow for size greater than 1.5 MiB(configurable).
-    // https://etcd.io/docs/v3.4.0/dev-guide/limit/
-    def testIfTooLargeOrBinary(f: File): Boolean = (f.length() + f.getName.length > maxSize) ||
-      f.getName.matches(".*\\.(gz|zip|jar|tar)")
+  private def listConfFiles(confDir: String): Seq[File] = {
+    // At the moment configmaps do not support storing binary content
+    // (i.e. skip jar,tar,gzip,zip).
+    def testIfBinary(f: File): Boolean = f.getName.matches(".*\\.(gz|zip|jar|tar)")
 
     // We exclude all the template files and user provided spark conf or properties,
     // Spark properties are resolved in a different step.
@@ -211,7 +212,7 @@ object KubernetesClientUtils extends Logging {
       f.getName.matches("spark.*(conf|properties)")
 
     val fileFilter = (f: File) => {
-      f.isFile && !testIfTooLargeOrBinary(f) && !testIfSparkConfOrTemplates(f)
+      f.isFile && !testIfBinary(f) && !testIfSparkConfOrTemplates(f)
     }
     val confFiles: Seq[File] = {
       val dir = new File(confDir)
