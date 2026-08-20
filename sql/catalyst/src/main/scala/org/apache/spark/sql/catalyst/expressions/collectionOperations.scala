@@ -2276,8 +2276,12 @@ case class TrimArray(left: Expression, right: Expression)
     if (n < 0 || n > numElements) {
       throw QueryExecutionErrors.invalidElementCountForTrimArrayError(prettyName, numElements, n)
     }
-    val data = arr.toSeq[AnyRef](elementType)
-    new GenericArrayData(data.slice(0, numElements - n))
+    val retainCount = numElements - n
+    val values = new Array[Any](retainCount)
+    for (i <- 0 until retainCount) {
+      if (!arr.isNullAt(i)) values(i) = arr.get(i, elementType)
+    }
+    new GenericArrayData(values)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
