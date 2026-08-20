@@ -1,21 +1,28 @@
 OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
-INTEL(R) XEON(R) PLATINUM 8573C
+Intel(R) Xeon(R) 6973P-C
 Can skip all row groups:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without shredded predicate pushdown                1494           1560          76         14.0          71.2       1.0X
-With shredded predicate pushdown                     65             77           7        322.8           3.1      23.0X
+Without shredded predicate pushdown                1375           1431          58         15.2          65.6       1.0X
+With shredded predicate pushdown                     62             74           8        339.0           2.9      22.2X
 
 OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
-INTEL(R) XEON(R) PLATINUM 8573C
+Intel(R) Xeon(R) 6973P-C
 Can skip some row groups:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without shredded predicate pushdown                1583           1594           7         13.2          75.5       1.0X
-With shredded predicate pushdown                     80             86           6        261.7           3.8      19.8X
+Without shredded predicate pushdown                1432           1453          19         14.6          68.3       1.0X
+With shredded predicate pushdown                     74             81           4        281.7           3.5      19.2X
 
 OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
-INTEL(R) XEON(R) PLATINUM 8573C
+Intel(R) Xeon(R) 6973P-C
 Can skip no row groups:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without shredded predicate pushdown                1846           1868          11         11.4          88.0       1.0X
-With shredded predicate pushdown                   1911           1925           8         11.0          91.1       1.0X
+Without shredded predicate pushdown                1676           1709          21         12.5          79.9       1.0X
+With shredded predicate pushdown                   1740           1776          25         12.1          83.0       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+Can skip some row groups (partial object):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+Without shredded predicate pushdown                 1824           1860          47         11.5          87.0       1.0X
+With shredded predicate pushdown                     116            121           5        181.5           5.5      15.8X
 
