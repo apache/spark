@@ -158,7 +158,7 @@ SELECT concat('<', c, '>') FROM (VALUES
 
 -- Comparison and IN: both sides (including the IN left-hand side) are cast to the LCT of all
 -- participants. Casting to CHAR pads, so CHAR vs CHAR of different lengths compares equal after
--- widen; casting to VARCHAR/STRING keeps the CHAR pad, so CHAR 'a' (stored as 'a ') is not equal
+-- widening; casting to VARCHAR/STRING keeps the CHAR pad, so CHAR 'a' (stored as 'a ') is not equal
 -- to VARCHAR/STRING 'a' unless the other side carries the same trailing blank. Trailing-blank
 -- ignoring is a collation concern (RTRIM), not a type-level PAD SPACE policy.
 SELECT cast('a' AS CHAR(2)) = cast('a' AS CHAR(4));

@@ -61,8 +61,14 @@ public class CharVarcharCodegenUtils {
    * characters instead of raising a right-truncation exception.
    */
   public static UTF8String charTypeCast(UTF8String inputStr, int limit) {
-    UTF8String truncated = varcharTypeCast(inputStr, limit);
-    return truncated.numChars() < limit ? truncated.rpad(limit, SPACE) : truncated;
+    int numChars = inputStr.numChars();
+    if (numChars == limit) {
+      return inputStr;
+    } else if (numChars < limit) {
+      return inputStr.rpad(limit, SPACE);
+    } else {
+      return inputStr.substring(0, limit);
+    }
   }
 
   /**
