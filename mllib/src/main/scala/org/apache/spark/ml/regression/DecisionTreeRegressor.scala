@@ -192,8 +192,6 @@ class DecisionTreeRegressionModel private[ml] (
 
   override private[ml] val treeStats: NodeStats = rootNode.computeStats
 
-  private[ml] def numLeave: Int = treeStats.numLeaves
-
   private[spark] override def estimatedSize: Long = estimateMatadataSize + getEstimatedSize()
 
   override def predict(features: Vector): Double = {
