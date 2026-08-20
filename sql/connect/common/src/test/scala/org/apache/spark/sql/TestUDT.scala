@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.types.{ArrayType, DataType, DoubleType, SQLUserDefinedType,
-  UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DoubleType, SQLUserDefinedType, UserDefinedType}
 
 object TestUDT {
 
