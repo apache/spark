@@ -4505,4 +4505,499 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     assert(shuffles.isEmpty, "should not contain any shuffle")
     checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 19.5)))
   }
+
+  test("SPARK-58594: union partitioning - two surviving positions collapsing onto one position " +
+      "of another leg counts as narrowing") {
+    // The second leg is an SPJ that selects both sides of one join key (`t3.k1 AS a`, `t4.k1 AS b`)
+    // and only one side of the other (`t3.k2 AS c`), so it reports `PC(KP([a, c]), KP([b, c]))`:
+    // `a` and `b` are two namings of its *first* key position. The first leg partitions by (a, b),
+    // so both of its positions survive -- but both project the second leg at position 0, dropping
+    // that leg's `k2`. The merged keys stay truthful, since the join condition forces
+    // `t4.k1 = t3.k1`, yet the second leg contributes one distinct key column where it partitions
+    // by two, so the merge must report `isNarrowed`. Counting surviving positions instead of each
+    // leg's *distinct* projected positions reports `false` here, which lets `groupedSatisfies`
+    // accept an ungrouped, narrowed partitioning without `allowKeysSubsetOfPartitionKeys` and drops
+    // the skew protection that flag exists to demand.
+    //
+    // `max(c)` is what keeps `c` alive. Without it `ColumnPruning` drops `c`, the second leg's own
+    // projection can no longer express its second key position, and that leg arrives already
+    // `isNarrowed = true` -- so the assertion below would hold for an entirely different reason.
+    val cols = Array(
+      Column.create("k1", LongType),
+      Column.create("k2", LongType),
+      Column.create("k3", LongType))
+    withTable("t1", "t3", "t4") {
+      createTable("t1", cols, Array(identity("k1"), identity("k2")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 10, 100), (2, 20, 200)")
+      createTable("t3", cols, Array(identity("k1"), identity("k2")))
+      sql("INSERT INTO testcat.ns.t3 VALUES (5, 50, 500), (5, 60, 600)")
+      createTable("t4", cols, Array(identity("k1"), identity("k2")))
+      sql("INSERT INTO testcat.ns.t4 VALUES (5, 50, 501), (5, 60, 601)")
+
+      val unionSql =
+        """SELECT a, b, max(c) AS m FROM (
+          |  SELECT k1 AS a, k2 AS b, k3 AS c FROM testcat.ns.t1
+          |  UNION ALL
+          |  SELECT /*+ MERGE(t3, t4) */ t3.k1 AS a, t4.k1 AS b, t3.k2 AS c
+          |  FROM testcat.ns.t3 JOIN testcat.ns.t4
+          |    ON t3.k1 = t4.k1 AND t3.k2 = t4.k2
+          |) u
+          |GROUP BY a, b
+          |""".stripMargin
+
+      Seq(true, false).foreach { allowSubset =>
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> allowSubset.toString) {
+          val df = sql(unionSql)
+          val plan = df.queryExecution.executedPlan
+
+          val union = collect(plan) { case u: UnionExec => u }.head
+          val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+          assert(kp.numPartitions == 4, "both legs keep two partitions each")
+          assert(!kp.isGrouped,
+            "the second leg's two partitions both merge to the key (5, 5)")
+          assert(kp.isNarrowed,
+            "the second leg contributes one distinct key column but partitions by two")
+
+          // `collectShuffles`/`collectGroupPartitions` only look inside a `SortMergeJoinExec`
+          // subtree, and the nodes of interest here sit above the union, so collect directly.
+          val shuffles = collect(plan) { case s: ShuffleExchangeExec => s }
+          val groupPartitions = collect(plan) { case g: GroupPartitionsExec => g }
+          if (allowSubset) {
+            assert(shuffles.isEmpty, "the config opts in to the skew risk")
+            assert(groupPartitions.nonEmpty,
+              "GroupPartitionsExec must coalesce the two partitions merging to (5, 5)")
+          } else {
+            assert(shuffles.nonEmpty,
+              "a narrowed, ungrouped partitioning must not satisfy the aggregate " +
+                "without the config")
+          }
+          checkAnswer(df, Seq(Row(1, 10, 100), Row(2, 20, 200), Row(5, 5, 60)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-58594: storage-partitioned join over a union of three legs, one of them permuted") {
+    // Three legs pin the per-leg position bookkeeping: the middle leg lists the key expressions in
+    // the opposite order, so each leg needs its own projection positions. Were the leg-to-positions
+    // indexing off by one, the legs' keys would be projected with each other's positions and the
+    // merged key list would mix (id, dept) rows with (dept, id) ones.
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("dept", StringType),
+      Column.create("data", StringType))
+    withTable("t1", "t2", "t3", "t4") {
+      createTable("t1", cols, Array(identity("id"), identity("dept")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'x', 'a1')")
+      createTable("t2", cols, Array(identity("dept"), identity("id")))
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'y', 'b2')")
+      createTable("t3", cols, Array(identity("id"), identity("dept")))
+      sql("INSERT INTO testcat.ns.t3 VALUES (3, 'z', 'c3')")
+      createTable("t4", cols, Array(identity("id"), identity("dept")))
+      sql("INSERT INTO testcat.ns.t4 VALUES " +
+        "(1, 'x', 'd1'), (2, 'y', 'd2'), (3, 'z', 'd3')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t4) */ u.id, u.dept, u.data, t4.data AS t4data
+            |FROM (
+            |  SELECT id, dept, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, dept, data FROM testcat.ns.t2
+            |  UNION ALL
+            |  SELECT id, dept, data FROM testcat.ns.t3
+            |) u
+            |JOIN testcat.ns.t4 ON u.id = t4.id AND u.dept = t4.dept
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        val union = collect(plan) { case u: UnionExec => u }.head
+        assert(union.children.length == 3,
+          "the three legs must not be collapsed into nested unions")
+        val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+        assert(kp.expressions.length == 2, "all three legs partition by both columns")
+        assert(kp.numPartitions == 3, "one partition per leg")
+        assert(!kp.isNarrowed, "a permutation drops no position")
+        assert(kp.isGrouped)
+
+        assert(collectShuffles(plan).isEmpty,
+          "no shuffle: every leg's keys are projected into the first leg's order")
+        checkAnswer(df, Seq(
+          Row(1, "x", "a1", "d1"), Row(2, "y", "b2", "d2"), Row(3, "z", "c3", "d3")))
+      }
+    }
+  }
+
+  test("SPARK-58594: storage-partitioned join over a union of storage-partitioned joins") {
+    // An inner `ShuffledJoin` reports `PartitioningCollection(left, right)`, so an SPJ inside a
+    // union leg makes that leg report a collection of `KeyedPartitioning`s -- one per join side.
+    // Without merging collections the union reports `UnknownPartitioning` and both sides of the
+    // outer join shuffle. Selecting both join keys (`t1.id` and `t2.id AS k`) is what keeps the
+    // collection alive: projecting only one key would narrow each leg back to a single
+    // `KeyedPartitioning` that the existing merge already handles.
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(identity("id"))
+    withTable("t1", "t2", "t3", "t4", "t5") {
+      createTable("t1", cols, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      createTable("t2", cols, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (1, 'b1'), (2, 'b2')")
+      createTable("t3", cols, partitions)
+      sql("INSERT INTO testcat.ns.t3 VALUES (3, 'c3'), (4, 'c4')")
+      createTable("t4", cols, partitions)
+      sql("INSERT INTO testcat.ns.t4 VALUES (3, 'd3'), (4, 'd4')")
+      createTable("t5", cols, partitions)
+      sql("INSERT INTO testcat.ns.t5 VALUES (1, 'e1'), (2, 'e2'), (3, 'e3'), (4, 'e4')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t5) */ u.id, u.k, t5.data
+            |FROM (
+            |  SELECT /*+ MERGE(t1, t2) */ t1.id, t2.id AS k
+            |  FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id
+            |  UNION ALL
+            |  SELECT /*+ MERGE(t3, t4) */ t3.id, t4.id AS k
+            |  FROM testcat.ns.t3 JOIN testcat.ns.t4 ON t3.id = t4.id
+            |) u
+            |JOIN testcat.ns.t5 ON u.id = t5.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        val union = collect(plan) { case u: UnionExec => u }.head
+        assert(union.children.forall(_.outputPartitioning.isInstanceOf[
+          physical.PartitioningCollection]),
+          "each union leg must report a PartitioningCollection for this test to be meaningful")
+
+        val collection = union.outputPartitioning match {
+          case pc: physical.PartitioningCollection => pc
+          case other => fail(s"expected a PartitioningCollection of KeyedPartitionings, got $other")
+        }
+        val kps = collection.partitionings.map(_.asInstanceOf[physical.KeyedPartitioning])
+        assert(kps.forall(_.numPartitions == 4),
+          "each merged descriptor carries the concatenation of both legs' keys")
+        assert(kps.forall(_.isGrouped), "disjoint leg keys merge without duplicates")
+
+        assert(collectShuffles(plan).isEmpty,
+          "no shuffle: the merged descriptor for `id` matches t5")
+        assert(collectGroupPartitions(plan).isEmpty,
+          "no GroupPartitionsExec: merged keys are already grouped and aligned")
+        checkAnswer(df, Seq(
+          Row(1, 1, "e1"), Row(2, 2, "e2"), Row(3, 3, "e3"), Row(4, 4, "e4")))
+      }
+    }
+  }
+
+  test("SPARK-58594: storage-partitioned join over union: children report a " +
+      "PartitioningCollection of KeyedPartitionings") {
+    // Each leg selects `id` twice (`id` and `id AS k`), so its `ProjectExec` reports one
+    // `KeyedPartitioning` per alias inside a `PartitioningCollection` rather than a single
+    // `KeyedPartitioning`. The union merges the collections member-wise and keeps both
+    // alternatives, so the SMJ can pick the one it needs. The join is on `u.id`, which is the
+    // second alternative (aliases come first), so keeping only one member would not do: `u.k` has
+    // to stay in the outer projection, otherwise `ColumnPruning` drops `id AS k` and each leg
+    // collapses back to a single `KeyedPartitioning` that Case A already handled.
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(identity("id"))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      createTable("t2", cols, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (3, 'b3'), (4, 'b4')")
+      createTable("t3", cols, partitions)
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3'), (4, 'c4')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.k, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, id AS k, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, id AS k, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        val union = collect(plan) { case u: UnionExec => u }.head
+        assert(union.children.forall(_.outputPartitioning.isInstanceOf[
+          physical.PartitioningCollection]),
+          "each union leg must report a PartitioningCollection for this test to be meaningful")
+
+        val collection = union.outputPartitioning match {
+          case pc: physical.PartitioningCollection => pc
+          case other => fail(s"expected a PartitioningCollection of KeyedPartitionings, got $other")
+        }
+        assert(collection.partitionings.size == 2,
+          "one merged KeyedPartitioning per alias both legs agree on")
+        val kps = collection.partitionings.map(_.asInstanceOf[physical.KeyedPartitioning])
+        assert(kps.forall(_.numPartitions == 4),
+          "each merged descriptor carries the concatenation of both legs' keys")
+        assert(kps.forall(_.isGrouped), "disjoint leg keys merge without duplicates")
+        assert(kps.map(_.isNarrowed).distinct.size == 1,
+          "the alternatives name one layout, so they must agree on isNarrowed")
+
+        assert(collectShuffles(plan).isEmpty,
+          "no shuffle: the merged descriptor for `id` matches t3")
+        assert(collectGroupPartitions(plan).isEmpty,
+          "no GroupPartitionsExec: merged keys are already grouped and aligned")
+        checkAnswer(df, Seq(
+          Row(1, 1, "a1", "c1"), Row(2, 2, "a2", "c2"),
+          Row(3, 3, "b3", "c3"), Row(4, 4, "b4", "c4")))
+      }
+    }
+  }
+
+  test("SPARK-58594: storage-partitioned join over union: merged PartitioningCollection needs " +
+      "grouping") {
+    // Same collection-per-leg shape as above, but the legs share the key 2, so every merged
+    // descriptor has a duplicate key and `isGrouped` is false. That routes the plan through
+    // `GroupPartitionsExec`, which resolves the child's partitioning with
+    // `collectFirst { case k: KeyedPartitioning => k }` -- i.e. it groups on one alternative and
+    // has to stay correct for the others, which is sound only because all members of the merged
+    // collection share one `partitionKeys` reference.
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(identity("id"))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      createTable("t2", cols, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2'), (3, 'b3')")
+      createTable("t3", cols, partitions)
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.k, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, id AS k, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, id AS k, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val collection = union.outputPartitioning match {
+          case pc: physical.PartitioningCollection => pc
+          case other => fail(s"expected a PartitioningCollection of KeyedPartitionings, got $other")
+        }
+        val kps = collection.partitionings.map(_.asInstanceOf[physical.KeyedPartitioning])
+        assert(kps.forall(_.numPartitions == 4), "merged keys are [1, 2] ++ [2, 3]")
+        assert(kps.forall(!_.isGrouped),
+          "the key 2 appears in both legs, so the merge is ungrouped")
+
+        assert(collectShuffles(plan).isEmpty, "no shuffle: grouping the merged keys matches t3")
+        assert(collectGroupPartitions(plan).nonEmpty,
+          "GroupPartitionsExec must coalesce the two partitions holding key 2")
+        checkAnswer(df, Seq(
+          Row(1, 1, "a1", "c1"), Row(2, 2, "a2", "c2"),
+          Row(2, 2, "b2", "c2"), Row(3, 3, "b3", "c3")))
+      }
+    }
+  }
+
+  test("SPARK-58594: storage-partitioned join over union: PartitioningCollection under AQE") {
+    // The SPARK-58317 pass-through has an AQE variant; cover the merged keyed collection too, since
+    // AQE re-plans the union's parent from stage output statistics.
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(identity("id"))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      createTable("t2", cols, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (3, 'b3'), (4, 'b4')")
+      createTable("t3", cols, partitions)
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3'), (4, 'c4')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.k, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, id AS k, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, id AS k, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |""".stripMargin)
+        checkAnswer(df, Seq(
+          Row(1, 1, "a1", "c1"), Row(2, 2, "a2", "c2"),
+          Row(3, 3, "b3", "c3"), Row(4, 4, "b4", "c4")))
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          "the merged keyed collection must survive AQE planning")
+      }
+    }
+  }
+
+  test("SPARK-58594: storage-partitioned join over union: legs agreeing on fewer key positions, " +
+      "narrowed keys stay distinct") {
+    // t1 is partitioned by (id, dept) and t2 by (id) alone, so the legs agree only on `id`. The
+    // merge narrows to that position and projects t1's two-column keys down to it. t1's keys stay
+    // distinct once projected ([1, 2]), so the merged descriptor is grouped and no config is
+    // needed: `groupedSatisfies` only gates a narrowed partitioning when it is also ungrouped.
+    // `u.dept` has to appear in the *outer* projection, not just the legs: `ColumnPruning` pushes
+    // through the union, and pruning a partition column makes `V2ScanPartitioningAndOrdering` drop
+    // the KeyedPartitioning at the scan, leaving the union nothing to merge (the follow-up
+    // SPARK-46367 called out).
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("dept", StringType),
+      Column.create("data", StringType))
+    val joinCols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, Array(identity("id"), identity("dept")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'x', 'a1'), (2, 'y', 'a2')")
+      createTable("t2", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t2 VALUES (3, 'p', 'b3'), (4, 'q', 'b4')")
+      createTable("t3", joinCols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3'), (4, 'c4')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.dept, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, dept, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, dept, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+        assert(kp.expressions.length == 1, "narrowed to the single position both legs partition by")
+        assert(kp.numPartitions == 4, "keys are t1's projected to `id` ([1, 2]) plus t2's ([3, 4])")
+        assert(kp.isNarrowed, "t1 lost its `dept` position")
+        assert(kp.isGrouped, "projecting t1's keys to `id` leaves them distinct")
+
+        assert(collectShuffles(plan).isEmpty, "no shuffle: the narrowed descriptor matches t3")
+        checkAnswer(df, Seq(
+          Row(1, "x", "a1", "c1"), Row(2, "y", "a2", "c2"),
+          Row(3, "p", "b3", "c3"), Row(4, "q", "b4", "c4")))
+      }
+    }
+  }
+
+  test("SPARK-58594: storage-partitioned join over union: legs agreeing on fewer key positions, " +
+      "narrowed keys collide") {
+    // As above, but t1 holds two partitions differing only in `dept`, so projecting its keys to
+    // `id` duplicates the key 1. The merge is then narrowed *and* ungrouped, which carries the same
+    // skew risk as using a subset of the partition keys for a join, so `groupedSatisfies` refuses
+    // it unless `allowKeysSubsetOfPartitionKeys` is enabled -- matching how SPARK-46367 gates a
+    // narrowing projection.
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("dept", StringType),
+      Column.create("data", StringType))
+    val joinCols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, Array(identity("id"), identity("dept")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'x', 'a1'), (1, 'y', 'a2')")
+      createTable("t2", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'p', 'b2')")
+      createTable("t3", joinCols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2')")
+
+      Seq(true, false).foreach { allowSubset =>
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> allowSubset.toString) {
+          val df = sql(
+            """SELECT /*+ MERGE(u, t3) */ u.id, u.dept, u.data, t3.data AS t3data
+              |FROM (
+              |  SELECT id, dept, data FROM testcat.ns.t1
+              |  UNION ALL
+              |  SELECT id, dept, data FROM testcat.ns.t2
+              |) u
+              |JOIN testcat.ns.t3 ON u.id = t3.id
+              |""".stripMargin)
+          val plan = df.queryExecution.executedPlan
+
+          val union = collect(plan) { case u: UnionExec => u }.head
+          val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+          assert(kp.numPartitions == 3, "t1's two partitions plus t2's one")
+          assert(kp.isNarrowed && !kp.isGrouped,
+            "projecting t1's keys to `id` collides on 1, so the merge is narrowed and ungrouped")
+
+          if (allowSubset) {
+            assert(collectShuffles(plan).isEmpty,
+              "the config opts in to the skew risk, so the narrowed descriptor is used")
+            assert(collectGroupPartitions(plan).nonEmpty,
+              "GroupPartitionsExec must coalesce t1's two partitions onto the key 1")
+          } else {
+            assert(collectShuffles(plan).nonEmpty,
+              "without the config a narrowed, ungrouped partitioning must not satisfy the join")
+          }
+          checkAnswer(df, Seq(
+            Row(1, "x", "a1", "c1"), Row(1, "y", "a2", "c1"), Row(2, "p", "b2", "c2")))
+        }
+      }
+    }
+  }
+
+  test("SPARK-58594: storage-partitioned join over union: legs list the same key expressions in " +
+      "a different order") {
+    // t1 is partitioned by (id, dept) and t2 by (dept, id). Both positions survive, but they sit at
+    // opposite positions in the two legs, so t2's keys are permuted rather than narrowed --
+    // `projectKeys` takes an arbitrary position sequence, so that costs nothing extra. Nothing is
+    // dropped, so the merge is not narrowed.
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("dept", StringType),
+      Column.create("data", StringType))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, Array(identity("id"), identity("dept")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'x', 'a1'), (2, 'y', 'a2')")
+      createTable("t2", cols, Array(identity("dept"), identity("id")))
+      sql("INSERT INTO testcat.ns.t2 VALUES (3, 'z', 'b3'), (4, 'w', 'b4')")
+      createTable("t3", cols, Array(identity("id"), identity("dept")))
+      sql("INSERT INTO testcat.ns.t3 VALUES " +
+        "(1, 'x', 'c1'), (2, 'y', 'c2'), (3, 'z', 'c3'), (4, 'w', 'c4')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.dept, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, dept, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, dept, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id AND u.dept = t3.dept
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+        assert(kp.expressions.length == 2, "both positions survive; only their order differs")
+        assert(kp.numPartitions == 4)
+        assert(!kp.isNarrowed, "a permutation drops no position")
+        assert(kp.isGrouped)
+
+        assert(collectShuffles(plan).isEmpty,
+          "no shuffle: t2's keys are permuted into t1's order, so the merge matches t3")
+        checkAnswer(df, Seq(
+          Row(1, "x", "a1", "c1"), Row(2, "y", "a2", "c2"),
+          Row(3, "z", "b3", "c3"), Row(4, "w", "b4", "c4")))
+      }
+    }
+  }
 }
