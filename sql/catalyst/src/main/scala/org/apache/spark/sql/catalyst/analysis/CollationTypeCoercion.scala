@@ -151,8 +151,8 @@ object CollationTypeCoercion extends SQLConfHelper {
       case (MapType(fk, fv, _), MapType(tk, tv, _)) =>
         stringConstraintChanged(fk, tk) || stringConstraintChanged(fv, tv)
       case (fs: StructType, ts: StructType) if fs.length == ts.length =>
-        fs.fields.zip(ts.fields).exists { case (a, b) =>
-          stringConstraintChanged(a.dataType, b.dataType)
+        fs.fields.indices.exists { i =>
+          stringConstraintChanged(fs.fields(i).dataType, ts.fields(i).dataType)
         }
       case _ => false
     }

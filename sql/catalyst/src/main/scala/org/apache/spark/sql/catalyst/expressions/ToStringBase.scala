@@ -64,20 +64,22 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
   protected final def castToString(
-      from: DataType, to: StringConstraint = NoConstraint): Any => UTF8String =
+      from: DataType, to: StringConstraint = NoConstraint): Any => UTF8String = {
+    val toUTF8String = castToString(from)
     (to, from) match {
       case (FixedLength(length), _: StringType)
           if SQLConf.get.charVarcharStandardSemantics && truncateCharVarcharOnCast =>
-        s => CharVarcharCodegenUtils.charTypeCast(castToString(from)(s), length)
+        s => CharVarcharCodegenUtils.charTypeCast(toUTF8String(s), length)
       case (MaxLength(length), _: StringType)
           if SQLConf.get.charVarcharStandardSemantics && truncateCharVarcharOnCast =>
-        s => CharVarcharCodegenUtils.varcharTypeCast(castToString(from)(s), length)
+        s => CharVarcharCodegenUtils.varcharTypeCast(toUTF8String(s), length)
       case (FixedLength(length), _) =>
-        s => CharVarcharCodegenUtils.charTypeWriteSideCheck(castToString(from)(s), length)
+        s => CharVarcharCodegenUtils.charTypeWriteSideCheck(toUTF8String(s), length)
       case (MaxLength(length), _) =>
-        s => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(castToString(from)(s), length)
-      case (NoConstraint, _) => castToString(from)
+        s => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(toUTF8String(s), length)
+      case (NoConstraint, _) => toUTF8String
     }
+  }
 
   // The Types Framework is the single integration point for framework types' cast-to-string, via
   // the zone-less formatUTF8. The cast's session zone is threaded into the lookup so TIMESTAMP_LTZ

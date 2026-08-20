@@ -136,7 +136,7 @@ SELECT concat('<', c, '>') FROM (
   INTERSECT
   SELECT cast('ab' AS CHAR(4)) AS c
 ) t;
--- Non-empty EXCEPT: after widen, 'ab  ' is not 'xy  '.
+-- Non-empty EXCEPT: after widening, 'ab  ' is not 'xy  '.
 SELECT typeof(c) FROM (
   SELECT cast('ab' AS CHAR(2)) AS c
   EXCEPT
