@@ -182,6 +182,11 @@ class RunnerConf(Conf):
         return int(self.get("spark.sql.execution.arrow.maxBytesPerBatch", 2**31 - 1))
 
     @property
+    def python_udf_arrow_max_bytes_per_output_batch(self) -> int:
+        # -1 (the default) means no limit; only positive values enable output batch resizing.
+        return int(self.get("spark.sql.execution.pythonUDF.arrow.maxBytesPerOutputBatch", -1))
+
+    @property
     def arrow_concurrency_level(self) -> int:
         return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.level", -1))
 
@@ -3027,6 +3032,22 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 del result
 
         # profiling is not supported for UDF
+
+        # Bound each output RecordBatch toward the byte cap (no limit when unset).
+        max_output_bytes = runner_conf.python_udf_arrow_max_bytes_per_output_batch
+        if max_output_bytes > 0:
+
+            def resized_grouped_func(
+                split_index: int,
+                data: Iterator[Iterator[pa.RecordBatch]],
+            ) -> Iterator[pa.RecordBatch]:
+                return ArrowBatchTransformer.resize_batches(
+                    grouped_func(split_index, data),
+                    max_output_bytes,
+                )
+
+            return resized_grouped_func, None, ser, ser
+
         return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:

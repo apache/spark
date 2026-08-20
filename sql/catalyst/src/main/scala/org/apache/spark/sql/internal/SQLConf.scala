@@ -5371,6 +5371,22 @@ object SQLConf {
       .version("4.0.0")
       .fallbackConf(BUFFER_SIZE)
 
+  val PYTHON_UDF_ARROW_MAX_BYTES_PER_OUTPUT_BATCH =
+    buildConf("spark.sql.execution.pythonUDF.arrow.maxBytesPerOutputBatch")
+      .internal()
+      .doc("Byte-size cap for a single Arrow RecordBatch produced by an Arrow-based Python UDF " +
+        "worker before it is sent back to the JVM. Without it a UDF that emits one Arrow batch " +
+        "per unit of work (e.g. applyInPandas, which produces one batch per group) can yield a " +
+        "single oversized batch that strains the JVM and downstream operators; when this is set " +
+        "the worker slices such a batch into row-balanced pieces each within the cap (a single " +
+        "row larger than the cap still yields a one-row batch). -1 (the default) means no limit.")
+      .version("4.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(x => x == -1 || (x > 0 && x <= Int.MaxValue),
+        "The value of spark.sql.execution.pythonUDF.arrow.maxBytesPerOutputBatch should " +
+          "be -1 (no limit) or greater than zero and less than or equal to INT_MAX.")
+      .createWithDefault(-1)
+
   val PANDAS_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.pandas.udf.buffer.size")
       .doc(
