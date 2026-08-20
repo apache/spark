@@ -326,10 +326,8 @@ class CountVectorizerModel(
       broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
     }
     val dictBr = broadcastDict.get
-    // SPARK-48837: capture parameter values here so that we only evaulate once-per-transform
-    // rather than once-per-row:
-    val minTf = $(minTF)
-    val isBinary = $(binary)
+    val localMinTF = $(minTF)
+    val localBinary = $(binary)
     val vectorizer = udf { document: Seq[String] =>
       val termCounts = new OpenHashMap[Int, Int]
       var tokenCount = 0L
@@ -340,8 +338,8 @@ class CountVectorizerModel(
         }
         tokenCount += 1
       }
-      val effectiveMinTF = if (minTf >= 1.0) minTf else tokenCount * minTf
-      val effectiveCounts = if (isBinary) {
+      val effectiveMinTF = if (localMinTF >= 1.0) localMinTF else tokenCount * localMinTF
+      val effectiveCounts = if (localBinary) {
         termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
       } else {
         termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, p._2.toDouble)).toSeq
