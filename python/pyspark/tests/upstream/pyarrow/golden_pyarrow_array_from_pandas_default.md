@@ -38,6 +38,10 @@
 | struct:nullable                 | [{'a': 1, 'b': 'x'}, None]@Series[object]                                            | [[('a', 1), ('b', 'x')], None]@struct<a: int64, b: string>      |
 | struct<struct>:standard         | [{'a': {'b': 1}}]@Series[object]                                                     | [[('a', {'b': 1})]]@struct<a: struct<b: int64>>                 |
 | struct<list<int64>>:standard    | [{'a': [1, 2]}]@Series[object]                                                       | [[('a', [1, 2])]]@struct<a: list<item: int64>>                  |
+| list<int64>:overflow            | [[300, 2], [3]]@Series[object]                                                       | [[300, 2], [3]]@list<item: int64>                               |
+| struct:overflow                 | [{'a': 300, 'b': 'x'}]@Series[object]                                                | [[('a', 300), ('b', 'x')]]@struct<a: int64, b: string>          |
+| struct<int64>:standard          | [{'a': 1, 'b': 2}]@Series[object]                                                    | [[('a', 1), ('b', 2)]]@struct<a: int64, b: int64>               |
+| struct<int64>:overflow          | [{'a': 300, 'b': 2}]@Series[object]                                                  | [[('a', 300), ('b', 2)]]@struct<a: int64, b: int64>             |
 | datetime64[ns]:standard         | [Timestamp('2024-06-15 18:30:00')]@Series[datetime64[ns]]                            | [2024-06-15 18:30:00]@timestamp[ns]                             |
 | datetime64[ns]:nullable         | [Timestamp('2024-06-15 18:30:00'), NaT]@Series[datetime64[ns]]                       | [2024-06-15 18:30:00, None]@timestamp[ns]                       |
 | datetime64[ns]:empty            | []@Series[datetime64[ns]]                                                            | []@timestamp[ns]                                                |
