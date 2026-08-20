@@ -98,6 +98,29 @@ class DataSourceV2DataFrameSessionCatalogSuite
       verifyTable("t", df)
     }
   }
+
+  test("SPARK-58389: time travel options are ignored for V1 table writes") {
+    withTable("t") {
+      sql("CREATE TABLE t(c BIGINT) USING csv")
+      val df = spark.range(1).toDF("c")
+
+      df.write
+        .format(v2Format)
+        .option("versionAsOf", "1")
+        .insertInto("t")
+      verifyTable("t", df)
+
+      // SaveMode.Ignore leaves the existing V1 table unchanged, but the write must still
+      // reach the V1 fallback before Spark rejects the time-travel option.
+      df.write
+        .format(v2Format)
+        .option("versionAsOf", "1")
+        .mode(SaveMode.Ignore)
+        .saveAsTable("t")
+
+      verifyTable("t", df)
+    }
+  }
 }
 
 class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable] {

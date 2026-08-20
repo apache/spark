@@ -1032,22 +1032,22 @@ class GeneralizedLinearRegressionModel private[ml] (
   private lazy val familyAndLink = FamilyAndLink(this)
 
   override def predict(features: Vector): Double = {
-    predict(features, 0.0)
+    GeneralizedLinearRegressionModel.predict(features, 0.0, coefficients, intercept, familyAndLink)
   }
 
   /**
    * Calculates the predicted value when offset is set.
    */
   private def predict(features: Vector, offset: Double): Double = {
-    val eta = predictLink(features, offset)
-    familyAndLink.fitted(eta)
+    GeneralizedLinearRegressionModel.predict(
+      features, offset, coefficients, intercept, familyAndLink)
   }
 
   /**
    * Calculates the link prediction (linear predictor) of the given instance.
    */
   private def predictLink(features: Vector, offset: Double): Double = {
-    BLAS.dot(features, coefficients) + intercept + offset
+    GeneralizedLinearRegressionModel.predictLink(features, offset, coefficients, intercept)
   }
 
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -1061,9 +1061,14 @@ class GeneralizedLinearRegressionModel private[ml] (
     val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)
     var outputData = dataset
     var numColsOutput = 0
+    val localCoefficients = coefficients
+    val localIntercept = intercept
+    val localFamilyAndLink = familyAndLink
 
     if (hasLinkPredictionCol) {
-      val predLinkUDF = udf((features: Vector, offset: Double) => predictLink(features, offset))
+      val predLinkUDF = udf((features: Vector, offset: Double) =>
+        GeneralizedLinearRegressionModel.predictLink(
+          features, offset, localCoefficients, localIntercept))
       outputData = outputData
         .withColumn($(linkPredictionCol), predLinkUDF(col($(featuresCol)), offset),
           outputSchema($(linkPredictionCol)).metadata)
@@ -1076,7 +1081,9 @@ class GeneralizedLinearRegressionModel private[ml] (
         outputData = outputData.withColumn($(predictionCol), predUDF(col($(linkPredictionCol))),
           outputSchema($(predictionCol)).metadata)
       } else {
-        val predUDF = udf((features: Vector, offset: Double) => predict(features, offset))
+        val predUDF = udf((features: Vector, offset: Double) =>
+          GeneralizedLinearRegressionModel.predict(
+            features, offset, localCoefficients, localIntercept, localFamilyAndLink))
         outputData = outputData.withColumn($(predictionCol), predUDF(col($(featuresCol)), offset),
           outputSchema($(predictionCol)).metadata)
       }
@@ -1176,6 +1183,24 @@ class GeneralizedLinearRegressionModel private[ml] (
 @Since("2.0.0")
 object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegressionModel] {
   private[ml] case class Data(intercept: Double, coefficients: Vector)
+
+  private def predict(
+      features: Vector,
+      offset: Double,
+      coefficients: Vector,
+      intercept: Double,
+      familyAndLink: GeneralizedLinearRegression.FamilyAndLink): Double = {
+    val eta = predictLink(features, offset, coefficients, intercept)
+    familyAndLink.fitted(eta)
+  }
+
+  private def predictLink(
+      features: Vector,
+      offset: Double,
+      coefficients: Vector,
+      intercept: Double): Double = {
+    BLAS.dot(features, coefficients) + intercept + offset
+  }
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
     import ReadWriteUtils._

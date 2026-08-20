@@ -25,6 +25,7 @@ from setuptools import setup
 from setuptools.command.install import install
 from shutil import copyfile, copytree, rmtree
 from pathlib import Path
+from dataclasses import dataclass
 
 if (
     # When we package, the parent directory 'classic' dir
@@ -100,10 +101,6 @@ elif len(JARS_PATH) == 0 and not os.path.exists(TEMP_PATH):
     print(incorrect_invocation_message, file=sys.stderr)
     sys.exit(-1)
 
-EXAMPLES_PATH = os.path.join(SPARK_HOME, "examples/src/main/python")
-SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
-USER_SCRIPTS_PATH = os.path.join(SPARK_HOME, "sbin")
-DATA_PATH = os.path.join(SPARK_HOME, "data")
 # The classic PySpark package bundles the assembly jars, so it ships the binary
 # license texts (licenses-binary), which enumerate those jars' licenses, mirroring
 # the binary distribution. The connect/client packages bundle no jars.
@@ -113,12 +110,26 @@ if not os.path.isdir(LICENSES_PATH):
     # were already copied to licenses/ (see dev/make-distribution.sh).
     LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
 
-SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
-USER_SCRIPTS_TARGET = os.path.join(TEMP_PATH, "sbin")
+
+@dataclass(frozen=True)
+class InstallPath:
+    source: str
+    target: str
+
+
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
-EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
-DATA_TARGET = os.path.join(TEMP_PATH, "data")
-LICENSES_TARGET = os.path.join(TEMP_PATH, "licenses")
+SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
+INSTALL_PATHS = [
+    InstallPath(JARS_PATH, JARS_TARGET),
+    InstallPath(os.path.join(SPARK_HOME, "bin"), SCRIPTS_TARGET),
+    InstallPath(os.path.join(SPARK_HOME, "sbin"), os.path.join(TEMP_PATH, "sbin")),
+    InstallPath(
+        os.path.join(SPARK_HOME, "examples/src/main/python"),
+        os.path.join(TEMP_PATH, "examples"),
+    ),
+    InstallPath(os.path.join(SPARK_HOME, "data"), os.path.join(TEMP_PATH, "data")),
+    InstallPath(LICENSES_PATH, os.path.join(TEMP_PATH, "licenses")),
+]
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
 # This is important because we only want to build the symlink farm while under Spark otherwise we
@@ -206,11 +217,7 @@ try:
     # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
     # find it where expected. The rest of the files aren't copied because they are accessed
     # using Python imports instead which will be resolved correctly.
-    try:
-        os.makedirs("pyspark/python/pyspark")
-    except OSError:
-        # Don't worry if the directory already exists.
-        pass
+    os.makedirs("pyspark/python/pyspark", exist_ok=True)
     copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if in_spark:
@@ -221,24 +228,16 @@ try:
         copyfile("packaging/classic/setup.py", "setup.py")
         copyfile("packaging/classic/setup.cfg", "setup.cfg")
 
-        # Construct the symlink farm - this is nein_sparkcessary since we can't refer to
+        # Construct the symlink farm - this is necessary since we can't refer to
         # the path above the package root and we need to copy the jars and scripts which
         # are up above the python root.
         if _supports_symlinks():
-            os.symlink(JARS_PATH, JARS_TARGET)
-            os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
-            os.symlink(USER_SCRIPTS_PATH, USER_SCRIPTS_TARGET)
-            os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
-            os.symlink(DATA_PATH, DATA_TARGET)
-            os.symlink(LICENSES_PATH, LICENSES_TARGET)
+            for path in INSTALL_PATHS:
+                os.symlink(path.source, path.target)
         else:
             # For windows fall back to the slower copytree
-            copytree(JARS_PATH, JARS_TARGET)
-            copytree(SCRIPTS_PATH, SCRIPTS_TARGET)
-            copytree(USER_SCRIPTS_PATH, USER_SCRIPTS_TARGET)
-            copytree(EXAMPLES_PATH, EXAMPLES_TARGET)
-            copytree(DATA_PATH, DATA_TARGET)
-            copytree(LICENSES_PATH, LICENSES_TARGET)
+            for path in INSTALL_PATHS:
+                copytree(path.source, path.target)
     else:
         # If we are not inside of SPARK_HOME verify we have the required symlink farm
         if not os.path.exists(JARS_TARGET):
@@ -415,19 +414,10 @@ finally:
     if in_spark:
         os.remove("setup.py")
         os.remove("setup.cfg")
-        # Depending on cleaning up the symlink farm or copied version
-        if _supports_symlinks():
-            os.remove(os.path.join(TEMP_PATH, "jars"))
-            os.remove(os.path.join(TEMP_PATH, "bin"))
-            os.remove(os.path.join(TEMP_PATH, "sbin"))
-            os.remove(os.path.join(TEMP_PATH, "examples"))
-            os.remove(os.path.join(TEMP_PATH, "data"))
-            os.remove(os.path.join(TEMP_PATH, "licenses"))
-        else:
-            rmtree(os.path.join(TEMP_PATH, "jars"))
-            rmtree(os.path.join(TEMP_PATH, "bin"))
-            rmtree(os.path.join(TEMP_PATH, "sbin"))
-            rmtree(os.path.join(TEMP_PATH, "examples"))
-            rmtree(os.path.join(TEMP_PATH, "data"))
-            rmtree(os.path.join(TEMP_PATH, "licenses"))
+        for path in INSTALL_PATHS:
+            if os.path.islink(path.target):
+                # Remove the link and not the real source trees under SPARK_HOME.
+                os.remove(path.target)
+            else:
+                rmtree(path.target)
         os.rmdir(TEMP_PATH)

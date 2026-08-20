@@ -31,10 +31,10 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, EqualTo, IsNull, Or, SortOrder}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, EqualTo, IsNull, Literal, Or, SortOrder}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, EliminateLimits}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GlobalLimit, Join, JoinHint, LeafNode, LocalRelation, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{CoalescedNullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution._
@@ -62,6 +62,16 @@ import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
+
+/**
+ * A leaf whose cost estimate under-counts its structural row bound. Used by SPARK-57956 to verify
+ * that an unmaterialized query stage exposes the structural `maxRows` instead of an estimate.
+ */
+private case class UnderCountLeaf(output: Seq[Attribute]) extends LeafNode {
+  override def maxRows: Option[Long] = Some(2L)
+  override def computeStats(): Statistics =
+    Statistics(sizeInBytes = BigInt(1), rowCount = Some(BigInt(0)))
+}
 
 @SlowSQLTest
 class AdaptiveQueryExecSuite
@@ -3396,6 +3406,32 @@ class AdaptiveQueryExecSuite
         assert(findTopLevelLimit(adaptive3).isEmpty)
       }
     }
+  }
+
+  test("SPARK-57956: unmaterialized query stage exposes structural maxRows, not the estimate") {
+    // Build a LogicalQueryStage whose underlying stage is never materialized. Its computeStats()
+    // falls back to the logical plan's cost estimate - here an under-count of 0 rows - which must
+    // NOT be promoted to a hard maxRows bound. Otherwise EliminateLimits would drop a LIMIT that
+    // still needs to be applied once the stage runs (SPARK-57956).
+    val output = Seq(AttributeReference("a", IntegerType)())
+    val logical = UnderCountLeaf(output)
+    val scan = LocalTableScanExec(output, Nil, None)
+    val exchange = BroadcastExchangeExec(
+      HashedRelationBroadcastMode(output, isNullAware = false), scan)
+    val queryStage = LogicalQueryStage(logical, BroadcastQueryStageExec(0, exchange, exchange))
+
+    assert(!queryStage.isMaterialized)
+    // The under-counted estimate is what computeStats() surfaces...
+    assert(queryStage.stats.rowCount.contains(BigInt(0)))
+    // ...but maxRows must remain the structural bound (2), not the estimate (0).
+    assert(queryStage.maxRows.contains(2L),
+      "an unmaterialized stage must expose its structural maxRows, not the row-count estimate")
+
+    // Since the structural bound (2) exceeds the limit (1), the LIMIT must be retained. With the
+    // estimate wrongly promoted (maxRows = 0), EliminateLimits would instead drop it.
+    val limited = GlobalLimit(Literal(1), queryStage)
+    assert(EliminateLimits(limited).isInstanceOf[GlobalLimit],
+      "LIMIT must be retained when the child's structural row bound exceeds the limit")
   }
 
   test("SPARK-48037: Fix SortShuffleWriter lacks shuffle write related metrics " +

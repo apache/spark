@@ -68,9 +68,9 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
 
-# The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
-# for code reuse.
-from pyspark.sql.functions import arrow_udf, pandas_udf  # noqa: F401
+# The implementations of pandas_udf, arrow_udf and udaf are embedded in pyspark.sql.functions
+# (they select the classic vs Connect UserDefinedFunction internally), so reuse them here.
+from pyspark.sql.functions import arrow_udf, pandas_udf, udaf  # noqa: F401
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (

@@ -2875,7 +2875,8 @@ class JDBCSuite extends SharedSparkSession {
           "hint" -> hint))
       }.getMessage
       assert(e.contains(s"Invalid value `$hint` for option `hint`." +
-        s" It should start with `/*+ ` and end with ` */`."))
+        s" It should start with `/*+ ` and end with ` */`," +
+        s" for example `/*+ INDEX(t1 id_idx) */`."))
     }
 
     // dialect supported check

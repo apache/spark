@@ -2984,7 +2984,8 @@ object SQLConf {
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("janino", "jdk"))
-    .createWithDefault("janino")
+    .createWithDefault(
+      sys.env.get("SPARK_CODEGEN_COMPILER").filter(_.nonEmpty).getOrElse("janino"))
 
   val WHOLESTAGE_HUGE_METHOD_LIMIT = buildConf("spark.sql.codegen.hugeMethodLimit")
     .internal()
@@ -3823,7 +3824,8 @@ object SQLConf {
         "eviction happens at batch end. When k, up to k eligible records are removed per input; " +
         "any still-eligible records left over are removed at batch end. Only applies to modes " +
         "that evict (e.g. Append/Update); has no effect in Complete mode, which never evicts. " +
-        "Currently read only by the streamline aggregation operator.")
+        "Read by the streamline aggregation and streaming deduplication (dropDuplicates) " +
+        "operators; dropDuplicatesWithinWatermark always evicts at batch end.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
@@ -4811,6 +4813,17 @@ object SQLConf {
         "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
 
+  val COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD =
+    buildConf("spark.sql.optimizer.collapseWindowWithEmptyOrderSpecInChild")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, the optimizer collapses two adjacent windows with the same partition " +
+        "spec into one when the window with the empty order spec is the child (inner) window. " +
+        "This saves a WindowExec pass but can disable the WindowGroupLimit and the LocalLimit " +
+        "push-down optimizations for top-k queries.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
@@ -5659,6 +5672,16 @@ object SQLConf {
     .version("2.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  val PARSE_SQL_ENABLED =
+    buildConf("spark.sql.function.parseSql.enabled")
+      .doc("When true, enables the parse_sql SQL function. This feature is under active " +
+        "development; the JSON contract may change across releases while the flag remains " +
+        "off by default.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
     .doc("When this option is set to false and all inputs are binary, `elt` returns " +
@@ -7031,7 +7054,8 @@ object SQLConf {
         "per-row cast-error companion column (nullable string) so that the cast error is only " +
         "raised when the row is consumed by the user expression. Without this flag, the cast is " +
         "always evaluated and any failure raises immediately, even when the surrounding " +
-        "expression would not have consumed the failing row.")
+        "expression would not have consumed the failing row. This also allows throwable variant " +
+        "extractions to be hoisted across joins while preserving their original error timing.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -7346,12 +7370,28 @@ object SQLConf {
     .createWithDefault(false)
 
   val PRESERVE_CHAR_VARCHAR_TYPE_INFO = buildConf("spark.sql.preserveCharVarcharTypeInfo")
-    .doc("When true, Spark does not replace CHAR/VARCHAR types the STRING type, which is the " +
-      "default behavior of Spark 3.0 and earlier versions. This means the length checks for " +
-      "CHAR/VARCHAR types is enforced and CHAR type is also properly padded.")
+    .doc("When true, Spark does not replace CHAR/VARCHAR with STRING in schemas and plans. " +
+      "This is the Spark 4.0 experimental path: types can leak through transforming string " +
+      "functions via child.dataType. Prefer spark.sql.charVarchar.standardSemantics.enabled " +
+      "for SQL standard CHAR/VARCHAR behavior (CAST/LCT/STRING-returning transforms).")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
+
+  val CHAR_VARCHAR_STANDARD_SEMANTICS =
+    buildConf("spark.sql.charVarchar.standardSemantics.enabled")
+      .doc("When true, enable SQL standard CHAR/VARCHAR semantics: first-class types in " +
+        "schemas and CAST targets; least-common-type for COALESCE/CASE/UNION may return " +
+        "CHAR/VARCHAR; transforming string functions and operators return plain STRING. " +
+        "This is a breaking change from the annotated-STRING default and from " +
+        "preserveCharVarcharTypeInfo (which keeps Char/Varchar through transforms).")
+      .version("4.4.0")
+      // PERSISTED, like ANSI mode: the flag decides the types a view body resolves to, so a view
+      // created under standard semantics must keep computing CHAR/VARCHAR regardless of the
+      // caller's session setting.
+      .withBindingPolicy(ConfigBindingPolicy.PERSISTED)
+      .booleanConf
+      .createWithDefault(false)
 
   val READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS =
     buildConf("spark.sql.legacy.readFileSourceTableCacheIgnoreOptions")
@@ -7366,7 +7406,9 @@ object SQLConf {
   val READ_SIDE_CHAR_PADDING = buildConf("spark.sql.readSideCharPadding")
     .doc("When true, Spark applies string padding when reading CHAR type columns/fields, " +
       "in addition to the write-side padding. This config is true by default to better enforce " +
-      "CHAR type semantic in cases such as external tables.")
+      "CHAR type semantic in cases such as external tables. When " +
+      s"'${CHAR_VARCHAR_STANDARD_SEMANTICS.key}' is true, this config is ignored: read-side " +
+      "CHAR/VARCHAR checks are always applied, and setting it to false logs a warning.")
     .version("3.4.0")
     .booleanConf
     .createWithDefault(true)
@@ -8832,6 +8874,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
+  def collapseWindowWithEmptyOrderSpecInChild: Boolean =
+    getConf(COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD)
+
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
   def maxVersionsToDeletePerMaintenance: Int = getConf(MAX_VERSIONS_TO_DELETE_PER_MAINTENANCE)
@@ -9470,6 +9515,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 
+  def parseSqlEnabled: Boolean = getConf(PARSE_SQL_ENABLED)
+
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
   def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
@@ -9623,6 +9670,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
 
   def preserveCharVarcharTypeInfo: Boolean = getConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
+
+  def charVarcharStandardSemantics: Boolean = getConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS)
 
   def avoidDoubleFilterEval: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
 

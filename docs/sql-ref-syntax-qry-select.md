@@ -214,6 +214,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [TABLESAMPLE](sql-ref-syntax-qry-select-sampling.html)
 * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
 * [JSON_VALUE](sql-ref-syntax-qry-select-json-value.html)
+* [JSON_EXISTS](sql-ref-syntax-qry-select-json-exists.html)
 * [Window Function](sql-ref-syntax-qry-select-window.html)
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)

@@ -573,6 +573,56 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  testWithWholeStageCodegenOnAndOff("SPARK-58213: corr returns NULL for zero variance") { _ =>
+    val input = Seq(
+      ("both-constant", Some(1.0), Some(1.0)),
+      ("both-constant", Some(1.0), Some(1.0)),
+      ("empty", None, None),
+      ("normal", Some(1.0), Some(1.0)),
+      ("normal", Some(2.0), Some(2.0)),
+      ("normal", Some(3.0), Some(3.0)),
+      ("partial-null", None, Some(0.0)),
+      ("partial-null", Some(1.0), Some(1.0)),
+      ("partial-null", Some(2.0), None),
+      ("partial-null", Some(3.0), Some(3.0)),
+      ("single", Some(1.0), Some(2.0)),
+      ("x-constant", Some(1.0), Some(1.0)),
+      ("x-constant", Some(1.0), Some(2.0)),
+      ("x-constant", Some(1.0), Some(3.0)),
+      ("y-constant", Some(1.0), Some(1.0)),
+      ("y-constant", Some(2.0), Some(1.0)),
+      ("y-constant", Some(3.0), Some(1.0)),
+      ("zero-correlation", Some(0.0), Some(1.0)),
+      ("zero-correlation", Some(1.0), Some(-2.0)),
+      ("zero-correlation", Some(2.0), Some(1.0))).toDF("case", "x", "y")
+
+    Seq(true, false).foreach { ansiEnabled =>
+      Seq(true, false).foreach { legacyStatisticalAggregate =>
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+            SQLConf.LEGACY_STATISTICAL_AGGREGATE.key ->
+              legacyStatisticalAggregate.toString) {
+          val singleRow = if (legacyStatisticalAggregate) {
+            Row("single", Double.NaN)
+          } else {
+            Row("single", null)
+          }
+          checkAnswer(
+            input.groupBy($"case").agg(corr($"x", $"y")).orderBy($"case"),
+            Seq(
+              Row("both-constant", null),
+              Row("empty", null),
+              Row("normal", 1.0),
+              Row("partial-null", 1.0),
+              singleRow,
+              Row("x-constant", null),
+              Row("y-constant", null),
+              Row("zero-correlation", 0.0)))
+        }
+      }
+    }
+  }
+
   test("null moments") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(emptyTableData.agg(

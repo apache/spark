@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkConf, SparkRuntimeException}
+import scala.util.Try
+
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, ScalarSubquery, StringRPad}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -27,6 +30,7 @@ import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.SharedSparkSession
@@ -854,6 +858,453 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58797: CAST to CHAR/VARCHAR with standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charDf = sql("SELECT CAST('ab' AS CHAR(5)) AS c")
+      assert(charDf.schema.head.dataType === CharType(5))
+      checkAnswer(charDf, Row("ab   "))
+
+      val varcharDf = sql("SELECT CAST('hello' AS VARCHAR(5)) AS v")
+      assert(varcharDf.schema.head.dataType === VarcharType(5))
+      checkAnswer(varcharDf, Row("hello"))
+
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("SELECT CAST('hello!' AS VARCHAR(5))").collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
+
+      // Multi-byte characters: length is in characters, not octets.
+      // scalastyle:off nonascii
+      checkAnswer(sql("SELECT CAST('你好' AS VARCHAR(2)) AS v"), Row("你好"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("SELECT CAST('你好啊' AS VARCHAR(2))").collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "2")
+      )
+      // scalastyle:on nonascii
+    }
+  }
+
+  test("SPARK-58798: least common type for COALESCE/CASE with CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS VARCHAR(5)), cast('world' AS VARCHAR(10))) AS c")
+        .schema.head.dataType === VarcharType(10))
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS VARCHAR(5)), cast('world!' AS CHAR(6))) AS c")
+        .schema.head.dataType === VarcharType(6))
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS CHAR(5)), cast('world!' AS CHAR(6))) AS c")
+        .schema.head.dataType === CharType(6))
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS VARCHAR(5)), 'world') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        """SELECT CASE WHEN true THEN cast('a' AS CHAR(2))
+          |ELSE cast('bb' AS CHAR(4)) END AS c""".stripMargin)
+        .schema.head.dataType === CharType(4))
+      // LCT(NULL, T) = T
+      assert(sql("SELECT coalesce(null, cast('a' AS CHAR(5))) AS c")
+        .schema.head.dataType === CharType(5))
+    }
+  }
+
+  test("SPARK-58799: transforming string functions return STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT lower(cast('AB' AS VARCHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        "SELECT cast('a' AS CHAR(1)) || cast('b' AS VARCHAR(1)) AS c")
+        .schema.head.dataType === StringType)
+      // Pads from CHAR participate in the concatenated value.
+      checkAnswer(
+        sql("SELECT cast('he' AS CHAR(4)) || cast('llo' AS CHAR(3)) AS c"),
+        Row("he  llo"))
+      assert(sql("SELECT substr(cast('hello' AS VARCHAR(5)), 1, 2) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        "SELECT upper(coalesce(cast('a' AS CHAR(2)), cast('b' AS CHAR(4)))) AS c")
+        .schema.head.dataType === StringType)
+    }
+  }
+
+  test("SPARK-58798: LCT preserves collation on CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val c1 = CharType(2, "UTF8_LCASE")
+      val c2 = CharType(4, "UTF8_LCASE")
+      assert(StringHelper.tightestCommonString(c1, c2).contains(CharType(4, "UTF8_LCASE")))
+      val v1 = VarcharType(3, "UTF8_LCASE")
+      val v2 = VarcharType(5, "UTF8_LCASE")
+      assert(StringHelper.tightestCommonString(v1, v2).contains(VarcharType(5, "UTF8_LCASE")))
+      assert(StringHelper.tightestCommonString(c1, v2).contains(VarcharType(5, "UTF8_LCASE")))
+    }
+  }
+
+  test("SPARK-58799: regexp/mask/split return STRING under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql("SELECT regexp_replace(cast('ab' AS CHAR(2)), 'a', 'x') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT regexp_extract(cast('ab' AS VARCHAR(2)), '(a)', 1) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT split(cast('a,b' AS CHAR(3)), ',') AS c")
+        .schema.head.dataType === ArrayType(StringType, containsNull = false))
+      assert(sql("SELECT mask(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+    }
+  }
+
+  test("SPARK-58796: preserve vs standardSemantics R1 matrix") {
+    // preserve-only: transforming ops may keep Char/Varchar (leaky experimental path).
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === CharType(2))
+    }
+    // standardSemantics: R1 forces STRING even if preserve is also on.
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+    }
+  }
+
+  test("SPARK-58797: standardSemantics wins over charVarcharAsString") {
+    withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val df = sql("SELECT CAST('ab' AS CHAR(5)) AS c")
+      assert(df.schema.head.dataType === CharType(5))
+      checkAnswer(df, Row("ab   "))
+    }
+  }
+
+  test("SPARK-58796: createDataFrame allows CHAR/VARCHAR when standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val df = spark.range(1).map(_.toString).toDF()
+      val schema = new StructType().add("id", CharType(5))
+      val created = spark.createDataFrame(df.collectAsList(), schema)
+      assert(created.schema.head.dataType === CharType(5))
+      checkAnswer(created, Row("0    "))
+
+      // RowEncoder must retain a declared collation on the constrained type, not rebuild
+      // CharType(length) / VarcharType(length) with the default collation.
+      val collated = new StructType()
+        .add("c", CharType(5, "UTF8_LCASE"))
+        .add("v", VarcharType(5, "UTF8_LCASE"))
+      val collatedDf = spark.createDataFrame(
+        java.util.Arrays.asList(Row("ab", "cd")), collated)
+      assert(collatedDf.schema("c").dataType === CharType(5, "UTF8_LCASE"))
+      assert(collatedDf.schema("v").dataType === VarcharType(5, "UTF8_LCASE"))
+      checkAnswer(collatedDf, Row("ab   ", "cd"))
+    }
+  }
+
+  test("SPARK-58803: Dataset/encoder/UDF CHAR/VARCHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // createDataFrame / RowEncoder write-side: pad CHAR, reject oversize.
+      val charSchema = new StructType().add("c", CharType(3))
+      checkAnswer(
+        spark.createDataFrame(java.util.Arrays.asList(Row("ab")), charSchema),
+        Row("ab "))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.createDataFrame(java.util.Arrays.asList(Row("abcd")), charSchema).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+      val varcharSchema = new StructType().add("v", VarcharType(3))
+      checkAnswer(
+        spark.createDataFrame(java.util.Arrays.asList(Row("ab")), varcharSchema),
+        Row("ab"))
+      // Oversize by trailing blanks only: trim just enough to fit the limit.
+      checkAnswer(
+        spark.createDataFrame(java.util.Arrays.asList(Row("abc ")), varcharSchema),
+        Row("abc"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.createDataFrame(java.util.Arrays.asList(Row("abcd")), varcharSchema).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      // Explicit Encoders.CHAR / VARCHAR: typed Dataset write-side checks.
+      val charDs = spark.createDataset(Seq("ab"))(Encoders.CHAR(4))
+      assert(charDs.schema.head.dataType === CharType(4))
+      checkAnswer(charDs.toDF(), Row("ab  "))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.createDataset(Seq("abcde"))(Encoders.VARCHAR(3)).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      // UDF register: return type stays CHAR/VARCHAR; write-side pad / length apply.
+      spark.udf.register("std_char_udf", () => "B", CharType(3))
+      spark.udf.register("std_varchar_udf", (x: String) => x, VarcharType(3))
+      val charUdf = sql("SELECT std_char_udf() AS c")
+      assert(charUdf.schema.head.dataType === CharType(3))
+      checkAnswer(charUdf, Row("B  "))
+      val varcharUdf = sql("SELECT std_varchar_udf('ab') AS v")
+      assert(varcharUdf.schema.head.dataType === VarcharType(3))
+      checkAnswer(varcharUdf, Row("ab"))
+      checkError(
+        exception = intercept[SparkException] {
+          sql("SELECT std_varchar_udf('abcd')").collect()
+        }.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      // Java udf(..., returnType) path and Dataset.encoder from CHAR result schema.
+      val javaUdf = functions.udf(
+        new org.apache.spark.sql.api.java.UDF0[String] {
+          override def call(): String = "a"
+        },
+        CharType(5))
+      val javaUdfDf = spark.range(1).select(javaUdf().as("c"))
+      assert(javaUdfDf.schema.head.dataType === CharType(5))
+      checkAnswer(javaUdfDf, Row("a    "))
+      assert(javaUdfDf.encoder.schema.head.dataType === CharType(5))
+
+      // Dataset.to: CHAR/VARCHAR target schema allowed; Cast applies store assignment.
+      withTable("std_cv_to") {
+        sql("CREATE TABLE std_cv_to (c CHAR(10), v VARCHAR(255)) USING parquet")
+        sql("INSERT INTO std_cv_to VALUES ('spark', 'awesome')")
+        val df = sql("SELECT * FROM std_cv_to")
+        assert(df.schema("c").dataType === CharType(10))
+        assert(df.schema("v").dataType === VarcharType(255))
+        val reordered = StructType.fromDDL("v VARCHAR(255), c CHAR(10)")
+        val toDf = df.to(reordered)
+        assert(toDf.schema.map(_.dataType) === Seq(VarcharType(255), CharType(10)))
+        checkAnswer(toDf, Row("awesome", "spark     "))
+        // Narrowing CHAR length is store assignment and must enforce length.
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            df.select($"c").to(new StructType().add("c", CharType(3))).collect()
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "3"))
+      }
+
+      // DataFrameReader / DataStreamReader user schemas keep CHAR/VARCHAR.
+      val readerSchema = new StructType().add("id", CharType(5))
+      val csvInput = spark.range(1).map(_.toString)
+      val csvDf = spark.read.schema(readerSchema).csv(csvInput)
+      assert(csvDf.schema.head.dataType === CharType(5))
+      checkAnswer(csvDf, Row("0    "))
+      val csvDfDdl = spark.read.schema("id VARCHAR(5)").csv(csvInput)
+      assert(csvDfDdl.schema.head.dataType === VarcharType(5))
+      withTempPath { dir =>
+        spark.range(1).write.save(dir.toString)
+        val streamDf = spark.readStream.schema(readerSchema).load(dir.toString)
+        assert(streamDf.schema.head.dataType === CharType(5))
+        val streamDdl = spark.readStream.schema("id VARCHAR(5)").load(dir.toString)
+        assert(streamDdl.schema.head.dataType === VarcharType(5))
+      }
+    }
+  }
+
+  test("SPARK-58794: R1 promotion unifies CHAR/VARCHAR with STRING at plain-string inputs") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("std_promote") {
+        sql("CREATE TABLE std_promote (c CHAR(5), v VARCHAR(5)) USING parquet")
+        sql("INSERT INTO std_promote VALUES ('ab', 'ab')")
+
+        // Expressions requiring all their string inputs to share one type must accept a
+        // CHAR/VARCHAR argument alongside a STRING one by promoting it to STRING.
+        Seq(
+          "overlay(c PLACING 'x' FROM 1)" -> "xb   ",
+          "overlay(v PLACING 'x' FROM 1)" -> "xb",
+          "string_agg(c, '-')" -> "ab   ",
+          "listagg(c, '-')" -> "ab   ",
+          "elt(1, c, 'x')" -> "ab   ",
+          // right() is RuntimeReplaceable; its literal branches must agree with the substring
+          // branch, which R1 has already reduced to STRING.
+          "right(c, 2)" -> "  ",
+          "left(c, 2)" -> "ab").foreach { case (expr, expected) =>
+          val df = sql(s"SELECT $expr AS r FROM std_promote")
+          assert(df.schema.head.dataType === StringType, s"$expr should return STRING")
+          checkAnswer(df, Row(expected))
+        }
+
+        // Transforming expressions must not inherit the input's length constraint: each of these
+        // produces a value whose length differs from the CHAR(5) input.
+        Seq(
+          "reverse(c)" -> "   ba",
+          "hex(c)" -> "6162202020",
+          "array_join(array(c, c), '-')" -> "ab   -ab   ").foreach { case (expr, expected) =>
+          val df = sql(s"SELECT $expr AS r FROM std_promote")
+          assert(df.schema.head.dataType === StringType, s"$expr should return STRING")
+          checkAnswer(df, Row(expected))
+        }
+
+        // Promotion must not reach pass-through / LCT sites, which preserve CHAR/VARCHAR (R2/R3).
+        Seq(
+          "c", "coalesce(c, c)", "case when true then c else c end", "max(c)",
+          "element_at(array(c), 1)", "transform(array(c), x -> x)[0]",
+          "first_value(c) over (order by 1)").foreach { expr =>
+          val df = sql(s"SELECT $expr AS r FROM std_promote")
+          assert(df.schema.head.dataType === CharType(5), s"$expr should stay CHAR(5)")
+        }
+
+        // reverse() on non-string inputs is unaffected by the R1 change.
+        assert(sql("SELECT reverse(array(1, 2)) AS r").schema.head.dataType ===
+          ArrayType(IntegerType, containsNull = false))
+      }
+    }
+  }
+
+  // Allowlist for the inventory below: R2/R3 pass-through and container cases that may keep
+  // CHAR(n)/VARCHAR(n): aggregates/ordering that return an input unchanged, null-handling,
+  // element access, array/map/struct constructors, and collection rearrangements that keep
+  // element types. Coverage is limited to the seven fixed argumentShapes templates in the test;
+  // a leak only at another arity or nested shape would not fail here. For those shapes,
+  // anything not listed must reduce to plain STRING (R1).
+  private val charVarcharPassThroughFunctions = Set(
+    "any_value", "approx_top_k", "approx_top_k_accumulate", "array", "array_agg", "array_compact",
+    "array_distinct", "array_max", "array_min", "array_repeat", "array_sort", "arrays_zip",
+    "coalesce", "collect_list", "collect_set", "collect_union", "concat", "explode",
+    "explode_outer", "first", "first_value", "get", "greatest", "ifnull", "last", "last_value",
+    "least", "map", "max", "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif",
+    "nullifzero", "nvl", "reverse", "shuffle", "sort_array", "struct", "when")
+
+  test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
+    val argumentShapes = Seq(
+      "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
+      "%s(array(c), '-')")
+
+    withTable("std_inventory") {
+      sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        val leaks = FunctionRegistry.functionSet.map(_.funcName).toSeq.sorted
+          .filterNot(charVarcharPassThroughFunctions.contains)
+          .flatMap { name =>
+            argumentShapes.map(_.format(name)).filter { call =>
+              // Most shapes do not typecheck for a given function; those are simply not evidence.
+              Try(sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType)
+                .toOption
+                .exists(CharVarcharUtils.hasCharVarchar)
+            }
+          }
+
+        assert(leaks.isEmpty,
+          "these inventoried calls returned a CHAR/VARCHAR type; either fix the expression to " +
+            "return plain STRING or add it to charVarcharPassThroughFunctions: " +
+            leaks.mkString(", "))
+      }
+    }
+  }
+
+  test("SPARK-58802: single-pass resolver agrees with fixed-point under standardSemantics") {
+    // Dual run defaults to on under tests, but pin it explicitly so this coverage cannot be
+    // silently lost: the HybridAnalyzer compares output schema and normalized plan across the
+    // two analyzers and fails with HYBRID_ANALYZER_EXCEPTION on any divergence. Resolver has no
+    // Char/Varchar-specific logic; it inherits Expression.dataType and shared TypeCoercion, so
+    // this matrix is the proof that LCT/CAST/R1 stay aligned (D19).
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE.key -> "true") {
+      // CAST / try_cast introduce the type (R3).
+      assert(sql("SELECT CAST('ab' AS CHAR(5)) AS c").schema.head.dataType === CharType(5))
+      assert(sql("SELECT CAST('hello' AS VARCHAR(5)) AS c").schema.head.dataType ===
+        VarcharType(5))
+      assert(sql("SELECT try_cast('abcdef' AS CHAR(2)) AS c").schema.head.dataType ===
+        CharType(2))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS c"), Row(null))
+
+      // Least common type (R2): COALESCE / CASE / NULL / CHAR+VARCHAR / CHAR+STRING.
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS VARCHAR(3)), CAST('bb' AS VARCHAR(7))) AS c")
+        .schema.head.dataType === VarcharType(7))
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS CHAR(2)), CAST('bb' AS VARCHAR(4))) AS c")
+        .schema.head.dataType === VarcharType(4))
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS CHAR(2)), 'bb') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS CHAR(5)), CAST(NULL AS CHAR(5))) AS c")
+        .schema.head.dataType === CharType(5))
+      assert(sql(
+        "SELECT CASE WHEN true THEN CAST('a' AS CHAR(2)) ELSE CAST('bb' AS CHAR(4)) END AS c")
+        .schema.head.dataType === CharType(4))
+      assert(sql(
+        "SELECT CASE WHEN false THEN CAST('a' AS VARCHAR(2)) ELSE CAST('bb' AS CHAR(4)) END AS c")
+        .schema.head.dataType === VarcharType(4))
+
+      // IN-list common type (side condition uses LCT; result is boolean).
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2)) IN (CAST('a ' AS CHAR(2)), CAST('bbb' AS VARCHAR(3)))"),
+        Row(true))
+
+      // Transforming operators return STRING (R1).
+      assert(sql("SELECT upper(CAST('ab' AS CHAR(2))) AS c").schema.head.dataType === StringType)
+      assert(sql("SELECT lower(CAST('AB' AS VARCHAR(2))) AS c").schema.head.dataType ===
+        StringType)
+      assert(sql("SELECT CAST('a' AS CHAR(1)) || CAST('b' AS VARCHAR(1)) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT concat(CAST('a' AS CHAR(2)), CAST('b' AS CHAR(3))) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT substr(CAST('hello' AS VARCHAR(5)), 1, 2) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT trim(CAST('ab  ' AS CHAR(4))) AS c").schema.head.dataType === StringType)
+      assert(sql("SELECT regexp_replace(CAST('ab' AS CHAR(2)), 'a', 'x') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT mask(CAST('ab' AS CHAR(2))) AS c").schema.head.dataType === StringType)
+      assert(sql("SELECT split(CAST('a,b' AS CHAR(3)), ',') AS c").schema.head.dataType ===
+        ArrayType(StringType, containsNull = false))
+      // R1 after LCT: coalesce stays CHAR, upper widens to STRING.
+      assert(sql(
+        "SELECT upper(coalesce(CAST('a' AS CHAR(2)), CAST('b' AS CHAR(4)))) AS c")
+        .schema.head.dataType === StringType)
+
+      // Set-operation LCT.
+      val union = sql(
+        """SELECT CAST('a' AS VARCHAR(3)) AS c
+          |UNION ALL
+          |SELECT CAST('abcd' AS VARCHAR(8)) AS c""".stripMargin)
+      assert(union.schema.head.dataType === VarcharType(8))
+      checkAnswer(union, Seq(Row("a"), Row("abcd")))
+
+      val intersect = sql(
+        """SELECT CAST('ab' AS CHAR(2)) AS c
+          |INTERSECT
+          |SELECT CAST('ab' AS CHAR(4)) AS c""".stripMargin)
+      assert(intersect.schema.head.dataType === CharType(4))
+      checkAnswer(intersect, Seq(Row("ab  ")))
+
+      // Nested types keep CHAR/VARCHAR through analysis.
+      assert(sql("SELECT array(CAST('a' AS CHAR(2)), CAST('bb' AS CHAR(3))) AS c")
+        .schema.head.dataType === ArrayType(CharType(3), containsNull = false))
+      assert(sql("SELECT struct(CAST('a' AS CHAR(2)) AS f) AS c")
+        .schema.head.dataType ===
+        StructType(Seq(StructField("f", CharType(2), nullable = false))))
+
+      // Collated CAST keeps the declared collation under both analyzers.
+      assert(sql("SELECT CAST('ab' AS CHAR(2) COLLATE UTF8_LCASE) AS c")
+        .schema.head.dataType === CharType(2, "UTF8_LCASE"))
+
+      // Bare column references keep the declared type (R3) through dual-run analysis.
+      withTable("char_varchar_dual_run") {
+        sql("CREATE TABLE char_varchar_dual_run (c CHAR(5), v VARCHAR(5)) USING parquet")
+        sql("INSERT INTO char_varchar_dual_run VALUES ('ab', 'ab')")
+        val df = sql("SELECT c, v FROM char_varchar_dual_run")
+        assert(df.schema("c").dataType === CharType(5))
+        assert(df.schema("v").dataType === VarcharType(5))
+        checkAnswer(df, Row("ab   ", "ab"))
+      }
+    }
+  }
+
   test("invalidate char/varchar in functions") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -1035,6 +1486,41 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '123456' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("select * from t"), Row("123456"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-58801: standardSemantics scan pads CHAR and errors on oversize") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col CHAR(3)) using $format LOCATION '$dir'")
+          checkAnswer(sql("SELECT * FROM t"), Row("12 "))
+        }
+      }
+      Seq("CHAR", "VARCHAR").foreach { typ =>
+        withTempPath { dir =>
+          withTable("t") {
+            sql("SELECT '123456' as col").write.format(format).save(dir.toString)
+            sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                sql("SELECT * FROM t").collect()
+              },
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2")
+            )
+          }
+        }
+      }
+      // An oversized value consisting only of trailing blanks is trimmed successfully.
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12  ' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col VARCHAR(2)) using $format LOCATION '$dir'")
+          checkAnswer(sql("SELECT * FROM t"), Row("12"))
         }
       }
     }

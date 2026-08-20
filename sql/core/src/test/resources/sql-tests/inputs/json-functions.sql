@@ -211,3 +211,37 @@ select json_value('{"a":[1,2]}', '$.a[*]');
 select json_value('{"a":1}', '$.a' RETURNING STRUCT<x:INT>);
 -- invalid: a DEFAULT that cannot cast to the RETURNING type
 select json_value('{}', '$.x' RETURNING INT DEFAULT array(1) ON EMPTY);
+
+-- JSON_EXISTS: test path presence (ANSI SQL:2016)
+select json_exists('{"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}', '$.addr.city');
+-- present but JSON null -> true
+select json_exists('{"score":null}', '$.score');
+-- absent -> false
+select json_exists('{"addr":{"city":"NYC"}}', '$.addr.zip');
+-- matches an object / array -> true
+select json_exists('{"addr":{"city":"NYC"}}', '$.addr');
+select json_exists('{"tags":["x","y"]}', '$.tags[0]');
+-- NULL input -> NULL (unknown)
+select json_exists(cast(null as string), '$.a');
+-- malformed input -> FALSE ON ERROR (default)
+select json_exists('not json', '$.a');
+-- ON ERROR behaviors
+select json_exists('not json', '$.a' TRUE ON ERROR);
+select json_exists('not json', '$.a' FALSE ON ERROR);
+select json_exists('not json', '$.a' UNKNOWN ON ERROR);
+select json_exists('not json', '$.a' ERROR ON ERROR);
+-- lax wildcard [*]: true iff the array has elements
+select json_exists('{"a":[1,2]}', '$.a[*]');
+select json_exists('{"a":[]}', '$.a[*]');
+-- lax auto-wrap: [*] over a non-array treats it as a single-element array
+select json_exists('{"a":5}', '$.a[*]');
+-- embedded wildcard: any element has the field
+select json_exists('{"a":[{"b":1},{"c":2}]}', '$.a[*].b');
+-- out-of-range index -> false
+select json_exists('{"a":[1,2]}', '$.a[5]');
+-- lax auto-unwrap: a member step over an array applies to each element
+select json_exists('{"a":[{"b":1},{"b":2}]}', '$.a.b');
+-- member wildcard .* matches any member
+select json_exists('{"addr":{"city":"NYC"}}', '$.*');
+-- invalid: an unparseable path is rejected at analysis
+select json_exists('{"a":1}', '$[');

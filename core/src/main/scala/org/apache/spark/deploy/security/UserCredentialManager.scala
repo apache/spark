@@ -121,7 +121,7 @@ private[spark] class UserCredentialManager(
       log"${MDC(LogKeys.PRINCIPAL, ctx.getPrincipal)} " +
       log"(issuer: ${MDC(LogKeys.URI, ctx.getIssuer)})")
 
-    val (credentials, earliestExpiry) = resolveCredentials(ctx)
+    val (credentials, earliestExpiry, activeProviders) = resolveCredentials(ctx)
     val serialized = UserCredentialManager.serializeUserCredentials(credentials)
     val version = credentialVersion.incrementAndGet()
 
@@ -140,6 +140,37 @@ private[spark] class UserCredentialManager(
 
     logInfo(log"Credential acquisition successful. Next renewal in " +
       log"${MDC(LogKeys.TIME_UNITS, UIUtils.formatDuration(renewalDelay))}.")
+
+    // Apply additional Spark properties declared by active providers.
+    // Only providers that successfully resolved credentials contribute properties.
+    // This allows provider modules to wire executor-side configuration
+    // (e.g., fs.s3a.aws.credentials.provider) without core having
+    // vendor-specific knowledge. Properties are only set if the user
+    // has not already configured them explicitly.
+    for (provider <- activeProviders) {
+      try {
+        val props = provider.additionalSparkProperties()
+        if (props != null) {
+          props.forEach { (key, value) =>
+            if (!sparkConf.contains(key)) {
+              sparkConf.set(key, value)
+              logInfo(log"Auto-configured ${MDC(LogKeys.CONFIG, key)} from " +
+                log"${MDC(LogKeys.CLASS_NAME, provider.getClass.getName)}")
+            } else {
+              logDebug(log"Skipped ${MDC(LogKeys.CONFIG, key)} from " +
+                log"${MDC(LogKeys.CLASS_NAME, provider.getClass.getName)} " +
+                log"(already configured)")
+            }
+          }
+        }
+      } catch {
+        case scala.util.control.NonFatal(e) =>
+          logWarning(log"Failed to apply additionalSparkProperties from " +
+            log"${MDC(LogKeys.CLASS_NAME, provider.getClass.getName)}. " +
+            log"Skipping.", e)
+      }
+    }
+
     (version, serialized)
   }
 
@@ -193,7 +224,7 @@ private[spark] class UserCredentialManager(
         log"${MDC(LogKeys.PRINCIPAL, ctx.getPrincipal)} " +
         log"(issuer: ${MDC(LogKeys.URI, ctx.getIssuer)})")
 
-      val (credentials, earliestExpiry) = resolveCredentials(ctx)
+      val (credentials, earliestExpiry, _) = resolveCredentials(ctx)
       val serialized = UserCredentialManager.serializeUserCredentials(credentials)
       val version = credentialVersion.incrementAndGet()
 
@@ -245,10 +276,11 @@ private[spark] class UserCredentialManager(
    * @return Tuple of (UserCredentials, earliest expiry across all service credentials)
    */
   private def resolveCredentials(
-      ctx: UserContext): (UserCredentials, Option[Instant]) = {
+      ctx: UserContext): (UserCredentials, Option[Instant], Seq[CredentialProvider]) = {
     val schemes = discoverSchemes()
 
     val credentialMap = new mutable.HashMap[String, ServiceCredential]()
+    val activeProviders = new mutable.ArrayBuffer[CredentialProvider]()
     var earliestExpiry: Option[Instant] = None
 
     for (scheme <- schemes) {
@@ -268,6 +300,7 @@ private[spark] class UserCredentialManager(
               log"returned null; skipping.")
           } else {
             credentialMap.put(scheme, credential)
+            activeProviders += provider
 
             val expiry = credential.getExpiresAt
             if (expiry != null) {
@@ -294,7 +327,7 @@ private[spark] class UserCredentialManager(
           "Check that providers are on the classpath and configured correctly.")
     }
 
-    (new UserCredentials(credentialMap.asJava), earliestExpiry)
+    (new UserCredentials(credentialMap.asJava), earliestExpiry, activeProviders.toSeq)
   }
 
   /**
