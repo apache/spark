@@ -31,7 +31,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.collection.{OpenHashMap, Utils}
@@ -193,12 +192,6 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
     val vocSize = $(vocabSize)
     val input = dataset.select($(inputCol))
-    val countingRequired = $(minDF) < 1.0 || $(maxDF) < 1.0
-    if (countingRequired) {
-      if (dataset.storageLevel == StorageLevel.NONE) {
-        input.persist(StorageLevel.MEMORY_AND_DISK)
-      }
-    }
     val inputSizeCol = input.select(count("*")).scalar()
     val minDfCol = if ($(minDF) >= 1.0) {
       lit($(minDF))
@@ -241,9 +234,6 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       .collect()
       .map(_.getString(0))
 
-    if (input.storageLevel != StorageLevel.NONE) {
-      input.unpersist()
-    }
     if (vocab.isEmpty) {
       this.logWarning("The vocabulary size is empty. " +
         "If this was unexpected, you may wish to lower minDF (or) increase maxDF.")
