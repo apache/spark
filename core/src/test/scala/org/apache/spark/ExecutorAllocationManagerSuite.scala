@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => mockitoEq}
 import org.mockito.Mockito._
 import org.scalatest.PrivateMethodTester
 
@@ -1068,6 +1069,53 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(manager.executorAllocationManagerSource.gracefullyDecommissioned.getCount() === 1)
     assert(manager.executorAllocationManagerSource.decommissionUnfinished.getCount() === 1)
     assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 1)
+  }
+
+  test("SPARK-58879: dynamic allocation accounts only for accepted idle decommissions") {
+    val conf = createConf(0, 5, 0, decommissioningEnabled = true)
+      .set(config.DYN_ALLOCATION_TESTING, false)
+    when(client.requestTotalExecutors(any(), any(), any())).thenReturn(true)
+    when(client.decommissionExecutorsIfIdle(any(), anyBoolean()))
+      .thenReturn(Seq("executor-2"))
+    val manager = createManager(conf)
+    onExecutorAddedDefaultProfile(manager, "executor-1")
+    onExecutorAddedDefaultProfile(manager, "executor-2")
+
+    assert(removeExecutorsDefaultProfile(manager, Seq("executor-1", "executor-2")) ===
+      Seq("executor-2"))
+    assert(executorsDecommissioning(manager) === Set("executor-2"))
+    assert(executorsPendingToRemove(manager).isEmpty)
+
+    val requests = ArgumentCaptor.forClass(
+      classOf[Array[(String, ExecutorDecommissionInfo)]])
+    verify(client).decommissionExecutorsIfIdle(requests.capture(), mockitoEq(false))
+    assert(requests.getValue.toSeq === Seq(
+      "executor-1" -> ExecutorDecommissionInfo("spark scale down"),
+      "executor-2" -> ExecutorDecommissionInfo("spark scale down")))
+    verify(client, never()).decommissionExecutors(any(), anyBoolean(), anyBoolean())
+    verify(client, never()).killExecutors(any(), anyBoolean(), anyBoolean(), anyBoolean())
+
+    // A stale timeout can be rejected again without accounting the executor as removed.
+    when(client.decommissionExecutorsIfIdle(any(), anyBoolean()))
+      .thenReturn(Seq.empty[String])
+    assert(removeExecutorsDefaultProfile(manager, Seq("executor-1")).isEmpty)
+    assert(executorsDecommissioning(manager) === Set("executor-2"))
+
+    // The same executor remains eligible for a later request once it is actually idle.
+    when(client.decommissionExecutorsIfIdle(any(), anyBoolean()))
+      .thenReturn(Seq("executor-1"))
+    assert(removeExecutorsDefaultProfile(manager, Seq("executor-1")) === Seq("executor-1"))
+    assert(executorsDecommissioning(manager) === Set("executor-1", "executor-2"))
+  }
+
+  test("SPARK-58879: unsupported idle decommission does not force removal") {
+    val unsupportedClient = mock(classOf[ExecutorAllocationClient], CALLS_REAL_METHODS)
+    assert(unsupportedClient.decommissionExecutorsIfIdle(
+      Array("executor-1" -> ExecutorDecommissionInfo("spark scale down")),
+      adjustTargetNumExecutors = false).isEmpty)
+    verify(unsupportedClient, never()).decommissionExecutors(any(), anyBoolean(), anyBoolean())
+    verify(unsupportedClient, never())
+      .killExecutors(any(), anyBoolean(), anyBoolean(), anyBoolean())
   }
 
   test("remove multiple executors") {

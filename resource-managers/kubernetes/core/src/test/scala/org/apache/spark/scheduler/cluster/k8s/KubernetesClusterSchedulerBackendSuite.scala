@@ -27,24 +27,26 @@ import io.fabric8.kubernetes.client.dsl.PodResource
 import io.fabric8.kubernetes.client.dsl.base.PatchContext
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
-import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
-import org.mockito.Mockito.{atLeastOnce, inOrder, mock, never, spy, verify, when}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => mockitoEq}
+import org.mockito.Mockito.{atLeastOnce, inOrder, mock, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
+import org.apache.spark.internal.config.SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
-import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor, StopDriver, StopExecutors}
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
+import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{DecommissionExecutor, RegisterExecutor, RemoveExecutor, StopDriver, StopExecutors}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
+import org.apache.spark.storage.{BlockManager, BlockManagerMaster}
 
 class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAndAfter {
 
-  private val schedulerExecutorService = new DeterministicScheduler()
+  private var schedulerExecutorService: DeterministicScheduler = _
   private val sparkConf = new SparkConf(false)
     .set("spark.executor.instances", "3")
     .set("spark.app.id", TEST_SPARK_APP_ID)
@@ -56,6 +58,12 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   @Mock
   private var env: SparkEnv = _
+
+  @Mock
+  private var blockManager: BlockManager = _
+
+  @Mock
+  private var blockManagerMaster: BlockManagerMaster = _
 
   @Mock
   private var rpcEnv: RpcEnv = _
@@ -116,12 +124,17 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   before {
+    schedulerExecutorService = new DeterministicScheduler()
     MockitoAnnotations.openMocks(this).close()
     when(taskScheduler.sc).thenReturn(sc)
+    when(taskScheduler.excludedNodes()).thenReturn(Set.empty[String])
     when(sc.conf).thenReturn(sparkConf)
+    when(sc.listenerBus).thenReturn(listenerBus)
     when(sc.resourceProfileManager).thenReturn(resourceProfileManager)
     when(sc.env).thenReturn(env)
     when(env.rpcEnv).thenReturn(rpcEnv)
+    when(env.blockManager).thenReturn(blockManager)
+    when(blockManager.master).thenReturn(blockManagerMaster)
     driverEndpoint = ArgumentCaptor.forClass(classOf[RpcEndpoint])
     when(
       rpcEnv.setupEndpoint(
@@ -134,7 +147,15 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(configMapsOperations.inNamespace("default")).thenReturn(configMapsWithNamespace)
     when(configMapsWithNamespace.resource(any[ConfigMap]())).thenReturn(configMapResource)
     when(podAllocator.driverPod).thenReturn(None)
-    schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
+    schedulerBackendUnderTest = createSchedulerBackend()
+  }
+
+  after {
+    ResourceProfile.clearDefaultProfile()
+  }
+
+  private def createSchedulerBackend(): KubernetesClusterSchedulerBackend = {
+    new KubernetesClusterSchedulerBackend(
       taskScheduler,
       sc,
       kubernetesClient,
@@ -146,8 +167,35 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       pollEvents)
   }
 
-  after {
-    ResourceProfile.clearDefaultProfile()
+  private def registerExecutor(
+      backend: KubernetesClusterSchedulerBackend,
+      executorId: String): RpcEndpointRef = {
+    val executorEndpoint = mock(classOf[RpcEndpointRef])
+    when(executorEndpoint.address).thenReturn(RpcAddress("localhost", 10000 + executorId.toInt))
+    backend.createDriverEndpoint().receiveAndReply(mock(classOf[RpcCallContext])).apply(
+      RegisterExecutor(executorId, executorEndpoint, s"host-$executorId", 1,
+        Map.empty, Map.empty, Map.empty, defaultProfile.id))
+    assert(backend.isExecutorActive(executorId))
+    executorEndpoint
+  }
+
+  private def withDecommissionMetadata(
+      f: KubernetesClusterSchedulerBackend => Unit): Unit = {
+    val keys = Seq(KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key,
+      KUBERNETES_EXECUTOR_POD_DELETION_COST.key, SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS.key)
+    val originalValues = keys.map(key => key -> sparkConf.getOption(key))
+    sparkConf.set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, "deployment")
+    sparkConf.set(KUBERNETES_EXECUTOR_POD_DELETION_COST, 7)
+    sparkConf.set(SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS, 10)
+    try {
+      // The backend captures the unknown-executor cache size when it is constructed.
+      f(createSchedulerBackend())
+    } finally {
+      originalValues.foreach {
+        case (key, Some(value)) => sparkConf.set(key, value)
+        case (key, None) => sparkConf.remove(key)
+      }
+    }
   }
 
   test("Start all components") {
@@ -301,6 +349,83 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     val annotations = annotated.get.getMetadata.getAnnotations.asScala
     assert(annotations("controller.kubernetes.io/pod-deletion-cost") === "7")
     sparkConf.remove(KUBERNETES_EXECUTOR_POD_DELETION_COST.key)
+  }
+
+  test("SPARK-58879: idle decommission passes only selected executors to Kubernetes") {
+    withDecommissionMetadata { schedulerBackend =>
+      val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackend)
+      val idleExecutor = registerExecutor(backend, "1")
+      val busyExecutor = registerExecutor(backend, "2")
+      when(taskScheduler.isExecutorBusy("2")).thenReturn(true)
+      when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+        .thenReturn(labeledPods)
+      when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+        .thenReturn(labeledPods)
+      when(labeledPods.withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1")).thenReturn(labeledPods)
+      val podResource = mock(classOf[PodResource])
+      when(labeledPods.resources())
+        .thenAnswer(_ => java.util.stream.Stream.of[PodResource](podResource))
+      val decomInfo = ExecutorDecommissionInfo("test")
+
+      val accepted = backend.decommissionExecutorsIfIdle(
+        Array("1" -> decomInfo, "2" -> decomInfo, "3" -> decomInfo, "1" -> decomInfo),
+        adjustTargetNumExecutors = false)
+
+      assert(accepted === Seq("1"))
+      val requests = ArgumentCaptor.forClass(
+        classOf[Array[(String, ExecutorDecommissionInfo)]])
+      verify(backend).decommissionExecutors(
+        requests.capture(), mockitoEq(false), mockitoEq(false))
+      assert(requests.getValue.toSeq === Seq("1" -> decomInfo))
+      assert(!backend.isExecutorActive("1"))
+      assert(backend.isExecutorActive("2"))
+      verify(blockManagerMaster).decommissionBlockManagers(Seq("1"))
+      verify(idleExecutor).send(DecommissionExecutor)
+      verify(busyExecutor, never()).send(DecommissionExecutor)
+      verify(kubernetesClient, never()).pods()
+
+      schedulerExecutorService.runUntilIdle()
+      verify(labeledPods, times(2)).withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+      val executorIds = ArgumentCaptor.forClass(classOf[Array[String]])
+      verify(labeledPods, atLeastOnce()).withLabelIn(
+        mockitoEq(SPARK_EXECUTOR_ID_LABEL), executorIds.capture(): _*)
+      assert(executorIds.getAllValues.asScala.forall(_.toSeq == Seq("1")))
+      verify(labeledPods, times(2)).resources()
+      val patches = ArgumentCaptor.forClass(classOf[Pod])
+      verify(podResource, times(2)).patch(any(classOf[PatchContext]), patches.capture())
+      val appliedPods = patches.getAllValues.asScala
+      assert(appliedPods.exists { pod =>
+        Option(pod.getMetadata.getLabels).exists(_.get("soLong") == "cruelWorld")
+      })
+      assert(appliedPods.exists { pod =>
+        Option(pod.getMetadata.getAnnotations).exists(_.get(POD_DELETION_COST) == "7")
+      })
+    }
+  }
+
+  test("SPARK-58879: rejected idle decommission has no pod updates or replay") {
+    withDecommissionMetadata { schedulerBackend =>
+      val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackend)
+      val busyExecutor = registerExecutor(backend, "1")
+      when(taskScheduler.isExecutorBusy("1")).thenReturn(true)
+      val decomInfo = ExecutorDecommissionInfo("test")
+
+      assert(backend.decommissionExecutorsIfIdle(
+        Array.empty[(String, ExecutorDecommissionInfo)],
+        adjustTargetNumExecutors = false).isEmpty)
+      assert(backend.decommissionExecutorsIfIdle(
+        Array("1" -> decomInfo, "2" -> decomInfo, "1" -> decomInfo),
+        adjustTargetNumExecutors = false).isEmpty)
+
+      val laterExecutor = registerExecutor(backend, "2")
+      schedulerExecutorService.runUntilIdle()
+      verify(backend, never()).decommissionExecutors(
+        any[Array[(String, ExecutorDecommissionInfo)]](), anyBoolean(), anyBoolean())
+      verify(blockManagerMaster, never()).decommissionBlockManagers(any[Seq[String]]())
+      verify(busyExecutor, never()).send(DecommissionExecutor)
+      verify(laterExecutor, never()).send(DecommissionExecutor)
+      verify(kubernetesClient, never()).pods()
+    }
   }
 
   test("SPARK-34407: CoarseGrainedSchedulerBackend.stop may throw SparkException") {
