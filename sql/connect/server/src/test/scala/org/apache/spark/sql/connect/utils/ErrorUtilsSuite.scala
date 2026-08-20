@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.utils
 
 import java.util.UUID
 
+import com.google.rpc.Code
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
@@ -47,5 +48,26 @@ class ErrorUtilsSuite extends SharedSparkSession {
 
     assert(error.getStatus.getCode == Status.Code.UNKNOWN)
     assert(error.getStatus.getDescription == classOf[InterruptedException].getName)
+  }
+
+  test("buildStatusFromThrowable uses throwable class when non-fatal throwable has no message") {
+    val status = ErrorUtils.buildStatusFromThrowable(new RuntimeException(), None)
+
+    assert(status.getCode == Code.INTERNAL_VALUE)
+    assert(status.getMessage == classOf[RuntimeException].getName)
+  }
+
+  test("buildStatusFromThrowable uses throwable class when non-fatal message is empty") {
+    val status = ErrorUtils.buildStatusFromThrowable(new RuntimeException(""), None)
+
+    assert(status.getCode == Code.INTERNAL_VALUE)
+    assert(status.getMessage == classOf[RuntimeException].getName)
+  }
+
+  test("buildStatusFromThrowable keeps the message when the non-fatal throwable has one") {
+    val status = ErrorUtils.buildStatusFromThrowable(new RuntimeException("boom"), None)
+
+    assert(status.getCode == Code.INTERNAL_VALUE)
+    assert(status.getMessage == "boom")
   }
 }

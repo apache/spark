@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Optional, Union
 import inspect
 import os
 import time
@@ -332,7 +332,9 @@ class GoldenFileTestMixin:
             raise
 
     @classmethod
-    def repr_arrow_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_arrow_value(
+        cls, value: Union["pa.Array", "pa.ChunkedArray"], max_len: int = 32
+    ) -> str:
         """
         Format a PyArrow Array/ChunkedArray for golden file.
 
@@ -359,7 +361,23 @@ class GoldenFileTestMixin:
         return f"{v_str}@{cls.repr_type(value.type)}"
 
     @classmethod
-    def repr_arrow_table_value(cls, value: Any, max_len: int = 32) -> str:
+    def _repr_arrow_columns(
+        cls, value: Union["pa.Table", "pa.RecordBatch"], max_len: int
+    ) -> "tuple[str, str]":
+        """Render a Table/RecordBatch as a "{name: [scalars], ...}" body and schema string."""
+        columns = []
+        for name, column in zip(value.schema.names, value.columns):
+            # Escape NULL bytes so the value can be safely stored in CSV files.
+            elements = [cls._scalar_str(scalar) for scalar in column]
+            columns.append(f"{name}: [" + ", ".join(elements) + "]")
+        v_str = "{" + ", ".join(columns) + "}"
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        schema = ", ".join(f"{f.name}: {cls.repr_type(f.type)}" for f in value.schema)
+        return v_str, schema
+
+    @classmethod
+    def repr_arrow_table_value(cls, value: "pa.Table", max_len: int = 32) -> str:
         """
         Format a PyArrow Table for golden file.
 
@@ -371,19 +389,27 @@ class GoldenFileTestMixin:
         str
             "{col: [val1, val2, None], ...}@Table[name: type, ...]"
         """
-        columns = []
-        for name, column in zip(value.column_names, value.columns):
-            # Escape NULL bytes so the value can be safely stored in CSV files.
-            elements = [cls._scalar_str(scalar) for scalar in column]
-            columns.append(f"{name}: [" + ", ".join(elements) + "]")
-        v_str = "{" + ", ".join(columns) + "}"
-        if max_len > 0:
-            v_str = v_str[:max_len]
-        schema = ", ".join(f"{f.name}: {cls.repr_type(f.type)}" for f in value.schema)
+        v_str, schema = cls._repr_arrow_columns(value, max_len)
         return f"{v_str}@Table[{schema}]"
 
     @classmethod
-    def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_arrow_record_batch_value(cls, value: "pa.RecordBatch", max_len: int = 32) -> str:
+        """
+        Format a PyArrow RecordBatch for golden file.
+
+        Same shape as ``repr_arrow_table_value`` (a RecordBatch is a single batch of
+        columns), keyed by column name, plus the Arrow schema.
+
+        Returns
+        -------
+        str
+            "{col: [val1, val2, None], ...}@RecordBatch[name: type, ...]"
+        """
+        v_str, schema = cls._repr_arrow_columns(value, max_len)
+        return f"{v_str}@RecordBatch[{schema}]"
+
+    @classmethod
+    def repr_pandas_value(cls, value: "pd.DataFrame", max_len: int = 32) -> str:
         """
         Format a pandas DataFrame for golden file.
 
@@ -412,7 +438,7 @@ class GoldenFileTestMixin:
         return f"{v_str}@Dataframe[{simple_schema}]"
 
     @classmethod
-    def repr_numpy_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_numpy_value(cls, value: "np.ndarray", max_len: int = 32) -> str:
         """
         Format a numpy ndarray for golden file.
 
@@ -456,6 +482,7 @@ class GoldenFileTestMixin:
 
         - PyArrow Array/ChunkedArray -> repr_arrow_value
         - PyArrow Table -> repr_arrow_table_value
+        - PyArrow RecordBatch -> repr_arrow_record_batch_value
         - pandas DataFrame -> repr_pandas_value
         - numpy ndarray -> repr_numpy_value
         - Everything else -> repr_python_value
@@ -476,6 +503,8 @@ class GoldenFileTestMixin:
             return cls.repr_arrow_value(value, max_len)
         if have_pyarrow and isinstance(value, pa.Table):
             return cls.repr_arrow_table_value(value, max_len)
+        if have_pyarrow and isinstance(value, pa.RecordBatch):
+            return cls.repr_arrow_record_batch_value(value, max_len)
 
         if have_pandas and isinstance(value, pd.DataFrame):
             return cls.repr_pandas_value(value, max_len)
@@ -487,7 +516,7 @@ class GoldenFileTestMixin:
         return cls.repr_python_value(value, max_len)
 
     @classmethod
-    def repr_pandas_series_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_pandas_series_value(cls, value: "pd.Series", max_len: int = 32) -> str:
         """
         Format a pandas Series for golden file.
 
