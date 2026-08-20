@@ -192,17 +192,9 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
     val vocSize = $(vocabSize)
     val input = dataset.select($(inputCol))
-    val inputSizeCol = input.select(count("*")).scalar()
-    val minDfCol = if ($(minDF) >= 1.0) {
-      lit($(minDF))
-    } else {
-      inputSizeCol * lit($(minDF))
-    }
-    val maxDfCol = if ($(maxDF) >= 1.0) {
-      lit($(maxDF))
-    } else {
-      inputSizeCol * lit($(maxDF))
-    }
+    val inputSizeCol = input.select(count(lit(0))).scalar()
+    val minDfCol = if ($(minDF) >= 1.0) lit($(minDF)) else inputSizeCol * lit($(minDF))
+    val maxDfCol = if ($(maxDF) >= 1.0) lit($(maxDF)) else inputSizeCol * lit($(maxDF))
     val filteringRequired = isSet(minDF) || isSet(maxDF)
     val wordCounts = if (filteringRequired) {
       input
@@ -213,18 +205,18 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           col("docId"),
           explode(col("tokens")).as("word"))
         .groupBy("docId", "word")
-        .agg(count("*").as("termCountInDoc"))
+        .agg(count(lit(0)).as("wordCountInDoc"))
         .groupBy("word")
         .agg(
-          sum("termCountInDoc").as("count"),
-          count("*").as("documentCount"))
-        .filter(col("documentCount") >= minDfCol && col("documentCount") <= maxDfCol)
+          sum("wordCountInDoc").as("count"),
+          count(lit(0)).as("docCount"))
+        .filter(minDfCol <= col("docCount") && col("docCount") <= maxDfCol)
         .select("word", "count")
     } else {
       input
         .select(explode(col($(inputCol))).as("word"))
         .groupBy("word")
-        .agg(count("*").as("count"))
+        .agg(count(lit(0)).as("count"))
     }
 
     val vocab = wordCounts
