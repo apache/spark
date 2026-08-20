@@ -1689,6 +1689,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           assert(spark.read.orc(path).schema.head.dataType === CharType(4))
         }
       }
+      // Collated unbounded STRING is not stamped; file-only ORC infers plain STRING,
+      // same as Avro (no catalyst property on unbounded STRING).
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).selectExpr("cast('ab' AS STRING COLLATE UTF8_LCASE) AS c")
+          .write.mode("overwrite").orc(path)
+        assert(spark.read.orc(path).schema.head.dataType === StringType)
+      }
 
       // Avro conversion stamps CHAR/VARCHAR (including nested fields and CHAR map keys).
       // The avro data source lives in connector/avro; sql/core still owns toAvroType,
@@ -1751,6 +1759,12 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           val back = deser.deserialize(reader.next()).get
             .asInstanceOf[org.apache.spark.sql.catalyst.InternalRow]
           assert(back.getUTF8String(0).toString === "ab  ")
+          val nestedField = back.getStruct(1, 1)
+          assert(nestedField.getUTF8String(0).toString === "xy")
+          val mapData = back.getMap(2)
+          assert(mapData.numElements() === 1)
+          assert(mapData.keyArray().getUTF8String(0).toString === "k ")
+          assert(mapData.valueArray().getUTF8String(0).toString === "v")
         } finally {
           reader.close()
         }

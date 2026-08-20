@@ -472,13 +472,14 @@ object OrcUtils extends Logging {
         // Write CHAR/VARCHAR as ORC STRING plus spark.sql.catalyst.type, not native
         // ORC CHAR/VARCHAR. Native ORC maxLength would truncate/pad independently of
         // Spark store assignment. Hive-written native CHAR still round-trips on read
-        // via toCatalystSchema. Stamp subclasses through charVarcharTypeName so a
-        // later StringType arm cannot drop the length.
+        // via toCatalystSchema. Unbounded STRING (including collated) stamps
+        // StringType.typeName ("string"), matching Avro: this PR does not round-trip
+        // collation on file-only reads.
         case s: StringType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.STRING)
           typeDesc.setAttribute(
             CATALYST_TYPE_ATTRIBUTE_NAME,
-            CharVarcharUtils.charVarcharTypeName(s).getOrElse(s.typeName))
+            CharVarcharUtils.charVarcharTypeName(s).getOrElse(StringType.typeName))
           Some(typeDesc)
         case _ => None
       }
