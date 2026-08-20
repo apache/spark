@@ -129,41 +129,41 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     }
   }
 
-  test("residual fallback beyond the leaf's min/max is not dropped") {
-    // The guard is load-bearing only when (a) the fallback row is the sole match and (b) the leaf
-    // min/max cannot match the literal on its own. `a` is shredded as bigint; id 0..49 -> a = id
-    // (typed leaf, min 0 max 49). id 50 -> a = 1500.5, a decimal the int64 leaf cannot hold, so it
-    // lands in v.typed_value.a.value with typed_value NULL. One row group: `a > 999` matches only
-    // that row, and the leaf min/max (<=49) cannot match it, so only the guard keeps the row group.
-    // A leaf-only predicate would drop it and lose the row (the #54598 bug).
-    Seq(
-      // Different fallback encodings that all miss the int64 leaf.
-      "'{\"a\":1500.5}'" -> Row(1500L),   // non-integral decimal
-      "'{\"a\":\"1500\"}'" -> Row(1500L)  // string
-    ).foreach { case (fallbackJson, want) =>
-      withTempDir { dir =>
-        val jsonExpr = s"case when id = 50 then $fallbackJson else '{\"a\":' || id || '}' end"
-        writeShredded(dir, "a bigint", jsonExpr, numRows = 51, blockSize = 1024 * 1024)
+  // Assert that a row group whose only match for `$.a > 999` is a residual fallback (a value the
+  // int64 leaf cannot hold, so it lands in v.typed_value.a.value with the leaf NULL) is not
+  // dropped. `fallbackJson` is the JSON for the fallback row. The leaf min/max is 0..49, so only
+  // the guard keeps the row group; a leaf-only predicate would drop it and lose the row (#54598).
+  private def checkResidualFallbackNotDropped(fallbackJson: String): Unit = {
+    withTempDir { dir =>
+      val jsonExpr =
+        "case when id = 50 then '" + fallbackJson + "' else '{\"a\":' || id || '}' end"
+      writeShredded(dir, "a bigint", jsonExpr, numRows = 51, blockSize = 1024 * 1024)
 
-        def read: DataFrame = spark.read.parquet(dir.getAbsolutePath)
-          .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a")
-          .where("a > 999")
-        val expected = baseline(read)
-        assert(expected == Seq(want), s"baseline should return the fallback row, got $expected")
+      def read: DataFrame = spark.read.parquet(dir.getAbsolutePath)
+        .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a")
+        .where("a > 999")
+      val expected = baseline(read)
+      assert(expected == Seq(Row(1500L)), s"baseline should return the fallback row, got $expected")
 
-        forEachReader { (dsv1, vectorized) =>
-          // The row group's only match is in the residual with a NULL leaf, so the guard must keep
-          // it: results include the fallback row and the row group is not skipped.
-          checkAnswer(read, expected)
-          if (dsv1 && vectorized) {
-            val all = spark.read.parquet(dir.getAbsolutePath)
-              .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a")
-            assert(countRowGroupsRead(read) == countRowGroupsRead(all),
-              "Row group whose only match is a residual fallback must NOT be skipped")
-          }
+      forEachReader { (dsv1, vectorized) =>
+        // The row group's only match is in the residual with a NULL leaf, so the guard must keep
+        // it: results include the fallback row and the row group is not skipped.
+        checkAnswer(read, expected)
+        if (dsv1 && vectorized) {
+          val all = spark.read.parquet(dir.getAbsolutePath)
+            .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a")
+          assert(countRowGroupsRead(read) == countRowGroupsRead(all),
+            "Row group whose only match is a residual fallback must NOT be skipped")
         }
       }
     }
+  }
+
+  test("residual fallback beyond the leaf's min/max is not dropped") {
+    // Different fallback encodings that all miss the int64 leaf: a non-integral decimal that
+    // 1500.5 rounds to 1500, and a string "1500". Both are read back as bigint 1500.
+    checkResidualFallbackNotDropped("{\"a\":1500.5}")
+    checkResidualFallbackNotDropped("{\"a\":\"1500\"}")
   }
 
   test("negated predicate over an all-fallback row group is not dropped") {
