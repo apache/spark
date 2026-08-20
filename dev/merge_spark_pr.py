@@ -1050,6 +1050,8 @@ def jira_components_from_title_tags(tags):
     ['PySpark', 'Documentation']
     >>> jira_components_from_title_tags(["SQL", "TEST"])
     ['SQL', 'Tests']
+    >>> jira_components_from_title_tags(["UDF"])
+    ['UDF']
     >>> jira_components_from_title_tags(["SQL", "FOLLOWUP", "4.X", "BOGUS"])
     ['SQL']
     >>> jira_components_from_title_tags(["SQL", "SQL"])
@@ -1449,6 +1451,7 @@ COMPONENTS = (
     Component("STREAMING", ("DSTREAM", "DSTREAMS"), primary=True, jira_name="DStreams"),
     Component("SUBMIT", jira_name="Spark Submit"),
     Component("TEST", ("TESTS", "TEST-ONLY", "TESTS-ONLY"), jira_name="Tests"),
+    Component("UDF", primary=True, jira_name="UDF"),
     Component("UI", ("WEBUI", "WEB_UI"), primary=True, jira_name="Web UI"),
     Component("WINDOWS", primary=True, jira_name="Windows"),
     Component("YARN", primary=True, jira_name="YARN"),

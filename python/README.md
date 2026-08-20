@@ -1,33 +1,36 @@
 # Apache Spark
 
 Spark is a unified analytics engine for large-scale data processing. It provides
-high-level APIs in Scala, Java, Python, and R, and an optimized engine that
+high-level APIs in Scala, Java, Python, and R (deprecated), and an optimized engine that
 supports general computation graphs for data analysis. It also supports a
 rich set of higher-level tools including Spark SQL for SQL and DataFrames,
 pandas API on Spark for pandas workloads, MLlib for machine learning, GraphX for graph processing,
 and Structured Streaming for stream processing.
 
-<https://spark.apache.org/>
+PySpark is the Python distribution of Spark.
 
-## Online Documentation
+Project home page: https://spark.apache.org/
 
-You can find the latest Spark documentation, including a programming
-guide, on the [project web page](https://spark.apache.org/documentation.html)
+Main documentation: https://spark.apache.org/docs/latest/
 
+PySpark documentation: https://spark.apache.org/docs/latest/api/python/index.html
 
-## Python Packaging
+## PySpark on PyPI
 
-This README file only contains basic information related to pip installed PySpark.
-This packaging is currently experimental and may change in future versions (although we will do our best to keep compatibility).
-Using PySpark requires the Spark JARs, and if you are building this from source please see the builder instructions at
-["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html).
+There are a few PySpark packages published by the Apache Spark project to PyPI:
 
-The Python packaging for Spark is not intended to replace all of the other use cases. This Python packaged version of Spark is suitable for interacting with an existing cluster (be it Spark standalone, YARN) - but does not contain the tools required to set up your own standalone Spark cluster. You can download the full version of Spark from the [Apache Spark downloads page](https://spark.apache.org/downloads.html).
+- `pyspark`: Classic PySpark, includes Spark assembly JARs
+- `pyspark-connect`: Classic PySpark with Spark Connect configured as the default, includes `pyspark`
+- `pyspark-client`: Pure Python Spark Connect client, no JARs or JRE needed
 
+For more information, see the [installation guide][install]. If you're building PySpark from source, see [Building Spark][build] and [pyproject.toml][py].
 
-**NOTE:** If you are using this with a Spark standalone cluster you must ensure that the version (including minor version) matches or you may experience odd errors.
+[install]: https://spark.apache.org/docs/latest/api/python/getting_started/install.html
+[build]: https://spark.apache.org/docs/latest/building-spark.html
+[py]: https://github.com/apache/spark/blob/master/pyproject.toml
 
-## Python Requirements
+## Python vs. "Full" Distribution of Spark
 
-At its core PySpark depends on Py4J, but some additional sub-packages have their own extra requirements for some features (including numpy, pandas, and pyarrow).
-See also [Dependencies](https://spark.apache.org/docs/latest/api/python/getting_started/install.html#dependencies) for production, and [pyproject.toml](https://github.com/apache/spark/blob/master/pyproject.toml) for development.
+PySpark is not intended to be a complete distribution of Spark. It's meant for local development or for interacting with an existing cluster (be it Spark standalone, YARN, or Kubernetes). Using PySpark to set up a new standalone Spark cluster is not supported. To set up a standalone cluster please [use the full distribution of Spark](https://spark.apache.org/downloads.html).
+
+When using PySpark with an existing Spark cluster you must ensure that the major and minor version (e.g. `4.3.*`) match or you may experience odd errors.

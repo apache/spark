@@ -22,7 +22,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTable, InMemoryTable, InMemoryTruncatableOnlyTable, InMemoryTruncatableOnlyTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTable, InMemoryTable, InMemoryTruncatableOnlyTable, InMemoryTruncatableOnlyTableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.write.DeleteSummary
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, TruncateTableExec, WriteDeltaExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -1047,8 +1047,10 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     // replace the row-level plan with a filter-only deleteWhere call via
     // OptimizeMetadataOnlyDeleteFromTable (canDeleteWhere returns false for LessThan).
     checkRowLevelOperationOptions(
-      sql(s"DELETE FROM $tableNameAsString WITH (`write.split-size` = 10) WHERE salary < 200"),
-      "write.split-size" -> "10")
+      sql(s"DELETE FROM $tableNameAsString WITH " +
+        s"(`load-option` = 'load-value', `write-option` = 'write-value') WHERE salary < 200"),
+      "load-option" -> "load-value",
+      "write-option" -> "write-value")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -1101,16 +1103,20 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     // dep = 'hr' is an EqualTo on the partition column. OptimizeMetadataOnlyDeleteFromTable
     // converts the row-level plan to a deleteWhere call. Verify options flow into the exec.
     val Seq(qe) = withQueryExecutionsCaptured(spark) {
-      sql(s"DELETE FROM $tableNameAsString WITH (`write.split-size` = 10) WHERE dep = 'hr'")
+      sql(s"DELETE FROM $tableNameAsString WITH " +
+        s"(`load-option` = 'load-value', `write-option` = 'write-value') WHERE dep = 'hr'")
     }
     val exec = qe.executedPlan.collectFirst {
       case e: DeleteFromTableExec => e
     }.getOrElse(fail("expected DeleteFromTableExec for the metadata-only deleteWhere path"))
-    assert(exec.options.get("write.split-size") === "10",
-      "options must reach DeleteFromTableExec on the deleteWhere path")
-    assert(exec.table.asInstanceOf[InMemoryRowLevelOperationTable].lastDeleteOptions
-      .get("write.split-size") === "10",
-      "options must be forwarded to SupportsDeleteV2.deleteWhere(predicates, options)")
+    assert(exec.options.get("load-option") === "load-value")
+    assert(exec.options.get("write-option") === "write-value")
+    val v2Table = exec.table.asInstanceOf[InMemoryRowLevelOperationTable]
+    assert(v2Table.lastDeleteOptions.get("load-option") === "load-value")
+    assert(v2Table.lastDeleteOptions.get("write-option") === "write-value")
+    assertLastTransactionWriteLoadOptions(
+      "load-option" -> "load-value",
+      "write-option" -> "write-value")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -1146,27 +1152,40 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     // is planned as TruncateTableExec (not DeleteFromTableExec).
     withSQLConf(
         "spark.sql.catalog.trunccat" ->
-          classOf[InMemoryTruncatableOnlyTableCatalog].getName) {
+          classOf[InMemoryTruncatableOnlyTableCatalog].getName,
+        "spark.sql.catalog.trunccat.tableStateOptionKeys" -> "load-option") {
       withTable("trunccat.ns.tbl") {
         sql("CREATE TABLE trunccat.ns.tbl (pk INT NOT NULL, dep STRING) USING foo")
         sql("INSERT INTO trunccat.ns.tbl VALUES (1, 'hr'), (2, 'software')")
+        val truncCatalog = spark.sessionState.catalogManager
+          .catalog("trunccat").asInstanceOf[InMemoryTruncatableOnlyTableCatalog]
+        truncCatalog.resetLoadTableCalls()
 
         val Seq(qe) = withQueryExecutionsCaptured(spark) {
-          sql("DELETE FROM trunccat.ns.tbl WITH (`write.split-size` = 10)")
+          sql("DELETE FROM trunccat.ns.tbl WITH " +
+            "(`load-option` = 'load-value', `write-option` = 'write-value')")
         }
         val exec = qe.executedPlan.collectFirst {
           case e: TruncateTableExec => e
         }.getOrElse(fail("expected TruncateTableExec for the truncate path"))
-        assert(exec.options.get("write.split-size") === "10",
-          "options must reach TruncateTableExec")
+        assert(exec.options.get("load-option") === "load-value")
+        assert(exec.options.get("write-option") === "write-value")
 
-        val truncTable = spark.sessionState.catalogManager
-          .catalog("trunccat").asInstanceOf[TableCatalog]
+        val targetLoads = truncCatalog.loadTableCalls.filter {
+          case (context, options) =>
+            context.writePrivileges() === java.util.Set.of(TableWritePrivilege.DELETE) &&
+              options.get("load-option") == "load-value" &&
+              options.get("write-option") == null &&
+              options.size() == 1
+        }
+        assert(targetLoads.nonEmpty, "target loadTable did not receive truncate state options")
+
+        val truncTable = truncCatalog
           .loadTable(org.apache.spark.sql.connector.catalog.Identifier.of(
             Array("ns"), "tbl"))
           .asInstanceOf[InMemoryTruncatableOnlyTable]
-        assert(truncTable.lastTruncateOptions.get("write.split-size") === "10",
-          "options must be forwarded to TruncatableTable.truncateTable(options)")
+        assert(truncTable.lastTruncateOptions.get("load-option") === "load-value")
+        assert(truncTable.lastTruncateOptions.get("write-option") === "write-value")
 
         checkAnswer(spark.table("trunccat.ns.tbl"), Nil)
       }
