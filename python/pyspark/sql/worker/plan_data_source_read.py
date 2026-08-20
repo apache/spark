@@ -163,10 +163,16 @@ def records_to_arrow_batches(
                 # Assign the values by name.
                 for name in column_names:
                     idx = col_mapping[name]
-                    pylist[idx].append(column_converters[idx](result[name]))
+                    converter = column_converters[idx]
+                    pylist[idx].append(
+                        converter(result[name]) if converter is not None else result[name]
+                    )
             else:
                 for col in range(num_cols):
-                    pylist[col].append(column_converters[col](result[col]))
+                    converter = column_converters[col]
+                    pylist[col].append(
+                        converter(result[col]) if converter is not None else result[col]
+                    )
         batch = pa.RecordBatch.from_arrays(pylist, schema=pa_schema)
         yield batch
 

@@ -1643,7 +1643,6 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 converters = [
                     ArrowTableToRowsConversion._create_converter(
                         f.dataType,
-                        none_on_identity=True,
                         binary_as_bytes=runner_conf.binary_as_bytes,
                     )
                     for f in eval_conf.input_type
@@ -3321,7 +3320,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     ),
                     LocalDataToArrowConversion._create_converter(
                         udf_return_type,
-                        none_on_identity=True,
                         int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                     ),
                 )
@@ -3331,7 +3329,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # --- Input preparation ---
         arrow_to_py_converters = [
             ArrowTableToRowsConversion._create_converter(
-                f.dataType, none_on_identity=True, binary_as_bytes=runner_conf.binary_as_bytes
+                f.dataType, binary_as_bytes=runner_conf.binary_as_bytes
             )
             for f in eval_conf.input_type
         ]
@@ -3511,7 +3509,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             arg_converters = [
                 ArrowTableToRowsConversion._create_converter(
                     _elementwise_leaf_type(input_fields[o].dataType, depth),
-                    none_on_identity=True,
                     binary_as_bytes=runner_conf.binary_as_bytes,
                 )
                 for o in args_kwargs_offsets
@@ -3531,7 +3528,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     ),
                     LocalDataToArrowConversion._create_converter(
                         udf_return_type,
-                        none_on_identity=True,
                         int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                     ),
                 )

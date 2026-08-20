@@ -560,40 +560,18 @@ class LocalDataToArrowConversion:
         else:
             return False
 
-    @overload
-    @staticmethod
-    def _create_converter(
-        dataType: DataType, nullable: bool = True, *, int_to_decimal_coercion_enabled: bool = False
-    ) -> Callable:
-        pass
-
-    @overload
     @staticmethod
     def _create_converter(
         dataType: DataType,
         nullable: bool = True,
         *,
-        none_on_identity: bool = False,
-        int_to_decimal_coercion_enabled: bool = False,
-    ) -> Optional[Callable]:
-        pass
-
-    @staticmethod
-    def _create_converter(
-        dataType: DataType,
-        nullable: bool = True,
-        *,
-        none_on_identity: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
     ) -> Optional[Callable]:
         assert dataType is not None and isinstance(dataType, DataType)
         assert isinstance(nullable, bool)
 
         if not LocalDataToArrowConversion._need_converter(dataType, nullable):
-            if none_on_identity:
-                return None
-            else:
-                return lambda value: value
+            return None
 
         if isinstance(dataType, NullType):
 
@@ -613,7 +591,6 @@ class LocalDataToArrowConversion:
                 LocalDataToArrowConversion._create_converter(
                     field.dataType,
                     field.nullable,
-                    none_on_identity=True,
                     int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
                 )
                 for field in dataType.fields
@@ -670,7 +647,6 @@ class LocalDataToArrowConversion:
             element_conv = LocalDataToArrowConversion._create_converter(
                 dataType.elementType,
                 dataType.containsNull,
-                none_on_identity=True,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
 
@@ -707,7 +683,6 @@ class LocalDataToArrowConversion:
             value_conv = LocalDataToArrowConversion._create_converter(
                 dataType.valueType,
                 dataType.valueContainsNull,
-                none_on_identity=True,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
 
@@ -820,7 +795,6 @@ class LocalDataToArrowConversion:
             conv = LocalDataToArrowConversion._create_converter(
                 udt.sqlType(),
                 nullable=nullable,
-                none_on_identity=True,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
 
@@ -949,7 +923,6 @@ class LocalDataToArrowConversion:
                 LocalDataToArrowConversion._create_converter(
                     field.dataType,
                     field.nullable,
-                    none_on_identity=True,
                     # Default to False for general data conversion
                     int_to_decimal_coercion_enabled=False,
                 )
@@ -1154,29 +1127,14 @@ class ArrowTableToRowsConversion:
         else:
             return False
 
-    @overload
-    @staticmethod
-    def _create_converter(dataType: DataType, *, binary_as_bytes: bool = True) -> Callable:
-        pass
-
-    @overload
     @staticmethod
     def _create_converter(
-        dataType: DataType, *, none_on_identity: bool, binary_as_bytes: bool = True
-    ) -> Optional[Callable]:
-        pass
-
-    @staticmethod
-    def _create_converter(
-        dataType: DataType, *, none_on_identity: bool = False, binary_as_bytes: bool = True
+        dataType: DataType, *, binary_as_bytes: bool = True
     ) -> Optional[Callable]:
         assert dataType is not None and isinstance(dataType, DataType)
 
         if not ArrowTableToRowsConversion._need_converter(dataType):
-            if none_on_identity:
-                return None
-            else:
-                return lambda value: value
+            return None
 
         if isinstance(dataType, NullType):
             return lambda value: None
@@ -1187,7 +1145,7 @@ class ArrowTableToRowsConversion:
 
             field_convs = [
                 ArrowTableToRowsConversion._create_converter(
-                    f.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                    f.dataType, binary_as_bytes=binary_as_bytes
                 )
                 for f in dataType.fields
             ]
@@ -1212,11 +1170,7 @@ class ArrowTableToRowsConversion:
 
         elif isinstance(dataType, ArrayType):
             element_conv = ArrowTableToRowsConversion._create_converter(
-                dataType.elementType, none_on_identity=True, binary_as_bytes=binary_as_bytes
-            )
-
-            assert element_conv is not None, (
-                f"_need_converter() returned True for ArrayType of {dataType.elementType}"
+                dataType.elementType, binary_as_bytes=binary_as_bytes
             )
 
             def convert_array(value: Any) -> Any:
@@ -1224,16 +1178,20 @@ class ArrowTableToRowsConversion:
                     return None
                 else:
                     assert isinstance(value, list)
-                    return [element_conv(v) for v in value]
+                    return (
+                        [element_conv(v) for v in value]
+                        if element_conv is not None
+                        else value
+                    )
 
             return convert_array
 
         elif isinstance(dataType, MapType):
             key_conv = ArrowTableToRowsConversion._create_converter(
-                dataType.keyType, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                dataType.keyType, binary_as_bytes=binary_as_bytes
             )
             value_conv = ArrowTableToRowsConversion._create_converter(
-                dataType.valueType, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                dataType.valueType, binary_as_bytes=binary_as_bytes
             )
 
             if key_conv is None:
@@ -1317,7 +1275,7 @@ class ArrowTableToRowsConversion:
             udt: UserDefinedType = dataType
 
             conv = ArrowTableToRowsConversion._create_converter(
-                udt.sqlType(), none_on_identity=True, binary_as_bytes=binary_as_bytes
+                udt.sqlType(), binary_as_bytes=binary_as_bytes
             )
 
             if conv is None:
@@ -1446,7 +1404,7 @@ class ArrowTableToRowsConversion:
         if len(fields) > 0:
             field_converters = [
                 ArrowTableToRowsConversion._create_converter(
-                    f.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                    f.dataType, binary_as_bytes=binary_as_bytes
                 )
                 for f in schema.fields
             ]

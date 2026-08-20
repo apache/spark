@@ -2327,7 +2327,7 @@ class DataFrame(ParentDataFrame):
         binary_as_bytes = self._get_binary_as_bytes()
         field_converters = [
             ArrowTableToRowsConversion._create_converter(
-                f.dataType, none_on_identity=False, binary_as_bytes=binary_as_bytes
+                f.dataType, binary_as_bytes=binary_as_bytes
             )
             for f in schema.fields
         ]
@@ -2340,7 +2340,11 @@ class DataFrame(ParentDataFrame):
                     ]
                     for i in range(0, table.num_rows):
                         values = [
-                            field_converters[j](columnar_data[j][i])  # type: ignore[misc]
+                            (
+                                field_converters[j](columnar_data[j][i])  # type: ignore[misc]
+                                if field_converters[j] is not None
+                                else columnar_data[j][i]
+                            )
                             for j in range(table.num_columns)
                         ]
                         yield _create_row(fields=schema.fieldNames(), values=values)

@@ -192,7 +192,12 @@ def _main(infile: IO, outfile: IO) -> None:
                 ]
                 for row in range(0, batch.num_rows):
                     values = [
-                        converters[col](columns[col][row]) for col in range(batch.num_columns)
+                        (
+                            converters[col](columns[col][row])
+                            if converters[col] is not None
+                            else columns[col][row]
+                        )
+                        for col in range(batch.num_columns)
                     ]
                     yield _create_row(fields=fields, values=values)
 
