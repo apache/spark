@@ -104,11 +104,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       location, session.sharedState.hadoopConf)
   }
 
-  // Strategy cases that target v2 views read `ResolvedPersistentView.info` directly. For
-  // session-catalog (v1) views the payload is a `V1View` wrapping the original
-  // `CatalogTable`; v2 catalogs supply a regular `View` from the catalog.
-  // `ResolveSessionCatalog` rewrites session-catalog views to v1 commands before this strategy
-  // fires, so v2 cases that don't expect a `V1View` won't see one.
+  // Strategy cases that target v2 views read `ResolvedPersistentView.info` directly. For views
+  // handled by the v1 session catalog, the payload is a `V1View` wrapping the original
+  // `CatalogTable`; ViewCatalog implementations supply a regular `View` from the catalog.
+  // `ResolveSessionCatalog` rewrites only the former to v1 commands before this strategy fires,
+  // so v2 cases that don't expect a `V1View` won't see one.
 
   private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
     val newLoc = tableSpec.location.map { loc =>
@@ -283,9 +283,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // CREATE TABLE ... LIKE ... for a v2 catalog target.
     // Source is an already-resolved Table object; no extra catalog round-trip is needed.
     // Views are wrapped in V1Table so the exec can extract schema and provider uniformly --
-    // session-catalog (v1) views unwrap to their original `CatalogTable`; non-session v2
-    // views go through `V1Table.toCatalogTable` to synthesize an equivalent `CatalogTable`
-    // from the resolved `View`.
+    // views handled by the v1 session catalog unwrap to their original `CatalogTable`;
+    // ViewCatalog-backed views go through `V1Table.toCatalogTable` to synthesize an equivalent
+    // `CatalogTable` from the resolved `View`.
     case CreateTableLike(
         ResolvedIdentifier(catalog, ident), source,
         locationStr, provider, serdeInfo, properties, ifNotExists) =>
@@ -339,15 +339,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CreateV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, userSpecifiedColumns, comment,
         collation, properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
 
-    // CREATE VIEW ... WITH METRICS on a non-session v2 catalog. Routes the metric-view path
-    // through `CreateV2MetricViewExec`, which extends `V2ViewPreparation` to share the
-    // `IF NOT EXISTS` short-circuit, `OR REPLACE`, and cross-type-collision decoding with
-    // `CreateV2ViewExec`. Session-catalog dispatch happens earlier in `ResolveSessionCatalog`,
-    // which rewrites `CreateMetricView` (the parser's v1/v2-agnostic logical plan) to
-    // `CreateMetricViewCommand` for v1 execution.
+    // CREATE VIEW ... WITH METRICS on a ViewCatalog. Routes the metric-view path through
+    // `CreateV2MetricViewExec`, which extends `V2ViewPreparation` to share the `IF NOT EXISTS`
+    // short-circuit, `OR REPLACE`, and cross-type-collision decoding with `CreateV2ViewExec`.
+    // Session catalogs without ViewCatalog are rewritten to `CreateMetricViewCommand` earlier
+    // in `ResolveSessionCatalog`.
     case CreateMetricView(
         ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment, properties,
-        originalText, allowExisting, replace) if !CatalogV2Util.isSessionCatalog(catalog) =>
+        originalText, allowExisting, replace) =>
       val viewCatalog = catalog match {
         case vc: ViewCatalog => vc
         case _ => throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
@@ -379,9 +378,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, rpv.info,
         originalText, query) :: Nil
 
-    // View DDL / inspection on a non-session v2 catalog that the v1 rewrite in
-    // `ResolveSessionCatalog` can't handle (its `ResolvedViewIdentifier` matcher is gated on
-    // `isSessionCatalog`). Routed to dedicated v2 execs that read the typed `View`
+    // View DDL / inspection on a ViewCatalog that the v1 rewrite in `ResolveSessionCatalog`
+    // leaves unchanged. Routed to dedicated v2 execs that read the typed `View`
     // resolved at analysis time directly from `ResolvedPersistentView.info` -- no re-loading
     // at exec time.
     case SetViewProperties(rpv @ ResolvedPersistentView(catalog, ident, _), props) =>
@@ -455,9 +453,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         output, rpv.info, DescribeColumn.extractColumnNameParts(column), isExtended) :: Nil
 
     // Plans that resolve through `UnresolvedTableOrView` reach here with a
-    // `ResolvedPersistentView` child for non-session v2 views (the v1 rewrite in
-    // `ResolveSessionCatalog` no longer matches them because `ResolvedViewIdentifier` is gated
-    // on `isSessionCatalog`). Pin each with `UNSUPPORTED_FEATURE.TABLE_OPERATION` so users get
+    // `ResolvedPersistentView` child for ViewCatalog-backed views. Pin each with
+    // `UNSUPPORTED_FEATURE.TABLE_OPERATION` so users get
     // a clean `AnalysisException` instead of a generic "No plan for ..." assertion from the
     // planner. Tracked for follow-up real handlers in SPARK-52729.
     case RefreshTable(ResolvedPersistentView(catalog, ident, _)) =>
@@ -476,8 +473,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // `UnresolvedTable` (not `UnresolvedTableOrView`), so `CheckAnalysis` surfaces
     // `EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE` before planning. No strategy case needed.
 
-    // DROP VIEW on a non-session ViewCatalog. The v1 rewrite in `ResolveSessionCatalog` skips
-    // ViewCatalog catalogs, so they fall through here. `DropViewExec` calls
+    // DROP VIEW on a ViewCatalog. The v1 rewrite in `ResolveSessionCatalog` skips ViewCatalog
+    // catalogs, so they fall through here. `DropViewExec` calls
     // `ViewCatalog.dropView` and surfaces `EXPECT_VIEW_NOT_TABLE` if the identifier resolves to
     // a table in a mixed catalog.
     case DropView(r @ ResolvedIdentifier(catalog: ViewCatalog, ident), ifExists) =>
@@ -685,11 +682,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // SHOW VIEWS on a v2 ViewCatalog. `ResolveSessionCatalog` rewrites the SHOW VIEWS plan to
     // v1 `ShowViewsCommand` only when the catalog is NOT a `ViewCatalog`; non-`ViewCatalog`
     // catalogs (session or not) are rejected with `MISSING_CATALOG_ABILITY.VIEWS` there. So
-    // this case sees `ViewCatalog` catalogs (typically non-session, since the default
-    // `V2SessionCatalog` is not a `ViewCatalog`; a session-catalog override that mixes in
-    // `ViewCatalog` would also reach here).
+    // this case sees `ViewCatalog` catalogs, including custom session-catalog implementations.
     case ShowViews(ResolvedNamespace(catalog: ViewCatalog, ns, _), pattern, output) =>
-      ShowViewsExec(output, catalog, ns, pattern) :: Nil
+      val v1SessionCatalog = if (CatalogV2Util.isSessionCatalog(catalog)) {
+        Some(session.sessionState.catalog)
+      } else {
+        None
+      }
+      ShowViewsExec(output, catalog, ns, pattern, v1SessionCatalog) :: Nil
 
     case ShowTablesExtended(
         ResolvedNamespace(catalog, ns, _),
