@@ -29,19 +29,25 @@ import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.{
+  ConstantObjectInspector,
+  ObjectInspector,
+  ObjectInspectorFactory
+}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, CodegenObjectFactoryMode, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
+import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
+import org.apache.spark.sql.hive.HiveGenericUDFEvaluator
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.types.{StringType, TimeType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
@@ -886,6 +892,23 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     }
     hiveContext.reset()
   }
+
+  test("SPARK-58792: Hive Generic UDF evaluator copies use isolated functions") {
+    val functionWrapper = HiveFunctionWrapper(classOf[InspectorSensitiveUDF].getName)
+    val literalEvaluator = new HiveGenericUDFEvaluator(functionWrapper, Seq(Literal("literal")))
+    val attributeEvaluator = new HiveGenericUDFEvaluator(
+      functionWrapper,
+      Seq(BoundReference(0, StringType, nullable = false)))
+
+    literalEvaluator.returnType
+    attributeEvaluator.returnType
+    assert(literalEvaluator.function ne attributeEvaluator.function)
+    literalEvaluator.setArg(0, "literal")
+    attributeEvaluator.setArg(0, "attribute")
+
+    assert(literalEvaluator.evaluate().toString === "constant")
+    assert(attributeEvaluator.evaluate().toString === "non-constant")
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
@@ -949,6 +972,21 @@ class PairUDF extends GenericUDF {
   }
 
   override def getDisplayString(p1: Array[String]): String = ""
+}
+
+class InspectorSensitiveUDF extends GenericUDF {
+  private var initializedWithConstantInspector = false
+
+  override def initialize(arguments: Array[ObjectInspector]): ObjectInspector = {
+    initializedWithConstantInspector = arguments.head.isInstanceOf[ConstantObjectInspector]
+    PrimitiveObjectInspectorFactory.javaStringObjectInspector
+  }
+
+  override def evaluate(arguments: Array[DeferredObject]): AnyRef = {
+    if (initializedWithConstantInspector) "constant" else "non-constant"
+  }
+
+  override def getDisplayString(children: Array[String]): String = "inspector_sensitive"
 }
 
 @UDFType(stateful = true)

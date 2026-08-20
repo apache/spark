@@ -18,11 +18,16 @@
 package org.apache.hadoop.hive.ql.exec;
 
 import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.udf.SettableUDF;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBridge;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorUtils.PrimitiveGrouping;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.*;
+import org.apache.hadoop.util.ReflectionUtils;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -42,6 +47,46 @@ public class HiveFunctionRegistryUtils {
 
   public static final SparkLogger LOG =
     SparkLoggerFactory.getLogger(HiveFunctionRegistryUtils.class);
+
+  /**
+   * Creates an independent copy of a GenericUDF without initializing Hive's FunctionRegistry.
+   *
+   * This is adapted from Hive's FunctionRegistry.cloneGenericUDF.
+   */
+  public static GenericUDF cloneGenericUDF(GenericUDF genericUDF) {
+    if (genericUDF == null) {
+      return null;
+    }
+
+    GenericUDF clonedUDF;
+    if (genericUDF instanceof GenericUDFBridge) {
+      GenericUDFBridge bridge = (GenericUDFBridge) genericUDF;
+      clonedUDF = new GenericUDFBridge(
+          bridge.getUdfName(), bridge.isOperator(), bridge.getUdfClassName());
+    } else if (genericUDF instanceof GenericUDFMacro) {
+      GenericUDFMacro macro = (GenericUDFMacro) genericUDF;
+      clonedUDF = new GenericUDFMacro(
+          macro.getMacroName(),
+          macro.getBody().clone(),
+          macro.getColNames(),
+          macro.getColTypes());
+    } else {
+      clonedUDF = ReflectionUtils.newInstance(genericUDF.getClass(), null);
+    }
+
+    try {
+      genericUDF.copyToNewInstance(clonedUDF);
+      if (genericUDF instanceof SettableUDF) {
+        TypeInfo typeInfo = ((SettableUDF) genericUDF).getTypeInfo();
+        if (typeInfo != null) {
+          ((SettableUDF) clonedUDF).setTypeInfo(typeInfo);
+        }
+      }
+    } catch (UDFArgumentException err) {
+      throw new IllegalArgumentException(err);
+    }
+    return clonedUDF;
+  }
 
   /**
    * This method is shared between UDFRegistry and UDAFRegistry. methodName will
