@@ -23,7 +23,7 @@ import java.util.Base64
 
 import scala.jdk.CollectionConverters._
 
-import io.fabric8.kubernetes.api.model.Secret
+import io.fabric8.kubernetes.api.model.{PodBuilder, Secret}
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -36,6 +36,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
 
   private val credentialsTempDirectory = Utils.createTempDir()
   private val BASE_DRIVER_POD = SparkPod.initialPod()
+  private val SERVICE_ACCOUNT_CONF = KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME.key
 
   test("Don't set any credentials") {
     val kubernetesConf = KubernetesTestConf.createDriverConf()
@@ -129,14 +130,10 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
   }
 
   test("SPARK-58872: warn when driver credentials drop the driver service account") {
-    val serviceAccountConf = KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME.key
     val caCertConf = s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX"
     val caCertFile = writeCredentials("sa-ca.pem", "ca-cert")
-    val submissionSparkConf = new SparkConf(false)
-      .set(serviceAccountConf, "spark")
-      .set(caCertConf, caCertFile.getAbsolutePath)
-    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = submissionSparkConf)
-    val stepUnderTest = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
+    val stepUnderTest = stepWith(
+      SERVICE_ACCOUNT_CONF -> "spark", caCertConf -> caCertFile.getAbsolutePath)
     val logAppender = new LogAppender
     val configuredPod = withLogAppenderReturning(logAppender) {
       stepUnderTest.configurePod(BASE_DRIVER_POD)
@@ -146,26 +143,107 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.pod.getSpec.getServiceAccount === null)
     assert(configuredPod.pod.getSpec.getServiceAccountName === null)
     val warnings = warningsFrom(logAppender)
-    val named = warnings.filter(w => w.contains(serviceAccountConf) && w.contains(caCertConf))
-    assert(named.size === 1, s"expected one warning naming both $serviceAccountConf and " +
+    val named = warnings.filter(w => w.contains(SERVICE_ACCOUNT_CONF) && w.contains(caCertConf))
+    assert(named.size === 1, s"expected one warning naming both $SERVICE_ACCOUNT_CONF and " +
       s"$caCertConf, got: $warnings")
     // Only the credentials actually submitted are named, so a message that lists all four fails.
     Seq(OAUTH_TOKEN_CONF_SUFFIX, CLIENT_KEY_FILE_CONF_SUFFIX, CLIENT_CERT_FILE_CONF_SUFFIX)
       .map(suffix => s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$suffix")
       .foreach(conf => assert(!named.head.contains(conf),
         s"warning names $conf, which was not set: ${named.head}"))
+    // The way out of the conflict is worth spelling out, so require it stays in the message.
+    assert(named.head.contains(s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.*"),
+      s"warning does not point at the mounted configs: ${named.head}")
 
+    // A pod template naming a different account does lose the configured one, so it must warn.
+    // The second case pins the field precedence: `serviceAccountName` wins over the deprecated
+    // `serviceAccount` alias, so that pod runs as `other` whatever the alias says.
+    Seq(
+      podWithAccount(serviceAccountName = Some("other")),
+      podWithAccount(serviceAccount = Some("spark"), serviceAccountName = Some("other"))
+    ).foreach { otherAccountPod =>
+      val otherAccountAppender = new LogAppender
+      withLogAppenderReturning(otherAccountAppender) {
+        stepUnderTest.configurePod(otherAccountPod)
+      }
+      assert(warningsFrom(otherAccountAppender).count(_.contains(SERVICE_ACCOUNT_CONF)) === 1,
+        s"expected one warning for a pod running as " +
+          s"${otherAccountPod.pod.getSpec.getServiceAccountName}/" +
+          s"${otherAccountPod.pod.getSpec.getServiceAccount}, " +
+          s"got: ${warningsFrom(otherAccountAppender)}")
+    }
+  }
+
+  test("SPARK-58872: stay quiet when the driver service account survives") {
     // With the account alone there is nothing to mount, so it is applied and nothing is warned.
-    val saOnlyConf = KubernetesTestConf.createDriverConf(
-      sparkConf = new SparkConf(false).set(serviceAccountConf, "spark"))
-    val saOnlyStep = new DriverKubernetesCredentialsFeatureStep(saOnlyConf)
     val saOnlyAppender = new LogAppender
     val saOnlyPod = withLogAppenderReturning(saOnlyAppender) {
-      saOnlyStep.configurePod(BASE_DRIVER_POD)
+      stepWith(SERVICE_ACCOUNT_CONF -> "spark").configurePod(BASE_DRIVER_POD)
     }
     assert(saOnlyPod.pod.getSpec.getServiceAccount === "spark")
     assert(saOnlyPod.pod.getSpec.getServiceAccountName === "spark")
-    assert(!warningsFrom(saOnlyAppender).exists(_.contains(serviceAccountConf)))
+    assert(warningsFrom(saOnlyAppender).isEmpty,
+      s"nothing was dropped, so nothing to warn about: ${warningsFrom(saOnlyAppender)}")
+
+    // The mounted configs are the escape hatch the message and the docs point at, so setting one
+    // alongside the account must neither drop it nor warn. This pins the escape hatch rather than
+    // the guard: the mounted keys are distinct from the submitted ones, so `shouldMountSecret` is
+    // false and `configurePod` takes its first branch.
+    val mountedAppender = new LogAppender
+    val mountedPod = withLogAppenderReturning(mountedAppender) {
+      stepWith(SERVICE_ACCOUNT_CONF -> "spark",
+        s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX" -> "/etc/ca.pem")
+        .configurePod(BASE_DRIVER_POD)
+    }
+    assert(mountedPod.pod.getSpec.getServiceAccount === "spark")
+    assert(mountedPod.pod.getSpec.getServiceAccountName === "spark")
+    assert(warningsFrom(mountedAppender).isEmpty,
+      s"mounted configs must not drop the account: ${warningsFrom(mountedAppender)}")
+
+    // A pod template that already names the same account loses nothing, so there is nothing to say.
+    val caCertFile = writeCredentials("quiet-ca.pem", "ca-cert")
+    val stepUnderTest = stepWith(SERVICE_ACCOUNT_CONF -> "spark",
+      s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX" ->
+        caCertFile.getAbsolutePath)
+    Seq(
+      podWithAccount(serviceAccountName = Some("spark")),
+      podWithAccount(serviceAccount = Some("spark")),
+      podWithAccount(serviceAccount = Some("spark"), serviceAccountName = Some("spark")),
+      // An explicitly empty `serviceAccountName` means unset, and Kubernetes then copies the alias
+      // up, so this pod also runs as spark.
+      podWithAccount(serviceAccount = Some("spark"), serviceAccountName = Some(""))
+    ).foreach { templatePod =>
+      val sameAccountAppender = new LogAppender
+      withLogAppenderReturning(sameAccountAppender) {
+        stepUnderTest.configurePod(templatePod)
+      }
+      assert(warningsFrom(sameAccountAppender).isEmpty,
+        s"warned although the pod already runs as spark via " +
+          s"${templatePod.pod.getSpec.getServiceAccountName}/" +
+          s"${templatePod.pod.getSpec.getServiceAccount}: " +
+          s"${warningsFrom(sameAccountAppender)}")
+    }
+  }
+
+  private def stepWith(confs: (String, String)*): DriverKubernetesCredentialsFeatureStep = {
+    val sparkConf = new SparkConf(false)
+    confs.foreach { case (k, v) => sparkConf.set(k, v) }
+    new DriverKubernetesCredentialsFeatureStep(
+      KubernetesTestConf.createDriverConf(sparkConf = sparkConf))
+  }
+
+  /**
+   * A driver pod whose spec names a service account, standing in for a user pod template.
+   * `serviceAccount` is Kubernetes' deprecated alias of `serviceAccountName`, and a template is
+   * parsed with no API-server defaulting, so a template can name either field on its own.
+   */
+  private def podWithAccount(
+      serviceAccount: Option[String] = None,
+      serviceAccountName: Option[String] = None): SparkPod = {
+    val spec = new PodBuilder(BASE_DRIVER_POD.pod).editOrNewSpec()
+    serviceAccount.foreach(spec.withServiceAccount(_))
+    serviceAccountName.foreach(spec.withServiceAccountName(_))
+    SparkPod(spec.endSpec().build(), BASE_DRIVER_POD.container)
   }
 
   private def warningsFrom(appender: LogAppender): Seq[String] =
