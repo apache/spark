@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, ExpressionSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -201,8 +201,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
+      val fullyPushedFilterSet = ExpressionSet(
+        fullyPushedRuntimeFilters ++ relation.pushedFilters)
       DataSourceV2Strategy.withProjectAndFilter(
-        project, postScanFilters.diff(fullyPushedRuntimeFilters),
+        project, postScanFilters.filterNot(fullyPushedFilterSet.contains),
         batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)

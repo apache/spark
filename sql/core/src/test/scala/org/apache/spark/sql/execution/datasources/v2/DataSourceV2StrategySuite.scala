@@ -17,18 +17,25 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.EnumSet
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends SharedSparkSession {
@@ -1052,6 +1059,85 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       // this test instead of failing it, as the recursion is in tail position.
       assert(new V2ExpressionBuilder(folded, isPredicate = true).build().isEmpty)
     }
+  }
+
+  test("additional Catalyst filters use dotted names for nested columns") {
+    val tableSchema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("s", StructType(Seq(
+        StructField("tz", StringType, nullable = true))), nullable = true)))
+    val additionalFilter =
+      EqualTo(AttributeReference("s.tz", StringType)(), Literal("UTC"))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(tableSchema, additionalFilter),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val struct = relation.output.find(_.name == "s").get
+    val expected = EqualTo(GetStructField(struct, 0, Some("tz")), Literal("UTC"))
+
+    val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
+    assert(pushedPlan.exists {
+      case Filter(condition, _: DataSourceV2ScanRelation) => condition.exists(_.semanticEquals(
+        expected))
+      case _ => false
+    }, s"expected rebound nested additional filter in:\n$pushedPlan")
+  }
+
+  test("additional Catalyst filters support quoted dotted name parts") {
+    val tableSchema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("a.b", StructType(Seq(
+        StructField("c.d", StringType, nullable = true))), nullable = true)))
+    val additionalFilter =
+      EqualTo(AttributeReference("`a.b`.`c.d`", StringType)(), Literal("PST"))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(tableSchema, additionalFilter),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val struct = relation.output.find(_.name == "a.b").get
+    val expected = EqualTo(GetStructField(struct, 0, Some("c.d")), Literal("PST"))
+
+    val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
+    assert(pushedPlan.exists {
+      case Filter(condition, _: DataSourceV2ScanRelation) => condition.exists(_.semanticEquals(
+        expected))
+      case _ => false
+    }, s"expected rebound quoted additional filter in:\n$pushedPlan")
+  }
+
+  private class InMemoryCatalystFilterTable(
+      tableSchema: StructType,
+      additionalFilter: Expression) extends Table with SupportsRead {
+
+    override def name(): String = "in-memory-catalyst-filter-table"
+
+    override def schema(): StructType = tableSchema
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      EnumSet.of(TableCapability.BATCH_READ)
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+      new InMemoryCatalystFilterScanBuilder(tableSchema, additionalFilter)
+  }
+
+  private class InMemoryCatalystFilterScanBuilder(
+      tableSchema: StructType,
+      additionalFilter: Expression)
+    extends ScanBuilder with SupportsPushDownCatalystFilters {
+
+    override def build(): Scan = new Scan {
+      override def readSchema(): StructType = tableSchema
+    }
+
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = filters
+
+    override def pushedFilters: Array[Predicate] = Array.empty
+
+    override def additionalCatalystFilters: Seq[Expression] = Seq(additionalFilter)
   }
 
   /**
