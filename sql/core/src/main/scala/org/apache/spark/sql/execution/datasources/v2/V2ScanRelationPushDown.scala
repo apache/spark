@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribu
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LocalRelation, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.VariantExtractionImpl
+import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystFilters, VariantExtractionImpl}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils._
@@ -126,7 +126,22 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.pushedPredicates.mkString(", ")
       }
 
-      val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+      val (additionalPostScanFilters, fullyPushedAdditionalFilters) = sHolder.builder match {
+        case r: SupportsPushDownCatalystFilters =>
+          val additionalFilters = r.additionalCatalystFilters.filter { filter =>
+            filter.deterministic && !SubqueryExpression.hasSubquery(filter)
+          }
+          val reboundAdditionalFilters = rebindFilters(additionalFilters, sHolder.output)
+          val fullyPushedFilterSet =
+            ExpressionSet(rebindFilters(r.fullyPushedFilters, sHolder.output))
+          val fullyPushedAdditional =
+            reboundAdditionalFilters.filter(fullyPushedFilterSet.contains)
+          (reboundAdditionalFilters, fullyPushedAdditional)
+        case _ =>
+          (Nil, Nil)
+      }
+      val postScanFilters = postScanFiltersWithoutSubquery ++
+        additionalPostScanFilters ++ normalizedFiltersWithSubquery
 
       // Compute the pushed filter expressions: the normalized filters that were fully pushed
       // down (i.e., not in postScanFilters). These are stored on the scan relation for potential
@@ -135,7 +150,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val postScanFilterSet = ExpressionSet(postScanFiltersWithoutSubquery)
       sHolder.pushedFilterExpressions = normalizedFiltersWithoutSubquery
         .filterNot(postScanFilterSet.contains)
-        .filter(_.deterministic)
+        .filter(_.deterministic) ++ fullyPushedAdditionalFilters
 
       logInfo(
         log"""
@@ -1259,6 +1274,22 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
         addToScan(plan)
     }
+  }
+
+  private def rebindFilters(
+      filters: Seq[Expression],
+      output: Seq[AttributeReference]): Seq[Expression] = {
+    val outputPlan = LocalRelation(output)
+    filters.map(_.transformUp {
+      case attr: AttributeReference =>
+        outputPlan.resolveQuoted(attr.name, conf.resolver) match {
+          case Some(Alias(child, _)) => child
+          case Some(resolved) => resolved.toAttribute
+          case None =>
+            throw SparkException.internalError(
+              s"Cannot resolve Catalyst filter attribute '${attr.name}'")
+        }
+    })
   }
 
 }

@@ -35,6 +35,32 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
   def pushFilters(filters: Seq[Expression]): Seq[Expression]
 
   /**
+   * Returns Catalyst filters that are fully evaluated by the data source and
+   * should not be evaluated again by Spark.
+   *
+   * Any additional filter returned by [[additionalCatalystFilters]] that Spark should not
+   * evaluate again in FilterExec should be returned here, in the same form.
+   */
+  def fullyPushedFilters: Seq[Expression] = Nil
+
+  /**
+   * Returns additional filters inferred by the data source. Spark adds these filters to the
+   * logical Filter node so later optimizer rules can use them, for example to make partition
+   * statistics more accurate for cost-based optimization.
+   *
+   * If a filter is also returned by [[fullyPushedFilters]], Spark drops it from FilterExec
+   * and does not evaluate it again in execution.
+   *
+   * Additional filters must be deterministic and must not contain subqueries.
+   *
+   * Column references must be represented by `AttributeReference`. A nested column is represented
+   * by a dotted name, with path parts containing dots quoted using Spark SQL identifier syntax.
+   * For example, nested column `tz` in `location` is `location.tz`, while nested column `c.d` in
+   * top-level column `a.b` is represented as `` `a.b`.`c.d` ``.
+   */
+  def additionalCatalystFilters: Seq[Expression] = Nil
+
+  /**
    * Returns the data filters that are pushed to the data source via
    * {@link #pushFilters(Seq[Expression])}.
    */
