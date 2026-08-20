@@ -98,7 +98,7 @@ private[spark] trait DecisionTreeModel {
   private[ml] lazy val numLeave: Int =
     leafIterator(rootNode).size
 
-  private[ml] lazy val leafAttr = {
+  private[ml] def leafAttr = {
     NominalAttribute.defaultAttr
       .withNumValues(numLeave)
   }
