@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, SQLException, Timestamp, Types}
+import java.time.LocalDateTime
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -181,8 +182,24 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
       case INTERVAL_YM => Some(YearMonthIntervalType())
       case INTERVAL_DS => Some(DayTimeIntervalType())
+      case Types.TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
+          typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
+        // Oracle DATE and TIMESTAMP are zoneless (both report typeName DATE/TIMESTAMP under
+        // Types.TIMESTAMP), so NTZ is faithful; WITH [LOCAL] TIME ZONE hits the -101/-102 case.
+        Some(TimestampNTZType)
       case _ => None
     }
+  }
+
+  // Preserve the zoneless wall-clock: the driver decoded the Timestamp in the JVM zone, and
+  // toLocalDateTime reads those same fields back, rather than rebasing through UTC. Mirrors
+  // PostgresDialect.
+  override def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
+    t.toLocalDateTime
+  }
+
+  override def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
+    Timestamp.valueOf(ldt)
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
@@ -210,6 +227,9 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     // Appendix A Reference Information.
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
+    // Filters on a TimestampNTZType-mapped column push down a LocalDateTime; render it via the same
+    // JDBC {ts ...} escape (LocalDateTime.toString would be an invalid literal for the driver).
+    case localDateTimeValue: LocalDateTime => "{ts '" + Timestamp.valueOf(localDateTimeValue) + "'}"
     case dateValue: Date => "{d '" + dateValue + "'}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case binaryValue: Array[Byte] =>
