@@ -297,10 +297,12 @@ class ConvertToCatalystSuite extends PlanTest {
 
   test("converts a nested transpiled UDF sitting at the root of the option") {
     transpileOn {
-      // An option that is nothing but `_udf_param_0`, bound to a transpiled call. Recursing only
-      // into the children would walk past the root and leave an Unevaluable TranspiledPythonUDF
-      // behind. Only a custom transpiler can produce this shape -- the built-in one casts every
-      // option to the return type, so its roots are always Casts.
+      // An option that is nothing but `_udf_param_0`, bound to a transpiled call. Only a custom
+      // transpiler can produce this shape -- the built-in one casts every option to the return
+      // type, so its roots are always Casts. The root is the marker, never the call itself, since
+      // substitution wraps every non-foldable argument; a marker is unary, so recursing into the
+      // children reaches the call. This pins that the call gets converted, not which traversal
+      // does it.
       val innerTPUDF = makeTPUDF(makePyUDF(attrA), Add(attrA, Literal(1L)))
       val outerTPUDF = makeTPUDF(makePyUDF(innerTPUDF),
         TranspiledUDFParameter(innerTPUDF, 0, NamedExpression.newExprId))
