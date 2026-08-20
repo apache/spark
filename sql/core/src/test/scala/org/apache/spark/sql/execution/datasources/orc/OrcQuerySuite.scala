@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.Utils.createArray
 
@@ -1259,6 +1260,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   }
 }
 
+@ExtendedSQLTest
 class OrcV1QuerySuite extends OrcQuerySuite {
   override protected def sparkConf: SparkConf =
     super
@@ -1266,6 +1268,7 @@ class OrcV1QuerySuite extends OrcQuerySuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }
 
+@ExtendedSQLTest
 class OrcV2QuerySuite extends OrcQuerySuite {
   override protected def sparkConf: SparkConf =
     super
