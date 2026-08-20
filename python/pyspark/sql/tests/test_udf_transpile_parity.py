@@ -20,17 +20,11 @@ transpilation enabled.
 
 Transpilation is only attempted when both
 ``spark.sql.experimental.optimizer.transpilePyUDFs`` and
-``spark.sql.ansi.enabled`` are true, and it falls back to interpreted Python
-for any UDF it cannot lower. These classes re-run the shared UDF mixins under
-that configuration so we can confirm that turning on the experimental feature
-does not change UDF results compared with the default (transpilation off) runs
-covered by the original concrete classes (``UDFTests``,
-``UDFCombinationsTests``, ``UnifiedUDFTests``).
+``spark.sql.ansi.enabled``. When disabled, or if transpilation fails,
+we fall back to the regular non-transpiled code path.
 
-They are also the regression net for how often a lowered UDF computes its
-inputs (SPARK-58626): an input normally gets its own column below the operator
-and is computed once per row, as eagerly as the Python eval operator would, so
-a test leaning on an argument being lazy or computed repeatedly shows up here.
+Testing here is focused on making sure that the results do not differ
+in a way that is semantically incorrect (e.g. rounding differences are acceptable).
 
 Transpilation is currently only supported in regular (non-Connect) Spark, so
 these classes are guarded with ``is_remote_only()`` and are intentionally not

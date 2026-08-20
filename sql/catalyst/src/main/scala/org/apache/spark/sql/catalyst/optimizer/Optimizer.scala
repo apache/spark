@@ -1075,8 +1075,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             case None =>
               s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
             case Some(catalystExpr) =>
-              // On the option itself, not its children: its root can be a substituted argument that
-              // is a transpiled call, and recursing past it would leave that Unevaluable.
+              // Recursively apply on the transpiled element.
               applyExpr(catalystExpr, parentIsUdf = false)
           }
         } else {
