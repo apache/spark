@@ -17,8 +17,8 @@
 
 """
 Golden-file tests for the PyArrow ``from_pandas`` constructors that take a whole pandas
-DataFrame: ``pa.RecordBatch.from_pandas`` (with ``pa.Table.from_pandas`` /
-``pa.Schema.from_pandas`` to follow in this file). These take a DataFrame, unlike
+DataFrame: ``pa.RecordBatch.from_pandas`` and ``pa.Schema.from_pandas`` (with
+``pa.Table.from_pandas`` to follow in this file). These take a DataFrame, unlike
 ``pa.Array.from_pandas`` which takes a Series (covered by test_pyarrow_array_from_pandas_*).
 
 Per-column type inference matches the Array tests, so these pin the DataFrame-level
@@ -28,6 +28,13 @@ for RecordBatch -- num_rows preservation for a 0-column DataFrame. Spark calls
 (the createDataFrame 0-column branch) and stateful_processor_api_client.py:557, relying on
 the default ``preserve_index=None`` to carry num_rows via the index metadata -- otherwise a
 0-column relation loses its rows.
+
+``Schema.from_pandas`` is inspected to build a Spark schema, and the two prod call sites
+diverge on ``preserve_index``: classic pandas/conversion.py:971 passes ``False`` (index
+dropped), Connect session.py:573 passes it bare/``None`` (a named or non-range index becomes
+an extra field) -- so a named-index frame yields different field sets. Spark reads each
+field's type AND nullability (conversion.py:989 / session.py:590), so the schema test pins
+name/type/nullability across ``preserve_index``.
 
 Regenerate with SPARK_GENERATE_GOLDEN_FILES=1.
 """
@@ -51,10 +58,24 @@ if have_pyarrow:
 
 class _PyArrowFromPandasFrameTestBase(GoldenFileTestMixin, unittest.TestCase):
     """
-    Shared machinery for the DataFrame-input ``from_pandas`` constructors (RecordBatch
-    here; Table/Schema as followups). Owns the source-frame inventory and defines no
-    ``test_*`` of its own.
+    Shared machinery for the DataFrame-input ``from_pandas`` constructors (RecordBatch and
+    Schema here; Table as a followup). Owns the source-frame inventory and the index-aware
+    input-cell rendering (both constructors depend on the index under ``preserve_index``);
+    defines no ``test_*`` of its own.
     """
+
+    @staticmethod
+    def _index_desc(index) -> str:
+        """Compact, deterministic description of a pandas index for the input cell."""
+        if isinstance(index, pd.MultiIndex):
+            return f"MultiIndex[names={list(index.names)}]"
+        if isinstance(index, pd.RangeIndex):
+            return f"RangeIndex[{index.start}:{index.stop}:{index.step}]"
+        return f"{index.name!r}:{index.tolist()}"
+
+    def _input_cell(self, df) -> str:
+        """Input DataFrame repr, extended with its index (repr_value drops it)."""
+        return f"{self.repr_value(df, max_len=0)}[index={self._index_desc(df.index)}]"
 
     def _build_source_frames(self):
         """Named pandas DataFrames covering shape x index-kind, plus a dtype sample."""
@@ -120,17 +141,6 @@ class _PyArrowFromPandasFrameTestBase(GoldenFileTestMixin, unittest.TestCase):
 class PyArrowRecordBatchFromPandasTests(_PyArrowFromPandasFrameTestBase):
     """Tests pa.RecordBatch.from_pandas() across preserve_index via golden file comparison."""
 
-    @staticmethod
-    def _index_desc(index) -> str:
-        """Compact, deterministic description of a pandas index for the input cell."""
-        if isinstance(index, pd.RangeIndex):
-            return f"RangeIndex[{index.start}:{index.stop}:{index.step}]"
-        return f"{index.name!r}:{index.tolist()}"
-
-    def _input_cell(self, df) -> str:
-        """Input DataFrame repr, extended with its index (repr_value drops it)."""
-        return f"{self.repr_value(df, max_len=0)}[index={self._index_desc(df.index)}]"
-
     def _from_pandas_cell(self, df, **kwargs) -> str:
         """
         Convert ``df`` via RecordBatch.from_pandas(**kwargs) and append num_rows -- the
@@ -168,6 +178,70 @@ class PyArrowRecordBatchFromPandasTests(_PyArrowFromPandasFrameTestBase):
             col_names=col_names,
             compute_cell=compute_cell,
             golden_file_prefix="golden_pyarrow_record_batch_from_pandas",
+            index_name="test case",
+            overrides=overrides,
+        )
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas,
+    pyarrow_requirement_message or pandas_requirement_message,
+)
+class PyArrowSchemaFromPandasTests(_PyArrowFromPandasFrameTestBase):
+    """Tests pa.Schema.from_pandas() across preserve_index via golden file comparison."""
+
+    def _schema_source_frames(self):
+        """Shared frames plus two MultiIndex rows -- a MultiIndex has several index levels,
+        each becoming its own field, so these pin multi-level index-to-field naming at the
+        schema. Level values are integers (stable int64 on pandas 2 and 3; strings drift)."""
+        frames = self._build_source_frames()
+        frames["single-column:multiindex"] = pd.DataFrame(
+            {"a": [1, 2, 3]},
+            index=pd.MultiIndex.from_tuples([(1, 10), (1, 20), (2, 30)], names=["g", "n"]),
+        )
+        frames["single-column:multiindex-partial-name"] = pd.DataFrame(
+            {"a": [1, 2]},
+            index=pd.MultiIndex.from_tuples([(1, 10), (2, 20)], names=["g", None]),
+        )
+        return frames
+
+    def _from_pandas_cell(self, df, **kwargs) -> str:
+        """
+        Infer the schema via Schema.from_pandas(**kwargs) and render its fields with
+        nullability -- the name/type/nullable Spark reads to build its StructType. Returns
+        ERR@<ExceptionClass> if inference raises; a formatting error is a test bug.
+        """
+        try:
+            schema = pa.Schema.from_pandas(df, **kwargs)
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
+        return self.repr_value(schema, max_len=0)
+
+    def test_from_pandas(self):
+        """Test pa.Schema.from_pandas() across preserve_index against golden file."""
+        sources = self._schema_source_frames()
+        row_names = list(sources.keys())
+        preserve = {
+            "preserve_index=None": None,
+            "preserve_index=False": False,
+            "preserve_index=True": True,
+        }
+        col_names = ["pandas dataframe", *preserve.keys()]
+
+        # Version-specific expected values go here, keyed by (row, col), for known drift.
+        overrides: dict[tuple[str, str], str] = {}
+
+        def compute_cell(row_name, col_name):
+            df = sources[row_name]
+            if col_name == "pandas dataframe":
+                return self._input_cell(df)
+            return self._from_pandas_cell(df, preserve_index=preserve[col_name])
+
+        self.compare_or_generate_golden_matrix(
+            row_names=row_names,
+            col_names=col_names,
+            compute_cell=compute_cell,
+            golden_file_prefix="golden_pyarrow_schema_from_pandas",
             index_name="test case",
             overrides=overrides,
         )
