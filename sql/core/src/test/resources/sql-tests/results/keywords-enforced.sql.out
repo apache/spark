@@ -16,15 +16,18 @@ AND	true
 ANTI	false
 ANY	true
 ANY_VALUE	false
+APPLY	false
 APPROX	false
 ARCHIVE	false
 ARRAY	false
 AS	true
 ASC	false
 ASENSITIVE	false
+ASOF	false
 AT	false
 ATOMIC	false
 AUTHORIZATION	true
+AUTO	false
 BEGIN	false
 BERNOULLI	false
 BETWEEN	false
@@ -49,6 +52,7 @@ CASE	true
 CAST	true
 CATALOG	false
 CATALOGS	false
+CDC	false
 CHANGE	false
 CHANGES	false
 CHAR	false
@@ -126,8 +130,10 @@ DOUBLE	false
 DROP	false
 ELSE	true
 ELSEIF	false
+EMPTY	false
 END	true
 ENFORCED	false
+ERROR	false
 ESCAPE	true
 ESCAPED	false
 EVOLUTION	false
@@ -172,6 +178,7 @@ GROUP	true
 GROUPING	false
 HANDLER	false
 HAVING	true
+HISTORY	false
 HOUR	false
 HOURS	false
 IDENTIFIED	false
@@ -205,6 +212,9 @@ ITEMS	false
 ITERATE	false
 JOIN	true
 JSON	false
+JSON_EXISTS	false
+JSON_TABLE	false
+JSON_VALUE	false
 KEY	false
 KEYS	false
 LANGUAGE	false
@@ -231,6 +241,7 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MATCH_CONDITION	false
 MATERIALIZED	false
 MAX	false
 MEASURE	false
@@ -271,6 +282,7 @@ OPTION	false
 OPTIONS	false
 OR	true
 ORDER	true
+ORDINALITY	false
 OUT	false
 OUTER	true
 OUTPUTFORMAT	false
@@ -318,6 +330,7 @@ RESET	false
 RESPECT	false
 RESTRICT	false
 RETURN	false
+RETURNING	false
 RETURNS	false
 REVOKE	false
 RIGHT	true
@@ -327,6 +340,7 @@ ROLLBACK	false
 ROLLUP	false
 ROW	false
 ROWS	false
+SCD	false
 SCHEMA	false
 SCHEMAS	false
 SECOND	false
@@ -335,6 +349,7 @@ SECURITY	false
 SELECT	true
 SEMI	false
 SEPARATED	false
+SEQUENCE	false
 SERDE	false
 SERDEPROPERTIES	false
 SESSION_USER	true
@@ -386,6 +401,7 @@ TIMESTAMP_NTZ	false
 TINYINT	false
 TO	true
 TOUCH	false
+TRACK	false
 TRAILING	true
 TRANSACTION	false
 TRANSACTIONS	false
@@ -403,6 +419,7 @@ UNION	true
 UNIQUE	true
 UNKNOWN	true
 UNLOCK	false
+UNNEST	false
 UNPIVOT	false
 UNSET	false
 UNTIL	false

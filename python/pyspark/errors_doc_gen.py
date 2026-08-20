@@ -1,26 +1,8 @@
 import re
-
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
 
-
-def generate_errors_doc(output_rst_file_path: str) -> None:
-    """
-    Generates a reStructuredText (RST) documentation file for PySpark error classes.
-
-    This function fetches error classes defined in `pyspark.errors.error_classes`
-    and writes them into an RST file. The generated RST file provides an overview
-    of common, named error classes returned by PySpark.
-
-    Parameters
-    ----------
-    output_rst_file_path : str
-        The file path where the RST documentation will be written.
-
-    Notes
-    -----
-    The generated RST file can be rendered using Sphinx to visualize the documentation.
-    """
-    header = """..  Licensed to the Apache Software Foundation (ASF) under one
+_ERROR_DOC_HEADER = """
+..  Licensed to the Apache Software Foundation (ASF) under one
     or more contributor license agreements.  See the NOTICE file
     distributed with this work for additional information
     regarding copyright ownership.  The ASF licenses this file
@@ -41,12 +23,34 @@ def generate_errors_doc(output_rst_file_path: str) -> None:
 Error classes in PySpark
 ========================
 
-This is a list of common, named error classes returned by PySpark which are defined at `error-conditions.json <https://github.com/apache/spark/blob/master/python/pyspark/errors/error-conditions.json>`_.
+This is a list of common, named error classes returned by PySpark which are defined at
+`error-conditions.json <https://github.com/apache/spark/blob/master/python/pyspark/errors/error-conditions.json>`_.
 
-When writing PySpark errors, developers must use an error class from the list. If an appropriate error class is not available, add a new one into the list. For more information, please refer to `Contributing Error and Exception <contributing.rst#contributing-error-and-exception>`_.
+When writing PySpark errors, developers must use an error class from the list. If an appropriate
+error class is not available, add a new one into the list. For more information, please refer to
+`Contributing Errors and Exceptions <contributing.rst#contributing-errors-and-exceptions>`_.
 """
-    with open(output_rst_file_path, "w") as f:
-        f.write(header + "\n\n")
+
+
+def generate_errors_doc(output_rst_file_path: str) -> None:
+    """
+    Generates a reStructuredText (RST) documentation file for PySpark error classes.
+
+    This function fetches error classes defined in `pyspark.errors.error_classes`
+    and writes them into an RST file. The generated RST file provides an overview
+    of common, named error classes returned by PySpark.
+
+    Parameters
+    ----------
+    output_rst_file_path : str
+        The file path where the RST documentation will be written.
+
+    Notes
+    -----
+    The generated RST file can be rendered using Sphinx to visualize the documentation.
+    """
+    with open(output_rst_file_path, "w", encoding="utf-8") as f:
+        f.write(_ERROR_DOC_HEADER.strip() + "\n\n")
         for error_key, error_details in ERROR_CLASSES_MAP.items():
             f.write(error_key + "\n")
             # The length of the error class name and underline must be the same

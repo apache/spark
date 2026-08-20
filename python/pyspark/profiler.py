@@ -410,7 +410,7 @@ class MemoryProfiler(Profiler):
         stats = self.stats()  # dict
         if stats:
             p = os.path.join(path, "udf_%d_memory.txt" % id)
-            with open(p, "w+") as f:
+            with open(p, "w+", encoding="utf-8") as f:
                 self._show_results(stats, stream=f)
 
 

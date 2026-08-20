@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
+import scala.jdk.CollectionConverters._
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, Encoders, Row}
@@ -28,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expr
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, Table, TableInfo, Txn, TxnTable, Update, Write}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, RowLevelOperationWithOptions, Table, TableInfo, Txn, TxnTable, Update, Write}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
@@ -48,12 +50,15 @@ abstract class RowLevelOperationSuiteBase
 
   before {
     spark.conf.set("spark.sql.catalog.cat", classOf[InMemoryRowLevelOperationTableCatalog].getName)
+    spark.conf.set(
+      "spark.sql.catalog.cat.tableStateOptionKeys", "load-option,targetLoadOption")
   }
 
   after {
     catalog.nextTxnRejectRegisteredScansAttempt = false
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf("spark.sql.catalog.cat")
+    spark.sessionState.conf.unsetConf("spark.sql.catalog.cat.tableStateOptionKeys")
   }
 
   protected final val PK_FIELD = StructField("pk", IntegerType, nullable = false)
@@ -177,6 +182,52 @@ abstract class RowLevelOperationSuiteBase
       case rd: ReplaceData => (rd.condition, rd.groupFilterCondition)
       case wd: WriteDelta => (wd.condition, wd.groupFilterCondition)
     }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+  }
+
+  // Asserts the given SQL options reached every V2 layer that should carry them: the target
+  // catalog load, the rewritten DataSourceV2Relation, the RowLevelOperationInfo passed to the
+  // operation builder, and the write builder's LogicalWriteInfo.
+  protected def checkRowLevelOperationOptions(
+      func: => Unit,
+      expectedOptions: (String, String)*): Unit = {
+    val Seq(qe) = withQueryExecutionsCaptured(spark)(func)
+    val writeRelation = qe.optimizedPlan.collectFirst {
+      case rd: ReplaceData => rd.table
+      case wd: WriteDelta => wd.table
+    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+      .asInstanceOf[DataSourceV2Relation]
+    assert(writeRelation.catalog.nonEmpty, "expected a catalog-backed V2 write relation")
+    assert(writeRelation.identifier.nonEmpty, "expected a catalog-backed V2 write identifier")
+    val operation = writeRelation.table.asInstanceOf[RowLevelOperationTable].operation
+      .asInstanceOf[RowLevelOperationWithOptions]
+    assertLastTransactionWriteLoadOptions(expectedOptions: _*)
+
+    expectedOptions.foreach { case (key, value) =>
+      assert(writeRelation.options.get(key) === value, s"relation option '$key'")
+      assert(operation.options.get(key) === value, s"row-level operation option '$key'")
+      assert(table.lastWriteInfo.options().get(key) === value, s"write option '$key'")
+    }
+  }
+
+  protected def assertLastTransactionWriteLoadOptions(
+      expectedOptions: (String, String)*): Unit = {
+    val stateKeys = catalog.tableStateOptionKeys().asScala
+    val expectedStateOptions = expectedOptions.filter { case (key, _) =>
+      stateKeys.exists(_.equalsIgnoreCase(key))
+    }
+    val targetLoads = catalog.lastTransaction.catalog.loadTableCalls.filter {
+      case (context, _) => !context.writePrivileges().isEmpty
+    }
+    assert(targetLoads.nonEmpty, "target loadTable did not receive write privileges")
+    targetLoads.foreach { case (_, options) =>
+      assert(options.size() === expectedStateOptions.size)
+      expectedStateOptions.foreach { case (key, value) =>
+        assert(options.get(key) === value, s"table-state option '$key'")
+      }
+      expectedOptions.diff(expectedStateOptions).foreach { case (key, _) =>
+        assert(options.get(key) === null, s"non-state load option '$key'")
+      }
+    }
   }
 
   protected def assertNoScanPlanning(plan: LogicalPlan): Unit = {

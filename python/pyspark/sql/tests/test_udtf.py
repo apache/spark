@@ -1999,6 +1999,25 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(AnalysisException, "Failed to analyze."):
             func().collect()
 
+    def test_udtf_analyze_traceback_with_locals(self):
+        with self.sql_conf({"spark.sql.execution.pyspark.udf.tracebackWithLocals.enabled": True}):
+
+            class TestUDTF:
+                @staticmethod
+                def analyze() -> AnalyzeResult:
+                    local_marker = 1
+                    if local_marker:
+                        raise ValueError("boom")
+                    return AnalyzeResult(StructType().add("x", StringType()))
+
+                def eval(self):
+                    yield ("x",)
+
+            func = udtf(TestUDTF)
+
+            with self.assertRaisesRegex(AnalysisException, "local_marker = 1"):
+                func().collect()
+
     def test_udtf_with_analyze_null_literal(self):
         class TestUDTF:
             @staticmethod

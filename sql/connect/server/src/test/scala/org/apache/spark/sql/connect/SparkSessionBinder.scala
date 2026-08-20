@@ -21,7 +21,6 @@ import java.util.UUID
 
 import org.apache.spark.{SparkEnv, SparkFunSuite}
 import org.apache.spark.sql
-import org.apache.spark.sql.classic
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SparkConnectService
@@ -29,8 +28,8 @@ import org.apache.spark.sql.connect.service.SparkConnectService
 /**
  * Provides a [[SparkSession connect.SparkSession]] backed by an in-process gRPC server. Extends
  * [[sql.SparkSessionBinder sql.SparkSessionBinder]] (which creates a
- * [[classic.SparkSession classic.SparkSession]] and SparkContext), then layers a Connect client
- * session on top by starting the gRPC service in-process.
+ * [[org.apache.spark.sql.classic.SparkSession classic.SparkSession]] and SparkContext), then
+ * layers a Connect client session on top by starting the gRPC service in-process.
  */
 trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
 
@@ -38,11 +37,9 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
 
   protected override def spark: SparkSession = _connectSpark
 
-  /** The underlying classic session used by the in-process server. */
-  private def classicSpark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
-
   override protected def beforeAll(): Unit = {
-    super.beforeAll()
+    initializeSession()
+
     // Other suites using mocks leave a mess in the global executionManager,
     // shut it down so that it's cleared before starting server.
     SparkConnectService.executionManager.shutdown()
@@ -64,14 +61,18 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
       .builder()
       .client(client)
       .create()
+    super.beforeAll()
   }
 
   override def afterAll(): Unit = {
-    if (_connectSpark != null) {
-      _connectSpark.close()
-      _connectSpark = null
+    try {
+      super.afterAll()
+    } finally {
+      if (_connectSpark != null) {
+        _connectSpark.close()
+        _connectSpark = null
+      }
+      SparkConnectService.stop()
     }
-    SparkConnectService.stop()
-    super.afterAll()
   }
 }

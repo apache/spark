@@ -366,7 +366,22 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     if (!options.inferSchema) {
       return StringType
     }
-    if (value == null || value.isEmpty) {
+    // A value matching the `nullValue` option carries no type information, so it preserves the
+    // type inferred so far -- matching `CSVInferSchema.inferField`. The XML parser already reads
+    // such values as null (see `StaxXmlParser`), so inference must skip them too; otherwise a
+    // column that is entirely `nullValue`s (or mixes them with a typed value) would infer the
+    // string content of the token instead of ignoring it.
+    //
+    // Unlike `CSVInferSchema.inferField`, an empty value is intentionally NOT skipped here. The
+    // CSV datasource defaults `nullValue` to `""`, so an empty field is already read as null by
+    // the parser (`UnivocityParser.nullSafeDatum`) and its inference can safely skip it. XML's
+    // `nullValue` defaults to `null`, so an empty value is NOT read as null: `StaxXmlParser`
+    // would call `convertTo("", <numericType>)`, which throws `NumberFormatException`, and in
+    // PERMISSIVE mode the error recovery can silently drop sibling records. To keep inference
+    // consistent with the parser, an empty value falls through the cascade to `StringType`, so a
+    // field mixing empty and numeric values widens to `StringType` rather than to the numeric
+    // type. See SPARK-58133.
+    if (value == null || value == options.nullValue) {
       return typeSoFar
     }
 
@@ -390,7 +405,8 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
       // would make the inferred type differ from the legacy path and depend on row order.
       // Re-entering at the top yields the same representative as from-scratch inference (which
       // reaches the temporal parsers through `tryParseDouble`), so the merged type matches.
-      case _: TimeType | DateType | TimestampNTZType | _: TimestampNTZNanosType | TimestampType =>
+      case _: TimeType | DateType | TimestampNTZType | _: TimestampNTZNanosType |
+          TimestampType | _: TimestampLTZNanosType =>
         tryParseTime(value)
       case StringType => StringType
       case other: DataType =>
@@ -682,16 +698,20 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     } else if (isTimeTypeEnabled && isTime(field)) {
       // TIME is tried ahead of date/timestamp, matching the ordering of the previous cascade.
       TimeType(TimeType.DEFAULT_PRECISION)
-    } else {
+    } else if (options.preferDate) {
       tryParseDate(field)
+    } else {
+      tryParseTimestampNTZ(field)
     }
   }
 
   private def tryParseTime(field: String): DataType = {
     if (isTimeTypeEnabled && isTime(field)) {
       TimeType(TimeType.DEFAULT_PRECISION)
-    } else {
+    } else if (options.preferDate) {
       tryParseDate(field)
+    } else {
+      tryParseTimestampNTZ(field)
     }
   }
 
@@ -736,7 +756,16 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
         case _: IllegalArgumentException => false
       }
     if (isTimestamp) {
-      TimestampType
+      // Prefer nanosecond type when there is a nonzero sub-microsecond component
+      // (nanosWithinMicro != 0) that TimestampType cannot represent.
+      val hasSubMicro = SQLConf.get.timestampNanosTypesEnabled &&
+        timestampFormatter.parseNanosOptional(field, 9)
+          .exists(_.nanosWithinMicro != 0)
+      if (hasSubMicro) {
+        TimestampLTZNanosType(9)
+      } else {
+        TimestampType
+      }
     } else {
       tryParseBoolean(field)
     }

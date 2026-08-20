@@ -143,6 +143,7 @@ Mathematical Functions
     sqrt
     tan
     tanh
+    truncate
     try_add
     try_divide
     try_mod
@@ -177,6 +178,7 @@ String Functions
     find_in_set
     format_number
     format_string
+    from_base32
     initcap
     instr
     is_valid_utf8
@@ -191,6 +193,7 @@ String Functions
     ltrim
     make_valid_utf8
     mask
+    normalize
     octet_length
     overlay
     position
@@ -216,6 +219,7 @@ String Functions
     substr
     substring
     substring_index
+    to_base32
     to_binary
     to_char
     to_number
@@ -349,6 +353,8 @@ Hash Functions
     sha
     sha1
     sha2
+    xxh3_128
+    xxh3_64
     xxhash64
 
 
@@ -449,6 +455,7 @@ Aggregate Functions
     bit_xor
     bitmap_construct_agg
     bitmap_or_agg
+    bitmap_xor_agg
     bool_and
     bool_or
     collect_list
@@ -587,6 +594,7 @@ JSON Functions
     json_array_length
     json_object_keys
     json_tuple
+    json_typeof
     schema_of_json
     to_json
 
@@ -602,8 +610,17 @@ VARIANT Functions
     schema_of_variant
     schema_of_variant_agg
     try_variant_get
+    variant_array_append
+    try_variant_array_append
     variant_delete
+    variant_from_arrays
+    variant_from_entries
+    variant_strip_nulls
     variant_get
+    variant_insert
+    try_variant_insert
+    variant_set
+    try_variant_set
     try_parse_json
     to_variant_object
 
@@ -655,6 +672,7 @@ Misc Functions
     current_path
     current_schema
     current_user
+    hmac
     input_file_block_length
     input_file_block_start
     input_file_name
@@ -752,6 +770,7 @@ UDF, UDTF and UDT
     arrow_udtf
     call_udf
     pandas_udf
+    udaf
     udf
     udtf
     unwrap_udt

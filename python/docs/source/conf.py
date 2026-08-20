@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # pyspark documentation build configuration file, created by
 # sphinx-quickstart on Thu Aug 28 15:17:47 2014.
@@ -74,6 +73,8 @@ extensions = [
     'IPython.sphinxext.ipython_console_highlighting',
     'numpydoc',  # handle NumPy documentation formatted docstrings.
     'sphinx_plotly_directive',  # For visualize plot result
+    # Local: forbid ':lines:' on 'literalinclude' (fragile line-number pinning).
+    'forbid_literalinclude_lines',
 ]
 
 # sphinx copy button

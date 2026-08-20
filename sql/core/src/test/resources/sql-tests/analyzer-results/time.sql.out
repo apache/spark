@@ -49,6 +49,20 @@ Project [to_time(time_str#x, Some(fmt_str#x)) AS to_time(time_str, fmt_str)#x]
 
 
 -- !query
+select typeof(to_time('00:12:00', null))
+-- !query analysis
+Project [typeof(to_time(00:12:00, Some(null))) AS typeof(to_time(00:12:00, NULL))#x]
++- OneRowRelation
+
+
+-- !query
+select typeof(to_time('00:12:00', cast(null as string)))
+-- !query analysis
+Project [typeof(to_time(00:12:00, Some(cast(null as string)))) AS typeof(to_time(00:12:00, CAST(NULL AS STRING)))#x]
++- OneRowRelation
+
+
+-- !query
 select to_time("11", "HH")
 -- !query analysis
 Project [to_time(11, Some(HH)) AS to_time(11, HH)#x]
@@ -1926,7 +1940,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"TIME '12:30:41.123'\"",
     "inputType" : "\"TIME(6)\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"(TIME '12:30:41.123' - TIMESTAMP '2025-07-11 10:00:01')\""
   },
   "queryContext" : [ {

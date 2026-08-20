@@ -102,7 +102,10 @@ class ViewResolver(
 
     val (resolvedChild, usedViewResolutionContext) = withViewResolutionContext(unresolvedView) {
       SQLConf.withExistingConf(
-        View.effectiveSQLConf(unresolvedView.desc.viewSQLConfigs, unresolvedView.isTempView)
+        View.effectiveSQLConf(
+          configs = unresolvedView.desc.viewSQLConfigs,
+          isTempView = unresolvedView.isTempView,
+          createSparkVersion = unresolvedView.desc.createVersion)
       ) {
         checkResolverGuard(unresolvedView)
 

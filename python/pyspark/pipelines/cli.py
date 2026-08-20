@@ -150,7 +150,7 @@ def find_pipeline_spec(current_dir: Path) -> Path:
 
 def load_pipeline_spec(spec_path: Path) -> PipelineSpec:
     """Load the pipeline spec from a YAML file at the given path."""
-    with spec_path.open("r") as f:
+    with spec_path.open("r", encoding="utf-8") as f:
         return unpack_pipeline_spec(yaml.safe_load(f))
 
 
@@ -261,7 +261,7 @@ def register_definitions(
                                 module_spec.loader.exec_module(module)
                     elif file.suffix == ".sql":
                         log_with_curr_timestamp(f"Registering SQL file {file}...")
-                        with file.open("r") as f:
+                        with file.open("r", encoding="utf-8") as f:
                             sql = f.read()
                         file_path_relative_to_spec = file.relative_to(path)
                         registry.register_sql(sql, file_path_relative_to_spec)

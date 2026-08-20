@@ -138,6 +138,6 @@ print("SparkSession available as 'spark'.")
 # which allows us to execute the user's PYTHONSTARTUP file:
 _pythonstartup = os.environ.get("OLD_PYTHONSTARTUP")
 if _pythonstartup and os.path.isfile(_pythonstartup):
-    with open(_pythonstartup) as f:
+    with open(_pythonstartup, encoding="utf-8") as f:
         code = compile(f.read(), _pythonstartup, "exec")
         exec(code)

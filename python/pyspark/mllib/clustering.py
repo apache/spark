@@ -135,7 +135,7 @@ class BisectingKMeansModel(JavaModelWrapper):
 
         Parameters
         ----------
-        point : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+        x : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             A data point (or RDD of points) to compute the cost(s).
             :py:class:`pyspark.mllib.linalg.Vector` can be replaced with equivalent
             objects (list, tuple, numpy.ndarray).
@@ -1075,7 +1075,8 @@ class StreamingKMeans:
         self._validate(dstream)
 
         def update(rdd: RDD["VectorLike"]) -> None:
-            self._model.update(rdd, self._decayFactor, self._timeUnit)  # type: ignore[union-attr]
+            assert self._model is not None
+            self._model.update(rdd, self._decayFactor, self._timeUnit)
 
         dstream.foreachRDD(update)
 

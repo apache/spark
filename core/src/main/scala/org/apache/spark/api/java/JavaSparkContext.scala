@@ -820,6 +820,15 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def cancelAllJobs(): Unit = sc.cancelAllJobs()
 
   /**
+   * Cancel all jobs that have been scheduled or are running.
+   *
+   * @param reason reason for cancellation
+   *
+   * @since 4.4.0
+   */
+  def cancelAllJobs(reason: String): Unit = sc.cancelAllJobs(reason)
+
+  /**
    * Returns a Java map of JavaRDDs that have marked themselves as persistent via cache() call.
    *
    * @note This does not necessarily mean the caching or computation was successful.

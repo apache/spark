@@ -308,6 +308,18 @@ class StringFunctionsSuite extends SharedSparkSession {
       Row("AQIDBA==", bytes))
   }
 
+  test("string to_base32/from_base32 function") {
+    val bytes = "foobar".getBytes("UTF-8")
+    val df = Seq((bytes, "MZXW6YTBOI======")).toDF("a", "b")
+    checkAnswer(
+      df.select(to_base32($"a"), from_base32($"b")),
+      Row("MZXW6YTBOI======", bytes))
+
+    checkAnswer(
+      df.selectExpr("to_base32(a)", "from_base32(b)"),
+      Row("MZXW6YTBOI======", bytes))
+  }
+
   test("string overlay function") {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
@@ -404,6 +416,16 @@ class StringFunctionsSuite extends SharedSparkSession {
     checkAnswer(Seq("大千世界").toDF("a").select(try_validate_utf8($"a")), Row("大千世界"))
     checkAnswer(Seq(("abc", null)).toDF("a", "b").select(try_validate_utf8($"b")), Row(null))
     checkAnswer(Seq(Array[Byte](-1)).toDF("a").select(try_validate_utf8($"a")), Row(null))
+    // scalastyle:on
+  }
+
+  test("string normalize") {
+    // scalastyle:off
+    val df = Seq("\uFB01").toDF("s")
+    checkAnswer(df.select(normalize($"s")), Row("\uFB01"))
+    checkAnswer(df.select(normalize($"s", lit("NFKC"))), Row("fi"))
+    checkAnswer(df.selectExpr("normalize(s, 'NFKC')"), Row("fi"))
+    checkAnswer(df.select(normalize(lit(null), lit("NFC"))), Row(null))
     // scalastyle:on
   }
 

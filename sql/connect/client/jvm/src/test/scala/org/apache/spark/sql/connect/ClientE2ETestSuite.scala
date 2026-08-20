@@ -308,6 +308,16 @@ class ClientE2ETestSuite
     assert(result(2) == 2)
   }
 
+  test("cube()/rollup() with no grouping columns return one grand-total row over empty input") {
+    // Exercises the Connect analyzed-plan path for the empty CUBE()/ROLLUP() grand total: with no
+    // grouping columns it lowers to a global aggregate, returning one row even over empty input,
+    // like an aggregation with no GROUP BY clause. Not SQL-expressible, so DataFrame-API only.
+    checkAnswer(spark.range(0).cube().count(), Row(0L))
+    checkAnswer(spark.range(0).rollup().count(), Row(0L))
+    checkAnswer(spark.range(3).cube().count(), Row(3L))
+    checkAnswer(spark.range(3).rollup().count(), Row(3L))
+  }
+
   test("read and write") {
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     val testDataPath = java.nio.file.Paths

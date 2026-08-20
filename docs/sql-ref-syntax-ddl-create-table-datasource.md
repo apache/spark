@@ -26,7 +26,7 @@ The `CREATE TABLE` statement defines a new table using a Data Source.
 ### Syntax
 
 ```sql
-CREATE TABLE [ IF NOT EXISTS ] table_identifier
+CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ ( col_name1 col_type1 [ COMMENT col_comment1 ], ... ) ]
     USING data_source
     [ OPTIONS ( key1=val1, key2=val2, ... ) ]
@@ -78,6 +78,14 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     Specifies buckets numbers, which is used in `CLUSTERED BY` clause.
 
+* **EXTERNAL**
+
+    The table is defined using the path provided as `LOCATION` and does not use the default location for this table.
+    Dropping an external table removes catalog metadata and leaves the data files in place.
+    `CREATE EXTERNAL TABLE` for a data source table must include `LOCATION`.
+    A data source table created with `LOCATION` is also external even without the
+    `EXTERNAL` keyword.
+
 * **LOCATION**
 
     Path to the directory where table data is stored, which could be a path on distributed storage like HDFS, etc.
@@ -115,6 +123,11 @@ input query, to make sure the table gets created contains exactly the same data 
 
 --Use data source
 CREATE TABLE student (id INT, name STRING, age INT) USING CSV;
+
+-- External data source table. DROP TABLE keeps the files at the location.
+CREATE EXTERNAL TABLE student (id INT, name STRING, age INT)
+    USING parquet
+    LOCATION '/tmp/student';
 
 --Use data from another table
 CREATE TABLE student_copy USING CSV

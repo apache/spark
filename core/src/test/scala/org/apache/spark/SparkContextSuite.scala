@@ -45,7 +45,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -713,6 +713,50 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("SPARK-58748: Kubernetes drivers do not advertise wildcard bind addresses") {
+    Seq(
+      ("0.0.0.0", "10.129.36.37", "10.129.36.37"),
+      ("::", "10.129.36.37", "10.129.36.37"),
+      ("10.138.148.230", "driver-service", "10.138.148.230"),
+      ("2001:DB8:0:0::BEEF", "driver-service", "[2001:db8::beef]")).foreach {
+      case (bindAddress, advertisedAddress, expectedAddress) =>
+        var observedAddress: Option[String] = None
+        val logAppender = new LogAppender("wildcard driver bind address")
+        val conf = new SparkConf(false)
+          .setMaster("k8s://https://localhost:6443")
+          .setAppName("driver-bind-address")
+          .set(DRIVER_BIND_ADDRESS, bindAddress)
+          .set(DRIVER_HOST_ADDRESS, advertisedAddress)
+
+        withLogAppender(logAppender) {
+          val error = intercept[SparkException] {
+            new SparkContext(conf) {
+              override private[spark] def createSparkEnv(
+                  conf: SparkConf,
+                  isLocal: Boolean,
+                  listenerBus: LiveListenerBus): SparkEnv = {
+                observedAddress = Some(conf.get(DRIVER_HOST_ADDRESS))
+                throw new SparkException("stop after resolving the driver address")
+              }
+            }
+          }
+          assert(error.getMessage === "stop after resolving the driver address")
+        }
+
+        assert(observedAddress.contains(expectedAddress))
+        val wildcardMessages = logAppender.loggingEvents
+          .map(_.getMessage.getFormattedMessage)
+          .filter(_.contains("is a wildcard; preserving advertised driver host"))
+        if (Utils.isAnyLocalAddress(bindAddress)) {
+          assert(wildcardMessages.size === 1)
+          assert(wildcardMessages.head.contains(bindAddress))
+          assert(wildcardMessages.head.contains(advertisedAddress))
+        } else {
+          assert(wildcardMessages.isEmpty)
+        }
+    }
+  }
+
   testCancellingTasks("that raise interrupted exception on cancel") {
     Thread.sleep(9999999)
   }
@@ -891,7 +935,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       ("yarn", 2, Option(1))
     ).foreach { case (master, cpusPerTask, executorCores) =>
       val conf = new SparkConf()
-      conf.set(CPUS_PER_TASK, cpusPerTask)
+      conf.set(CPUS_PER_TASK, BigDecimal(cpusPerTask))
       executorCores.map(executorCores => conf.set(EXECUTOR_CORES, executorCores))
       val ex = intercept[SparkException] {
         sc = new SparkContext(master, "test", conf)
@@ -1008,7 +1052,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val conf = new SparkConf()
         .setMaster("local-cluster[3, 2, 1024]")
         .setAppName("test-cluster")
-        .set(CPUS_PER_TASK, 2)
+        .set(CPUS_PER_TASK, BigDecimal(2))
         .set(WORKER_GPU_ID.amountConf, "3")
         .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
         .set(TASK_GPU_ID.amountConf, "3")
@@ -1021,7 +1065,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
       val rdd1 = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
         val context = TaskContext.get()
-        Iterator(context.cpus())
+        Iterator(context.cpuAmount())
       }
       val cpus = rdd1.collect()
       assert(cpus === Array(2, 2, 2))
@@ -1475,11 +1519,31 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("SPARK-55757: Improve `spark.task.cpus` validation") {
-    val conf = new SparkConf().setAppName("test").setMaster("local").set(CPUS_PER_TASK, 0)
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+      .set(CPUS_PER_TASK, BigDecimal(0))
     val m = intercept[SparkIllegalArgumentException] {
       sc = new SparkContext(conf)
     }.getMessage
-    assert(m.contains("Number of cores to allocate for each task should be positive."))
+    assert(m.contains("Number of cores to allocate for each task must be a positive value"))
+  }
+
+  test("SPARK-58192: spark.task.cpus rejects out-of-range and over-precise values") {
+    def read(value: String): BigDecimal = {
+      new SparkConf().set(CPUS_PER_TASK.key, value).get(CPUS_PER_TASK)
+    }
+    assert(read("1.5") == BigDecimal("1.5"))
+    assert(read("0.000000001") == BigDecimal("1E-9"))
+    assert(read("2147483647") == BigDecimal(Int.MaxValue))
+    // trailing zeros beyond 9 decimal places are stripped before the precision check
+    assert(read("1.5000000000000") == BigDecimal("1.5"))
+    // Includes extreme exponents: they must be rejected by the bounds check before the
+    // normalization step could materialize their huge unscaled representation.
+    Seq("0", "-1", "4e-10", "2147483648", "1e100000000", "1e1000000000").foreach { v =>
+      val e = intercept[SparkIllegalArgumentException] { read(v) }
+      assert(e.getMessage.contains("must be a positive value between"), s"for value $v")
+    }
+    val e = intercept[SparkIllegalArgumentException] { read("0.1234567891") }
+    assert(e.getMessage.contains("supports at most 9 decimal places"))
   }
 
   test("SPARK-57867: Driver should not reserve off-heap memory in non-local mode") {
@@ -1500,6 +1564,19 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .set(MEMORY_OFFHEAP_SIZE, 5L * 1024 * 1024)
     sc = new SparkContext(conf)
     assert(sc.env.memoryManager.maxOffHeapStorageMemory > 0)
+  }
+
+  test("SPARK-41246: fail-fast on RDD id overflow") {
+    val conf = new SparkConf().setAppName("test").setMaster("local[1]")
+    sc = new SparkContext(conf)
+    sc.setNextRddIdForTesting(Int.MaxValue)
+    val last = sc.parallelize(Seq(1), 1)
+    assert(last.id === Int.MaxValue)
+    val err = intercept[SparkException] {
+      sc.parallelize(Seq(2), 1)
+    }
+    assert(err.getMessage.contains("Int.MaxValue"))
+    assert(err.getMessage.contains("overflowed"))
   }
 }
 

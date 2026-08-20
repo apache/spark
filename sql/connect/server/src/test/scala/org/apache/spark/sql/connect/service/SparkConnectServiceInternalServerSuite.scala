@@ -302,6 +302,7 @@ private class SparkConnectServiceLifeCycleListener extends SparkListener {
         SparkConnectServiceLifeCycleListener.checksOnServiceEndEvent.foreach { checks =>
           checks.foreach(_(serviceEnd))
         }
+      case _ =>
     }
   }
 }

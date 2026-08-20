@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import com.ibm.icu.text.Normalizer2;
+
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
@@ -30,6 +32,7 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.zip.CRC32;
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -148,6 +151,28 @@ public class ExpressionImplUtils {
     else return null;
   }
 
+  /**
+   * Normalizes the given string using the given Unicode normalization form, per the
+   * decomposition/composition algorithm in Unicode Standard Annex #15. Uses ICU4J, the same
+   * library backing Spark's collation support, instead of the JDK's {@code java.text.Normalizer}
+   * so the result is pinned to Spark's bundled ICU4J/Unicode data (see {@code icu4j.version} in
+   * pom.xml) and does not vary across JVM vendors or versions.
+   *
+   * @param input the input string to normalize.
+   * @param form the normalization form, one of NFC, NFD, NFKC, NFKD (case-insensitive).
+   * @return the normalized string.
+   */
+  public static UTF8String normalize(UTF8String input, UTF8String form) {
+    Normalizer2 normalizer = switch (form.toString().toUpperCase(Locale.ROOT)) {
+      case "NFC" -> Normalizer2.getNFCInstance();
+      case "NFD" -> Normalizer2.getNFDInstance();
+      case "NFKC" -> Normalizer2.getNFKCInstance();
+      case "NFKD" -> Normalizer2.getNFKDInstance();
+      default -> throw QueryExecutionErrors.invalidNormalizeFormError(form.toString());
+    };
+    return UTF8String.fromString(normalizer.normalize(input.toString()));
+  }
+
   public static byte[] aesEncrypt(byte[] input,
                                   byte[] key,
                                   UTF8String mode,
@@ -179,6 +204,42 @@ public class ExpressionImplUtils {
             null,
             aad
     );
+  }
+
+  /**
+   * Computes a keyed-hash message authentication code (HMAC) of the given message using the
+   * given key and hash algorithm.
+   * @param key The secret key.
+   * @param message The message to authenticate.
+   * @param algorithm The hash algorithm. Supported values (case-insensitive):
+   *                  SHA-224, SHA-256, SHA-384, SHA-512, SHA-1, MD5.
+   * @return The raw HMAC bytes.
+   */
+  public static byte[] hmac(byte[] key, byte[] message, UTF8String algorithm) {
+    String macName = hmacName(algorithm.toString());
+    try {
+      Mac mac = Mac.getInstance(macName);
+      mac.init(new SecretKeySpec(key, macName));
+      return mac.doFinal(message);
+    } catch (GeneralSecurityException | IllegalArgumentException e) {
+      throw QueryExecutionErrors.hmacCryptoError(e.getMessage());
+    }
+  }
+
+  /**
+   * Maps a user-facing hash algorithm name to its JCA {@link Mac} algorithm name. Supported
+   * algorithms are SHA-224, SHA-256, SHA-384, SHA-512, SHA-1 and MD5 (case-insensitive).
+   */
+  private static String hmacName(String algorithm) {
+    return switch (algorithm.toUpperCase(Locale.ROOT)) {
+      case "SHA-224", "SHA224" -> "HmacSHA224";
+      case "SHA-256", "SHA256" -> "HmacSHA256";
+      case "SHA-384", "SHA384" -> "HmacSHA384";
+      case "SHA-512", "SHA512" -> "HmacSHA512";
+      case "SHA-1", "SHA1" -> "HmacSHA1";
+      case "MD5" -> "HmacMD5";
+      default -> throw QueryExecutionErrors.hmacUnsupportedAlgorithmError(algorithm);
+    };
   }
 
   /**

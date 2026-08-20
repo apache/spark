@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 
-from typing import Any, Optional
+from typing import Any, Callable, List, Optional, Union
+import inspect
 import os
 import time
 
@@ -194,6 +195,85 @@ class GoldenFileTestMixin:
                     "Install 'tabulate' package to generate markdown files."
                 )
 
+    def compare_or_generate_golden_matrix(
+        self,
+        row_names: List[str],
+        col_names: List[str],
+        compute_cell: Callable[[str, str], str],
+        golden_file_prefix: str,
+        index_name: str = "source \\ target",
+        overrides: Optional[dict[tuple[str, str], str]] = None,
+    ) -> None:
+        """
+        Run a matrix of computations and compare against (or generate) a golden file.
+
+        1. If SPARK_GENERATE_GOLDEN_FILES=1, compute every cell, build a
+           DataFrame, and save it as the new golden CSV / Markdown file.
+        2. Otherwise, load the existing golden file and assert that every cell
+           matches the freshly computed value.
+
+        Parameters
+        ----------
+        row_names : list[str]
+            Ordered row labels (becomes the DataFrame index).
+        col_names : list[str]
+            Ordered column labels.
+        compute_cell : (row_name, col_name) -> str
+            Function that computes the string result for one cell.
+        golden_file_prefix : str
+            Prefix for the golden CSV/MD files (without extension).
+            Files are placed in the same directory as the concrete test file.
+        index_name : str, default "source \\ target"
+            Name for the index column in the golden file.
+        overrides : dict[(row, col) -> str], optional
+            Version-specific expected values that take precedence over the golden
+            file.  Use this to document known behavioral differences across
+            library versions (e.g. PyArrow 18 vs 22) directly in the test code,
+            so that the same golden file works for multiple versions.
+        """
+        generating = self.is_generating_golden()
+
+        test_dir = os.path.dirname(inspect.getfile(type(self)))
+        golden_csv = os.path.join(test_dir, f"{golden_file_prefix}.csv")
+        golden_md = os.path.join(test_dir, f"{golden_file_prefix}.md")
+
+        golden = None
+        if not generating:
+            golden = self.load_golden_csv(golden_csv)
+
+        errors = []
+        results = {}
+
+        for row_name in row_names:
+            for col_name in col_names:
+                result = compute_cell(row_name, col_name)
+                results[(row_name, col_name)] = result
+
+                if not generating:
+                    if overrides and (row_name, col_name) in overrides:
+                        expected = overrides[(row_name, col_name)]
+                    else:
+                        expected = golden.loc[row_name, col_name]
+                    if expected != result:
+                        errors.append(
+                            f"{row_name} -> {col_name}: expected '{expected}', got '{result}'"
+                        )
+
+        if generating:
+            import pandas as pd
+
+            index = pd.Index(row_names, name=index_name)
+            df = pd.DataFrame(index=index)
+            for col_name in col_names:
+                df[col_name] = [results[(row, col_name)] for row in row_names]
+            self.save_golden(df, golden_csv, golden_md)
+        else:
+            self.assertEqual(
+                len(errors),
+                0,
+                f"\n{len(errors)} golden file mismatches:\n" + "\n".join(errors),
+            )
+
     @staticmethod
     def repr_type(t: Any) -> str:
         """
@@ -231,12 +311,35 @@ class GoldenFileTestMixin:
             #   "halffloat" -> "float16", "float" -> "float32", "double" -> "float64"
             return _ARROW_FLOAT_ALIASES.get(s, s)
 
+    @staticmethod
+    def _scalar_str(scalar: Any) -> str:
+        """
+        Render one PyArrow scalar for a golden cell via PyArrow's own ``str(scalar)``.
+
+        A temporal value can be valid in Arrow yet outside Python's ``datetime`` range
+        (e.g. a date32 past year 9999), where ``str`` builds a Python datetime and
+        raises ``OverflowError``.  Record ``temporal overflow`` for those instead of
+        failing.  A non-temporal ``OverflowError`` is unexpected, so it propagates.
+        """
+        try:
+            return str(scalar).replace("\x00", "\\0")
+        except OverflowError:
+            # A valid Arrow temporal value can exceed Python's datetime range (e.g. a
+            # date32 past year 9999); record ``temporal overflow`` rather than fail.
+            # A non-temporal overflow is unexpected, so re-raise.
+            if pa.types.is_temporal(scalar.type):
+                return "temporal overflow"
+            raise
+
     @classmethod
-    def repr_arrow_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_arrow_value(
+        cls, value: Union["pa.Array", "pa.ChunkedArray"], max_len: int = 32
+    ) -> str:
         """
         Format a PyArrow Array/ChunkedArray for golden file.
 
-        Each element uses str(scalar) from PyArrow's own scalar formatting.
+        Each element is rendered by ``_scalar_str`` (PyArrow's scalar formatting, with
+        an out-of-range temporal fallback).
 
         Parameters
         ----------
@@ -251,16 +354,70 @@ class GoldenFileTestMixin:
             "[val1, val2, None]@arrow_type"
         """
         # Escape NULL bytes so the value can be safely stored in CSV files.
-        elements = [str(scalar).replace("\x00", "\\0") for scalar in value]
+        elements = [cls._scalar_str(scalar) for scalar in value]
         v_str = "[" + ", ".join(elements) + "]"
         if max_len > 0:
             v_str = v_str[:max_len]
         return f"{v_str}@{cls.repr_type(value.type)}"
 
     @classmethod
-    def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
+    def _repr_arrow_columns(
+        cls, value: Union["pa.Table", "pa.RecordBatch"], max_len: int
+    ) -> "tuple[str, str]":
+        """Render a Table/RecordBatch as a "{name: [scalars], ...}" body and schema string."""
+        columns = []
+        for name, column in zip(value.schema.names, value.columns):
+            # Escape NULL bytes so the value can be safely stored in CSV files.
+            elements = [cls._scalar_str(scalar) for scalar in column]
+            columns.append(f"{name}: [" + ", ".join(elements) + "]")
+        v_str = "{" + ", ".join(columns) + "}"
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        schema = ", ".join(f"{f.name}: {cls.repr_type(f.type)}" for f in value.schema)
+        return v_str, schema
+
+    @classmethod
+    def repr_arrow_table_value(cls, value: "pa.Table", max_len: int = 32) -> str:
+        """
+        Format a PyArrow Table for golden file.
+
+        Renders each column with PyArrow's scalar formatting (as ``repr_arrow_value``
+        does for an Array), keyed by column name, plus the Arrow schema.
+
+        Returns
+        -------
+        str
+            "{col: [val1, val2, None], ...}@Table[name: type, ...]"
+        """
+        v_str, schema = cls._repr_arrow_columns(value, max_len)
+        return f"{v_str}@Table[{schema}]"
+
+    @classmethod
+    def repr_arrow_record_batch_value(cls, value: "pa.RecordBatch", max_len: int = 32) -> str:
+        """
+        Format a PyArrow RecordBatch for golden file.
+
+        Same shape as ``repr_arrow_table_value`` (a RecordBatch is a single batch of
+        columns), keyed by column name, plus the Arrow schema.
+
+        Returns
+        -------
+        str
+            "{col: [val1, val2, None], ...}@RecordBatch[name: type, ...]"
+        """
+        v_str, schema = cls._repr_arrow_columns(value, max_len)
+        return f"{v_str}@RecordBatch[{schema}]"
+
+    @classmethod
+    def repr_pandas_value(cls, value: "pd.DataFrame", max_len: int = 32) -> str:
         """
         Format a pandas DataFrame for golden file.
+
+        Renders each column with tolist() (as ``repr_pandas_series_value`` does for a
+        Series), keyed by column name, plus the schema. tolist() gives a stable
+        Python-native representation and avoids ``DataFrame.to_json``'s epoch date
+        serialization, which overflows on out-of-nanosecond-range dates (year 9999
+        with the default date_as_object=True) and misreads non-ns units on pandas 2.
 
         Parameters
         ----------
@@ -272,16 +429,16 @@ class GoldenFileTestMixin:
         Returns
         -------
         str
-            "value@Dataframe[schema]"
+            "{col: [val1, val2], ...}@Dataframe[schema]"
         """
-        v_str = value.to_json().replace("\n", " ")
+        v_str = str({name: col.tolist() for name, col in value.items()}).replace("\n", " ")
         if max_len > 0:
             v_str = v_str[:max_len]
         simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
         return f"{v_str}@Dataframe[{simple_schema}]"
 
     @classmethod
-    def repr_numpy_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_numpy_value(cls, value: "np.ndarray", max_len: int = 32) -> str:
         """
         Format a numpy ndarray for golden file.
 
@@ -324,6 +481,8 @@ class GoldenFileTestMixin:
         based on the value's type.
 
         - PyArrow Array/ChunkedArray -> repr_arrow_value
+        - PyArrow Table -> repr_arrow_table_value
+        - PyArrow RecordBatch -> repr_arrow_record_batch_value
         - pandas DataFrame -> repr_pandas_value
         - numpy ndarray -> repr_numpy_value
         - Everything else -> repr_python_value
@@ -342,6 +501,10 @@ class GoldenFileTestMixin:
         """
         if have_pyarrow and isinstance(value, (pa.Array, pa.ChunkedArray)):
             return cls.repr_arrow_value(value, max_len)
+        if have_pyarrow and isinstance(value, pa.Table):
+            return cls.repr_arrow_table_value(value, max_len)
+        if have_pyarrow and isinstance(value, pa.RecordBatch):
+            return cls.repr_arrow_record_batch_value(value, max_len)
 
         if have_pandas and isinstance(value, pd.DataFrame):
             return cls.repr_pandas_value(value, max_len)
@@ -353,7 +516,7 @@ class GoldenFileTestMixin:
         return cls.repr_python_value(value, max_len)
 
     @classmethod
-    def repr_pandas_series_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_pandas_series_value(cls, value: "pd.Series", max_len: int = 32) -> str:
         """
         Format a pandas Series for golden file.
 

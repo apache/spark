@@ -27,7 +27,7 @@ Or install all dev dependencies:
 
 ```bash
 cd $SPARK_HOME
-pip install -r dev/requirements.txt
+pip install --group dev
 ```
 
 ## Quick Start

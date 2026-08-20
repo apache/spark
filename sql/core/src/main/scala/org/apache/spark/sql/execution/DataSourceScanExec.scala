@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow, TableIdent
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -320,6 +320,34 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
   def requiredSchema: StructType
   // Identifier for the table in the metastore.
   def tableIdentifier: Option[TableIdentifier]
+  // When true, the `MarkSingleTaskExecution` optimizer rule has marked this scan's plan shape as a
+  // candidate for single-task execution. The scan is only actually executed in a single task when
+  // it additionally passes the file count and size thresholds (see `useSingleTaskExecution`).
+  def markedForSingleTaskExecution: Boolean
+
+  /**
+   * Whether this file scan should run in a single task, reporting a `SinglePartition` output
+   * partitioning so that a following shuffle can be elided. This is true when the plan shape was
+   * marked eligible by the optimizer and the statically-selected files fall within the configured
+   * count and size bounds. Bucketed scans are excluded: they report a `HashPartitioning` over the
+   * bucket columns, which coalescing to a single partition would invalidate. It relies on
+   * `selectedPartitions`, so it must not be evaluated before the scan's file listing is available.
+   */
+  lazy val useSingleTaskExecution: Boolean = {
+    if (!markedForSingleTaskExecution || bucketedScan) {
+      false
+    } else {
+      val sqlConf = getSqlConf(relation.sparkSession)
+      val minNumFiles = sqlConf.getConf(SQLConf.SINGLE_TASK_EXECUTION_MIN_NUM_FILES)
+      val maxNumFiles = sqlConf.getConf(SQLConf.SINGLE_TASK_EXECUTION_MAX_NUM_FILES)
+      val minNumBytes = sqlConf.getConf(SQLConf.SINGLE_TASK_EXECUTION_MIN_NUM_BYTES)
+      val maxPartitionBytes = sqlConf.getConf(SQLConf.FILES_MAX_PARTITION_BYTES)
+      val numFiles = selectedPartitions.totalNumberOfFiles
+      val numBytes = selectedPartitions.totalFileSize
+      numFiles >= minNumFiles && numFiles <= maxNumFiles &&
+        numBytes >= minNumBytes && numBytes <= maxPartitionBytes
+    }
+  }
 
 
   lazy val fileConstantMetadataColumns: Seq[AttributeReference] = output.collect {
@@ -478,6 +506,8 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
         Nil
       }
       (partitioning, sortOrder)
+    } else if (useSingleTaskExecution) {
+      (SinglePartition, Nil)
     } else {
       (UnknownPartitioning(0), Nil)
     }
@@ -696,7 +726,8 @@ case class FileSourceScanExec(
     override val optionalNumCoalescedBuckets: Option[Int],
     override val dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier],
-    override val disableBucketedScan: Boolean = false)
+    override val disableBucketedScan: Boolean = false,
+    override val markedForSingleTaskExecution: Boolean = false)
   extends FileSourceScanLike {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -744,10 +775,28 @@ case class FileSourceScanExec(
     inputRDD :: Nil
   }
 
+  /**
+   * The input RDD, coalesced to a single partition when this scan runs in single-task mode. This
+   * enforces the `SinglePartition` output partitioning reported by `outputPartitioning`, which is
+   * estimated from the statically-selected files and may not correspond exactly to the number of
+   * partitions the input RDD produces after dynamic pruning. Coalescing here keeps the query
+   * correct in either case.
+   */
+  private[spark] lazy val maybeCoalesceInputRDD: RDD[InternalRow] = {
+    if (useSingleTaskExecution && inputRDD.getNumPartitions > 1) {
+      inputRDD.coalesce(1)
+    } else if (useSingleTaskExecution && inputRDD.getNumPartitions == 0) {
+      // All files were pruned away; produce a single empty partition to match `SinglePartition`.
+      sparkContext.parallelize[InternalRow](Nil, 1)
+    } else {
+      inputRDD
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     if (needsUnsafeRowConversion) {
-      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+      maybeCoalesceInputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
         val toUnsafe = UnsafeProjection.create(schema)
         toUnsafe.initialize(index)
         iter.map { row =>
@@ -756,7 +805,7 @@ case class FileSourceScanExec(
         }
       }
     } else {
-      inputRDD.mapPartitionsInternal { iter =>
+      maybeCoalesceInputRDD.mapPartitionsInternal { iter =>
         iter.map { row =>
           numOutputRows += 1
           row
@@ -768,7 +817,7 @@ case class FileSourceScanExec(
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val numOutputRows = longMetric("numOutputRows")
     val scanTime = longMetric("scanTime")
-    inputRDD.asInstanceOf[RDD[ColumnarBatch]].mapPartitionsInternal { batches =>
+    maybeCoalesceInputRDD.asInstanceOf[RDD[ColumnarBatch]].mapPartitionsInternal { batches =>
       new Iterator[ColumnarBatch] {
 
         override def hasNext: Boolean = {
@@ -921,7 +970,8 @@ case class FileSourceScanExec(
       optionalNumCoalescedBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
       None,
-      disableBucketedScan)
+      disableBucketedScan,
+      markedForSingleTaskExecution)
   }
 
   override def getStream: Option[SparkDataStream] = stream

@@ -160,6 +160,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Read with at syntax time travel") {
+    // Version time travel
     val read = proto.Read
       .newBuilder()
       .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name@v1").build())
@@ -173,12 +174,30 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       case other => fail(s"Expected RelationTimeTravel but got: $other")
     }
 
+    // Timestamp time travel
+    val tsRead = read.toBuilder
+      .setNamedTable(
+        proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name@20190129003758000").build())
+      .build()
+    transform(proto.Relation.newBuilder.setRead(tsRead).build()) match {
+      case RelationTimeTravel(relation: UnresolvedRelation, timestamp, version) =>
+        assert(relation.multipartIdentifier === Seq("name"))
+        assert(timestamp.isDefined)
+        assert(version.isEmpty)
+      case other => fail(s"Expected RelationTimeTravel but got: $other")
+    }
+
     // Streaming reads do not support time travel.
     val streamingRead = read.toBuilder.setIsStreaming(true).build()
     val e = intercept[AnalysisException] {
       transform(proto.Relation.newBuilder.setRead(streamingRead).build())
     }
     assert(e.getCondition === "UNSUPPORTED_FEATURE.TIME_TRAVEL")
+    val streamingTsRead = tsRead.toBuilder.setIsStreaming(true).build()
+    val tsErr = intercept[AnalysisException] {
+      transform(proto.Relation.newBuilder.setRead(streamingTsRead).build())
+    }
+    assert(tsErr.getCondition === "UNSUPPORTED_FEATURE.TIME_TRAVEL")
 
     // A non-time-travel '@' suffix is a parse error.
     val badRead = read.toBuilder
@@ -635,6 +654,18 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(array(0).toString == InternalRow(1, "spark", 1, "spark").toString)
     assert(array(1).toString == InternalRow(2, "hadoop", 2, "hadoop").toString)
     assert(array(2).toString == InternalRow(3, "kafka", 3, "kafka").toString)
+  }
+
+  test("SPARK-58341: transform SQL with 5 or more positional arguments binds in order") {
+    val sql = proto.SQL
+      .newBuilder()
+      .setQuery("SELECT ?, ?, ?, ?, ?, ?")
+    (1 to 6).foreach { v =>
+      sql.addPosArguments(proto.Expression.newBuilder().setLiteral(toLiteralProto(v)))
+    }
+
+    val df = Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setSql(sql).build()))
+    assert(df.collect() === Array(Row(1, 2, 3, 4, 5, 6)))
   }
 
   test("transform UnresolvedStar with target field") {

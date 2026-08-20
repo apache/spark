@@ -187,7 +187,9 @@ def _main(infile: IO, outfile: IO) -> None:
     def data_source_write_func(iterator: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         def batch_to_rows() -> Iterator[Row]:
             for batch in iterator:
-                columns = [column.to_pylist() for column in batch.columns]
+                columns = [
+                    ArrowTableToRowsConversion._to_pylist(column) for column in batch.columns
+                ]
                 for row in range(0, batch.num_rows):
                     values = [
                         converters[col](columns[col][row]) for col in range(batch.num_columns)

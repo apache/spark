@@ -22,7 +22,7 @@ import scala.util.Try
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.DataflowGraph.mapUnique
-import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
+import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -146,7 +146,9 @@ case class DataflowGraph(
    *                upstream flows
    * @return The reanalyzed flow
    */
-  protected[graph] def reanalyzeFlow(srcFlow: Flow): ResolvedFlow = {
+  protected[graph] def reanalyzeFlow(
+      srcFlow: Flow,
+      sessionCaseSensitive: Boolean): ResolvedFlow = {
     val upstreamDatasetIdentifiers = dfsInternal(
       flowNodes(srcFlow.identifier).output,
       downstream = false,
@@ -164,40 +166,82 @@ case class DataflowGraph(
       tables = table.get(srcFlow.destinationIdentifier).toSeq,
       sinks = sink.get(srcFlow.destinationIdentifier).toSeq
     )
-    subgraph.resolve().resolvedFlow(srcFlow.identifier)
+    subgraph.resolve(sessionCaseSensitive).resolvedFlow(srcFlow.identifier)
   }
 
   /**
    * A map of the inferred schema of each table, computed by merging the analyzed schemas
    * of all flows writing to that table.
+   *
+   * The merge honors the effective `spark.sql.caseSensitive` of the flows writing to each table:
+   * under case-insensitive analysis two flows emitting column names that differ only in case
+   * contribute a single column rather than both, which would otherwise produce a target schema the
+   * engine's own resolver cannot disambiguate. Which spelling survives such a fold is fixed by
+   * [[SchemaInferenceUtils.inferSchemaFromFlows]], which merges in sorted flow identifier order.
    */
-  lazy val inferredSchema: Map[TableIdentifier, StructType] = {
-    flowsTo.view.mapValues { flows =>
-      flows
-        .map { flow =>
-          resolvedFlow(flow.identifier).schema
-        }
-        .reduce(SchemaMergingUtils.mergeSchemas)
+  def inferSchemas(sessionCaseSensitive: Boolean): Map[TableIdentifier, StructType] = {
+    flowsTo.map { case (destinationIdentifier, flows) =>
+      val resolvedFlows = flows.map { flow =>
+        resolvedFlow(flow.identifier)
+      }
+      destinationIdentifier -> SchemaInferenceUtils.inferSchemaFromFlows(
+        tableIdentifier = destinationIdentifier,
+        flows = resolvedFlows,
+        userSpecifiedSchema = None,
+        sessionCaseSensitive = sessionCaseSensitive)
+    }
+  }
+
+  /**
+   * The internal auxiliary tables owned by each destination [[Table]], derived from the resolved
+   * flows writing to it and the destination schemas inferred from them. Keyed by the destination's
+   * identifier; only destinations that actually require auxiliary tables appear. Today only AutoCDC
+   * flow destination tables have an auxiliary table, and exactly one.
+   *
+   * Auxiliary tables are deliberately NOT part of the logical graph (they are never resolved,
+   * connected, or exposed as [[Input]]s); this is purely a derived view used during dataset
+   * materialization to create/evolve them alongside their owning table. The derivation is pure and
+   * performs no catalog access.
+   */
+  def auxiliaryTableSpecs(
+      inferredSchemas: Map[TableIdentifier, StructType]
+  ): Map[TableIdentifier, AuxiliaryTableSpec] = {
+    resolvedFlowsTo.flatMap { case (destinationTableIdentifier, flowsToDestinationTable) =>
+      table.get(destinationTableIdentifier).flatMap { destinationTable =>
+        flowsToDestinationTable
+          // A target is written by at most one AutoCDC flow today (graph validation rejects
+          // multi-flow AutoCDC), so take the single AutoCDC flow if one exists. Furthermore, today
+          // only AutoCDC flows produce an auxiliary table artifact.
+          .collectFirst { case f: AutoCdcMergeFlow => f }
+          .map { autoCdcFlow =>
+            val spec = AutoCdcAuxiliaryTable.buildAuxiliaryTableSpecFor(
+              targetTable = destinationTable,
+              targetTableSchema = inferredSchemas(destinationTableIdentifier),
+              inputAutoCdcFlow = autoCdcFlow
+            )
+            destinationTableIdentifier -> spec
+          }
+      }
     }.toMap
   }
 
   /** Ensure that the [[DataflowGraph]] is valid and throws errors if not. */
-  def validate(): DataflowGraph = {
-    validationFailure.toOption match {
+  def validate(sessionCaseSensitive: Boolean): DataflowGraph = {
+    validationFailure(sessionCaseSensitive).toOption match {
       case Some(exception) => throw exception
       case None => this
     }
   }
 
   /**
-   * Validate the current [[DataflowGraph]] and cache the validation failure.
+   * Validate the current [[DataflowGraph]] and return the validation failure, if one exists.
    *
    * To add more validations, add them in a helper function that throws an exception if the
    * validation fails, and invoke the helper function here.
    */
-  private lazy val validationFailure: Try[Throwable] = Try {
+  private def validationFailure(sessionCaseSensitive: Boolean): Try[Throwable] = Try {
     validateSuccessfulFlowAnalysis()
-    validateUserSpecifiedSchemas()
+    validateUserSpecifiedSchemas(sessionCaseSensitive)
     // Connecting the graph sorts it topologically
     validateGraphIsTopologicallySorted()
     validateMultiQueryTables()
@@ -205,7 +249,6 @@ case class DataflowGraph(
     validateEveryDatasetHasFlow()
     validateTablesAreResettable()
     validateFlowStreamingness()
-    inferredSchema
   }.failed
 
   /**
@@ -228,10 +271,12 @@ case class DataflowGraph(
   def resolved: Boolean =
     flows.forall(f => resolvedFlow.contains(f.identifier))
 
-  def resolve(): DataflowGraph =
+  def resolve(sessionCaseSensitive: Boolean): DataflowGraph =
     DataflowGraphTransformer.withDataflowGraphTransformer(this) { transformer =>
       val coreDataflowNodeProcessor =
-        new CoreDataflowNodeProcessor(rawGraph = this)
+        new CoreDataflowNodeProcessor(
+          rawGraph = this,
+          sessionCaseSensitive = sessionCaseSensitive)
       transformer
         .transformDownNodes(coreDataflowNodeProcessor.processNode)
         .getDataflowGraph
