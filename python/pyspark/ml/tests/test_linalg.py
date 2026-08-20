@@ -391,7 +391,8 @@ class VectorUDTTests(MLlibTestCase):
         with self.assertRaises(AnalysisException) as context:
             df.select(wrap_udt("vec", MatrixUDT())).collect()
         self.assertEqual(
-            context.exception.getCondition(), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+            context.exception.getCondition(), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
+        )
 
     def test_wrap_unwrap_udt_round_trip(self):
         df = self.spark.createDataFrame([(self.dv1,), (self.sv1,)], ["vec"])
@@ -402,9 +403,7 @@ class VectorUDTTests(MLlibTestCase):
 
     def test_wrap_unwrap_udt_round_trip_with_udt_column(self):
         df = self.spark.createDataFrame([(self.dv1,), (self.sv1,)], ["vec"])
-        round_trip = df.select(
-            wrap_udt(unwrap_udt("vec"), lit(VectorUDT().json())).alias("vec")
-        )
+        round_trip = df.select(wrap_udt(unwrap_udt("vec"), lit(VectorUDT().json())).alias("vec"))
 
         self.assertEqual(round_trip.schema["vec"].dataType, VectorUDT())
         self.assertEqual(round_trip.collect(), [Row(vec=self.dv1), Row(vec=self.sv1)])
@@ -484,7 +483,8 @@ class MatrixUDTTests(MLlibTestCase):
         with self.assertRaises(AnalysisException) as context:
             df.select(wrap_udt("mat", VectorUDT())).collect()
         self.assertEqual(
-            context.exception.getCondition(), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+            context.exception.getCondition(), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
+        )
 
     def test_wrap_unwrap_udt_round_trip(self):
         df = self.spark.createDataFrame([(self.dm1,), (self.sm1,)], ["mat"])
@@ -495,9 +495,7 @@ class MatrixUDTTests(MLlibTestCase):
 
     def test_wrap_unwrap_udt_round_trip_with_udt_column(self):
         df = self.spark.createDataFrame([(self.dm1,), (self.sm1,)], ["mat"])
-        round_trip = df.select(
-            wrap_udt(unwrap_udt("mat"), lit(MatrixUDT().json())).alias("mat")
-        )
+        round_trip = df.select(wrap_udt(unwrap_udt("mat"), lit(MatrixUDT().json())).alias("mat"))
 
         self.assertEqual(round_trip.schema["mat"].dataType, MatrixUDT())
         self.assertEqual(round_trip.collect(), [Row(mat=self.dm1), Row(mat=self.sm1)])
