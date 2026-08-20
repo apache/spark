@@ -1345,9 +1345,10 @@ case class HashAggregateExec(
 object HashAggregateExec {
   /**
    * Spills the in-memory hash map to disk and returns the sorter holding the spilled data. Called
-   * by the generated code of [[HashAggregateExec]] when a buffer cannot be allocated from the hash
-   * map: the first spill destructs the map into a new sorter, and later spills merge into the
-   * existing one. Returning the sorter lets the generated code keep it in a single mutable field.
+   * by the generated code of [[HashAggregateExec]] (through the static forwarder) when a buffer
+   * cannot be allocated from the hash map: the first spill destructs the map into a new sorter, and
+   * later spills merge into the existing one. Returning the sorter lets the generated code keep it
+   * in a single mutable field.
    *
    * Extracting this type-independent spill machinery into a shared helper keeps it compiled once
    * per JVM instead of being re-emitted into every HashAggregateExec stage's generated code.
