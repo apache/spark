@@ -729,6 +729,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.keySet.toSeq
   }
 
+  /**
+   * Whether this backend can hold its executors gracefully: publish an all-zero executor
+   * requirement to the cluster manager, and let the executors that are already running finish
+   * their tasks and exit on their own instead of being terminated.
+   *
+   * False by default so that a backend has to opt in: the base `doRequestTotalExecutors` does
+   * not acknowledge the published requirement at all, and a cluster manager that terminates
+   * running executors once the requirement drops to zero cannot drain them gracefully.
+   */
+  private[spark] def supportsExecutorHold: Boolean = false
+
   def getExecutorsWithRegistrationTs(): Map[String, Long] = synchronized {
     executorDataMap.toMap.transform((_, v) => v.registrationTs)
   }
