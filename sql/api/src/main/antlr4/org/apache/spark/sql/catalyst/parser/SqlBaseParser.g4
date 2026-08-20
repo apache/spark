@@ -1468,6 +1468,11 @@ primaryExpression
       (errorBehavior=jsonValueBehavior ON ERROR)? RIGHT_PAREN                                  #jsonValue
     | JSON_EXISTS LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
       (errorBehavior=jsonExistsErrorBehavior ON ERROR)? RIGHT_PAREN                             #jsonExists
+    | JSON_OBJECT LEFT_PAREN (
+        jsonObjectMember (COMMA jsonObjectMember)*
+        | jsonObjectCommaMember (COMMA jsonObjectCommaMember)*)?
+      (nullBehavior=jsonConstructorNullBehavior ON NULL)?
+      (RETURNING returning=dataType)? RIGHT_PAREN                                              #jsonObject
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
@@ -1509,6 +1514,30 @@ jsonExistsErrorBehavior
     | FALSE
     | UNKNOWN
     | ERROR
+    ;
+
+// The behavior selected by a JSON_OBJECT `... ON NULL` clause.
+// NULL and ABSENT are keywords.
+jsonConstructorNullBehavior
+    : NULL                                                                                     #jsonConstructorNullNull
+    | ABSENT                                                                                   #jsonConstructorNullAbsent
+    ;
+
+// A key-value pair in JSON_OBJECT: `key VALUE value`, `KEY key VALUE value`, or `key : value`.
+// Both sides accept a full `expression` (not just `valueExpression`) so that ordinary predicates --
+// e.g. `JSON_OBJECT('present' VALUE x IS NOT NULL)` -- work without parentheses, matching normal
+// function-argument syntax. The `VALUE` / `COLON` separator and the trailing `ON NULL` / `RETURNING`
+// clauses are keywords that terminate the expression, so this stays unambiguous.
+jsonObjectMember
+    : KEY keyExpr=expression VALUE valueExpr=expression
+    | keyExpr=expression (VALUE | COLON) valueExpr=expression
+    ;
+
+// Compatibility form used by systems such as MySQL: `JSON_OBJECT(key, value[, key, value]...)`.
+// Kept as a separate alternative from `jsonObjectMember` because COMMA is both the key/value
+// separator inside a member and the separator between members.
+jsonObjectCommaMember
+    : keyExpr=expression COMMA valueExpr=expression
     ;
 
 semiStructuredExtractionPath
@@ -2092,7 +2121,8 @@ operatorPipeSetAssignmentSeq
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
 //--ANSI-NON-RESERVED-START
-    : ADD
+    : ABSENT
+    | ADD
     | AFTER
     | AGGREGATE
     | ALIGN
@@ -2256,6 +2286,7 @@ ansiNonReserved
     | ITERATE
     | JSON
     | JSON_EXISTS
+    | JSON_OBJECT
     | JSON_TABLE
     | JSON_VALUE
     | KEY
@@ -2494,7 +2525,8 @@ strictNonReserved
 
 nonReserved
 //--DEFAULT-NON-RESERVED-START
-    : ADD
+    : ABSENT
+    | ADD
     | AFTER
     | AGGREGATE
     | ALIGN
@@ -2696,6 +2728,7 @@ nonReserved
     | ITERATE
     | JSON
     | JSON_EXISTS
+    | JSON_OBJECT
     | JSON_TABLE
     | JSON_VALUE
     | KEY

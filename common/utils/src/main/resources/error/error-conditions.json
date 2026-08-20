@@ -1963,6 +1963,11 @@
           "<functionName> has an invalid or unsupported JSON path <path>."
         ]
       },
+      "INVALID_JSON_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> RETURNING clause must be a string type (STRING), but got <returningType>."
+        ]
+      },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
         "message" : [
           "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a scalar (string, numeric, boolean, or datetime) type."
@@ -5615,6 +5620,12 @@
       "<functionName> could not evaluate the path <path>: the input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
     ],
     "sqlState" : "2203G"
+  },
+  "JSON_OBJECT_NULL_KEY" : {
+    "message" : [
+      "JSON_OBJECT key must be a non-null string, but got a null key."
+    ],
+    "sqlState" : "2200E"
   },
   "JSON_VALUE_ON_ERROR" : {
     "message" : [
