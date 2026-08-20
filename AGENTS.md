@@ -208,11 +208,11 @@ a regression introduced by those changes. Reuse the earlier PRs' JIRA ticket(s) 
 `[FOLLOWUP]` after the component tag, for example
 `[SPARK-xxxx][COMPONENT][FOLLOWUP] Title`.
 
-Do not treat a separately planned PR as a follow-up just because it shares a JIRA with an
-earlier PR. If the existing JIRA still covers the work, use the normal title format with
-that JIRA and without `[FOLLOWUP]`. If the work falls outside the existing JIRA's scope, or
-if any earlier change has been released, create a new JIRA ticket and do not use
-`[FOLLOWUP]`.
+Do not use `[FOLLOWUP]` for a separately planned PR that implements a distinct part of a
+larger effort. For separately planned non-trivial PRs, create a separate JIRA ticket for
+each PR and use the normal title format without `[FOLLOWUP]`. Also create a new JIRA ticket
+if the work falls outside the earlier JIRA's scope, or if any earlier change has been
+released.
 
 Infer the PR title from the changes. If no ticket ID is given and the PR is not draft, WIP, MINOR, or TRIVIAL, create one using `dev/create_spark_jira.py`, using the PR title (without the JIRA ID and component tag) as the ticket title.
 
