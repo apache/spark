@@ -1611,6 +1611,24 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
         val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
         assert(unionExec.size == 1)
 
+        // Pin the discriminator to qualifier: child 0's partitioning references the same column
+        // (`id`) as its output, differing only in qualifier (`[t1]` vs the subquery qualifier),
+        // never nullability. The explicit nullability check rules out the nullability cause the
+        // DataFrame test below exercises; a future refactor leaking a nullability difference
+        // fails loudly instead of silently changing what the test covers.
+        val child0 = unionExec.head.children.head
+        val outputId = child0.output.head.asInstanceOf[AttributeReference]
+        val partitioningId =
+          child0.outputPartitioning.asInstanceOf[HashPartitioning].expressions.head
+            .asInstanceOf[AttributeReference]
+        assert(outputId.exprId == partitioningId.exprId,
+          s"expected the same column: $outputId vs $partitioningId")
+        assert(outputId.nullable == partitioningId.nullable,
+          s"nullability must match, qualifier is the sole difference: " +
+            s"$outputId vs $partitioningId")
+        assert(outputId.qualifier != partitioningId.qualifier,
+          s"expected a qualifier difference: $outputId vs $partitioningId")
+
         // Child 0's `HashPartitioning` references `id` with the `t1` qualifier while its output
         // `id` carries the subquery qualifier; remapping both to the union's output attributes
         // still propagates the hash partitioning despite the qualifier difference. The propagated
@@ -1653,15 +1671,15 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
   test("SPARK-58819: union outputPartitioning ignores partition key nullability") {
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
-        // `PushDownPredicates` would otherwise push `IsNotNull` below the shuffle, turning child
-        // 0 into a `ShuffleExchangeExec` whose partitioning and output carry the same nullability.
-        // Disabling it keeps `FilterExec` directly above the shuffle, so its output (nullability
-        // narrowed) differs from its passed-through partitioning only in nullability.
-        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-          "org.apache.spark.sql.catalyst.optimizer.PushDownPredicates") {
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      // `.sample(1.0)` keeps `FilterExec` above the shuffle without disabling any rule:
+      // `PushPredicateThroughNonJoin.canPushThrough` has no `Sample` case, so `IsNotNull` stays
+      // above the `Sample`, which passes its child's output and partitioning through verbatim.
+      // The filter's output nullability is thus narrowed while its passed-through partitioning
+      // keeps the nullable key. `fraction = 1.0` passes every row, keeping counts deterministic.
       val df1 = Seq((Option(1), 10L), (Option(2), 20L)).toDF("id", "v")
-        .repartition($"id").filter($"id".isNotNull)
+        .repartition($"id").sample(withReplacement = false, fraction = 1.0, seed = 42)
+        .filter($"id".isNotNull)
       val df2 = Seq((Option(1), 30L), (Option(3), 40L)).toDF("id", "v")
         .groupBy($"id").agg(sum($"v").as("v"))
 

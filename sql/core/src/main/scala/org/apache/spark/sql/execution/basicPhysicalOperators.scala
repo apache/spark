@@ -899,9 +899,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // Map every child's partitioning attributes to this union's output attributes, so all
     // partitionings are expressed in the same attribute space before comparison. A child's
     // `outputPartitioning` may reference attributes that differ from its own `output` in any
-    // field `AttributeReference.equals` compares (name, nullability, metadata, qualifier): a
-    // Filter narrows nullability via `IsNotNull` while passing its child's partitioning through,
-    // and a partitioning built inside a view or subquery carries that relation's qualifier.
+    // field `AttributeReference.equals` compares other than `dataType`, which two attributes
+    // sharing an `ExprId` agree on (so name, nullability, metadata, qualifier): a Filter
+    // narrows nullability via `IsNotNull` while passing its child's partitioning through, and
+    // a partitioning built inside a view or subquery carries that relation's qualifier.
     // `AttributeMap` is keyed by `ExprId`, so remapping every child (including the first)
     // normalizes all of those.
     val unionOutput = output
