@@ -1260,7 +1260,6 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   }
 }
 
-@ExtendedSQLTest
 class OrcV1QuerySuite extends OrcQuerySuite {
   override protected def sparkConf: SparkConf =
     super

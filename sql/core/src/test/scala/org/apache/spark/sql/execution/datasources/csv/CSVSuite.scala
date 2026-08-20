@@ -4075,7 +4075,6 @@ abstract class CSVSuite
   }
 }
 
-@ExtendedSQLTest
 class CSVv1Suite extends CSVSuite {
   override protected def sparkConf: SparkConf =
     super
