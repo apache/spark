@@ -369,6 +369,7 @@ __all__ = [  # noqa: F405
     "bitmap_and_agg",
     "bitmap_construct_agg",
     "bitmap_or_agg",
+    "bitmap_xor_agg",
     "bool_and",
     "bool_or",
     "collect_list",
@@ -621,6 +622,7 @@ __all__ = [  # noqa: F405
     # Call Functions
     "call_udf",
     "pandas_udf",
+    "udaf",
     "udf",
     "udtf",
     "arrow_udtf",

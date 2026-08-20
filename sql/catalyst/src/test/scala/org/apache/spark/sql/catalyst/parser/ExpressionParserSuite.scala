@@ -331,6 +331,21 @@ class ExpressionParserSuite extends AnalysisTest {
         Some(Literal("x")), Some(Literal("y"))))
   }
 
+  test("JSON_EXISTS expressions") {
+    import org.apache.spark.sql.catalyst.expressions.JsonExistsBehavior
+    // Bare form defaults to FALSE ON ERROR.
+    assertEqual("json_exists(a, '$.b')", JsonExists($"a", "$.b", JsonExistsBehavior.False))
+    assertEqual(
+      "json_exists(a, '$.b' TRUE ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.True))
+    assertEqual(
+      "json_exists(a, '$.b' FALSE ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.False))
+    assertEqual(
+      "json_exists(a, '$.b' UNKNOWN ON ERROR)",
+      JsonExists($"a", "$.b", JsonExistsBehavior.Unknown))
+    assertEqual(
+      "json_exists(a, '$.b' ERROR ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.Error))
+  }
+
   test("cast expressions") {
     // Note that DataType parsing is tested elsewhere.
     assertEqual("cast(a as int)", $"a".cast(IntegerType))

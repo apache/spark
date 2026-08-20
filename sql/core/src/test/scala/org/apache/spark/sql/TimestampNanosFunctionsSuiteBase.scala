@@ -774,6 +774,53 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  // collect_list over nanosecond-precision timestamps (SPARK-56822). `CollectList` is
+  // type-agnostic: its `ArrayBuffer` buffer holds the physical `TimestampNanosVal` and the
+  // result element type is exactly `child.dataType`, so the input precision, family (NTZ/LTZ)
+  // and sub-microsecond remainder survive with no truncation to micros. The collection order
+  // after aggregation is not deterministic, so the contents are compared as a set.
+
+  test("SPARK-56822: collect_list over nanosecond-precision timestamps preserves type and nanos " +
+    "remainder") {
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p))
+        .add("ltz", TimestampLTZNanosType(p))
+      // The sub-microsecond parts are multiples of 100ns, so they are exact at every p in [7, 9]
+      // (no flooring) yet non-zero -- a value truncated to micros would be visibly wrong. The NULL
+      // row is dropped (collect_list ignores nulls by default).
+      val data = Seq(
+        Row(LocalDateTime.parse("2020-01-01T12:34:56.000000100"),
+          Instant.parse("2020-01-01T12:34:56.000000100Z")),
+        Row(LocalDateTime.parse("2020-01-02T00:00:00.000000900"),
+          Instant.parse("2020-01-02T00:00:00.000000900Z")),
+        Row(null, null))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+      val sqlRes = df.selectExpr("collect_list(ntz)", "collect_list(ltz)")
+      // The result keeps the family (NTZ/LTZ) and precision; nulls are dropped so
+      // containsNull=false.
+      assert(sqlRes.schema.map(_.dataType) === Seq(
+        ArrayType(TimestampNTZNanosType(p), containsNull = false),
+        ArrayType(TimestampLTZNanosType(p), containsNull = false)))
+
+      val expectedNtz = Set(
+        LocalDateTime.parse("2020-01-01T12:34:56.000000100"),
+        LocalDateTime.parse("2020-01-02T00:00:00.000000900"))
+      val expectedLtz = Set(
+        Instant.parse("2020-01-01T12:34:56.000000100Z"),
+        Instant.parse("2020-01-02T00:00:00.000000900Z"))
+      // The Scala Column API path agrees with the SQL path; both drop the null and keep
+      // both values.
+      val sqlRow = sqlRes.collect().head
+      val colRow = df.select(collect_list(col("ntz")), collect_list(col("ltz"))).collect().head
+      assert(sqlRow.getSeq[LocalDateTime](0).toSet === expectedNtz)
+      assert(sqlRow.getSeq[Instant](1).toSet === expectedLtz)
+      assert(colRow.getSeq[LocalDateTime](0).toSet === expectedNtz)
+      assert(colRow.getSeq[Instant](1).toSet === expectedLtz)
+    }
+  }
+
   test("SPARK-57816: date_format / to_char / to_varchar over nanosecond-precision timestamps") {
     // The 9-`S` pattern is a fixed-width fraction field, so it always emits 9 digits; truncating to
     // precision `p` zeros the low digits (floor); it does not drop them. The session zone is

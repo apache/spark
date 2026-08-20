@@ -2436,6 +2436,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionList" -> groupAggPandasUDFNames.map(toSQLId).mkString(", ")))
   }
 
+  def invalidPythonAggregatePlacementError(
+      pythonAggregateNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PYTHON_UDF_PLACEMENT",
+      messageParameters = Map(
+        "functionList" -> pythonAggregateNames.map(toSQLId).mkString(", ")))
+  }
+
+  def invalidIncrementalPythonAggregatorBufferError(
+      name: String, bufferType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PYTHON_AGGREGATOR_BUFFER_SCHEMA",
+      messageParameters = Map(
+        "functionName" -> toSQLId(name),
+        "bufferType" -> Option(bufferType).map(toSQLType).getOrElse("NULL")))
+  }
+
   def ambiguousAttributesInSelfJoinError(
       ambiguousAttrs: Seq[AttributeReference]): Throwable = {
     new AnalysisException(
@@ -3010,6 +3027,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1214",
       messageParameters = Map("windowExpressions" -> windowExpressions.toString()))
+  }
+
+  def multiplePythonUDFTypesInWindowError(functionNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW",
+      messageParameters = Map("functionList" -> functionNames.map(toSQLId).mkString(", ")))
   }
 
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {

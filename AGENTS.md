@@ -103,6 +103,9 @@ These are combined with a base above rather than used on their own:
 
 Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
 
+For build and test setup, including how to run tests and troubleshoot common
+local failures, see `docs/building-spark.md`.
+
 Prefer SBT over Maven for faster incremental compilation. Module names are defined in `project/SparkBuild.scala`.
 
 Compile a single module:

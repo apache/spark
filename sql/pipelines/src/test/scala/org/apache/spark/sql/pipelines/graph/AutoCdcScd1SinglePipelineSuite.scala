@@ -40,10 +40,9 @@ class AutoCdcScd1SinglePipelineSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
-  test("an upsert event lands a new row in an empty target table") {
-    val session = spark
-    import session.implicits._
+  import testImplicits._
 
+  test("an upsert event lands a new row in an empty target table") {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -73,9 +72,6 @@ class AutoCdcScd1SinglePipelineSuite
 
   test("consecutive upsert, delete, and re-upsert events for the same key in one run " +
     "converge to the latest event") {
-    val session = spark
-    import session.implicits._
-
     // Target schema deliberately omits `is_delete`: the source carries it as a control
     // column, drives the deleteCondition, and is excluded from the target projection.
     spark.sql(
@@ -117,9 +113,6 @@ class AutoCdcScd1SinglePipelineSuite
 
   test("two AutoCDC flows targeting separate tables in one pipeline produce independent " +
     "results") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.t_a " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -168,9 +161,6 @@ class AutoCdcScd1SinglePipelineSuite
 
   test("an AutoCDC flow targeting a table whose format does not support row-level " +
     "operations fails with AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE") {
-    val session = spark
-    import session.implicits._
-
     // Intentionally use a non-merge-compatible catalog, whose default table format is parquet.
     val catalog = TestGraphRegistrationContext.DEFAULT_CATALOG
     val database = TestGraphRegistrationContext.DEFAULT_DATABASE

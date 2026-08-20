@@ -433,21 +433,26 @@ object PositionResult {
 }
 
 /**
- * Row-source and column extraction for the SQL `JSON_TABLE` function. Given the JSON input, the
- * (wildcard-free) container path, and whether the row path ended in `[*]`, it produces the
- * per-row JSON documents that the [[org.apache.spark.sql.catalyst.expressions.JsonTable]]
- * generator then projects into columns via [[navigateColumns]].
+ * Token-aware navigation of a `containerPath` shared by the SQL/JSON functions. Three entry
+ * points, each with its own path constraints -- so `containerPath` is NOT wildcard-free in general:
  *
- *   - `$.items[*]` (containerPath `$.items`, `explodeRoot` = true): the container must be an
- *     array; each element becomes a row.
- *   - `$` or `$.x` (`explodeRoot` = false): the matched value becomes exactly one row.
+ *   - [[evaluate]] -- `JSON_TABLE` row source: given the input, a wildcard-free container path, and
+ *     whether the row path ended in `[*]`, produces the per-row JSON documents that the
+ *     [[org.apache.spark.sql.catalyst.expressions.JsonTable]] generator projects into columns via
+ *     [[navigateColumns]]. `$.items[*]` (containerPath `$.items`, `explodeRoot` = true) explodes an
+ *     array into rows; `$` or `$.x` (`explodeRoot` = false) yields exactly one row.
+ *   - [[lookup]] -- `JSON_VALUE` single-scalar extraction, over a wildcard-free path
+ *     (`explodeRoot` = false).
+ *   - [[pathExists]] -- `JSON_EXISTS` existence test. Here `containerPath` MAY contain wildcards
+ *     (`[*]`, `.*`, `['*']`) and is evaluated in SQL/JSON *lax* mode (auto-wrap/unwrap, see
+ *     [[anyMatch]]); `explodeRoot` is unused, so construct with `explodeRoot` = false.
  *
  * Unlike `get_json_object`, navigation here is token-aware and distinguishes missing keys from
- * JSON `null` values (see [[JsonPathResult]]).
+ * JSON `null` values (see [[JsonPathResult]] / [[PositionResult]]).
  *
- * The input is required to be exactly one well-formed JSON value (no trailing garbage, not
- * empty); anything else is treated as malformed, so the caller applies the ON ERROR behavior
- * consistently in both modes.
+ * Every entry point requires the input to be exactly one well-formed JSON value (no trailing
+ * garbage, not empty); anything else is treated as malformed, so the caller applies the ON ERROR
+ * behavior consistently in both modes.
  */
 case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: Boolean) {
   import PathInstruction._
@@ -582,6 +587,161 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
     }
     // At the root now: exactly one value was present iff nothing remains.
     parser.nextToken() == null
+  }
+
+  /**
+   * Tests whether `containerPath` matches at least one item in a single JSON document, evaluated in
+   * SQL/JSON *lax* mode (see [[anyMatch]]): wildcards are supported and a structural mismatch is a
+   * non-match rather than an error. Returns `Some(true)` if the path matches (including a match
+   * whose value is an explicit JSON `null`), `Some(false)` if it matches nothing, and `None` if the
+   * input is not a single well-formed JSON value (malformed / trailing garbage / empty). Does not
+   * serialize the matched value. A `null` input is the caller's responsibility; `explodeRoot` is
+   * ignored (construct the evaluator with `explodeRoot = false`).
+   *
+   * A single parser both navigates the path and validates well-formedness: after the match
+   * decision, [[drainToRootEnd]] consumes the rest of the root value and rejects any trailing
+   * content, so a valid prefix followed by garbage (or a second root value) is malformed exactly as
+   * a fully bad document is. This avoids the extra O(document size) pass a separate
+   * `isSingleWellFormedValue` scan would add per row.
+   */
+  final def pathExists(json: UTF8String): Option[Boolean] = {
+    Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+      try {
+        if (parser.nextToken() == null) {
+          None // empty or whitespace-only
+        } else {
+          val exists = anyMatch(parser, containerPath)
+          if (drainToRootEnd(parser)) Some(exists) else None
+        }
+      } catch {
+        case _: JsonProcessingException => None
+      }
+    }
+  }
+
+  /**
+   * Returns whether `path` matches at least one item within the JSON value at the parser's current
+   * token, evaluated in SQL/JSON *lax* mode (the `JSON_EXISTS` default, matching Oracle and
+   * PostgreSQL):
+   *   - wildcards are supported: `[*]` (any array element) and `.*` / `['*']` (any object member);
+   *   - arrays are auto-unwrapped, i.e. a member/index/wildcard step applied to an array is applied
+   *     to each element (so `$.a.b` matches when `a` is an array of objects each having `b`);
+   *   - a non-array is auto-wrapped as a single-element array, so `[*]` / `[0]` match the value;
+   *   - a structural mismatch (e.g. a member step on a scalar) is a non-match, never an error.
+   *
+   * Invariant: the parser enters positioned on the first token of the current value and leaves
+   * positioned on that value's last token -- the value is always fully consumed, even after a match
+   * is found -- so wildcard branches compose and [[drainToRootEnd]] can validate trailing content.
+   */
+  private def anyMatch(parser: JsonParser, path: Seq[PathInstruction]): Boolean = {
+    path match {
+      case Nil =>
+        // End of path: the current value is present (including a JSON null) -> a match. Consume it.
+        parser.skipChildren()
+        true
+
+      case Key :: Named(name) :: rest =>
+        parser.currentToken match {
+          case JsonToken.START_OBJECT =>
+            // First-match semantics for a named key: only the first member with this name is
+            // followed, so a duplicate key later in the object is ignored. This matches the
+            // first-match `positionAt` / `navigateAll` used by `JSON_VALUE` / `JSON_TABLE`, so a
+            // path resolves consistently across the JSON functions. The whole object is still
+            // drained (subsequent members skipped) to keep the parser-position invariant.
+            var found = false
+            var matched = false
+            var token = parser.nextToken()
+            while (token != null && token != JsonToken.END_OBJECT) {
+              val matches = !matched && parser.currentName == name
+              parser.nextToken() // move onto the value; each branch consumes it
+              if (matches) {
+                matched = true
+                if (anyMatch(parser, rest)) found = true
+              } else {
+                parser.skipChildren()
+              }
+              token = parser.nextToken()
+            }
+            found
+          case JsonToken.START_ARRAY =>
+            forEachElement(parser)(anyMatch(parser, path)) // lax auto-unwrap: apply to each element
+          case _ =>
+            false // member accessor on a scalar: no match (the scalar is already fully consumed)
+        }
+
+      case Subscript :: Index(index) :: rest =>
+        parser.currentToken match {
+          case JsonToken.START_ARRAY =>
+            var found = false
+            var i = 0L
+            var token = parser.nextToken()
+            while (token != null && token != JsonToken.END_ARRAY) {
+              if (i == index) {
+                if (anyMatch(parser, rest)) found = true
+              } else {
+                parser.skipChildren()
+              }
+              i += 1
+              token = parser.nextToken()
+            }
+            found
+          case _ =>
+            // lax auto-wrap: a non-array is a single-element array; [0] matches, [i>0] does not.
+            if (index == 0) {
+              anyMatch(parser, rest)
+            } else {
+              parser.skipChildren() // consume the wrapped value to keep the invariant
+              false
+            }
+        }
+
+      case Subscript :: Wildcard :: rest =>
+        parser.currentToken match {
+          case JsonToken.START_ARRAY =>
+            forEachElement(parser)(anyMatch(parser, rest))
+          case _ =>
+            anyMatch(parser, rest) // lax auto-wrap: a non-array is a single-element array
+        }
+
+      case Wildcard :: rest =>
+        parser.currentToken match {
+          case JsonToken.START_OBJECT =>
+            var found = false
+            var token = parser.nextToken()
+            while (token != null && token != JsonToken.END_OBJECT) {
+              parser.nextToken() // move onto the member value
+              if (found) parser.skipChildren() else if (anyMatch(parser, rest)) found = true
+              token = parser.nextToken()
+            }
+            found
+          case JsonToken.START_ARRAY =>
+            forEachElement(parser)(anyMatch(parser, path)) // lax auto-unwrap: apply to each element
+          case _ =>
+            false // member wildcard on a scalar: no members
+        }
+
+      case _ =>
+        // Unreachable: JsonPathParser only produces the instruction pairs handled above.
+        parser.skipChildren()
+        false
+    }
+  }
+
+  /**
+   * Iterates the array the parser is positioned on (its current token is `START_ARRAY`), evaluating
+   * `matchElement` once per element with the parser positioned on that element's first token; each
+   * call must fully consume its element. Returns whether any element matched, and always drains the
+   * whole array, leaving the parser on the closing `END_ARRAY`. Once a match is found the remaining
+   * elements are skipped, not matched (existence short-circuits, but the array is still drained).
+   */
+  private def forEachElement(parser: JsonParser)(matchElement: => Boolean): Boolean = {
+    var found = false
+    var token = parser.nextToken()
+    while (token != null && token != JsonToken.END_ARRAY) {
+      if (found) parser.skipChildren() else if (matchElement) found = true
+      token = parser.nextToken()
+    }
+    found
   }
 
   /**

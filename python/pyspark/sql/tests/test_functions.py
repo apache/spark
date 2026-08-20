@@ -65,7 +65,6 @@ class FunctionsTestsMixin:
             "not",  # equivalent to python ~expression
             "any",  # equivalent to python ~some
             "len",  # equivalent to python ~length
-            "udaf",  # used for creating UDAF's which are not supported in PySpark
             "partitioning$",  # partitioning expressions for DSv2
         ]
 
