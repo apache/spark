@@ -340,6 +340,8 @@ jobs:
           ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
           ${{ runner.os }}-coursier-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: |
         if [ -f ./dev/free_disk_space ]; then
           ./dev/free_disk_space
@@ -676,6 +678,8 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-coursier-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
@@ -811,6 +815,8 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-coursier-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
@@ -957,6 +963,8 @@ jobs:
         restore-keys: |
           docs-maven-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
@@ -1088,6 +1096,8 @@ jobs:
         restore-keys: |
           docs-maven-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
@@ -1391,6 +1401,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-coursier-
       - name: Free up disk space
+        timeout-minutes: 10
+        continue-on-error: true
         run: |
           if [ -f ./dev/free_disk_space ]; then
             ./dev/free_disk_space
