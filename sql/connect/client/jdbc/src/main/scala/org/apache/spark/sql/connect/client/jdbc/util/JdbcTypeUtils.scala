@@ -173,14 +173,19 @@ private[jdbc] object JdbcTypeUtils {
   }
 
   /**
-   * JDBC `CHAR_OCTET_LENGTH`. Spark CHAR/VARCHAR lengths are in characters; report `n` so
-   * clients that size buffers from this column see the declared width instead of 0.
-   * Unbounded STRING and non-character types keep 0 (not applicable / unknown).
+   * JDBC `CHAR_OCTET_LENGTH` is a byte capacity. Spark CHAR/VARCHAR lengths are in
+   * characters, so report `4 * n` (UTF-8 maximum bytes per character), saturating at
+   * `Int.MaxValue`. Unbounded STRING and non-character types keep 0 (not applicable).
    */
   def getCharOctetLength(field: StructField): Int = field.dataType match {
-    case c: CharType => c.length
-    case v: VarcharType => v.length
+    case c: CharType => maxUtf8OctetLength(c.length)
+    case v: VarcharType => maxUtf8OctetLength(v.length)
     case _ => 0
+  }
+
+  private def maxUtf8OctetLength(numChars: Int): Int = {
+    val maxChars = Int.MaxValue / 4
+    if (numChars > maxChars) Int.MaxValue else numChars * 4
   }
 
   /**

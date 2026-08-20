@@ -350,8 +350,8 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
         val octetLength = rowSet.getInt("CHAR_OCTET_LENGTH")
         schema(pos).dataType match {
-          case c: CharType => assert(octetLength === c.length)
-          case v: VarcharType => assert(octetLength === v.length)
+          case c: CharType => assert(octetLength === c.length * 4)
+          case v: VarcharType => assert(octetLength === v.length * 4)
           case _ => assert(octetLength === 0) // JDBC getInt on SQL NULL
         }
 

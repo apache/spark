@@ -268,13 +268,13 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
           assert(rs.getInt("DATA_TYPE") === Types.CHAR)
           assert(rs.getString("TYPE_NAME") === "CHAR(4)")
           assert(rs.getInt("COLUMN_SIZE") === 4)
-          assert(rs.getInt("CHAR_OCTET_LENGTH") === 4)
+          assert(rs.getInt("CHAR_OCTET_LENGTH") === 16)
           assert(rs.next())
           assert(rs.getString("COLUMN_NAME") === "v")
           assert(rs.getInt("DATA_TYPE") === Types.VARCHAR)
           assert(rs.getString("TYPE_NAME") === "VARCHAR(6)")
           assert(rs.getInt("COLUMN_SIZE") === 6)
-          assert(rs.getInt("CHAR_OCTET_LENGTH") === 6)
+          assert(rs.getInt("CHAR_OCTET_LENGTH") === 24)
           assert(!rs.next())
         }
       } finally {

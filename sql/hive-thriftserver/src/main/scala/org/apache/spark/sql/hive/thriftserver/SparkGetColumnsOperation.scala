@@ -130,7 +130,7 @@ private[hive] class SparkGetColumnsOperation(
    * For CHAR(n) and VARCHAR(n), it returns the declared character length n.
    * For struct type, when its elements are fixed-size, the summation of all element sizes will be
    * returned.
-   * For array, map, unbounded string, and binaries, the column size is variable, return null.
+   * For array, map, unbounded string, and binaries, the column size is variable; return null.
    */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
     case dt @ (BooleanType | _: NumericType | DateType | TimestampType | TimestampNTZType |
@@ -149,14 +149,19 @@ private[hive] class SparkGetColumnsOperation(
   }
 
   /**
-   * JDBC CHAR_OCTET_LENGTH. Spark CHAR/VARCHAR lengths are in characters; report n so
-   * clients that size buffers from this column see the declared width. Unbounded STRING
-   * and non-character types stay null (not applicable).
+   * JDBC CHAR_OCTET_LENGTH is a byte capacity. Spark CHAR/VARCHAR lengths are in
+   * characters, so report 4 * n (UTF-8 maximum bytes per character), saturating at
+   * Int.MaxValue. Unbounded STRING and non-character types stay null (not applicable).
    */
   private def getCharOctetLength(typ: DataType): Option[Int] = typ match {
-    case c: CharType => Some(c.length)
-    case v: VarcharType => Some(v.length)
+    case c: CharType => Some(maxUtf8OctetLength(c.length))
+    case v: VarcharType => Some(maxUtf8OctetLength(v.length))
     case _ => None
+  }
+
+  private def maxUtf8OctetLength(numChars: Int): Int = {
+    val maxChars = Int.MaxValue / 4
+    if (numChars > maxChars) Int.MaxValue else numChars * 4
   }
 
   /**

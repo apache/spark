@@ -74,7 +74,7 @@ object RowEncoder extends DataTypeErrorsBase {
 
   /**
    * Builds an encoder for a schema that the engine produced, such as the result schema of a Spark
-   * Connect query. Whether CHAR/VARCHAR are first class types is decided by the session that
+   * Connect query. Whether CHAR/VARCHAR are first-class types is decided by the session that
    * produced the schema, so they are always accepted here. A client cannot read that session's
    * configuration, and refusing the type would make the result undecodable.
    */
