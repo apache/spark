@@ -19,10 +19,10 @@ package org.apache.spark.ml
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.functions._
-import org.apache.spark.ml.linalg.{Matrices, MatrixUDT, Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.linalg.{Matrices, MatrixUDT, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldMatrixUDT,
-  VectorUDT => OldVectorUDT, Vectors => OldVectors}
+  Vectors => OldVectors, VectorUDT => OldVectorUDT}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.functions.{col, unwrap_udt, wrap_udt}
 import org.apache.spark.sql.types.UserDefinedType
