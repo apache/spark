@@ -2212,8 +2212,24 @@ private[spark] class DAGScheduler(
     // Job submitted, clear internal data.
     barrierJobIdToNumTasksCheckFailures.remove(jobId)
 
+    // For a pipelined job, stamp the per-run epoch (the jobId) into the job's properties BEFORE
+    // creating the ActiveJob, so submitMissingTasks -- which clones jobIdToActiveJob(jobId)
+    // .properties per stage -- carries the SAME epoch to every stage's tasks. Both the producer
+    // (writer) and the consumer (reader) of the one gang belong to this job, so both read one
+    // value; a different run is a different job, hence a different epoch, which keys the
+    // in-process channel rendezvous per run (see SPARK_PIPELINED_RUN_EPOCH). Copy the caller's
+    // Properties rather than mutating it. Inert for a non-pipelined job (property never set,
+    // never read).
+    val jobProperties =
+      if (hasPipelined) {
+        val p = Utils.cloneProperties(if (properties == null) new Properties() else properties)
+        p.setProperty(SparkContext.SPARK_PIPELINED_RUN_EPOCH, jobId.toString)
+        p
+      } else {
+        properties
+      }
     // Pass hasPipelined (computed above) into the job; see ActiveJob.hasPipelinedDependency.
-    val job = new ActiveJob(jobId, finalStage, callSite, listener, artifacts, properties,
+    val job = new ActiveJob(jobId, finalStage, callSite, listener, artifacts, jobProperties,
       hasPipelinedDependency = hasPipelined)
     clearCacheLocs()
     logInfo(
@@ -2704,15 +2720,6 @@ private[spark] class DAGScheduler(
     // So set the property only on the result-feeding producer.
     stage match {
       case sms: ShuffleMapStage if isPipelinedProducer(stage) =>
-        // Notify the pipelined manager that this producer stage is being (re)submitted, before
-        // any of its map tasks start. A transport with per-run state keyed by shuffleId resets it
-        // here -- the one point with no live task of the new run, so the reset cannot race the
-        // run's own writers/readers. The in-process channel transport clears a prior run's
-        // abandoned-partition marks; the RPC streaming manager keeps no such state (no-op default).
-        // The scheduler stays transport-agnostic: it calls the PipelinedShuffleManager trait, not
-        // a concrete transport.
-        SparkEnv.get.pipelinedShuffleManager
-          .onPipelinedProducerStageSubmit(sms.shuffleDep.shuffleId)
         jobIdToActiveJob.get(jobId).map(_.finalStage).collect { case rs: ResultStage => rs }
           .foreach { rs =>
             // The live set is the result stage's partition ids. Those are the shuffle's reduce

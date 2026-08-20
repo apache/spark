@@ -52,6 +52,13 @@ private[spark] class ChannelShuffleWriter[K, V](
   private val numPartitions = partitioner.numPartitions
   private val shuffleId = handle.shuffleId
 
+  // Per-run epoch (the jobId), read from the job-level local property the DAGScheduler set for a
+  // pipelined job. The reader of this gang reads the SAME value, so both address the same
+  // per-run queues in the process-wide rendezvous; a re-run of this shuffleId is a different job
+  // and gets a different epoch, keeping its queues physically separate. Absent (a core-RDD test
+  // path that never sets it, and never re-runs a shuffleId concurrently) means epoch 0.
+  private val runEpoch = ChannelShuffleRendezvous.epochOf(TaskContext.get())
+
   // The reduce partitions this job actually reads, from the producer stage's task property
   // (set by the DAGScheduler from the result stage's partitions). A record routed to a
   // partition NOT in this set has no consumer -- putting it would fill that partition's
@@ -94,16 +101,25 @@ private[spark] class ChannelShuffleWriter[K, V](
   // since those records are never shuffled out. `records` is the number of pairs in `batch`
   // (a full batch is `batchSize`, a trimmed tail is shorter; the end-of-stream marker is 0).
   private def putUnlessAbandoned(pid: Int, batch: AnyRef, records: Int): Boolean = {
-    val q = ChannelShuffleRendezvous.queue(shuffleId, pid)
+    val q = ChannelShuffleRendezvous.queue(shuffleId, runEpoch, pid)
     val start = System.nanoTime()
-    while (!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid)) {
+    while (!ChannelShuffleRendezvous.isAbandoned(shuffleId, runEpoch, pid)) {
+      // Wake on a task kill even without thread interruption. `isAbandoned` is set only by a
+      // reduce task that actually STARTED (its completion listener); if the reader for pid never
+      // started -- the group aborts while this producer is already filling queues (an
+      // unserializable consumer task, an early failure of another member, a job cancel) -- the
+      // mark never appears and this offer loop would park forever, pinning the executor slot
+      // (spark.job.interruptOnCancel defaults to false, so the kill does not interrupt the
+      // thread). Checking the TaskContext interrupt flag each cycle is the symmetric escape to
+      // the reader's takeItem.
+      Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
       if (q.offer(batch, 100, java.util.concurrent.TimeUnit.MILLISECONDS)) {
         // A successful offer can race abandon(): abandon does `add(mark)` then `q.clear()`, so if
         // it ran between the isAbandoned check above and this offer, our batch lands AFTER the
         // clear and would be stranded in the queue (no reader will ever drain it). Re-check and
         // clear it ourselves so nothing is left behind. The reader has departed, so discarding is
         // correct; and it keeps the queue empty for removeShuffle rather than pinning a batch.
-        if (ChannelShuffleRendezvous.isAbandoned(shuffleId, pid)) {
+        if (ChannelShuffleRendezvous.isAbandoned(shuffleId, runEpoch, pid)) {
           q.clear()
           return false
         }
@@ -118,12 +134,10 @@ private[spark] class ChannelShuffleWriter[K, V](
   }
 
   override def write(records: Iterator[Product2[K, V]]): Unit = {
-    // Abandoned marks left by an EARLIER run of this shuffleId (a RangePartitioner sampling job
-    // then the main job; executeTake batches) are reset by the DAGScheduler when it submits this
-    // producer stage -- before any map task of this run starts (see
-    // ChannelShuffleRendezvous.clearAbandonedForShuffle). The writer must NOT clear them itself:
-    // map tasks of the same run are concurrent, and a late one clearing a mark would erase a
-    // departure a sibling's reader had already recorded for this run, re-hanging the writer.
+    // No stale-state reset is needed here: this run's queues and abandoned marks are keyed by
+    // runEpoch (the jobId), so an EARLIER run of this shuffleId (a RangePartitioner sampling job
+    // then the main job; executeTake batches; a re-executed classic plan) used a different epoch
+    // and its leftovers are physically separate -- this run starts against empty per-epoch state.
 
     // One in-progress batch per reduce partition, plus its fill count.
     val batches = Array.fill(numPartitions)(new Array[AnyRef](batchSize))
@@ -166,7 +180,7 @@ private[spark] class ChannelShuffleWriter[K, V](
           putUnlessAbandoned(p, Arrays.copyOf(batches(p), sizes(p)), sizes(p))
         }
         // Re-check: the reader may have departed while the trimmed batch was being put.
-        if (!ChannelShuffleRendezvous.isAbandoned(shuffleId, p)) {
+        if (!ChannelShuffleRendezvous.isAbandoned(shuffleId, runEpoch, p)) {
           putUnlessAbandoned(p, ChannelShuffleRendezvous.EndOfStream, records = 0)
         }
       }
@@ -219,6 +233,10 @@ private[spark] class ChannelShuffleReader[K, C](
       s"[$startPartition, $endPartition); the in-process channel transport does not support " +
       "coalesced multi-partition reads (see class doc).")
 
+  // Per-run epoch (the jobId), the same value the writer of this gang reads, so both address the
+  // same per-run queues in the process-wide rendezvous. See ChannelShuffleRendezvous.epochOf.
+  private val runEpoch = ChannelShuffleRendezvous.epochOf(TaskContext.get())
+
   // On task completion (normal end, early stop like LIMIT, or failure) mark this reader's
   // partition as abandoned, so a writer still feeding it stops and does not wedge on its bounded
   // queue. Registered once here; fires whether or not the iterator was drained to the end.
@@ -226,7 +244,7 @@ private[spark] class ChannelShuffleReader[K, C](
     tc.addTaskCompletionListener[Unit] { _ =>
       var p = startPartition
       while (p < endPartition) {
-        ChannelShuffleRendezvous.abandon(handle.shuffleId, p)
+        ChannelShuffleRendezvous.abandon(handle.shuffleId, runEpoch, p)
         p += 1
       }
     }
@@ -236,7 +254,7 @@ private[spark] class ChannelShuffleReader[K, C](
     (startPartition until endPartition).iterator.flatMap(drainQueue)
 
   private def drainQueue(reducePartitionId: Int): Iterator[Product2[K, C]] = {
-    val q = ChannelShuffleRendezvous.queue(handle.shuffleId, reducePartitionId)
+    val q = ChannelShuffleRendezvous.queue(handle.shuffleId, runEpoch, reducePartitionId)
     new Iterator[Product2[K, C]] {
       // The current batch being handed out, and the cursor into it. A null batch after
       // advance() means every map task has signalled end-of-stream: iteration is over.

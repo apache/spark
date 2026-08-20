@@ -137,22 +137,24 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
-  test("unregisterShuffle drops the shuffle's rendezvous queues") {
+  test("unregisterShuffle drops the shuffle's rendezvous queues across all epochs") {
     // Test the manager's cleanup contract directly rather than relying on the async
-    // ContextCleaner + GC to fire (which would be flaky). Populate a couple of queues for
-    // a shuffle id, then confirm unregisterShuffle removes exactly those.
+    // ContextCleaner + GC to fire (which would be flaky). Populate queues for a shuffle id under
+    // TWO different epochs (a re-run), plus a different shuffle, then confirm unregisterShuffle
+    // removes every epoch of shuffle 7 and leaves shuffle 9 alone.
     ChannelShuffleRendezvous.clear()
     try {
-      ChannelShuffleRendezvous.queue(7, 0).put("a")
-      ChannelShuffleRendezvous.queue(7, 1).put("b")
-      ChannelShuffleRendezvous.queue(9, 0).put("c") // a different shuffle, must survive
-      assert(ChannelShuffleRendezvous.numQueuesForTesting === 3)
+      ChannelShuffleRendezvous.queue(7, epoch = 1, 0).put("a")
+      ChannelShuffleRendezvous.queue(7, epoch = 1, 1).put("b")
+      ChannelShuffleRendezvous.queue(7, epoch = 2, 0).put("a2") // a re-run of shuffle 7
+      ChannelShuffleRendezvous.queue(9, epoch = 1, 0).put("c")  // a different shuffle, must survive
+      assert(ChannelShuffleRendezvous.numQueuesForTesting === 4)
 
       ChannelShuffleRendezvous.removeShuffle(7)
       assert(ChannelShuffleRendezvous.numQueuesForTesting === 1,
-        "only shuffle 7's queues should be dropped")
+        "every epoch of shuffle 7's queues should be dropped")
       // Shuffle 9's queue is untouched.
-      assert(ChannelShuffleRendezvous.queue(9, 0).peek() === "c")
+      assert(ChannelShuffleRendezvous.queue(9, epoch = 1, 0).peek() === "c")
     } finally {
       ChannelShuffleRendezvous.clear()
     }
@@ -268,7 +270,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     // the mark is set and the queue is drained.
     ChannelShuffleRendezvous.clear()
     try {
-      val q = ChannelShuffleRendezvous.queue(42, 0)
+      val q = ChannelShuffleRendezvous.queue(42, epoch = 1, 0)
       // Put a few batches into the queue.
       q.put("batch1")
       q.put("batch2")
@@ -276,11 +278,11 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       assert(!q.isEmpty, "queue should have elements")
 
       // Abandon the partition.
-      ChannelShuffleRendezvous.abandon(42, 0)
+      ChannelShuffleRendezvous.abandon(42, epoch = 1, 0)
 
       // Both conditions must hold after abandon:
       // 1. The partition is marked abandoned (prevents new writes).
-      assert(ChannelShuffleRendezvous.isAbandoned(42, 0),
+      assert(ChannelShuffleRendezvous.isAbandoned(42, epoch = 1, 0),
         "partition should be marked abandoned")
       // 2. The queue is drained (unblocks any parked put and cleans up).
       assert(q.isEmpty, "queue should be drained by abandon()")
@@ -289,44 +291,44 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
-  test("clearAbandonedForShuffle resets a run's marks; other shuffles and queues survive") {
+  test("a re-run's epoch isolates it from a prior run's leftover queue and marks") {
+    // Finding B: a re-run of the same shuffleId must not see the previous run's leftovers. Two
+    // runs of one shuffleId are two jobs, so two epochs; keying the rendezvous by epoch makes the
+    // second run's queue and marks physically separate from the first's. This is the property
+    // that prevents a new reader from draining stale batches / counting stale EndOfStream markers
+    // (a silent wrong result) and a straggler writer of the aborted run from touching the new
+    // run's queue.
     ChannelShuffleRendezvous.clear()
     try {
       val shuffleId = 55
-      val other = 56
-      val pid1 = 0
+      val pid = 0
+
+      // Run epoch=1 leaves a batch, an EndOfStream, and an abandoned mark on pid (its reader
+      // never fully drained -- e.g. the group aborted).
+      ChannelShuffleRendezvous.queue(shuffleId, epoch = 1, pid).put("stale-batch")
+      ChannelShuffleRendezvous.queue(shuffleId, epoch = 1, pid).put(
+        ChannelShuffleRendezvous.EndOfStream)
+      ChannelShuffleRendezvous.abandon(shuffleId, epoch = 1, pid)
+      // abandon drains the queue, so re-add a leftover to model a partition whose reader never
+      // started (no abandon, queue keeps its contents).
       val pid2 = 1
+      ChannelShuffleRendezvous.queue(shuffleId, epoch = 1, pid2).put("stale-unread")
 
-      // Abandon two partitions of `shuffleId` and one of another shuffle.
-      ChannelShuffleRendezvous.queue(shuffleId, pid1).put("data1")
-      ChannelShuffleRendezvous.queue(shuffleId, pid2).put("data2")
-      ChannelShuffleRendezvous.abandon(shuffleId, pid1)
-      ChannelShuffleRendezvous.abandon(shuffleId, pid2)
-      ChannelShuffleRendezvous.abandon(other, pid1)
+      // Run epoch=2 (the re-run) sees FRESH state for the same (shuffleId, pid): a new empty
+      // queue and no abandoned mark, regardless of what epoch 1 left behind.
+      assert(ChannelShuffleRendezvous.queue(shuffleId, epoch = 2, pid).isEmpty,
+        "the re-run's queue must be empty, not the prior run's leftovers")
+      assert(ChannelShuffleRendezvous.queue(shuffleId, epoch = 2, pid2).isEmpty,
+        "the re-run's queue must be empty for an unread prior-run partition too")
+      assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, epoch = 2, pid),
+        "the re-run must not inherit the prior run's abandoned mark")
 
-      assert(ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1))
-      assert(ChannelShuffleRendezvous.isAbandoned(shuffleId, pid2))
-
-      // clearAbandonedForShuffle resets ALL of a shuffle's marks (the whole-shuffle reset the
-      // scheduler triggers when re-submitting a producer stage), leaving queues and OTHER
-      // shuffles' marks intact.
-      ChannelShuffleRendezvous.clearAbandonedForShuffle(shuffleId)
-      assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1),
-        "the shuffle's marks must be reset")
-      assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid2),
-        "the shuffle's marks must be reset")
-      assert(ChannelShuffleRendezvous.isAbandoned(other, pid1),
-        "a different shuffle's marks must survive")
-      assert(ChannelShuffleRendezvous.numQueuesForTesting === 2,
-        "clearAbandonedForShuffle must not drop queues")
-
-      // removeShuffle drops both queues and all marks for the shuffle.
-      ChannelShuffleRendezvous.abandon(shuffleId, pid1)
+      // removeShuffle at cleanup drops every epoch for the shuffle.
       ChannelShuffleRendezvous.removeShuffle(shuffleId)
       assert(ChannelShuffleRendezvous.numQueuesForTesting === 0,
-        "removeShuffle should drop all queues for this shuffle")
-      assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, pid1),
-        "removeShuffle should clear all abandoned marks for this shuffle")
+        "removeShuffle should drop queues of every epoch for this shuffle")
+      assert(!ChannelShuffleRendezvous.isAbandoned(shuffleId, epoch = 1, pid),
+        "removeShuffle should clear abandoned marks of every epoch")
     } finally {
       ChannelShuffleRendezvous.clear()
     }
@@ -338,13 +340,14 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     // then assert read() yields every data row IN ORDER and terminates -- it must not block
     // waiting for a further marker (would hang the test), nor stop early. The reader reads only
     // handle.shuffleId, so a mock handle suffices; TaskContext.get() is None here so no
-    // completion listener is registered. TempShuffleReadMetrics is a no-op reporter.
+    // completion listener is registered and the reader's epoch defaults to 0 -- so pre-load the
+    // queue at epoch 0 to match. TempShuffleReadMetrics is a no-op reporter.
     ChannelShuffleRendezvous.clear()
     try {
       val shuffleId = 11
       val pid = 0
       val numMaps = 3
-      val q = ChannelShuffleRendezvous.queue(shuffleId, pid)
+      val q = ChannelShuffleRendezvous.queue(shuffleId, epoch = 0, pid)
       // batch1, EOS, batch2, EOS, batch3, EOS (3 markers = numMaps). Rows are (k, v) pairs.
       q.put(Array[AnyRef]((1, 1), (2, 2)))
       q.put(ChannelShuffleRendezvous.EndOfStream)

@@ -77,13 +77,6 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   // SQL layer must detach each row from the producer's reused buffer before the writer sees it.
   override def requiresDetachedRecords: Boolean = true
 
-  // Reset a prior run's abandoned-partition marks when this shuffle's producer stage is
-  // (re)submitted -- before any map task of the new run starts, so it cannot race the run's own
-  // writers/readers. A shuffleId is re-run within one query (a RangePartitioner sample job then
-  // the main job; executeTake's per-batch jobs), and abandonment is a per-run fact.
-  override def onPipelinedProducerStageSubmit(shuffleId: Int): Unit =
-    ChannelShuffleRendezvous.clearAbandonedForShuffle(shuffleId)
-
   override def registerShuffle[K, V, C](
       shuffleId: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle =
