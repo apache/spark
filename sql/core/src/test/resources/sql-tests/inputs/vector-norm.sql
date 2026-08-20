@@ -186,3 +186,29 @@ SELECT vector_norm(array(float('inf'), 1.0F), 2.0F);
 
 -- vector_normalize: dividing by an infinite norm yields NaN for the infinite element
 SELECT vector_normalize(array(float('inf'), 1.0F), 2.0F);
+
+-- SPARK-58897: NaN elements propagate through the norm, following the convention of max and
+-- array_max that NaN compares as larger than any other value
+
+-- vector_norm: a NaN element makes the infinity norm NaN, not the largest of the other elements
+SELECT vector_norm(array(float('nan')), float('inf'));
+SELECT vector_norm(array(float('nan'), 5.0F), float('inf'));
+SELECT vector_norm(array(5.0F, float('nan')), float('inf'));
+SELECT vector_norm(array(float('nan'), float('inf')), float('inf'));
+
+-- vector_norm: the L1 and L2 norms propagate NaN in the same way
+SELECT vector_norm(array(float('nan'), 5.0F), 1.0F);
+SELECT vector_norm(array(float('nan'), 5.0F), 2.0F);
+
+-- vector_norm: a NaN element in the unrolled section of a large vector
+SELECT vector_norm(
+  array(1.0F, 2.0F, 3.0F, 4.0F, 5.0F, float('nan'), 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F),
+  float('inf')
+);
+
+-- vector_norm: a NULL element still takes precedence over a NaN element
+SELECT vector_norm(array(float('nan'), CAST(NULL AS FLOAT)), float('inf'));
+
+-- vector_normalize: a NaN norm yields an all-NaN vector, not NULL
+SELECT vector_normalize(array(float('nan')), float('inf'));
+SELECT vector_normalize(array(float('nan'), 5.0F), float('inf'));
