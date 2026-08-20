@@ -942,41 +942,42 @@ class LocalDataToArrowConversion:
                     )
                 return tuple(item)
 
-        rows = [to_row(item) for item in data]
+        if len_column_names == 0:
+            for item in data:
+                to_row(item)
+            return pa.Table.from_struct_array(pa.array([{}] * len(data)))
 
-        if len_column_names > 0:
-            column_convs = [
-                LocalDataToArrowConversion._create_converter(
-                    field.dataType,
-                    field.nullable,
-                    none_on_identity=True,
-                    # Default to False for general data conversion
-                    int_to_decimal_coercion_enabled=False,
-                )
-                for field in schema.fields
-            ]
-
-            pylist = [
-                [conv(row[i]) for row in rows] if conv is not None else [row[i] for row in rows]
-                for i, conv in enumerate(column_convs)
-            ]
-
-            pa_schema = to_arrow_schema(
-                StructType(
-                    [
-                        StructField(
-                            field.name, _deduplicate_field_names(field.dataType), field.nullable
-                        )
-                        for field in schema.fields
-                    ]
-                ),
-                timezone="UTC",
-                prefers_large_types=use_large_var_types,
+        column_convs = [
+            LocalDataToArrowConversion._create_converter(
+                field.dataType,
+                field.nullable,
+                none_on_identity=True,
+                # Default to False for general data conversion
+                int_to_decimal_coercion_enabled=False,
             )
+            for field in schema.fields
+        ]
 
-            return pa.Table.from_arrays(pylist, schema=pa_schema)
-        else:
-            return pa.Table.from_struct_array(pa.array([{}] * len(rows)))
+        pylist: list[list[Any]] = [[] for _ in range(len_column_names)]
+        for item in data:
+            for i, value in enumerate(to_row(item)):
+                conv = column_convs[i]
+                pylist[i].append(conv(value) if conv is not None else value)
+
+        pa_schema = to_arrow_schema(
+            StructType(
+                [
+                    StructField(
+                        field.name, _deduplicate_field_names(field.dataType), field.nullable
+                    )
+                    for field in schema.fields
+                ]
+            ),
+            timezone="UTC",
+            prefers_large_types=use_large_var_types,
+        )
+
+        return pa.Table.from_arrays(pylist, schema=pa_schema)
 
 
 class ArrowTableToRowsConversion:
