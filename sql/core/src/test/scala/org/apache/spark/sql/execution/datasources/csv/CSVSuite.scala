@@ -3897,6 +3897,96 @@ abstract class CSVSuite
     }
   }
 
+  test("csv variant retains scalars as strings when inferSchema is disabled") {
+    withTempPath { path =>
+      val data =
+        """field 1,field2
+          |100,1.1
+          |2000-01-01,2000-01-01 01:02:03
+          |,true
+          |1e9,hello,extra
+          |missing
+          |""".stripMargin
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+
+      def checkSingleVariant(options: Map[String, String], expected: String*): Unit = {
+        val allOptions = options ++ Map("singleVariantColumn" -> "v")
+        checkAnswer(
+          spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+          expected.map(Row(_))
+        )
+      }
+
+      // A small partition size ensures each value is parsed independently and would otherwise get
+      // its type inferred.
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        // With variantRespectInferSchema on and inferSchema off, every non-null scalar stays a
+        // string, while the null value (empty token) is still preserved as a variant null.
+        // inferSchema defaults to false, so passing it explicitly and omitting it behave the same.
+        for (opts <- Seq(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
+            Map("variantRespectInferSchema" -> "true"))) {
+          checkSingleVariant(opts,
+            """{"_c0":"field 1","_c1":"field2"}""",
+            """{"_c0":"100","_c1":"1.1"}""",
+            """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03"}""",
+            """{"_c0":null,"_c1":"true"}""",
+            """{"_c0":"1e9","_c1":"hello","_c2":"extra"}""",
+            """{"_c0":"missing"}""")
+        }
+
+        // Explicitly enabling inference infers types even with variantRespectInferSchema on.
+        checkSingleVariant(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "true"),
+          """{"_c0":"field 1","_c1":"field2"}""",
+          """{"_c0":100,"_c1":1.1}""",
+          """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}""",
+          """{"_c0":null,"_c1":true}""",
+          """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+          """{"_c0":"missing"}""")
+
+        // variantRespectInferSchema defaults to false, so scalar types are inferred regardless of
+        // inferSchema.
+        checkSingleVariant(Map("inferSchema" -> "false"),
+          """{"_c0":"field 1","_c1":"field2"}""",
+          """{"_c0":100,"_c1":1.1}""",
+          """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}""",
+          """{"_c0":null,"_c1":true}""",
+          """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+          """{"_c0":"missing"}""")
+      }
+
+      // Works with a header too: field names come from the header, values stay strings.
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(
+          Map("header" -> "true", "variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
+          """{"field 1":"100","field2":"1.1"}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03"}""",
+          """{"field 1":null,"field2":"true"}""",
+          """{"field 1":"1e9","field2":"hello"}""",
+          """{"field 1":"missing"}""")
+      }
+
+      // Values whose textual form is lost by type inference: leading zeros ("0001" -> 1), a leading
+      // sign ("+5" -> 5), and boolean case ("True" -> true). With retention on they are kept
+      // verbatim as strings; with it off they are inferred (the surprising default behavior).
+      val lossyData =
+        """0001,+5
+          |True,007
+          |""".stripMargin
+      Files.write(path.toPath, lossyData.getBytes(StandardCharsets.UTF_8))
+
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10") {
+        checkSingleVariant(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
+          """{"_c0":"0001","_c1":"+5"}""",
+          """{"_c0":"True","_c1":"007"}""")
+
+        checkSingleVariant(Map("inferSchema" -> "false"),
+          """{"_c0":1,"_c1":5}""",
+          """{"_c0":true,"_c1":7}""")
+      }
+    }
+  }
+
   test("write variant with csv is disallowed") {
     checkError(
       exception = intercept[AnalysisException] {
