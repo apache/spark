@@ -95,10 +95,7 @@ private[spark] trait DecisionTreeModel {
 
   private[ml] def numLeaves: Int = treeStats.numLeaves
 
-  private[ml] def leafAttr = {
-    NominalAttribute.defaultAttr
-      .withNumValues(numLeaves)
-  }
+  private[ml] def leafAttr = NominalAttribute.defaultAttr.withNumValues(numLeaves)
 
   private[ml] def getLeafField(leafCol: String) = {
     leafAttr.withName(leafCol).toStructField()
