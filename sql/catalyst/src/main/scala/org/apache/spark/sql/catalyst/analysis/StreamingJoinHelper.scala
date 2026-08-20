@@ -23,9 +23,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -33,6 +34,34 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * Helper object for stream joins. See [[StreamingSymmetricHashJoinExec]] in SQL for more details.
  */
 object StreamingJoinHelper extends PredicateHelper with Logging {
+
+  private def isWatermarked(expression: Expression): Boolean = expression match {
+    case ne: NamedExpression => ne.metadata.contains(delayKey)
+    case _ => false
+  }
+
+  private def runtimeWatermarkedAttribute(attributes: Seq[Attribute]): Option[Attribute] = {
+    runtimeWatermarkedAttribute(
+      attributes,
+      allowMultipleEventTimeColumns =
+        !SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE))
+  }
+
+  private def runtimeWatermarkedAttribute(
+      attributes: Seq[Attribute],
+      allowMultipleEventTimeColumns: Boolean): Option[Attribute] = {
+    // Mirror WatermarkSupport.findEventTimeColumn without depending on sql/core from catalyst.
+    val watermarked = attributes.filter(_.metadata.contains(delayKey))
+    if (watermarked.isEmpty) {
+      None
+    } else if (!allowMultipleEventTimeColumns &&
+        watermarked.map(_.exprId).toSet.size > 1) {
+      // Runtime rejects multiple distinct event-time columns in this mode.
+      None
+    } else {
+      Some(watermarked.head)
+    }
+  }
 
   /**
    * Check the provided logical plan to see if its join keys contain a watermark attribute.
@@ -48,6 +77,153 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           case _ => false
         }
       case _ => false
+    }
+  }
+
+  /**
+   * Whether both equality join keys at the state-key eviction ordinal are watermarked.
+   *
+   * This is required by outer-like equality joins (left outer). Eviction of left state must be
+   * aligned with late-event filtering on both sides: a right watermark drops late right rows after
+   * unmatched rows have been emitted, and a left watermark drops late left rows after the right
+   * state that could have matched them has been evicted.
+   *
+   * The eviction ordinal is chosen in the same way as
+   * StreamingSymmetricHashJoinHelper.findJoinKeyOrdinalForWatermark.
+   */
+  def isWatermarkOnBothEvictionJoinKeys(join: Join): Boolean = {
+    join match {
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
+        joinKeyOrdinalForWatermark(leftKeys, rightKeys).exists { ordinal =>
+          val leftRuntimeWatermark = runtimeWatermarkedAttribute(join.left.output)
+          val rightRuntimeWatermark = runtimeWatermarkedAttribute(join.right.output)
+          ordinal < leftKeys.length && ordinal < rightKeys.length &&
+            isWatermarked(leftKeys(ordinal)) && isWatermarked(rightKeys(ordinal)) &&
+            leftRuntimeWatermark.exists(leftKeys(ordinal).references.contains) &&
+            rightRuntimeWatermark.exists(rightKeys(ordinal).references.contains)
+        }
+      case _ => false
+    }
+  }
+
+  private def joinKeyOrdinalForWatermark(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): Option[Int] = {
+    leftKeys.indexWhere(isWatermarked) match {
+      case i if i >= 0 => Some(i)
+      case _ =>
+        rightKeys.indexWhere(isWatermarked) match {
+          case i if i >= 0 => Some(i)
+          case _ => None
+        }
+    }
+  }
+
+  /**
+   * Like [[getStateValueWatermark]], but only succeeds when the state watermark is derived from
+   * watermarked attributes on both sides, and is actually a function of the other side's event
+   * watermark. This is useful for analysis-time validation of range conditions: the runtime
+   * value-watermark predicate is applied to the watermarked attribute on the side being evicted,
+   * so accepting a range bound over some other attribute would make the predicate either
+   * ineffective or incorrect.
+   *
+   * Restricting the eligible attributes to watermarked ones is not sufficient on its own:
+   * [[getStateValueWatermark]] requires the evicted side's watermarked attribute to appear in the
+   * condition (it is the attribute the state watermark is solved for), but it treats the
+   * watermark-providing side as satisfied whenever that side merely *has* a watermark, even one
+   * absent from the range bound. A predicate with a constant bound (e.g. `leftTime > <literal>`)
+   * would then still yield a state watermark -- but a constant one, not tied to the other stream's
+   * progress -- so the runtime eviction predicate degenerates to a static constant and the left
+   * state is not really evicted. We therefore additionally require the derived state watermark to
+   * move with the event watermark: a bound that is independent of it does not relate the two sides.
+   */
+  def getStateValueWatermarkOnWatermarkedAttributes(
+      attributesToFindStateWatermarkFor: Seq[Attribute],
+      attributesWithEventWatermark: Seq[Attribute],
+      joinCondition: Option[Expression],
+      eventWatermark: Option[Long],
+      allowMultipleEventTimeColumns: Boolean =
+        !SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)): Option[Long] = {
+    val evictedSide = runtimeWatermarkedAttribute(
+      attributesToFindStateWatermarkFor, allowMultipleEventTimeColumns)
+      .map(attr => AttributeSet(Seq(attr)))
+    val watermarkProvidingSide = runtimeWatermarkedAttribute(
+      attributesWithEventWatermark, allowMultipleEventTimeColumns)
+      .map(attr => AttributeSet(Seq(attr)))
+    val runtimeEvictedSide = AttributeSet(attributesToFindStateWatermarkFor)
+    val runtimeWatermarkProvidingSide = AttributeSet(attributesWithEventWatermark)
+    eventWatermark match {
+      case Some(wm) if evictedSide.isDefined && watermarkProvidingSide.isDefined =>
+        // Probe with two well-separated event watermark values; a genuine cross-stream range bound
+        // shifts the state watermark forward, whereas a constant or anti-monotonic bound does not.
+        val altWm = wm + 1000000L
+        if (hasNonAdvancingGenericOnlyStateWatermarkPredicate(
+            runtimeEvictedSide, runtimeWatermarkProvidingSide, evictedSide.get,
+            watermarkProvidingSide.get, joinCondition, wm, altWm)) {
+          return None
+        }
+        if (hasNonAdvancingStrictStateWatermarkPredicate(
+            evictedSide.get, watermarkProvidingSide.get, joinCondition, wm, altWm)) {
+          return None
+        }
+        val watermarkAt = getStateValueWatermark(
+          evictedSide.get, watermarkProvidingSide.get, joinCondition, Some(wm),
+          requireWatermarkSideInCondition = true)
+        val watermarkAtAlt = getStateValueWatermark(
+          evictedSide.get, watermarkProvidingSide.get, joinCondition, Some(altWm),
+          requireWatermarkSideInCondition = true)
+        (watermarkAt, watermarkAtAlt) match {
+          case (result @ Some(a), Some(b)) if b > a => result
+          case _ => None
+        }
+      case _ => None
+    }
+  }
+
+  private def hasNonAdvancingGenericOnlyStateWatermarkPredicate(
+      runtimeAttributesToFindStateWatermarkFor: AttributeSet,
+      runtimeAttributesWithEventWatermark: AttributeSet,
+      strictAttributesToFindStateWatermarkFor: AttributeSet,
+      strictAttributesWithEventWatermark: AttributeSet,
+      joinCondition: Option[Expression],
+      eventWatermark: Long,
+      altEventWatermark: Long): Boolean = {
+    joinCondition.exists { condition =>
+      splitConjunctivePredicates(condition).exists { predicate =>
+        val genericWatermark = getStateValueWatermark(
+          runtimeAttributesToFindStateWatermarkFor, runtimeAttributesWithEventWatermark,
+          Some(predicate), Some(eventWatermark))
+        val genericWatermarkAtAlt = getStateValueWatermark(
+          runtimeAttributesToFindStateWatermarkFor, runtimeAttributesWithEventWatermark,
+          Some(predicate), Some(altEventWatermark))
+        val strictWatermark = getStateValueWatermark(
+          strictAttributesToFindStateWatermarkFor, strictAttributesWithEventWatermark,
+          Some(predicate), Some(eventWatermark), requireWatermarkSideInCondition = true)
+        genericWatermark.exists { watermark =>
+          strictWatermark.isEmpty && genericWatermarkAtAlt.forall(_ <= watermark)
+        }
+      }
+    }
+  }
+
+  private def hasNonAdvancingStrictStateWatermarkPredicate(
+      strictAttributesToFindStateWatermarkFor: AttributeSet,
+      strictAttributesWithEventWatermark: AttributeSet,
+      joinCondition: Option[Expression],
+      eventWatermark: Long,
+      altEventWatermark: Long): Boolean = {
+    joinCondition.exists { condition =>
+      splitConjunctivePredicates(condition).exists { predicate =>
+        val watermark = getStateValueWatermark(
+          strictAttributesToFindStateWatermarkFor, strictAttributesWithEventWatermark,
+          Some(predicate), Some(eventWatermark), requireWatermarkSideInCondition = true)
+        val watermarkAtAlt = getStateValueWatermark(
+          strictAttributesToFindStateWatermarkFor, strictAttributesWithEventWatermark,
+          Some(predicate), Some(altEventWatermark), requireWatermarkSideInCondition = true)
+        watermark.exists { value =>
+          watermarkAtAlt.forall(_ <= value)
+        }
+      }
     }
   }
 
@@ -73,6 +249,20 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
       eventWatermark: Option[Long]): Option[Long] = {
+    getStateValueWatermark(
+      attributesToFindStateWatermarkFor,
+      attributesWithEventWatermark,
+      joinCondition,
+      eventWatermark,
+      requireWatermarkSideInCondition = false)
+  }
+
+  private def getStateValueWatermark(
+      attributesToFindStateWatermarkFor: AttributeSet,
+      attributesWithEventWatermark: AttributeSet,
+      joinCondition: Option[Expression],
+      eventWatermark: Option[Long],
+      requireWatermarkSideInCondition: Boolean): Option[Long] = {
 
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
@@ -83,7 +273,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
       try {
         getStateWatermarkFromLessThenPredicate(
-          l, r, attributesToFindStateWatermarkFor, attributesWithEventWatermark, eventWatermark)
+          l, r, attributesToFindStateWatermarkFor, attributesWithEventWatermark, eventWatermark,
+          requireWatermarkSideInCondition)
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error trying to extract state constraint from condition " +
@@ -132,15 +323,32 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       rightExpr: Expression,
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
-      eventWatermark: Option[Long]): Option[Long] = {
+      eventWatermark: Option[Long],
+      requireWatermarkSideInCondition: Boolean): Option[Long] = {
 
-    val attributesInCondition = AttributeSet(
+    val attributesInConditionSeq =
       leftExpr.collect { case a: AttributeReference => a } ++
-      rightExpr.collect { case a: AttributeReference => a }
-    )
-    if (attributesInCondition.count(attributesToFindStateWatermarkFor.contains) > 1 ||
-        attributesInCondition.count(attributesWithEventWatermark.contains) > 1) {
+        rightExpr.collect { case a: AttributeReference => a }
+    val attributesInCondition = AttributeSet(attributesInConditionSeq)
+    val stateSideAttributeCount =
+      if (requireWatermarkSideInCondition) {
+        attributesInConditionSeq.count(attributesToFindStateWatermarkFor.contains)
+      } else {
+        attributesInCondition.count(attributesToFindStateWatermarkFor.contains)
+      }
+    val watermarkSideAttributeCount =
+      if (requireWatermarkSideInCondition) {
+        attributesInConditionSeq.count(attributesWithEventWatermark.contains)
+      } else {
+        attributesInCondition.count(attributesWithEventWatermark.contains)
+      }
+    if (stateSideAttributeCount > 1 || watermarkSideAttributeCount > 1) {
       // If more than attributes present in condition from one side, then it cannot be solved
+      return None
+    }
+    if (requireWatermarkSideInCondition && watermarkSideAttributeCount == 0) {
+      // A state watermark must move with the other side's event watermark. A bound that does not
+      // reference the watermark-providing side may produce a constant, but not a valid watermark.
       return None
     }
 

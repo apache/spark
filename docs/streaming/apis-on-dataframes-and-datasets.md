@@ -1293,6 +1293,20 @@ joined <- join(
 </div>
 
 
+For a **left outer** join, the surviving unmatched left rows are emitted when the left-side state is
+evicted, and an already-emitted `NULL`-extended row can be invalidated by a right row that arrives
+later. Correct results therefore require the watermark to be placed so that (1) the left state is
+actually evicted and (2) both sides are late-filtered on the dimension that bounds matching.
+Concretely: for an equality join on a watermarked event-time key, that key must be watermarked on
+**both** sides; for a time range condition, the range bound must relate watermarked event-time
+columns from both sides. The recommended, always-correct configuration -- watermarking both sides on
+the event-time column used by the join, as in the example above -- satisfies both. Configurations
+that leave the left state un-evicted (a watermark on only the right side of a range condition) or
+leave either side unfiltered on the eviction key (a watermark on only one equality join key) are
+rejected at analysis time. To restore the previous, looser behavior, set
+`spark.sql.streaming.join.stricterWatermarkRequirements.enabled` to `false`; note that the looser
+behavior can silently produce incorrect (missing) outer results.
+
 ###### Semantic Guarantees of Stream-stream Outer Joins with Watermarking
 Outer joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
 regarding watermark delays and whether data will be dropped or not.
@@ -1317,6 +1331,15 @@ It is also referred to as a left semi join. Similar to outer joins, watermark + 
 constraints must be specified for semi join. This is to evict unmatched input rows on left side,
 the engine must know when an input row on left side is not going to match with anything on right
 side in future.
+
+As with a left outer join, the left state must be evicted so that never-matched left rows do not
+accumulate: for an equality join the watermarked join key evicts the left key state; for a time
+range condition the range bound must relate watermarked event-time columns from both sides. Unlike
+outer joins, a semi join has no additional late-filtering requirement, because it emits a row on
+match rather than at eviction, so there is no already-emitted row for a late right row to
+invalidate. A range condition watermarked only on one side is rejected at analysis time; to restore
+the previous, looser behavior (which leaves the left state unbounded), set
+`spark.sql.streaming.join.stricterWatermarkRequirements.enabled` to `false`.
 
 ###### Semantic Guarantees of Stream-stream Semi Joins with Watermarking
 Semi joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
@@ -1398,8 +1421,9 @@ regarding watermark delays and whether data will be dropped or not.
   <tr>
     <td style="vertical-align: middle;">Left Outer</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on right + time constraints for correct
-      results, optionally specify watermark on left for all state cleanup
+      Conditionally supported. For equality-key joins, watermark both sides of the join key used for
+      eviction. For range-condition joins, the range bound must use watermarked columns from both
+      sides.
     </td>
   </tr>
   <tr>
@@ -1419,8 +1443,8 @@ regarding watermark delays and whether data will be dropped or not.
   <tr>
     <td style="vertical-align: middle;">Left Semi</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on right + time constraints for correct
-      results, optionally specify watermark on left for all state cleanup
+      Conditionally supported. Equality-key joins require a watermark on a join key for state
+      cleanup. Range-condition joins require watermarked range-bound columns from both sides.
     </td>
   </tr>
   <tr>

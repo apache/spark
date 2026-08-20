@@ -23,6 +23,10 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.3 to 4.4
+
+- Since Spark 4.4, stream-stream left semi and left outer joins enforce stricter watermark-placement requirements at analysis time, so that the left-side state their output (or bounded state size) depends on is actually evicted, and, for left outer, so that late rows cannot invalidate an already-emitted unmatched row. Configurations that previously ran but could silently produce incorrect results or unbounded state -- for example a range-condition join whose range bound is not between watermarked attributes on both sides, or a left outer equality join whose eviction key is not watermarked on both sides -- now fail with an `AnalysisException`. To restore the previous behavior, set `spark.sql.streaming.join.stricterWatermarkRequirements.enabled` to `false`. (See [SPARK-58904](https://issues.apache.org/jira/browse/SPARK-58904) for more details.)
+
 ## Upgrading from Structured Streaming 4.1 to 4.2
 
 - Since Spark 4.2, restarting a streaming query from a checkpoint whose metadata file is missing while the offset or commit logs contain data fails with `STREAMING_CHECKPOINT_MISSING_METADATA_FILE`, instead of silently generating a new query ID (which can duplicate data in exactly-once sinks). Restore the metadata file or use a new checkpoint location. To restore the previous behavior, set `spark.sql.streaming.checkpoint.verifyMetadataExists.enabled` to `false`. (See [SPARK-55058](https://issues.apache.org/jira/browse/SPARK-55058) for more details.)
