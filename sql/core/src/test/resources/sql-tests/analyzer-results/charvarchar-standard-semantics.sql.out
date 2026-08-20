@@ -396,10 +396,10 @@ Project [typeof(coalesce(cast(cast(a as char(2) collate UTF8_LCASE) as char(4) c
 
 
 -- !query
-SELECT concat('<', coalesce(
-  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)), '>')
+SELECT hex(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)))
 -- !query analysis
-Project [concat(<, coalesce(cast(cast(a as char(2) collate UTF8_LCASE) as char(4) collate UTF8_LCASE), cast(bb as char(4) collate UTF8_LCASE)), >) AS concat('<' collate UTF8_LCASE, coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS CHAR(4) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE)#x]
+Project [hex(cast(coalesce(cast(cast(a as char(2) collate UTF8_LCASE) as char(4) collate UTF8_LCASE), cast(bb as char(4) collate UTF8_LCASE)) as string collate UTF8_LCASE)) AS hex(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS CHAR(4) COLLATE UTF8_LCASE)))#x]
 +- OneRowRelation
 
 
@@ -421,11 +421,11 @@ Project [typeof(coalesce(cast(cast(a as char(2) collate UTF8_LCASE) as char(4) c
 
 
 -- !query
-SELECT concat('<', coalesce(
+SELECT hex(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
-  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>')
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)))
 -- !query analysis
-Project [concat(<, coalesce(cast(cast(a as char(2) collate UTF8_LCASE) as char(4) collate UTF8_LCASE), cast(1 as char(4) collate UTF8_LCASE)), >) AS concat('<' collate UTF8_LCASE, coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE)#x]
+Project [hex(cast(coalesce(cast(cast(a as char(2) collate UTF8_LCASE) as char(4) collate UTF8_LCASE), cast(1 as char(4) collate UTF8_LCASE)) as string collate UTF8_LCASE)) AS hex(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(1 AS CHAR(4) COLLATE UTF8_LCASE)))#x]
 +- OneRowRelation
 
 
@@ -650,7 +650,7 @@ Project [(cast(cast(a as char(2)) as string collate UTF8_BINARY) = a ) AS (CAST(
 -- !query
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = 'a'
 -- !query analysis
-Project [(cast(a as char(2) collate UTF8_BINARY_RTRIM) = a) AS (CAST(a AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = 'a' collate UTF8_BINARY_RTRIM)#x]
+Project [(cast(a as char(2) collate UTF8_BINARY_RTRIM) = cast(a as char(2) collate UTF8_BINARY_RTRIM)) AS (CAST(a AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = a)#x]
 +- OneRowRelation
 
 

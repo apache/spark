@@ -459,12 +459,12 @@ char(4) collate UTF8_LCASE
 
 
 -- !query
-SELECT concat('<', coalesce(
-  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)), '>')
+SELECT hex(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)))
 -- !query schema
-struct<concat('<' collate UTF8_LCASE, coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS CHAR(4) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE):string collate UTF8_LCASE>
+struct<hex(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS CHAR(4) COLLATE UTF8_LCASE))):string collate UTF8_LCASE>
 -- !query output
-<a   >
+61202020
 
 
 -- !query
@@ -487,13 +487,13 @@ char(4) collate UTF8_LCASE
 
 
 -- !query
-SELECT concat('<', coalesce(
+SELECT hex(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
-  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>')
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)))
 -- !query schema
-struct<concat('<' collate UTF8_LCASE, coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE):string collate UTF8_LCASE>
+struct<hex(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(1 AS CHAR(4) COLLATE UTF8_LCASE))):string collate UTF8_LCASE>
 -- !query output
-<a   >
+61202020
 
 
 -- !query
@@ -672,7 +672,7 @@ true
 -- !query
 SELECT cast('a' AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = 'a'
 -- !query schema
-struct<(CAST(a AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = 'a' collate UTF8_BINARY_RTRIM):boolean>
+struct<(CAST(a AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = a):boolean>
 -- !query output
 true
 

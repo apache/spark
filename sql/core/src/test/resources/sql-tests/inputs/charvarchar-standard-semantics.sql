@@ -86,8 +86,8 @@ SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(2) COLLATE UTF8_LCASE)));
 SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)));
-SELECT concat('<', coalesce(
-  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)), '>');
+SELECT hex(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)));
 SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS VARCHAR(4) COLLATE UTF8_LCASE)));
 -- Mixed strength, same collation: Implicit string CAST CHAR(2) vs Default
@@ -96,9 +96,9 @@ SELECT typeof(coalesce(
 SELECT typeof(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
   cast(1 AS CHAR(4) COLLATE UTF8_LCASE)));
-SELECT concat('<', coalesce(
+SELECT hex(coalesce(
   cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
-  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)), '>');
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)));
 
 -- Set operations and multi-row VALUES share the same LCT as COALESCE.
 SELECT typeof(c) FROM (
