@@ -201,10 +201,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
-      val fullyPushedFilterSet = ExpressionSet(
-        fullyPushedRuntimeFilters ++ relation.pushedFilters)
+      // Advisory filters are kept in the logical Filter for the optimizer only, and Spark never
+      // evaluates them. See SupportsPushDownCatalystFilters.advisoryFilters.
+      val notEvaluatedFilterSet = ExpressionSet(
+        fullyPushedRuntimeFilters ++ relation.advisoryFilters)
       DataSourceV2Strategy.withProjectAndFilter(
-        project, postScanFilters.filterNot(fullyPushedFilterSet.contains),
+        project, postScanFilters.filterNot(notEvaluatedFilterSet.contains),
         batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
