@@ -624,6 +624,21 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorsToDecommission.toImmutableArraySeq
   }
 
+  override def decommissionExecutorsIfIdle(
+      executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
+      adjustTargetNumExecutors: Boolean): Seq[String] = withLock {
+    val idleExecutors = executorsAndDecomInfo.distinctBy(_._1).filter { case (executorId, _) =>
+      isExecutorActive(executorId) && !scheduler.isExecutorBusy(executorId)
+    }
+    if (idleExecutors.isEmpty) {
+      Seq.empty
+    } else {
+      // Keep both locks until the existing path marks these executors pending decommission.
+      // Use virtual dispatch so cluster-manager overrides receive only the filtered IDs.
+      decommissionExecutors(idleExecutors, adjustTargetNumExecutors, triggeredByExecutor = false)
+    }
+  }
+
   override def start(): Unit = {
     setupTokenManager()
     setupUserCredentialManager()
