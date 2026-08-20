@@ -23,6 +23,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Tests for runtime adaptive partial aggregation
@@ -43,6 +44,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  *      when) it should -- high-cardinality input bypasses, low-cardinality input keeps aggregating,
  *      the feature switch and eligibility rules are honored, and both check points work.
  */
+@ExtendedSQLTest
 class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
