@@ -907,8 +907,8 @@ See the [configuration page](configuration.html) for information on Spark config
     Service account that is used when running the driver pod. The driver pod uses this service account when requesting
     executor pods from the API server. Note that this cannot be specified alongside a submitted CA cert file, client key
     file, client cert file, and/or OAuth token: Spark mounts those as a secret and they take precedence, so the driver
-    pod is left with the service account its spec already names, or the namespace's default. Spark logs a warning about
-    that, unless the pod spec already names this same account. To have Spark apply this configuration anyway, put the
+    pod is left with the service account its spec already names, or the namespace's default. Spark logs a warning when
+    the account is dropped. To have Spark apply this configuration anyway, put the
     credentials inside the driver pod and point the
     <code>spark.kubernetes.authenticate.driver.mounted.*</code> configurations at them instead, which does not mount a
     secret. In client mode, use <code>spark.kubernetes.authenticate.serviceAccountName</code> instead.

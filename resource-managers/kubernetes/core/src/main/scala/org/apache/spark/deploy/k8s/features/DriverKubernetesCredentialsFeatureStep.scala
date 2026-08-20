@@ -30,7 +30,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.buildPodWithServiceAccount
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CONFIG, CONFIGS, VALUE}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIGS, PREFIX, SERVICE_ACCOUNT_NAME, VALUE}
 
 private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf)
   extends KubernetesFeatureConfigStep with Logging {
@@ -79,32 +79,27 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     if (!shouldMountSecret) {
       pod.copy(pod = buildPodWithServiceAccount(driverServiceAccount, pod).getOrElse(pod.pod))
     } else {
-      // Driver-side credentials win over the driver's service account: this branch never applies
-      // the account, so the pod is left with whatever its spec already names, a pod template's
-      // account or the namespace's default, and whatever RBAC that carries. The docs have said
-      // since 2.3.0 that the two cannot be combined, but nothing enforced or reported it, so a
-      // submission setting both looked like it had been honored. `caCertFile` is the easiest of the
-      // four to trip over, since it only establishes TLS trust in the API server rather than
-      // authenticating the driver, yet it is enough on its own to drop the account. Warn rather
-      // than fail: these submissions are accepted today, and rejecting them needs a release note.
-      // Stay quiet when the pod spec already names the same account, since then nothing is lost.
-      // Read both fields, preferring `serviceAccountName`: `serviceAccount` is Kubernetes'
-      // deprecated alias, `serviceAccountName` wins when a spec sets both to different values, and
-      // a pod template is parsed straight into the model object with no API-server defaulting, so
-      // a template that names only one of them leaves the other null.
+      // The credentials secret takes precedence over the driver service account: this branch never
+      // applies the account, so warn that the pod keeps whatever its spec names, or the namespace
+      // default. Stay quiet when the spec already names the same account. Both spec fields are
+      // read, `serviceAccountName` winning, matching Kubernetes' SetDefaults_PodSpec: a pod
+      // template is deserialized with no API-server defaulting, so it can leave either one null.
       val podSpec = Option(pod.pod.getSpec)
       val podServiceAccount = podSpec.flatMap(s => Option(s.getServiceAccountName))
         .filter(_.nonEmpty)
         .orElse(podSpec.flatMap(s => Option(s.getServiceAccount)).filter(_.nonEmpty))
       driverServiceAccount.filterNot(podServiceAccount.contains).foreach { account =>
+        val keptAccount = podServiceAccount
+          .map(name => log"the pod keeps ${MDC(SERVICE_ACCOUNT_NAME, name)}, named by its spec")
+          .getOrElse(log"the pod falls back to the namespace's default account")
         logWarning(log"Not applying " +
           log"${MDC(CONFIG, KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME.key)}=${MDC(VALUE, account)} " +
           log"to the driver pod, because the driver credentials given by " +
-          log"${MDC(CONFIGS, submittedCredentialConfs.mkString(", "))} take precedence: the pod " +
-          log"keeps the service account its spec already names, or the namespace's default. To " +
-          log"have Spark apply that configuration anyway, put the credentials inside the driver " +
-          log"pod and point the `spark.kubernetes.authenticate.driver.mounted.*` configurations " +
-          log"at them instead, which does not mount a secret.")
+          log"${MDC(CONFIGS, submittedCredentialConfs.mkString(", "))} take precedence: " +
+          keptAccount + log". To have Spark apply that configuration anyway, put the credentials " +
+          log"inside the driver pod and point the " +
+          log"${MDC(PREFIX, KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX)}.* configurations at " +
+          log"them instead, which does not mount a secret.")
       }
       val driverPodWithMountedKubernetesCredentials =
         new PodBuilder(pod.pod)
