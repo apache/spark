@@ -204,7 +204,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // Advisory filters are kept in the logical Filter for the optimizer only, and Spark never
       // evaluates them. See SupportsPushDownCatalystFilters.advisoryFilters.
       val notEvaluatedFilterSet = ExpressionSet(
-        fullyPushedRuntimeFilters ++ relation.advisoryFilters)
+        fullyPushedRuntimeFilters ++ relation.pushedFilters ++ relation.advisoryFilters)
       DataSourceV2Strategy.withProjectAndFilter(
         project, postScanFilters.filterNot(notEvaluatedFilterSet.contains),
         batchExec, !batchExec.supportsColumnar) :: Nil
