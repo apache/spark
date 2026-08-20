@@ -1665,11 +1665,11 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "non-deterministic filter should be retained as a post-scan Filter")
   }
 
-  test("additional Catalyst filters remain in a Spark-side Filter") {
-    val additionalFilter = "i > 2"
+  test("advisory filters stay in the logical Filter but are not evaluated by FilterExec") {
+    val advisoryFilter = "i > 2"
     val df = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
-      .option("additionalFilter", additionalFilter)
+      .option("advisoryFilter", advisoryFilter)
       .load()
     val query = df.filter($"i" > -1)
 
@@ -1677,40 +1677,16 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     val filters = query.queryExecution.optimizedPlan.collect {
       case filter: LogicalFilter => filter.condition
     }
-    assert(filters.exists(containsFilter(_, additionalFilter)),
-      s"additional filter $additionalFilter should remain in the Spark plan:\n" +
+    assert(filters.exists(containsFilter(_, advisoryFilter)),
+      s"advisory filter $advisoryFilter should remain in the logical Filter:\n" +
         query.queryExecution.optimizedPlan)
+    assert(getScanRelation(query).advisoryFilters.exists(containsFilter(_, advisoryFilter)),
+      "advisory filter should be recorded on the scan relation")
     val execFilters = query.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(execFilters.exists(containsFilter(_, additionalFilter)),
-      s"unpushed additional filter $additionalFilter should remain in FilterExec:\n" +
-        query.queryExecution.executedPlan)
-  }
-
-  test("fully pushed additional Catalyst filters stay in Filter but not FilterExec") {
-    val additionalFilter = "i > 2"
-    val df = spark.read
-      .format(classOf[CatalystFilterDataSourceV2].getName)
-      .option("additionalFilter", additionalFilter)
-      .option("pushAdditionalFilter", "true")
-      .load()
-    val query = df.filter($"i" > -1)
-
-    checkAnswer(query, (3 until 10).map(i => Row(i, -i)))
-    val filters = query.queryExecution.optimizedPlan.collect {
-      case filter: LogicalFilter => filter.condition
-    }
-    assert(filters.exists(containsFilter(_, additionalFilter)),
-      s"additional filter $additionalFilter should remain in the logical Filter:\n" +
-        query.queryExecution.optimizedPlan)
-    assert(getScanRelation(query).pushedFilters.exists(containsFilter(_, additionalFilter)),
-      "fully pushed additional filter should be recorded on the scan relation")
-    val execFilters = query.queryExecution.executedPlan.collect {
-      case filter: FilterExec => filter.condition
-    }
-    assert(!execFilters.exists(containsFilter(_, additionalFilter)),
-      s"fully pushed additional filter $additionalFilter should be dropped from FilterExec:\n" +
+    assert(!execFilters.exists(containsFilter(_, advisoryFilter)),
+      s"advisory filter $advisoryFilter should be dropped from FilterExec:\n" +
         query.queryExecution.executedPlan)
   }
 
@@ -1966,39 +1942,31 @@ class CatalystFilterDataSourceV2 extends TestingV2Source {
 class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends SimpleScanBuilder
   with SupportsPushDownCatalystFilters {
 
-  private var filters = Seq.empty[CatalystExpression]
-  // The additional filter is supplied by the test as SQL. Column references must be
+  // The advisory filter is supplied by the test as SQL. Column references must be
   // AttributeReference, so resolve the parsed names against the source schema.
-  private val additionalFilter = Option(options.get("additionalFilter")).map { sql =>
+  private val advisoryFilter = Option(options.get("advisoryFilter")).map { sql =>
     CatalystSqlParser.parseExpression(sql).transformUp {
       case u: UnresolvedAttribute =>
         val field = TestingV2Source.schema(u.name)
         AttributeReference(field.name, field.dataType)()
     }
   }
-  private val pushesAdditionalFilter = options.getBoolean("pushAdditionalFilter", false)
 
   override def pushFilters(filters: Seq[CatalystExpression]): Seq[CatalystExpression] = {
     if (filters.exists(!_.deterministic)) {
       throw new IllegalArgumentException(
         s"Non-deterministic filters should not be pushed: ${filters.mkString(", ")}")
     }
-    this.filters = filters
     Nil
   }
 
-  override def fullyPushedFilters: Seq[CatalystExpression] = {
-    filters ++ (if (pushesAdditionalFilter) additionalFilter.toSeq else Nil)
-  }
-
-  override def additionalCatalystFilters: Seq[CatalystExpression] = additionalFilter.toSeq
+  override def advisoryFilters: Seq[CatalystExpression] = advisoryFilter.toSeq
 
   override def pushedFilters: Array[Predicate] = Array.empty
 
   override def planInputPartitions(): Array[InputPartition] = {
-    // A filter reported as fully pushed must actually be applied by the source, since Spark
-    // stops evaluating it.
-    additionalFilter.filter(_ => pushesAdditionalFilter) match {
+    // Spark never evaluates an advisory filter, so the source has to apply it itself.
+    advisoryFilter match {
       case Some(filter) =>
         val attrs = DataTypeUtils.toAttributes(readSchema())
         val bound = filter.transformUp {
@@ -2017,7 +1985,7 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    if (pushesAdditionalFilter) ValuesReaderFactory else SimpleReaderFactory
+    if (advisoryFilter.isDefined) ValuesReaderFactory else SimpleReaderFactory
   }
 }
 
