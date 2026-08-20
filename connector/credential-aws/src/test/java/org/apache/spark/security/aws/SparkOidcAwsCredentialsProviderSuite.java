@@ -38,6 +38,7 @@ import org.apache.spark.security.UserCredentials;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -384,6 +385,39 @@ public class SparkOidcAwsCredentialsProviderSuite {
     // Final read must return the latest version
     AwsSessionCredentials finalCreds = (AwsSessionCredentials) provider.resolveCredentials();
     assertEquals("key-99", finalCreds.accessKeyId());
+  }
+
+  // =========================================================================
+  // Auto-config integration (verifies contract with AwsStsCredentialProvider)
+  // =========================================================================
+
+  @Test
+  void testClassNameMatchesAutoConfigValue() {
+    AwsStsCredentialProvider stsProvider = new AwsStsCredentialProvider();
+    stsProvider.init(Map.of(
+        "spark.security.oidc.aws.roleArn", "arn:aws:iam::123456789012:role/test",
+        "spark.security.oidc.aws.region", "us-east-1"));
+    Map<String, String> props = stsProvider.additionalSparkProperties();
+    assertEquals(
+        SparkOidcAwsCredentialsProvider.class.getName(),
+        props.get("spark.hadoop.fs.s3a.aws.credentials.provider"));
+    stsProvider.close();
+  }
+
+  // =========================================================================
+  // Cache behavior: same version returns same instance (no re-deserialization)
+  // =========================================================================
+
+  @Test
+  void testCacheHitReturnsSameInstanceWhenVersionUnchanged() {
+    populateStore("key-1", "secret-1", "token-1", 1L);
+
+    SparkOidcAwsCredentialsProvider provider = new SparkOidcAwsCredentialsProvider();
+    AwsCredentials result1 = provider.resolveCredentials();
+    AwsCredentials result2 = provider.resolveCredentials();
+
+    // Same cached instance proves deserialization was skipped on second call
+    assertSame(result1, result2);
   }
 
   // =========================================================================
