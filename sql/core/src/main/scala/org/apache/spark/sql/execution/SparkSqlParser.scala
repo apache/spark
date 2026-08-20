@@ -1041,7 +1041,7 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       withIdentClause(ctx.identifierReference(), functionIdentifier => {
         if (ctx.TEMPORARY == null) {
-          CreateUserDefinedFunction(
+          CreateUserDefinedFunctionCommand(
             UnresolvedIdentifier(functionIdentifier),
             inputParamText,
             returnTypeText,
@@ -1053,6 +1053,7 @@ class SparkSqlAstBuilder extends AstBuilder {
             containsSQL,
             language,
             isTableFunc,
+            isTemp = false,
             ctx.EXISTS != null,
             ctx.REPLACE != null)
         } else {
@@ -1064,7 +1065,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           // Extract the actual function name, handling session qualification
           val funcName = extractTempFunctionName(functionIdentifier, ctx)
           CreateUserDefinedFunctionCommand(
-            FunctionIdentifier(funcName),
+            UnresolvedIdentifier(Seq(funcName)),
             inputParamText,
             returnTypeText,
             exprText,

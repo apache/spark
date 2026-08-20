@@ -25,11 +25,14 @@ import org.apache.spark.sql.catalyst.catalog.{LanguageSQL, RoutineLanguage, User
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+
 /**
  * The base class for CreateUserDefinedFunctionCommand
  */
 abstract class CreateUserDefinedFunctionCommand
-  extends LeafRunnableCommand with CapturesConfig
+  extends UnaryRunnableCommand with CapturesConfig
 
 
 object CreateUserDefinedFunctionCommand {
@@ -40,7 +43,7 @@ object CreateUserDefinedFunctionCommand {
    */
   // scalastyle:off argcount
   def apply(
-      name: FunctionIdentifier,
+      child: LogicalPlan,
       inputParamText: Option[String],
       returnTypeText: String,
       exprText: Option[String],
@@ -62,7 +65,7 @@ object CreateUserDefinedFunctionCommand {
     language match {
       case LanguageSQL =>
         CreateSQLFunctionCommand(
-          name,
+          child,
           inputParamText,
           returnTypeText,
           exprText,
@@ -80,6 +83,42 @@ object CreateUserDefinedFunctionCommand {
         throw UserDefinedFunctionErrors.unsupportedUserDefinedFunction(other)
     }
   }
+  // scalastyle:off argcount
+  def apply(
+      name: FunctionIdentifier,
+      inputParamText: Option[String],
+      returnTypeText: String,
+      exprText: Option[String],
+      queryText: Option[String],
+      comment: Option[String],
+      collation: Option[String],
+      isDeterministic: Option[Boolean],
+      containsSQL: Option[Boolean],
+      language: RoutineLanguage,
+      isTableFunc: Boolean,
+      isTemp: Boolean,
+      ignoreIfExists: Boolean,
+      replace: Boolean
+  ): CreateUserDefinedFunctionCommand = {
+    // scalastyle:on argcount
+    val nameParts = name.database.toSeq :+ name.funcName
+    apply(
+      UnresolvedIdentifier(nameParts),
+      inputParamText,
+      returnTypeText,
+      exprText,
+      queryText,
+      comment,
+      collation,
+      isDeterministic,
+      containsSQL,
+      language,
+      isTableFunc,
+      isTemp,
+      ignoreIfExists,
+      replace)
+  }
+
 
   /**
    * Check whether the function parameters contain duplicated column names.
