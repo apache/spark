@@ -49,11 +49,13 @@ object PythonUDF {
     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
     PythonEvalType.SQL_SCALAR_ARROW_UDF,
     PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
-    // The fold UDF that backs `aggregate` / `reduce` with a Python UDF: from the plan's point of
-    // view it is row-shaped (the array column and the zero value in, one folded value out per row);
-    // only the Python worker runs the sequential per-element fold. `ExtractPythonUDFs` extracts it
-    // like any other scalar UDF. See ExtractPythonUDFFromLambda and the SQL_SCALAR_FOLD_UDF type.
-    PythonEvalType.SQL_SCALAR_FOLD_UDF
+    // The fold UDFs that back `aggregate` / `reduce` with a Python UDF: from the plan's point of
+    // view they are row-shaped (the array column and the zero value in, one folded value out per
+    // row); only the Python worker runs the fold. `ExtractPythonUDFs` extracts them like any other
+    // scalar UDF. See ExtractPythonUDFFromLambda and the SQL_SCALAR_*_FOLD_UDF types.
+    PythonEvalType.SQL_SCALAR_FOLD_UDF,
+    PythonEvalType.SQL_SCALAR_PANDAS_FOLD_UDF,
+    PythonEvalType.SQL_SCALAR_ARROW_FOLD_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {
@@ -245,15 +247,32 @@ object PythonUDF {
   }
 
   /**
-   * The scalar Python UDF flavors the worker fold ([[PythonEvalType.SQL_SCALAR_FOLD_UDF]]) can run
-   * as the `merge` / `finish` function of an `aggregate` / `reduce` fold. The fold calls the UDF
-   * once per element (`merge`) or once on the final accumulator (`finish`), row at a time, so only
-   * the non-iterator row-at-a-time scalar flavors qualify; the batched vectorized and iterator
-   * flavors do not fit a per-element call.
+   * The scalar Python UDF flavors that can be the `merge` / `finish` function of an
+   * `aggregate` / `reduce` fold in the Python worker. The row-at-a-time flavors
+   * ([[PythonEvalType.SQL_BATCHED_UDF]] / [[PythonEvalType.SQL_ARROW_BATCHED_UDF]]) fold one
+   * element at a time. The vectorized pandas / Arrow flavors also qualify: the fold is vectorized
+   * by stepping the element index across rows in lockstep, so each step is a single `merge` call
+   * over a batch (a `Series` / `Array`) of the still-active rows -- preserving their batch
+   * contract. The iterator flavors do not (their one-iterator-per-partition contract cannot be
+   * split into per-step calls).
    */
   def isFoldableScalarUDF(udf: PythonUDF): Boolean = udf.evalType match {
-    case PythonEvalType.SQL_BATCHED_UDF | PythonEvalType.SQL_ARROW_BATCHED_UDF => true
+    case PythonEvalType.SQL_BATCHED_UDF | PythonEvalType.SQL_ARROW_BATCHED_UDF |
+        PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_ARROW_UDF => true
     case _ => false
+  }
+
+  /**
+   * The fold eval type that runs a `merge` UDF of the given (foldable, see [[isFoldableScalarUDF]])
+   * scalar flavor as the sequential fold of `aggregate` / `reduce` in the Python worker: the
+   * row-at-a-time flavors share the pickle-based [[PythonEvalType.SQL_SCALAR_FOLD_UDF]], while the
+   * vectorized pandas / Arrow flavors keep their batch shape under their own fold eval type.
+   */
+  def foldEvalType(mergeEvalType: Int): Int = mergeEvalType match {
+    case PythonEvalType.SQL_BATCHED_UDF | PythonEvalType.SQL_ARROW_BATCHED_UDF =>
+      PythonEvalType.SQL_SCALAR_FOLD_UDF
+    case PythonEvalType.SQL_SCALAR_PANDAS_UDF => PythonEvalType.SQL_SCALAR_PANDAS_FOLD_UDF
+    case PythonEvalType.SQL_SCALAR_ARROW_UDF => PythonEvalType.SQL_SCALAR_ARROW_FOLD_UDF
   }
 
   /**

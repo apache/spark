@@ -176,7 +176,10 @@ case class ArrowEvalPythonExec(
       PythonEvalType.SQL_SCALAR_ARROW_UDF,
       PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
       PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-      PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF)
+      PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+      // Vectorized pandas / Arrow fold of `aggregate` / `reduce` (see ExtractPythonUDFFromLambda).
+      PythonEvalType.SQL_SCALAR_PANDAS_FOLD_UDF,
+      PythonEvalType.SQL_SCALAR_ARROW_FOLD_UDF)
 }
 
 class ArrowEvalPythonEvaluatorFactory(

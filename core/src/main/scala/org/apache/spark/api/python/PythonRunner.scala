@@ -60,12 +60,16 @@ private[spark] object PythonEvalType {
   val SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF = 104
   val SQL_SCALAR_ARROW_ELEMENTWISE_UDF = 105
   val SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF = 106
-  // A pair of scalar Python UDFs (`merge` and `finish`) that implement the SQL `aggregate` /
-  // `reduce` higher-order function's sequential left fold over a single row's array, inside the
-  // Python worker. Unlike the element-wise types above, the fold cannot be lifted (the UDF reads
-  // the running accumulator), so the whole fold runs in Python: per row, `acc = zero`, then
-  // `acc = merge(acc, element)` for each element, then `finish(acc)`. See ArrayAggregatePythonExec.
+  // The `merge` UDF of the SQL `aggregate` / `reduce` higher-order function, run as a sequential
+  // left fold over each row's array inside the Python worker. Unlike the element-wise types above,
+  // the fold cannot be lifted (the UDF reads the running accumulator), so it runs in Python: per
+  // row, `acc = zero`, then `acc = merge(acc, element)` for each element. See
+  // ExtractPythonUDFFromLambda. 107 is a row-at-a-time (pickle) UDF; 108/109 are the vectorized
+  // pandas / Arrow flavors, folded by stepping the element index across rows in lockstep so each
+  // step is a single vectorized `merge` call over the still-active rows.
   val SQL_SCALAR_FOLD_UDF = 107
+  val SQL_SCALAR_PANDAS_FOLD_UDF = 108
+  val SQL_SCALAR_ARROW_FOLD_UDF = 109
 
   val SQL_SCALAR_PANDAS_UDF = 200
   val SQL_GROUPED_MAP_PANDAS_UDF = 201
@@ -120,6 +124,8 @@ private[spark] object PythonEvalType {
     case SQL_SCALAR_ARROW_ELEMENTWISE_UDF => "SQL_SCALAR_ARROW_ELEMENTWISE_UDF"
     case SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF => "SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF"
     case SQL_SCALAR_FOLD_UDF => "SQL_SCALAR_FOLD_UDF"
+    case SQL_SCALAR_PANDAS_FOLD_UDF => "SQL_SCALAR_PANDAS_FOLD_UDF"
+    case SQL_SCALAR_ARROW_FOLD_UDF => "SQL_SCALAR_ARROW_FOLD_UDF"
     case SQL_SCALAR_PANDAS_UDF => "SQL_SCALAR_PANDAS_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF => "SQL_GROUPED_MAP_PANDAS_UDF"
     case SQL_GROUPED_AGG_PANDAS_UDF => "SQL_GROUPED_AGG_PANDAS_UDF"

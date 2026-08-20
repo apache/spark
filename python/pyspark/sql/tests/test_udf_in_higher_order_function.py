@@ -815,6 +815,61 @@ class UDFInHigherOrderFunctionTestsMixin:
                 df.select(sf.aggregate("values", sf.lit(0), lambda acc, x: add(acc, x))).collect()
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
+    def test_pandas_udf_in_aggregate_fold(self):
+        # A vectorized scalar pandas UDF as the whole `merge` lambda folds each row's array. The
+        # fold is sequential within a row but vectorized across rows -- one Series `merge` call per
+        # element index over the still-active rows -- so the UDF keeps its pandas Series contract.
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3, 4],), ([10, 20],), ([],), (None,)], "values array<int>"
+        )
+
+        @pandas_udf(IntegerType())
+        def add(acc: pd.Series, x: pd.Series) -> pd.Series:
+            return acc + x
+
+        assertDataFrameEqual(
+            df.select(sf.aggregate("values", sf.lit(0), lambda acc, x: add(acc, x)).alias("r")),
+            [(10,), (30,), (0,), (None,)],
+        )
+
+        # Order-dependent, to confirm the per-row left-fold order is preserved under vectorization.
+        sdf = self.spark.createDataFrame(
+            [(["a", "b", "c"],), (["x", "y"],)], "values array<string>"
+        )
+
+        @pandas_udf(StringType())
+        def concat(acc: pd.Series, x: pd.Series) -> pd.Series:
+            return acc + x + "|"
+
+        assertDataFrameEqual(
+            sdf.select(
+                sf.aggregate("values", sf.lit(""), lambda acc, x: concat(acc, x)).alias("r")
+            ),
+            [("a|b|c|",), ("x|y|",)],
+        )
+
+    def test_arrow_udf_in_aggregate_fold(self):
+        # Same as the pandas fold, but with a vectorized Arrow UDF (pyarrow Array in and out).
+        import pyarrow.compute as pc
+        from pyspark.sql.functions import arrow_udf
+
+        df = self.spark.createDataFrame(
+            [([1, 2, 3, 4],), ([10, 20],), ([],), (None,)], "values array<int>"
+        )
+
+        @arrow_udf(IntegerType())
+        def add(acc, x):
+            return pc.add(acc, x)
+
+        # Non-zero initial value via the `reduce` alias.
+        assertDataFrameEqual(
+            df.select(sf.reduce("values", sf.lit(100), lambda acc, x: add(acc, x)).alias("r")),
+            [(110,), (130,), (100,), (None,)],
+        )
+
     def test_scalar_pandas_udf_in_lambda(self):
         # A vectorized scalar pandas UDF is lifted and applied over the flattened elements, so it
         # still receives a pandas Series (its native contract) once per batch, not per element.

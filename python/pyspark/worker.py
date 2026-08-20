@@ -701,6 +701,10 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        # Vectorized fold `merge` UDFs (pandas / Arrow): the stepped-scan mapper calls the same
+        # (func, offsets, return_type) tuple once per element index over the still-active rows.
+        PythonEvalType.SQL_SCALAR_PANDAS_FOLD_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_FOLD_UDF,
     ):
         return func, args_offsets, kwargs_offsets, return_type
     # Grouped-map and cogrouped-map UDFs: (func, args_offsets, return_type, num_udf_args).
@@ -2065,6 +2069,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_UDF,
+        # Vectorized fold `merge` UDFs (pandas / Arrow) are sent over Arrow and folded by stepping
+        # the element index across rows in the worker (see the stepped-scan mappers below).
+        PythonEvalType.SQL_SCALAR_PANDAS_FOLD_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_FOLD_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
@@ -2211,6 +2219,68 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     output_batch, combined_arrow_schema
                 )
                 verify_scalar_result(output_batch, batch.num_rows)
+                yield output_batch
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
+    if eval_type in (
+        PythonEvalType.SQL_SCALAR_PANDAS_FOLD_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_FOLD_UDF,
+    ):
+        # Vectorized `merge` of `aggregate` / `reduce` (see ExtractPythonUDFFromLambda). The fold is
+        # sequential *within* a row but independent *across* rows, so it is vectorized on the row
+        # axis: at each element index the `merge` UDF is called once on a batch (a pandas Series /
+        # Arrow Array) of (accumulator, element) for the rows whose array still has an element at
+        # that index. This keeps the UDF's batch contract while folding each row left to right. A
+        # null array folds to null without ever calling `merge`.
+        import pyarrow as pa
+
+        assert num_udfs == 1, "One fold UDF expected here."
+        merge_func, args_offsets, _, return_type = udfs[0]
+        assert len(args_offsets) == 2, "The fold UDF takes the array and the zero columns."
+        array_offset, zero_offset = args_offsets
+        is_pandas = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_FOLD_UDF
+        arrow_return_type = to_arrow_type(
+            return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+        )
+        if is_pandas:
+            import pandas as pd
+
+        def func(split_index: int, data: Iterator["pa.RecordBatch"]) -> Iterator["pa.RecordBatch"]:
+            for batch in data:
+                num_rows = batch.num_rows
+                # The accumulator (seeded from the zero column) is kept as Python values so it can
+                # be re-fed to `merge` each step; the element type comes from the array column.
+                elem_type = batch.column(array_offset).type.value_type
+                arrays = batch.column(array_offset).to_pylist()
+                acc = batch.column(zero_offset).to_pylist()
+                # -1 marks a null array (folds to null); otherwise the element count of the row.
+                lengths = [len(a) if a is not None else -1 for a in arrays]
+                max_len = max(lengths) if lengths else 0
+                for j in range(max_len):
+                    active = [i for i in range(num_rows) if lengths[i] > j]
+                    if not active:
+                        continue
+                    accs = [acc[i] for i in active]
+                    elems = [arrays[i][j] for i in active]
+                    if is_pandas:
+                        result = merge_func(pd.Series(accs), pd.Series(elems))
+                    else:
+                        result = merge_func(
+                            pa.array(accs, type=arrow_return_type),
+                            pa.array(elems, type=elem_type),
+                        )
+                    results = result.to_pylist() if hasattr(result, "to_pylist") else list(result)
+                    for k, i in enumerate(active):
+                        acc[i] = results[k]
+                for i in range(num_rows):
+                    if lengths[i] < 0:
+                        acc[i] = None
+                output_batch = pa.RecordBatch.from_arrays(
+                    [pa.array(acc, type=arrow_return_type)], ["_0"]
+                )
+                verify_scalar_result(output_batch, num_rows)
                 yield output_batch
 
         # profiling is not supported for UDF

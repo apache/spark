@@ -246,7 +246,10 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
         // iterator types: the worker feeds a single iterator UDF, so they must not be
         // parallel-fused with siblings (e.g. `transform(arr, x -> f(x) + g(x))` for iterator UDFs).
         evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF ||
-        evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF) {
+        evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF ||
+        // The vectorized fold worker steps one array per operator, so keep one fold per operator.
+        evalType == PythonEvalType.SQL_SCALAR_PANDAS_FOLD_UDF ||
+        evalType == PythonEvalType.SQL_SCALAR_ARROW_FOLD_UDF) {
         false
       } else {
         evalType == firstVisitedScalarUDFEvalType.get
@@ -365,7 +368,11 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
                  | PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_UDF
-                 | PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF =>
+                 | PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+                 // The vectorized pandas / Arrow fold that backs `aggregate` / `reduce`: sent over
+                 // Arrow, then folded in the worker by stepping the element index across rows.
+                 | PythonEvalType.SQL_SCALAR_PANDAS_FOLD_UDF
+                 | PythonEvalType.SQL_SCALAR_ARROW_FOLD_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
               throw SparkException.internalError("Unexpected UDF evalType")

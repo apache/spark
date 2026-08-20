@@ -99,6 +99,8 @@ if typing.TYPE_CHECKING:
         SQLScalarArrowElementwiseUDFType,
         SQLScalarArrowIterElementwiseUDFType,
         SQLScalarFoldUDFType,
+        SQLScalarPandasFoldUDFType,
+        SQLScalarArrowFoldUDFType,
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
@@ -676,12 +678,14 @@ class PythonEvalType:
     SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF: "SQLScalarPandasIterElementwiseUDFType" = 104
     SQL_SCALAR_ARROW_ELEMENTWISE_UDF: "SQLScalarArrowElementwiseUDFType" = 105
     SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF: "SQLScalarArrowIterElementwiseUDFType" = 106
-    # A pair of scalar Python UDFs (``merge`` and ``finish``) implementing the SQL ``aggregate`` /
-    # ``reduce`` higher-order function's sequential left fold over a single row's array, run inside
-    # the Python worker. The fold reads the running accumulator, so it cannot be lifted like the
-    # element-wise types above; per row the worker computes ``acc = zero``, then
-    # ``acc = merge(acc, element)`` for each element, then ``finish(acc)``.
+    # The ``merge`` UDF of the SQL ``aggregate`` / ``reduce`` higher-order function, run as a
+    # sequential left fold over each row's array inside the Python worker (the fold reads the
+    # running accumulator, so it cannot be lifted like the element-wise types above). 107 is a
+    # row-at-a-time (pickle) UDF; 108/109 are the vectorized pandas / Arrow flavors, folded by
+    # stepping the element index across rows in lockstep (one vectorized ``merge`` call per step).
     SQL_SCALAR_FOLD_UDF: "SQLScalarFoldUDFType" = 107
+    SQL_SCALAR_PANDAS_FOLD_UDF: "SQLScalarPandasFoldUDFType" = 108
+    SQL_SCALAR_ARROW_FOLD_UDF: "SQLScalarArrowFoldUDFType" = 109
 
     SQL_SCALAR_PANDAS_UDF: "PandasScalarUDFType" = 200
     SQL_GROUPED_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 201

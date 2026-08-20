@@ -122,7 +122,9 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       // The fold returns the accumulator, i.e. the `merge` UDF's return type.
       mergeUdf.dataType,
       Seq(agg.argument, agg.zero),
-      PythonEvalType.SQL_SCALAR_FOLD_UDF,
+      // The fold eval type mirrors the `merge` UDF's flavor: a row-at-a-time (pickle) fold, or a
+      // vectorized pandas / Arrow fold that steps the element index across rows.
+      PythonUDF.foldEvalType(mergeUdf.evalType),
       mergeUdf.udfDeterministic)
     agg.finish.asInstanceOf[LambdaFunction].function match {
       case finishUdf: PythonUDF =>
