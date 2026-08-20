@@ -16,9 +16,12 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.parquet.bytes.DirectByteBufferAllocator
+import java.nio.ByteBuffer
+
+import org.apache.parquet.bytes.{ByteBufferInputStream, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.Utils
 import org.apache.parquet.column.values.deltastrings.DeltaByteArrayWriter
+import org.apache.parquet.io.ParquetDecodingException
 
 import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
@@ -195,5 +198,35 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
       reader.skipBinary(skipCount)
       i += skipCount + 1
     }
+  }
+
+  test("SPARK-55968: invalid negative prefix length throws ParquetDecodingException") {
+    Utils.writeData(writer, Array("a", "b"))
+    val bytes = writer.getBytes.toInputStream.readAllBytes()
+    // Byte 5 is min_delta in the prefix lengths DeltaBinaryPacked block.
+    // 3 is zig-zag encoding for -2, creating prefix lengths [0, -2].
+    bytes(5) = 3.toByte
+    val is = ByteBufferInputStream.wrap(ByteBuffer.wrap(bytes))
+    writableColumnVector = new OnHeapColumnVector(2, StringType)
+    reader.initFromPage(2, is)
+    val ex = intercept[ParquetDecodingException] {
+      reader.readBinary(2, writableColumnVector, 0)
+    }
+    assert(ex.getMessage.contains("Invalid negative prefix length"))
+  }
+
+  test("SPARK-55968: prefix length exceeding previous length throws ParquetDecodingException") {
+    Utils.writeData(writer, Array("a", "b"))
+    val bytes = writer.getBytes.toInputStream.readAllBytes()
+    // 4 is zig-zag encoding for +2, creating prefix lengths [0, 2].
+    // Previous value has length 1 ("a"), so prefix length 2 exceeds previous value length.
+    bytes(5) = 4.toByte
+    val is = ByteBufferInputStream.wrap(ByteBuffer.wrap(bytes))
+    writableColumnVector = new OnHeapColumnVector(2, StringType)
+    reader.initFromPage(2, is)
+    val ex = intercept[ParquetDecodingException] {
+      reader.readBinary(2, writableColumnVector, 0)
+    }
+    assert(ex.getMessage.contains("exceeds previous value length"))
   }
 }
