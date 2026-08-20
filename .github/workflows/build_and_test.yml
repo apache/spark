@@ -276,7 +276,7 @@ jobs:
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).build == 'true'
+    if: fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.build_timeout_minutes }}
     strategy:
@@ -415,16 +415,10 @@ jobs:
         python3.12 -m pip install 'numpy>=1.23.2' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
         python3.12 -m pip list
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
         zstd -dc compile-artifact.tar.zst | tar -xf -
         rm compile-artifact.tar.zst
@@ -437,10 +431,8 @@ jobs:
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         export SERIAL_SBT_TESTS=1
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
@@ -761,16 +753,10 @@ jobs:
           echo ""
         done
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
         zstd -dc compile-artifact.tar.zst | tar -xf -
         rm compile-artifact.tar.zst
@@ -780,10 +766,8 @@ jobs:
       if: ${{ matrix.modules != 'pyspark-connect-old-client' }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         if [[ "$MODULES_TO_TEST" == *"pyspark-install"* ]]; then
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
@@ -796,13 +780,6 @@ jobs:
         SPARK_CONNECT_TESTING_REMOTE: sc://localhost
       if: ${{ matrix.modules == 'pyspark-connect-old-client' && inputs.branch == 'master' }}
       run: |
-        # Build Spark
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        else
-          ./build/sbt -Phive Test/package
-        fi
-
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
         sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
@@ -928,16 +905,10 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
         zstd -dc compile-artifact.tar.zst | tar -xf -
         rm compile-artifact.tar.zst
@@ -948,10 +919,8 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
@@ -1266,7 +1235,7 @@ jobs:
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
+    if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1308,16 +1277,10 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
         zstd -dc compile-artifact.tar.zst | tar -xf -
         rm compile-artifact.tar.zst
@@ -1395,7 +1358,7 @@ jobs:
 
   docker-integration-tests:
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
+    if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.docker_integration_tests_timeout_minutes }}
@@ -1444,26 +1407,18 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
         zstd -dc compile-artifact.tar.zst | tar -xf -
         rm compile-artifact.tar.zst
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
@@ -1489,7 +1444,7 @@ jobs:
 
   k8s-integration-tests:
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
+    if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1535,16 +1490,10 @@ jobs:
           distribution: zulu
           java-version: ${{ inputs.java }}
       - name: Download precompiled artifact
-        id: download-precompiled
-        if: needs.precompile.result == 'success'
-        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
       - name: Extract precompiled artifact
-        id: extract-precompiled
-        if: steps.download-precompiled.outcome == 'success'
-        continue-on-error: true
         run: |
           zstd -dc compile-artifact.tar.zst | tar -xf -
           rm compile-artifact.tar.zst
