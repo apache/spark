@@ -48,6 +48,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   private var _name: Option[String] = None
   private var copyOnLoad: Boolean = false
+  private var stateOptionKeys: util.Set[String] = util.Set.of()
 
   // Records every (TableContext, table-state options) pair passed to the options-aware
   // loadTable(), in call order, so tests can verify that the analyzer / DataFrame API correctly
@@ -65,7 +66,12 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = Some(name)
     copyOnLoad = options.getBoolean("copyOnLoad", false)
+    stateOptionKeys = Option(options.get("tableStateOptionKeys"))
+      .map(_.split(",").iterator.map(_.trim).filter(_.nonEmpty).toSet.asJava)
+      .getOrElse(util.Set.of())
   }
+
+  override def tableStateOptionKeys(): util.Set[String] = stateOptionKeys
 
   override def name: String = _name.get
 

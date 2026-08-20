@@ -1282,7 +1282,9 @@ case class Hex(child: Expression)
     Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation(supportsTrimCollation = true)))
 
   override def dataType: DataType = child.dataType match {
-    case st: StringType => st
+    // Hex expands each input character to two hex digits, so a CHAR(n)/VARCHAR(n) input must not
+    // carry its length constraint into the result (R1).
+    case st: StringType => StringHelper.transformingStringResultType(st)
     case _ => super.dataType
   }
 

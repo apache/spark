@@ -185,6 +185,16 @@ class MapInArrowTestsMixin:
     def test_map_in_arrow_with_barrier_mode(self):
         df = self.spark.range(10)
 
+        def func0(iterator):
+            from pyspark import BarrierTaskContext
+
+            BarrierTaskContext.get()
+            for batch in iterator:
+                yield batch
+
+        with self.assertRaisesRegex(PythonException, "\\[NOT_IN_BARRIER_STAGE\\]"):
+            df.mapInArrow(func0, "id long", False).collect()
+
         def func1(iterator):
             from pyspark import TaskContext, BarrierTaskContext
 

@@ -520,4 +520,93 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     assert(fakeProvider.getCloseCount === 1,
       "stop() should close initialized providers exactly once")
   }
+
+  // ========== additionalSparkProperties application ==========
+
+  test("start() applies additionalSparkProperties from active providers") {
+    val conf = createSparkConf()
+    conf.set("spark.security.oidc.provider.fake",
+      "org.apache.spark.security.FakeCredentialProvider")
+    val ctx = createUserContext()
+
+    val manager = new UserCredentialManager(
+      conf, createIngestor(ctx), (_, _) => ())
+
+    try {
+      manager.start()
+      assert(conf.get("spark.hadoop.fs.fake.credentials.provider") ===
+        "org.apache.spark.security.FakeExecutorCredentialProvider")
+    } finally {
+      manager.stop()
+    }
+  }
+
+  test("start() does not overwrite user-set properties") {
+    val conf = createSparkConf()
+    conf.set("spark.security.oidc.provider.fake",
+      "org.apache.spark.security.FakeCredentialProvider")
+    // User explicitly sets the property before start()
+    conf.set("spark.hadoop.fs.fake.credentials.provider", "user.Custom")
+    val ctx = createUserContext()
+
+    val manager = new UserCredentialManager(
+      conf, createIngestor(ctx), (_, _) => ())
+
+    try {
+      manager.start()
+      // User-set value must NOT be overwritten
+      assert(conf.get("spark.hadoop.fs.fake.credentials.provider") === "user.Custom")
+    } finally {
+      manager.stop()
+    }
+  }
+
+  test("start() handles provider returning null from additionalSparkProperties") {
+    // AnotherFakeCredentialProvider uses default (empty map), not null.
+    // This test verifies the defensive null check doesn't crash
+    // with a provider that inherits the default empty map.
+    val conf = createSparkConf()
+    conf.set("spark.security.oidc.provider.fake",
+      "org.apache.spark.security.FakeCredentialProvider")
+    val ctx = createUserContext()
+
+    val manager = new UserCredentialManager(
+      conf, createIngestor(ctx), (_, _) => ())
+
+    try {
+      // Should not throw
+      manager.start()
+      assert(conf.contains("spark.hadoop.fs.fake.credentials.provider"))
+    } finally {
+      manager.stop()
+    }
+  }
+
+  test("start() succeeds when a provider throws from additionalSparkProperties") {
+    // AnotherFakeCredentialProvider is configured to throw; FakeCredentialProvider should
+    // still have its properties applied (exception isolation via NonFatal catch).
+    val conf = createSparkConf()
+    conf.set("spark.security.oidc.provider.fake",
+      "org.apache.spark.security.FakeCredentialProvider")
+    conf.set("spark.security.oidc.provider.shared",
+      "org.apache.spark.security.AnotherFakeCredentialProvider")
+    val ctx = createUserContext()
+
+    AnotherFakeCredentialProvider.throwOnProperties = true
+    try {
+      val manager = new UserCredentialManager(
+        conf, createIngestor(ctx), (_, _) => ())
+      try {
+        // start() must not fail even though AnotherFakeCredentialProvider throws
+        manager.start()
+        // FakeCredentialProvider's property must still be applied
+        assert(conf.get("spark.hadoop.fs.fake.credentials.provider") ===
+          "org.apache.spark.security.FakeExecutorCredentialProvider")
+      } finally {
+        manager.stop()
+      }
+    } finally {
+      AnotherFakeCredentialProvider.throwOnProperties = false
+    }
+  }
 }

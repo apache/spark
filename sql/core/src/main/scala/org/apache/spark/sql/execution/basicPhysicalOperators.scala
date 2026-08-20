@@ -208,10 +208,19 @@ trait GeneratePredicateHelper extends PredicateHelper {
         }
       }.mkString("\n").trim
 
+      val nestedNullChecks = notNullPreds.zipWithIndex.collect {
+        case (p @ IsNotNull(n), idx)
+            if !generatedIsNotNullChecks(idx) && !n.isInstanceOf[Attribute] &&
+              c.exists(_.semanticEquals(n)) =>
+          generatedIsNotNullChecks(idx) = true
+          genPredicate(p, inputExprCode, inputAttrs)
+      }.mkString("\n").trim
+
       // Here we use *this* operator's output with this output's nullability since we already
       // enforced them with the IsNotNull checks above.
       s"""
          |$nullChecks
+         |$nestedNullChecks
          |${genPredicate(c, inputExprCode, outputAttrs)}
        """.stripMargin.trim
     }.mkString("\n")
@@ -400,6 +409,20 @@ case class FilterExec(condition: Expression, child: SparkPlan)
                     parts.append(genNotNull(IsNotNull(r)))
                     parts.append('\n')
                   }
+                }
+                notNullPreds.zipWithIndex.foreach {
+                  case (p @ IsNotNull(n), ni)
+                      if !generatedIsNotNullChecks(ni) && !n.isInstanceOf[Attribute] &&
+                        orig.exists(_.semanticEquals(n)) =>
+                    generatedIsNotNullChecks(ni) = true
+                    var checkCode: String = null
+                    ctx.withSubExprEliminationExprs(Map.empty) {
+                      checkCode = genNotNull(p)
+                      Seq.empty
+                    }
+                    parts.append(checkCode)
+                    parts.append('\n')
+                  case _ =>
                 }
                 statesByFirstUse.get(idx).foreach { states =>
                   parts.append(ctx.evaluateSubExprEliminationState(states))
