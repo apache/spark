@@ -671,6 +671,8 @@ createTableClauses
      skewSpec |
      clusterBySpec |
      bucketSpec |
+     writeDistributionSpec |
+     writeOrderingSpec |
      rowFormat |
      createFileFormat |
      locationSpec |
@@ -1380,6 +1382,24 @@ transform
 transformArgument
     : qualifiedName
     | constant
+    ;
+
+writeDistributionSpec
+    : DISTRIBUTED BY PARTITION
+    ;
+
+writeOrderingSpec
+    : LOCALLY? ORDERED BY writeOrder
+    | UNORDERED
+    ;
+
+writeOrder
+    : fields+=writeOrderField (COMMA fields+=writeOrderField)*
+    | LEFT_PAREN fields+=writeOrderField (COMMA fields+=writeOrderField)* RIGHT_PAREN
+    ;
+
+writeOrderField
+    : transform direction=(ASC | DESC)? (NULLS nullOrder=(FIRST | LAST))?
     ;
 
 expression
@@ -2189,6 +2209,7 @@ ansiNonReserved
     | DIRECTORY
     | DISTANCE
     | DISTRIBUTE
+    | DISTRIBUTED
     | DIV
     | DO
     | DOUBLE
@@ -2272,6 +2293,7 @@ ansiNonReserved
     | LIST
     | LOAD
     | LOCAL
+    | LOCALLY
     | LOCATION
     | LOCK
     | LOCKS
@@ -2313,6 +2335,7 @@ ansiNonReserved
     | OPEN
     | OPTION
     | OPTIONS
+    | ORDERED
     | ORDINALITY
     | OUT
     | OUTPUTFORMAT
@@ -2436,6 +2459,7 @@ ansiNonReserved
     | UNIFORM
     | UNLOCK
     | UNNEST
+    | UNORDERED
     | UNPIVOT
     | UNSET
     | UNTIL
@@ -2613,6 +2637,7 @@ nonReserved
     | DISTANCE
     | DISTINCT
     | DISTRIBUTE
+    | DISTRIBUTED
     | DIV
     | DO
     | DOUBLE
@@ -2714,6 +2739,7 @@ nonReserved
     | LIST
     | LOAD
     | LOCAL
+    | LOCALLY
     | LOCALTIME
     | LOCATION
     | LOCK
@@ -2762,6 +2788,7 @@ nonReserved
     | OPTIONS
     | OR
     | ORDER
+    | ORDERED
     | ORDINALITY
     | OUT
     | OUTER
@@ -2899,6 +2926,7 @@ nonReserved
     | UNKNOWN
     | UNLOCK
     | UNNEST
+    | UNORDERED
     | UNPIVOT
     | UNSET
     | UNTIL

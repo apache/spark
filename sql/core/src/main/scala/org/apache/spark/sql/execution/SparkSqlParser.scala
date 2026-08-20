@@ -601,6 +601,13 @@ class SparkSqlAstBuilder extends AstBuilder {
         invalidStatement("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
 
+      if (!ctx.createTableClauses().writeDistributionSpec.isEmpty ||
+          !ctx.createTableClauses().writeOrderingSpec.isEmpty) {
+        // This builds a temp view, which has nowhere to record a write distribution or ordering,
+        // so honoring the clause is impossible; reject it rather than drop it silently.
+        invalidStatement("CREATE TEMPORARY TABLE ... DISTRIBUTED BY/ORDERED BY", ctx)
+      }
+
       val (_, _, _, _, options, location, _, _, _, _) =
         visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
@@ -1654,8 +1661,8 @@ class SparkSqlAstBuilder extends AstBuilder {
         clusterBySpec.map(_.asTransform)
 
     // Because the createTableClauses grammar is reused for pipeline datasets but pipeline
-    // datasets don't support bucketing, options, storage location, or Hive SerDe, validate they
-    // are not set.
+    // datasets don't support bucketing, options, storage location, Hive SerDe, or a write
+    // distribution and ordering, validate they are not set.
     if (bucketSpec.isDefined) {
       throw operationNotAllowed(s"Bucketing is not supported for CREATE $syntaxTypeErrorStr " +
         "statements. Please remove any bucket spec specified in the statement.", ctx)
@@ -1676,6 +1683,12 @@ class SparkSqlAstBuilder extends AstBuilder {
       throw operationNotAllowed(s"Specifying location is not supported for CREATE " +
         s"$syntaxTypeErrorStr statements. The storage location for a pipeline dataset is " +
         "managed by the pipeline itself.", ctx)
+    }
+    if (!ctx.createTableClauses().writeDistributionSpec.isEmpty ||
+      !ctx.createTableClauses().writeOrderingSpec.isEmpty) {
+      throw operationNotAllowed(s"A write distribution and ordering is not supported for CREATE " +
+        s"$syntaxTypeErrorStr statements. Please remove any DISTRIBUTED BY PARTITION, " +
+        "ORDERED BY, or UNORDERED clause specified in the statement.", ctx)
     }
 
     val spec = TableSpec(
