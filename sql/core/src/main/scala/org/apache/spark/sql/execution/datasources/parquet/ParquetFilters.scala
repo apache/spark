@@ -61,9 +61,7 @@ class ParquetFilters(
     caseSensitive: Boolean,
     datetimeRebaseSpec: RebaseSpec,
     variantExtractionSchema: Option[StructType] = None) {
-  // Shredded-variant physical field-name constants. Declared first so they are initialized before
-  // `nameToShreddedVariantField`, which reads them during construction (Scala initializes `val`s in
-  // declaration order).
+  // Shredded-variant physical field-name constants.
   private val TYPED_VALUE = "typed_value"
   private val VALUE = "value"
 
@@ -137,6 +135,12 @@ class ParquetFilters(
    *                           schema are included; a value for the path can only be hiding in one
    *                           of these residuals when the typed leaf is NULL, which is what the
    *                           pushed predicate's guard checks (see `makeShreddedFilter`).
+   *                           Spark's writer (`VariantShreddingWriter.castShredded`) always shreds
+   *                           an object field that is in the shredding schema and routes only
+   *                           non-schema keys into a level's own `value`, so with Spark-written
+   *                           files a value can only fall back to the leaf's own-level residual;
+   *                           the ancestor-level residuals guard against writers that legitimately
+   *                           decline to shred an intermediate level.
    */
   private case class ShreddedVariantField(
       leaf: ParquetPrimitiveField,
@@ -973,12 +977,12 @@ class ParquetFilters(
   }
 
   // Whether `predicate` references a shredded-variant logical path anywhere. Used to refuse
-  // conversion under negation: the shredded predicate is `or(leaf, isNotNull(residual)...)`, and
-  // `not(...)` of it is rewritten by parquet-mr's LogicalInverseRewriter into
-  // `and(notEq(leaf), eq(residual, null))`, whose `eq(residual, null)` conjunct makes an AND
-  // row-group-droppable whenever the residual has no nulls -- unsound (drops a row group whose
-  // matching values are all in the residual). Since a negated shredded predicate cannot be
-  // expressed soundly with row-group statistics, we do not push it at all.
+  // conversion under negation: the shredded predicate is `or(leaf, and(anyResidualNotNull,
+  // isNull(leaf)))`, and parquet-mr's LogicalInverseRewriter pushes `not(...)` inside to
+  // `and(not(leaf), or(and(eq(residual, null)...), notEq(leaf, null)))`, which is row-group-
+  // droppable as soon as some residual has no nulls AND the leaf is entirely NULL -- exactly an
+  // all-fallback row group, whose matching values are all in a residual. Since a negated shredded
+  // predicate cannot be expressed soundly with row-group statistics, we do not push it at all.
   //
   // `sources.Filter.references` already recurses through And/Or/Not and every leaf filter, so this
   // stays correct if new Filter subtypes are added.
@@ -1017,23 +1021,17 @@ class ParquetFilters(
       ): Option[FilterPredicate] = {
     val field = nameToShreddedVariantField(name)
     makeLeaf(field.leaf.fieldType, field.leaf.fieldNames).map { leafPredicate =>
-      val anyResidualNotNull = field.residualFieldNames
+      field.residualFieldNames
         .map(n => FilterApi.notEq(binaryColumn(n), null.asInstanceOf[Binary]))
-        .reduceLeftOption[FilterPredicate](FilterApi.or)
-      val leafIsNull = makeEq.lift(field.leaf.fieldType)
-        .map(_(field.leaf.fieldNames, null))
-      (anyResidualNotNull, leafIsNull) match {
-        case (Some(residual), Some(isNull)) =>
-          FilterApi.or(leafPredicate, FilterApi.and(residual, isNull))
-        case (Some(residual), None) =>
-          // Leaf type has no null-equality encoding; fall back to the sound flat OR (drops only
-          // when every residual is entirely NULL).
-          field.residualFieldNames.foldLeft(leafPredicate) { (acc, n) =>
-            FilterApi.or(acc, FilterApi.notEq(binaryColumn(n), null.asInstanceOf[Binary]))
-          }
-        case (None, _) =>
+        .reduceLeftOption[FilterPredicate](FilterApi.or) match {
+        case None =>
           // No residuals exist in this file for the path, so the leaf is a complete summary.
           leafPredicate
+        case Some(anyResidualNotNull) =>
+          // `makeLeaf` returned Some, so the leaf type is one `makeEq` also covers (its case list
+          // is a superset of the comparison ops), hence `makeEq.lift` is defined here.
+          val leafIsNull = makeEq.lift(field.leaf.fieldType).get(field.leaf.fieldNames, null)
+          FilterApi.or(leafPredicate, FilterApi.and(anyResidualNotNull, leafIsNull))
       }
     }
   }
@@ -1065,10 +1063,10 @@ class ParquetFilters(
 
     predicate match {
       // Shredded-variant paths (e.g. "v.`0`"). Only comparison predicates that use min/max
-      // statistics are eligible. Each pushes or(leafPredicate, isNotNull(residual)...) over every
-      // residual `value` column along the path (see `makeShreddedFilter`). IS NULL / IS NOT NULL on
-      // the logical variant field are intentionally out of scope: "the extracted field is null" is
-      // not the same as "typed_value is null", so we must not conflate them.
+      // statistics are eligible. Each pushes the guarded predicate built by `makeShreddedFilter`.
+      // IS NULL / IS NOT NULL on the logical variant field are intentionally out of scope: "the
+      // extracted field is null" is not the same as "typed_value is null", so we must not conflate
+      // them.
       case sources.EqualTo(name, value) if canMakeShreddedFilterOn(name, value) =>
         makeShreddedFilter(name, (t, n) => makeEq.lift(t).map(_(n, value)))
       case sources.EqualNullSafe(name, value) if canMakeShreddedFilterOn(name, value) =>
@@ -1173,8 +1171,8 @@ class ParquetFilters(
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       // Refuse to push a negated predicate that references a shredded-variant path: not() of the
-      // sound `or(leaf, isNotNull(residual)...)` shape is rewritten into an unsound
-      // `and(..., eq(residual, null))` by parquet-mr (see `referencesShreddedName`).
+      // guarded shredded predicate is rewritten by parquet-mr into a form that can drop an
+      // all-fallback row group (see `referencesShreddedName`).
       case sources.Not(pred) if referencesShreddedName(pred) => None
       case sources.Not(pred) =>
         createFilterHelper(pred, canPartialPushDownConjuncts = false)

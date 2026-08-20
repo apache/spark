@@ -2431,7 +2431,8 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   // PushVariantIntoScan rewrites variant_get(v, '$.a', 'bigint') > 999 into a struct-field access
   // "v.`0`" > 999 where "0" carries VariantMetadata for path "$.a". ParquetFilters maps that
   // logical path to the physical shredded leaf v.typed_value.a.typed_value and, for soundness,
-  // OR-s an IS NOT NULL guard on every residual `value` column along the path.
+  // guards it so a row group is skipped only when the leaf cannot match AND every value for the
+  // path is provably in the leaf (see `makeShreddedFilter`).
   // ----------------------------------------------------------------------------------------------
 
   /** A variant-extraction StructField named by ordinal, carrying VariantMetadata for `path`. */

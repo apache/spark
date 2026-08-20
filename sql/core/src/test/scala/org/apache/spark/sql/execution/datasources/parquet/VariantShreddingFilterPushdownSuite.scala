@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -32,8 +33,8 @@ import org.apache.spark.util.AccumulatorContext
  * statistics. On the DSv1 path, PushVariantIntoScan rewrites
  * `variant_get(v, '$.a', 'bigint') > 999` into a struct-field access `v.`0` > 999`, and (when
  * `spark.sql.variant.shreddedPredicatePushdown.enabled` is true) ParquetFilters maps `v.`0`` to
- * the physical leaf and OR-s in an IS NOT NULL guard on every untyped residual `value` column
- * along the path.
+ * the physical leaf and guards it so a row group is skipped only when the leaf cannot match AND
+ * every value for the path is provably in the leaf (see `makeShreddedFilter`).
  *
  * Scope: the optimization fires on the DSv1 read path only. On the DSv2 path variant extraction is
  * pushed through the separate SupportsPushDownVariantExtractions mechanism, and the filter is never
@@ -301,28 +302,31 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     }
   }
 
-  test("multi-level $.a.b: fallback at an intermediate level is not dropped") {
+  test("multi-level $.a.b: nested residual fallback beyond the leaf's min/max is not dropped") {
     withTempDir { dir =>
-      // `a` shredded as struct<b bigint>. One row stores `a` as a plain number (not an object):
-      // the whole `a` subtree cannot be shredded, so `a` goes to the L1 residual
-      // (v.typed_value.a.value) with its typed_value NULL. The IS NOT NULL guard on that L1
-      // residual must prevent skipping a row group that contains it. Row 6 has a matching nested
-      // value so a leaf-only predicate would be tempted to skip.
+      // `a` shredded as struct<b bigint>. Rows 0..19 shred cleanly, so the nested leaf
+      // v.typed_value.a.typed_value.b.typed_value is min 0 / max 19. Row 20 stores `b` as a
+      // non-integral decimal the int64 leaf cannot hold, so it lands in
+      // v.typed_value.a.typed_value.b.value with the leaf NULL. `b > 999` matches only that row and
+      // the leaf min/max cannot match it, so only the guard keeps the row group -- this makes the
+      // nested leaf-level residual load-bearing (a leaf-only predicate would drop it).
       val jsonExpr =
-        "case when id = 5 then '{\"a\":9999}' " +
-        "when id = 6 then '{\"a\":{\"b\":5000}}' " +
-        "else '{\"a\":{\"b\":' || id || '}}' end"
-      writeShredded(dir, "a struct<b bigint>", jsonExpr, numRows = 20, blockSize = 1024 * 1024)
+        "case when id = 20 then '{\"a\":{\"b\":1500.5}}' else '{\"a\":{\"b\":' || id || '}}' end"
+      writeShredded(dir, "a struct<b bigint>", jsonExpr, numRows = 21, blockSize = 1024 * 1024)
 
       def read: DataFrame = spark.read.parquet(dir.getAbsolutePath)
-        .selectExpr("variant_get(v, '$.a.b', 'bigint') AS b")
+        .selectExpr("try_variant_get(v, '$.a.b', 'bigint') AS b")
         .where("b > 999")
-      val expected = baseline(read)
-      // Row 6 (b=5000) matches; rows 0..4,7..19 have b <= 19; row 5 has no `b` (a is a scalar).
-      assert(expected.contains(Row(5000L)), s"baseline should include the matching row: $expected")
+      assert(baseline(read) == Seq(Row(1500L)), "baseline should return the nested fallback row")
 
-      forEachReader { (_, _) =>
-        checkAnswer(read, expected)
+      forEachReader { (dsv1, vectorized) =>
+        checkAnswer(read, Seq(Row(1500L)))
+        if (dsv1 && vectorized) {
+          val all = spark.read.parquet(dir.getAbsolutePath)
+            .selectExpr("try_variant_get(v, '$.a.b', 'bigint') AS b")
+          assert(countRowGroupsRead(read) == countRowGroupsRead(all),
+            "Row group whose only match is a nested residual fallback must NOT be skipped")
+        }
       }
     }
   }
@@ -362,10 +366,11 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     }
   }
 
-  test("deferCastError=true: optimization does not fire but results are correct") {
-    // With deferCastError, strict variant_get is rewritten into UnwrapVariantCastError, which is
-    // not translated to a pushable filter -- so shredded pushdown silently does not fire. Results
-    // must still be correct (the filter is applied post-scan).
+  test("deferCastError=true: strict non-string cast does not fire; try_variant_get still does") {
+    // With deferCastError, a strict cast to a non-string, non-variant type is rewritten into
+    // UnwrapVariantCastError, which is not translated to a pushable filter -- so shredded pushdown
+    // does not fire for it (results still correct). try_variant_get (failOnError=false) and string
+    // targets are unaffected and still fire. Results must be correct in every combination.
     withTempDir { dir =>
       writeShredded(dir, "a bigint", "'{\"a\":' || id || '}'", numRows = 2000, blockSize = 512)
       Seq("true", "false").foreach { defer =>
@@ -374,14 +379,67 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
           SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> defer,
           SQLConf.VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED.key -> "true",
           SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+          SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
           SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> "true") {
           withClue(s"(deferCastError=$defer) ") {
-            val df = spark.read.parquet(dir.getAbsolutePath)
+            // Strict cast: correct either way (does not fire when defer=true).
+            val strict = spark.read.parquet(dir.getAbsolutePath)
               .selectExpr("variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
-            checkAnswer(df.orderBy("a"), (1000L to 1999L).map(Row(_)))
+            checkAnswer(strict.orderBy("a"), (1000L to 1999L).map(Row(_)))
+            // try_variant_get: unaffected by deferCastError and still skips a row group on DSv1.
+            val tryGet = spark.read.parquet(dir.getAbsolutePath)
+              .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
+            val all = spark.read.parquet(dir.getAbsolutePath)
+              .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a")
+            checkAnswer(tryGet.orderBy("a"), (1000L to 1999L).map(Row(_)))
+            assert(countRowGroupsRead(tryGet) < countRowGroupsRead(all),
+              "try_variant_get should still skip regardless of deferCastError")
           }
         }
       }
     }
+  }
+
+  test("strict variant_get preserves INVALID_VARIANT_CAST on a residual fallback (not empty)") {
+    // The worst failure mode: a thrown cast error silently becoming an empty result. `a` shredded
+    // as int; row 50 stores 3000000000, which overflows int32 so it lands in the residual with the
+    // leaf NULL (extraction type matches the leaf exactly, so the path is pushed). With
+    // deferCastError=false (default) the scan casts eagerly, so strict `variant_get(v,'$.a','int')`
+    // must raise INVALID_VARIANT_CAST -- a leaf-only push would drop the row group (leaf max 49)
+    // and return empty instead. The guard keeps the row group, so the error is preserved.
+    withTempDir { dir =>
+      val jsonExpr = "case when id = 50 then '{\"a\":3000000000}' else '{\"a\":' || id || '}' end"
+      writeShredded(dir, "a int", jsonExpr, numRows = 51, blockSize = 1024 * 1024)
+      Seq("parquet", "").foreach { useV1 =>
+        Seq(true, false).foreach { vectorized =>
+          withSQLConf(
+            SQLConf.USE_V1_SOURCE_LIST.key -> useV1,
+            SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "false",
+            SQLConf.VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED.key -> "true",
+            SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+            SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> "true") {
+            withClue(s"(useV1='$useV1', vectorized=$vectorized) ") {
+              val e = intercept[SparkException] {
+                spark.read.parquet(dir.getAbsolutePath)
+                  .selectExpr("variant_get(v, '$.a', 'int') AS a").where("a > 999").collect()
+              }
+              assert(findCause(e, "INVALID_VARIANT_CAST"),
+                s"Expected INVALID_VARIANT_CAST to be preserved, got: $e")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Walk an exception's cause chain for a Spark error condition (message substring).
+  private def findCause(e: Throwable, condition: String): Boolean = {
+    var cur: Throwable = e
+    while (cur != null) {
+      if (Option(cur.getMessage).exists(_.contains(condition))) return true
+      cur = cur.getCause
+    }
+    false
   }
 }
