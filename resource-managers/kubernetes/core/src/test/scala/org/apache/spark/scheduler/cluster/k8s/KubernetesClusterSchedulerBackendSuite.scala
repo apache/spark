@@ -496,4 +496,18 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     assert(id1 === id2, "applicationId() must return the same value on repeated calls")
     assert(id1.startsWith("spark-"), "generated app ID should have the spark- prefix")
   }
+
+  test("SPARK-58915: the executors can be held only with the direct pods allocator") {
+    assert(schedulerBackendUnderTest.supportsExecutorHold)
+    Seq("statefulset", "deployment", "com.example.CustomAllocator").foreach { allocator =>
+      sparkConf.set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, allocator)
+      try {
+        assert(!schedulerBackendUnderTest.supportsExecutorHold,
+          s"holding must not be supported with the $allocator allocator")
+      } finally {
+        sparkConf.remove(KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key)
+      }
+    }
+    assert(schedulerBackendUnderTest.supportsExecutorHold)
+  }
 }
