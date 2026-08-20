@@ -200,10 +200,10 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       input
         .select(
           monotonically_increasing_id().as("docId"),
-          col($(inputCol)).as("tokens"))
+          col($(inputCol)).as("doc"))
         .select(
           col("docId"),
-          explode(col("tokens")).as("word"))
+          explode(col("doc")).as("word"))
         .groupBy("docId", "word")
         .agg(count(lit(0)).as("wordCountInDoc"))
         .groupBy("word")
