@@ -75,7 +75,11 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand.apply"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.execution.command.CreateSQLFunctionCommand"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.apply")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.apply"),
+    ProblemFilters.exclude[MissingClassProblem](
+      "org.apache.spark.sql.catalyst.plans.logical.CreateUserDefinedFunction"),
+    ProblemFilters.exclude[MissingClassProblem](
+      "org.apache.spark.sql.catalyst.plans.logical.CreateUserDefinedFunction$")
   )
 
   // Exclude rules for 4.2.x from 4.1.0
