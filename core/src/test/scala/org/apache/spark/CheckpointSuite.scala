@@ -739,6 +739,92 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
         parameters = Map("path" -> rddPath.toString))
     }
   }
+
+  // SPARK-58883: truncated checkpoint directory (trailing part-* file deleted) should be
+  // detected when reading back via SparkContext.checkpointFile.
+  test("SPARK-58883: reading a truncated checkpoint directory throws an error") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      // Delete the last partition file; the remaining files are still contiguous so the
+      // old contiguity check would pass silently and return a 3-partition RDD.
+      val lastPartFile = new Path(checkpointPath, "part-00003")
+      assert(fs.exists(lastPartFile), "expected part-00003 to exist before deletion")
+      fs.delete(lastPartFile, false)
+
+      // Reading back should now throw because _num_partitions records the original count.
+      // The ReliableCheckpointRDD has no separate "original" RDD on the read path, so
+      // its own id is used for both RDD id fields.
+      val recoveredRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+      checkError(
+        exception = intercept[SparkException](recoveredRDD.partitions),
+        condition = "CHECKPOINT_RDD_PARTITION_COUNT_MISMATCH",
+        sqlState = Some("58030"),
+        parameters = Map(
+          "originalRDDId" -> recoveredRDD.id.toString,
+          "originalRDDLength" -> "4",
+          "newRDDId" -> recoveredRDD.id.toString,
+          "newRDDLength" -> "3"))
+    }
+  }
+
+  test("SPARK-58883: checkpoint directory without _num_partitions is read without error") {
+    // Backward compatibility: a checkpoint written before SPARK-58883 has no _num_partitions
+    // file. Removing it must not prevent the RDD from being read.
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      // Remove the metadata file to simulate a pre-SPARK-58883 checkpoint.
+      val countFile = new Path(checkpointPath, "_num_partitions")
+      fs.delete(countFile, false)
+
+      // Must recover normally with all 4 partitions and correct data.
+      val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+      assert(recovered.partitions.length === 4)
+      assert(recovered.collect().sorted === (1 to 20).toArray)
+    }
+  }
+
+  test("SPARK-58883: corrupted _num_partitions file is tolerated") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      // Overwrite _num_partitions with garbage to simulate a partial write or corruption.
+      val countFile = new Path(checkpointPath, "_num_partitions")
+      val out = fs.create(countFile, true)
+      out.write(Array[Byte](0xff.toByte, 0xfe.toByte))
+      out.close()
+
+      // A corrupted file must not prevent recovery (warning is logged; count is not checked).
+      val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+      assert(recovered.partitions.length === 4)
+      assert(recovered.collect().sorted === (1 to 20).toArray)
+    }
+  }
 }
 
 /**
