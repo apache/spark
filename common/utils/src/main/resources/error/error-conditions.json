@@ -8299,7 +8299,8 @@
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
-      "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
+      "Unrecognized SQL type - name: <typeName>, id: <jdbcType>.",
+      "To read this column, map it explicitly with the `customSchema` option, or register a custom `JdbcDialect` that handles this type."
     ],
     "sqlState" : "42704"
   },
@@ -8884,6 +8885,11 @@
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
           "Multiple bucket TRANSFORMs."
+        ]
+      },
+      "MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW" : {
+        "message" : [
+          "Cannot use Python user-defined functions of different types together over a single window: <functionList>. Use a separate window specification for each."
         ]
       },
       "MULTI_ACTION_ALTER" : {

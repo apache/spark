@@ -1,0 +1,11 @@
+source \ target	list<element: int64>	list<element: int8>	list<element: string>	map<string, int64>	map<string, int8>	struct<a: int64, b: string>	struct<a: int8, b: string>
+list<int64>:standard	[[1, 2], [3]]@list<element: int64>	[[1, 2], [3]]@list<element: int8>	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError
+list<int64>:overflow	[[300, 2], [3]]@list<element: int64>	ERR@ArrowInvalid	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError
+list<int64>:nullable	[[1, 2], None]@list<element: int64>	[[1, 2], None]@list<element: int8>	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError
+list<int64>:null-element	[[1, None], [3]]@list<element: int64>	[[1, None], [3]]@list<element: int8>	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError
+list<string>:standard	ERR@ArrowInvalid	ERR@ArrowInvalid	[['a', 'b'], ['c']]@list<element: string>	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError
+struct:standard	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowInvalid	ERR@ArrowInvalid	[[('a', 1), ('b', 'x')]]@struct<a: int64, b: string>	[[('a', 1), ('b', 'x')]]@struct<a: int8, b: string>
+struct:overflow	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowInvalid	ERR@ArrowInvalid	[[('a', 300), ('b', 'x')]]@struct<a: int64, b: string>	ERR@ArrowInvalid
+struct:nullable	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowInvalid	ERR@ArrowInvalid	[[('a', 1), ('b', 'x')], None]@struct<a: int64, b: string>	[[('a', 1), ('b', 'x')], None]@struct<a: int8, b: string>
+struct<int64>:standard	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	[[('a', 1), ('b', 2)]]@map<string, int64>	[[('a', 1), ('b', 2)]]@map<string, int8>	ERR@ArrowTypeError	ERR@ArrowTypeError
+struct<int64>:overflow	ERR@ArrowTypeError	ERR@ArrowTypeError	ERR@ArrowTypeError	[[('a', 300), ('b', 2)]]@map<string, int64>	ERR@ArrowInvalid	ERR@ArrowTypeError	ERR@ArrowInvalid

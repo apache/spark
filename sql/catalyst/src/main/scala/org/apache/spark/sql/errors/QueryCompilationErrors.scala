@@ -3029,6 +3029,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("windowExpressions" -> windowExpressions.toString()))
   }
 
+  def multiplePythonUDFTypesInWindowError(functionNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW",
+      messageParameters = Map("functionList" -> functionNames.map(toSQLId).mkString(", ")))
+  }
+
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
