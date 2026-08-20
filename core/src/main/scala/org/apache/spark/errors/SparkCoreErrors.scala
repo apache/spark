@@ -202,6 +202,19 @@ private[spark] object SparkCoreErrors {
     )
   }
 
+  def checkpointTruncatedDirectoryError(
+      checkpointDirPath: Path, expected: Int, found: Int): Throwable = {
+    new SparkException(
+      errorClass = "CHECKPOINT_TRUNCATED_DIRECTORY",
+      messageParameters = Map(
+        "path" -> s"$checkpointDirPath",
+        "expected" -> s"$expected",
+        "found" -> s"$found"
+      ),
+      cause = null
+    )
+  }
+
   def checkpointFailedToSaveError(task: Int, path: Path): Throwable = {
     new IOException("Checkpoint failed: failed to save output of task: " +
       s"$task and final output path does not exist: $path")
