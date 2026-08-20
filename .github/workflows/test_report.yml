@@ -44,8 +44,9 @@ jobs:
     - name: Publish test report
       uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2
       with:
-        check_name: Report test results
+        name: Report test results
         reporter: java-junit
         token: ${{ secrets.GITHUB_TOKEN }}
         path: "**/target/test-reports/*.xml"
+        use-actions-summary: false
         fail-on-empty: false
