@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   AggregateWindowFunction,
   CurrentRow,
   FrameLessOffsetWindowFunction,
-  PythonAggregate,
   RangeFrame,
   RankLike,
   RowFrame,
@@ -163,15 +162,6 @@ object WindowResolution {
         agg.failAnalysis(
           errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
           messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction))
-        )
-      case AggregateExpression(_: PythonAggregate, _, _, _, _) =>
-        // The incremental Python aggregator has a dedicated two-stage physical operator and is not
-        // supported as a window function. Reject it here with a clear analysis error, rather than
-        // letting it be misclassified as a SQL aggregate (`WindowFunctionType.functionType` only
-        // routes `PythonUDAF` to the Python path) and fail with an internal error at execution.
-        windowExpression.failAnalysis(
-          errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
-          messageParameters = Map("sqlExpr" -> toSQLExpr(windowExpression.windowFunction))
         )
       case _: AggregateExpression | _: FrameLessOffsetWindowFunction | _: AggregateWindowFunction =>
       case other =>

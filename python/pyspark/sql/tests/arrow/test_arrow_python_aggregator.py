@@ -36,7 +36,8 @@ from pyspark.testing.utils import (
 
 
 if have_pyarrow:
-    from pyspark.sql.aggregator import Aggregator, udaf
+    from pyspark.sql.aggregator import Aggregator
+    from pyspark.sql.functions import udaf
 
     class Mean(Aggregator):
         @property
@@ -280,12 +281,92 @@ class ArrowPythonAggregatorTestsMixin:
         with self.assertRaises(AnalysisException):
             df.groupBy("k").pivot("p").agg(udaf(Mean())(sf.col("v"))).collect()
 
-    def test_window_rejected(self):
-        # The incremental aggregator has no window operator; using it over a window must fail
-        # analysis rather than crash with an internal error at execution.
+    def test_window_unbounded(self):
+        # Unbounded partition frame: every row gets its whole group's aggregate. Cross-checked
+        # against the equivalent SQL window aggregate.
         df = self._data()
-        with self.assertRaises(AnalysisException):
-            df.select(udaf(Mean())(sf.col("v")).over(Window.partitionBy("k"))).collect()
+        w = Window.partitionBy("k")
+        result = df.withColumn("m", udaf(Mean())(sf.col("v")).over(w)).orderBy("k", "v").collect()
+        expected = df.withColumn("m", sf.avg("v").over(w)).orderBy("k", "v").collect()
+        self.assertEqual(len(result), len(expected))
+        for r, e in zip(result, expected):
+            self.assertAlmostEqual(r["m"], e["m"], places=6)
+
+    def test_window_running_frame(self):
+        # Ordered, growing frame (unbounded preceding .. current row): a running aggregate that
+        # exercises the per-row bounded-frame path in the worker.
+        df = self._data()
+        w = (
+            Window.partitionBy("k")
+            .orderBy("v")
+            .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+        )
+        result = df.withColumn("m", udaf(Mean())(sf.col("v")).over(w)).orderBy("k", "v").collect()
+        expected = df.withColumn("m", sf.avg("v").over(w)).orderBy("k", "v").collect()
+        self.assertEqual(len(result), len(expected))
+        for r, e in zip(result, expected):
+            self.assertAlmostEqual(r["m"], e["m"], places=6)
+
+    def test_window_sliding_frame(self):
+        # Sliding frame (1 preceding .. 1 following) with a custom single-field buffer aggregator.
+        df = self._data()
+        w = Window.partitionBy("k").orderBy("v").rowsBetween(-1, 1)
+        result = (
+            df.withColumn("s", udaf(SumSquares())(sf.col("v")).over(w)).orderBy("k", "v").collect()
+        )
+        expected = (
+            df.withColumn("s", sf.sum(sf.col("v") * sf.col("v")).over(w))
+            .orderBy("k", "v")
+            .collect()
+        )
+        self.assertEqual(len(result), len(expected))
+        for r, e in zip(result, expected):
+            self.assertAlmostEqual(r["s"], e["s"], places=4)
+
+    def test_window_bounded_preceding_frame(self):
+        # A fixed number of preceding rows exercises both branches of the running-buffer
+        # optimization: the lower bound is clamped to 0 for the first rows (running buffer is
+        # extended in place) and then advances (each frame is refolded from zero).
+        df = self._data()
+        w = Window.partitionBy("k").orderBy("v").rowsBetween(-3, Window.currentRow)
+        result = df.withColumn("m", udaf(Mean())(sf.col("v")).over(w)).orderBy("k", "v").collect()
+        expected = df.withColumn("m", sf.avg("v").over(w)).orderBy("k", "v").collect()
+        self.assertEqual(len(result), len(expected))
+        for r, e in zip(result, expected):
+            self.assertAlmostEqual(r["m"], e["m"], places=6)
+
+    def test_window_decimal_output(self):
+        # A non-trivial (Decimal) output type over a window, exercising the explicit
+        # ``pa.array(..., type=result_type)`` typing on the window path.
+        df = self._data()
+        w = Window.partitionBy("k")
+        result = (
+            df.withColumn("s", udaf(DecimalSum())(sf.col("v")).over(w)).orderBy("k", "v").collect()
+        )
+        expected = df.withColumn("s", sf.sum("v").over(w)).orderBy("k", "v").collect()
+        self.assertEqual(len(result), len(expected))
+        for r, e in zip(result, expected):
+            self.assertIsInstance(r["s"], Decimal)
+            self.assertAlmostEqual(float(r["s"]), e["s"], places=4)
+
+    def test_window_mixed_python_udf_rejected(self):
+        # An incremental aggregator and a grouped-agg pandas UDF over the same window are both
+        # Python window functions but use different eval types, so they cannot share one operator.
+        # This must raise a clear analysis error rather than an internal assertion.
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        @pandas_udf("double", PandasUDFType.GROUPED_AGG)
+        def pandas_mean(v):
+            return v.mean()
+
+        df = self._data()
+        w = Window.partitionBy("k")
+        with self.assertRaises(AnalysisException) as ctx:
+            df.select(udaf(Mean())(sf.col("v")).over(w), pandas_mean(sf.col("v")).over(w)).collect()
+        self.assertEqual(
+            ctx.exception.getCondition(),
+            "UNSUPPORTED_FEATURE.MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW",
+        )
 
     def test_mixed_with_other_aggregate_rejected(self):
         # An incremental aggregator mixed with another aggregate in one Aggregate is unsupported;
