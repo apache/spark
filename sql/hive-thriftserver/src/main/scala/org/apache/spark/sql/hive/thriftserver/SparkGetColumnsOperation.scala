@@ -126,7 +126,7 @@ private[hive] class SparkGetColumnsOperation(
   }
 
   /**
-   * For boolean, numeric and datetime types, it returns the default size of its catalyst type.
+   * For boolean, numeric and datetime types, this method returns the input type's default size.
    * For CHAR(n) and VARCHAR(n), it returns the declared character length n.
    * For struct type, when its elements are fixed-size, the summation of all element sizes will be
    * returned.
