@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.LanguageSQL
+import org.apache.spark.sql.catalyst.plans.logical.CreateUserDefinedFunction
 import org.apache.spark.sql.execution.SparkSqlParser
 
 class CreateSQLFunctionParserSuite extends AnalysisTest {
@@ -47,9 +48,9 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       containsSQL: Option[Boolean] = None,
       isTableFunc: Boolean = false,
       ignoreIfExists: Boolean = false,
-      replace: Boolean = false): CreateUserDefinedFunctionCommand = {
+      replace: Boolean = false): CreateUserDefinedFunction = {
     // scalastyle:on argcount
-    CreateUserDefinedFunctionCommand(
+    CreateUserDefinedFunction(
       UnresolvedIdentifier(nameParts),
       inputParamText = inputParamText,
       returnTypeText = returnTypeText,
@@ -61,7 +62,6 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       containsSQL = containsSQL,
       language = LanguageSQL,
       isTableFunc = isTableFunc,
-      isTemp = false,
       ignoreIfExists = ignoreIfExists,
       replace = replace)
   }
