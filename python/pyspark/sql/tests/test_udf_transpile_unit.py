@@ -1670,6 +1670,53 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertEqual(6, lam(5))
         self.assertEqual(self._vals(lam, LongType(), "a long", [(5,)]), [6])
 
+    def test_udf_transpile_locates_a_lambda_with_no_column_positions(self):
+        # A lambda whose body is a bare constant (``lambda x: 42``) compiles to only
+        # a synthetic ``RESUME`` plus a ``RETURN_CONST``, and some CPython builds
+        # report ``(0, 0)`` columns for both. That is not hypothetical: it is why
+        # ``lambda x: 42`` silently stopped lowering on Spark's CI while lowering
+        # fine locally, where ``RETURN_CONST`` does carry columns.
+        #
+        # Line-only bounds are enough, because ``_verifies`` recompiles and compares
+        # a code signature -- so refusing here bought no safety and cost every
+        # constant-bodied lambda its lowering. ``co_positions`` cannot be forged on a
+        # real code object, so drive the two helpers directly with a stub; the
+        # end-to-end constant case is ``test_udf_transpile_lowers_operators``.
+        import ast
+
+        from pyspark.sql.transpile import _instruction_extent, _node_encloses
+
+        class Positions:
+            def __init__(self, positions):
+                self._positions = positions
+
+            def co_positions(self):
+                return iter(self._positions)
+
+        # Columns present: bounds stay column-precise, and the synthetic (0, 0)
+        # entry is still ignored rather than dragging the start back to column 0.
+        self.assertEqual(
+            ((7, 21), (7, 23)),
+            _instruction_extent(Positions([(7, 7, 0, 0), (7, 7, 21, 23)])),
+        )
+        # Columns unavailable everywhere: degrade to lines instead of giving up.
+        line_only = _instruction_extent(Positions([(7, 7, 0, 0), (7, 7, 0, 0)]))
+        self.assertEqual(((7, None), (7, None)), line_only)
+        # ``None`` is now reserved for a code object with no positions at all, which
+        # is the real ``-X no_debug_ranges`` case the caller reports as such.
+        self.assertIsNone(_instruction_extent(Positions([(None, None, None, None)])))
+
+        # A lambda starting mid-line must still enclose line-only bounds; comparing
+        # columns would reject it, since it does not begin at column 0.
+        (node,) = [
+            n for n in ast.walk(ast.parse("value = lambda x: 42\n")) if isinstance(n, ast.Lambda)
+        ]
+        self.assertEqual(1, node.lineno)
+        self.assertGreater(node.col_offset, 0)
+        self.assertTrue(_node_encloses(node, ((1, None), (1, None))))
+        # A different line must not match, so the fallback still narrows by line.
+        self.assertFalse(_node_encloses(node, ((2, None), (2, None))))
+
     def test_udf_transpile_imported_module_call_does_not_verify_yet(self):
         # Pins a KNOWN LIMITATION so the future ``ast.Call`` work trips over it
         # instead of silently losing lowering. Verification compares raw
