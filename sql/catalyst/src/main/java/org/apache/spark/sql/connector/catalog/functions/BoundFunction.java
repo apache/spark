@@ -93,11 +93,11 @@ public interface BoundFunction extends Function {
    * <p>
    * Two functions that partition data differently must not return the same name; Spark may
    * otherwise treat unrelated data as co-partitioned. An override should return a stable name
-   * across {@code bind} calls, since Spark binds a function afresh per report and has only this
-   * name to relate two of them by. Equal functions must share the same canonical name; the reverse
-   * is not true, as this name is deliberately coarser and says nothing about the rest of a
-   * function's state. For whether two transform expressions are the same expression, see
-   * {@link #equals(Object)}.
+   * across {@code bind} calls, since Spark may bind a function multiple times and has only this
+   * name to relate two bound instances by. Equal functions must share the same canonical name;
+   * the reverse is not true, as this name is deliberately coarser and says nothing about the
+   * rest of a function's state. For whether two transform expressions are the same expression,
+   * see {@link #equals(Object)}.
    *
    * @return a canonical name for this function
    */
@@ -112,9 +112,9 @@ public interface BoundFunction extends Function {
   /**
    * Implementations SHOULD override {@link Object#equals(Object)} and {@link Object#hashCode()}.
    * <p>
-   * Spark binds a function afresh every time it converts a partitioning or ordering reported by a
-   * source, so two reports of one transform hold two bound instances. Without a semantic
-   * {@code equals} it cannot tell they are the same, and misses optimizations such as:
+   * Spark may bind a function multiple times, so the same transform can be represented by two
+   * different bound instances. Without a semantic {@code equals} it cannot tell they are the
+   * same, and misses optimizations such as:
    * <ul>
    *   <li>keeping a union's keyed partitioning</li>
    *   <li>retaining a reported ordering that matches the partitioning</li>
