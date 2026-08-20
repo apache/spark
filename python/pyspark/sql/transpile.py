@@ -40,6 +40,7 @@ import ast
 import contextlib
 import functools
 import os
+import sys
 import threading
 import tokenize
 import warnings
@@ -979,7 +980,7 @@ def _defaults_stripped(node: ast.Lambda) -> ast.Lambda:
     """
     args = node.args
     bare_args = ast.arguments(
-        posonlyargs=list(getattr(args, "posonlyargs", [])),
+        posonlyargs=list(args.posonlyargs),
         args=list(args.args),
         vararg=args.vararg,
         kwonlyargs=list(args.kwonlyargs),
@@ -1060,19 +1061,27 @@ def _syntax_warnings_suppressed() -> Iterator[None]:
     file the user never wrote; under ``-W error`` / ``PYTHONWARNINGS=error`` it
     raises instead, disabling lowering for the whole module.
 
-    Only ``SyntaxWarning`` and ``DeprecationWarning`` are filtered -- measured to be
-    the only categories ``ast.parse``/``compile`` raise on 3.11-3.13; 3.14 is in
-    Spark's CI matrix but was not checked. The narrowing bounds the blast radius, it
-    does not remove it: a filter is process-global, so a concurrent thread's own
-    ``DeprecationWarning`` is dropped for the duration too (measured). Keep the
-    wrapped region to the parse/compile call itself -- the lock is held for its
-    duration, so file I/O inside it would serialize concurrent ``udf()`` construction
-    behind the read as well.
+    A filter is process-global, so anything filtered here is also dropped for every
+    other thread for the duration -- including a warning the user configured
+    ``-W error`` to raise on. That makes the filter set worth minimizing rather than
+    merely narrowing. Measured on 3.11/3.12/3.13/3.14, ``ast.parse``/``compile``
+    raise ``SyntaxWarning`` only, EXCEPT on 3.11, where an invalid string or bytes
+    escape is a ``DeprecationWarning`` instead (it became ``SyntaxWarning`` in 3.12).
+    So ``DeprecationWarning`` is suppressed only on 3.11, where it is load-bearing,
+    rather than on the three versions where it is pure blast radius.
+
+    Keep the wrapped region to the parse/compile call itself. The lock is held for
+    its duration, so file I/O inside it would serialize concurrent ``udf()``
+    construction behind the read. Note the far more expensive parse IS inside it:
+    that is tolerable only because ``ast.parse`` never releases the GIL, so on a
+    GIL build the lock costs nothing that the interpreter was not already
+    serializing, while a read would have released it.
     """
     with _WARNINGS_LOCK:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=SyntaxWarning)
-            warnings.filterwarnings("ignore", category=DeprecationWarning)
+            if sys.version_info < (3, 12):
+                warnings.filterwarnings("ignore", category=DeprecationWarning)
             yield
 
 
@@ -1174,14 +1183,19 @@ def _parse_file_lambdas(path: str, _mtime_ns: int, _size: int) -> Tuple[ast.Lamb
     staleness safe, so this key is an optimization, not the correctness boundary.
 
     The read is fresh from disk and stays OUTSIDE the warning-suppression lock;
-    ``tokenize.open`` respects the source's encoding cookie. Returns an empty tuple
-    when the file cannot be read or does not parse.
+    ``tokenize.open`` respects the source's encoding cookie.
+
+    A read failure PROPAGATES to the caller rather than returning ``()`` here.
+    ``lru_cache`` does not cache exceptions, so a TRANSIENT failure is retried on
+    the next ``udf()``; caching ``()`` would strand it, because none of the things
+    that cause one -- a momentary ACL change, an NFS or FUSE stall, EMFILE under a
+    wide thread pool -- touch mtime or size, so the freshness key never invalidates
+    and lowering stays off for that file for the life of the process. A PARSE
+    failure is still cached as ``()``, which is safe because it self-heals: fixing
+    the source changes size or mtime, and so the key.
     """
-    try:
-        with tokenize.open(path) as handle:
-            source = handle.read()
-    except Exception:
-        return ()
+    with tokenize.open(path) as handle:
+        source = handle.read()
     return _lambdas_in_text(source)
 
 
@@ -1214,7 +1228,12 @@ def _file_lambda_candidates(target: CodeType) -> Sequence[ast.Lambda]:
         except Exception:
             return ()
         return _parse_text_lambdas("".join(lines))
-    return _parse_file_lambdas(target.co_filename, stat.st_mtime_ns, stat.st_size)
+    try:
+        return _parse_file_lambdas(target.co_filename, stat.st_mtime_ns, stat.st_size)
+    except Exception:
+        # A read that failed after ``os.stat`` succeeded. Deliberately not cached --
+        # see ``_parse_file_lambdas``.
+        return ()
 
 
 def _resolve_lambda(
@@ -1340,10 +1359,14 @@ def _lambda_to_function_def(node: ast.Lambda) -> ast.FunctionDef:
     Lets the rest of the transpiler treat lambdas and ``def`` uniformly.
 
     ``node`` comes from a process-lifetime cache shared by every later ``udf()``
-    call on that file, so nothing here may mutate it or its children: the
-    synthesized ``Return`` gets its positions copied explicitly rather than via
-    ``ast.fix_missing_locations``, which would write into the shared body subtree.
-    The wrapper only ALIASES ``args`` and ``body``, which lowering reads.
+    call on that file, so nothing here may mutate it or its children. The wrapper
+    only ALIASES ``args`` and ``body``, which lowering reads.
+
+    Positions are copied onto the synthesized nodes explicitly. ``ast.fix_missing``
+    ``_locations`` would also work today -- it only writes where ``lineno`` is
+    absent, and every parser-produced node in the cached subtree has one -- but it
+    walks the shared subtree to find that out, so it is one added synthesized child
+    away from writing into it. Copying explicitly touches only the nodes built here.
     """
     returned = ast.Return(value=node.body)
     ast.copy_location(returned, node.body)
@@ -1477,9 +1500,12 @@ def _transpile_func(
         extraction_errors: List[str] = []
         function_ast = _get_function_from_ast(func, extraction_errors)
         if function_ast is None:
+            # ``_get_function_from_ast`` appends exactly one reason on every path
+            # that returns ``None``, so this list is never empty and needs no
+            # catch-all filler.
             return (
                 [],
-                extraction_errors or ["Error extracting function body from ast, cannot transpile"],
+                extraction_errors,
                 [],
                 [],
             )
@@ -1497,7 +1523,7 @@ def _transpile_func(
             or fn_args.kwonlyargs
             or fn_args.vararg is not None
             or fn_args.kwarg is not None
-            or getattr(fn_args, "posonlyargs", [])
+            or fn_args.posonlyargs
         ):
             return (
                 [],

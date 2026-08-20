@@ -1717,6 +1717,56 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # A different line must not match, so the fallback still narrows by line.
         self.assertFalse(_node_encloses(node, ((2, None), (2, None))))
 
+    def test_udf_transpile_transient_read_failure_is_not_cached(self):
+        # ``_parse_file_lambdas`` is keyed on (path, mtime_ns, size). A read failure
+        # must NOT be cached under that key: nothing that causes a transient one -- a
+        # momentary ACL change, an NFS stall, EMFILE under a wide thread pool --
+        # touches mtime or size, so the key never invalidates and lowering would stay
+        # off for that file for the life of the process. A PARSE failure may be
+        # cached, because fixing the source changes the key.
+        import importlib.util
+        import os
+        import tempfile
+
+        from pyspark.sql.transpile import _get_function_from_ast, _parse_file_lambdas
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "transient_mod.py")
+            with open(path, "w") as handle:
+                handle.write("f = lambda x: x + 1\n")
+            spec = importlib.util.spec_from_file_location("transient_mod", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            before = os.stat(path)
+
+            _parse_file_lambdas.cache_clear()
+            self.assertIsNotNone(_get_function_from_ast(module.f))
+
+            # Clear first, or the successful parse above is simply served from the
+            # cache and the read that matters never happens.
+            _parse_file_lambdas.cache_clear()
+            os.chmod(path, 0o000)
+            try:
+                unreadable = _get_function_from_ast(module.f)
+            finally:
+                os.chmod(path, 0o644)
+            if unreadable is not None:
+                # Running as a user that ignores the mode bits (e.g. root); the
+                # scenario cannot be provoked, so assert nothing about it.
+                self.skipTest("file mode does not restrict reads for this user")
+
+            after = os.stat(path)
+            self.assertEqual(
+                (before.st_mtime_ns, before.st_size),
+                (after.st_mtime_ns, after.st_size),
+                "chmod must not change the freshness key, or this proves nothing",
+            )
+            self.assertIsNotNone(
+                _get_function_from_ast(module.f),
+                "a transient read failure was cached, so lowering stayed off for the "
+                "file even after it became readable again under an unchanged key",
+            )
+
     def test_udf_transpile_imported_module_call_does_not_verify_yet(self):
         # Pins a KNOWN LIMITATION so the future ``ast.Call`` work trips over it
         # instead of silently losing lowering. Verification compares raw
