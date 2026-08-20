@@ -70,7 +70,12 @@ object MimaExcludes {
     // [SPARK-57987] Add desc field to the SQL REST API Node case class
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$"),
+    // [SPARK-50698][SQL] Refactor CreateUserDefinedFunctionCommand to extend from UnaryRunnableCommand
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand.apply"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.execution.command.CreateSQLFunctionCommand"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.apply")
   )
 
   // Exclude rules for 4.2.x from 4.1.0
