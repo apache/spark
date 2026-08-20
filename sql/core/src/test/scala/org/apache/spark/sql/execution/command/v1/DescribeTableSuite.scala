@@ -904,8 +904,6 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         assert(!description.exists(_.getString(0) == "# Partition Information"))
       }
 
-      // The JSON output never consulted `partitionSchema` for this case, so it keeps reporting
-      // the declared partition columns as before.
       val jsonValue = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl AS JSON").head().getString(0)
       val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
       assert(parsedOutput.partition_columns === Some(List("declared_part")))
