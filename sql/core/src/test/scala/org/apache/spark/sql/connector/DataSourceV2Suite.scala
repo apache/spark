@@ -29,11 +29,15 @@ import test.org.apache.spark.sql.connector._
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{
-  AttributeReference, Expression => CatalystExpression, GreaterThan => CatalystGreaterThan,
-  LessThan => CatalystLessThan, Literal => CatalystLiteral, ScalarSubquery}
+  AttributeReference, BindReferences, Expression => CatalystExpression,
+  GreaterThan => CatalystGreaterThan, LessThan => CatalystLessThan,
+  Literal => CatalystLiteral, Predicate => CatalystPredicate, ScalarSubquery}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter => LogicalFilter, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
@@ -43,7 +47,7 @@ import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
-import org.apache.spark.sql.execution.SortExec
+import org.apache.spark.sql.execution.{FilterExec, SortExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{
   BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, PushedDownOperators,
@@ -1207,6 +1211,11 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  private def containsFilter(condition: CatalystExpression, filter: String): Boolean = {
+    val expected = CatalystSqlParser.parseExpression(filter).sql
+    condition.exists(_.sql == expected)
+  }
+
   private def hasJLtNeg5(condition: CatalystExpression): Boolean = {
     condition.exists {
       case CatalystLessThan(attr: AttributeReference, CatalystLiteral(value: Int, _)) =>
@@ -1656,6 +1665,55 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "non-deterministic filter should be retained as a post-scan Filter")
   }
 
+  test("additional Catalyst filters remain in a Spark-side Filter") {
+    val additionalFilter = "i > 2"
+    val df = spark.read
+      .format(classOf[CatalystFilterDataSourceV2].getName)
+      .option("additionalFilter", additionalFilter)
+      .load()
+    val query = df.filter($"i" > -1)
+
+    checkAnswer(query, (3 until 10).map(i => Row(i, -i)))
+    val filters = query.queryExecution.optimizedPlan.collect {
+      case filter: LogicalFilter => filter.condition
+    }
+    assert(filters.exists(containsFilter(_, additionalFilter)),
+      s"additional filter $additionalFilter should remain in the Spark plan:\n" +
+        query.queryExecution.optimizedPlan)
+    val execFilters = query.queryExecution.executedPlan.collect {
+      case filter: FilterExec => filter.condition
+    }
+    assert(execFilters.exists(containsFilter(_, additionalFilter)),
+      s"unpushed additional filter $additionalFilter should remain in FilterExec:\n" +
+        query.queryExecution.executedPlan)
+  }
+
+  test("fully pushed additional Catalyst filters stay in Filter but not FilterExec") {
+    val additionalFilter = "i > 2"
+    val df = spark.read
+      .format(classOf[CatalystFilterDataSourceV2].getName)
+      .option("additionalFilter", additionalFilter)
+      .option("pushAdditionalFilter", "true")
+      .load()
+    val query = df.filter($"i" > -1)
+
+    checkAnswer(query, (3 until 10).map(i => Row(i, -i)))
+    val filters = query.queryExecution.optimizedPlan.collect {
+      case filter: LogicalFilter => filter.condition
+    }
+    assert(filters.exists(containsFilter(_, additionalFilter)),
+      s"additional filter $additionalFilter should remain in the logical Filter:\n" +
+        query.queryExecution.optimizedPlan)
+    assert(getScanRelation(query).pushedFilters.exists(containsFilter(_, additionalFilter)),
+      "fully pushed additional filter should be recorded on the scan relation")
+    val execFilters = query.queryExecution.executedPlan.collect {
+      case filter: FilterExec => filter.condition
+    }
+    assert(!execFilters.exists(containsFilter(_, additionalFilter)),
+      s"fully pushed additional filter $additionalFilter should be dropped from FilterExec:\n" +
+        query.queryExecution.executedPlan)
+  }
+
   test("SPARK-58207: V2 filter pushdown skips non-deterministic filters") {
     val df = spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
     // i > 3 is deterministic and pushable; rand() > 0.5 is non-deterministic. rand() translates
@@ -1744,6 +1802,26 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 }
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition
+
+case class ValuesInputPartition(values: Seq[Int]) extends InputPartition
+
+object ValuesReaderFactory extends PartitionReaderFactory {
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val ValuesInputPartition(values) = partition
+    new PartitionReader[InternalRow] {
+      private var index = -1
+
+      override def next(): Boolean = {
+        index += 1
+        index < values.length
+      }
+
+      override def get(): InternalRow = InternalRow(values(index), -values(index))
+
+      override def close(): Unit = {}
+    }
+  }
+}
 
 object SimpleReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
@@ -1880,26 +1958,66 @@ class CatalystFilterDataSourceV2 extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new CatalystFilterScanBuilder()
+      new CatalystFilterScanBuilder(options)
     }
   }
 }
 
-class CatalystFilterScanBuilder extends SimpleScanBuilder
+class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends SimpleScanBuilder
   with SupportsPushDownCatalystFilters {
+
+  private var filters = Seq.empty[CatalystExpression]
+  // The additional filter is supplied by the test as SQL. Column references must be
+  // AttributeReference, so resolve the parsed names against the source schema.
+  private val additionalFilter = Option(options.get("additionalFilter")).map { sql =>
+    CatalystSqlParser.parseExpression(sql).transformUp {
+      case u: UnresolvedAttribute =>
+        val field = TestingV2Source.schema(u.name)
+        AttributeReference(field.name, field.dataType)()
+    }
+  }
+  private val pushesAdditionalFilter = options.getBoolean("pushAdditionalFilter", false)
 
   override def pushFilters(filters: Seq[CatalystExpression]): Seq[CatalystExpression] = {
     if (filters.exists(!_.deterministic)) {
       throw new IllegalArgumentException(
         s"Non-deterministic filters should not be pushed: ${filters.mkString(", ")}")
     }
+    this.filters = filters
     Nil
   }
+
+  override def fullyPushedFilters: Seq[CatalystExpression] = {
+    filters ++ (if (pushesAdditionalFilter) additionalFilter.toSeq else Nil)
+  }
+
+  override def additionalCatalystFilters: Seq[CatalystExpression] = additionalFilter.toSeq
 
   override def pushedFilters: Array[Predicate] = Array.empty
 
   override def planInputPartitions(): Array[InputPartition] = {
-    throw new IllegalArgumentException("planInputPartitions must not be called")
+    // A filter reported as fully pushed must actually be applied by the source, since Spark
+    // stops evaluating it.
+    additionalFilter.filter(_ => pushesAdditionalFilter) match {
+      case Some(filter) =>
+        val attrs = DataTypeUtils.toAttributes(readSchema())
+        val bound = filter.transformUp {
+          case attr: AttributeReference =>
+            attrs.find(_.name == attr.name).getOrElse(
+              throw new IllegalArgumentException(s"Unknown column: ${attr.name}"))
+        }
+        val predicate = CatalystPredicate.createInterpreted(
+          BindReferences.bindReference(bound, attrs))
+        Array(ValuesInputPartition((0 until 10).filter { i =>
+          predicate.eval(InternalRow(i, -i))
+        }))
+      case None =>
+        Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
+    }
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = {
+    if (pushesAdditionalFilter) ValuesReaderFactory else SimpleReaderFactory
   }
 }
 
