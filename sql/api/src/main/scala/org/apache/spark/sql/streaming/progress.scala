@@ -60,13 +60,14 @@ import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
  * @param memoryUsedBytes
  *   Memory used, in bytes, by the operator's state store.
  * @param numRowsDroppedByWatermark
- *   Number of input rows dropped because they were later than the watermark.
+ *   Number of input rows dropped because their event time was older than the watermark.
  * @param numShufflePartitions
  *   Number of shuffle partitions the operator ran with.
  * @param numStateStoreInstances
  *   Number of state store instances backing the operator.
  * @param customMetrics
- *   State store implementation specific metrics, keyed by metric name.
+ *   Custom metrics specific to the stateful operator or state store implementation, keyed by
+ *   metric name.
  */
 @Evolving
 class StateOperatorProgress private[spark] (
