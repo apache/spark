@@ -455,6 +455,7 @@ Aggregate Functions
     bit_xor
     bitmap_construct_agg
     bitmap_or_agg
+    bitmap_xor_agg
     bool_and
     bool_or
     collect_list
@@ -773,6 +774,7 @@ UDF, UDTF and UDT
     arrow_udtf
     call_udf
     pandas_udf
+    udaf
     udf
     udtf
     unwrap_udt

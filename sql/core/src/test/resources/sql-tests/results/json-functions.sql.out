@@ -1546,3 +1546,179 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "json_value('{}', '$.x' RETURNING INT DEFAULT array(1) ON EMPTY)"
   } ]
 }
+
+
+-- !query
+select json_exists('{"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}', '$.addr.city')
+-- !query schema
+struct<JSON_EXISTS({"id":7,"addr":{"city":"NYC"},"score":null,"tags":["x","y"]}, '$.addr.city'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"score":null}', '$.score')
+-- !query schema
+struct<JSON_EXISTS({"score":null}, '$.score'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.addr.zip')
+-- !query schema
+struct<JSON_EXISTS({"addr":{"city":"NYC"}}, '$.addr.zip'):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.addr')
+-- !query schema
+struct<JSON_EXISTS({"addr":{"city":"NYC"}}, '$.addr'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"tags":["x","y"]}', '$.tags[0]')
+-- !query schema
+struct<JSON_EXISTS({"tags":["x","y"]}, '$.tags[0]'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists(cast(null as string), '$.a')
+-- !query schema
+struct<JSON_EXISTS(CAST(NULL AS STRING), '$.a'):boolean>
+-- !query output
+NULL
+
+
+-- !query
+select json_exists('not json', '$.a')
+-- !query schema
+struct<JSON_EXISTS(not json, '$.a'):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_exists('not json', '$.a' TRUE ON ERROR)
+-- !query schema
+struct<JSON_EXISTS(not json, '$.a' TRUE ON ERROR):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('not json', '$.a' FALSE ON ERROR)
+-- !query schema
+struct<JSON_EXISTS(not json, '$.a'):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_exists('not json', '$.a' UNKNOWN ON ERROR)
+-- !query schema
+struct<JSON_EXISTS(not json, '$.a' UNKNOWN ON ERROR):boolean>
+-- !query output
+NULL
+
+
+-- !query
+select json_exists('not json', '$.a' ERROR ON ERROR)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_EXISTS_ON_ERROR",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_exists`",
+    "path" : "'$.a'"
+  }
+}
+
+
+-- !query
+select json_exists('{"a":[1,2]}', '$.a[*]')
+-- !query schema
+struct<JSON_EXISTS({"a":[1,2]}, '$.a[*]'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"a":[]}', '$.a[*]')
+-- !query schema
+struct<JSON_EXISTS({"a":[]}, '$.a[*]'):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_exists('{"a":5}', '$.a[*]')
+-- !query schema
+struct<JSON_EXISTS({"a":5}, '$.a[*]'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"a":[{"b":1},{"c":2}]}', '$.a[*].b')
+-- !query schema
+struct<JSON_EXISTS({"a":[{"b":1},{"c":2}]}, '$.a[*].b'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"a":[1,2]}', '$.a[5]')
+-- !query schema
+struct<JSON_EXISTS({"a":[1,2]}, '$.a[5]'):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_exists('{"a":[{"b":1},{"b":2}]}', '$.a.b')
+-- !query schema
+struct<JSON_EXISTS({"a":[{"b":1},{"b":2}]}, '$.a.b'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"addr":{"city":"NYC"}}', '$.*')
+-- !query schema
+struct<JSON_EXISTS({"addr":{"city":"NYC"}}, '$.*'):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_exists('{"a":1}', '$[')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_PATH",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_exists`",
+    "path" : "'$['",
+    "sqlExpr" : "\"JSON_EXISTS({\"a\":1}, '$[')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "json_exists('{\"a\":1}', '$[')"
+  } ]
+}

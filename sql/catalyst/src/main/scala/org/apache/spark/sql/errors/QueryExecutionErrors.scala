@@ -1648,6 +1648,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = cause)
   }
 
+  def jsonExistsOnError(functionName: String, path: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_EXISTS_ON_ERROR",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)))
+  }
+
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2179",

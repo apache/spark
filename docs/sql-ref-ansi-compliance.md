@@ -618,6 +618,7 @@ Below is a list of all the keywords in Spark SQL.
 |ITERATE|non-reserved|non-reserved|non-reserved|
 |JOIN|reserved|strict-non-reserved|reserved|
 |JSON|non-reserved|non-reserved|non-reserved|
+|JSON_EXISTS|non-reserved|non-reserved|reserved|
 |JSON_TABLE|non-reserved|non-reserved|reserved|
 |JSON_VALUE|non-reserved|non-reserved|reserved|
 |KEY|non-reserved|non-reserved|non-reserved|

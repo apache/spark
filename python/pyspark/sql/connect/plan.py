@@ -784,7 +784,7 @@ class CachedRemoteRelation(LogicalPlan):
                             request_serializer=request_serializer,
                             response_deserializer=response_deserializer,
                         )
-                        metadata = session.client._builder.metadata()
+                        metadata = session.client._execute_plan_metadata(req.operation_id)
                         channel(req, metadata=metadata)  # type: ignore[arg-type]
             except Exception as e:
                 logger.warning(f"RemoveRemoteCachedRelation failed with exception: {e}.")
