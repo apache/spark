@@ -16,13 +16,19 @@
  */
 package org.apache.spark.sql.execution.python.streaming
 
-import java.io.DataOutputStream
-import java.nio.channels.ServerSocketChannel
+import java.io.{DataOutputStream, InterruptedIOException}
+import java.nio.channels.{
+  AsynchronousCloseException,
+  ClosedByInterruptException,
+  ClosedChannelException,
+  ServerSocketChannel
+}
 
 import scala.collection.mutable
 
 import com.google.protobuf.ByteString
 import org.mockito.ArgumentMatchers.{any, argThat}
+import org.mockito.invocation.InvocationOnMock
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
 
@@ -635,6 +641,57 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     ).build()
     stateServer.handleUtilsRequest(message)
     verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+  }
+
+  Seq(
+    ("InterruptedException", () => new InterruptedException()),
+    ("InterruptedIOException", () => new InterruptedIOException()),
+    ("ClosedByInterruptException", () => new ClosedByInterruptException())
+  ).foreach { case (name, newException) =>
+    test(s"run handles $name while waiting for the Python worker") {
+      Thread.interrupted()
+      val socket = mock(classOf[ServerSocketChannel])
+      when(socket.accept())
+        .thenAnswer((_: InvocationOnMock) => throw newException())
+
+      try {
+        newStateServer(socket).run()
+        assert(Thread.currentThread().isInterrupted)
+      } finally {
+        Thread.interrupted()
+      }
+
+      verify(statefulProcessorHandle).setHandleState(StatefulProcessorHandleState.CLOSED)
+      verify(outputStream, times(0)).writeInt(any[Int])
+    }
+  }
+
+  Seq(
+    ("AsynchronousCloseException", () => new AsynchronousCloseException()),
+    ("ClosedChannelException", () => new ClosedChannelException())
+  ).foreach { case (name, newException) =>
+    test(s"run handles $name while waiting for the Python worker") {
+      Thread.interrupted()
+      val socket = mock(classOf[ServerSocketChannel])
+      when(socket.accept())
+        .thenAnswer((_: InvocationOnMock) => throw newException())
+
+      newStateServer(socket).run()
+
+      assert(!Thread.currentThread().isInterrupted)
+      verify(statefulProcessorHandle).setHandleState(StatefulProcessorHandleState.CLOSED)
+      verify(outputStream, times(0)).writeInt(any[Int])
+    }
+  }
+
+  private def newStateServer(
+      socket: ServerSocketChannel): TransformWithStateInPySparkStateServer = {
+    new TransformWithStateInPySparkStateServer(socket,
+      statefulProcessorHandle, groupingKeySchema, 2,
+      batchTimestampMs, eventTimeWatermarkForEviction,
+      outputStream, valueStateMap, transformWithStateInPySparkDeserializer,
+      listStateMap, mutable.HashMap[String, Iterator[Row]](), mapStateMap,
+      mutable.HashMap[String, Iterator[(Row, Row)]](), expiryTimerIter, listTimerMap)
   }
 
   private def getIntegerRow(value: Int): Row = {
