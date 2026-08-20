@@ -3110,6 +3110,20 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED =
+    ConfigBuilder("spark.checkpoint.verifyPartitionCount.enabled")
+      .internal()
+      .doc("When true, a checkpoint directory written by a Spark version that supports " +
+        "SPARK-58883 records the expected number of partitions in a _num_partitions file, and " +
+        "reading that directory back throws CHECKPOINT_TRUNCATED_DIRECTORY if the on-disk " +
+        "count disagrees with the files found. Set to false to suppress the check when " +
+        "recovering a checkpoint that was legitimately truncated. Has no effect on directories " +
+        "written before SPARK-58883 (no _num_partitions file present).")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED =
     ConfigBuilder("spark.checkpoint.local.verifyChecksum.enabled")
       .internal()

@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.io.FileNotFoundException
+import java.io.{DataInputStream, DataOutputStream, FileNotFoundException}
 import java.util.concurrent.TimeUnit
 
 import scala.reflect.ClassTag
@@ -31,7 +31,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_COMPRESS}
+import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_COMPRESS, CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -69,6 +69,8 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
    * Since the original RDD may belong to a prior application, there is no way to know a
    * priori the number of partitions to expect. This method assumes that the original set of
    * checkpoint files are fully preserved in a reliable storage across application lifespans.
+   * When the directory was written by a Spark version that supports SPARK-58883, a
+   * `_num_partitions` file records the expected count and is compared against the files found.
    */
   protected override def getPartitions: Array[Partition] = {
     // listStatus can throw exception if path does not exist.
@@ -82,6 +84,20 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
       if (path.getName != expectedFileName) {
         throw SparkCoreErrors.invalidCheckpointDirectoryError(path, expectedFileName)
       }
+    }
+    // If a partition-count metadata file is present and the integrity check is enabled,
+    // verify no trailing files are missing. Directories written by earlier Spark versions
+    // have no such file; a missing file is silently tolerated for backward compatibility.
+    // Set spark.checkpoint.verifyPartitionCount.enabled=false to suppress this check when
+    // recovering a legitimately truncated directory. See SPARK-58883.
+    if (context.conf.get(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED)) {
+      ReliableCheckpointRDD.readPartitionCountFromCheckpointDir(context, checkpointPath)
+        .foreach { expected =>
+          if (inputFiles.length != expected) {
+            throw SparkCoreErrors.checkpointTruncatedDirectoryError(
+              cpath, expected, inputFiles.length)
+          }
+        }
     }
     Array.tabulate(inputFiles.length)(i => new CheckpointRDDPartition(i))
   }
@@ -143,6 +159,10 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     "_partitioner"
   }
 
+  private def checkpointPartitionCountFileName(): String = {
+    "_num_partitions"
+  }
+
   /**
    * Write RDD to checkpoint files and return a ReliableCheckpointRDD representing the RDD.
    */
@@ -170,6 +190,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     if (originalRDD.partitioner.nonEmpty) {
       writePartitionerToCheckpointDir(sc, originalRDD.partitioner.get, checkpointDirPath)
     }
+    writePartitionCountToCheckpointDir(sc, originalRDD.partitions.length, checkpointDirPath)
 
     val checkpointDurationMs =
       TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - checkpointStartTimeNs)
@@ -268,6 +289,81 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     }
   }
 
+  /**
+   * Write the partition count of the checkpointed RDD to the checkpoint directory so that
+   * a later read via [[SparkContext.checkpointFile]] can detect a truncated directory.
+   * The file is written atomically (temp path then rename) so a torn write leaves no partial
+   * file. The payload is a 1-byte format version followed by a 4-byte big-endian Int.
+   * This is done on a best-effort basis; any exception is caught, logged and ignored so that
+   * an inability to write the file does not prevent checkpointing. See SPARK-58883.
+   */
+  private def writePartitionCountToCheckpointDir(
+      sc: SparkContext, partitionCount: Int, checkpointDirPath: Path): Unit = {
+    try {
+      val countFilePath = new Path(checkpointDirPath, checkpointPartitionCountFileName())
+      val tmpFilePath = new Path(
+        checkpointDirPath, s".${checkpointPartitionCountFileName()}-tmp")
+      val bufferSize = sc.conf.get(BUFFER_SIZE)
+      val fs = countFilePath.getFileSystem(sc.hadoopConfiguration)
+      // Write to a temp path first so readers never see a partial file.
+      val fileOutputStream = fs.create(tmpFilePath, true, bufferSize)
+      val dos = new DataOutputStream(fileOutputStream)
+      Utils.tryWithSafeFinally {
+        dos.writeByte(1) // format version
+        dos.writeInt(partitionCount)
+      } {
+        dos.close()
+      }
+      if (!fs.rename(tmpFilePath, countFilePath)) {
+        fs.delete(tmpFilePath, false)
+        logWarning(
+          log"Failed to rename ${MDC(TEMP_OUTPUT_PATH, tmpFilePath)} to " +
+          log"${MDC(PATH, countFilePath)}, " +
+          log"truncation detection will be inactive for this directory")
+      }
+      logDebug(s"Written partition count $partitionCount to $countFilePath")
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Error writing partition count to ${MDC(PATH, checkpointDirPath)}, " +
+          log"truncation detection will be inactive for this directory", e)
+    }
+  }
+
+  /**
+   * Read the expected partition count from the checkpoint directory metadata file, if present.
+   * Returns [[None]] when the file is absent (checkpoint written by an older Spark version)
+   * or unreadable, so callers must tolerate a missing value. See SPARK-58883.
+   */
+  private def readPartitionCountFromCheckpointDir(
+      sc: SparkContext, checkpointDirPath: String): Option[Int] = {
+    try {
+      val bufferSize = sc.conf.get(BUFFER_SIZE)
+      val countFilePath = new Path(checkpointDirPath, checkpointPartitionCountFileName())
+      val fs = countFilePath.getFileSystem(sc.hadoopConfiguration)
+      val fileInputStream = fs.open(countFilePath, bufferSize)
+      val count = Utils.tryWithSafeFinally {
+        val dis = new DataInputStream(fileInputStream)
+        val version = dis.readByte()
+        if (version != 1) {
+          throw new IllegalArgumentException(
+            s"Unsupported _num_partitions format version: $version in $countFilePath")
+        }
+        dis.readInt()
+      } {
+        fileInputStream.close()
+      }
+      logDebug(s"Read partition count $count from $countFilePath")
+      Some(count)
+    } catch {
+      case _: FileNotFoundException =>
+        logDebug(s"No partition count file in $checkpointDirPath (older checkpoint)")
+        None
+      case NonFatal(e) =>
+        logWarning(log"Error reading partition count from ${MDC(PATH, checkpointDirPath)}, " +
+          log"truncation detection will be inactive for this directory", e)
+        None
+    }
+  }
 
   /**
    * Read a partitioner from the given RDD checkpoint directory, if it exists.
