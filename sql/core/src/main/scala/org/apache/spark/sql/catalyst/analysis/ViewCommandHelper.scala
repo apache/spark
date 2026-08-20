@@ -18,28 +18,29 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.{CreateView, DropView, LogicalPlan}
-import org.apache.spark.sql.connector.catalog.ViewCatalog
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, RelationCatalog, V1View, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.isSessionCatalog
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{CreateViewCommand, DropTableCommand, DropTempViewCommand}
 
 /**
  * Rewrites resolved view commands to their session-catalog commands in [[ResolveSessionCatalog]].
- * Views in a non-session [[ViewCatalog]] keep the V2 command.
+ * Native views in a [[ViewCatalog]] keep the V2 command, including in a custom session catalog.
  */
 object ViewCommandHelper {
 
   /**
    * Rewrites a resolved [[DropView]] to [[DropTempViewCommand]] for a temporary view or to
-   * [[DropTableCommand]] for a session-catalog view, matching temporary views first. Fails if a
-   * session-catalog target's namespace does not have exactly one part.
+   * [[DropTableCommand]] for a V1 session-catalog view, matching temporary views first. Fails if a
+   * V1 session-catalog target's namespace does not have exactly one part.
    *
    * For remaining resolved targets outside a [[ViewCatalog]], [[FakeSystemCatalog]] uses
    * [[DropTempViewCommand]], sharing the execution path for session-qualified temporary views.
    * Other catalogs fail with `MISSING_CATALOG_ABILITY.VIEWS`, matching `CheckViewReferences` for
    * CREATE/ALTER VIEW and the analyzer gate on [[UnresolvedView]].
    *
-   * Returns `dropView` itself for non-session [[ViewCatalog]] targets or unresolved targets.
-   * For non-session view catalogs, `DataSourceV2Strategy` routes DROP VIEW to
+   * Returns `dropView` itself for native [[ViewCatalog]] targets or unresolved targets.
+   * For native view catalogs, `DataSourceV2Strategy` routes DROP VIEW to
    * `ViewCatalog.dropView`, including metric views persisted through the same interface.
    */
   def rewrite(dropView: DropView): LogicalPlan = dropView match {
@@ -62,8 +63,8 @@ object ViewCommandHelper {
   }
 
   /**
-   * Lowers a session-catalog [[CreateView]] to [[CreateViewCommand]], leaving other targets intact.
-   * Fails if a session-catalog target's namespace does not have exactly one part.
+   * Lowers a V1 session-catalog [[CreateView]] to [[CreateViewCommand]], leaving other targets
+   * intact. Fails if a V1 session-catalog target's namespace does not have exactly one part.
    * Analysis-only state is not transferred: HandleSpecialCommand marks the new command analyzed.
    */
   def rewriteCreateView(createView: CreateView): LogicalPlan = createView match {
@@ -87,9 +88,28 @@ object ViewCommandHelper {
       createView
   }
 
+  private[analysis] def useV1ViewCommands(catalog: CatalogPlugin): Boolean = {
+    isSessionCatalog(catalog) && !catalog.isInstanceOf[ViewCatalog]
+  }
+
+  private def isDelegatedV1View(catalog: CatalogPlugin, ident: Identifier): Boolean = {
+    catalog match {
+      case relationCatalog: RelationCatalog if isSessionCatalog(catalog) =>
+        try {
+          relationCatalog.loadRelation(ident).isInstanceOf[V1View]
+        } catch {
+          case _: NoSuchNamespaceException | _: NoSuchTableException => false
+        }
+      case _ => false
+    }
+  }
+
   private object DropViewInSessionCatalog
-    extends ResolvedIdentifierInSessionCatalog("DROP", "VIEW")
+    extends ResolvedIdentifierInSessionCatalog(
+      "DROP", "VIEW",
+      (catalog, ident) => useV1ViewCommands(catalog) || isDelegatedV1View(catalog, ident))
 
   private object CreateViewInSessionCatalog
-    extends ResolvedIdentifierInSessionCatalog("CREATE", "VIEW")
+    extends ResolvedIdentifierInSessionCatalog(
+      "CREATE", "VIEW", (catalog, _) => useV1ViewCommands(catalog))
 }
