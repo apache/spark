@@ -323,6 +323,18 @@ class ArrowPythonAggregatorTestsMixin:
         for r, e in zip(result, expected):
             self.assertAlmostEqual(r["s"], e["s"], places=4)
 
+    def test_window_bounded_preceding_frame(self):
+        # A fixed number of preceding rows exercises both branches of the running-buffer
+        # optimization: the lower bound is clamped to 0 for the first rows (running buffer is
+        # extended in place) and then advances (each frame is refolded from zero).
+        df = self._data()
+        w = Window.partitionBy("k").orderBy("v").rowsBetween(-3, Window.currentRow)
+        result = df.withColumn("m", udaf(Mean())(sf.col("v")).over(w)).orderBy("k", "v").collect()
+        expected = df.withColumn("m", sf.avg("v").over(w)).orderBy("k", "v").collect()
+        self.assertEqual(len(result), len(expected))
+        for r, e in zip(result, expected):
+            self.assertAlmostEqual(r["m"], e["m"], places=6)
+
     def test_window_decimal_output(self):
         # A non-trivial (Decimal) output type over a window, exercising the explicit
         # ``pa.array(..., type=result_type)`` typing on the window path.

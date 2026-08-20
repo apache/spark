@@ -2669,13 +2669,12 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             prefers_large_types=runner_conf.use_large_var_types,
         )
 
-        def aggregate_frame(agg: Any, value_cols: list, num_rows: int) -> Any:
-            # Fold ``num_rows`` rows (each a tuple across ``value_cols``, matching the call-site
-            # argument order) into a buffer, then finish. An empty frame yields ``finish(zero())``.
-            buffer = agg.zero()
-            for r in range(num_rows):
+        def fold(agg: Any, buffer: Any, value_cols: list, start: int, end: int) -> Any:
+            # Fold rows ``[start, end)`` (each a tuple across ``value_cols``, matching the call-site
+            # argument order) into ``buffer`` via the aggregator's ``reduce``.
+            for r in range(start, end):
                 buffer = agg.reduce(buffer, tuple(c[r] for c in value_cols))
-            return agg.finish(buffer)
+            return buffer
 
         def grouped_func(
             split_index: int, data: Iterator["GroupedBatch"]
@@ -2703,26 +2702,36 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         value_cols = [concatenated.column(o).to_pylist() for o in args_offsets] + [
                             concatenated.column(v).to_pylist() for v in kwargs_offsets.values()
                         ]
-                        result = aggregate_frame(agg, value_cols, num_rows)
+                        result = agg.finish(fold(agg, agg.zero(), value_cols, 0, num_rows))
                         result_arrays.append(pa.array([result] * num_rows, type=result_type))
                     elif bound_type == "bounded":
-                        # Per-row frame: slice the batch to ``[begin, end)`` and fold its rows.
-                        # TODO(SPARK-58890): this refolds each frame from ``zero`` independently, so
-                        # a per-row frame whose lower bound never advances (e.g.
-                        # ``rowsBetween(unboundedPreceding, currentRow)``) is O(n^2). Since the
-                        # aggregator is incremental, a running buffer could be reused with one
-                        # ``reduce`` per row (O(n)) whenever ``begin`` does not move. Left as a
-                        # follow-up.
+                        # Per-row frame ``[begin, end)``. Materialize the aggregator's input columns
+                        # once; frames index into them by row.
                         begin_col = concatenated.column(args_offsets[0])
                         end_col = concatenated.column(args_offsets[1])
                         data_offsets = list(args_offsets[2:]) + list(kwargs_offsets.values())
+                        value_cols = [concatenated.column(o).to_pylist() for o in data_offsets]
+                        # When consecutive frames share the same lower bound and only grow on the
+                        # right (e.g. rowsBetween(unboundedPreceding, currentRow)), extend the
+                        # running buffer by the newly-included rows instead of refolding from
+                        # ``zero`` -- O(n) overall rather than O(n^2). Otherwise -- the lower bound
+                        # advanced (a row left the window, which ``reduce`` cannot subtract) or the
+                        # frame shrank -- refold the frame from ``zero``.
                         results = []
+                        have_running = False
+                        running: Any = None
+                        prev_begin = -1
+                        prev_end = 0
                         for i in range(num_rows):
-                            offset = begin_col[i].as_py()
-                            length = end_col[i].as_py() - offset
-                            frame = concatenated.slice(offset=offset, length=length)
-                            value_cols = [frame.column(o).to_pylist() for o in data_offsets]
-                            results.append(aggregate_frame(agg, value_cols, length))
+                            begin = begin_col[i].as_py()
+                            end = end_col[i].as_py()
+                            if have_running and begin == prev_begin and end >= prev_end:
+                                running = fold(agg, running, value_cols, prev_end, end)
+                            else:
+                                running = fold(agg, agg.zero(), value_cols, begin, end)
+                            have_running = True
+                            prev_begin, prev_end = begin, end
+                            results.append(agg.finish(running))
                         result_arrays.append(pa.array(results, type=result_type))
                     else:
                         raise PySparkRuntimeError(
