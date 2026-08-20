@@ -611,6 +611,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map_misc",
         "pyspark.sql.tests.arrow.test_arrow_grouped_map",
+        "pyspark.sql.tests.arrow.test_arrow_python_aggregator",
         "pyspark.sql.tests.arrow.test_arrow_python_udf",
         "pyspark.sql.tests.arrow.test_arrow_python_udf_cached",
         "pyspark.sql.tests.arrow.test_arrow_udf",
@@ -675,6 +676,7 @@ pyspark_testing = Module(
         "pyspark.testing.utils",
         "pyspark.testing.pandasutils",
         # unittests
+        "pyspark.testing.tests.test_changed_files",
         "pyspark.testing.tests.test_fail",
         "pyspark.testing.tests.test_fail_in_set_up_class",
         "pyspark.testing.tests.test_no_tests",
@@ -1255,6 +1257,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_grouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map_misc",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_python_aggregator",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_python_udf",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_scalar",

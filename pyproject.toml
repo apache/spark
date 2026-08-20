@@ -162,6 +162,8 @@ internal_lint = [
 internal_test = [
     # Dependency for running tests
     "unittest-xml-reporting",
+    # Import graph support for smart test selection
+    "grimp",
     # Coverage tool
     "coverage",
     # 3rd party libraries that unittests use.

@@ -311,12 +311,33 @@ class GoldenFileTestMixin:
             #   "halffloat" -> "float16", "float" -> "float32", "double" -> "float64"
             return _ARROW_FLOAT_ALIASES.get(s, s)
 
+    @staticmethod
+    def _scalar_str(scalar: Any) -> str:
+        """
+        Render one PyArrow scalar for a golden cell via PyArrow's own ``str(scalar)``.
+
+        A temporal value can be valid in Arrow yet outside Python's ``datetime`` range
+        (e.g. a date32 past year 9999), where ``str`` builds a Python datetime and
+        raises ``OverflowError``.  Record ``temporal overflow`` for those instead of
+        failing.  A non-temporal ``OverflowError`` is unexpected, so it propagates.
+        """
+        try:
+            return str(scalar).replace("\x00", "\\0")
+        except OverflowError:
+            # A valid Arrow temporal value can exceed Python's datetime range (e.g. a
+            # date32 past year 9999); record ``temporal overflow`` rather than fail.
+            # A non-temporal overflow is unexpected, so re-raise.
+            if pa.types.is_temporal(scalar.type):
+                return "temporal overflow"
+            raise
+
     @classmethod
     def repr_arrow_value(cls, value: Any, max_len: int = 32) -> str:
         """
         Format a PyArrow Array/ChunkedArray for golden file.
 
-        Each element uses str(scalar) from PyArrow's own scalar formatting.
+        Each element is rendered by ``_scalar_str`` (PyArrow's scalar formatting, with
+        an out-of-range temporal fallback).
 
         Parameters
         ----------
@@ -331,7 +352,7 @@ class GoldenFileTestMixin:
             "[val1, val2, None]@arrow_type"
         """
         # Escape NULL bytes so the value can be safely stored in CSV files.
-        elements = [str(scalar).replace("\x00", "\\0") for scalar in value]
+        elements = [cls._scalar_str(scalar) for scalar in value]
         v_str = "[" + ", ".join(elements) + "]"
         if max_len > 0:
             v_str = v_str[:max_len]
@@ -353,7 +374,7 @@ class GoldenFileTestMixin:
         columns = []
         for name, column in zip(value.column_names, value.columns):
             # Escape NULL bytes so the value can be safely stored in CSV files.
-            elements = [str(scalar).replace("\x00", "\\0") for scalar in column]
+            elements = [cls._scalar_str(scalar) for scalar in column]
             columns.append(f"{name}: [" + ", ".join(elements) + "]")
         v_str = "{" + ", ".join(columns) + "}"
         if max_len > 0:
@@ -366,6 +387,12 @@ class GoldenFileTestMixin:
         """
         Format a pandas DataFrame for golden file.
 
+        Renders each column with tolist() (as ``repr_pandas_series_value`` does for a
+        Series), keyed by column name, plus the schema. tolist() gives a stable
+        Python-native representation and avoids ``DataFrame.to_json``'s epoch date
+        serialization, which overflows on out-of-nanosecond-range dates (year 9999
+        with the default date_as_object=True) and misreads non-ns units on pandas 2.
+
         Parameters
         ----------
         value : pd.DataFrame
@@ -376,9 +403,9 @@ class GoldenFileTestMixin:
         Returns
         -------
         str
-            "value@Dataframe[schema]"
+            "{col: [val1, val2], ...}@Dataframe[schema]"
         """
-        v_str = value.to_json().replace("\n", " ")
+        v_str = str({name: col.tolist() for name, col in value.items()}).replace("\n", " ")
         if max_len > 0:
             v_str = v_str[:max_len]
         simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])

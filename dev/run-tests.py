@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import subprocess
+import tempfile
 from contextlib import contextmanager
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
@@ -392,7 +393,9 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, inc
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests(test_modules, test_pythons, parallelism, with_coverage=False):
+def run_python_tests(
+    test_modules, test_pythons, parallelism, changed_files=None, with_coverage=False
+):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
     if with_coverage:
@@ -408,7 +411,14 @@ def run_python_tests(test_modules, test_pythons, parallelism, with_coverage=Fals
         command.append("--modules=%s" % ",".join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
     command.append("--python-executables=%s" % test_pythons)
-    run_cmd(command)
+    if changed_files:
+        with tempfile.NamedTemporaryFile("w") as f:
+            f.write("\n".join(changed_files))
+            f.flush()
+            command.append("--changed-files=%s" % f.name)
+            run_cmd(command)
+    else:
+        run_cmd(command)
 
 
 def run_python_packaging_tests():
@@ -662,10 +672,26 @@ def main():
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests and not os.environ.get("SKIP_PYTHON"):
+        relevant_changed_files = None
+        # We only do smart test selection on push action of apache/spark
+        # If APACHE_SPARK_REF is set, we are in a forked repository.
+        # Otherwise if we have a list of changed files, we must be in post-merge CI.
+        if not os.environ.get("APACHE_SPARK_REF", "") and changed_files:
+            # Filter out all dev_tools files because they are not relevant
+            relevant_changed_files = [
+                f for f in changed_files if not modules.dev_tools.contains_file(f)
+            ]
+            # If there are relevant changed files that are not pyspark, we don't do smart test
+            if any(
+                not (f.endswith(".py") and f.startswith("python/pyspark/"))
+                for f in relevant_changed_files
+            ):
+                relevant_changed_files = None
         run_python_tests(
             modules_with_python_tests,
             opts.python_executables,
             opts.parallelism,
+            changed_files=relevant_changed_files,
             with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true",
         )
         run_python_packaging_tests()

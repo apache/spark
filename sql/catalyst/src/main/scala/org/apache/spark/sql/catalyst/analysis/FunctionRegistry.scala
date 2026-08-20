@@ -1062,7 +1062,28 @@ object FunctionRegistry {
     fr
   }
 
-  val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
+  /**
+   * Builtin function identifiers known to SHOW FUNCTIONS / SessionCatalog.
+   * Starts as the catalyst [[builtin]] set; sql/core-only builtins (e.g. parse_sql)
+   * are added later via [[registerExtraBuiltin]].
+   */
+  @volatile private var _functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
+
+  def functionSet: Set[FunctionIdentifier] = _functionSet
+
+  /**
+   * Registers a builtin that cannot live in catalyst (e.g. depends on SparkSqlParser
+   * in sql/core). Updates both [[builtin]] (so session clones / catalog reset see it)
+   * and [[functionSet]] (so SHOW FUNCTIONS classifies it as SYSTEM, not USER).
+   */
+  private[sql] def registerExtraBuiltin(
+      name: String,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = synchronized {
+    val id = builtinFunctionIdentifier(name)
+    builtin.registerFunction(id, info, builder)
+    _functionSet = _functionSet + id
+  }
 
   /** Registry for internal functions used by Connect and the Column API. */
   private[sql] val internal: SimpleFunctionRegistry =

@@ -363,11 +363,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
-      case leaf: LeafNode if !SQLConf.get.preserveCharVarcharTypeInfo &&
-        leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
+      case leaf: LeafNode
+          if !SQLConf.get.charVarcharFirstClassTypes &&
+            leaf.output.exists(attr => CharVarcharUtils.hasCharVarchar(attr.dataType)) =>
         throw SparkException.internalError(
           s"Logical plan should not have output of char/varchar type when " +
-            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is false: " + leaf)
+            s"${SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key} and " +
+            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} are both false: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.schemaNotFound(u.multipartIdentifier)

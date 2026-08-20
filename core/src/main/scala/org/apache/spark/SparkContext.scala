@@ -452,9 +452,18 @@ class SparkContext(config: SparkConf) extends Logging {
     // instead of relying on the default value of the config constant.
     if (SparkMasterRegex.isK8s(master) &&
         _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", true)) {
-      logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
-        "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
-      _conf.set(DRIVER_HOST_ADDRESS, Utils.normalizeIpIfNeeded(_conf.get(DRIVER_BIND_ADDRESS)))
+      val bindAddress = _conf.get(DRIVER_BIND_ADDRESS)
+      if (Utils.isAnyLocalAddress(bindAddress)) {
+        val driverHost = _conf.get(DRIVER_HOST_ADDRESS)
+        logInfo(log"spark.kubernetes.executor.useDriverPodIP is true but bind address " +
+          log"${MDC(LogKeys.BIND_ADDRESS, bindAddress)} is a wildcard; " +
+          log"preserving advertised driver host ${MDC(LogKeys.HOST, driverHost)}")
+        _conf.set(DRIVER_HOST_ADDRESS, driverHost)
+      } else {
+        logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
+          "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
+        _conf.set(DRIVER_HOST_ADDRESS, Utils.normalizeIpIfNeeded(bindAddress))
+      }
     } else {
       _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
     }
@@ -2730,16 +2739,17 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
    * @param reason reason for cancellation.
-   * @return A future with [[ActiveJob]]s, allowing extraction of information such as Job ID and
-   *   tags.
+   * @return A future with the cancelled jobs' [[CancelledJobInfo]], allowing extraction of
+   *   information such as Job ID and tags. Covers active jobs and barrier jobs cancelled while
+   *   deferred for their slot-check retry (which have no [[ActiveJob]]).
    */
   private[spark] def cancelJobsWithTagWithFuture(
       tag: String,
-      reason: String): Future[Seq[ActiveJob]] = {
+      reason: String): Future[Seq[CancelledJobInfo]] = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
 
-    val cancelledJobs = Promise[Seq[ActiveJob]]()
+    val cancelledJobs = Promise[Seq[CancelledJobInfo]]()
     dagScheduler.cancelJobsWithTag(tag, Some(reason), Some(cancelledJobs))
     cancelledJobs.future
   }

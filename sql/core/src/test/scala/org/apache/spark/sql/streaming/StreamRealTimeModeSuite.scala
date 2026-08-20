@@ -33,7 +33,8 @@ import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExcha
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
-import org.apache.spark.sql.execution.streaming.state.{FailureInjectionCheckpointFileManager, FailureInjectionFileSystem}
+import org.apache.spark.sql.execution.streaming.state.{FailureInjectionCheckpointFileManager,
+  FailureInjectionFileSystem, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{broadcast, concat, lit, udf}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -466,6 +467,57 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       CheckAnswerWithTimeout(60000, 2, 3, 4, 5, 6, 7, 8, 8, 8, 9),
       StopStream
     )
+  }
+
+  test("transformWithState writes batch 0 metadata only after the RTM offset WAL") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[FailureInjectionCheckpointFileManager].getName,
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      withTempDir { checkpointDir =>
+        val injectionState = FailureInjectionFileSystem.registerTempPath(checkpointDir.getPath)
+        try {
+          val inputData = LowLatencyMemoryStream[String](1)
+          val result = inputData.toDS()
+            .groupByKey(value => value)
+            .transformWithState(
+              new RunningCountStatefulProcessor,
+              TimeMode.ProcessingTime(),
+              OutputMode.Update())
+          val metadataFile = new java.io.File(
+            checkpointDir, "state/0/_metadata/v2/0")
+          val stateSchemaDir = new java.io.File(
+            checkpointDir, "state/0/_stateSchema/default")
+
+          injectionState.failureCreateAtomicRegex = Seq(".*/offsets/0")
+          testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+            AddData(inputData, "a"),
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            CheckAnswerWithTimeout(60000, ("a", "1")),
+            Execute { _ =>
+              assert(Option(stateSchemaDir.listFiles()).exists(_.nonEmpty))
+              assert(!metadataFile.exists())
+            },
+            advanceRealTimeClock,
+            ExpectFailure[IOException]()
+          )
+          assert(!metadataFile.exists())
+
+          injectionState.failureCreateAtomicRegex = Seq.empty
+          testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            CheckAnswerWithTimeout(60000, ("a", "1")),
+            advanceRealTimeClock,
+            WaitUntilBatchProcessed(0),
+            StopStream
+          )
+          assert(metadataFile.exists())
+        } finally {
+          FailureInjectionFileSystem.removePathFromTempToInjectionState(checkpointDir.getPath)
+        }
+      }
+    }
   }
 
   // ========================================================================================

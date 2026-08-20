@@ -287,6 +287,15 @@ private[connect] object ErrorUtils extends Logging {
       .exists(_.toString.contains("org.apache.spark.sql.execution.python"))
   }
 
+  private def fallbackErrorDescription(e: Throwable): String = {
+    val message = e.getMessage
+    if (message != null && message.nonEmpty) {
+      Utils.abbreviate(message, 2048)
+    } else {
+      e.getClass.getName
+    }
+  }
+
   /**
    * Process an error by retrieving session context, converting to gRPC status, logging, posting
    * events, and executing callbacks. This is the core error handling logic shared by both
@@ -343,7 +352,7 @@ private[connect] object ErrorUtils extends Logging {
       case e: Throwable =>
         Status.UNKNOWN
           .withCause(e)
-          .withDescription(Utils.abbreviate(e.getMessage, 2048))
+          .withDescription(fallbackErrorDescription(e))
           .asRuntimeException()
     }
 

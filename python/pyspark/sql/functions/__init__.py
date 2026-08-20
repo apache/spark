@@ -617,6 +617,7 @@ __all__ = [  # noqa: F405
     # Call Functions
     "call_udf",
     "pandas_udf",
+    "udaf",
     "udf",
     "udtf",
     "arrow_udtf",
