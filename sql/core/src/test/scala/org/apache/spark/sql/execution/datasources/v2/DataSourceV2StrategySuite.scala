@@ -1041,15 +1041,15 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("additional Catalyst filters use dotted names for nested columns") {
+  test("advisory filters use dotted names for nested columns") {
     val tableSchema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("s", StructType(Seq(
         StructField("tz", StringType, nullable = true))), nullable = true)))
-    val additionalFilter =
+    val advisoryFilter =
       EqualTo(AttributeReference("s.tz", StringType)(), Literal("UTC"))
     val relation = DataSourceV2Relation.create(
-      new InMemoryCatalystFilterTable(tableSchema, additionalFilter),
+      new InMemoryCatalystFilterTable(tableSchema, advisoryFilter),
       None,
       None,
       CaseInsensitiveStringMap.empty)
@@ -1062,18 +1062,18 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       case Filter(condition, _: DataSourceV2ScanRelation) => condition.exists(_.semanticEquals(
         expected))
       case _ => false
-    }, s"expected rebound nested additional filter in:\n$pushedPlan")
+    }, s"expected rebound nested advisory filter in:\n$pushedPlan")
   }
 
-  test("additional Catalyst filters support quoted dotted name parts") {
+  test("advisory filters support quoted dotted name parts") {
     val tableSchema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("a.b", StructType(Seq(
         StructField("c.d", StringType, nullable = true))), nullable = true)))
-    val additionalFilter =
+    val advisoryFilter =
       EqualTo(AttributeReference("`a.b`.`c.d`", StringType)(), Literal("PST"))
     val relation = DataSourceV2Relation.create(
-      new InMemoryCatalystFilterTable(tableSchema, additionalFilter),
+      new InMemoryCatalystFilterTable(tableSchema, advisoryFilter),
       None,
       None,
       CaseInsensitiveStringMap.empty)
@@ -1086,12 +1086,12 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       case Filter(condition, _: DataSourceV2ScanRelation) => condition.exists(_.semanticEquals(
         expected))
       case _ => false
-    }, s"expected rebound quoted additional filter in:\n$pushedPlan")
+    }, s"expected rebound quoted advisory filter in:\n$pushedPlan")
   }
 
   private class InMemoryCatalystFilterTable(
       tableSchema: StructType,
-      additionalFilter: Expression) extends Table with SupportsRead {
+      advisoryFilter: Expression) extends Table with SupportsRead {
 
     override def name(): String = "in-memory-catalyst-filter-table"
 
@@ -1101,12 +1101,12 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       EnumSet.of(TableCapability.BATCH_READ)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-      new InMemoryCatalystFilterScanBuilder(tableSchema, additionalFilter)
+      new InMemoryCatalystFilterScanBuilder(tableSchema, advisoryFilter)
   }
 
   private class InMemoryCatalystFilterScanBuilder(
       tableSchema: StructType,
-      additionalFilter: Expression)
+      advisoryFilter: Expression)
     extends ScanBuilder with SupportsPushDownCatalystFilters {
 
     override def build(): Scan = new Scan {
@@ -1117,7 +1117,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     override def pushedFilters: Array[Predicate] = Array.empty
 
-    override def additionalCatalystFilters: Seq[Expression] = Seq(additionalFilter)
+    override def advisoryFilters: Seq[Expression] = Seq(advisoryFilter)
   }
 
   /**

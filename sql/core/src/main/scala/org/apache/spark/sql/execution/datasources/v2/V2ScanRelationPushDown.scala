@@ -126,22 +126,17 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.pushedPredicates.mkString(", ")
       }
 
-      val (additionalPostScanFilters, fullyPushedAdditionalFilters) = sHolder.builder match {
+      sHolder.advisoryFilterExpressions = sHolder.builder match {
         case r: SupportsPushDownCatalystFilters =>
-          val additionalFilters = r.additionalCatalystFilters.filter { filter =>
+          val advisoryFilters = r.advisoryFilters.filter { filter =>
             filter.deterministic && !SubqueryExpression.hasSubquery(filter)
           }
-          val reboundAdditionalFilters = rebindFilters(additionalFilters, sHolder.output)
-          val fullyPushedFilterSet =
-            ExpressionSet(rebindFilters(r.fullyPushedFilters, sHolder.output))
-          val fullyPushedAdditional =
-            reboundAdditionalFilters.filter(fullyPushedFilterSet.contains)
-          (reboundAdditionalFilters, fullyPushedAdditional)
+          rebindFilters(advisoryFilters, sHolder.output)
         case _ =>
-          (Nil, Nil)
+          Nil
       }
       val postScanFilters = postScanFiltersWithoutSubquery ++
-        additionalPostScanFilters ++ normalizedFiltersWithSubquery
+        sHolder.advisoryFilterExpressions ++ normalizedFiltersWithSubquery
 
       // Compute the pushed filter expressions: the normalized filters that were fully pushed
       // down (i.e., not in postScanFilters). These are stored on the scan relation for potential
@@ -150,7 +145,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val postScanFilterSet = ExpressionSet(postScanFiltersWithoutSubquery)
       sHolder.pushedFilterExpressions = normalizedFiltersWithoutSubquery
         .filterNot(postScanFilterSet.contains)
-        .filter(_.deterministic) ++ fullyPushedAdditionalFilters
+        .filter(_.deterministic)
 
       logInfo(
         log"""
@@ -1034,6 +1029,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // merge unsound. See DataSourceV2ScanRelation.pushedFilters.
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
         pushedFilters = sHolder.pushedFilterExpressions,
+        advisoryFilters = sHolder.advisoryFilterExpressions.map(projectionFunc),
         // The one site that grants mergeability: a plain scan carrying only reproducible pushdowns
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
         mergeableScan = !hasBlockingPushdown(sHolder))
@@ -1323,6 +1319,8 @@ case class ScanBuilderHolder(
   var pushedVariants: Option[VariantInRelation] = None
 
   var pushedFilterExpressions: Seq[Expression] = Seq.empty
+
+  var advisoryFilterExpressions: Seq[Expression] = Seq.empty
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with
