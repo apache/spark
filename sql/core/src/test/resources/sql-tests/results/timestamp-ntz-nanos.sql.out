@@ -727,6 +727,32 @@ NULL
 
 
 -- !query
+SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    TIMESTAMP_NTZ '2022-03-27 03:00:00.123456789')
+-- !query schema
+struct<convert_timezone(Europe/Brussels, Europe/Moscow, TIMESTAMP_NTZ '2022-03-27 03:00:00.123456789'):timestamp_ntz(9)>
+-- !query output
+2022-03-27 04:00:00.123456789
+
+
+-- !query
+SELECT typeof(convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    '2022-03-27 03:00:00.1234567' :: timestamp_ntz(7)))
+-- !query schema
+struct<typeof(convert_timezone(Europe/Brussels, Europe/Moscow, CAST(2022-03-27 03:00:00.1234567 AS TIMESTAMP_NTZ(7)))):string>
+-- !query output
+timestamp_ntz(7)
+
+
+-- !query
+SELECT convert_timezone('America/Los_Angeles', 'UTC', CAST(NULL AS timestamp_ntz(9)))
+-- !query schema
+struct<convert_timezone(America/Los_Angeles, UTC, CAST(NULL AS TIMESTAMP_NTZ(9))):timestamp_ntz(9)>
+-- !query output
+NULL
+
+
+-- !query
 SELECT max(c), min(c) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),

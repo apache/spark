@@ -22,6 +22,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.window._
@@ -33,6 +34,7 @@ import org.apache.spark.sql.execution.window._
  * <ul>
  *   <li> SQL_WINDOW_AGG_ARROW_UDF for Arrow UDF
  *   <li> SQL_WINDOW_AGG_PANDAS_UDF for Pandas UDF
+ *   <li> SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF for the incremental Arrow aggregator (`udaf`)
  * </ul>
  *
  * This is similar to [[WindowExec]]. The main difference is that this node does not compute
@@ -127,7 +129,8 @@ case class ArrowWindowPythonExec(
   private def supportedPythonEvalTypes: Array[Int] =
     Array(
       PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
-      PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF)
+      PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+      PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF)
 }
 
 object ArrowWindowPythonExec {
@@ -139,8 +142,16 @@ object ArrowWindowPythonExec {
     val evalTypes = windowExpression.flatMap(w => WindowFunctionType.pythonEvalType(w))
     assert(evalTypes.nonEmpty,
       "Cannot extract eval type from PythonUDAFs in ArrowWindowPythonExec")
-    assert(evalTypes.distinct.size == 1,
-      "All window functions must have the same eval type in ArrowWindowPythonExec")
+    // Distinct eval types here means incompatible Python window UDFs were grouped into one window
+    // (e.g. an incremental aggregator mixed with a grouped-agg pandas/arrow UDAF). They share the
+    // `WindowFunctionType.Python` type, so they pass the check in `PhysicalWindow`, but cannot run
+    // in a single operator; surface a clear analysis error rather than an internal AssertionError.
+    if (evalTypes.distinct.size != 1) {
+      val functionNames = windowExpression.flatMap(_.collect {
+        case e: PythonFuncExpression => e.name
+      }).distinct
+      throw QueryCompilationErrors.multiplePythonUDFTypesInWindowError(functionNames)
+    }
     ArrowWindowPythonExec(windowExpression, partitionSpec, orderSpec, child, evalTypes.head)
   }
 }

@@ -1252,6 +1252,21 @@ class UDFSuite extends SharedSparkSession {
         parameters = Map("dataType" -> s"\"${dt.sql}\"")
       )
     }
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(CharType(5), VarcharType(5)).foreach { dt =>
+        val f = udf(
+          new UDF0[String] {
+            override def call(): String = "a"
+          },
+          dt
+        )
+        val df = spark.range(1).select(f().as("c"))
+        assert(df.schema.head.dataType === dt)
+        assert(df.encoder.schema.head.dataType === dt)
+        val expected = if (dt.isInstanceOf[CharType]) "a    " else "a"
+        checkAnswer(df, Row(expected))
+      }
+    }
   }
 
   test("SPARK-47927: ScalaUDF null handling") {
