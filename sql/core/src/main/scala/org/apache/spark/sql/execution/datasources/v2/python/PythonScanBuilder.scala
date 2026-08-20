@@ -48,8 +48,8 @@ class PythonScanBuilder(
   // itself. Two paths set it: (1) the filter-pushdown pass defers planning while limit pushdown
   // is enabled and a limit pass might follow; (2) a pushed limit was rejected, so planning falls
   // back to a fresh reader. In both, build() plans the read with the filters only. This is
-  // distinct from `readInfo.isEmpty` when both pushdowns are disabled -- in that case, no pushdown pass
-  // ran and `PythonScan` plans the read later instead, so build() must not plan.
+  // distinct from `readInfo.isEmpty` when both pushdowns are disabled -- in that case, no
+  // pushdown pass ran and `PythonScan` plans the read later instead, so build() must not plan.
   private var deferredPlanning: Boolean = false
 
   override def build(): Scan = {
