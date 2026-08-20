@@ -426,19 +426,19 @@ class AdaptiveQueryExecSuite
       // A possible resulting query plan:
       // BroadcastHashJoin
       // +- BroadcastExchange
-      //    +- LocalShuffleReader*
+      //    +- AQEShuffleRead local*
       //       +- ShuffleExchange
       //          +- BroadcastHashJoin
       //             +- BroadcastExchange
-      //                +- LocalShuffleReader*
+      //                +- AQEShuffleRead local*
       //                   +- ShuffleExchange
-      //             +- LocalShuffleReader*
+      //             +- AQEShuffleRead local*
       //                +- ShuffleExchange
       // +- BroadcastHashJoin
-      //    +- LocalShuffleReader*
+      //    +- AQEShuffleRead local*
       //       +- ShuffleExchange
       //    +- BroadcastExchange
-      //       +-LocalShuffleReader*
+      //       +-AQEShuffleRead local*
       //             +- ShuffleExchange
 
       // After applied the 'OptimizeShuffleWithLocalRead' rule, we can convert all the four
@@ -473,20 +473,20 @@ class AdaptiveQueryExecSuite
       // A possible resulting query plan:
       // BroadcastHashJoin
       // +- BroadcastExchange
-      //    +- LocalShuffleReader*
+      //    +- AQEShuffleRead local*
       //       +- ShuffleExchange
       //          +- BroadcastHashJoin
       //             +- BroadcastExchange
-      //                +- LocalShuffleReader*
+      //                +- AQEShuffleRead local*
       //                   +- ShuffleExchange
-      //             +- LocalShuffleReader*
+      //             +- AQEShuffleRead local*
       //                +- ShuffleExchange
       // +- BroadcastHashJoin
-      //    +- LocalShuffleReader*
+      //    +- AQEShuffleRead local*
       //       +- ShuffleExchange
       //    +- BroadcastExchange
       //       +-HashAggregate
-      //          +- CoalescedShuffleReader
+      //          +- AQEShuffleRead coalesced
       //             +- ShuffleExchange
 
       // The shuffle added by Aggregate can't apply local read.
@@ -518,21 +518,21 @@ class AdaptiveQueryExecSuite
       // A possible resulting query plan:
       // BroadcastHashJoin
       // +- BroadcastExchange
-      //    +- LocalShuffleReader*
+      //    +- AQEShuffleRead local*
       //       +- ShuffleExchange
       //          +- BroadcastHashJoin
       //             +- BroadcastExchange
-      //                +- LocalShuffleReader*
+      //                +- AQEShuffleRead local*
       //                   +- ShuffleExchange
-      //             +- LocalShuffleReader*
+      //             +- AQEShuffleRead local*
       //                +- ShuffleExchange
       // +- BroadcastHashJoin
       //    +- Filter
       //       +- HashAggregate
-      //          +- CoalescedShuffleReader
+      //          +- AQEShuffleRead coalesced
       //             +- ShuffleExchange
       //    +- BroadcastExchange
-      //       +-LocalShuffleReader*
+      //       +-AQEShuffleRead local*
       //           +- ShuffleExchange
 
       // The shuffle added by Aggregate can't apply local read.
