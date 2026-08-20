@@ -5549,6 +5549,7 @@ object SQLConf {
         "rather than a strict iterator, matching the behavior before 4.3.0. When false, the " +
         "returned value must be an iterator, matching the declared Iterator[...] signatures.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
