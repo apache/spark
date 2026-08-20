@@ -5672,6 +5672,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PARSE_SQL_ENABLED =
+    buildConf("spark.sql.function.parseSql.enabled")
+      .doc("When true, enables the parse_sql SQL function. This feature is under active " +
+        "development; the JSON contract may change across releases while the flag remains " +
+        "off by default.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
     .doc("When this option is set to false and all inputs are binary, `elt` returns " +
       "an output as binary. Otherwise, it returns as a string.")
@@ -9503,6 +9513,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
+
+  def parseSqlEnabled: Boolean = getConf(PARSE_SQL_ENABLED)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
