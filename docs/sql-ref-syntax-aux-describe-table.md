@@ -30,8 +30,10 @@ If a table's declared partition columns do not match the last columns of its sch
 metadata is inconsistent. `DESCRIBE TABLE` still returns the rest of the metadata, and reports
 both column lists under an `# Invalid Partition Information` section in place of the usual
 `# Partition Information` section. Repair such a table so that its declared partition columns
-match the last columns of its schema; until then, commands that require the partition schema,
-such as `DESCRIBE TABLE ... PARTITION`, `SHOW PARTITIONS` and `SHOW CREATE TABLE`, keep failing.
+match the last columns of its schema. Until then, commands that inspect a specific partition
+still fail: `DESCRIBE TABLE ... PARTITION`, `SHOW TABLE EXTENDED ... PARTITION`, and
+`SHOW PARTITIONS ... PARTITION`. So does `SHOW CREATE TABLE ... AS SERDE`. Unfiltered
+`SHOW PARTITIONS` and plain `SHOW CREATE TABLE` do not fail for this mismatch.
 
 ### Syntax
 
