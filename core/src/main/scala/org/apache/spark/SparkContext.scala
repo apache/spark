@@ -61,7 +61,7 @@ import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.ShuffleDataIOUtils
 import org.apache.spark.shuffle.api.ShuffleDriverComponents
@@ -244,6 +244,13 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _shuffleDriverComponents: ShuffleDriverComponents = _
   private var _plugins: Option[PluginContainer] = None
   private var _resourceProfileManager: ResourceProfileManager = _
+
+  // Whether the executors are held via `holdExecutors()`, and, when dynamic allocation is
+  // disabled, the number of executors to restore on `resumeExecutors()`. Declared here so
+  // that the initializers run before the constructor exposes the context through the UI:
+  // a hold served while `postStartHook()` is still waiting must not be erased.
+  @volatile private var _executorsHeld: Boolean = false
+  private var heldNumExecutors: Int = 0
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -2071,6 +2078,234 @@ class SparkContext(config: SparkConf) extends Logging {
           force = true).nonEmpty
       case _ =>
         logWarning("Killing executors is not supported by current scheduler.")
+        false
+    }
+  }
+
+  /**
+   * Whether `holdExecutors()` is supported in the current deployment. It requires a scheduler
+   * backend that can adjust the number of executors and can hold them, decommission support,
+   * and shuffle data kept outside the executors: either an external shuffle service or a
+   * `ShuffleDataIO` with reliable storage.
+   */
+  private[spark] def executorHoldSupported: Boolean = {
+    (schedulerBackend match {
+      case cg: CoarseGrainedSchedulerBackend => cg.supportsExecutorHold
+      case _ => false
+    }) &&
+      (conf.get(SHUFFLE_SERVICE_ENABLED) || shuffleDriverComponents.supportsReliableStorage()) &&
+      conf.get(DECOMMISSION_ENABLED)
+  }
+
+  /** Whether the executors are currently held by `holdExecutors()`. */
+  private[spark] def executorsHeld: Boolean = _executorsHeld
+
+  /**
+   * :: DeveloperApi ::
+   * Hold the whole application by declining to allocate new executors and gracefully
+   * decommissioning all existing ones. Each executor finishes its running tasks and then
+   * exits -- unless `spark.executor.decommission.forceKillTimeout` is set, in which case an
+   * executor still running tasks is killed after that timeout. The shuffle data already
+   * written remains available outside the executors, so the application can later pick up
+   * where it left off via `resumeExecutors()`. Cached blocks are not preserved and are
+   * recomputed after resuming. While held the application has no executors, so with
+   * `spark.default.parallelism` unset the default parallelism falls back to 2, and an RDD
+   * created during the hold keeps that partition count after resuming.
+   *
+   * This requires decommission support (`spark.decommission.enabled`), shuffle data kept
+   * outside the executors -- either an external shuffle service
+   * (`spark.shuffle.service.enabled`) or a `ShuffleDataIO` with reliable storage -- and a
+   * scheduler backend that can hold executors: Standalone, YARN, and Kubernetes with the
+   * `direct` pods allocator. Fallback storage
+   * (`spark.storage.decommission.fallbackStorage.path`) deliberately does not qualify:
+   * shuffle blocks not yet migrated when an executor exits are dropped.
+   *
+   * Executor requirements requested while held, through `requestExecutors` or
+   * `requestTotalExecutors`, are recorded but nothing is allocated until `resumeExecutors()`
+   * restores them.
+   *
+   * Pipelined-shuffle jobs are outside the hold's scope. A hold is rejected, on a
+   * best-effort check, while a pipelined job is running: its transient shuffle data lives
+   * only on the executors and would not survive the drain, and a group that slips past the
+   * check is aborted rather than drained, since a pipelined task set tolerates no task
+   * failure. A pipelined job submitted while held fails its gang admission immediately
+   * instead of waiting; resubmit it after the resume (with
+   * `spark.scheduler.pipelinedGroup.slotCheck.enabled=false` there is no admission check,
+   * so it waits for the resume instead). Workloads with long-running tasks (a
+   * streaming receiver, continuous processing) are outside the scope too: their tasks never
+   * finish, so the drain cannot complete.
+   *
+   * @throws IllegalArgumentException when the decommission or shuffle-storage precondition is
+   *         not met; an unsupported scheduler backend instead returns false with a warning.
+   * @return whether the lowered executor requirement was acknowledged by the cluster manager.
+   *         With dynamic allocation a rejected request is retried in the background; the
+   *         executors are drained in either case.
+   */
+  @DeveloperApi
+  def holdExecutors(): Boolean = {
+    schedulerBackend match {
+      case cg: CoarseGrainedSchedulerBackend if cg.supportsExecutorHold =>
+        require(executorHoldSupported,
+          s"holdExecutors() requires ${DECOMMISSION_ENABLED.key} and either " +
+            s"${SHUFFLE_SERVICE_ENABLED.key} or a ShuffleDataIO with reliable storage")
+        val pipelinedRunning = taskScheduler match {
+          case ts: TaskSchedulerImpl => ts.hasPipelinedTaskSets
+          case _ => false
+        }
+        if (pipelinedRunning) {
+          // A pipelined group reads and writes transient shuffle data that lives only on
+          // its executors: a partially launched group would deadlock the drain, and a
+          // force-killed member aborts the whole group.
+          logWarning(log"Cannot hold the executors while a pipelined job is running.")
+          false
+        } else synchronized {
+          if (_executorsHeld) {
+            // A repeated hold re-asserts the zero requirement: the earlier publish may not
+            // have been acknowledged, and with dynamic allocation off nothing retries it.
+            if (executorAllocationManager.isDefined) true else zeroExecutorRequirementAndDrain(cg)
+          } else {
+            if (executorAllocationManager.isEmpty) {
+              // The requirement to restore on resume when none was explicitly requested
+              // (explicitly requested totals, made before or during the hold, are
+              // republished from the backend directly). Only killExecutors' bookkeeping
+              // zero is kill-seeded (read atomically against a concurrent reset): restore
+              // the count of executors not already being removed, so that resume neither
+              // parks the application at zero nor undoes the downscale. Otherwise
+              // Standalone has no explicit requirement by default (and ignores
+              // spark.executor.instances, even a leftover value), so restore an unbounded
+              // one; elsewhere follow the conf, or fall back to the cluster manager's
+              // default when no executor has registered yet.
+              heldNumExecutors = if (cg.hasKillSeededTotalsOnly) {
+                cg.activeExecutorCount
+              } else {
+                schedulerBackend match {
+                  case _: StandaloneSchedulerBackend => Int.MaxValue
+                  case _ =>
+                    conf.get(EXECUTOR_INSTANCES).getOrElse(math.max(cg.getExecutorIds().size,
+                      SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS))
+                }
+              }
+            }
+            // Mark the hold before talking to the cluster manager, so that a partial failure
+            // below leaves the executors held, and thus resumable, instead of half-held.
+            _executorsHeld = true
+            cg.setExecutorsHeld(true)
+            executorAllocationManager match {
+              case Some(manager) =>
+                val acknowledged = manager.suspend()
+                drainHeldExecutors(cg)
+                acknowledged
+              case None => zeroExecutorRequirementAndDrain(cg)
+            }
+          }
+        }
+      case _ =>
+        logWarning("Holding executors is not supported by current scheduler.")
+        false
+    }
+  }
+
+  // Gracefully decommission all the current executors of a held application and let the
+  // executor monitor know, so that it does not try to remove the draining executors again and
+  // reports them in the decommissioning metrics.
+  private def drainHeldExecutors(b: ExecutorAllocationClient): Unit = {
+    val executors = b.getExecutorIds()
+    if (executors.nonEmpty) {
+      val decommissioned = b.decommissionExecutors(
+        executors.map(id => (id, ExecutorDecommissionInfo("Executors are held"))).toArray,
+        adjustTargetNumExecutors = false,
+        triggeredByExecutor = false)
+      executorAllocationManager.foreach(
+        _.executorMonitor.executorsDecommissioned(decommissioned))
+    }
+  }
+
+  // Restore the hold invariant without dynamic allocation: publish the zero requirement
+  // (the requested totals are kept and republished on resume) and drain the current
+  // executors. The publish must not abort the drain, which has to run even when the cluster
+  // manager is temporarily unreachable; the registration guard remains the backstop when the
+  // publish fails.
+  private[spark] def zeroExecutorRequirementAndDrain(
+      cg: CoarseGrainedSchedulerBackend): Boolean = {
+    val acknowledged = try {
+      cg.republishRequestedTotals()
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Failed to lower the executor requirement while holding the " +
+          log"executors.", e)
+        false
+    }
+    drainHeldExecutors(cg)
+    acknowledged
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Resume an application held by `holdExecutors()` by restoring its executor requirements.
+   *
+   * @return whether the restored executor requirement was acknowledged by the cluster manager.
+   *         With dynamic allocation a rejected request is retried in the background and the
+   *         hold is lifted; otherwise the executors stay held so the call can be retried.
+   */
+  @DeveloperApi
+  def resumeExecutors(): Boolean = {
+    schedulerBackend match {
+      case cg: CoarseGrainedSchedulerBackend =>
+        synchronized {
+          if (!_executorsHeld) {
+            true
+          } else {
+            // Lift the backend guard before restoring the requirement, so that an executor
+            // granted by the restored requirement cannot race with its own registration and
+            // be drained.
+            cg.setExecutorsHeld(false)
+            val acknowledged = executorAllocationManager match {
+              case Some(manager) =>
+                // resume() retries a rejected push in the background, so the hold can be
+                // lifted regardless of the acknowledgment.
+                manager.resume()
+              case None =>
+                try {
+                  // Totals requested before or during the hold are republished as-is; the
+                  // check and the publish are atomic, so a concurrent cluster manager reset
+                  // cannot turn this into publishing an empty map. When none are recorded
+                  // (never requested, or cleared by such a reset), restore the requirement
+                  // captured at hold.
+                  cg.republishExplicitTotals().getOrElse {
+                    // Publish without recording: the pre-hold state had no explicitly
+                    // requested totals, and recording the restore (in particular
+                    // Standalone's unbounded sentinel) would flip killExecutors' empty-map
+                    // seeding and mark the totals explicit for good.
+                    cg.publishTotalsWithoutRecording(
+                      immutable.Map(resourceProfileManager.defaultResourceProfile ->
+                        heldNumExecutors))
+                  }
+                } catch {
+                  case NonFatal(e) =>
+                    logWarning(log"Failed to restore the executor requirement while resuming " +
+                      log"the executors.", e)
+                    false
+                }
+            }
+            if (executorAllocationManager.isDefined || acknowledged) {
+              _executorsHeld = false
+            } else {
+              // The requirement could not be restored: stay held and re-arm the guard. The
+              // recorded totals are still the non-zero pre-hold ones, and an executor may
+              // have registered while the guard was down, so restore the hold invariant:
+              // push the zero requirement again and drain any current executors. The call
+              // can be retried.
+              cg.setExecutorsHeld(true)
+              zeroExecutorRequirementAndDrain(cg)
+              logWarning(log"The cluster manager did not acknowledge the restored executor " +
+                log"requirement; the executors remain held and resumeExecutors() can be " +
+                log"retried.")
+            }
+            acknowledged
+          }
+        }
+      case _ =>
+        logWarning("Resuming executors is not supported by current scheduler.")
         false
     }
   }
