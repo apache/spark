@@ -396,7 +396,7 @@ object JsonValueLookup {
  * The result of a single-value [[JsonTableEvaluator.queryLookup]] for `JSON_QUERY`. Unlike
  * [[JsonValueLookup]] -- which reports an object/array match as `NonScalar` without serializing it,
  * since `JSON_VALUE` never returns a non-scalar -- `Found` here always carries the matched value's
- * verbatim JSON text (`JSON_QUERY` returns objects, arrays, and scalars alike). `structural`
+ * serialized JSON text (`JSON_QUERY` returns objects, arrays, and scalars alike). `structural`
  * distinguishes an object/array match from a scalar match, which the caller needs for the array
  * wrapper (`WITH CONDITIONAL`) and quotes (`OMIT QUOTES`) behaviors. A JSON `null` literal is a
  * scalar match whose text is `null`, not a distinct case.
@@ -406,15 +406,17 @@ object JsonQueryLookup {
   /** The path did not match (routes to ON EMPTY). */
   case object Missing extends JsonQueryLookup
   /**
-   * The path matched a value; `raw` is its verbatim JSON text (a string is still quoted), and
+   * The path matched a value; `raw` is its serialized JSON text (a string is still quoted) and
    * `structural` is true iff the value is an object or array. `unquoted` is the `OMIT QUOTES`
    * form -- a matched JSON string's decoded content (read straight from the parser), and `raw`
    * itself for every other value (objects, arrays, numbers, booleans, and JSON `null`, for which
    * `OMIT QUOTES` is a no-op). Carrying it here lets the caller apply `OMIT QUOTES` without
-   * re-parsing the serialized fragment. It is populated only when
-   * [[JsonTableEvaluator.queryLookup]] is called with `omitQuotes = true`; otherwise (the default
-   * `KEEP QUOTES`, which discards it) it is left equal to `raw`, so the string decode is not paid
-   * for.
+   * re-parsing the serialized fragment. It differs from `raw` only for a matched string, and only
+   * when [[JsonTableEvaluator.queryLookup]] is called with `omitQuotes = true`; the default
+   * `KEEP QUOTES` path discards `unquoted` and leaves it equal to `raw`, so the string decode is
+   * not paid for. As an optimization, a matched string under `OMIT QUOTES` -- whose `raw` the
+   * caller would discard, since `OMIT QUOTES` cannot be combined with a wrapper -- skips
+   * serialization entirely, so `raw` then also holds the decoded content.
    */
   case class Found(raw: UTF8String, structural: Boolean, unquoted: UTF8String)
     extends JsonQueryLookup
@@ -580,13 +582,13 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
 
   /**
    * Resolves `containerPath` against a single JSON value for `JSON_QUERY`, serializing the matched
-   * value as verbatim JSON text. Returns:
+   * value to JSON text. Returns:
    *
    *   - `None` if the input is not a single well-formed JSON value (malformed / trailing garbage /
    *     empty), which the caller maps to ON ERROR;
    *   - `Some(Missing)` if the path matches nothing (ON EMPTY);
    *   - `Some(Found(raw, structural, unquoted))` if the path matches, where `raw` is the value's
-   *     verbatim JSON text, `structural` is true for an object or array (as opposed to a scalar,
+   *     serialized JSON text, `structural` is true for an object or array (as opposed to a scalar,
    *     including a JSON `null`, whose text is `null`), and `unquoted` is the `OMIT QUOTES` form
    *     (a matched JSON string's decoded content; `raw` for every other value).
    *
@@ -620,11 +622,13 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
                   val raw = serializeCurrentValue(parser)
                   JsonQueryLookup.Found(raw, structural = true, unquoted = raw)
                 case JsonToken.VALUE_STRING if omitQuotes =>
-                  // Capture the decoded string straight from the parser so `OMIT QUOTES` need not
-                  // re-parse the serialized (re-quoted) form. Only decode for `OMIT QUOTES`: the
-                  // default `KEEP QUOTES` path (below) discards it, so the allocation is skipped.
+                  // `OMIT QUOTES` returns the string's decoded content and cannot be combined with
+                  // an array wrapper (rejected at analysis time), so the serialized (re-quoted)
+                  // `raw` form would be discarded on this branch. Decode straight from the parser
+                  // and carry it as both fields, skipping the wasted `serializeCurrentValue`. Only
+                  // `OMIT QUOTES` reaches here; a `KEEP QUOTES` string falls through below.
                   val unquoted = UTF8String.fromString(parser.getText)
-                  JsonQueryLookup.Found(serializeCurrentValue(parser), structural = false, unquoted)
+                  JsonQueryLookup.Found(unquoted, structural = false, unquoted)
                 case _ =>
                   // A non-string scalar (number/boolean), for which `OMIT QUOTES` is a no-op, or a
                   // string under the default `KEEP QUOTES` (its decoded form is never used): the

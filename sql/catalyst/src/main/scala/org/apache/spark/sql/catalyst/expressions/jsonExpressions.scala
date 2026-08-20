@@ -1025,7 +1025,7 @@ object JsonQueryQuotes {
  *
  *   - missing path                        -> ON EMPTY behavior
  *   - malformed / non-single-value input  -> ON ERROR behavior
- *   - matched object / array / scalar     -> its verbatim JSON text, after applying the array
+ *   - matched object / array / scalar     -> its serialized JSON text, after applying the array
  *                                            wrapper and quotes clauses
  *
  * A matched scalar (including a JSON `null`) is not an error under the default `WITHOUT ARRAY
@@ -1110,10 +1110,10 @@ case class JsonQuery(
       else throw QueryExecutionErrors.jsonQueryOnErrorError(prettyName, path, cause = null)
   }
 
-  // Apply the array-wrapper and quotes clauses to a matched value. `raw` is its verbatim JSON text,
-  // `unquoted` is the OMIT QUOTES form (a string's decoded content; `raw` otherwise, so OMIT QUOTES
-  // is a no-op for objects, arrays, and non-string scalars), and `structural` is true for an object
-  // or array match (rather than a scalar, incl. JSON null).
+  // Apply the array-wrapper and quotes clauses to a matched value. `raw` is its serialized JSON
+  // text, `unquoted` is the OMIT QUOTES form (a string's decoded content; `raw` otherwise, so OMIT
+  // QUOTES is a no-op for objects, arrays, and non-string scalars), and `structural` is true for an
+  // object or array match (rather than a scalar, incl. JSON null).
   private def wrapAndQuote(raw: UTF8String, unquoted: UTF8String, structural: Boolean): UTF8String =
     wrapper match {
       case JsonQueryWrapper.Without =>
