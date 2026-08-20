@@ -331,11 +331,11 @@ class CountVectorizerModel(
     val minTf = $(minTF)
     val isBinary = $(binary)
     val vectorizer = udf { document: Seq[String] =>
-      val termCounts = new OpenHashMap[Int, Double]
+      val termCounts = new OpenHashMap[Int, Int]
       var tokenCount = 0L
       document.foreach { term =>
         dictBr.value.get(term) match {
-          case Some(index) => termCounts.changeValue(index, 1.0, _ + 1.0)
+          case Some(index) => termCounts.changeValue(index, 1, _ + 1)
           case None => // ignore terms not in the vocabulary
         }
         tokenCount += 1
@@ -344,7 +344,7 @@ class CountVectorizerModel(
       val effectiveCounts = if (isBinary) {
         termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
       } else {
-        termCounts.filter(_._2 >= effectiveMinTF).toSeq
+        termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, p._2.toDouble)).toSeq
       }
 
       Vectors.sparse(dictBr.value.size, effectiveCounts)
