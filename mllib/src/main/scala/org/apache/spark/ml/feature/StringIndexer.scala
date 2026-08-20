@@ -344,36 +344,36 @@ class StringIndexerModel (
 
   private def getKeepInvalidIndexer(
       labels: Array[String],
-      labelToIndex: OpenHashMap[String, Double]): UserDefinedFunction = {
+      labelToIndex: OpenHashMap[String, Int]): UserDefinedFunction = {
     val unknownIndex = labels.length.toDouble
     udf { label: String =>
       if (label == null) {
         unknownIndex
       } else {
-        labelToIndex.get(label).getOrElse(unknownIndex)
+        labelToIndex.get(label).map(_.toDouble).getOrElse(unknownIndex)
       }
     }.asNondeterministic()
   }
 
   private def getSkipInvalidIndexer(
-      labelToIndex: OpenHashMap[String, Double]): UserDefinedFunction = {
+      labelToIndex: OpenHashMap[String, Int]): UserDefinedFunction = {
     udf { label: String =>
       if (label == null) {
         null
       } else {
-        labelToIndex.get(label).map(index => java.lang.Double.valueOf(index)).orNull
+        labelToIndex.get(label).map(index => java.lang.Double.valueOf(index.toDouble)).orNull
       }
     }.asNondeterministic()
   }
 
   private def getErrorInvalidIndexer(
-      labelToIndex: OpenHashMap[String, Double]): UserDefinedFunction = {
+      labelToIndex: OpenHashMap[String, Int]): UserDefinedFunction = {
     udf { label: String =>
       if (label == null) {
         throw new SparkException("StringIndexer encountered NULL value. To handle or skip " +
           "NULLS, try setting StringIndexer.handleInvalid.")
       } else {
-        labelToIndex.get(label).getOrElse {
+        labelToIndex.get(label).map(_.toDouble).getOrElse {
           throw new SparkException(s"Unseen label: $label. To handle unseen labels, " +
             s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
         }
@@ -385,7 +385,7 @@ class StringIndexerModel (
       dataset: Dataset[_],
       inputColNames: Array[String],
       outputColNames: Array[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Double]]): DataFrame = {
+      labelsToIndexArray: Array[OpenHashMap[String, Int]]): DataFrame = {
     val (transformedDataset, _) = transformWithIndexers(
       dataset,
       inputColNames,
@@ -400,14 +400,14 @@ class StringIndexerModel (
       dataset: Dataset[_],
       inputColNames: Array[String],
       outputColNames: Array[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Double]]): DataFrame = {
+      labelsToIndexArray: Array[OpenHashMap[String, Int]]): DataFrame = {
     val (transformedDataset, filteredOutputColNames) = transformWithIndexers(
       dataset,
       inputColNames,
       outputColNames,
       labelsToIndexArray,
       keepInvalid = false,
-      (_: Array[String], labelToIndex: OpenHashMap[String, Double]) =>
+      (_: Array[String], labelToIndex: OpenHashMap[String, Int]) =>
         getSkipInvalidIndexer(labelToIndex))
     if (filteredOutputColNames.length > 0) {
       // The skip indexers return null for invalid labels. Their nondeterminism keeps this filter
@@ -422,14 +422,14 @@ class StringIndexerModel (
       dataset: Dataset[_],
       inputColNames: Array[String],
       outputColNames: Array[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Double]]): DataFrame = {
+      labelsToIndexArray: Array[OpenHashMap[String, Int]]): DataFrame = {
     val (transformedDataset, _) = transformWithIndexers(
       dataset,
       inputColNames,
       outputColNames,
       labelsToIndexArray,
       keepInvalid = false,
-      (_: Array[String], labelToIndex: OpenHashMap[String, Double]) =>
+      (_: Array[String], labelToIndex: OpenHashMap[String, Int]) =>
         getErrorInvalidIndexer(labelToIndex))
     transformedDataset
   }
@@ -438,9 +438,9 @@ class StringIndexerModel (
       dataset: Dataset[_],
       inputColNames: Array[String],
       outputColNames: Array[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Double]],
+      labelsToIndexArray: Array[OpenHashMap[String, Int]],
       keepInvalid: Boolean,
-      getIndexer: (Array[String], OpenHashMap[String, Double]) => UserDefinedFunction):
+      getIndexer: (Array[String], OpenHashMap[String, Int]) => UserDefinedFunction):
       (DataFrame, Array[String]) = {
     val filteredOutputColNames = ArrayBuffer.empty[String]
     val filteredOutputColumns = ArrayBuffer.empty[Column]
@@ -494,7 +494,7 @@ class StringIndexerModel (
 
     val (inputColNames, outputColNames) = getInOutCols()
     val labelsToIndexArray = labelsArray.map { labels =>
-      val map = new OpenHashMap[String, Double](labels.length)
+      val map = new OpenHashMap[String, Int](labels.length)
       labels.zipWithIndex.foreach { case (label, idx) =>
         map.update(label, idx)
       }
