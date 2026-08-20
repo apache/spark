@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period}
 import java.util.{Properties, TimeZone}
 
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
@@ -148,6 +148,14 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       """INSERT INTO datetimePartitionTest VALUES
         |(4, {d '2018-07-12'}, {ts '2018-07-12 09:51:15'})
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.commit()
+
+    // Single-row table with a sub-second (microsecond) TIMESTAMP for NTZ precision tests.
+    conn.prepareStatement("CREATE TABLE datetimeFraction (id NUMBER(10), t TIMESTAMP)")
+      .executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO datetimeFraction VALUES (1, {ts '1996-01-01 01:23:45.123456'})")
+      .executeUpdate()
     conn.commit()
 
     conn.prepareStatement("CREATE TABLE test_ltz(t TIMESTAMP WITH LOCAL TIME ZONE)")
@@ -285,7 +293,8 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     def checkRow(row: Row): Unit = {
       assert(row.getDecimal(0).equals(BigDecimal.valueOf(1)))
       assert(row.getDate(1).equals(Date.valueOf("1991-11-09")))
-      assert(row.getTimestamp(2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
+      // Oracle TIMESTAMP column t maps to TimestampNTZType, materialized as a LocalDateTime.
+      assert(row.get(2) === LocalDateTime.of(1996, 1, 1, 1, 23, 45))
     }
     checkRow(sql("SELECT * FROM datetime where id = 1").head())
     sql("INSERT INTO TABLE datetime1 SELECT * FROM datetime where id = 1")
@@ -437,7 +446,8 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       (3, "2018-07-08", "2018-07-08 13:32:01"),
       (4, "2018-07-12", "2018-07-12 09:51:15")
     ).map { case (id, date, timestamp) =>
-      Row(BigDecimal.valueOf(id), Date.valueOf(date), Timestamp.valueOf(timestamp))
+      // DATE d stays DateType under mapDateToTimestamp=false; Oracle TIMESTAMP t maps to NTZ.
+      Row(BigDecimal.valueOf(id), Date.valueOf(date), Timestamp.valueOf(timestamp).toLocalDateTime)
     }
 
     // DateType partition column
@@ -497,24 +507,28 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     }
 
     val query = "SELECT id, d, t FROM datetime WHERE id = 1"
-    // query option to pass on the query string.
-    val df = spark.read.format("jdbc")
-      .option("url", jdbcUrl)
-      .option("query", query)
-      .option("oracle.jdbc.mapDateToTimestamp", "false")
-      .load()
-    assert(df.collect().toSet === expectedResult)
+    // Keep t (Oracle TIMESTAMP) mapped to TimestampType so the expected Timestamp rows match;
+    // the NTZ mapping is exercised by the dedicated tests below.
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+      // query option to pass on the query string.
+      val df = spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("query", query)
+        .option("oracle.jdbc.mapDateToTimestamp", "false")
+        .load()
+      assert(df.collect().toSet === expectedResult)
 
-    // query option in the create table path.
-    sql(
-      s"""
-         |CREATE OR REPLACE TEMPORARY VIEW queryOption
-         |USING org.apache.spark.sql.jdbc
-         |OPTIONS (url '$jdbcUrl',
-         |   query '$query',
-         |   oracle.jdbc.mapDateToTimestamp false)
-       """.stripMargin.replaceAll("\n", " "))
-    assert(sql("select id, d, t from queryOption").collect().toSet == expectedResult)
+      // query option in the create table path.
+      sql(
+        s"""
+           |CREATE OR REPLACE TEMPORARY VIEW queryOption
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (url '$jdbcUrl',
+           |   query '$query',
+           |   oracle.jdbc.mapDateToTimestamp false)
+         """.stripMargin.replaceAll("\n", " "))
+      assert(sql("select id, d, t from queryOption").collect().toSet == expectedResult)
+    }
   }
 
   test("SPARK-32992: map Oracle's ROWID type to StringType") {
@@ -544,26 +558,215 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
   }
 
   test("SPARK-42627: Support ORACLE TIMESTAMP WITH LOCAL TIME ZONE") {
-    Seq("true", "false").foreach { flag =>
-      withSQLConf((SQLConf.LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED.key, flag)) {
-        val df = spark.read.format("jdbc")
-          .option("url", jdbcUrl)
-          .option("dbtable", "test_ltz")
-          .load()
-        val row1 = df.collect().head.getTimestamp(0)
-        assert(df.count() === 1)
-        assert(row1 === Timestamp.valueOf("2018-11-17 13:33:33"))
+    // flag="true" round-trips through a plain Oracle TIMESTAMP column, which now reads as
+    // TimestampNTZType; pin the pre-4.4 read mapping since this test covers only the write mapping.
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+      Seq("true", "false").foreach { flag =>
+        withSQLConf((SQLConf.LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED.key, flag)) {
+          val df = spark.read.format("jdbc")
+            .option("url", jdbcUrl)
+            .option("dbtable", "test_ltz")
+            .load()
+          val row1 = df.collect().head.getTimestamp(0)
+          assert(df.count() === 1)
+          assert(row1 === Timestamp.valueOf("2018-11-17 13:33:33"))
 
-        df.write.format("jdbc")
+          df.write.format("jdbc")
+            .option("url", jdbcUrl)
+            .option("dbtable", "test_ltz" + flag)
+            .save()
+
+          val df2 = spark.read.format("jdbc")
+            .option("url", jdbcUrl)
+            .option("dbtable", "test_ltz" + flag)
+            .load()
+          checkAnswer(df2, Row(row1))
+        }
+      }
+    }
+  }
+
+  test("Oracle DATE and TIMESTAMP read as TimestampNTZType by default; " +
+      "TimestampType under the legacy flag") {
+    // Read the `datetime` table's DATE column D (1991-11-09, no time zone) and TIMESTAMP column T
+    // (1996-01-01 01:23:45) in the driver's default mode (oracle.jdbc.mapDateToTimestamp=true), so
+    // both arrive under JDBC Types.TIMESTAMP.
+    def readDatetime(): DataFrame =
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("dbtable", "datetime")
+        .load()
+
+    // Default: both Oracle DATE and TIMESTAMP -> TimestampNTZType.
+    val df = readDatetime()
+    assert(df.schema("D").dataType === TimestampNTZType)
+    assert(df.schema("T").dataType === TimestampNTZType)
+    val row = df.select("D", "T").collect().head
+    assert(row.get(0) === LocalDateTime.of(1991, 11, 9, 0, 0, 0))
+    assert(row.get(1) === LocalDateTime.of(1996, 1, 1, 1, 23, 45))
+
+    // Sub-second precision: a TIMESTAMP(6) microsecond value round-trips as NTZ without truncation.
+    val fracDf = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "datetimeFraction")
+      .load()
+    assert(fracDf.schema("T").dataType === TimestampNTZType)
+    assert(fracDf.select("T").collect().head.get(0)
+      === LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000))
+
+    // Legacy flag on: both fall back to TimestampType.
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+      val legacyDf = readDatetime()
+      assert(legacyDf.schema("D").dataType === TimestampType)
+      assert(legacyDf.schema("T").dataType === TimestampType)
+      val legacyRow = legacyDf.select("D", "T").collect().head
+      assert(legacyRow.getTimestamp(0) === Timestamp.valueOf("1991-11-09 00:00:00"))
+      assert(legacyRow.getTimestamp(1) === Timestamp.valueOf("1996-01-01 01:23:45"))
+    }
+  }
+
+  // Reads the `datetime` table and asserts both columns come back as TimestampNTZType with their
+  // exact zoneless wall-clock values. `readerOptions` lets each test toggle one timezone mechanism.
+  private def assertDatetimeReadsAsNtz(readerOptions: Map[String, String] = Map.empty): Unit = {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "datetime")
+      .options(readerOptions)
+      .load()
+    assert(df.schema("D").dataType === TimestampNTZType)
+    assert(df.schema("T").dataType === TimestampNTZType)
+    val row = df.select("D", "T").collect().head
+    assert(row.get(0) === LocalDateTime.of(1991, 11, 9, 0, 0, 0))
+    assert(row.get(1) === LocalDateTime.of(1996, 1, 1, 1, 23, 45))
+  }
+
+  // Each test flips one timezone mechanism and asserts the zoneless DATE/TIMESTAMP -> NTZ read is
+  // unchanged. The fixed values are off any DST boundary, so the read is deterministic.
+
+  test("NTZ read is invariant to the JVM default time zone") {
+    Seq(UTC, PST, LA).foreach { zone =>
+      withDefaultTimeZone(zone) {
+        assertDatetimeReadsAsNtz()
+      }
+    }
+  }
+
+  test("NTZ read is invariant to spark.sql.session.timeZone") {
+    Seq("UTC", "America/Los_Angeles", "Asia/Kolkata").foreach { tz =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+        assertDatetimeReadsAsNtz()
+      }
+    }
+  }
+
+  test("NTZ read is invariant to the Oracle session TIME_ZONE (sessionInitStatement)") {
+    Seq("+00:00", "-08:00", "+05:30").foreach { tz =>
+      assertDatetimeReadsAsNtz(
+        Map("sessionInitStatement" -> s"ALTER SESSION SET TIME_ZONE='$tz'"))
+    }
+  }
+
+  test("NTZ read is invariant to oracle.jdbc.timezoneAsRegion") {
+    Seq("true", "false").foreach { flag =>
+      assertDatetimeReadsAsNtz(Map("oracle.jdbc.timezoneAsRegion" -> flag))
+    }
+  }
+
+  test("NTZ read is invariant to NLS date/timestamp formats") {
+    Seq(
+      "ALTER SESSION SET NLS_DATE_FORMAT='YYYY-MM-DD HH24:MI:SS'",
+      "ALTER SESSION SET NLS_TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF'"
+    ).foreach { initStmt =>
+      assertDatetimeReadsAsNtz(Map("sessionInitStatement" -> initStmt))
+    }
+  }
+
+  // How NTZ-mapped Oracle DATE (D) and TIMESTAMP (T) behave as WHERE predicates, using the 4-row
+  // datetimePartitionTest table. pushDown=false forces Spark-side evaluation (on the materialized
+  // zoneless LocalDateTime) instead of pushing to Oracle, so the two paths can be compared.
+  private def filteredIds(where: String, pushDown: Boolean = true): Set[Long] = {
+    spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "datetimePartitionTest")
+      .option("pushDownPredicate", pushDown.toString)
+      .load()
+      .where(where)
+      .selectExpr("cast(id as long) as id")
+      .collect().map(_.getLong(0)).toSet
+  }
+
+  test("WHERE on NTZ DATE column: equality (DATE has no time component)") {
+    assert(filteredIds("D = TIMESTAMP_NTZ'2018-07-08 00:00:00'") === Set(3L))
+  }
+
+  test("WHERE on NTZ DATE column: range excludes the equal lower bound") {
+    // ids 1,2 have D = 2018-07-06 00:00:00 (equal, not greater); ids 3,4 are strictly after.
+    assert(filteredIds("D > TIMESTAMP_NTZ'2018-07-06 00:00:00'") === Set(3L, 4L))
+  }
+
+  test("WHERE on NTZ TIMESTAMP column: equality") {
+    assert(filteredIds("T = TIMESTAMP_NTZ'2018-07-06 08:10:08'") === Set(2L))
+  }
+
+  test("WHERE on NTZ TIMESTAMP column: range") {
+    assert(filteredIds(
+      "T > TIMESTAMP_NTZ'2018-07-06 06:00:00' AND T < TIMESTAMP_NTZ'2018-07-09 00:00:00'")
+      === Set(2L, 3L))
+  }
+
+  test("WHERE on NTZ DATE column: pushdown off (Spark-side eval) matches pushdown on") {
+    val where = "D > TIMESTAMP_NTZ'2018-07-06 00:00:00'"
+    val off = filteredIds(where, pushDown = false)
+    assert(off === Set(3L, 4L))
+    assert(off === filteredIds(where, pushDown = true))
+  }
+
+  test("WHERE on NTZ TIMESTAMP column: pushdown off (Spark-side eval) matches pushdown on") {
+    val where = "T > TIMESTAMP_NTZ'2018-07-06 06:00:00'"
+    val off = filteredIds(where, pushDown = false)
+    assert(off === Set(2L, 3L, 4L))
+    assert(off === filteredIds(where, pushDown = true))
+  }
+
+  test("Predicates on NTZ-mapped Oracle columns are pushed down to Oracle") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "datetimePartitionTest")
+      .load()
+      .where("D > TIMESTAMP_NTZ'2018-07-06 00:00:00' AND " +
+        "T > TIMESTAMP_NTZ'2018-07-06 06:00:00'")
+    val scan = df.queryExecution.executedPlan.collectFirst {
+      case r: RowDataSourceScanExec => r
+    }.getOrElse(fail("Expected a RowDataSourceScanExec in the plan"))
+    val pushed = scan.metadata.getOrElse("PushedFilters", "")
+    assert(pushed.contains("GreaterThan(D,2018-07-06T00:00)"),
+      s"NTZ DATE predicate was not pushed down; PushedFilters=$pushed")
+    assert(pushed.contains("GreaterThan(T,2018-07-06T06:00)"),
+      s"NTZ TIMESTAMP predicate was not pushed down; PushedFilters=$pushed")
+    assert(df.count() === 2)
+  }
+
+  test("TimestampNTZType round-trips through an Oracle write and read") {
+    val ldt = LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000)
+    val schema = StructType(Seq(StructField("T", TimestampNTZType)))
+    // Write and read under several JVM zones; the zoneless NTZ wall-clock (incl. microseconds) must
+    // survive the round-trip regardless of the zone.
+    Seq(UTC, LA).foreach { zone =>
+      withDefaultTimeZone(zone) {
+        val dfWrite = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(ldt))), schema)
+        dfWrite.write.format("jdbc")
+          .mode(SaveMode.Overwrite)
           .option("url", jdbcUrl)
-          .option("dbtable", "test_ltz" + flag)
+          .option("dbtable", "ntz_write_roundtrip")
           .save()
 
-        val df2 = spark.read.format("jdbc")
+        val dfRead = spark.read.format("jdbc")
           .option("url", jdbcUrl)
-          .option("dbtable", "test_ltz" + flag)
+          .option("dbtable", "ntz_write_roundtrip")
           .load()
-        checkAnswer(df2, Row(row1))
+        assert(dfRead.schema.fields.head.dataType === TimestampNTZType)
+        assert(dfRead.collect().head.get(0) === ldt)
       }
     }
   }
