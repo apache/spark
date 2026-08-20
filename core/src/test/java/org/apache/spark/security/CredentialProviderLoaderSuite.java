@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -443,11 +445,55 @@ public class CredentialProviderLoaderSuite {
     IllegalStateException e = assertThrows(IllegalStateException.class,
         () -> loader.providerFor("fake", conf));
     assertEquals("Credential providers have already been closed", e.getMessage());
+    assertThrows(IllegalStateException.class,
+        () -> loader.providerFor("nonexistent", conf));
 
     CredentialProviderLoader nextLoader = new CredentialProviderLoader();
     CredentialProvider second = nextLoader.providerFor("fake", conf).orElseThrow();
     assertInstanceOf(FakeCredentialProvider.class, second);
     assertTrue(first != second, "A new loader should discover a fresh provider instance");
+  }
+
+  @Test
+  public void testStaleLifecycleCannotUseNextLifecycleProviders() throws Exception {
+    Map<String, String> conf = Map.of();
+    CredentialProvider retiredProvider = loader.providerFor("fake", conf).orElseThrow();
+    CountDownLatch releaseStaleCaller = new CountDownLatch(1);
+    AtomicReference<Throwable> staleFailure = new AtomicReference<>();
+    Thread staleCaller = new Thread(() -> {
+      try {
+        releaseStaleCaller.await();
+        loader.providerFor("fake", conf);
+      } catch (Throwable t) {
+        staleFailure.set(t);
+      }
+    });
+    staleCaller.start();
+
+    try {
+      loader.closeAll();
+
+      CredentialProviderLoader nextLoader = new CredentialProviderLoader();
+      try {
+        CredentialProvider nextProvider = nextLoader.providerFor("fake", conf).orElseThrow();
+        assertTrue(retiredProvider != nextProvider,
+            "The next lifecycle should discover a fresh provider instance");
+
+        releaseStaleCaller.countDown();
+        staleCaller.join(10000);
+
+        assertFalse(staleCaller.isAlive(), "The stale caller should have completed");
+        assertInstanceOf(IllegalStateException.class, staleFailure.get());
+        assertEquals("Credential providers have already been closed",
+            staleFailure.get().getMessage());
+      } finally {
+        nextLoader.closeAll();
+      }
+    } finally {
+      releaseStaleCaller.countDown();
+      staleCaller.interrupt();
+      staleCaller.join(10000);
+    }
   }
 
   @Test

@@ -120,13 +120,19 @@ public final class CredentialProviderLoader {
    * @return the selected provider, or empty if no provider supports the scheme
    * @throws IllegalArgumentException if explicit selection names an unknown or non-supporting
    *     class, or if multiple candidates exist without explicit selection
-   * @throws IllegalStateException if a provider returns null from {@code supportedSchemes()}
+   * @throws IllegalStateException if providers have already been closed or if a provider returns
+   *     null from {@code supportedSchemes()}
    */
   public Optional<CredentialProvider> providerFor(String scheme, Map<String, String> conf) {
     Objects.requireNonNull(scheme, "scheme must not be null");
     Objects.requireNonNull(conf, "conf must not be null");
     if (scheme.isEmpty()) {
       throw new IllegalArgumentException("scheme must not be empty");
+    }
+    synchronized (this) {
+      if (providersClosed) {
+        throw new IllegalStateException("Credential providers have already been closed");
+      }
     }
     String normalizedScheme = scheme.toLowerCase(Locale.ROOT);
     List<CredentialProvider> providers = getProviders();
@@ -182,6 +188,7 @@ public final class CredentialProviderLoader {
     // to a specific prefix. We keep the full key (unlike extractSessionConfigs which
     // strips the prefix) so providers can distinguish sub-keys unambiguously.
     synchronized (this) {
+      // Re-check under the initialization lock in case closeAll() ran during selection.
       if (providersClosed) {
         throw new IllegalStateException("Credential providers have already been closed");
       }
