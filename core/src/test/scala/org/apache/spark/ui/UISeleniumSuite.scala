@@ -302,6 +302,29 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     }
   }
 
+  test("SPARK-58828: spark.ui.holdEnabled should properly control hold button display") {
+    def hasHoldLink: Boolean = find(className("confirm-link")).isDefined
+    // The control needs a coarse-grained backend (so local-cluster, not local) and the hold
+    // preconditions; the external shuffle service itself is not needed to render the page.
+    val holdConfs = Map(
+      SHUFFLE_SERVICE_ENABLED.key -> "true",
+      DECOMMISSION_ENABLED.key -> "true")
+
+    withSpark(newSparkContext(master = "local-cluster[1,1,1024]",
+        additionalConfs = holdConfs)) { sc =>
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/jobs")
+        assert(hasHoldLink)
+      }
+    }
+
+    withSpark(newSparkContext(master = "local-cluster[1,1,1024]",
+        additionalConfs = holdConfs + (UI_HOLD_ENABLED.key -> "false"))) { sc =>
+      goToUi(sc, "/jobs")
+      assert(!hasHoldLink)
+    }
+  }
+
   test("jobs page should not display job group name unless some job was submitted in a job group") {
     withSpark(newSparkContext()) { sc =>
       // If no job has been run in a job group, then "(Job Group)" should not appear in the header

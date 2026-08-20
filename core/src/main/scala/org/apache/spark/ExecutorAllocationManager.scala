@@ -69,7 +69,9 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * blocks will be removed if it has been idle for more than L seconds.
  *
  * There is no retry logic in either case because we make the assumption that the cluster manager
- * will eventually fulfill all requests it receives asynchronously.
+ * will eventually fulfill all requests it receives asynchronously. The one exception is the
+ * deferred target push used while the executors are held (see `targetSyncPending`), which
+ * retries until the cluster manager acknowledges the current targets.
  *
  * The relevant Spark properties are below. Each of these properties applies separately to
  * every ResourceProfile. So if you set a minimum number of executors, that is a minimum
@@ -174,6 +176,28 @@ private[spark] class ExecutorAllocationManager(
   //   (1) a stage is submitted, or
   //   (2) an executor idle timeout has elapsed.
   @volatile private var initializing: Boolean = true
+
+  // Whether allocation is suspended because the executors are held. While this is true,
+  // `schedule()` is a no-op so that pending tasks do not bring up new executors.
+  // See `SparkContext.holdExecutors()`.
+  private var suspended: Boolean = false
+
+  // Whether the current executor targets still have to be pushed to the cluster manager. Set
+  // when a push from `suspend()`/`resume()` fails or is rejected (e.g. before the YARN AM has
+  // registered), and by `reset()`, which may run inside a cluster manager RPC handler where a
+  // synchronous request would self-deadlock (e.g. YARN's RegisterClusterManager). The push is
+  // performed from the allocation thread in `schedule()` and retried until acknowledged, with
+  // an exponential backoff: the conditions under which it retries (an AM restart, an
+  // unreachable cluster manager) resolve on a timescale far above the allocation tick.
+  private var targetSyncPending: Boolean = false
+
+  // Ticks to wait before the next deferred push attempt, and the delay to arm after another
+  // failure. Zero keeps the first attempt after arming `targetSyncPending` immediate.
+  private var ticksUntilTargetSync: Int = 0
+  private var targetSyncBackoffTicks: Int = 0
+
+  // Upper bound of the deferred push backoff, in ticks (10 seconds with the 100ms interval).
+  private val maxTargetSyncBackoffTicks = 100
 
   // Number of locality aware tasks for each ResourceProfile, used for executor placement.
   private var numLocalityAwareTasksPerResourceProfileId = new mutable.HashMap[Int, Int]
@@ -282,12 +306,107 @@ private[spark] class ExecutorAllocationManager(
   def reset(): Unit = synchronized {
     addTime = 0L
     numExecutorsTargetPerResourceProfileId.keys.foreach { rpId =>
-      numExecutorsTargetPerResourceProfileId(rpId) = initialNumExecutors
+      numExecutorsTargetPerResourceProfileId(rpId) = if (suspended) 0 else initialNumExecutors
     }
     numExecutorsToAddPerResourceProfileId.keys.foreach { rpId =>
       numExecutorsToAddPerResourceProfileId(rpId) = 1
     }
     executorMonitor.reset()
+    if (suspended) {
+      // A restarted cluster manager AM may have allocated executors on its own, so the zero
+      // targets have to be pushed again. Leave that to `schedule()`: this method may run
+      // inside the cluster manager's RPC handler, where a synchronous request would
+      // self-deadlock.
+      targetSyncPending = true
+      ticksUntilTargetSync = 0
+      targetSyncBackoffTicks = 0
+    }
+  }
+
+  /**
+   * Push the current executor targets to the cluster manager and report whether the request
+   * was acknowledged, arming the `schedule()` retry otherwise.
+   */
+  private def syncTargetsWithClient(): Boolean = {
+    val acknowledged = try {
+      client.requestTotalExecutors(
+        numExecutorsTargetPerResourceProfileId.toMap,
+        numLocalityAwareTasksPerResourceProfileId.toMap,
+        rpIdToHostToLocalTaskCount)
+    } catch {
+      case NonFatal(e) =>
+        // Use INFO level to be consistent with `doUpdateRequest`: errors here are more
+        // commonly caused by YARN AM restarts, which is a recoverable issue.
+        logInfo("Error reaching cluster manager.", e)
+        false
+    }
+    if (acknowledged) {
+      targetSyncPending = false
+      ticksUntilTargetSync = 0
+      targetSyncBackoffTicks = 0
+    } else {
+      targetSyncPending = true
+      ticksUntilTargetSync = targetSyncBackoffTicks
+      targetSyncBackoffTicks =
+        math.min(maxTargetSyncBackoffTicks, math.max(1, targetSyncBackoffTicks * 2))
+    }
+    acknowledged
+  }
+
+  /**
+   * Suspend allocation and lower the executor targets of all resource profiles to zero, so that
+   * pending tasks do not bring up new executors while the executors are held. Target updates
+   * are a no-op in `schedule()` until [[resume()]] is called.
+   *
+   * @return whether the zero targets were acknowledged by the cluster manager. When false, the
+   *         push is retried from `schedule()` until acknowledged.
+   */
+  def suspend(): Boolean = synchronized {
+    if (!suspended) {
+      suspended = true
+      numExecutorsTargetPerResourceProfileId.keys.foreach { rpId =>
+        numExecutorsTargetPerResourceProfileId(rpId) = 0
+      }
+      numExecutorsToAddPerResourceProfileId.keys.foreach { rpId =>
+        numExecutorsToAddPerResourceProfileId(rpId) = 1
+      }
+      syncTargetsWithClient()
+    } else {
+      true
+    }
+  }
+
+  /**
+   * Resume allocation suspended by [[suspend()]]. The executor targets are recomputed from the
+   * current load on the next `schedule()` run.
+   *
+   * @return whether the restored targets were acknowledged by the cluster manager. When false,
+   *         the push is retried from `schedule()` until acknowledged.
+   */
+  def resume(): Boolean = synchronized {
+    if (suspended) {
+      suspended = false
+      // Restore at least the lower bound of the target: the initial warm-up requested by
+      // `start()` when no stage has been submitted yet (`updateAndSyncNumExecutorsTarget`
+      // skips it while initializing), and `minNumExecutors` otherwise, so that an idle
+      // application does not stay below the minimum until the next backlog.
+      val floor = if (initializing) initialNumExecutors else minNumExecutors
+      numExecutorsTargetPerResourceProfileId.keys.foreach { rpId =>
+        numExecutorsTargetPerResourceProfileId(rpId) =
+          math.max(numExecutorsTargetPerResourceProfileId(rpId), floor)
+      }
+      val acknowledged = syncTargetsWithClient()
+      if (!initializing && numExecutorsTargetPerResourceProfileId.keys
+          .exists(maxNumExecutorsNeededPerResourceProfile(_) > 0)) {
+        // Trigger an immediate ramp-up for the load that built up while suspended. Do not
+        // touch `addTime` otherwise: nothing resets it to NOT_SET while idle, and a stale
+        // value would let a much later backlog skip the scheduler backlog timeout.
+        addTime = clock.nanoTime()
+      }
+      acknowledged
+    } else {
+      true
+    }
   }
 
   /**
@@ -339,6 +458,21 @@ private[spark] class ExecutorAllocationManager(
    * This is factored out into its own method for testing.
    */
   private def schedule(): Unit = synchronized {
+    if (targetSyncPending) {
+      if (ticksUntilTargetSync <= 0) {
+        // Deferred target push, retried with a backoff until acknowledged: an earlier push
+        // was rejected or failed (e.g. before the YARN AM registered), or `reset()` ran
+        // inside a cluster manager RPC handler where a synchronous request would
+        // self-deadlock. No `testing` short-circuit here: tests assert on this call through
+        // the mocked client.
+        syncTargetsWithClient()
+      } else {
+        ticksUntilTargetSync -= 1
+      }
+    }
+    if (suspended) {
+      return
+    }
     val executorIdsToBeRemoved = executorMonitor.timedOutExecutors()
     if (executorIdsToBeRemoved.nonEmpty) {
       initializing = false
@@ -717,8 +851,11 @@ private[spark] class ExecutorAllocationManager(
         updateExecutorPlacementHints()
 
         if (!numExecutorsTargetPerResourceProfileId.contains(profId)) {
-          numExecutorsTargetPerResourceProfileId.put(profId, initialNumExecutors)
-          if (initialNumExecutors > 0) {
+          // While suspended, a new resource profile must start at a zero target so that the
+          // hold is not bypassed; the target is recomputed on resume.
+          numExecutorsTargetPerResourceProfileId.put(
+            profId, if (suspended) 0 else initialNumExecutors)
+          if (!suspended && initialNumExecutors > 0) {
             logDebug(s"requesting executors, rpId: $profId, initial number is $initialNumExecutors")
             // we need to trigger a schedule since we add an initial number here.
             client.requestTotalExecutors(
