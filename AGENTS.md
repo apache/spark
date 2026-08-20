@@ -202,7 +202,17 @@ It lists `master` and the latest major's release branches the commit reached (e.
 
 PR title format is `[SPARK-xxxx][COMPONENT] Title`. Draft, WIP, MINOR, and TRIVIAL PRs may omit the JIRA ID. The component tag is derived from the JIRA component name: take the last word and uppercase it (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `Structured Streaming` → `[STREAMING]`, `SQL` → `[SQL]`).
 
-Use `[FOLLOWUP]` only when a PR directly modifies or corrects unreleased work from one or more specific earlier PRs, such as addressing post-merge review feedback or fixing a regression introduced by those changes. A separately planned PR that implements another part of a JIRA's original scope is a continuation: reuse the JIRA and use the normal title format without `[FOLLOWUP]`. If the work falls outside the original scope, or if any earlier change has been released, create a new JIRA ticket and do not use `[FOLLOWUP]`. Otherwise, reuse the earlier PRs' JIRA ticket(s) and insert `[FOLLOWUP]` after the component tag, for example `[SPARK-xxxx][COMPONENT][FOLLOWUP] Title`.
+Use `[FOLLOWUP]` only for small PRs that directly modify or correct unreleased work from
+one or more specific earlier PRs, such as addressing post-merge review feedback or fixing
+a regression introduced by those changes. Reuse the earlier PRs' JIRA ticket(s) and insert
+`[FOLLOWUP]` after the component tag, for example
+`[SPARK-xxxx][COMPONENT][FOLLOWUP] Title`.
+
+Do not treat a separately planned PR as a follow-up just because it shares a JIRA with an
+earlier PR. If the existing JIRA still covers the work, use the normal title format with
+that JIRA and without `[FOLLOWUP]`. If the work falls outside the existing JIRA's scope, or
+if any earlier change has been released, create a new JIRA ticket and do not use
+`[FOLLOWUP]`.
 
 Infer the PR title from the changes. If no ticket ID is given and the PR is not draft, WIP, MINOR, or TRIVIAL, create one using `dev/create_spark_jira.py`, using the PR title (without the JIRA ID and component tag) as the ticket title.
 
