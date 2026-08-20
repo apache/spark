@@ -2129,7 +2129,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * only on the executors and would not survive the drain, and a group that slips past the
    * check is aborted rather than drained, since a pipelined task set tolerates no task
    * failure. A pipelined job submitted while held fails its gang admission immediately
-   * instead of waiting; resubmit it after the resume. Workloads with long-running tasks (a
+   * instead of waiting; resubmit it after the resume (with
+   * `spark.scheduler.pipelinedGroup.slotCheck.enabled=false` there is no admission check,
+   * so it waits for the resume instead). Workloads with long-running tasks (a
    * streaming receiver, continuous processing) are outside the scope too: their tasks never
    * finish, so the drain cannot complete.
    *
