@@ -194,25 +194,22 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     val vocSize = $(vocabSize)
     val input = dataset.select($(inputCol))
     val countingRequired = $(minDF) < 1.0 || $(maxDF) < 1.0
-    val maybeInputSize = if (countingRequired) {
+    if (countingRequired) {
       if (dataset.storageLevel == StorageLevel.NONE) {
         input.persist(StorageLevel.MEMORY_AND_DISK)
       }
-      Some(input.count())
-    } else {
-      None
     }
-    val minDf = if ($(minDF) >= 1.0) {
-      $(minDF)
+    val inputSizeCol = input.select(count("*")).scalar()
+    val minDfCol = if ($(minDF) >= 1.0) {
+      lit($(minDF))
     } else {
-      $(minDF) * maybeInputSize.get
+      inputSizeCol * lit($(minDF))
     }
-    val maxDf = if ($(maxDF) >= 1.0) {
-      $(maxDF)
+    val maxDfCol = if ($(maxDF) >= 1.0) {
+      lit($(maxDF))
     } else {
-      $(maxDF) * maybeInputSize.get
+      inputSizeCol * lit($(maxDF))
     }
-    require(maxDf >= minDf, "maxDF must be >= minDF.")
     val filteringRequired = isSet(minDF) || isSet(maxDF)
     val wordCounts = if (filteringRequired) {
       input
@@ -228,7 +225,7 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
         .agg(
           sum("termCountInDoc").as("count"),
           count("*").as("documentCount"))
-        .filter(col("documentCount") >= minDf && col("documentCount") <= maxDf)
+        .filter(col("documentCount") >= minDfCol && col("documentCount") <= maxDfCol)
         .select("word", "count")
     } else {
       input
