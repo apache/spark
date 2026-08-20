@@ -68,8 +68,16 @@ _LINUX_ZOMBIE_STATE = "Z"
 def _pid_alive(pid: int) -> bool:
     """Whether ``pid`` is running. A process we cannot signal counts as alive. Linux zombies
     count as terminated: they remain signalable until their parent reaps them, but cannot own
-    or serve a managed server. POSIX only, like the reuse and pool paths that call it.
+    or serve a managed server.
+
+    Off POSIX this returns ``True`` without probing: ``os.kill`` there terminates the target for
+    any signal other than ``CTRL_C_EVENT`` / ``CTRL_BREAK_EVENT``, so signal 0 is not a safe
+    liveness probe, and callers fall through to the port check instead. Guarding here rather than
+    at each call site keeps every caller (reuse and pool) safe. (The pool path needs ``fcntl`` and
+    so never runs off POSIX regardless.)
     """
+    if os.name != "posix":
+        return True
     if pid <= 0:
         return False
     try:
@@ -264,7 +272,7 @@ class LocalConnectServer:
 
         if self.spark_version != __version__ or self.pid is None:
             return False
-        if os.name == "posix" and not _pid_alive(self.pid):
+        if not _pid_alive(self.pid):
             return False
         return self.is_listening()
 
@@ -520,10 +528,7 @@ class ServerLauncher:
         while time.time() < deadline:
             pid = self._discovery.daemon_pid()
             if pid is not None:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.settimeout(0.5)
-                    listening = sock.connect_ex(("localhost", port)) == 0
-                if listening:
+                if _port_open("localhost", port):
                     self._discovery.save(
                         {
                             "host": "localhost",

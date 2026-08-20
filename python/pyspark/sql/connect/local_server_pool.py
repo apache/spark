@@ -39,6 +39,12 @@ from pyspark.errors import PySparkValueError
 # rest feed the classpath, heap, and JVM options. This is a curated set, not an exhaustive
 # one: the launcher inherits the whole environment, so it names the inputs that most commonly
 # differ between runs rather than every variable a server could read.
+#
+# PATH is a deliberate omission: bin/spark-class prefers ${JAVA_HOME}/bin/java and only falls
+# back to the first java on PATH, so two runs with different JDKs first on PATH and no JAVA_HOME
+# would share a member. The identity already tracks PATH indirectly through shutil.which for the
+# interpreters, and PATH is too volatile to fingerprint whole; a run needing a specific JDK
+# should set JAVA_HOME.
 _JVM_ENV_VARS = (
     "SPARK_CONF_DIR",
     "JAVA_HOME",

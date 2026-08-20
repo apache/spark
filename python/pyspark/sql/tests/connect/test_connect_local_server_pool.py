@@ -30,6 +30,7 @@ from pyspark.testing.connectutils import should_test_connect, connect_requiremen
 if should_test_connect:
     from pyspark.sql.connect.local_server import _pid_alive
     from pyspark.sql.connect.local_server_pool import (
+        _JVM_ENV_VARS,
         PoolDirectory,
         PoolMember,
         ServerPool,
@@ -410,16 +411,29 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             self.assertNotEqual(base, pool_fingerprint("local[*]", {}))
 
     def test_fingerprint_includes_jvm_env(self) -> None:
-        # Environment that shapes the launched JVM must change the identity. SPARK_CONF_DIR is
-        # the common CI case: it selects the spark-defaults.conf / spark-env.sh the server reads.
-        with mock.patch.dict(os.environ, {"SPARK_CONF_DIR": "/conf/a"}):
-            with_conf_a = pool_fingerprint("local[*]", {})
-        with mock.patch.dict(os.environ, {"SPARK_CONF_DIR": "/conf/b"}):
-            self.assertNotEqual(with_conf_a, pool_fingerprint("local[*]", {}))
-        with mock.patch.dict(os.environ, {"JAVA_HOME": "/jdk/a"}):
-            with_java_a = pool_fingerprint("local[*]", {})
-        with mock.patch.dict(os.environ, {"JAVA_HOME": "/jdk/b"}):
-            self.assertNotEqual(with_java_a, pool_fingerprint("local[*]", {}))
+        # Every JVM-shaping variable must change the identity. SPARK_CONF_DIR is the common CI
+        # case (it selects the spark-defaults.conf / spark-env.sh the server reads); the rest
+        # feed the classpath, heap, and JVM options. The expected list is spelled out here
+        # independently rather than derived from _JVM_ENV_VARS: the fingerprint reads that same
+        # tuple, so dropping a variable from it would silently leave the fingerprint AND a loop
+        # over it in agreement. The equality check catches such drift (a removal or an unlisted
+        # addition), and the loop proves each variable still changes the identity.
+        expected = (
+            "SPARK_CONF_DIR",
+            "JAVA_HOME",
+            "SPARK_DIST_CLASSPATH",
+            "SPARK_DAEMON_MEMORY",
+            "SPARK_DRIVER_MEMORY",
+            "SPARK_SUBMIT_OPTS",
+            "SPARK_DAEMON_JAVA_OPTS",
+        )
+        self.assertEqual(set(_JVM_ENV_VARS), set(expected))
+        for var in expected:
+            with self.subTest(var=var):
+                with mock.patch.dict(os.environ, {var: "/value/a"}):
+                    with_a = pool_fingerprint("local[*]", {})
+                with mock.patch.dict(os.environ, {var: "/value/b"}):
+                    self.assertNotEqual(with_a, pool_fingerprint("local[*]", {}))
 
     def test_pool_member_validation(self) -> None:
         valid = self._server_data(12345, 123, created=1)
