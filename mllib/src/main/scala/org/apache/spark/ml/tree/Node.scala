@@ -78,7 +78,7 @@ sealed abstract class Node extends Serializable {
    */
   private[ml] def maxSplitFeatureIndex(): Int
 
-  private[ml] def computeStats: Node.TreeStats = {
+  private[ml] def computeStats: NodeStats = {
     var numDescendants = 0
     var subtreeDepth = 0
     var numLeaves = 0
@@ -98,16 +98,16 @@ sealed abstract class Node extends Serializable {
     }
 
     visit(this, 0)
-    Node.TreeStats(subtreeDepth, numDescendants, numLeaves)
+    NodeStats(subtreeDepth, numDescendants, numLeaves)
   }
 }
 
-private[ml] object Node {
+private[ml] case class NodeStats(
+    subtreeDepth: Int,
+    numDescendants: Int,
+    numLeaves: Int)
 
-  private[ml] case class TreeStats(
-      subtreeDepth: Int,
-      numDescendants: Int,
-      numLeaves: Int)
+private[ml] object Node {
 
   /**
    * Create a new Node from the old Node format, recursively creating child nodes as needed.

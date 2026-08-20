@@ -91,7 +91,7 @@ private[spark] trait DecisionTreeModel {
     }
   }
 
-  private[ml] def treeStats: Node.TreeStats
+  private[ml] def treeStats: NodeStats
 
   private[ml] def numLeaves: Int = treeStats.numLeaves
 
