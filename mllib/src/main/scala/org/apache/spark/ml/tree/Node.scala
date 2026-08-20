@@ -77,9 +77,37 @@ sealed abstract class Node extends Serializable {
    * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
    */
   private[ml] def maxSplitFeatureIndex(): Int
+
+  private[ml] def computeStats: Node.TreeStats = {
+    var numDescendants = 0
+    var subtreeDepth = 0
+    var numLeaves = 0
+
+    def visit(node: Node, depth: Int): Unit = {
+      if (depth > 0) {
+        numDescendants += 1
+      }
+      subtreeDepth = math.max(subtreeDepth, depth)
+      node match {
+        case _: LeafNode =>
+          numLeaves += 1
+        case internal: InternalNode =>
+          visit(internal.leftChild, depth + 1)
+          visit(internal.rightChild, depth + 1)
+      }
+    }
+
+    visit(this, 0)
+    Node.TreeStats(subtreeDepth, numDescendants, numLeaves)
+  }
 }
 
 private[ml] object Node {
+
+  private[ml] case class TreeStats(
+      subtreeDepth: Int,
+      numDescendants: Int,
+      numLeaves: Int)
 
   /**
    * Create a new Node from the old Node format, recursively creating child nodes as needed.
