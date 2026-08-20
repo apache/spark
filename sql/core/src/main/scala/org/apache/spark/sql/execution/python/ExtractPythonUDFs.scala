@@ -351,6 +351,11 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
                   log"Falling back to non-Arrow-optimized UDF execution.")
               }
               BatchEvalPython(validUdfs, resultAttrs, child)
+            case PythonEvalType.SQL_SCALAR_FOLD_UDF =>
+              // The fold UDF backing `aggregate` / `reduce` with a Python UDF: same pickle-based
+              // operator as SQL_BATCHED_UDF, but the eval type tells the worker to run the
+              // sequential per-element fold. See ExtractPythonUDFFromLambda.
+              BatchEvalPython(validUdfs, resultAttrs, child, PythonEvalType.SQL_SCALAR_FOLD_UDF)
             case PythonEvalType.SQL_SCALAR_PANDAS_UDF
                  | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                  | PythonEvalType.SQL_ARROW_BATCHED_UDF

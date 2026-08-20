@@ -89,8 +89,52 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
                 if hof.functions.exists(_.exists(_.isInstanceOf[PythonUDF])) &&
                   PythonUDF.canRewritePythonUDFInLambda(hof) =>
               rewriteNest(hof)
+            // `aggregate` / `reduce` with a Python UDF cannot be lifted (the fold is sequential),
+            // so instead of applying the UDF once to the whole array it is run as a fold in the
+            // Python worker. See `rewriteFoldableAggregate`.
+            case agg: ArrayAggregate
+                if agg.functions.exists(_.exists(_.isInstanceOf[PythonUDF])) &&
+                  PythonUDF.isFoldableAggregate(agg) =>
+              rewriteFoldableAggregate(agg)
           }
       }
+    }
+  }
+
+  /**
+   * Rewrites a foldable `aggregate` / `reduce` (see [[PythonUDF.isFoldableAggregate]]) into an
+   * ordinary expression the rest of the pipeline can evaluate: a fold UDF applied to the array
+   * argument and the zero value, optionally wrapped in the `finish` UDF.
+   *
+   * The fold UDF reuses the `merge` lambda's Python function but runs under
+   * [[PythonEvalType.SQL_SCALAR_FOLD_UDF]], so the Python worker performs the sequential fold
+   * (`acc = zero`; `acc = merge(acc, element)` per element; `finish(acc)`) rather than a single
+   * call. Its children are the fold's array argument and zero value -- both real columns, unlike
+   * the discarded `(acc, element)` lambda variables the `merge` UDF was written over. A
+   * non-identity `finish` is left as an ordinary outer scalar UDF over the fold result, which
+   * [[ExtractPythonUDFs]] then extracts like any other scalar UDF (its own, distinct eval type).
+   */
+  private def rewriteFoldableAggregate(agg: ArrayAggregate): Expression = {
+    val mergeUdf = agg.merge.asInstanceOf[LambdaFunction].function.asInstanceOf[PythonUDF]
+    val fold = PythonUDF(
+      mergeUdf.name,
+      mergeUdf.func,
+      // The fold returns the accumulator, i.e. the `merge` UDF's return type.
+      mergeUdf.dataType,
+      Seq(agg.argument, agg.zero),
+      PythonEvalType.SQL_SCALAR_FOLD_UDF,
+      mergeUdf.udfDeterministic)
+    agg.finish.asInstanceOf[LambdaFunction].function match {
+      case finishUdf: PythonUDF =>
+        // Native ArrayAggregate returns null for a null array *without* applying `finish`. The fold
+        // UDF already returns null for a null array, but the outer `finish` UDF would then turn
+        // that null into `finish(null)`, so guard on a null array to match native semantics. The
+        // extracted `finish` UDF is still evaluated on those rows, but the If discards its value.
+        If(
+          IsNull(agg.argument),
+          Literal.create(null, finishUdf.dataType),
+          finishUdf.withNewChildren(Seq(fold)))
+      case _ => fold // identity finish returns the fold result (already null for a null array)
     }
   }
 

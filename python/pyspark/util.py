@@ -98,6 +98,7 @@ if typing.TYPE_CHECKING:
         SQLScalarPandasIterElementwiseUDFType,
         SQLScalarArrowElementwiseUDFType,
         SQLScalarArrowIterElementwiseUDFType,
+        SQLScalarFoldUDFType,
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
@@ -675,6 +676,12 @@ class PythonEvalType:
     SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF: "SQLScalarPandasIterElementwiseUDFType" = 104
     SQL_SCALAR_ARROW_ELEMENTWISE_UDF: "SQLScalarArrowElementwiseUDFType" = 105
     SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF: "SQLScalarArrowIterElementwiseUDFType" = 106
+    # A pair of scalar Python UDFs (``merge`` and ``finish``) implementing the SQL ``aggregate`` /
+    # ``reduce`` higher-order function's sequential left fold over a single row's array, run inside
+    # the Python worker. The fold reads the running accumulator, so it cannot be lifted like the
+    # element-wise types above; per row the worker computes ``acc = zero``, then
+    # ``acc = merge(acc, element)`` for each element, then ``finish(acc)``.
+    SQL_SCALAR_FOLD_UDF: "SQLScalarFoldUDFType" = 107
 
     SQL_SCALAR_PANDAS_UDF: "PandasScalarUDFType" = 200
     SQL_GROUPED_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 201

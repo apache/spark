@@ -1029,8 +1029,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ArrowEvalPython(udfs, output, child, evalType) =>
         ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
-      case BatchEvalPython(udfs, output, child) =>
-        BatchEvalPythonExec(udfs, output, planLater(child)) :: Nil
+      case BatchEvalPython(udfs, output, child, evalType) =>
+        BatchEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
       case BatchEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child) =>
         BatchEvalPythonUDTFExec(udtf, requiredChildOutput, resultAttrs, planLater(child)) :: Nil
       case ArrowEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child, evalType) =>

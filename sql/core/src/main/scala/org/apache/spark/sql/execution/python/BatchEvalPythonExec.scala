@@ -36,7 +36,11 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * A physical plan that evaluates a [[PythonUDF]]
  */
-case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
+case class BatchEvalPythonExec(
+    udfs: Seq[PythonUDF],
+    resultAttrs: Seq[Attribute],
+    child: SparkPlan,
+    evalType: Int = PythonEvalType.SQL_BATCHED_UDF)
   extends EvalPythonExec with PythonPickleBatchMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
@@ -60,7 +64,8 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       pythonMetrics,
       jobArtifactUUID,
       sessionUUID,
-      binaryAsBytes)
+      binaryAsBytes,
+      evalType)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonExec =
@@ -76,7 +81,8 @@ class BatchEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String],
-    binaryAsBytes: Boolean)
+    binaryAsBytes: Boolean,
+    evalType: Int = PythonEvalType.SQL_BATCHED_UDF)
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
   override def evaluate(
@@ -94,7 +100,7 @@ class BatchEvalPythonEvaluatorFactory(
     // Output iterator for results from Python.
     val outputIterator =
       new PythonUDFWithNamedArgumentsRunner(
-        funcs, PythonEvalType.SQL_BATCHED_UDF, argMetas, pythonMetrics,
+        funcs, evalType, argMetas, pythonMetrics,
         jobArtifactUUID, sessionUUID)
       .compute(inputIterator, context.partitionId(), context)
 

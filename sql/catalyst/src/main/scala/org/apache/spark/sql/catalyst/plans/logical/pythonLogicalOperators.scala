@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistryBase, MultiInstanceRelation, UnresolvedAttribute, UnresolvedStar, WidenStatefulOpNullability}
@@ -312,12 +313,19 @@ trait BaseEvalPythonUDTF extends UnaryNode {
 }
 
 /**
- * A logical plan that evaluates a [[PythonUDF]]
+ * A logical plan that evaluates a [[PythonUDF]] over the pickle-based (non-Arrow) worker path.
+ *
+ * `evalType` is normally [[org.apache.spark.api.python.PythonEvalType.SQL_BATCHED_UDF]]. The one
+ * other value it carries is `SQL_SCALAR_FOLD_UDF`, for the fold UDF that backs `aggregate` /
+ * `reduce` with a Python UDF: the operator I/O is identical (the array and zero columns in, one
+ * folded value out per row), and only the eval type sent to the worker differs so it runs the
+ * sequential per-element fold rather than a single call. See ExtractPythonUDFFromLambda.
  */
 case class BatchEvalPython(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
-    child: LogicalPlan) extends BaseEvalPython {
+    child: LogicalPlan,
+    evalType: Int = PythonEvalType.SQL_BATCHED_UDF) extends BaseEvalPython {
   override protected def withNewChildInternal(newChild: LogicalPlan): BatchEvalPython =
     copy(child = newChild)
 }

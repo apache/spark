@@ -48,7 +48,12 @@ object PythonUDF {
     PythonEvalType.SQL_SCALAR_PANDAS_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
     PythonEvalType.SQL_SCALAR_ARROW_UDF,
-    PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+    PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+    // The fold UDF that backs `aggregate` / `reduce` with a Python UDF: from the plan's point of
+    // view it is row-shaped (the array column and the zero value in, one folded value out per row);
+    // only the Python worker runs the sequential per-element fold. `ExtractPythonUDFs` extracts it
+    // like any other scalar UDF. See ExtractPythonUDFFromLambda and the SQL_SCALAR_FOLD_UDF type.
+    PythonEvalType.SQL_SCALAR_FOLD_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {
@@ -237,6 +242,64 @@ object PythonUDF {
       case other => other.children.exists(check(_, bound))
     }
     check(e, Set.empty)
+  }
+
+  /**
+   * The scalar Python UDF flavors the worker fold ([[PythonEvalType.SQL_SCALAR_FOLD_UDF]]) can run
+   * as the `merge` / `finish` function of an `aggregate` / `reduce` fold. The fold calls the UDF
+   * once per element (`merge`) or once on the final accumulator (`finish`), row at a time, so only
+   * the non-iterator row-at-a-time scalar flavors qualify; the batched vectorized and iterator
+   * flavors do not fit a per-element call.
+   */
+  def isFoldableScalarUDF(udf: PythonUDF): Boolean = udf.evalType match {
+    case PythonEvalType.SQL_BATCHED_UDF | PythonEvalType.SQL_ARROW_BATCHED_UDF => true
+    case _ => false
+  }
+
+  /**
+   * Whether an `aggregate` / `reduce` ([[ArrayAggregate]]) can have the Python UDFs in its lambdas
+   * run as a sequential fold in the Python worker ([[PythonEvalType.SQL_SCALAR_FOLD_UDF]]), rather
+   * than lifted out like the element-wise UDFs of `transform` and friends. The fold is inherently
+   * sequential -- the `merge` UDF reads the running accumulator, so it sees earlier steps' outputs,
+   * not array elements -- and cannot be applied once to the whole array; instead the whole fold
+   * runs in Python (`acc = zero`; `acc = merge(acc, element)` per element; `finish(acc)`).
+   *
+   * The MVP recognizes only the shape the worker fold executes:
+   *   - `merge` is `(acc, x) -> f(acc, x)`: its body is a single foldable scalar Python UDF whose
+   *     arguments are exactly the accumulator and element lambda variables, in that order.
+   *   - `finish` is either the identity (`acc -> acc`) or `acc -> g(acc)` for a single foldable
+   *     scalar Python UDF `g` over the accumulator variable.
+   *
+   * A UDF in `zero` is an ordinary scalar UDF outside every lambda (handled by `ExtractPythonUDFs`)
+   * and never reaches here. Shapes that mix a UDF with other expressions in a lambda body, or use
+   * an unsupported UDF flavor, are not foldable and stay rejected by `CheckAnalysis`.
+   */
+  def isFoldableAggregate(agg: ArrayAggregate): Boolean = {
+    def isFoldableUDFOver(body: Expression, vars: Seq[NamedLambdaVariable]): Boolean = body match {
+      case udf: PythonUDF if isFoldableScalarUDF(udf) =>
+        udf.children.length == vars.length &&
+          udf.children.zip(vars).forall {
+            case (v: NamedLambdaVariable, expected) => v.exprId == expected.exprId
+            case _ => false
+          }
+      case _ => false
+    }
+    (agg.merge, agg.finish) match {
+      case (
+            LambdaFunction(
+              mergeBody, Seq(accVar: NamedLambdaVariable, elemVar: NamedLambdaVariable), _),
+            LambdaFunction(finishBody, Seq(finishAccVar: NamedLambdaVariable), _)) =>
+        val mergeFoldable = isFoldableUDFOver(mergeBody, Seq(accVar, elemVar))
+        val finishFoldable = finishBody match {
+          case v: NamedLambdaVariable => v.exprId == finishAccVar.exprId // identity finish
+          case other => isFoldableUDFOver(other, Seq(finishAccVar))
+        }
+        // At least one lambda must actually carry a UDF, otherwise this is a plain JVM fold that
+        // needs no special handling. `merge` reading the accumulator is what blocks the lift.
+        val hasUDF = mergeBody.isInstanceOf[PythonUDF] || finishBody.isInstanceOf[PythonUDF]
+        mergeFoldable && finishFoldable && hasUDF
+      case _ => false
+    }
   }
 
   def isWindowPandasUDF(e: PythonFuncExpression): Boolean = {

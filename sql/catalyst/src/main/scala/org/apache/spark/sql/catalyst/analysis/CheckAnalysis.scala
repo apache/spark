@@ -519,7 +519,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 .exists(_.exists(_.isInstanceOf[PythonUDF])) &&
                 !PythonUDF.hasFreeLambdaVariable(hof) &&
                 !(conf.pythonUDFInHigherOrderFunctionEnabled &&
-                  PythonUDF.canRewritePythonUDFInLambda(hof)) =>
+                  PythonUDF.canRewritePythonUDFInLambda(hof)) &&
+                // `aggregate` / `reduce` cannot be lifted (the fold is sequential), but a foldable
+                // shape runs the fold in the Python worker instead (see ExtractPythonUDFFromLambda
+                // and PythonEvalType.SQL_SCALAR_FOLD_UDF), so it is accepted here too.
+                !(conf.pythonUDFInHigherOrderFunctionEnabled && (hof match {
+                  case agg: ArrayAggregate => PythonUDF.isFoldableAggregate(agg)
+                  case _ => false
+                })) =>
             // Name the offending UDF: the first one of an unsupported eval type if any (e.g. a
             // pandas UDF), otherwise the first Python UDF in the lambdas.
             val udfs = hof.functions.flatMap(_.collect { case u: PythonUDF => u })

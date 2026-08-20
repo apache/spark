@@ -740,16 +740,20 @@ class UDFInHigherOrderFunctionTestsMixin:
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
     def test_udf_in_aggregate_fails(self):
-        # `aggregate` / `reduce` is a sequential fold: the values a UDF sees are outputs of earlier
-        # steps, not elements of a collection, so it cannot be applied once to the whole array. A
-        # UDF anywhere in `aggregate` / `reduce` - `merge` or `finish` - must fail analysis.
+        # `aggregate` / `reduce` is a sequential fold, so a UDF cannot be lifted like `transform`'s.
+        # A UDF that is the *whole* `merge` (or `finish`) lambda runs as a fold in the worker (see
+        # `test_udf_in_aggregate_fold`), but shapes that mix a UDF with other expressions in a
+        # lambda, or leave a native `merge` with only a UDF in `finish`, are not foldable and still
+        # fail analysis.
         df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
         plus_one = udf(lambda x: x + 1, IntegerType())
         double_it = udf(lambda acc: acc * 2, IntegerType())
 
         aggregates = [
+            # UDF mixed with `acc +` in the merge body: not a single foldable UDF call.
             sf.aggregate("values", sf.lit(0), lambda acc, x: acc + plus_one(x)),
             sf.aggregate("values", sf.lit(0), lambda acc, x: plus_one(acc) + x),
+            # Native merge, UDF only in finish: the fold rewrite requires the UDF to be the merge.
             sf.aggregate("values", sf.lit(0), lambda acc, x: acc + x, lambda acc: double_it(acc)),
             # `reduce` is an alias of `aggregate`, so it is rejected the same way.
             sf.reduce("values", sf.lit(0), lambda acc, x: acc + plus_one(x)),
@@ -757,6 +761,58 @@ class UDFInHigherOrderFunctionTestsMixin:
         for agg in aggregates:
             with self.assertRaises(AnalysisException) as ctx:
                 df.select(agg).collect()
+            self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+
+    def test_udf_in_aggregate_fold(self):
+        # A UDF that is the whole `merge` lambda - `(acc, x) -> udf(acc, x)`, reading the running
+        # accumulator - cannot be lifted, but runs as a sequential fold in the Python worker
+        # (SQL_SCALAR_FOLD_UDF). The result must match a plain Python fold over each row's array; a
+        # null array folds to null.
+        df = self.spark.createDataFrame(
+            [([1, 2, 3, 4],), ([10, 20],), ([],), (None,)], "values array<int>"
+        )
+        add = udf(lambda acc, x: (acc or 0) + x, IntegerType())
+
+        assertDataFrameEqual(
+            df.select(sf.aggregate("values", sf.lit(0), lambda acc, x: add(acc, x)).alias("r")),
+            [(10,), (30,), (0,), (None,)],
+        )
+        # Non-zero initial value, via the `reduce` alias.
+        assertDataFrameEqual(
+            df.select(sf.reduce("values", sf.lit(100), lambda acc, x: add(acc, x)).alias("r")),
+            [(110,), (130,), (100,), (None,)],
+        )
+
+    def test_udf_in_aggregate_fold_with_finish(self):
+        # A `finish` UDF (`acc -> g(acc)`) runs once on the fold result. A null array yields null
+        # without applying `finish`, matching native ArrayAggregate.
+        df = self.spark.createDataFrame([([1, 2, 3, 4],), ([],), (None,)], "values array<int>")
+        add = udf(lambda acc, x: (acc or 0) + x, IntegerType())
+        to_str = udf(lambda acc: "sum=" + str(acc), StringType())
+        assertDataFrameEqual(
+            df.select(
+                sf.aggregate(
+                    "values", sf.lit(0), lambda acc, x: add(acc, x), lambda acc: to_str(acc)
+                ).alias("r")
+            ),
+            [("sum=10",), ("sum=0",), (None,)],
+        )
+
+    def test_udf_in_aggregate_fold_is_sequential(self):
+        # An order-dependent fold proves this is a genuine left fold, not a commutative reduce.
+        df = self.spark.createDataFrame([(["a", "b", "c"],)], "values array<string>")
+        concat = udf(lambda acc, x: (acc or "") + x + "|", StringType())
+        assertDataFrameEqual(
+            df.select(sf.aggregate("values", sf.lit(""), lambda acc, x: concat(acc, x)).alias("r")),
+            [("a|b|c|",)],
+        )
+
+    def test_udf_in_aggregate_fold_disabled_by_conf(self):
+        df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
+        add = udf(lambda acc, x: (acc or 0) + x, IntegerType())
+        with self.sql_conf({"spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled": False}):
+            with self.assertRaises(AnalysisException) as ctx:
+                df.select(sf.aggregate("values", sf.lit(0), lambda acc, x: add(acc, x))).collect()
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
     def test_scalar_pandas_udf_in_lambda(self):

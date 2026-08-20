@@ -729,6 +729,27 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
         return func, None, None, return_type
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
         return func, None, None, None
+    # Fold UDF backing the SQL `aggregate` / `reduce` higher-order function with a Python UDF (see
+    # PythonEvalType.SQL_SCALAR_FOLD_UDF and ExtractPythonUDFFromLambda). `func` is the `merge`
+    # callable ``(acc, element) -> acc``; the two input columns are the array to fold and the zero
+    # value. Fold each row's array sequentially (``acc = zero``; ``acc = merge(acc, element)``),
+    # then convert the accumulator to its internal representation once, as the batched path does.
+    # Returns ``(args_offsets, fold)`` so the SQL_BATCHED_UDF mapper drives it row at a time.
+    elif eval_type == PythonEvalType.SQL_SCALAR_FOLD_UDF:
+        merge = func
+        need_conversion = return_type.needConversion()
+        to_internal = return_type.toInternal
+
+        def fold(array_value, zero_value):
+            # Match native ArrayAggregate: a null array folds to null (not to the zero value).
+            if array_value is None:
+                return None
+            acc = zero_value
+            for element in array_value:
+                acc = merge(acc, element)
+            return to_internal(acc) if need_conversion else acc
+
+        return args_offsets, fold
     # Batched (plain Python) UDFs: (args_kwargs_offsets, eval func); apply kwargs binding and
     # convert each result to the internal representation only when the return type requires it.
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
@@ -5013,7 +5034,14 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return func, None, ser, ser
 
-    elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
+    elif eval_type in (
+        PythonEvalType.SQL_BATCHED_UDF,
+        # The fold UDF backing `aggregate` / `reduce` shares this row-at-a-time pickle mapper:
+        # read_single_udf prepared it as an (arg_offsets, fold) pair over the array and zero
+        # columns, so applying it per row is exactly the batched call below. See
+        # PythonEvalType.SQL_SCALAR_FOLD_UDF.
+        PythonEvalType.SQL_SCALAR_FOLD_UDF,
+    ):
         # Plain Python (pickle) UDFs, the only eval type reaching this branch. read_single_udf
         # prepared each UDF as an (arg_offsets, eval_func) pair. Apply every one to each input
         # row: a single UDF yields its bare result, multiple UDFs yield a tuple of results,

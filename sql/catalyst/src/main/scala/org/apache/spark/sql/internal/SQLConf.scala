@@ -5471,15 +5471,18 @@ object SQLConf {
   val PYTHON_UDF_IN_HIGHER_ORDER_FUNCTION_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled")
       .doc("When true, a scalar Python UDF may be used inside the lambda of a higher-order " +
-        "function such as `transform` or `filter`. The UDF is not evaluated inside the lambda; " +
-        "it is applied to the whole array outside the lambda and the lambda reads the " +
-        "precomputed result. This uses an Arrow-based execution path, so PyArrow is required " +
-        "even for a UDF created with useArrow=False. Because the UDF is precomputed over the " +
-        "whole array, it runs once per element regardless of any short-circuiting (`exists`, " +
-        "`when`) in the lambda. In particular, an `array_sort` comparator that calls the UDF on " +
-        "both elements, `(a, b) -> udf(a, b)`, precomputes it over every pair, costing O(n^2) " +
-        "calls and memory for an array of length n; avoid it for large arrays. When false, such " +
-        "queries fail with UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF as before.")
+        "function such as `transform` or `filter`. For element-wise functions the UDF is not " +
+        "evaluated inside the lambda; it is applied to the whole array outside the lambda and " +
+        "the lambda reads the precomputed result. This uses an Arrow-based execution path, so " +
+        "PyArrow is required even for a UDF created with useArrow=False. Because the UDF is " +
+        "precomputed over the whole array, it runs once per element regardless of any short-" +
+        "circuiting (`exists`, `when`) in the lambda. In particular, an `array_sort` comparator " +
+        "that calls the UDF on both elements, `(a, b) -> udf(a, b)`, precomputes it over every " +
+        "pair, costing O(n^2) calls and memory for an array of length n; avoid it for large " +
+        "arrays. For `aggregate` / `reduce`, whose fold is sequential and cannot be precomputed, " +
+        "a UDF in the `merge` (and optional `finish`) lambda instead runs the fold row at a time " +
+        "in the Python worker. When false, such queries fail with " +
+        "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF as before.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
