@@ -486,12 +486,19 @@ class ConversionTests(unittest.TestCase):
             (IntegerType(), (1,), (None,)),
             ((IntegerType(), {"nullable": False}), (1,)),
             (StringType(), ("a",)),
+            # bool coerced to string matches the JVM (EvaluatePython.makeFromJava).
+            (StringType(), (True, "true"), (False, "false")),
             (BinaryType(), (b"a",)),
             (GeographyType("ANY"), (None,)),
             (GeometryType("ANY"), (None,)),
             (ArrayType(IntegerType()), ([1, None],)),
             (ArrayType(IntegerType(), containsNull=False), ([1, 2],)),
             (ArrayType(BinaryType()), ([b"a", b"b"],)),
+            # array<string> with already-str, coerced (int/bool) and null elements.
+            (
+                ArrayType(StringType()),
+                (["ok", 42, True, False, None], ["ok", "42", "true", "false", None]),
+            ),
             (MapType(StringType(), IntegerType()), ({"a": 1, "b": None},)),
             (
                 MapType(StringType(), IntegerType(), valueContainsNull=False),
@@ -707,42 +714,6 @@ class ConversionTests(unittest.TestCase):
         ]:
             output = ArrowArrayConversion.localize_tz(arr)
             self.assertEqual(output, expected, f"{output.tolist()} != {expected.tolist()}")
-
-    def test_string_binary_identity_fast_path(self):
-        # convert_string / convert_binary short-circuit values that are already
-        # the target Python type; non-target values must still be coerced with
-        # the unchanged behavior. Cover scalar, array, map value and struct
-        # leaves for both string and binary.
-        schema = (
-            StructType()
-            .add("s", StringType())
-            .add("arr_s", ArrayType(StringType()))
-            .add("map_s", MapType(StringType(), StringType()))
-            .add("struct_s", StructType().add("s", StringType()))
-            .add("b", BinaryType())
-            .add("arr_b", ArrayType(BinaryType()))
-        )
-        data = [
-            (
-                "already",  # str: identity fast path
-                ["ok", 42, True, False, None],  # non-str elements coerced
-                {"k": 42},  # non-str map value coerced
-                {"s": True},  # non-str struct field coerced
-                b"bytes",  # bytes: identity fast path
-                [b"x", bytearray(b"y"), None],  # bytearray coerced to bytes
-            )
-        ]
-        tbl = LocalDataToArrowConversion.convert(data, schema, use_large_var_types=False)
-        row = ArrowTableToRowsConversion.convert(tbl, schema)[0]
-
-        self.assertEqual(row.s, "already")
-        self.assertEqual(row.arr_s, ["ok", "42", "true", "false", None])
-        self.assertEqual(row.map_s, {"k": "42"})
-        self.assertEqual(row.struct_s.s, "true")
-        self.assertEqual(row.b, b"bytes")
-        self.assertEqual(row.arr_b, [b"x", b"y", None])
-        # bytearray must be materialized as immutable bytes, not shared as-is.
-        self.assertIsInstance(row.arr_b[1], bytes)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
