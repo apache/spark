@@ -147,6 +147,7 @@ private[spark] object PythonEvalType {
       "SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF"
     case SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF =>
       "SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF"
+    case SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF => "SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF"
   }
 
   // The eval types produced by ExtractPythonUDFFromLambda: a scalar UDF lifted out of a

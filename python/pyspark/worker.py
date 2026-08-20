@@ -2707,6 +2707,12 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         result_arrays.append(pa.array([result] * num_rows, type=result_type))
                     elif bound_type == "bounded":
                         # Per-row frame: slice the batch to ``[begin, end)`` and fold its rows.
+                        # TODO(SPARK-58890): this refolds each frame from ``zero`` independently, so
+                        # a per-row frame whose lower bound never advances (e.g.
+                        # ``rowsBetween(unboundedPreceding, currentRow)``) is O(n^2). Since the
+                        # aggregator is incremental, a running buffer could be reused with one
+                        # ``reduce`` per row (O(n)) whenever ``begin`` does not move. Left as a
+                        # follow-up.
                         begin_col = concatenated.column(args_offsets[0])
                         end_col = concatenated.column(args_offsets[1])
                         data_offsets = list(args_offsets[2:]) + list(kwargs_offsets.values())

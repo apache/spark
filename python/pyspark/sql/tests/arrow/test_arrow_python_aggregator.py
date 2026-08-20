@@ -323,6 +323,35 @@ class ArrowPythonAggregatorTestsMixin:
         for r, e in zip(result, expected):
             self.assertAlmostEqual(r["s"], e["s"], places=4)
 
+    def test_window_decimal_output(self):
+        # A non-trivial (Decimal) output type over a window, exercising the explicit
+        # ``pa.array(..., type=result_type)`` typing on the window path.
+        df = self._data()
+        w = Window.partitionBy("k")
+        result = (
+            df.withColumn("s", udaf(DecimalSum())(sf.col("v")).over(w)).orderBy("k", "v").collect()
+        )
+        expected = df.withColumn("s", sf.sum("v").over(w)).orderBy("k", "v").collect()
+        self.assertEqual(len(result), len(expected))
+        for r, e in zip(result, expected):
+            self.assertIsInstance(r["s"], Decimal)
+            self.assertAlmostEqual(float(r["s"]), e["s"], places=4)
+
+    def test_window_mixed_python_udf_rejected(self):
+        # An incremental aggregator and a grouped-agg pandas UDF over the same window are both
+        # Python window functions but use different eval types, so they cannot share one operator.
+        # This must raise a clear analysis error rather than an internal assertion.
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        @pandas_udf("double", PandasUDFType.GROUPED_AGG)
+        def pandas_mean(v):
+            return v.mean()
+
+        df = self._data()
+        w = Window.partitionBy("k")
+        with self.assertRaises(AnalysisException):
+            df.select(udaf(Mean())(sf.col("v")).over(w), pandas_mean(sf.col("v")).over(w)).collect()
+
     def test_mixed_with_other_aggregate_rejected(self):
         # An incremental aggregator mixed with another aggregate in one Aggregate is unsupported;
         # the error must be the dedicated (non-pandas) placement error.
