@@ -338,7 +338,9 @@ private[spark] object SparkCoreErrors {
       blockManagerId: BlockManagerId,
       blockId: BlockId): Throwable = {
     SparkException.internalError(
-      s"Failed to store block $blockId on $blockManagerId.", category = "STORAGE")
+      s"Failed to store block $blockId on $blockManagerId. This mostly happens when there is " +
+        "not enough storage memory for the block and its storage level has no disk fallback.",
+      category = "STORAGE")
   }
 
   def localBlockDataNotFoundError(blockId: BlockId): Throwable = {

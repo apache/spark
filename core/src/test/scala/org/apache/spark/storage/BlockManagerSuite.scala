@@ -2076,8 +2076,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       parameters = Map(
         "blockId" -> shuffleBlockId.toString,
         "resolverClass" -> badShuffleResolver.getClass.getName))
-    // The `ClassCastException` is kept as the cause, so an unrelated CCE raised inside a
-    // third-party resolver stays diagnosable.
+    // The `ClassCastException` is kept as the cause. The `try` only covers building the callback,
+    // so this pins the cast failure itself rather than anything the resolver does while writing.
     assert(exception.getCause.isInstanceOf[ClassCastException])
   }
 
@@ -2414,10 +2414,18 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       conf.set(SHUFFLE_SERVICE_PORT.key, shufflePort.toString)
       conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
       conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
-      val e = intercept[SparkException] {
-        makeBlockManager(8000, "timeoutExec")
-      }.getMessage
-      assert(e.contains("TimeoutException"))
+      // `matchPVals` because the parameter is the text of the `RuntimeException` that
+      // `TransportClient.sendRpcSync` wraps Guava's `TimeoutException` in (`cause.toString`).
+      // Only the class-name prefix of that text is stable; the rest is a Guava internal that
+      // varies run to run (e.g. the future's identity hash and a scheduling-delay clause).
+      checkError(
+        exception = intercept[SparkException] {
+          makeBlockManager(8000, "timeoutExec")
+        },
+        condition = "UNABLE_TO_REGISTER_WITH_EXTERNAL_SHUFFLE_SERVICE",
+        sqlState = Some("58030"),
+        parameters = Map("message" -> "(?s)java\\.util\\.concurrent\\.TimeoutException: .*"),
+        matchPVals = true)
       verify(master, times(0))
         .registerBlockManager(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
       server.close()
