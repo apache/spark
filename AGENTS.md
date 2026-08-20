@@ -204,9 +204,7 @@ PR title format is `[SPARK-xxxx][COMPONENT] Title`. Draft, WIP, MINOR, and TRIVI
 
 Use `[FOLLOWUP]` only for small PRs that directly modify or correct unreleased work from
 one or more specific earlier PRs, such as addressing post-merge review feedback or fixing
-a regression introduced by those changes. Reuse the earlier PRs' JIRA ticket(s) and insert
-`[FOLLOWUP]` after the component tag, for example
-`[SPARK-xxxx][COMPONENT][FOLLOWUP] Title`.
+a regression introduced by those changes.
 
 Do not use `[FOLLOWUP]` for a separately planned PR that implements a distinct part of a
 larger effort. For separately planned non-trivial PRs, create a separate JIRA ticket for
