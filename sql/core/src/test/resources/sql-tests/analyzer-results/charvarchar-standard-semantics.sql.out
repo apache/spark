@@ -230,14 +230,14 @@ Project [typeof(elt(1, cast(cast(ab as char(5)) as string), x, true)) AS typeof(
 -- !query
 SELECT typeof(right(cast('ab' AS CHAR(5)), 2))
 -- !query analysis
-Project [typeof(right(cast(cast(ab as char(5)) as string), 2)) AS typeof(right(CAST(ab AS CHAR(5)), 2))#x]
+Project [typeof(right(cast(ab as char(5)), 2)) AS typeof(right(CAST(ab AS CHAR(5)), 2))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT concat('<', right(cast('ab' AS CHAR(5)), 2), '>')
 -- !query analysis
-Project [concat(<, right(cast(cast(ab as char(5)) as string), 2), >) AS concat(<, right(CAST(ab AS CHAR(5)), 2), >)#x]
+Project [concat(<, right(cast(ab as char(5)), 2), >) AS concat(<, right(CAST(ab AS CHAR(5)), 2), >)#x]
 +- OneRowRelation
 
 
