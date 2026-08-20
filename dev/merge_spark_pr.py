@@ -1351,7 +1351,7 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=(), all
         )
 
 
-def update_jira_for_pr(pr_num, title, merge_branches, title_components, allow_resolved=False):
+def update_jira_for_pr(pr_num, title, merge_branches, title_components, allow_resolved=True):
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     print()
     continue_maybe("Would you like to update an associated JIRA?")
@@ -1943,9 +1943,7 @@ def main():
             # Backport mode may be the first chance to resolve a JIRA after an interrupted
             # original merge. If it was already resolved, add any newly inferred fix versions.
             if not is_minor:
-                update_jira_for_pr(
-                    pr_num, title, picked_refs, title_components, allow_resolved=True
-                )
+                update_jira_for_pr(pr_num, title, picked_refs, title_components)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
