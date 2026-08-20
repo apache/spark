@@ -890,31 +890,72 @@ def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
     return [arg.arg for arg in node.args.args]
 
 
-def _instruction_extent(code: CodeType) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
-    """The (start, end) source bounds enclosing every instruction of ``code``."""
+# Source bounds as ``((start_line, start_col), (end_line, end_col))``. A ``None``
+# column means only LINE information was recoverable -- see ``_instruction_extent``.
+_Extent = Tuple[Tuple[int, Optional[int]], Tuple[int, Optional[int]]]
+
+
+def _instruction_extent(code: CodeType) -> Optional[_Extent]:
+    """The (start, end) source bounds enclosing every instruction of ``code``.
+
+    Column-precise when any instruction carries usable columns, and LINE-ONLY
+    (``None`` columns) when none does. The fallback is not hypothetical: a lambda
+    whose body is a bare constant (``lambda x: 42``) emits only a synthetic
+    ``RESUME`` plus a ``RETURN_CONST``, and some CPython builds report ``(0, 0)``
+    columns for both -- which is how ``lambda x: 42`` stopped lowering on Spark's
+    CI while lowering fine locally, where ``RETURN_CONST`` does carry columns.
+
+    Returning ``None`` there would silently disable lowering, so degrade instead.
+    Line-only bounds admit every candidate on the line rather than one exact span,
+    and ``_verifies`` is what makes the choice safe: it recompiles and compares a
+    code signature, so a wrong candidate is rejected rather than lowered. ``None``
+    is now reserved for a code object carrying no positions AT ALL, which is the
+    genuine ``-X no_debug_ranges`` case the caller reports as such.
+
+    The cost of widening is bounded and falls the safe way, measured on blanked
+    columns. Lambdas sharing a line still resolve to their own body whenever their
+    COMPILED CODE differs -- including an outer and an inner one on the same line,
+    which both enclose line-only bounds and are separated by CONFIRM. Ones that
+    compile identically both verify, so the caller reports them ambiguous and falls
+    back to interpreted Python: byte-identical twins, and also lambdas differing
+    ONLY in a parameter default, since ``_defaults_stripped`` removes exactly that
+    before comparing. Position was what told those apart, and without columns they
+    are genuinely indistinguishable -- falling back is the only honest answer, and
+    it costs a lowering rather than risking a wrong one.
+    """
     starts = []
     ends = []
+    lines = []
     for lineno, end_lineno, start_col, end_col in code.co_positions():
-        if lineno is None or end_lineno is None or start_col is None or end_col is None:
+        if lineno is None or end_lineno is None:
+            continue
+        lines.append((lineno, end_lineno))
+        if start_col is None or end_col is None:
             continue
         if start_col == 0 and end_col == 0:
             continue
         starts.append((lineno, start_col))
         ends.append((end_lineno, end_col))
-    if not starts:
-        return None
-    return (min(starts), max(ends))
+    if starts:
+        return (min(starts), max(ends))
+    if lines:
+        return ((min(line for line, _ in lines), None), (max(end for _, end in lines), None))
+    return None
 
 
-def _node_encloses(node: ast.expr, extent: Tuple[Tuple[int, int], Tuple[int, int]]) -> bool:
+def _node_encloses(node: ast.expr, extent: _Extent) -> bool:
     """Whether ``node``'s source span encloses ``extent`` (lexicographic order)."""
     if node.end_lineno is None or node.end_col_offset is None:
         return False
-    start, end = extent
-    return (node.lineno, node.col_offset) <= start and end <= (
-        node.end_lineno,
-        node.end_col_offset,
-    )
+    (start_line, start_col), (end_line, end_col) = extent
+    if start_col is None or end_col is None:
+        # Line-only bounds (see ``_instruction_extent``): comparing columns would
+        # reject every candidate, since the lambda does not begin at column 0.
+        return node.lineno <= start_line and end_line <= node.end_lineno
+    return (node.lineno, node.col_offset) <= (start_line, start_col) and (
+        end_line,
+        end_col,
+    ) <= (node.end_lineno, node.end_col_offset)
 
 
 # ``ast.FunctionDef``'s overloads in mypy's typeshed require keyword-only
@@ -1186,7 +1227,9 @@ def _resolve_lambda(
     * locate by position -- the candidates whose source span encloses the extent of
       ``target``'s own instructions. Enclosure rather than an exact span match
       because on 3.11 a conditional-expression body (the transpiler's own null-guard
-      idiom) has no instruction carrying its full span;
+      idiom) has no instruction carrying its full span. When no instruction carries
+      columns at all the extent is line-only, which narrows to the line and leaves
+      the rest to CONFIRM (see ``_instruction_extent``);
     * confirm by recompiling -- of those, the one whose code signature matches
       ``target`` (see ``_verifies``). This disambiguates the nested candidates of
       ``lambda x: (lambda y: ...)`` and rejects source that has diverged from the
