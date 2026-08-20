@@ -1439,6 +1439,49 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertFalse(self._pre_evaluates_an_input(col_df))
             self.assertEqual([0, 1, 4], [r[0] for r in col_df.collect()])
 
+    def test_udf_transpile_reused_column_shares_one_draw(self):
+        # SPARK-58626: pins a KNOWN DIFFERENCE from interpreted Python, documented in
+        # transpile.py. Build a call once and use that same Column twice, with a seed that
+        # was still unresolved at call time, and both uses read the one pre-evaluated
+        # column -- one draw. Interpreted draws twice, because ResolveRandomSeed gives each
+        # plan occurrence its own seed while the marker ids (minted once per builder call)
+        # say both occurrences are the same parameter.
+        #
+        # If someone re-mints the ids per plan occurrence, this test flips and the note in
+        # transpile.py should go with it. The narrowness matters, so the two shapes that do
+        # NOT differ are pinned here too.
+        from pyspark.sql.functions import expr, rand
+
+        identity = lambda v: v  # noqa: E731
+        transpile_off = {
+            "spark.sql.experimental.optimizer.transpilePyUDFs": False,
+            "spark.sql.ansi.enabled": True,
+        }
+
+        def draws(conf, arg_factory, reuse):
+            with self.sql_conf(conf):
+                u = UserDefinedFunction(identity, DoubleType())
+                if reuse:
+                    c = u(arg_factory())
+                    df = self.spark.range(40).select(c.alias("x"), c.alias("y"))
+                else:
+                    df = self.spark.range(40).select(
+                        u(arg_factory()).alias("x"), u(arg_factory()).alias("y")
+                    )
+                rows = df.collect()
+                return "one" if all(r["x"] == r["y"] for r in rows) else "two"
+
+        unresolved = lambda: expr("rand()")  # noqa: E731
+
+        # The difference: one Column reused, seed unresolved.
+        self.assertEqual("one", draws(_TRANSPILE_ON, unresolved, reuse=True))
+        self.assertEqual("two", draws(transpile_off, unresolved, reuse=True))
+
+        # Not affected: two separate calls, and a baked-in literal seed.
+        for conf in (_TRANSPILE_ON, transpile_off):
+            self.assertEqual("two", draws(conf, unresolved, reuse=False))
+            self.assertEqual("one", draws(conf, rand, reuse=True))
+
     def test_udf_transpile_pre_evaluates_inside_a_group_by(self):
         # SPARK-58626: in an Aggregate only a use an aggregate function wraps may read a column --
         # see PreEvaluateTranspiledUDFInputs' scaladoc for why. The Scala test only inspects the

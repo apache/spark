@@ -41,6 +41,19 @@ computed once per row, as eagerly as the Python eval operator would, but a
 cheap argument or one we cannot put in a projection is left at each use site
 instead -- so a nondeterministic argument can get drawn more than once per
 row. An argument the body never uses is never computed at all.
+
+One known difference in the other direction (SPARK-58626): build a call once,
+then use that same ``Column`` in two places, and both places read the one
+column and share a single draw. Interpreted Python draws twice there, because
+analysis gives each occurrence of an unresolved random seed its own seed::
+
+    c = my_udf(expr("rand()"))
+    df.select(c.alias("x"), c.alias("y"))   # lowered: x == y; interpreted: x != y
+
+This needs the seed to still be unresolved -- ``expr("rand()")`` or SQL text,
+not ``functions.rand()``, which bakes a literal seed in and makes both paths
+share. Two separate calls are unaffected, and so are two different UDFs, even
+when they read the same argument ``Column``: each call gets its own column.
 """
 
 import ast
