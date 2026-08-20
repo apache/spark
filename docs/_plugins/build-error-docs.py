@@ -22,7 +22,26 @@ ERROR_CONDITIONS_PATH = (
 
 def assemble_message(message_parts):
     message = " ".join(message_parts)
+    # A message may already contain inline code spans that embed a placeholder
+    # such as `APPROX NEAREST <numResults> BY ...`. The substitution below wraps
+    # every `<...>` token in backticks, which would insert backticks *inside* an
+    # existing code span and split it. The split leaks the placeholder as raw
+    # HTML (e.g. `<numResults>`), which the browser then interprets as a tag and
+    # uses to break the surrounding <table> structure on the generated page.
+    #
+    # To avoid that, existing inline code spans are stashed first, the bare
+    # placeholders are wrapped, and the code spans are restored untouched so that
+    # markdown escapes their angle-bracket content as HTML entities.
+    code_spans = []
+
+    def _stash_code_span(match):
+        code_spans.append(match.group(0))
+        return f"\x00{len(code_spans) - 1}\x00"
+
+    message = re.sub(r"`[^`]*`", _stash_code_span, message)
     cleaned_message = re.sub(r"(<.*?>)", lambda x: f"`{x.group(1)}`", message)
+    for index, code_span in enumerate(code_spans):
+        cleaned_message = cleaned_message.replace(f"\x00{index}\x00", code_span)
     return markdown.markdown(cleaned_message)
 
 
