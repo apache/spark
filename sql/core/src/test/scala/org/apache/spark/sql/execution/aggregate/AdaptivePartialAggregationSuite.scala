@@ -532,7 +532,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   test("distinct with an order-sensitive non-distinct aggregate across partitions") {
     // A single-partition `range` fuses the whole four-phase DISTINCT plan into one stage, so the
     // split-topology path (the frozen map draining one row per queued row, the queue flush, and
-    // the `shouldStop()` re-entry) never runs for a `PartialMerge` member, nor does an
+    // the `shouldStop()` re-entry) never runs for a `PartialMerge` member, including an
     // order-sensitive one. Deriving both grouping columns and varying the partition count forces
     // the exchanges; carrying `first`/`last` makes the pass-through's merge-into-an-empty-buffer
     // step observable. The forced-spill cells are omitted because the sort-based fallback reorders
