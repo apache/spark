@@ -221,6 +221,15 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         agg.groupingExpressions.length ->
           agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
     }.groupBy(_._1).map { case (n, pairs) => n -> pairs.map(_._2).sum }
+    // The pure `PartialMerge` de-duplication phase (grouping on key + distinct columns) is the one
+    // phase the `exists(_.mode == Partial)` guard exists to exclude. It shares the 2-key bucket
+    // above with the leading `Partial` phase, so pin its ineligibility directly.
+    val dedupPhases = collect(df.queryExecution.executedPlan) {
+      case agg: HashAggregateExec if agg.aggregateExpressions.nonEmpty &&
+        agg.aggregateExpressions.forall(_.mode == PartialMerge) => agg
+    }
+    assert(dedupPhases.forall(!_.metrics.contains("numBypassingRows")),
+      "the pure-PartialMerge de-duplication phase must stay ineligible")
     checkAgainstReference(df, build)
     byKeyCount
   }
@@ -520,6 +529,33 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("distinct with an order-sensitive non-distinct aggregate across partitions") {
+    // A single-partition `range` fuses the whole four-phase DISTINCT plan into one stage, so the
+    // split-topology path (the frozen map draining one row per queued row, the queue flush, and
+    // the `shouldStop()` re-entry) never runs for a `PartialMerge` member, nor does an
+    // order-sensitive one. Deriving both grouping columns and varying the partition count forces
+    // the exchanges; carrying `first`/`last` makes the pass-through's merge-into-an-empty-buffer
+    // step observable. The forced-spill cells are omitted because the sort-based fallback reorders
+    // `first`/`last` in the feature-off reference arm too.
+    forEachCodegenAndMap() { clue =>
+      Seq(1, 2).foreach { parts =>
+        val df = () => spark.range(0, 400, 1, parts)
+          .select(($"id" % 100).cast("string") as "k", ($"id" % 7) as "v", $"id" as "w")
+          .groupBy($"k")
+          .agg(countDistinct($"v") as "cd", sum($"w") as "s",
+            first($"w") as "f", last($"w") as "l")
+        withClue(s"$clue parts=$parts") {
+          val byKeyCount = bypassRowsByGroupingKeyCount(df)
+          assert(byKeyCount.get(2).exists(_ > 0),
+            s"expected the de-duplication partial (grouping on k, v) to bypass, got $byKeyCount")
+          assert(byKeyCount.get(1).exists(_ > 0),
+            s"expected the distinct partial (PartialMerge++Partial, grouping on k) to bypass, " +
+              s"got $byKeyCount")
+        }
+      }
+    }
+  }
+
   test("an imperative aggregate stays correct in the distinct intermediate phase") {
     // `approx_count_distinct` uses `HyperLogLogPlusPlus`, an `ImperativeAggregate` whose buffer is
     // written by `initialize`/`merge` rather than a projection, so the distinct intermediate phase
@@ -544,9 +580,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("distinct aggregation bypasses on high-cardinality input") {
-    // The `PartialMerge` phase of the multi-phase distinct plan always aggregates (it is not
-    // `Partial` mode and requires a distribution), so the rows reaching the distinct `Partial`
-    // phase are de-duplicated and pass-through carries exactly one distinct value each.
+    // The `PartialMerge` phase of the multi-phase distinct plan always aggregates (it requires a
+    // distribution, so it is never eligible), so the rows reaching the distinct `Partial` phase
+    // are de-duplicated and pass-through carries exactly one distinct value each.
     forEachCodegenAndMap() { clue =>
       val df = () => spark.range(0, 1000, 1, 1)
         .select(($"id" % 100).cast("string") as "k", $"id" as "v")
