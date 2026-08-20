@@ -21,9 +21,9 @@ import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, ScalarSubquery, StringRPad}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, Literal, ScalarSubquery, StringRPad}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Project}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
@@ -868,25 +868,80 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assert(varcharDf.schema.head.dataType === VarcharType(5))
       checkAnswer(varcharDf, Row("hello"))
 
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          sql("SELECT CAST('hello!' AS VARCHAR(5))").collect()
-        },
-        condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "5")
-      )
+      // ISO 6.13: character-to-character CAST truncates rather than erroring.
+      checkAnswer(sql("SELECT CAST('hello!' AS VARCHAR(5)) AS v"), Row("hello"))
+      checkAnswer(sql("SELECT CAST('abcdef' AS CHAR(2)) AS c"), Row("ab"))
+      checkAnswer(sql("SELECT CAST('abcdef' AS VARCHAR(2)) AS v"), Row("ab"))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS CHAR(2)) AS c"), Row("ab"))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS v"), Row("ab"))
 
       // Multi-byte characters: length is in characters, not octets.
       // scalastyle:off nonascii
       checkAnswer(sql("SELECT CAST('你好' AS VARCHAR(2)) AS v"), Row("你好"))
+      checkAnswer(sql("SELECT CAST('你好啊' AS VARCHAR(2)) AS v"), Row("你好"))
+      // scalastyle:on nonascii
+
+      // ISO 6.13 numeric-to-character CAST still errors when the literal does not fit.
       checkError(
         exception = intercept[SparkRuntimeException] {
-          sql("SELECT CAST('你好啊' AS VARCHAR(2))").collect()
+          sql("SELECT CAST(12345 AS VARCHAR(4))").collect()
         },
         condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "2")
+        parameters = Map("limit" -> "4")
       )
-      // scalastyle:on nonascii
+      checkAnswer(sql("SELECT CAST(12345 AS VARCHAR(5)) AS v"), Row("12345"))
+      checkAnswer(sql("SELECT try_cast(12345 AS VARCHAR(4)) AS v"), Row(null))
+
+      // LCT must wrap the inner CAST, not retarget it (truncation / overflow stay).
+      checkAnswer(
+        sql("SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4))) AS c"),
+        Row("ab"))
+      checkAnswer(
+        sql("""SELECT CASE WHEN true THEN CAST('abcdef' AS VARCHAR(2))
+          |ELSE CAST('x' AS VARCHAR(4)) END AS c""".stripMargin),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT CAST('abcdef' AS VARCHAR(2)) IN (CAST('ab' AS VARCHAR(4)))"),
+        Row(true))
+      checkAnswer(
+        sql("""SELECT coalesce(
+          |  CAST('abcdef' AS VARCHAR(2) COLLATE UTF8_LCASE),
+          |  CAST('x' AS VARCHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT coalesce(try_cast(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5))) AS c"),
+        Row("x"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("SELECT coalesce(CAST(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5)))").collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "4")
+      )
+    }
+  }
+
+  test("SPARK-58797: store assignment with standardSemantics and charVarcharAsString") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      val wide = new StructType().add("c", CharType(10))
+      val df = spark.createDataFrame(java.util.Arrays.asList(Row("spark")), wide)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          df.to(new StructType().add("c", CharType(3))).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+      withTable("std_and_as_string") {
+        sql("CREATE TABLE std_and_as_string (v VARCHAR(2)) USING parquet")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql("INSERT INTO std_and_as_string VALUES ('abc')")
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "2"))
+      }
     }
   }
 
@@ -1201,6 +1256,91 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58794: collated mixed-length LCT ignores collation strength for length") {
+    val mixedLength =
+      """SELECT coalesce(
+        |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+        |  cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin
+    val mixedStrength =
+      """SELECT coalesce(
+        |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+        |  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin
+
+    Seq(
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true").foreach { case (key, value) =>
+      withSQLConf(key -> value) {
+        assert(sql(mixedLength).schema.head.dataType === CharType(4, "UTF8_LCASE"),
+          s"$key=$value same-strength mixed CHAR lengths")
+        assert(sql(mixedStrength).schema.head.dataType === CharType(4, "UTF8_LCASE"),
+          s"$key=$value Implicit CHAR(2) vs Default CHAR(4) must widen, not narrow")
+      }
+    }
+  }
+
+  test("SPARK-58794: typed CHAR Literal is re-padded when LCT widens the length") {
+    // CollationTypeCoercion.changeType used to `copy(dataType)` on Literal, which would
+    // leave CHAR(2) "a " as a CHAR(4) value without the extra pad. SQL CAST is a Cast
+    // node so goldens do not cover this; Literal.create does.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val c2 = Column(Literal.create("a", CharType(2, "UTF8_LCASE")))
+      val c4 = Column(Literal.create("bb", CharType(4, "UTF8_LCASE")))
+      val coalesced = functions.coalesce(c2, c4)
+      val df = spark.range(1).select(coalesced.as("c"))
+      assert(df.schema.head.dataType === CharType(4, "UTF8_LCASE"))
+      checkAnswer(df, Row("a   "))
+    }
+  }
+
+  test("SPARK-58794: parameterized CHAR/VARCHAR lengths under standardSemantics") {
+    // Length positions accept parameter markers (`integerValue` -> `parameterMarker`). Under
+    // standardSemantics the bound type stays first-class: CAST keeps CHAR/VARCHAR, pads and
+    // enforces length, and DDL schemas retain the substituted n.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charDf = spark.sql("SELECT cast('ab' AS CHAR(:n)) AS c", Map("n" -> 5))
+      assert(charDf.schema.head.dataType === CharType(5))
+      checkAnswer(
+        spark.sql("SELECT concat('<', cast('ab' AS CHAR(:n)), '>')", Map("n" -> 5)),
+        Row("<ab   >"))
+
+      val varcharDf = spark.sql("SELECT cast('hello' AS VARCHAR(?)) AS c", Array(5))
+      assert(varcharDf.schema.head.dataType === VarcharType(5))
+      checkAnswer(
+        spark.sql("SELECT cast('abcdef' AS VARCHAR(?))", Array(2)),
+        Row("ab"))
+
+      withTable("param_varchar", "param_char") {
+        spark.sql(
+          "CREATE TABLE param_varchar (c VARCHAR(:n)) USING parquet", Map("n" -> 7))
+        assert(spark.table("param_varchar").schema.head.dataType === VarcharType(7))
+        spark.sql("CREATE TABLE param_char (c CHAR(?)) USING parquet", Array(4))
+        assert(spark.table("param_char").schema.head.dataType === CharType(4))
+      }
+
+      // Non-integral / negative lengths fail when substituted into the length position.
+      checkError(
+        exception = intercept[ParseException] {
+          spark.sql("SELECT cast('a' AS CHAR(:n))", Map("n" -> -1))
+        },
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'-'", "hint" -> ""),
+        context = ExpectedContext(
+          fragment = "SELECT cast('a' AS CHAR(:n))",
+          start = 0,
+          stop = 27))
+      checkError(
+        exception = intercept[ParseException] {
+          spark.sql("SELECT cast('a' AS CHAR(:n))", Map("n" -> 1.5))
+        },
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'1.5D'", "hint" -> ""),
+        context = ExpectedContext(
+          fragment = "SELECT cast('a' AS CHAR(:n))",
+          start = 0,
+          stop = 27))
+    }
+  }
+
   test("SPARK-58802: single-pass resolver agrees with fixed-point under standardSemantics") {
     // Dual run defaults to on under tests, but pin it explicitly so this coverage cannot be
     // silently lost: the HybridAnalyzer compares output schema and normalized plan across the
@@ -1219,7 +1359,18 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         VarcharType(5))
       assert(sql("SELECT try_cast('abcdef' AS CHAR(2)) AS c").schema.head.dataType ===
         CharType(2))
-      checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS c"), Row(null))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS c"), Row("ab"))
+      checkAnswer(
+        sql("SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4))) AS c"),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT CAST('abcdef' AS VARCHAR(2)) IN (CAST('ab' AS VARCHAR(4)))"),
+        Row(true))
+      checkAnswer(
+        sql("""SELECT coalesce(
+          |  CAST('abcdef' AS VARCHAR(2) COLLATE UTF8_LCASE),
+          |  CAST('x' AS VARCHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("ab"))
 
       // Least common type (R2): COALESCE / CASE / NULL / CHAR+VARCHAR / CHAR+STRING.
       assert(sql(
@@ -1289,9 +1440,41 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         .schema.head.dataType ===
         StructType(Seq(StructField("f", CharType(2), nullable = false))))
 
-      // Collated CAST keeps the declared collation under both analyzers.
-      assert(sql("SELECT CAST('ab' AS CHAR(2) COLLATE UTF8_LCASE) AS c")
-        .schema.head.dataType === CharType(2, "UTF8_LCASE"))
+      // Collated mixed-length LCT (the CollationTypeCoercion equal-strength and
+      // mixed-strength paths). Set ops have a separate resolver path.
+      assert(sql(
+        """SELECT coalesce(
+          |  CAST('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  CAST('bb' AS CHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === CharType(4, "UTF8_LCASE"))
+      assert(sql(
+        """SELECT coalesce(
+          |  CAST('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  CAST(1 AS CHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === CharType(4, "UTF8_LCASE"))
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) = " +
+          "CAST('a' AS CHAR(4) COLLATE UTF8_LCASE)"),
+        Row(true))
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) IN " +
+          "(CAST('a' AS CHAR(4) COLLATE UTF8_LCASE))"),
+        Row(true))
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) = " +
+          "CAST('a' AS VARCHAR(2) COLLATE UTF8_LCASE)"),
+        Row(false))
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) IN " +
+          "(CAST('a' AS VARCHAR(2) COLLATE UTF8_LCASE))"),
+        Row(false))
+
+      val mixedCharUnion = sql(
+        """SELECT CAST('a' AS CHAR(2)) AS c
+          |UNION ALL
+          |SELECT CAST('bb' AS CHAR(4)) AS c""".stripMargin)
+      assert(mixedCharUnion.schema.head.dataType === CharType(4))
+      checkAnswer(mixedCharUnion, Seq(Row("a   "), Row("bb  ")))
 
       // Bare column references keep the declared type (R3) through dual-run analysis.
       withTable("char_varchar_dual_run") {

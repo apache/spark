@@ -34,31 +34,17 @@ ab
 -- !query
 SELECT CAST('abcdef' AS CHAR(2))
 -- !query schema
-struct<>
+struct<CAST(abcdef AS CHAR(2)):char(2)>
 -- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "EXCEED_LIMIT_LENGTH",
-  "sqlState" : "54006",
-  "messageParameters" : {
-    "limit" : "2"
-  }
-}
+ab
 
 
 -- !query
 SELECT CAST('abcdef' AS VARCHAR(2))
 -- !query schema
-struct<>
+struct<CAST(abcdef AS VARCHAR(2)):varchar(2)>
 -- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "EXCEED_LIMIT_LENGTH",
-  "sqlState" : "54006",
-  "messageParameters" : {
-    "limit" : "2"
-  }
-}
+ab
 
 
 -- !query
@@ -66,7 +52,7 @@ SELECT try_cast('abcdef' AS CHAR(2))
 -- !query schema
 struct<TRY_CAST(abcdef AS CHAR(2)):char(2)>
 -- !query output
-NULL
+ab
 
 
 -- !query
@@ -74,7 +60,95 @@ SELECT try_cast('abcdef' AS VARCHAR(2))
 -- !query schema
 struct<TRY_CAST(abcdef AS VARCHAR(2)):varchar(2)>
 -- !query output
+ab
+
+
+-- !query
+SELECT CAST(12345 AS VARCHAR(4))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "EXCEED_LIMIT_LENGTH",
+  "sqlState" : "54006",
+  "messageParameters" : {
+    "limit" : "4"
+  }
+}
+
+
+-- !query
+SELECT CAST(12345 AS VARCHAR(5))
+-- !query schema
+struct<CAST(12345 AS VARCHAR(5)):varchar(5)>
+-- !query output
+12345
+
+
+-- !query
+SELECT try_cast(12345 AS VARCHAR(4))
+-- !query schema
+struct<TRY_CAST(12345 AS VARCHAR(4)):varchar(4)>
+-- !query output
 NULL
+
+
+-- !query
+SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4)))
+-- !query schema
+struct<coalesce(CAST(abcdef AS VARCHAR(2)), CAST(x AS VARCHAR(4))):varchar(4)>
+-- !query output
+ab
+
+
+-- !query
+SELECT CASE WHEN true THEN CAST('abcdef' AS VARCHAR(2)) ELSE CAST('x' AS VARCHAR(4)) END
+-- !query schema
+struct<CASE WHEN true THEN CAST(abcdef AS VARCHAR(2)) ELSE CAST(x AS VARCHAR(4)) END:varchar(4)>
+-- !query output
+ab
+
+
+-- !query
+SELECT CAST('abcdef' AS VARCHAR(2)) IN (CAST('ab' AS VARCHAR(4)))
+-- !query schema
+struct<(CAST(abcdef AS VARCHAR(2)) IN (CAST(ab AS VARCHAR(4)))):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT coalesce(
+  CAST('abcdef' AS VARCHAR(2) COLLATE UTF8_LCASE),
+  CAST('x' AS VARCHAR(4) COLLATE UTF8_LCASE))
+-- !query schema
+struct<coalesce(CAST(abcdef AS VARCHAR(2) COLLATE UTF8_LCASE), CAST(x AS VARCHAR(4) COLLATE UTF8_LCASE)):varchar(4) collate UTF8_LCASE>
+-- !query output
+ab
+
+
+-- !query
+SELECT coalesce(try_cast(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5)))
+-- !query schema
+struct<coalesce(TRY_CAST(12345 AS VARCHAR(4)), CAST(x AS VARCHAR(5))):varchar(5)>
+-- !query output
+x
+
+
+-- !query
+SELECT coalesce(CAST(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "EXCEED_LIMIT_LENGTH",
+  "sqlState" : "54006",
+  "messageParameters" : {
+    "limit" : "4"
+  }
+}
 
 
 -- !query
@@ -376,6 +450,53 @@ char(2) collate UTF8_LCASE
 
 
 -- !query
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)))
+-- !query schema
+struct<typeof(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS CHAR(4) COLLATE UTF8_LCASE))):string>
+-- !query output
+char(4) collate UTF8_LCASE
+
+
+-- !query
+SELECT hex(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)))
+-- !query schema
+struct<hex(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS CHAR(4) COLLATE UTF8_LCASE))):string collate UTF8_LCASE>
+-- !query output
+61202020
+
+
+-- !query
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE), cast('bb' AS VARCHAR(4) COLLATE UTF8_LCASE)))
+-- !query schema
+struct<typeof(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(bb AS VARCHAR(4) COLLATE UTF8_LCASE))):string>
+-- !query output
+varchar(4) collate UTF8_LCASE
+
+
+-- !query
+SELECT typeof(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)))
+-- !query schema
+struct<typeof(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(1 AS CHAR(4) COLLATE UTF8_LCASE))):string>
+-- !query output
+char(4) collate UTF8_LCASE
+
+
+-- !query
+SELECT hex(coalesce(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)))
+-- !query schema
+struct<hex(coalesce(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(1 AS CHAR(4) COLLATE UTF8_LCASE))):string collate UTF8_LCASE>
+-- !query output
+61202020
+
+
+-- !query
 SELECT typeof(c) FROM (
   SELECT cast('a' AS VARCHAR(3)) AS c
   UNION ALL
@@ -385,6 +506,248 @@ SELECT typeof(c) FROM (
 struct<typeof(c):string>
 -- !query output
 varchar(8)
+
+
+-- !query
+SELECT typeof(c) FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION ALL
+  SELECT cast('bb' AS CHAR(4)) AS c
+) t LIMIT 1
+-- !query schema
+struct<typeof(c):string>
+-- !query output
+char(4)
+
+
+-- !query
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION ALL
+  SELECT cast('bb' AS CHAR(4)) AS c
+) t
+-- !query schema
+struct<concat(<, c, >):string>
+-- !query output
+<a   >
+<bb  >
+
+
+-- !query
+SELECT typeof(c) FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION
+  SELECT cast('a' AS CHAR(4)) AS c
+) t
+-- !query schema
+struct<typeof(c):string>
+-- !query output
+char(4)
+
+
+-- !query
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('a' AS CHAR(2)) AS c
+  UNION
+  SELECT cast('a' AS CHAR(4)) AS c
+) t
+-- !query schema
+struct<concat(<, c, >):string>
+-- !query output
+<a   >
+
+
+-- !query
+SELECT typeof(c) FROM (
+  SELECT cast('ab' AS CHAR(2)) AS c
+  INTERSECT
+  SELECT cast('ab' AS CHAR(4)) AS c
+) t
+-- !query schema
+struct<typeof(c):string>
+-- !query output
+char(4)
+
+
+-- !query
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('ab' AS CHAR(2)) AS c
+  INTERSECT
+  SELECT cast('ab' AS CHAR(4)) AS c
+) t
+-- !query schema
+struct<concat(<, c, >):string>
+-- !query output
+<ab  >
+
+
+-- !query
+SELECT typeof(c) FROM (
+  SELECT cast('ab' AS CHAR(2)) AS c
+  EXCEPT
+  SELECT cast('xy' AS CHAR(4)) AS c
+) t
+-- !query schema
+struct<typeof(c):string>
+-- !query output
+char(4)
+
+
+-- !query
+SELECT concat('<', c, '>') FROM (
+  SELECT cast('ab' AS CHAR(2)) AS c
+  EXCEPT
+  SELECT cast('xy' AS CHAR(4)) AS c
+) t
+-- !query schema
+struct<concat(<, c, >):string>
+-- !query output
+<ab  >
+
+
+-- !query
+SELECT typeof(c) FROM (VALUES
+  (cast('a' AS CHAR(2))),
+  (cast('bb' AS CHAR(4)))
+) t(c)
+-- !query schema
+struct<typeof(c):string>
+-- !query output
+char(4)
+char(4)
+
+
+-- !query
+SELECT concat('<', c, '>') FROM (VALUES
+  (cast('a' AS CHAR(2))),
+  (cast('bb' AS CHAR(4)))
+) t(c)
+-- !query schema
+struct<concat(<, c, >):string>
+-- !query output
+<a   >
+<bb  >
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) = cast('a' AS CHAR(4))
+-- !query schema
+struct<(CAST(a AS CHAR(2)) = CAST(a AS CHAR(4))):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) = cast('a' AS VARCHAR(2))
+-- !query schema
+struct<(CAST(a AS CHAR(2)) = CAST(a AS VARCHAR(2))):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) = cast('a ' AS VARCHAR(2))
+-- !query schema
+struct<(CAST(a AS CHAR(2)) = CAST(a  AS VARCHAR(2))):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) = 'a'
+-- !query schema
+struct<(CAST(a AS CHAR(2)) = a):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) = 'a '
+-- !query schema
+struct<(CAST(a AS CHAR(2)) = a ):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = 'a'
+-- !query schema
+struct<(CAST(a AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = a):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) =
+  cast('a' AS CHAR(4) COLLATE UTF8_BINARY_RTRIM)
+-- !query schema
+struct<(CAST(a AS CHAR(2) COLLATE UTF8_BINARY_RTRIM) = CAST(a AS CHAR(4) COLLATE UTF8_BINARY_RTRIM)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)))
+-- !query schema
+struct<(CAST(a AS CHAR(2)) IN (CAST(a AS CHAR(4)))):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) IN (cast('a' AS VARCHAR(2)))
+-- !query schema
+struct<(CAST(a AS CHAR(2)) IN (CAST(a AS VARCHAR(2)))):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) IN (cast('a ' AS VARCHAR(2)))
+-- !query schema
+struct<(CAST(a AS CHAR(2)) IN (CAST(a  AS VARCHAR(2)))):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) IN ('a', 'b')
+-- !query schema
+struct<(CAST(a AS CHAR(2)) IN (a, b)):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) IN ('a ', 'b')
+-- !query schema
+struct<(CAST(a AS CHAR(2)) IN (a , b)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)), cast('b' AS VARCHAR(3)))
+-- !query schema
+struct<(CAST(a AS CHAR(2)) IN (CAST(a AS CHAR(4)), CAST(b AS VARCHAR(3)))):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) = cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE)
+-- !query schema
+struct<(CAST(a AS CHAR(2) COLLATE UTF8_LCASE) = CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE)):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT cast('a' AS CHAR(2) COLLATE UTF8_LCASE) IN (cast('a' AS VARCHAR(2) COLLATE UTF8_LCASE))
+-- !query schema
+struct<(CAST(a AS CHAR(2) COLLATE UTF8_LCASE) IN (CAST(a AS VARCHAR(2) COLLATE UTF8_LCASE))):boolean>
+-- !query output
+false
 
 
 -- !query
