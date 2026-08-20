@@ -1020,6 +1020,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
       }.filter(_.references.subsetOf(AttributeSet(output)))
 
+      // Also remap to the pruned output the advisory filters that will be removed from the final
+      // FilterExec by DataSourceV2Strategy.
+      // Advisory filters were in normalizedFilters, so pruning retained their fields and
+      // FIELD_NOT_FOUND cannot occur here.
+      val remappedAdvisoryFilters = sHolder.advisoryFilterExpressions.map(projectionFunc)
+
       // Record the fully-pushed filter expressions on the scan relation, keeping their references
       // to the relation's (pre-pruning) output. These include filters on columns that were pruned
       // out of the scan output -- e.g. an unselected partition column the source still enforces
@@ -1029,7 +1035,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // merge unsound. See DataSourceV2ScanRelation.pushedFilters.
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
         pushedFilters = sHolder.pushedFilterExpressions,
-        advisoryFilters = sHolder.advisoryFilterExpressions.map(projectionFunc),
+        advisoryFilters = remappedAdvisoryFilters,
         // The one site that grants mergeability: a plain scan carrying only reproducible pushdowns
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
         mergeableScan = !hasBlockingPushdown(sHolder))

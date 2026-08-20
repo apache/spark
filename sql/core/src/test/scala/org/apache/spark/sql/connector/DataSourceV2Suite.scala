@@ -1255,6 +1255,12 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         "fake connector should use Spark's projection-aware scan-delegated stats size")
       assert(q.queryExecution.optimizedPlan.stats.rowCount.contains(BigInt(7)),
         "re-added pushed predicate should adjust plan row count from the scan's pre-filter stats")
+      val execFilters = q.queryExecution.executedPlan.collect {
+        case filter: FilterExec => filter.condition
+      }
+      assert(!execFilters.exists(hasIGt3),
+        s"fully pushed predicate should be removed from FilterExec:\n" +
+          q.queryExecution.executedPlan)
     }
   }
 
