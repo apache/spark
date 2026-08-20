@@ -609,10 +609,13 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-58816: insert with column list resolves structs in map keys positionally") {
-    withTable("t") {
-      createTable("t", Seq("m"), Seq("MAP<STRUCT<x: INT, y: INT>, STRING>"))
-      sql("INSERT INTO t (m) SELECT map(named_struct('y', 20, 'x', 10), 'val')")
-      checkAnswer(spark.table("t"), Row(Map(Row(20, 10) -> "val")))
+    // Hive Metastore only supports primitive types for Map keys.
+    if (!format.startsWith("hive")) {
+      withTable("t") {
+        createTable("t", Seq("m"), Seq("MAP<STRUCT<x: INT, y: INT>, STRING>"))
+        sql("INSERT INTO t (m) SELECT map(named_struct('y', 20, 'x', 10), 'val')")
+        checkAnswer(spark.table("t"), Row(Map(Row(20, 10) -> "val")))
+      }
     }
   }
 
@@ -642,9 +645,15 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
   test("SPARK-58816: insert with column list resolves deeply nested mixed " +
     "collections positionally") {
     withTable("t") {
-      createTable("t", Seq("arr_map"), Seq("ARRAY<MAP<STRING, STRUCT<x: INT, y: INT>>>"))
-      sql("INSERT INTO t (arr_map) SELECT array(map('k', named_struct('y', 20, 'x', 10)))")
-      checkAnswer(spark.table("t"), Row(Seq(Map("k" -> Row(20, 10)))))
+      createTable(
+        "t",
+        Seq("nested_arr"),
+        Seq("ARRAY<STRUCT<nested: ARRAY<STRUCT<x: INT, y: INT>>>>"))
+      sql(
+        """INSERT INTO t (nested_arr)
+          |SELECT array(named_struct('nested', array(named_struct('y', 20, 'x', 10))))
+          |""".stripMargin)
+      checkAnswer(spark.table("t"), Row(Seq(Row(Seq(Row(20, 10))))))
     }
   }
 }
