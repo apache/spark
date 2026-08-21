@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, InsertIntoStatement, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -411,6 +411,14 @@ object CTESubstitution extends Rule[LogicalPlan] {
       alwaysInline: Boolean,
       cteRelations: Seq[(String, CTERelationDef)],
       recursiveCTERelation: Option[(String, CTERelationDef)]): LogicalPlan = {
+    plan match {
+      case i: InsertIntoStatement =>
+        // CTE names are visible in the input query, but they do not shadow the INSERT target.
+        return i.copy(query = substituteCTE(
+          i.query, alwaysInline, cteRelations, recursiveCTERelation))
+      case _ =>
+    }
+
     plan.resolveOperatorsUpWithPruning(
         _.containsAnyPattern(RELATION_TIME_TRAVEL, RELATION_CHANGES, UNRESOLVED_RELATION,
           PLAN_EXPRESSION, UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {

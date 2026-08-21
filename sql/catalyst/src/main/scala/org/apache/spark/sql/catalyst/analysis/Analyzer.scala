@@ -1151,17 +1151,11 @@ class Analyzer(
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
       case i @ InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
-        val relation = table match {
-          case u: UnresolvedRelation if !u.isStreaming =>
-            resolveRelation(u).getOrElse(u)
-          case other => other
-        }
-
         // Inserting into a file-based temporary view is allowed.
         // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
-        // Thus, we need to look at the raw plan if `relation` is a temporary view.
+        // Thus, we need to look at the raw plan if `table` is a temporary view.
         // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
-        unwrapRelationPlan(relation) match {
+        unwrapRelationPlan(table) match {
           case v: View if i.replaceCriteriaOpt.exists(_.isReplaceWhere) =>
             throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, i)
           case v: View =>
