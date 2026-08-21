@@ -4520,6 +4520,23 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("function-based target IDENTIFIER in INSERT REPLACE WHERE") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t VALUES (1, 'a'), (2, 'b')")
+
+      spark.sql(
+        """INSERT INTO IDENTIFIER(
+          |  lower(regexp_replace(:table_name, 'PLACEHOLDER', 'TBL')))
+          |REPLACE WHERE id = 1
+          |VALUES (1, 'updated')""".stripMargin,
+        Map("table_name" -> "TESTCAT.PLACEHOLDER"))
+
+      checkAnswer(spark.table(t), Seq(Row(1L, "updated"), Row(2L, "b")))
+    }
+  }
+
   test("Session variable in INSERT REPLACE WHERE") {
     val t = "testcat.tbl"
     withTable(t) {

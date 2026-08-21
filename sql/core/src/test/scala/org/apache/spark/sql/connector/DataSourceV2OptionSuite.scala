@@ -269,7 +269,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         s"`$writeOption` = '$writeOptionValue') VALUES (1, 'a'), (2, 'b')")
 
       var collected = df.queryExecution.optimizedPlan.collect {
-        case CommandResult(_, AppendData(relation: DataSourceV2Relation, _, _, _, _, _, _), _, _) =>
+        case CommandResult(
+            _, AppendData(relation: DataSourceV2Relation, _, _, _, _, _, _, _), _, _) =>
           assert(relation.table.isInstanceOf[InMemoryBaseTable])
           assertTargetOptions(relation.options)
       }
@@ -407,7 +408,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert(captured.size === 1)
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case AppendData(relation: DataSourceV2Relation, _, writeOptions, _, _, _, _) =>
+        case AppendData(relation: DataSourceV2Relation, _, writeOptions, _, _, _, _, _) =>
           assert(relation.table.isInstanceOf[InMemoryBaseTable])
           assert(writeOptions(loadOption) === loadOptionValue)
           assert(writeOptions(writeOption) === writeOptionValue)
@@ -439,7 +440,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert(captured.size === 1)
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case AppendData(relation: DataSourceV2Relation, _, writeOptions, _, _, _, _) =>
+        case AppendData(relation: DataSourceV2Relation, _, writeOptions, _, _, _, _, _) =>
           assert(relation.table.isInstanceOf[InMemoryBaseTable])
           assert(writeOptions(loadOption) === loadOptionValue)
           assert(writeOptions(writeOption) === writeOptionValue)
@@ -468,7 +469,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         s"`$writeOption` = '$writeOptionValue') VALUES (3, 'c'), (4, 'd')")
       var collected = df.queryExecution.optimizedPlan.collect {
         case CommandResult(_,
-          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _),
+          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _, _),
           _, _) =>
           assert(relation.table.isInstanceOf[InMemoryBaseTable])
           assertTargetOptions(relation.options)
@@ -509,7 +510,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
         case OverwritePartitionsDynamic(
-            relation: DataSourceV2Relation, _, writeOptions, _, _, _) =>
+            relation: DataSourceV2Relation, _, writeOptions, _, _, _, _) =>
           assert(relation.table.isInstanceOf[InMemoryBaseTable])
           assert(writeOptions(loadOption) === loadOptionValue)
           assert(writeOptions(writeOption) === writeOptionValue)
@@ -539,7 +540,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         s"VALUES (3, 'c'), (4, 'd')")
       var collected = df.queryExecution.optimizedPlan.collect {
         case CommandResult(_,
-          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _),
+          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _, _),
           _, _) =>
           assert(relation.table.isInstanceOf[InMemoryBaseTable])
           assertTargetOptions(relation.options)
@@ -579,7 +580,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
         case OverwriteByExpression(
-            relation: DataSourceV2Relation, _, _, writeOptions, _, _, _, _) =>
+            relation: DataSourceV2Relation, _, _, writeOptions, _, _, _, _, _) =>
           assert(relation.table.isInstanceOf[InMemoryBaseTable])
           assert(writeOptions(loadOption) === loadOptionValue)
           assert(writeOptions(writeOption) === writeOptionValue)
@@ -621,7 +622,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       val qe = captured.head
       val logicalWrites = qe.optimizedPlan.collect {
         case OverwritePartitionsDynamic(
-            relation: DataSourceV2Relation, _, writeOptions, _, _, _) =>
+            relation: DataSourceV2Relation, _, writeOptions, _, _, _, _) =>
           assert(relation.table.isInstanceOf[InMemoryBaseTable])
           assert(writeOptions(loadOption) === loadOptionValue)
           assert(writeOptions(writeOption) === writeOptionValue)
@@ -660,7 +661,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       var collected = qe.optimizedPlan.collect {
         case OverwriteByExpression(
-            relation: DataSourceV2Relation, _, _, writeOptions, _, _, _, _) =>
+            relation: DataSourceV2Relation, _, _, writeOptions, _, _, _, _, _) =>
           assert(relation.table.isInstanceOf[InMemoryBaseTable])
           assert(writeOptions(loadOption) === loadOptionValue)
           assert(writeOptions(writeOption) === writeOptionValue)

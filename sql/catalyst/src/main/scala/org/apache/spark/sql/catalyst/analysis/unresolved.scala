@@ -60,15 +60,13 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  * A logical plan placeholder that holds the identifier clause string expression. It will be
  * replaced by the actual logical plan with the evaluated identifier string.
  *
- * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed slot (e.g.
+ * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed table child (e.g.
  * `OverwriteByExpression.table`) directly at parse time, instead of wrapping the whole command.
  *
- * The parser always places this node inside the command's identifier slot (a child slot for
- * DELETE/UPDATE/MERGE/CTAS/RTAS, or a non-child slot for `InsertIntoStatement.table` and
- * `OverwriteByExpression.table` -- handled via explicit cases in `ResolveIdentifierClause` and
- * `BindParameters`). It is never the substitution root of a `WITH ... <command>` subtree, so
- * `CTEInChildren` semantics are not needed: any surrounding `WithCTE` produced by
- * `CTESubstitution` targets the inner command directly.
+ * The parser always places this node inside the command's identifier child. It is never the
+ * substitution root of a `WITH ... <command>` subtree, so `CTEInChildren` semantics are not
+ * needed: any surrounding `WithCTE` produced by `CTESubstitution` targets the inner command
+ * directly.
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,

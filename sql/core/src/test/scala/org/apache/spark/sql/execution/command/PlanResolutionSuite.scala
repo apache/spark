@@ -27,12 +27,12 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, FunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -224,7 +224,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
   private val v1SessionCatalog: SessionCatalog = new SessionCatalog(
     new InMemoryCatalog,
-    EmptyFunctionRegistry,
+    FunctionRegistry.builtin.clone(),
     new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
   createTempView(v1SessionCatalog, "v", LocalRelation(Nil), false)
 
@@ -1318,7 +1318,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val sql1 = "INSERT INTO testcat.defaultvalues VALUES (DEFAULT, DEFAULT)"
     parseAndResolve(sql1) match {
       // The top-most Project just adds aliases.
-      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _, _) =>
+      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _, _, _) =>
         assert(l.data.length == 1)
         val row = l.data.head
         assert(row.numFields == 2)
@@ -1356,19 +1356,19 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val overwriteSql = s"INSERT OVERWRITE $tblName(i, s) VALUES (3, 'a')"
     val overwriteParsed = parseAndResolve(overwriteSql)
     insertParsed match {
-      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _, _) =>
+      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
     }
     overwriteParsed match {
-      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _) =>
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
     }
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       val dynamicOverwriteParsed = parseAndResolve(overwriteSql)
       dynamicOverwriteParsed match {
-        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _, _) =>
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _, _, _) =>
           assert(isByName)
         case _ =>
           fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
@@ -1397,6 +1397,46 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         parseAndResolve(
           "INSERT INTO testcat.tab AS t REPLACE USING (i) " +
             "SELECT * FROM v2Table")
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> "`tab`",
+        "operation" -> "INSERT INTO ... REPLACE ON/USING")
+    )
+  }
+
+  test("function-based IDENTIFIER in INSERT commands") {
+    val target =
+      "IDENTIFIER(lower(regexp_replace('TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB')))"
+    val statements = Seq(
+      s"INSERT INTO $target SELECT * FROM v2Table" -> classOf[AppendData],
+      s"INSERT OVERWRITE TABLE $target SELECT * FROM v2Table" ->
+        classOf[OverwriteByExpression],
+      s"INSERT INTO $target REPLACE WHERE i = 1 SELECT * FROM v2Table" ->
+        classOf[OverwriteByExpression])
+
+    statements.foreach { case (sqlText, expectedClass) =>
+      parseAndResolve(sqlText) match {
+        case write: V2WriteCommand =>
+          assert(expectedClass.isInstance(write))
+          assert(write.isAnalyzed)
+          assert(write.children === Seq(write.query))
+          assert(write.innerChildren === Seq(write.table))
+        case other =>
+          fail(s"Expected V2WriteCommand, but got: $other")
+      }
+    }
+  }
+
+  test("function-based IDENTIFIER in INSERT INTO REPLACE USING") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        parseAndResolve(
+          """INSERT INTO IDENTIFIER(lower(regexp_replace(
+            |  'TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB'))) AS t
+            |REPLACE USING (i)
+            |SELECT * FROM v2Table""".stripMargin)
       },
       condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       sqlState = "0A000",
@@ -1734,7 +1774,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _) =>
+        case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _, _) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _) =>

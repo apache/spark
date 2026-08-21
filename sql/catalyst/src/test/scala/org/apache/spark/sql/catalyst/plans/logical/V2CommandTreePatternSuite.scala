@@ -94,4 +94,43 @@ class V2CommandTreePatternSuite extends SparkFunSuite {
       WriteDeltaProjections(None, emptyRow, None))
     assert(plan.containsAllPatterns(TreePattern.COMMAND, TreePattern.WRITE_DELTA))
   }
+
+  test("V2 write commands hide the target table after analysis") {
+    val commands = Seq[V2WriteCommand](
+      AppendData.byPosition(v2Relation, source),
+      InsertOnlyMerge(v2Relation, source),
+      OverwriteByExpression.byPosition(v2Relation, source, Literal.TrueLiteral),
+      OverwritePartitionsDynamic.byPosition(v2Relation, source),
+      ReplaceData(
+        v2Relation,
+        Literal.TrueLiteral,
+        source,
+        v2Relation,
+        ReplaceDataProjections(emptyRow, None)),
+      WriteDelta(
+        v2Relation,
+        Literal.TrueLiteral,
+        source,
+        v2Relation,
+        WriteDeltaProjections(None, emptyRow, None)))
+
+    commands.foreach { command =>
+      assert(command.children === Seq(command.table, command.query))
+      assert(command.innerChildren.isEmpty)
+
+      val analyzed = command.withNewIsAnalyzed(true)
+      assert(analyzed.children === Seq(analyzed.query))
+      assert(analyzed.innerChildren === Seq(analyzed.table))
+    }
+  }
+
+  test("V2 write commands unwrap analyzer aliases around the target table") {
+    val command = AppendData.byPosition(v2Relation, source)
+    val updated = command
+      .withNewChildren(Seq(SubqueryAlias("t", v2Relation), source))
+      .asInstanceOf[AppendData]
+
+    assert(updated.table === v2Relation)
+    assert(updated.query === source)
+  }
 }
