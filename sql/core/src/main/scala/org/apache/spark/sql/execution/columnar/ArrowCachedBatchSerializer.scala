@@ -23,10 +23,14 @@ import java.nio.channels.Channels
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
-import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot, VectorUnloader}
+import org.apache.arrow.flatbuf.{RecordBatch => FlatBufRecordBatch}
+import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.{TypeLayout, VectorLoader, VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
 import org.apache.arrow.vector.ipc.{ReadChannel, WriteChannel}
+import org.apache.arrow.vector.ipc.message.{ArrowBodyCompression, ArrowFieldNode}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
+import org.apache.arrow.vector.types.pojo.Field
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
@@ -283,6 +287,135 @@ private object ArrowCachedBatchSerializer {
     val writeChannel = new WriteChannel(Channels.newChannel(out))
     MessageSerializer.serialize(writeChannel, batch)
     out.toByteArray
+  }
+
+  /**
+   * Number of Arrow buffers a field occupies in a RecordBatch body, including all of its
+   * descendants, in the depth-first order `VectorLoader` consumes them. The type's own buffer
+   * count comes from `TypeLayout` (validity + offset/data buffers), then each child contributes
+   * its whole subtree recursively. Used to map each top-level column to its run of buffers.
+   */
+  private def fieldBufferCount(field: Field): Int =
+    TypeLayout.getTypeBufferCount(field.getType) +
+      field.getChildren.asScala.map(fieldBufferCount).sum
+
+  /** Number of Arrow field nodes a field occupies (itself plus every descendant). */
+  private def fieldNodeCount(field: Field): Int =
+    1 + field.getChildren.asScala.map(fieldNodeCount).sum
+
+  /** Number of variadic buffer counts a field contributes (one per view-type buffer, recursive). */
+  private def fieldVariadicCount(field: Field): Int = {
+    val own = field.getType match {
+      // View types (Utf8View/BinaryView) carry a variadic-buffer count in the RecordBatch;
+      // no other type does. The cache never writes view vectors today, but account for them so
+      // the span arithmetic stays correct if that changes.
+      case _: org.apache.arrow.vector.types.pojo.ArrowType.Utf8View |
+          _: org.apache.arrow.vector.types.pojo.ArrowType.BinaryView => 1
+      case _ => 0
+    }
+    own + field.getChildren.asScala.map(fieldVariadicCount).sum
+  }
+
+  /**
+   * Read an encapsulated IPC RecordBatch message from `data`, materializing off-heap only the
+   * buffers of the requested top-level columns. This is the projection-pushdown read path: the
+   * message metadata (a small flatbuffer) lists every buffer's (offset, length) within the body,
+   * so we copy just the byte ranges belonging to the selected columns straight out of the
+   * in-memory `data` array, never touching (or allocating off-heap for) the unselected columns.
+   *
+   * The body is a flat, depth-first sequence of buffers in schema order, so each top-level column
+   * owns a contiguous run of buffers whose span is `fieldBufferCount`; field nodes and variadic
+   * counts run in the same order. The selected columns' bytes are copied into one off-heap buffer
+   * (each buffer 8-byte aligned, matching Arrow's IPC body layout) and the returned batch's
+   * buffers are windows into it, exactly like the standard reader slices one body buffer -- so the
+   * batch has a single underlying allocation and no per-buffer bookkeeping. The returned batch
+   * owns its buffers (the constructor retains each), so the caller closes it as usual.
+   *
+   * Compression is preserved unchanged: buffer (offset, length) spans cover the on-body bytes
+   * including any per-buffer uncompressed-length prefix, so the copied windows are still compressed
+   * as written; `VectorLoader.load` decompresses only the selected ones later.
+   */
+  def readProjectedRecordBatch(
+      data: Array[Byte],
+      schemaFields: Seq[Field],
+      selectedIndices: Array[Int],
+      allocator: BufferAllocator): ArrowRecordBatch = {
+    val in = new ByteArrayInputStream(data)
+    val readChannel = new ReadChannel(Channels.newChannel(in))
+    // Read only the message metadata; the body bytes stay in `data` and are copied selectively.
+    val metadata = MessageSerializer.readMessage(readChannel)
+    require(metadata != null, "Unexpected end of input reading cached batch message")
+    val batch =
+      metadata.getMessage.header(new FlatBufRecordBatch()).asInstanceOf[FlatBufRecordBatch]
+    // serializeBatch writes exactly [encapsulated message][body] with no end-of-stream marker, so
+    // the body is the tail of `data`: it starts at data.length minus the declared body length.
+    val bodyStart = data.length - metadata.getMessageBodyLength().toInt
+
+    val compression: ArrowBodyCompression =
+      if (batch.compression() == null) NoCompressionCodec.DEFAULT_BODY_COMPRESSION
+      else new ArrowBodyCompression(batch.compression().codec(), batch.compression().method())
+
+    val nodeStarts = schemaFields.scanLeft(0)(_ + fieldNodeCount(_)).toArray
+    val bufferStarts = schemaFields.scanLeft(0)(_ + fieldBufferCount(_)).toArray
+    val variadicStarts = schemaFields.scanLeft(0)(_ + fieldVariadicCount(_)).toArray
+    val hasVariadic = batch.variadicBufferCountsLength() > 0
+
+    // Enumerate the selected columns' nodes, buffer indices and variadic counts, in output order.
+    val selectedNodes = new java.util.ArrayList[ArrowFieldNode]()
+    val selectedBufferIdx = new scala.collection.mutable.ArrayBuffer[Int]()
+    val selectedVariadic = new java.util.ArrayList[java.lang.Long]()
+    selectedIndices.foreach { i =>
+      val field = schemaFields(i)
+      val nStart = nodeStarts(i)
+      (nStart until nStart + fieldNodeCount(field)).foreach { j =>
+        val node = batch.nodes(j)
+        selectedNodes.add(new ArrowFieldNode(node.length(), node.nullCount()))
+      }
+      val bStart = bufferStarts(i)
+      (bStart until bStart + fieldBufferCount(field)).foreach(selectedBufferIdx += _)
+      if (hasVariadic) {
+        val vStart = variadicStarts(i)
+        (vStart until vStart + fieldVariadicCount(field)).foreach(j =>
+          selectedVariadic.add(batch.variadicBufferCounts(j)))
+      }
+    }
+
+    val layout = selectedBufferIdx.map { j =>
+      val buf = batch.buffers(j)
+      (buf.offset(), buf.length())
+    }
+    val alignedSizes = layout.map { case (_, len) => ((len + 7) / 8) * 8 }
+    val body = allocator.buffer(math.max(alignedSizes.sum, 1))
+    try {
+      val selectedBuffers = new java.util.ArrayList[org.apache.arrow.memory.ArrowBuf]()
+      var pos = 0L
+      layout.indices.foreach { k =>
+        val (srcOffset, len) = layout(k)
+        if (len > 0) {
+          body.setBytes(pos, data, bodyStart + srcOffset.toInt, len.toInt)
+        }
+        val window = body.slice(pos, len)
+        window.writerIndex(len)
+        selectedBuffers.add(window)
+        pos += alignedSizes(k)
+      }
+      val recordBatch = new ArrowRecordBatch(
+        batch.length().toInt,
+        selectedNodes,
+        selectedBuffers,
+        compression,
+        selectedVariadic,
+        false)
+      // The constructor retained each window (slice() itself does not), so the batch now holds one
+      // reference per window into `body`. Drop `body`'s original allocation reference; the batch is
+      // then the sole owner and the caller's recordBatch.close() frees the single allocation.
+      body.close()
+      recordBatch
+    } catch {
+      case t: Throwable =>
+        body.close()
+        throw t
+    }
   }
 
   /**
@@ -1143,6 +1276,21 @@ private class ArrowCachedBatchToColumnarBatchIterator(
   private val arrowSchema = ArrowUtils.toArrowSchema(
     cacheSchema, timeZoneId, false, false, losslessInternalTypes = true)
 
+  // Projection pushdown: the cached batch stores all cache columns, but only the selected ones
+  // are needed. When every selected column maps to a distinct cached column, read a batch holding
+  // only the selected columns' buffers (in columnIndices order) so unselected columns are never
+  // copied off-heap, loaded, or decompressed. The projected schema's field order matches
+  // columnIndices, so the loaded root's vectors are already in output order. If any selected
+  // attribute is absent from the cache schema (index -1), fall back to reading the full batch.
+  private val cacheFields = arrowSchema.getFields.asScala.toSeq
+  private val canProjectOnLoad = columnIndices.forall(_ >= 0)
+  private val projectedSchema =
+    if (canProjectOnLoad) {
+      new org.apache.arrow.vector.types.pojo.Schema(columnIndices.map(cacheFields).toList.asJava)
+    } else {
+      arrowSchema
+    }
+
   // Track only the previous root to close it when next batch is produced
   private var previousRoot: VectorSchemaRoot = null
 
@@ -1202,11 +1350,16 @@ private class ArrowCachedBatchToColumnarBatchIterator(
 
     previousRoot = root
 
-    // Wrap vectors in ArrowColumnVector and project to selected columns.
-    val allColumns = root.getFieldVectors.asScala.map { vector =>
-      new ArrowColumnVector(vector)
-    }.toArray[ColumnVector]
-    val selectedColumns = columnIndices.map(allColumns(_))
+    // When projected on load, the root already holds only the selected columns in output order,
+    // so wrap its vectors directly. Otherwise it holds all cache columns and must be selected.
+    val selectedColumns = if (canProjectOnLoad) {
+      root.getFieldVectors.asScala.map(v => new ArrowColumnVector(v)).toArray[ColumnVector]
+    } else {
+      val allColumns = root.getFieldVectors.asScala.map { vector =>
+        new ArrowColumnVector(vector)
+      }.toArray[ColumnVector]
+      columnIndices.map(allColumns(_))
+    }
     val batch = new ColumnarBatch(selectedColumns, root.getRowCount)
 
     // Start prefetching the next batch while this one is being consumed.
@@ -1217,11 +1370,18 @@ private class ArrowCachedBatchToColumnarBatchIterator(
 
   /** Deserialize a cached batch into its own freshly-created root. Does not touch other roots. */
   private def deserializeToRoot(cachedBatch: ArrowCachedBatch): VectorSchemaRoot = {
-    val in = new ByteArrayInputStream(cachedBatch.arrowData)
-    val readChannel = new ReadChannel(Channels.newChannel(in))
-    val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
+    // Projection pushdown: read only the selected columns' buffers out of the cached bytes, so
+    // unselected columns are never copied off-heap, loaded, or decompressed.
+    val recordBatch = if (canProjectOnLoad) {
+      ArrowCachedBatchSerializer.readProjectedRecordBatch(
+        cachedBatch.arrowData, cacheFields, columnIndices, allocator)
+    } else {
+      val in = new ByteArrayInputStream(cachedBatch.arrowData)
+      val readChannel = new ReadChannel(Channels.newChannel(in))
+      MessageSerializer.deserializeRecordBatch(readChannel, allocator)
+    }
     Utils.tryWithSafeFinally {
-      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      val root = VectorSchemaRoot.create(projectedSchema, allocator)
       // VectorLoader.load fills vectors incrementally, so a failure (malformed data, decompression
       // error, OOM) can occur after earlier vectors have allocated buffers. Close the partially
       // loaded root on failure, otherwise it becomes unreachable and the later allocator.close()
@@ -1424,6 +1584,20 @@ private class ArrowCachedBatchToInternalRowIterator(
   private val arrowSchema = ArrowUtils.toArrowSchema(
     cacheSchema, timeZoneId, false, false, losslessInternalTypes = true)
 
+  // Projection pushdown: see ArrowCachedBatchToColumnarBatchIterator. When every selected column
+  // maps to a distinct cached column, read a batch holding only the selected columns' buffers so
+  // unselected columns are never copied off-heap, loaded, or decompressed, and readers bind
+  // positionally. If any selected attribute is absent from the cache (index -1), fall back to the
+  // full batch and bind readers via columnIndices.
+  private val cacheFields = arrowSchema.getFields.asScala.toSeq
+  private val canProjectOnLoad = columnIndices.forall(_ >= 0)
+  private val projectedSchema =
+    if (canProjectOnLoad) {
+      new org.apache.arrow.vector.types.pojo.Schema(columnIndices.map(cacheFields).toList.asJava)
+    } else {
+      arrowSchema
+    }
+
   // Pre-build typed readers per column at init time -- no per-row pattern match
   private val columnReaders: Array[ArrowColumnReader] =
     selectedSchema.fields.map(f => ArrowColumnReader.create(f.dataType))
@@ -1504,11 +1678,17 @@ private class ArrowCachedBatchToInternalRowIterator(
 
   /** Deserialize a cached batch into a VectorSchemaRoot. */
   private def deserializeBatch(cachedBatch: ArrowCachedBatch): VectorSchemaRoot = {
-    val in = new ByteArrayInputStream(cachedBatch.arrowData)
-    val readChannel = new ReadChannel(Channels.newChannel(in))
-    val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
+    // Projection pushdown: read only the selected columns' buffers out of the cached bytes.
+    val recordBatch = if (canProjectOnLoad) {
+      ArrowCachedBatchSerializer.readProjectedRecordBatch(
+        cachedBatch.arrowData, cacheFields, columnIndices, allocator)
+    } else {
+      val in = new ByteArrayInputStream(cachedBatch.arrowData)
+      val readChannel = new ReadChannel(Channels.newChannel(in))
+      MessageSerializer.deserializeRecordBatch(readChannel, allocator)
+    }
     try {
-      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      val root = VectorSchemaRoot.create(projectedSchema, allocator)
       // VectorLoader.load fills vectors incrementally, so a failure (malformed data, decompression
       // error, OOM) can occur after earlier vectors have allocated buffers. Close the partially
       // loaded root on failure, otherwise it becomes unreachable and the later allocator.close()
@@ -1560,10 +1740,13 @@ private class ArrowCachedBatchToInternalRowIterator(
 
     currentRoot = root
 
-    // Update pre-built readers with new vectors
+    // Update pre-built readers with new vectors. When projected on load, the root holds the
+    // selected columns positionally; otherwise it holds all cache columns, selected via
+    // columnIndices.
     var i = 0
     while (i < numFields) {
-      columnReaders(i).setVector(root.getVector(columnIndices(i)))
+      val vectorIndex = if (canProjectOnLoad) i else columnIndices(i)
+      columnReaders(i).setVector(root.getVector(vectorIndex))
       i += 1
     }
 
