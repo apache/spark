@@ -23,9 +23,9 @@ import org.apache.spark.ml.linalg.{Matrices, MatrixUDT, Vector, Vectors, VectorU
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldMatrixUDT,
   Vectors => OldVectors, VectorUDT => OldVectorUDT}
-import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.functions.{col, unwrap_udt, wrap_udt}
-import org.apache.spark.sql.types.UserDefinedType
+import org.apache.spark.sql.types.{StructField, StructType, UserDefinedType}
 
 class FunctionsSuite extends MLTest {
 
@@ -45,6 +45,22 @@ class FunctionsSuite extends MLTest {
       df.select(wrap_udt(unwrap_udt(col("value")), targetUDT).as("value")).collect()
     }
     assert(e.getCondition === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+  }
+
+  private def checkNullableWrapUDTConversion(
+      value: Any,
+      sourceUDT: UserDefinedType[_],
+      targetUDT: UserDefinedType[_],
+      expected: Any): Unit = {
+    val schema = StructType(Seq(StructField("value", sourceUDT, nullable = true)))
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(value), Row(null))),
+      schema)
+    val converted = df.select(wrap_udt(unwrap_udt(col("value")), targetUDT).as("value"))
+
+    assert(converted.schema("value").dataType === targetUDT)
+    assert(converted.schema("value").nullable)
+    assert(converted.collect().map(_.get(0)).toSeq === Seq(expected, null))
   }
 
   test("test vector_to_array") {
@@ -217,5 +233,21 @@ class FunctionsSuite extends MLTest {
     checkWrapUDTTypeMismatch(
       mlMatrixDF,
       new VectorUDT)
+  }
+
+  test("wrap and unwrap nullable vector UDT columns") {
+    val oldVector = OldVectors.sparse(3, Array(1), Array(2.0))
+    checkNullableWrapUDTConversion(
+      oldVector,
+      new OldVectorUDT,
+      new VectorUDT,
+      oldVector.asML)
+
+    val mlVector = Vectors.dense(1.0, 2.0)
+    checkNullableWrapUDTConversion(
+      mlVector,
+      new VectorUDT,
+      new OldVectorUDT,
+      OldVectors.fromML(mlVector))
   }
 }
