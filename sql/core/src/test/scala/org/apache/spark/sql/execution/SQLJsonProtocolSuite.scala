@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.json4s.JsonAST.JString
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkFunSuite
@@ -113,6 +114,22 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
     event.qe = null
     event.executionFailure = None
     assert(readBack == event)
+  }
+
+  test("SPARK-58701: SparkListenerSQLExecutionStart SQL text JSON round-trip") {
+    val event = SparkListenerSQLExecutionStart(
+      executionId = 1,
+      rootExecutionId = Some(1),
+      description = "test desc",
+      details = "test detail",
+      physicalPlanDescription = "test plan",
+      sparkPlanInfo = SparkPlanInfo.EMPTY,
+      time = 10,
+      sqlText = Some("SELECT 1"))
+    val jsonString = JsonProtocol.sparkEventToJsonString(event)
+    val json = parse(jsonString)
+    assert((json \ "sqlText") == JString("SELECT 1"))
+    assert(JsonProtocol.sparkEventFromJson(jsonString) == event)
   }
 
   test("SPARK-40834: Use SparkListenerSQLExecutionEnd to track final SQL status in UI") {

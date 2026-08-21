@@ -198,7 +198,10 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       System.currentTimeMillis(),
-      Map.empty))
+      Map.empty,
+      sqlText = Some("SELECT 1")))
+
+    assert(statusStore.execution(executionId).get.sqlText === Some("SELECT 1"))
 
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -345,7 +348,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       val listener = new SparkListener {
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
-            case SparkListenerSQLExecutionStart(_, _, _, _, planDescription, _, _, _, _, _, _) =>
+            case SparkListenerSQLExecutionStart(_, _, _, _, planDescription, _, _, _, _, _, _, _) =>
               assert(expected.forall(planDescription.contains))
               checkDone = true
             case _ => // ignore other events

@@ -76,7 +76,8 @@ class QueryExecution(
     // the enclosing QueryExecution's analyzer here to propagate the transaction context.
     // Omitting it causes the nested QE to use sessionState.analyzer, which has no knowledge
     // of the transaction and will load tables outside the transaction's catalog scope.
-    val analyzerOpt: Option[Analyzer] = None) extends LookupCatalog {
+    val analyzerOpt: Option[Analyzer] = None,
+    val sqlText: Option[String] = None) extends LookupCatalog {
 
   val id: Long = QueryExecution.nextExecutionId
 

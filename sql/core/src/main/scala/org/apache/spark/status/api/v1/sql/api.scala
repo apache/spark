@@ -45,4 +45,5 @@ class ExecutionData private[spark] (
     val errorMessage: String = null,
     val rootExecutionId: Long = -1,
     val modifiedConfigs: Map[String, String] = Map.empty,
-    val totalTaskTime: Long = -1L)
+    val totalTaskTime: Long = -1L,
+    val sqlText: String = null)
