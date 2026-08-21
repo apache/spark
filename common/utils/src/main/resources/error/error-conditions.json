@@ -999,6 +999,13 @@
     },
     "sqlState" : "XX000"
   },
+  "CHECKPOINT_DIRECTORY_NOT_SET" : {
+    "message" : [
+      "Cannot checkpoint because no checkpoint directory is configured.",
+      "Set one with `SparkContext.setCheckpointDir` or the \"spark.checkpoint.dir\" configuration."
+    ],
+    "sqlState" : "55019"
+  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",
@@ -1013,6 +1020,13 @@
       "If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant."
     ],
     "sqlState" : "56000"
+  },
+  "CHECKPOINT_RDD_PARTITION_COUNT_MISMATCH" : {
+    "message" : [
+      "The checkpoint of RDD <originalRDDId> has <newRDDLength> partition(s), but the RDD itself has <originalRDDLength>. The checkpoint RDD is <newRDDId>.",
+      "This usually means the checkpoint directory is not on storage that both the driver and the executors can read and write, or that some checkpoint files did not survive until the checkpoint was read back."
+    ],
+    "sqlState" : "58030"
   },
   "CHECK_CONSTRAINT_VIOLATION" : {
     "message" : [
@@ -2678,6 +2692,12 @@
     ],
     "sqlState" : "42822"
   },
+  "FAILED_CREATE_CHECKPOINT_DIRECTORY" : {
+    "message" : [
+      "Failed to create the checkpoint directory <path> as FileSystem.mkdirs returned false."
+    ],
+    "sqlState" : "58030"
+  },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
       "User defined function (<functionName>: (<signature>) => <result>) failed due to: <reason>."
@@ -3773,6 +3793,12 @@
       }
     },
     "sqlState" : "42K03"
+  },
+  "INVALID_CHECKPOINT_DIRECTORY" : {
+    "message" : [
+      "Cannot read the checkpoint directory <path>: expected the partition file <expectedFileName> but found <fileName>. The partition files must be numbered contiguously from part-00000."
+    ],
+    "sqlState" : "58030"
   },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
@@ -11592,33 +11618,6 @@
   "_LEGACY_ERROR_TEMP_3015" : {
     "message" : [
       "countByValueApprox() does not support arrays"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3016" : {
-    "message" : [
-      "Checkpoint directory has not been set in the SparkContext"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3017" : {
-    "message" : [
-      "Invalid checkpoint file: <path>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3018" : {
-    "message" : [
-      "Failed to create checkpoint path <checkpointDirPath>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3019" : {
-    "message" : [
-      "Checkpoint RDD has a different number of partitions from original RDD. Original",
-      "RDD [ID: <originalRDDId>, num of partitions: <originalRDDLength>];",
-      "Checkpoint RDD [ID: <newRDDId>, num of partitions: <newRDDLength>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3020" : {
-    "message" : [
-      "Checkpoint dir must be specified."
     ]
   },
   "_LEGACY_ERROR_TEMP_3028" : {
