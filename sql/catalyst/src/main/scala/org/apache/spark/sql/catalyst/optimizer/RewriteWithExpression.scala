@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, PLAN_EXPRESSION,
+  WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -144,21 +145,33 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   }
 
   /**
-   * `e` with every foldable subtree replaced by its value, as [[ConstantFolding]] would. That rule
-   * runs several batches after this one, so a comparison written against a literal still carries
-   * the cast an implicit coercion put around it here, and a cast is not a node
-   * [[ExprUtils.canEvaluateUnconditionally]] admits: asking the folded form asks about the
-   * expression that batch will produce. A foldable subtree that raises -- `cast('x' as int)` under
-   * ANSI -- fails to fold and stays a cast, so the check turns the guard down.
+   * `e` with every subtree that is constant for the whole query replaced by its value. A comparison
+   * written against a literal still carries the cast an implicit coercion put around it -- `a > 0`
+   * on an int column arrives here as `a > cast(0 as int)` -- and a cast is not a node
+   * [[ExprUtils.canEvaluateUnconditionally]] admits, so asking it about the condition as written
+   * would give up the guard on most conditions anyone writes.
    *
-   * The rule itself is not called: it tags a subtree that failed to evaluate, so asking it a
-   * question here would change what it does later to the very expression being asked about. This
-   * folds a copy instead, and only to answer the question -- the guard that goes into the plan is
-   * the condition as written, which the later batch folds along with everything else. A foldable
-   * subtree may hold state, which the copy accounts for in the same way the rule does.
+   * Evaluating the subtree here is what makes this sound, rather than the later [[ConstantFolding]]
+   * batch that will do the same to the plan: a subtree that reads no row data and returned a value
+   * here returns that same value on every row, so repeating it in the project cannot raise there.
+   * Both halves are needed. `foldable` alone does not give the first, since a node may report
+   * itself foldable while ignoring its children -- `typeof(6 / a)` is foldable because it answers
+   * from the child's type without dividing anything, and a comparison against it is foldable in
+   * turn -- so folding by `foldable` would hide the division from the check while leaving it in the
+   * guard that runs. Requiring no references keeps such a subtree in the tree for the check to turn
+   * down, and the two conditions the check makes of the whole condition are asked of the subtree as
+   * well, so that folding cannot answer them by deleting their subject.
+   *
+   * A subtree that raises instead of folding -- `cast('x' as int)` under ANSI -- is left as it is,
+   * so the check turns the guard down. `Try` catches what `ConstantFolding` catches, and leaves the
+   * same node behind. Only the answer is taken from this: the guard that goes into the plan is the
+   * condition as written, which the later batch folds along with everything else.
    */
   private def foldedForm(e: Expression): Expression = e.transformUp {
-    case f if f.foldable && !f.isInstanceOf[Literal] =>
+    case f if f.foldable && f.references.isEmpty && f.deterministic &&
+        !f.containsPattern(PLAN_EXPRESSION) && !f.isInstanceOf[Literal] =>
+      // A stateful expression is nondeterministic, so the copy is only for the symmetry with
+      // `ConstantFolding`, which evaluates a foldable subtree the same way.
       Try(Literal.create(f.freshCopyIfContainsStatefulExpression().eval(EmptyRow), f.dataType))
         .getOrElse(f)
   }

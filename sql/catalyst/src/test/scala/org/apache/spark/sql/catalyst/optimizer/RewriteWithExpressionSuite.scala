@@ -485,10 +485,10 @@ class RewriteWithExpressionSuite extends PlanTest {
             Some(Literal(false))).as("col"))
         .analyze)
 
-    // A condition is measured as `ConstantFolding` will leave it, which runs several batches later:
-    // the cast an implicit coercion puts around a literal is not a node that can be repeated as a
-    // guard, but it folds to one, so the guard survives. `a > 0L` in SQL arrives here as this. The
-    // guard itself keeps the condition as written, for that later batch to fold.
+    // A condition that reads no row data is measured by its value, so the cast an implicit coercion
+    // puts around a literal -- not a node that can be repeated as a guard -- does not cost the
+    // guard. `a > 0L` in SQL arrives here as this. The guard itself keeps the condition as written,
+    // for `ConstantFolding` to fold along with the rest of the plan.
     val foldableCast =
       GreaterThan(a, Cast(Literal(0L), IntegerType, Some(conf.sessionLocalTimeZone)))
     val plan7 = testRelation.select(
@@ -510,8 +510,8 @@ class RewriteWithExpressionSuite extends PlanTest {
             Some(Literal(false))).as("col"))
         .analyze)
 
-    // A foldable subtree that raises does not fold, so it is still a cast when the condition is
-    // measured, and the guard is given up. Under ANSI the row where `a` is null would otherwise
+    // A subtree that raises rather than returning a value is left as it is, so it is still a cast
+    // when the condition is measured, and the guard is given up. Under ANSI it would otherwise
     // raise CAST_INVALID_INPUT on every row of the project.
     val raisingCast = GreaterThan(
       a, Cast(Literal("x"), IntegerType, Some(conf.sessionLocalTimeZone), EvalMode.ANSI))
@@ -533,12 +533,37 @@ class RewriteWithExpressionSuite extends PlanTest {
             Some(Literal(false))).as("col"))
         .analyze)
 
+    // A node can report itself foldable while ignoring its children: `typeof` answers from the
+    // child's type, so `typeof(a + a) = 'int'` and every comparison against it are foldable even
+    // though the addition is not. Measuring the condition by its value would delete the addition
+    // from what is measured while leaving it in the guard that runs, so a subtree is only measured
+    // by its value when it reads no row data.
+    val foldableOverRowData = EqualTo(TypeOf(a + a), Literal("int"))
+    val plan9 = testRelation.select(
+      CaseWhen(
+        Seq(
+          (foldableOverRowData, Literal(true)),
+          (b > 0, between(rand, Literal(0.4), Literal(0.6)))),
+        Some(Literal(false))).as("col"))
+    assert(foldableOverRowData.foldable, "the condition must be foldable to test anything")
+    comparePlans(
+      Optimizer.execute(plan9),
+      testRelation
+        .select((testRelation.output :+ rand.as("_common_expr_0")): _*)
+        .select(
+          CaseWhen(
+            Seq(
+              (foldableOverRowData, Literal(true)),
+              (b > 0, $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6))),
+            Some(Literal(false))).as("col"))
+        .analyze)
+
     // The guard comes from the conditions as they were before this pass rewrote them: the rewritten
     // first condition references a column this pass is still adding, which a `Project` cannot read
     // from its own project list. Here the definition it hoists is a column comparison, which cannot
     // raise, so inlining it into the guard keeps the guard available.
     val nonCheapSafeCond = With(a > 0) { case Seq(ref) => ref || ref }
-    val plan9 = testRelation.select(
+    val plan10 = testRelation.select(
       CaseWhen(
         Seq(
           (nonCheapSafeCond, Literal(true)),
@@ -547,7 +572,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     val hoistedOr = $"_common_expr_1" || $"_common_expr_1"
     val inlinedOr = (a > 0) || (a > 0)
     comparePlans(
-      Optimizer.execute(plan9),
+      Optimizer.execute(plan10),
       testRelation
         .select((testRelation.output ++ Seq(
           (a > 0).as("_common_expr_1"),
@@ -563,10 +588,10 @@ class RewriteWithExpressionSuite extends PlanTest {
     // `NaNvl` reaches its right child only when the left one is NaN. `IsNaN` is false for a null
     // input, so it is the whole guard.
     val d = doubleRelation.output.head
-    val plan10 = doubleRelation.select(
+    val plan11 = doubleRelation.select(
       NaNvl(d, With(rand) { case Seq(ref) => ref + ref }).as("col"))
     comparePlans(
-      Optimizer.execute(plan10),
+      Optimizer.execute(plan11),
       doubleRelation
         .select((doubleRelation.output :+ guarded(IsNaN(d))): _*)
         .select(NaNvl(d, $"_common_expr_0" + $"_common_expr_0").as("col"))
