@@ -101,16 +101,14 @@ private[spark] trait DecisionTreeModel {
     leafAttr.withName(leafCol).toStructField()
   }
 
-  @transient private lazy val leafIndices: Map[LeafNode, Int] = {
-    leafIterator(rootNode).zipWithIndex.toMap
-  }
-
   /**
    * @return The index of the leaf corresponding to the feature vector.
    *         Leaves are indexed in pre-order from 0.
    */
   def predictLeaf(features: Vector): Double = {
-    leafIndices(rootNode.predictImpl(features)).toDouble
+    val leaf = rootNode.predictImpl(features)
+    assert(leaf.leafIndex >= 0, "Leaf indices are not assigned.")
+    leaf.leafIndex.toDouble
   }
 
   def getEstimatedSize(): Long = {
@@ -508,7 +506,7 @@ private[ml] object DecisionTreeModelReadWrite {
       finalNodes(n.id) = node
     }
     // Return the root node
-    finalNodes.head
+    Node.withLeafIndices(finalNodes.head)
   }
 }
 

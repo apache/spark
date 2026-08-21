@@ -345,7 +345,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
-    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
+    val rootNode = Node.withLeafIndices(Node.fromOld(oldModel.topNode, categoricalFeatures))
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtr")
     new DecisionTreeRegressionModel(uid, rootNode, numFeatures)
   }
