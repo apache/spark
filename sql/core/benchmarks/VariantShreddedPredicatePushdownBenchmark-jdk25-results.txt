@@ -1,28 +1,35 @@
 OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 Can skip all row groups:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without shredded predicate pushdown                1949           1999          94         10.8          92.9       1.0X
-With shredded predicate pushdown                     89            103           9        234.6           4.3      21.8X
+Without shredded predicate pushdown                1515           1574          79         13.8          72.3       1.0X
+With shredded predicate pushdown                     67             76           8        312.8           3.2      22.6X
 
 OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 Can skip some row groups:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without shredded predicate pushdown                1950           1977          32         10.8          93.0       1.0X
-With shredded predicate pushdown                    110            118           4        191.3           5.2      17.8X
+Without shredded predicate pushdown                1507           1526          18         13.9          71.9       1.0X
+With shredded predicate pushdown                     84             91           8        250.7           4.0      18.0X
 
 OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 Can skip no row groups:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without shredded predicate pushdown                2385           2408          14          8.8         113.7       1.0X
-With shredded predicate pushdown                   2467           2492          28          8.5         117.6       1.0X
+Without shredded predicate pushdown                1876           1893          17         11.2          89.5       1.0X
+With shredded predicate pushdown                   1940           1958          19         10.8          92.5       1.0X
 
 OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
+Can skip no row groups (default block size):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+Without shredded predicate pushdown                   1658           1695          38         12.6          79.1       1.0X
+With shredded predicate pushdown                      1659           1666          10         12.6          79.1       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 9V74 80-Core Processor
 Can skip some row groups (partial object):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Without shredded predicate pushdown                 2332           2348          15          9.0         111.2       1.0X
-With shredded predicate pushdown                     150            159           6        140.0           7.1      15.6X
+Without shredded predicate pushdown                 1772           1789          20         11.8          84.5       1.0X
+With shredded predicate pushdown                     116            123           7        180.2           5.5      15.2X
 
