@@ -305,6 +305,20 @@ class ArrowBatchTransformerTests(unittest.TestCase):
         self.assertEqual(len(slices), 1)
         self.assertEqual(slices[0].num_rows, 0)
 
+    def test_resize_batches_row_larger_than_cap(self):
+        """Rows individually larger than the cap yield one-row slices, never empty ones."""
+        import pyarrow as pa
+
+        # 3 rows of ~1 KB each; max_bytes=1 forces num_slices == num_rows.
+        batch = pa.RecordBatch.from_arrays([pa.array([b"x" * 1000] * 3)], ["x"])
+
+        slices = list(ArrowBatchTransformer.resize_batches(iter([batch]), 1))
+
+        self.assertEqual(len(slices), 3)
+        self.assertTrue(all(s.num_rows == 1 for s in slices))
+        rejoined = [v for s in slices for v in s.column(0).to_pylist()]
+        self.assertEqual(rejoined, [b"x" * 1000] * 3)
+
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 @unittest.skipIf(not have_pandas, pandas_requirement_message)
