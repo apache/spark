@@ -5384,6 +5384,7 @@ object SQLConf {
         "applyInPandas (SQL_GROUPED_MAP_PANDAS_UDF) honors this; other Arrow-based Python UDFs " +
         "ignore it. -1 (the default) means no limit.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(x => x == -1 || (x > 0 && x <= Int.MaxValue),
         "The value of spark.sql.execution.pythonUDF.arrow.maxBytesPerOutputBatch should " +
