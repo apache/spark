@@ -49,17 +49,13 @@ private[spark] trait DecisionTreeModel {
   def rootNode: Node
 
   /** Number of nodes in tree, including leaf nodes. */
-  def numNodes: Int = {
-    1 + rootNode.numDescendants
-  }
+  def numNodes: Int = treeStats.numDescendants + 1
 
   /**
    * Depth of the tree.
    * E.g.: Depth 0 means 1 leaf node.  Depth 1 means 1 internal node and 2 leaf nodes.
    */
-  lazy val depth: Int = {
-    rootNode.subtreeDepth
-  }
+  def depth: Int = treeStats.subtreeDepth
 
   /** Summary of the model */
   override def toString: String = {
@@ -95,13 +91,11 @@ private[spark] trait DecisionTreeModel {
     }
   }
 
-  private[ml] lazy val numLeave: Int =
-    leafIterator(rootNode).size
+  private[ml] def treeStats: NodeStats
 
-  private[ml] def leafAttr = {
-    NominalAttribute.defaultAttr
-      .withNumValues(numLeave)
-  }
+  private[ml] def numLeaves: Int = treeStats.numLeaves
+
+  private[ml] def leafAttr = NominalAttribute.defaultAttr.withNumValues(numLeaves)
 
   private[ml] def getLeafField(leafCol: String) = {
     leafAttr.withName(leafCol).toStructField()

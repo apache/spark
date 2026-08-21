@@ -270,7 +270,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     val transformed = newTree.transform(newData)
     checkNominalOnDF(transformed, "prediction", newTree.numClasses)
-    checkNominalOnDF(transformed, "predictedLeafId", newTree.numLeave)
+    checkNominalOnDF(transformed, "predictedLeafId", newTree.numLeaves)
     checkVectorSizeOnDF(transformed, "rawPrediction", newTree.numClasses)
     checkVectorSizeOnDF(transformed, "probability", newTree.numClasses)
 
