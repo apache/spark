@@ -3341,7 +3341,7 @@ abstract class CSVSuite
   }
 
   test("validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 42)
+    assert(CSVOptions.getAllOptions.size == 43)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3385,6 +3385,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("delimiter"))
     assert(CSVOptions.isValidOption("singleVariantColumn"))
     assert(CSVOptions.isValidOption("columnPruning"))
+    assert(CSVOptions.isValidOption("variantRespectInferSchema"))
     // Please add validation on any new CSV options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
     assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
@@ -3921,9 +3922,9 @@ abstract class CSVSuite
       // its type inferred.
       withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        // With variantRespectInferSchema on and inferSchema off, every non-null scalar stays a
-        // string, while the null value (empty token) is still preserved as a variant null.
-        // inferSchema defaults to false, so passing it explicitly and omitting it behave the same.
+        // With variantRespectInferSchema on and inferSchema off, scalar values parse as string,
+        // while the null value (empty token) parses as a variant null. inferSchema defaults to
+        // false, so passing it explicitly and omitting it behave the same.
         for (opts <- Seq(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
             Map("variantRespectInferSchema" -> "true"))) {
           checkSingleVariant(opts,
@@ -3935,24 +3936,32 @@ abstract class CSVSuite
             """{"_c0":"missing"}""")
         }
 
-        // Explicitly enabling inference infers types even with variantRespectInferSchema on.
-        checkSingleVariant(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "true"),
-          """{"_c0":"field 1","_c1":"field2"}""",
-          """{"_c0":100,"_c1":1.1}""",
-          """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}""",
-          """{"_c0":null,"_c1":true}""",
-          """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
-          """{"_c0":"missing"}""")
+        // Explicitly enabling inference or disabling variantRespectInferSchema causes types
+        // to be inferred. Timestamps should be inferred correctly for all parsing modes.
+        for ((policy, timestampField) <- Seq(
+            "CORRECTED" -> "\"2000-01-01 01:02:03+00:00\"",
+            "LEGACY" -> "\"2000-01-01 01:02:03\"")) {
+          withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+            // Explicitly enabling inference infers types even with variantRespectInferSchema on.
+            checkSingleVariant(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "true"),
+              """{"_c0":"field 1","_c1":"field2"}""",
+              """{"_c0":100,"_c1":1.1}""",
+              s"""{"_c0":"2000-01-01","_c1":$timestampField}""",
+              """{"_c0":null,"_c1":true}""",
+              """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+              """{"_c0":"missing"}""")
 
-        // variantRespectInferSchema defaults to false, so scalar types are inferred regardless of
-        // inferSchema.
-        checkSingleVariant(Map("inferSchema" -> "false"),
-          """{"_c0":"field 1","_c1":"field2"}""",
-          """{"_c0":100,"_c1":1.1}""",
-          """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}""",
-          """{"_c0":null,"_c1":true}""",
-          """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
-          """{"_c0":"missing"}""")
+            // variantRespectInferSchema defaults to false, so scalar types are inferred regardless
+            // of inferSchema.
+            checkSingleVariant(Map("inferSchema" -> "false"),
+              """{"_c0":"field 1","_c1":"field2"}""",
+              """{"_c0":100,"_c1":1.1}""",
+              s"""{"_c0":"2000-01-01","_c1":$timestampField}""",
+              """{"_c0":null,"_c1":true}""",
+              """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+              """{"_c0":"missing"}""")
+          }
+        }
       }
 
       // Works with a header too: field names come from the header, values stay strings.
