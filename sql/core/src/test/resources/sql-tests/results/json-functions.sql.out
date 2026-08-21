@@ -1722,3 +1722,266 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "json_exists('{\"a\":1}', '$[')"
   } ]
 }
+
+
+-- !query
+select json_query('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.addr')
+-- !query schema
+struct<JSON_QUERY({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.addr'):string>
+-- !query output
+{"city":"NYC"}
+
+
+-- !query
+select json_query('{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}', '$.tags')
+-- !query schema
+struct<JSON_QUERY({"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null}, '$.tags'):string>
+-- !query output
+["x","y"]
+
+
+-- !query
+select json_query('{"id":7}', '$.id')
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.id'):string>
+-- !query output
+7
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name')
+-- !query schema
+struct<JSON_QUERY({"name":"Ada"}, '$.name'):string>
+-- !query output
+"Ada"
+
+
+-- !query
+select json_query('{"score":null}', '$.score')
+-- !query schema
+struct<JSON_QUERY({"score":null}, '$.score'):string>
+-- !query output
+null
+
+
+-- !query
+select json_query('{"id":7}', '$.missing')
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.missing'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_query(cast(null as string), '$.a')
+-- !query schema
+struct<JSON_QUERY(CAST(NULL AS STRING), '$.a'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_query('{"tags":["x","y"]}', '$.tags[0]' WITH ARRAY WRAPPER)
+-- !query schema
+struct<JSON_QUERY({"tags":["x","y"]}, '$.tags[0]' WITH UNCONDITIONAL ARRAY WRAPPER):string>
+-- !query output
+["x"]
+
+
+-- !query
+select json_query('{"tags":["x","y"]}', '$.tags' WITH UNCONDITIONAL ARRAY WRAPPER)
+-- !query schema
+struct<JSON_QUERY({"tags":["x","y"]}, '$.tags' WITH UNCONDITIONAL ARRAY WRAPPER):string>
+-- !query output
+[["x","y"]]
+
+
+-- !query
+select json_query('{"id":7}', '$.id' WITH ARRAY WRAPPER)
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.id' WITH UNCONDITIONAL ARRAY WRAPPER):string>
+-- !query output
+[7]
+
+
+-- !query
+select json_query('{"id":7}', '$.id' WITH CONDITIONAL ARRAY WRAPPER)
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.id' WITH CONDITIONAL ARRAY WRAPPER):string>
+-- !query output
+[7]
+
+
+-- !query
+select json_query('{"addr":{"city":"NYC"}}', '$.addr' WITH CONDITIONAL ARRAY WRAPPER)
+-- !query schema
+struct<JSON_QUERY({"addr":{"city":"NYC"}}, '$.addr' WITH CONDITIONAL ARRAY WRAPPER):string>
+-- !query output
+{"city":"NYC"}
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name' OMIT QUOTES)
+-- !query schema
+struct<JSON_QUERY({"name":"Ada"}, '$.name' OMIT QUOTES):string>
+-- !query output
+Ada
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name' KEEP QUOTES)
+-- !query schema
+struct<JSON_QUERY({"name":"Ada"}, '$.name'):string>
+-- !query output
+"Ada"
+
+
+-- !query
+select json_query('{"id":7}', '$.missing' EMPTY ARRAY ON EMPTY)
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.missing' EMPTY ARRAY ON EMPTY):string>
+-- !query output
+[]
+
+
+-- !query
+select json_query('{"id":7}', '$.missing' EMPTY OBJECT ON EMPTY)
+-- !query schema
+struct<JSON_QUERY({"id":7}, '$.missing' EMPTY OBJECT ON EMPTY):string>
+-- !query output
+{}
+
+
+-- !query
+select json_query('{"id":7}', '$.missing' ERROR ON EMPTY)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_QUERY_ON_ERROR.EMPTY",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "path" : "'$.missing'"
+  }
+}
+
+
+-- !query
+select json_query('not json', '$.a')
+-- !query schema
+struct<JSON_QUERY(not json, '$.a'):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_query('not json', '$.a' EMPTY ARRAY ON ERROR)
+-- !query schema
+struct<JSON_QUERY(not json, '$.a' EMPTY ARRAY ON ERROR):string>
+-- !query output
+[]
+
+
+-- !query
+select json_query('not json', '$.a' EMPTY OBJECT ON ERROR)
+-- !query schema
+struct<JSON_QUERY(not json, '$.a' EMPTY OBJECT ON ERROR):string>
+-- !query output
+{}
+
+
+-- !query
+select json_query('not json', '$.a' ERROR ON ERROR)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "JSON_QUERY_ON_ERROR.ERROR",
+  "sqlState" : "2203G",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "path" : "'$.a'"
+  }
+}
+
+
+-- !query
+select json_query('{"addr":{"city":"NYC"}}', '$.addr' RETURNING STRING)
+-- !query schema
+struct<JSON_QUERY({"addr":{"city":"NYC"}}, '$.addr'):string>
+-- !query output
+{"city":"NYC"}
+
+
+-- !query
+select json_query('{"a":[1,2]}', '$.a[*]')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_PATH",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "path" : "'$.a[*]'",
+    "sqlExpr" : "\"JSON_QUERY({\"a\":[1,2]}, '$.a[*]')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "json_query('{\"a\":[1,2]}', '$.a[*]')"
+  } ]
+}
+
+
+-- !query
+select json_query('{"a":1}', '$.a' RETURNING INT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_QUERY_RETURNING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "returningType" : "\"INT\"",
+    "sqlExpr" : "\"JSON_QUERY({\"a\":1}, '$.a' RETURNING INT)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "json_query('{\"a\":1}', '$.a' RETURNING INT)"
+  } ]
+}
+
+
+-- !query
+select json_query('{"name":"Ada"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_JSON_QUERY_WRAPPER_AND_QUOTES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`json_query`",
+    "sqlExpr" : "\"JSON_QUERY({\"name\":\"Ada\"}, '$.name' WITH UNCONDITIONAL ARRAY WRAPPER OMIT QUOTES)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 76,
+    "fragment" : "json_query('{\"name\":\"Ada\"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES)"
+  } ]
+}
