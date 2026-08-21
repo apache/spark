@@ -81,7 +81,7 @@ class V2CommandTreePatternSuite extends SparkFunSuite {
       Literal.TrueLiteral,
       source,
       v2Relation,
-      ReplaceDataProjections(emptyRow, None))
+      ReplaceDataProjections(emptyRow, None, None))
     assert(plan.containsAllPatterns(TreePattern.COMMAND, TreePattern.REPLACE_DATA))
   }
 
@@ -91,7 +91,7 @@ class V2CommandTreePatternSuite extends SparkFunSuite {
       Literal.TrueLiteral,
       source,
       v2Relation,
-      WriteDeltaProjections(None, emptyRow, None))
+      WriteDeltaProjections(None, None, emptyRow, None))
     assert(plan.containsAllPatterns(TreePattern.COMMAND, TreePattern.WRITE_DELTA))
   }
 }
