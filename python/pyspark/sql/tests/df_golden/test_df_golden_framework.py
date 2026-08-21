@@ -564,6 +564,8 @@ class DFGoldenFrameworkTests(unittest.TestCase):
             conf = FakeConf()
 
         class FakeProviderSession:
+            is_stopped = False
+
             def newSession(self):
                 return FakeSession()
 
@@ -593,25 +595,33 @@ class DFGoldenFrameworkTests(unittest.TestCase):
             self.addCleanup(os.environ.update, {"SPARK_GENERATE_GOLDEN_FILES": generating})
         return Cases, calls
 
+    def test_session_is_released_by_the_class_cleanup(self):
+        cases, calls = self._fake_golden_class()
+        cases.setUpClass()
+        cases.tearDownClass()
+        # Nothing releases the session before the cleanup does.
+        self.assertEqual(calls, [])
+        cases.doClassCleanups()
+        self.assertEqual(calls, ["release", "close"])
+
     def test_session_is_released_when_set_up_class_fails(self):
-        # A runner skips tearDownClass when setUpClass raises, so the session is
-        # released from a class cleanup, which runs in both paths.
+        # A runner skips tearDownClass when setUpClass raises, so the cleanup is
+        # what releases the session, here before the provider stopped anything.
         cases, calls = self._fake_golden_class(fail_setup=True)
         with self.assertRaisesRegex(RuntimeError, "setup_session failed"):
             cases.setUpClass()
         cases.doClassCleanups()
         self.assertEqual(calls, ["release", "close"])
 
-    def test_session_is_released_in_tear_down_class(self):
-        # Released there rather than by the class cleanup, which runs only once
-        # the session-providing class has stopped the session it was made from.
+    def test_session_release_is_skipped_once_the_provider_session_stopped(self):
+        # The session it was made from is gone, and with it the server holding
+        # the session to release; only the client is left to close.
         cases, calls = self._fake_golden_class()
         cases.setUpClass()
         cases.tearDownClass()
-        self.assertEqual(calls, ["release", "close"])
-        # The cleanup still runs afterwards and finds nothing left to release.
+        cases.spark.is_stopped = True
         cases.doClassCleanups()
-        self.assertEqual(calls, ["release", "close"])
+        self.assertEqual(calls, ["close"])
 
     # -- golden file location ---------------------------------------------
 

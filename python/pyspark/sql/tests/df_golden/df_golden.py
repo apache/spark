@@ -904,10 +904,10 @@ class DFGoldenTestMixin:
             "{}: no session was created; list DFGoldenTestMixin before the "
             "session-providing test class".format(cls.__name__)
         )
-        # Registered before the session exists, so the session below is released
-        # even when preparing it fails: unittest skips tearDownClass when
-        # setUpClass raises, but class cleanups run either way, and an open
-        # Connect client would hang the test process at exit.
+        # The one place the session below is released.  A class cleanup runs
+        # after tearDownClass, and also after a setUpClass that raised (which
+        # skips tearDownClass), so registering it before the session exists
+        # covers a failure in the setup that follows.
         cls.addClassCleanup(cls._close_golden_session)
         cls._golden_session = cls.spark.newSession()
         # Golden files are generated with ANSI mode on, matching the SQL golden
@@ -918,12 +918,6 @@ class DFGoldenTestMixin:
 
     @classmethod
     def tearDownClass(cls):
-        # Release before the session-providing class stops its own session:
-        # under SPARK_LOCAL_REMOTE that takes the local Connect server down with
-        # it, and the class cleanup registered in setUpClass runs only after
-        # tearDownClass, so releasing from there would retry against a dead
-        # server.  It stays the path for a failed setUpClass, and no-ops here.
-        cls._close_golden_session()
         try:
             if cls._golden_regenerating and cls.case_names():
                 cls._write_golden_file()
@@ -932,20 +926,32 @@ class DFGoldenTestMixin:
 
     @classmethod
     def _close_golden_session(cls):
+        """
+        Release this class's session, whenever its class cleanup gets to run.
+
+        That is after the session-providing class has stopped the session this
+        one was made from, or -- when setUpClass raised, which skips
+        tearDownClass -- before that class stopped anything.  Both orders end up
+        here, so nothing else has to release the session.
+        """
         if cls._golden_session is None:
             return
-        # Release only this sub-session server-side and close its client
-        # channel.  We must NOT call ``session.stop()``: under
-        # ``SPARK_LOCAL_REMOTE`` (the test harness) ``stop()`` terminates the
-        # shared local Connect server, breaking the rest of the suite and
-        # hanging the session-providing class's ``spark.stop()`` in release
-        # retries against the dead server until the test times out.
         client = cls._golden_session.client
         cls._golden_session = None
-        try:
-            client.release_session()
-        except Exception:
-            pass
+        # Release this session server-side only while the session it was made
+        # from is alive.  Stopping that one takes the local Connect server down
+        # with it (what ``stop()`` does under ``SPARK_LOCAL_REMOTE``, which is
+        # how the tests run), so there is nothing left to release, and the
+        # request would retry against a dead server until the test times out.
+        # For the same reason this must NOT call ``session.stop()`` on the
+        # session it is releasing: that would take the server down mid-suite.
+        if not cls.spark.is_stopped:
+            try:
+                client.release_session()
+            except Exception:
+                pass
+        # The client is closed either way: its channel holds threads that would
+        # otherwise keep the test process from exiting.
         try:
             client.close()
         except Exception:
