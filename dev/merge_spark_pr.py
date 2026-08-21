@@ -180,7 +180,7 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     contain the commit, leveraging the Upstream-First backporting policy (cherry-picks flow
     master -> branch-M.x -> branch-M.N):
       - master contributes the greatest unreleased N.0.0;
-      - branch-M.x with master contributes that major's greatest unreleased minor.0;
+      - branch-M.x contributes that major's greatest unreleased minor.0;
       - branch-M.N contributes its greatest unreleased M.N.patch.
     Redundant entries are then suppressed: master's N.0.0 is dropped when any branch-M.x is in
     the merge set (a cherry-pick to branch-M.x has already landed on master); branch-M.x's
@@ -217,7 +217,7 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     ([], 1, True)
 
     >>> compute_merge_default_fix_versions(["branch-4.x"], ["4.3.0"])
-    ([], [])
+    (['4.3.0'], [])
 
     >>> d, w = compute_merge_default_fix_versions(["branch-4.99"], ["4.3.0"])
     >>> d == [] and len(w) == 1 and "branch-4.99" in w[0]
@@ -277,8 +277,6 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
             continue
         line_major = _integration_major_from_branch(b)
         if line_major is not None:
-            if "master" not in merge_branches:
-                continue
             line_versions = [n for n in names if re.match(r"^%s\.\d+\.\d+$" % line_major, n)]
             chosen = _semver_max_version(line_versions)
             if chosen:
@@ -286,7 +284,7 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
             else:
                 warnings.append(
                     "Could not infer an unreleased Spark %s (minor.maintenance) fix version "
-                    "for branch-%s.x + master merge; enter version(s) manually when prompted."
+                    "for branch-%s.x merge; enter version(s) manually when prompted."
                     % (line_major, line_major)
                 )
             continue
