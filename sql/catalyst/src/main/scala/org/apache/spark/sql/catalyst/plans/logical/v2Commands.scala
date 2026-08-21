@@ -46,6 +46,7 @@ import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, 
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
 // which is required by the DS v1 API. We need to keep the analyzed input query plan to build
@@ -98,7 +99,7 @@ trait WriteWithSchemaEvolution extends LogicalPlan {
  * Base trait for DataSourceV2 write commands
  */
 trait V2WriteCommand
-    extends AnalysisOnlyCommand
+    extends UnaryCommand
     with KeepAnalyzedQuery
     with CTEInChildren
     with WriteWithSchemaEvolution {
@@ -106,17 +107,18 @@ trait V2WriteCommand
   def query: LogicalPlan
   def isByName: Boolean
 
-  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(table, query)
+  override def child: LogicalPlan = query
 
-  // The target table must be visible to all analyzer rules, but it must not reach the optimizer.
-  // In particular, V2ScanRelationPushDown would turn a DataSourceV2Relation target into a scan
-  // relation, while physical write planning requires the original relation. The input query still
-  // needs normal optimization, so retain only the query as a child after analysis.
-  override def childrenAfterAnalysis: Seq[LogicalPlan] = Seq(query)
-  override def innerChildrenAfterAnalysis: Seq[LogicalPlan] = Seq(table)
-
-  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    withNewQuery(WithCTE(query, cteDefs))
+  // `table` is a non-child slot, so the default tree-pattern propagation in TreeNode/QueryPlan
+  // does not see patterns inside it. Add `table`'s bits so that `containsPattern(...)` pruning
+  // correctly reports patterns living in `table` (e.g. `PLAN_WITH_UNRESOLVED_IDENTIFIER`,
+  // `PARAMETER`). Only `OverwriteByExpression` is constructed at parse time with a placeholder
+  // in `table`, but applying this uniformly across all `V2WriteCommand`s keeps the invariant
+  // consistent for any future analyzer-built node that lands a placeholder in the same slot.
+  override protected def getDefaultTreePatternBits: BitSet = {
+    val bits = super.getDefaultTreePatternBits
+    bits.union(table.treePatternBits)
+    bits
   }
 
   override lazy val resolved: Boolean = table.resolved && query.resolved && outputResolved
@@ -152,36 +154,6 @@ trait V2WriteCommand
 
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
   def withNewTable(newTable: NamedRelation): V2WriteCommand
-  def withNewIsAnalyzed(newIsAnalyzed: Boolean): V2WriteCommand
-  override def storeAnalyzedQuery(): V2WriteCommand
-
-  override protected def stringArgs: Iterator[Any] = {
-    productElementNames.zip(productIterator).collect {
-      case (name, arg) if name != "isAnalyzed" => arg
-    }
-  }
-
-  override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = {
-    storeAnalyzedQuery().withNewIsAnalyzed(true)
-  }
-
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): V2WriteCommand = {
-    if (isAnalyzed) {
-      assert(newChildren.size == 1)
-      withNewQuery(newChildren.head)
-    } else {
-      assert(newChildren.size == 2)
-      val newTable = EliminateSubqueryAliases(newChildren.head) match {
-        case named: NamedRelation => named
-        case other =>
-          throw SparkException.internalError(
-            "V2WriteCommand table child must remain a NamedRelation, but got: " +
-              other.getClass.getName)
-      }
-      withNewTable(newTable).withNewQuery(newChildren(1))
-    }
-  }
 }
 
 /** Trait for streaming write commands that participate in DSv2 transactions. */
@@ -206,15 +178,13 @@ case class AppendData(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None,
-    isAnalyzed: Boolean = false) extends V2WriteCommand with TransactionalWrite {
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
-  override def withNewIsAnalyzed(newIsAnalyzed: Boolean): AppendData = {
-    copy(isAnalyzed = newIsAnalyzed)
-  }
-  override def storeAnalyzedQuery(): AppendData = copy(analyzedQuery = Some(query))
+  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
+  override protected def withNewChildInternal(newChild: LogicalPlan): AppendData =
+    copy(query = newChild)
 }
 
 object AppendData {
@@ -254,17 +224,15 @@ case class InsertOnlyMerge(
     table: NamedRelation,
     query: LogicalPlan,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None,
-    isAnalyzed: Boolean = false) extends V2WriteCommand with TransactionalWrite {
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
   override def withNewQuery(newQuery: LogicalPlan): InsertOnlyMerge = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): InsertOnlyMerge = copy(table = newTable)
-  override def withNewIsAnalyzed(newIsAnalyzed: Boolean): InsertOnlyMerge = {
-    copy(isAnalyzed = newIsAnalyzed)
-  }
-  override def storeAnalyzedQuery(): InsertOnlyMerge = copy(analyzedQuery = Some(query))
+  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
+  override protected def withNewChildInternal(newChild: LogicalPlan): InsertOnlyMerge =
+    copy(query = newChild)
 }
 
 /**
@@ -278,8 +246,7 @@ case class OverwriteByExpression(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None,
-    isAnalyzed: Boolean = false) extends V2WriteCommand with TransactionalWrite {
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] =
     Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override lazy val resolved: Boolean = {
@@ -292,11 +259,10 @@ case class OverwriteByExpression(
   override def withNewTable(newTable: NamedRelation): OverwriteByExpression = {
     copy(table = newTable)
   }
-  override def withNewIsAnalyzed(newIsAnalyzed: Boolean): OverwriteByExpression = {
-    copy(isAnalyzed = newIsAnalyzed)
-  }
 
-  override def storeAnalyzedQuery(): OverwriteByExpression = copy(analyzedQuery = Some(query))
+  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
+  override protected def withNewChildInternal(newChild: LogicalPlan): OverwriteByExpression =
+    copy(query = newChild)
 }
 
 object OverwriteByExpression {
@@ -340,8 +306,7 @@ case class OverwritePartitionsDynamic(
     writeOptions: Map[String, String],
     isByName: Boolean,
     withSchemaEvolution: Boolean,
-    write: Option[Write] = None,
-    isAnalyzed: Boolean = false) extends V2WriteCommand with TransactionalWrite {
+    write: Option[Write] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] =
     Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
@@ -350,12 +315,12 @@ case class OverwritePartitionsDynamic(
   override def withNewTable(newTable: NamedRelation): OverwritePartitionsDynamic = {
     copy(table = newTable)
   }
-  override def withNewIsAnalyzed(newIsAnalyzed: Boolean): OverwritePartitionsDynamic = {
-    copy(isAnalyzed = newIsAnalyzed)
-  }
 
   // OverwritePartitionsDynamic has no v1 fallback
-  override def storeAnalyzedQuery(): OverwritePartitionsDynamic = this
+  override def storeAnalyzedQuery(): Command = this
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): OverwritePartitionsDynamic =
+    copy(query = newChild)
 }
 
 object OverwritePartitionsDynamic {
@@ -423,8 +388,7 @@ case class ReplaceData(
     originalTable: NamedRelation,
     projections: ReplaceDataProjections,
     groupFilterCondition: Option[Expression] = None,
-    write: Option[Write] = None,
-    isAnalyzed: Boolean = false) extends RowLevelWrite {
+    write: Option[Write] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
@@ -478,12 +442,13 @@ case class ReplaceData(
   override def withNewQuery(newQuery: LogicalPlan): ReplaceData = copy(query = newQuery)
 
   override def withNewTable(newTable: NamedRelation): ReplaceData = copy(table = newTable)
-  override def withNewIsAnalyzed(newIsAnalyzed: Boolean): ReplaceData = {
-    copy(isAnalyzed = newIsAnalyzed)
-  }
 
   // ReplaceData has no v1 fallback
-  override def storeAnalyzedQuery(): ReplaceData = this
+  override def storeAnalyzedQuery(): Command = this
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): ReplaceData = {
+    copy(query = newChild)
+  }
 
   override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(REPLACE_DATA)
 }
@@ -513,8 +478,7 @@ case class WriteDelta(
     originalTable: NamedRelation,
     projections: WriteDeltaProjections,
     groupFilterCondition: Option[Expression] = None,
-    write: Option[DeltaWrite] = None,
-    isAnalyzed: Boolean = false) extends RowLevelWrite {
+    write: Option[DeltaWrite] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
@@ -590,12 +554,13 @@ case class WriteDelta(
   override def withNewQuery(newQuery: LogicalPlan): V2WriteCommand = copy(query = newQuery)
 
   override def withNewTable(newTable: NamedRelation): V2WriteCommand = copy(table = newTable)
-  override def withNewIsAnalyzed(newIsAnalyzed: Boolean): WriteDelta = {
-    copy(isAnalyzed = newIsAnalyzed)
-  }
 
   // WriteDelta has no v1 fallback
-  override def storeAnalyzedQuery(): WriteDelta = this
+  override def storeAnalyzedQuery(): Command = this
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): WriteDelta = {
+    copy(query = newChild)
+  }
 
   override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(WRITE_DELTA)
 }

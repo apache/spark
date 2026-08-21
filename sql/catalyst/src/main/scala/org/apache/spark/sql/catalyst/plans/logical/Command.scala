@@ -52,10 +52,8 @@ trait BinaryCommand extends Command with BinaryLike[LogicalPlan]
  * but not optimized. An example would be "create view": we don't need to optimize the view subtree
  * because we will just store the entire view text as is in the catalog.
  *
- * The way we do this is by replacing [[childrenToAnalyze]] with [[childrenAfterAnalysis]] once
- * the subtree is analyzed. By default, `childrenAfterAnalysis` is empty, which prevents the
- * optimizer (or the analyzer from that point on) from traversing into the analyzed children.
- * Children removed after analysis remain available through [[innerChildrenAfterAnalysis]].
+ * The way we do this is by setting the children to empty once the subtree is analyzed. This will
+ * prevent the optimizer (or the analyzer from that point on) from traversing into the children.
  *
  * There's a corresponding rule
  * [[org.apache.spark.sql.catalyst.analysis.Analyzer.HandleSpecialCommand]] that marks these
@@ -64,14 +62,8 @@ trait BinaryCommand extends Command with BinaryLike[LogicalPlan]
 trait AnalysisOnlyCommand extends Command {
   val isAnalyzed: Boolean
   def childrenToAnalyze: Seq[LogicalPlan]
-  def childrenAfterAnalysis: Seq[LogicalPlan] = Nil
-  def innerChildrenAfterAnalysis: Seq[QueryPlan[_]] = childrenToAnalyze
-  override final def children: Seq[LogicalPlan] = {
-    if (isAnalyzed) childrenAfterAnalysis else childrenToAnalyze
-  }
-  override def innerChildren: Seq[QueryPlan[_]] = {
-    if (isAnalyzed) innerChildrenAfterAnalysis else Nil
-  }
+  override final def children: Seq[LogicalPlan] = if (isAnalyzed) Nil else childrenToAnalyze
+  override def innerChildren: Seq[QueryPlan[_]] = if (isAnalyzed) childrenToAnalyze else Nil
   // After the analysis finished, we give the command a chance to update it's state based
   // on the `AnalysisContext`
   def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan

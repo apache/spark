@@ -436,7 +436,7 @@ object GroupBasedRowLevelOperation extends RowLevelOperationExtractor {
   type ReturnType = (ReplaceData, Expression, Option[Expression], LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case rd @ ReplaceData(ExtractV2Table(table), cond, query, _, _, groupFilterCond, _, _) =>
+    case rd @ ReplaceData(ExtractV2Table(table), cond, query, _, _, groupFilterCond, _) =>
       // group-based UPDATEs that are rewritten as UNION read the table twice
       val allowMultipleReads = rd.operation.command == UPDATE
       val readRelation = findReadRelation(table, query, allowMultipleReads)
@@ -462,7 +462,7 @@ object DeltaBasedRowLevelOperation extends RowLevelOperationExtractor {
   type ReturnType = (WriteDelta, Expression, Option[Expression], LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case wd @ WriteDelta(ExtractV2Table(table), cond, query, _, _, groupFilterCond, _, _) =>
+    case wd @ WriteDelta(ExtractV2Table(table), cond, query, _, _, groupFilterCond, _) =>
       val readRelation = findReadRelation(table, query, allowMultipleReads = false)
       readRelation.map((wd, cond, groupFilterCond, _))
 

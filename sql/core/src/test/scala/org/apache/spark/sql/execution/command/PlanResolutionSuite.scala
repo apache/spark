@@ -1318,7 +1318,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val sql1 = "INSERT INTO testcat.defaultvalues VALUES (DEFAULT, DEFAULT)"
     parseAndResolve(sql1) match {
       // The top-most Project just adds aliases.
-      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _, _, _) =>
+      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _, _) =>
         assert(l.data.length == 1)
         val row = l.data.head
         assert(row.numFields == 2)
@@ -1356,19 +1356,19 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val overwriteSql = s"INSERT OVERWRITE $tblName(i, s) VALUES (3, 'a')"
     val overwriteParsed = parseAndResolve(overwriteSql)
     insertParsed match {
-      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _, _, _) =>
+      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
     }
     overwriteParsed match {
-      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _, _) =>
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
     }
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       val dynamicOverwriteParsed = parseAndResolve(overwriteSql)
       dynamicOverwriteParsed match {
-        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _, _, _) =>
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _, _) =>
           assert(isByName)
         case _ =>
           fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
@@ -1420,9 +1420,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       parseAndResolve(sqlText) match {
         case write: V2WriteCommand =>
           assert(expectedClass.isInstance(write))
-          assert(write.isAnalyzed)
+          assert(write.table.resolved)
           assert(write.children === Seq(write.query))
-          assert(write.innerChildren === Seq(write.table))
+          assert(write.innerChildren.isEmpty)
         case other =>
           fail(s"Expected V2WriteCommand, but got: $other")
       }
@@ -1774,7 +1774,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _, _) =>
+        case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _) =>

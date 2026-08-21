@@ -520,14 +520,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             v1, v2Write.getClass.getName, classOf[V1Write].getName)
       }
 
-    case AppendData(r: DataSourceV2Relation, query, _, _, _, Some(write), _, _) =>
+    case AppendData(r: DataSourceV2Relation, query, _, _, _, Some(write), _) =>
       AppendDataExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
-    case InsertOnlyMerge(r: DataSourceV2Relation, query, Some(write), _, _) =>
+    case InsertOnlyMerge(r: DataSourceV2Relation, query, Some(write), _) =>
       InsertOnlyMergeExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
     case OverwriteByExpression(r @ ExtractV2Table(v1: SupportsWrite), _, _,
-        _, _, _, Some(write), analyzedQuery, _) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+        _, _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
           assert(analyzedQuery.isDefined)
@@ -538,10 +538,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case OverwriteByExpression(
-        r: DataSourceV2Relation, _, query, _, _, _, Some(write), _, _) =>
+        r: DataSourceV2Relation, _, query, _, _, _, Some(write), _) =>
       OverwriteByExpressionExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
-    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, _, Some(write), _) =>
+    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, _, Some(write)) =>
       OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
     case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters, options) =>
@@ -582,7 +582,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case rd @ ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
-        _, Some(write), _) =>
+        _, Some(write)) =>
       ReplaceDataExec(
         planLater(query),
         refreshCache(r), // use the original relation to refresh the cache
@@ -592,7 +592,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         r.name) :: Nil
 
     case wd @ WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
-        _, Some(write), _) =>
+        _, Some(write)) =>
       WriteDeltaExec(
         planLater(query),
         refreshCache(r), // use the original relation to refresh the cache

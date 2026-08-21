@@ -47,14 +47,14 @@ object ResolveInlineTables extends Rule[LogicalPlan] with EvalHelper {
           i.copy(query = sa.copy(child = EvaluateUnresolvedInlineTable
             .evaluateUnresolvedInlineTable(table, ignoreCollation = true)))
         }
-      case w @ OverwriteByExpression(_, _, table: UnresolvedInlineTable, _, _, _, _, _, _)
+      case w @ OverwriteByExpression(_, _, table: UnresolvedInlineTable, _, _, _, _, _)
           if table.expressionsResolved =>
         CurrentOrigin.withOrigin(table.origin) {
           w.copy(query = EvaluateUnresolvedInlineTable
             .evaluateUnresolvedInlineTable(table, ignoreCollation = true))
         }
       case w @ OverwriteByExpression(
-          _, _, sa @ SubqueryAlias(_, table: UnresolvedInlineTable), _, _, _, _, _, _)
+          _, _, sa @ SubqueryAlias(_, table: UnresolvedInlineTable), _, _, _, _, _)
           if table.expressionsResolved =>
         CurrentOrigin.withOrigin(table.origin) {
           w.copy(query = sa.copy(child = EvaluateUnresolvedInlineTable

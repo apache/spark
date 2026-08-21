@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, Limit, OverwriteByExpression, ReplaceTableAsSelect, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, Limit, ReplaceTableAsSelect, WithCTE}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -2613,29 +2613,18 @@ class ParametersSuite extends SharedSparkSession {
         s"${boundInsert.userSpecifiedCols}")
   }
 
-  test("ResolveFunctions resolves IDENTIFIER expressions in DML table children") {
+  test("ResolveFunctions resolves IDENTIFIER expressions in InsertIntoStatement table child") {
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
       """INSERT INTO IDENTIFIER(lower(regexp_replace(
         |  'TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB'))) REPLACE WHERE id = 1
         |SELECT 1 AS id""".stripMargin)
     val insert = parsedPlan.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
       fail(s"Expected InsertIntoStatement in parsed plan:\n$parsedPlan"))
-    val unresolvedTable = insert.table.asInstanceOf[PlanWithUnresolvedIdentifier]
     assert(insert.children === Seq(insert.table, insert.query))
 
     val resolvedInsert = spark.sessionState.analyzer.ResolveFunctions(insert)
       .asInstanceOf[InsertIntoStatement]
     assert(resolvedInsert.table.asInstanceOf[PlanWithUnresolvedIdentifier]
-      .identifierExpr.resolved)
-
-    val overwrite = OverwriteByExpression.byPosition(
-      table = unresolvedTable,
-      query = insert.query,
-      deleteExpr = Literal.TrueLiteral)
-    assert(overwrite.children === Seq(overwrite.table, overwrite.query))
-    val resolvedOverwrite = spark.sessionState.analyzer.ResolveFunctions(overwrite)
-      .asInstanceOf[OverwriteByExpression]
-    assert(resolvedOverwrite.table.asInstanceOf[PlanWithUnresolvedIdentifier]
       .identifierExpr.resolved)
   }
 
