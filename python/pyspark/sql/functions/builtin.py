@@ -29207,7 +29207,8 @@ def wrap_udt(col: "ColumnOrName", udt: "Union[UserDefinedType, Column]") -> Colu
     col : :class:`~pyspark.sql.Column` or column name
         The column to wrap. The column data type must match the UDT's underlying SQL type.
     udt : :class:`~pyspark.sql.types.UserDefinedType` or :class:`~pyspark.sql.Column`
-        The target user-defined type, or a column containing its JSON representation.
+        The target user-defined type, or a constant string column containing its JSON
+        representation.
 
     Returns
     -------

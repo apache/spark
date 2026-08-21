@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
-import org.apache.spark.sql.types.{DataType, StringType, UserDefinedType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{DataType, UserDefinedType}
 
 /**
  * Wrap a column with a UDT whose underlying SQL type matches the column data type.
@@ -69,9 +69,17 @@ case class WrapUDT(child: Expression, udt: UserDefinedType[_])
 
 object WrapUDT {
   private def parseUDT(expression: Expression): UserDefinedType[_] = {
-    expression match {
-      case Literal(json: UTF8String, StringType) =>
-        DataType.fromJson(json.toString).asInstanceOf[UserDefinedType[_]]
+    ExprUtils.evalTypeExpr(expression) match {
+      case udt: UserDefinedType[_] => udt
+      case dataType =>
+        throw new AnalysisException(
+          errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "sqlExpr" -> toSQLExpr(expression),
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType("UserDefinedType"),
+            "inputSql" -> toSQLExpr(expression),
+            "inputType" -> toSQLType(dataType)))
     }
   }
 }
