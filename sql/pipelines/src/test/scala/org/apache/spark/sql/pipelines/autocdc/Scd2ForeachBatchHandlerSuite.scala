@@ -1000,6 +1000,10 @@ class Scd2ForeachBatchHandlerSuite
         Row(1, "carol", 43, 43L, null, meta(43L))
       )
     )
+
+    // The run head stays hidden in the auxiliary table, holding the values it had before the
+    // untracked-only change continued the run.
+    checkAnswer(auxTable, Row(1, "alice", 39, 39L, null, meta(39L), null))
   }
 
   test("an event after a deletion leaves the run the deletion closed exactly as it was") {
@@ -1032,6 +1036,10 @@ class Scd2ForeachBatchHandlerSuite
         targetRow(1, "b", 20L, null, 20L)
       )
     )
+
+    // The head hidden at 10 is also left untouched - the new event neither closed it nor
+    // duplicated it.
+    checkAnswer(auxTable, auxRow(1, "a", 10L, null, 10L, null))
   }
 
   test("changing only an untracked column updates the current record without adding history") {
