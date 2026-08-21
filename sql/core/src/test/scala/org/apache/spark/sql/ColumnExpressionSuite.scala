@@ -445,14 +445,35 @@ class ColumnExpressionSuite extends SharedSparkSession {
     // The pre-evaluated column is guarded by the branch condition, so the rows that take another
     // branch do not advance the counter: the ids the ELSE rows see are 0, 1, 2, ... over those rows
     // alone, exactly as they are when the branch is the only one.
-    val someRowsSkipBranch = "CASE WHEN id % 2 = 0 THEN NULL " +
+    val someRowsSkipBranch = "CASE WHEN id < 5 THEN NULL " +
       "ELSE monotonically_increasing_id() BETWEEN 1 AND 2 END"
     checkAnswer(
       df.selectExpr(someRowsSkipBranch),
       (0 until 10).map { i =>
-        // The odd rows are the 0th, 1st, 2nd, ... rows that reach the branch.
-        if (i % 2 == 0) Row(null) else Row(i / 2 >= 1 && i / 2 <= 2)
+        // Rows 5 to 9 are the 0th, 1st, 2nd, ... rows that reach the branch.
+        if (i < 5) Row(null) else Row(i - 5 >= 1 && i - 5 <= 2)
       })
+  }
+
+  test("SPARK-58818: a branch condition that can raise is not repeated as a guard") {
+    // The guard of a pre-evaluated definition is evaluated on every row of a projection, and
+    // subexpression elimination can hoist a part of it repeated across guards out of the enclosing
+    // `If` and evaluate it up front. A condition carrying arithmetic therefore keeps the definition
+    // unguarded, or `6 / a` would be evaluated on the row where `a` is 0, which takes the first
+    // branch and never divides.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = spark.range(0, 6, 1, 1).selectExpr("cast(id as int) - 2 as a")
+      val query = "CASE WHEN a = 0 THEN false " +
+        "WHEN 6 / a > 2 THEN rand(1) BETWEEN 0 AND 1 " +
+        "WHEN 6 / a < -2 THEN rand(2) BETWEEN 0 AND 1 " +
+        "ELSE false END"
+      // `a` runs -2, -1, 0, 1, 2, 3: the first two take the third branch, `0` the first, `1` and
+      // `2` the second, and `3` falls through. `rand` is in [0, 1), so a row that reaches a
+      // `BETWEEN` is true whatever it draws.
+      checkAnswer(
+        df.selectExpr(query),
+        Seq(Row(true), Row(true), Row(false), Row(true), Row(true), Row(false)))
+    }
   }
 
   test("in") {
