@@ -83,6 +83,7 @@ ability to generate logical and physical plan for a given query using
    * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
    * [TABLESAMPLE](sql-ref-syntax-qry-select-sampling.html)
    * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
+   * [JSON_QUERY](sql-ref-syntax-qry-select-json-query.html)
    * [JSON_TABLE](sql-ref-syntax-qry-select-json-table.html)
    * [JSON_VALUE](sql-ref-syntax-qry-select-json-value.html)
    * [JSON_EXISTS](sql-ref-syntax-qry-select-json-exists.html)

@@ -1968,6 +1968,16 @@
           "<functionName> has an invalid or unsupported JSON path <path>."
         ]
       },
+      "INVALID_JSON_QUERY_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a string type."
+        ]
+      },
+      "INVALID_JSON_QUERY_WRAPPER_AND_QUOTES" : {
+        "message" : [
+          "<functionName> cannot combine an OMIT QUOTES clause with a WITH ARRAY WRAPPER clause. OMIT QUOTES applies only to an unwrapped result."
+        ]
+      },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
         "message" : [
           "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a scalar (string, numeric, boolean, or datetime) type."
@@ -5619,6 +5629,24 @@
     "message" : [
       "<functionName> could not evaluate the path <path>: the input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
     ],
+    "sqlState" : "2203G"
+  },
+  "JSON_QUERY_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not extract a value at path <path>."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The path matched no value. This error was requested by the ERROR ON EMPTY clause."
+        ]
+      },
+      "ERROR" : {
+        "message" : [
+          "The input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
+        ]
+      }
+    },
     "sqlState" : "2203G"
   },
   "JSON_VALUE_ON_ERROR" : {
