@@ -88,7 +88,7 @@ class WrapUDTExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       case (arguments, actualNum) =>
         checkError(
           exception = intercept[AnalysisException] {
-            FunctionRegistry.builtin.lookupFunction(FunctionIdentifier("wrap_udt"), arguments)
+            FunctionRegistry.internal.lookupFunction(FunctionIdentifier("wrap_udt"), arguments)
           },
           condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
           parameters = Map(
