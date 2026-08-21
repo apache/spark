@@ -376,6 +376,38 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
     )
   }
 
+  test("dedup event-time projected away") {
+    val input = MemoryStream[(String, Long)]
+    val result = input.toDF()
+      .selectExpr("_1 AS id", "CAST(_2 AS TIMESTAMP) AS ts")
+      .withWatermark("ts", "10 seconds")
+      .dropDuplicates("id")
+      .select("id")
+
+    testStream(result, Append)(
+      AddData(input, ("a", 1000000L)),
+      CheckNewAnswer("a"),
+      AddData(input, ("b", 1000L)),
+      CheckNewAnswer()
+    )
+  }
+
+  test("dedup event-time retained") {
+    val input = MemoryStream[(String, Long)]
+    val result = input.toDF()
+      .selectExpr("_1 AS id", "CAST(_2 AS TIMESTAMP) AS ts")
+      .withWatermark("ts", "10 seconds")
+      .dropDuplicates("id")
+      .selectExpr("id", "CAST(ts AS LONG) AS tsl")
+
+    testStream(result, Append)(
+      AddData(input, ("a", 1000000L)),
+      CheckNewAnswer(("a", 1000000L)),
+      AddData(input, ("b", 1000L)),
+      CheckNewAnswer()
+    )
+  }
+
   test("test no-data flag") {
     val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
 
