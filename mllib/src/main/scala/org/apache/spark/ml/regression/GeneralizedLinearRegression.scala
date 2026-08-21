@@ -1282,7 +1282,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
     if (origModel.isDefined(origModel.predictionCol) && origModel.getPredictionCol.nonEmpty) {
       origModel.getPredictionCol
     } else {
-      "prediction_" + java.util.UUID.randomUUID.toString
+      Identifiable.randomUID("prediction")
     }
   }
 
@@ -1456,7 +1456,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
         link.link(glrSummary.getDouble(4))
       } else {
         // Create empty feature column and fit intercept only model using param setting from model
-        val featureNull = "feature_" + java.util.UUID.randomUUID.toString
+        val featureNull = Identifiable.randomUID("feature")
         val paramMap = model.extractParamMap()
         paramMap.put(model.featuresCol, featureNull)
         if (family.name != "tweedie") {

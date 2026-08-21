@@ -21,12 +21,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, LessThan, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, ArrayTransform, Expression, GenericInternalRow, LambdaFunction, LessThan, Literal, NamedLambdaVariable, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, StructType}
 
 
 class ConvertToLocalRelationSuite extends PlanTest {
@@ -86,6 +86,18 @@ class ConvertToLocalRelationSuite extends PlanTest {
     val optimized = Optimize.execute(projected.analyze)
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-58208: ConvertToLocalRelation uses fresh stateful project expressions") {
+    val element = NamedLambdaVariable("x", IntegerType, nullable = false)
+    val transform = ArrayTransform(
+      Literal.create(Seq(1, 2), ArrayType(IntegerType, containsNull = false)),
+      LambdaFunction(Add(element, Literal(1)), Seq(element)))
+    val project = Project(Seq(Alias(transform, "v")()), LocalRelation(Nil, Seq(InternalRow.empty)))
+
+    Optimize.execute(project)
+
+    assert(element.value.get() == null)
   }
 }
 

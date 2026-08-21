@@ -4813,6 +4813,17 @@ object SQLConf {
         "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
 
+  val COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD =
+    buildConf("spark.sql.optimizer.collapseWindowWithEmptyOrderSpecInChild")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, the optimizer collapses two adjacent windows with the same partition " +
+        "spec into one when the window with the empty order spec is the child (inner) window. " +
+        "This saves a WindowExec pass but can disable the WindowGroupLimit and the LocalLimit " +
+        "push-down optimizations for top-k queries.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
@@ -5661,6 +5672,16 @@ object SQLConf {
     .version("2.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  val PARSE_SQL_ENABLED =
+    buildConf("spark.sql.function.parseSql.enabled")
+      .doc("When true, enables the parse_sql SQL function. This feature is under active " +
+        "development; the JSON contract may change across releases while the flag remains " +
+        "off by default.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
     .doc("When this option is set to false and all inputs are binary, `elt` returns " +
@@ -8853,6 +8874,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
+  def collapseWindowWithEmptyOrderSpecInChild: Boolean =
+    getConf(COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD)
+
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
   def maxVersionsToDeletePerMaintenance: Int = getConf(MAX_VERSIONS_TO_DELETE_PER_MAINTENANCE)
@@ -9490,6 +9514,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
+
+  def parseSqlEnabled: Boolean = getConf(PARSE_SQL_ENABLED)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 

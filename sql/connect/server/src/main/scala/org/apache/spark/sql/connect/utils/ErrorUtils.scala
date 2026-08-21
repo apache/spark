@@ -276,7 +276,7 @@ private[connect] object ErrorUtils extends Logging {
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
       .addDetails(ProtoAny.pack(withStackTrace.build()))
-      .setMessage(SparkConnectService.extractErrorMessage(st))
+      .setMessage(errorDescription(st))
       .build()
   }
 
@@ -287,7 +287,13 @@ private[connect] object ErrorUtils extends Logging {
       .exists(_.toString.contains("org.apache.spark.sql.execution.python"))
   }
 
-  private def fallbackErrorDescription(e: Throwable): String = {
+  /**
+   * Returns a non-empty description for the given throwable: its abbreviated message when one is
+   * present, and its fully qualified class name otherwise. Both the INTERNAL status built for a
+   * non-fatal throwable and the UNKNOWN fallback status use this, so that a client never receives
+   * an error whose description is empty.
+   */
+  private def errorDescription(e: Throwable): String = {
     val message = e.getMessage
     if (message != null && message.nonEmpty) {
       Utils.abbreviate(message, 2048)
@@ -352,7 +358,7 @@ private[connect] object ErrorUtils extends Logging {
       case e: Throwable =>
         Status.UNKNOWN
           .withCause(e)
-          .withDescription(fallbackErrorDescription(e))
+          .withDescription(errorDescription(e))
           .asRuntimeException()
     }
 

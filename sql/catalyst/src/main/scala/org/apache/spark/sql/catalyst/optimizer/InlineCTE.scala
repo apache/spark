@@ -40,10 +40,19 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
  * @param alwaysInline if true, inline all CTEs in the query plan.
  * @param keepDanglingRelations if true, dangling CTE relations will be kept in the original
  *                              `WithCTE` node.
+ * @param isAnalysis if true, this rule runs during analysis (e.g. from `CheckAnalysis`), where
+ *                   the plan may be a subplan that references `CTERelationDef`s owned by a
+ *                   surrounding scope; such out-of-scope references are tolerated and left for
+ *                   the owning scope to resolve. Defaults to false: every other caller (the
+ *                   optimizer, `ProgressReporter`) operates on a complete plan, so a
+ *                   `CTERelationRef` with no definition in the plan indicates corruption and
+ *                   raises an error rather than being silently dropped. Only the scoped
+ *                   `CheckAnalysis` call opts into the tolerant behavior.
  */
 case class InlineCTE(
     alwaysInline: Boolean = false,
-    keepDanglingRelations: Boolean = false) extends Rule[LogicalPlan] {
+    keepDanglingRelations: Boolean = false,
+    isAnalysis: Boolean = false) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
@@ -148,18 +157,36 @@ case class InlineCTE(
           buildCTEMap(child, cteMap, outerCTEId)
         }
 
-      case ref: CTERelationRef =>
-        cteMap(ref.cteId) = cteMap(ref.cteId).withRefCountIncreased(1)
+      case ref: CTERelationRef => cteMap.get(ref.cteId) match {
+        case Some(refInfo) =>
+          cteMap(ref.cteId) = refInfo.withRefCountIncreased(1)
 
-        // The `outerCTEId` CTE definition can either reference `cteId` definition if `cteId` is in
-        // the same or in an outer `WithCTE` node, or `outerCTEId` can contain `cteId` definition if
-        // `cteId` is an inner `WithCTE` node inside `outerCTEId`.
-        // In both cases we can track the relations in `outgoingRefs` when we see a definition the
-        // first time. But if we encounter a conflicting duplicated contains relation later, then we
-        // will remove the references of the first contains relation.
-        outerCTEId.foreach { cteId =>
-          cteMap(cteId).increaseOutgoingRefCount(ref.cteId, 1)
-        }
+          // The `outerCTEId` CTE definition can either reference `cteId` definition if `cteId` is
+          // in the same or in an outer `WithCTE` node, or `outerCTEId` can contain `cteId`
+          // definition if `cteId` is an inner `WithCTE` node inside `outerCTEId`.
+          // In both cases we can track the relations in `outgoingRefs` when we see a definition the
+          // first time. But if we encounter a conflicting duplicated contains relation later, then
+          // we will remove the references of the first contains relation.
+          outerCTEId.foreach { cteId =>
+            cteMap(cteId).increaseOutgoingRefCount(ref.cteId, 1)
+          }
+
+        case None =>
+          // The referenced CTE definition is not present in this plan. During analysis
+          // (`isAnalysis` = true) this legitimately happens when a check runs on a subplan that
+          // contains the reference but not its enclosing `WithCTE` -- e.g.
+          // `ResolveSQLTableFunctions` calls `checkAnalysis` (which runs `InlineCTE`) on a resolved
+          // SQL table function whose argument is a scalar subquery referencing an outer CTE. The
+          // reference is resolved by the scope that owns the definition, so there is nothing to
+          // count here. Otherwise (`isAnalysis` = false) the plan is complete, so a missing
+          // definition indicates corruption -- fail loudly rather than silently dropping the
+          // reference.
+          if (!isAnalysis) {
+            throw SparkException.internalError(
+              "No CTERelationDef found for CTERelationRef with id " +
+                s"${ref.cteId} while building the CTE map.")
+          }
+      }
 
       case _ =>
         if (plan.containsPattern(CTE)) {
@@ -229,39 +256,50 @@ case class InlineCTE(
           WithCTE(inlined, notInlined)
         }
 
-      case ref: CTERelationRef =>
-        val refInfo = cteMap(ref.cteId)
-
-        val cteBody = if (ref.isUnlimitedRecursion) {
-          setUnlimitedRecursion(refInfo.cteDef.child, ref.cteId)
-        } else {
-          refInfo.cteDef.child
-        }
-        if (refInfo.shouldInline) {
-          if (ref.outputSet == refInfo.cteDef.outputSet) {
-            cteBody
-          } else {
-            val ctePlan = DeduplicateRelations(
-              Join(
-                cteBody,
-                cteBody,
-                Inner,
-                None,
-                JoinHint(None, None)
-              )
-            ).children(1)
-            val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
-              if (srcAttr.semanticEquals(tgtAttr)) {
-                tgtAttr
-              } else {
-                Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
-              }
-            }
-            Project(projectList, ctePlan)
+      case ref: CTERelationRef => cteMap.get(ref.cteId) match {
+        case None =>
+          // Out-of-scope reference whose definition is not in this plan (mirrors the guard in
+          // `buildCTEMap`). During analysis it is left unchanged for the scope that owns the
+          // definition; otherwise a missing definition is corruption.
+          if (!isAnalysis) {
+            throw SparkException.internalError(
+              "No CTERelationDef found for CTERelationRef with id " +
+                s"${ref.cteId} while inlining CTEs.")
           }
-        } else {
           ref
-        }
+
+        case Some(refInfo) =>
+          val cteBody = if (ref.isUnlimitedRecursion) {
+            setUnlimitedRecursion(refInfo.cteDef.child, ref.cteId)
+          } else {
+            refInfo.cteDef.child
+          }
+          if (refInfo.shouldInline) {
+            if (ref.outputSet == refInfo.cteDef.outputSet) {
+              cteBody
+            } else {
+              val ctePlan = DeduplicateRelations(
+                Join(
+                  cteBody,
+                  cteBody,
+                  Inner,
+                  None,
+                  JoinHint(None, None)
+                )
+              ).children(1)
+              val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
+                if (srcAttr.semanticEquals(tgtAttr)) {
+                  tgtAttr
+                } else {
+                  Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
+                }
+              }
+              Project(projectList, ctePlan)
+            }
+          } else {
+            ref
+          }
+      }
 
       case _ if plan.containsPattern(CTE) =>
         plan
