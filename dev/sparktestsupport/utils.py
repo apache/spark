@@ -39,9 +39,13 @@ def determine_modules_for_files(filenames):
     ['pyspark-core', 'pyspark-install', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
+    >>> [x.name for x in determine_modules_for_files(["python/README.md"])]
+    []
     """
     changed_modules = set()
     for filename in filenames:
+        if modules.is_ignored_file(filename):
+            continue
         if ("GITHUB_ACTIONS" not in os.environ) and filename.startswith(".github"):
             continue
         matched_at_least_one_module = False
