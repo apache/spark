@@ -153,7 +153,11 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * {@link TableCatalog#loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} instead.
    *
    * @param ident the identifier
-   * @param stateOptions options declared to affect table state
+   * @param stateOptions options declared to affect table state by
+   *                     {@link #tableStateOptionKeys()}. Spark applies the same table-state
+   *                     projection when the identifier turns out to be a {@link View}: the kind
+   *                     is only known once this call returns, so there is no separate
+   *                     view-state declaration.
    * @return a {@link Table} for tables, or a {@link View} for views
    * @throws NoSuchTableException if neither a table nor a view exists at {@code ident}
    * @since 4.3.0
@@ -200,8 +204,8 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * cheaper than the unified one -- note that reads do not reach this method: they go to
    * {@link #loadRelation(Identifier, CaseInsensitiveStringMap)}, directly from the resolver or
    * via {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)}. What remains
-   * here is write-privilege loads, DDL and miscellaneous lookups and reloads, including
-   * {@code V2TableReference} resolution.
+   * here is write-privilege loads, DDL and miscellaneous lookups, and the non-cacheable
+   * {@code V2TableReference} write-target reload.
    */
   @Override
   default Table loadTable(Identifier ident) throws NoSuchTableException {
