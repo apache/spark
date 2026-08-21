@@ -938,6 +938,18 @@ class FunctionsTestsMixin:
                 df.select(getattr(F, name)(F.col("name"))),
             )
 
+    def test_bitmap_scalar_functions(self):
+        df = self.spark.createDataFrame([("F00F", "70")], ["left", "right"])
+        left = F.to_binary("left", F.lit("hex"))
+        right = F.to_binary("right", F.lit("hex"))
+        actual = df.select(
+            F.substring(F.hex(F.bitmap_and(left, right)), 0, 4),
+            F.substring(F.hex(F.bitmap_or(left, right)), 0, 4),
+            F.substring(F.hex(F.bitmap_andnot(left, right)), 0, 4),
+            F.substring(F.hex(F.bitmap_xor(left, right)), 0, 4),
+        )
+        assertDataFrameEqual([Row("7000", "F00F", "800F", "800F")], actual)
+
     def test_collation(self):
         df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
         actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct()

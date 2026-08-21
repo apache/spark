@@ -2266,6 +2266,22 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     binary.select(fn.bitmap_or_agg(fn.col("bytes")))
   }
 
+  test("function bitmap_and") {
+    binary.select(fn.bitmap_and(fn.col("bytes"), fn.col("bytes")))
+  }
+
+  test("function bitmap_or") {
+    binary.select(fn.bitmap_or(fn.col("bytes"), fn.col("bytes")))
+  }
+
+  test("function bitmap_andnot") {
+    binary.select(fn.bitmap_andnot(fn.col("bytes"), fn.col("bytes")))
+  }
+
+  test("function bitmap_xor") {
+    binary.select(fn.bitmap_xor(fn.col("bytes"), fn.col("bytes")))
+  }
+
   test("function bitmap_xor_agg") {
     binary.select(fn.bitmap_xor_agg(fn.col("bytes")))
   }

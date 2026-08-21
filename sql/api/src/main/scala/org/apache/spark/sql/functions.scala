@@ -7339,6 +7339,91 @@ object functions {
   def bitmap_count(col: Column): Column = Column.fn("bitmap_count", col)
 
   /**
+   * Returns a bitmap that is the bitwise AND of two input bitmaps. The result is always a
+   * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
+   * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
+   *
+   * @param left
+   *   A column that evaluates to a binary bitmap.
+   * @param right
+   *   A column that evaluates to a binary bitmap.
+   * @group misc_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a binary bitmap.
+   */
+  def bitmap_and(left: Column, right: Column): Column = Column.fn("bitmap_and", left, right)
+
+  /**
+   * Returns a bitmap that is the bitwise OR of two input bitmaps. The result is always a
+   * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
+   * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
+   *
+   * @param left
+   *   A column that evaluates to a binary bitmap.
+   * @param right
+   *   A column that evaluates to a binary bitmap.
+   * @group misc_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a binary bitmap.
+   */
+  def bitmap_or(left: Column, right: Column): Column = Column.fn("bitmap_or", left, right)
+
+  /**
+   * Returns a bitmap that is the bitwise AND NOT of two input bitmaps. The result is always a
+   * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
+   * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
+   *
+   * @param left
+   *   A column that evaluates to a binary bitmap.
+   * @param right
+   *   A column that evaluates to a binary bitmap.
+   * @group misc_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a binary bitmap.
+   */
+  def bitmap_andnot(left: Column, right: Column): Column =
+    Column.fn("bitmap_andnot", left, right)
+
+  /**
+   * Returns a bitmap that is the bitwise XOR of two input bitmaps. The result is always a
+   * 4096-byte Spark Binary bitmap. If either input is NULL, the result is NULL. Missing bytes in
+   * shorter inputs are treated as zero, and inputs longer than 4096 bytes raise
+   * `BITMAP_INPUT_TOO_LARGE`. Both inputs must use the same bit-position mapping. If they were
+   * constructed by grouping `bitmap_bit_position` values by `bitmap_bucket_number`, they must
+   * represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+   * function operates on two bitmaps from the same row; use `bitmap_*_agg` to combine bitmaps
+   * across rows. The representation is not a RoaringBitmap serialization.
+   *
+   * @param left
+   *   A column that evaluates to a binary bitmap.
+   * @param right
+   *   A column that evaluates to a binary bitmap.
+   * @group misc_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a binary bitmap.
+   */
+  def bitmap_xor(left: Column, right: Column): Column = Column.fn("bitmap_xor", left, right)
+
+  /**
    * Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column. The
    * input column should be bitmaps created from bitmap_construct_agg().
    *
