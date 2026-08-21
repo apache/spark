@@ -82,6 +82,21 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   }
 
   /**
+   * The number of events that have been dropped (because the queue was full) from the
+   * executor management queue since this bus was started. This queue delivers events to
+   * `ExecutorAllocationManager`'s listener, which is the sole source of the "pending/running
+   * tasks per stage" bookkeeping used to decide how many executors are needed. Since dropped
+   * events are never redelivered or resynced, a positive value here means dynamic allocation's
+   * view of the application's stages may be missing updates (e.g. a dropped
+   * `SparkListenerStageSubmitted` event permanently hides that stage's tasks from the "executors
+   * needed" calculation), even though other queues (like the one backing the Spark UI) may be
+   * completely unaffected and show the application progressing normally.
+   */
+  private[spark] def numDroppedExecutorManagementEvents: Long = {
+    metrics.metricRegistry.counter(s"queue.$EXECUTOR_MANAGEMENT_QUEUE.numDroppedEvents").getCount
+  }
+
+  /**
    * Add a listener to a specific queue, creating a new queue if needed. Queues are independent
    * of each other (each one uses a separate thread for delivering events), allowing slower
    * listeners to be somewhat isolated from others.
