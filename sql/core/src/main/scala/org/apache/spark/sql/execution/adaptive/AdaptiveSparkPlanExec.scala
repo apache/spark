@@ -81,7 +81,7 @@ case class AdaptiveSparkPlanExec(
   // Access is serialized by the execution context's stage lifecycle lock.
   @transient private val uncancelledObsoleteStageIds = mutable.HashSet.empty[Int]
 
-  // Remember every local alias because each registers its own materialization callback.
+  // Remember every local alias so cancellation and failure handling cover every stage ID.
   @transient private val stageIdsByResult =
     mutable.HashMap.empty[AtomicReference[Option[Any]], mutable.LinkedHashSet[Int]]
 
@@ -1300,12 +1300,12 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
   private val sharedStageResults =
     new ConcurrentHashMap[AtomicReference[Option[Any]], Boolean]()
 
-  /** Conservatively protect a result whose owner is unknown or explicitly forced by a test. */
+  /** Conservatively protect a result whose owner is unknown or whose protection is test-forced. */
   private[adaptive] def markSharedStageResult(resultOption: AtomicReference[Option[Any]]): Unit = {
     sharedStageResults.put(resultOption, true)
   }
 
-  /** Protect a result only when another adaptive plan, rather than a local alias, reuses it. */
+  /** Conservatively protect a result with unknown ownership or reuse by another adaptive plan. */
   private[adaptive] def markSharedStageResult(
       resultOption: AtomicReference[Option[Any]], owner: AdaptiveSparkPlanExec): Unit = {
     val originalOwner = stageResultOwners.get(resultOption)
@@ -1314,7 +1314,7 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
     }
   }
 
-  /** Return whether an independently owned adaptive plan has reused this result. */
+  /** Return whether this result is conservatively protected from obsolete-stage cancellation. */
   private[adaptive] def isSharedStageResult(resultOption: AtomicReference[Option[Any]]): Boolean = {
     sharedStageResults.containsKey(resultOption)
   }

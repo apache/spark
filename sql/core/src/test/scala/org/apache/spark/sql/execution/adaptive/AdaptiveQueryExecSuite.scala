@@ -63,7 +63,7 @@ import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.tags.SlowSQLTest
-import org.apache.spark.util.{SparkFatalException, Utils}
+import org.apache.spark.util.{SparkFatalException, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -416,7 +416,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("empty filtered global aggregate stage preserves its single output row") {
+  test("global aggregate over empty filtered input preserves its single output row") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
@@ -810,7 +810,7 @@ class AdaptiveQueryExecSuite
       val reusedStage = acquireStage()
       assert(reusedStage.shuffle eq originalStage.shuffle)
       assert(reusedStage.plan.isInstanceOf[ReusedExchangeExec])
-      scala.concurrent.Await.result(originalStage.materialize(), 30.seconds)
+      ThreadUtils.awaitResult(originalStage.materialize(), 30.seconds)
       assert(originalStage.shuffle.futureAction.get().isDefined)
       assert(!originalStage.isMaterialized)
 
