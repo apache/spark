@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.planmerging
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeSet, Expression, ExpressionSet, If, Literal, NamedExpression, Or, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeSet, Expression, ExpressionSet, If, Literal, NamedExpression, Or, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
@@ -858,49 +858,17 @@ class PlanMerger(
       }
   }
 
-  // Compares two reported partitioning expression lists. A TransformExpression must be compared by
-  // transform semantics -- `isSameFunction`, i.e. the connector's `canonicalName` and bucket count
-  // -- and NOT by the BoundFunction instance it holds. V2ExpressionUtils binds the function afresh
-  // on every derivation, and while `canonicalName` is a documented obligation (its default returns
-  // a random UUID precisely to force an override), `equals` on BoundFunction is not required
-  // anywhere. So for a connector that meets only the documented contract, `canonicalized ==` calls
-  // two identical `bucket(4, id)` reports different and declines the merge. Connectors that do
-  // define `equals` semantically are unaffected -- Iceberg's `BaseScalarFunction` compares on
-  // `canonicalName` -- but that is a courtesy we should not depend on. `isSameFunction` is the same
-  // notion a storage-partitioned join uses to compare its two sides, but only that part of it is
-  // borrowed: `KeyedShuffleSpec.isExpressionCompatible` matches any two leaves (it recovers the
-  // positions separately), ignores transform children and honours
-  // `v2BucketingAllowCompatibleTransforms`, none of which is sound here -- preserving a report
-  // means reproducing it exactly, so leaves and children must match too.
-  private def sameReportedExpressions(a: Seq[Expression], b: Seq[Expression]): Boolean = {
-    a.length == b.length && a.zip(b).forall {
-      case (l: TransformExpression, r: TransformExpression) =>
-        // Recurse, so a nested transform's children are compared by transform semantics too,
-        // rather than falling back to the instance-sensitive equality this method exists to avoid.
-        l.isSameFunction(r) && sameReportedExpressions(l.children, r.children)
-      case (l, r) => l semanticEquals r
-    }
-  }
-
-  // [[SortOrder.orderingSatisfies]] with the sort keys compared by `sameReportedExpressions` (see
-  // above) rather than semanticEquals. `sameOrderExpressions` needs no handling here: a reported
-  // ordering comes from V2ExpressionUtils.toCatalystOrdering, which always leaves it empty.
-  private def reportedOrderingSatisfies(o1: Seq[SortOrder], o2: Seq[SortOrder]): Boolean = {
-    o2.length <= o1.length && o2.zip(o1).forall { case (required, provided) =>
-      provided.direction == required.direction && provided.nullOrdering == required.nullOrdering &&
-        sameReportedExpressions(Seq(provided.child), Seq(required.child))
-    }
-  }
-
   // The key-grouped partitioning the merged scan must reproduce to keep both inputs not-worse: the
   // two must be equal, so a differing non-empty pair is INCOMPATIBLE (None); an empty side imposes
   // no constraint. Compared in cp's relation space (np's report was remapped into it by the
-  // caller).
+  // caller). A report carrying a `TransformExpression` compares equal across the two inputs only if
+  // the connector's `BoundFunction` implements `equals` -- Spark does not derive that identity
+  // itself, see `BoundFunction#equals` -- so a connector that does not gives up this merge.
   private def combineRequiredKeyGroupedPartitioning(
       a: Seq[Expression], b: Seq[Expression]): Option[Seq[Expression]] = {
     if (a.isEmpty) Some(b)
     else if (b.isEmpty) Some(a)
-    else if (sameReportedExpressions(a, b)) Some(a)
+    else if (a.map(_.canonicalized) == b.map(_.canonicalized)) Some(a)
     else None
   }
 
@@ -909,8 +877,8 @@ class PlanMerger(
   // neither satisfies the other they are INCOMPATIBLE (None). An empty ordering never constrains.
   private def combineRequiredOrdering(
       a: Seq[SortOrder], b: Seq[SortOrder]): Option[Seq[SortOrder]] = {
-    if (reportedOrderingSatisfies(a, b)) Some(a)
-    else if (reportedOrderingSatisfies(b, a)) Some(b)
+    if (SortOrder.orderingSatisfies(a, b)) Some(a)
+    else if (SortOrder.orderingSatisfies(b, a)) Some(b)
     else None
   }
 
@@ -936,10 +904,10 @@ class PlanMerger(
     val kgpDegraded = !dsv2AllowKeyGroupedPartitioningDegradation &&
       requiredKeyGroupedPartitioning.nonEmpty &&
       !merged.keyGroupedPartitioning.exists(
-        sameReportedExpressions(_, requiredKeyGroupedPartitioning))
+        _.map(_.canonicalized) == requiredKeyGroupedPartitioning.map(_.canonicalized))
     val orderingDegraded = !dsv2AllowOrderingDegradation &&
       requiredOrdering.nonEmpty &&
-      !reportedOrderingSatisfies(merged.ordering.getOrElse(Nil), requiredOrdering)
+      !SortOrder.orderingSatisfies(merged.ordering.getOrElse(Nil), requiredOrdering)
     kgpDegraded || orderingDegraded
   }
 

@@ -240,10 +240,11 @@ object PythonUDF {
   }
 
   def isWindowPandasUDF(e: PythonFuncExpression): Boolean = {
-    // This is currently only `PythonUDAF` (which means SQL_GROUPED_AGG_PANDAS_UDF or
-    // SQL_GROUPED_AGG_ARROW_UDF), but we might
-    // support new types in the future, e.g, N -> N transform.
-    e.isInstanceOf[PythonUDAF]
+    // `PythonUDAF` (SQL_GROUPED_AGG_PANDAS_UDF or SQL_GROUPED_AGG_ARROW_UDF) and the incremental
+    // `PythonAggregate` are the Python aggregate functions that run over a window through the
+    // Python window operator, rather than the JVM SQL window path. We might support new types in
+    // the future, e.g. N -> N transform.
+    e.isInstanceOf[PythonUDAF] || e.isInstanceOf[PythonAggregate]
   }
 
   def correctEvalType(udf: PythonUDF, pythonUDFArrowFallbackOnUDT: Boolean): Int = {

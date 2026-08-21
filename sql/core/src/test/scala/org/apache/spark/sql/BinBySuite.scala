@@ -493,4 +493,78 @@ class BinBySuite extends QueryTest with SharedSparkSession {
           Array(ExpectedContext(fragment = "ORDER BY t.value", start = 271, stop = 286)))
     }
   }
+
+  test("BIN BY resolves a bare ORDER BY on a re-output DISTRIBUTE column that is not projected") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // A bare ORDER BY on the re-output DISTRIBUTE column resolves even when it is not projected.
+      val df = spark.sql(
+        """SELECT bin_start
+          |FROM VALUES
+          |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:10:00', 100.0D)
+          |  AS metrics(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))
+          |ORDER BY value""".stripMargin)
+      checkAnswer(df, Seq(
+        Row(tsAt("2024-01-01 00:00:00")),
+        Row(tsAt("2024-01-01 00:05:00"))))
+    }
+  }
+
+  test("BIN BY rejects a source-qualified reference to a re-output DISTRIBUTE column") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // The re-output DISTRIBUTE column drops its source qualifier, so `metrics.value` fails.
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(
+            """SELECT metrics.value
+              |FROM VALUES
+              |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:10:00', 100.0D)
+              |  AS metrics(ts_start, ts_end, value)
+              |BIN BY (
+              |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+              |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00'
+              |  DISTRIBUTE UNIFORM (value))""".stripMargin)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
+          "objectName" -> "`metrics`.`value`",
+          "proposal" -> ("`metrics`.`ts_end`, `value`, `bin_start`, " +
+            "`metrics`.`ts_start`, `bin_end`")),
+        queryContext =
+          Array(ExpectedContext(fragment = "metrics.value", start = 7, stop = 19)))
+    }
+  }
+
+  test("BIN BY keeps a file-source metadata column reachable in ORDER BY and SELECT") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTempDir { dir =>
+        val path = new java.io.File(dir, "metrics").getCanonicalPath
+        spark.sql(
+          """SELECT TIMESTAMP '2024-01-01 00:00:00' AS ts_start,
+            |       TIMESTAMP '2024-01-01 00:10:00' AS ts_end, 100.0D AS value""".stripMargin)
+          .write.mode("overwrite").parquet(path)
+        val binBy =
+          s"""parquet.`$path` BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+             |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin
+
+        // `_metadata` is a hidden metadata column; BIN BY carries it through for a bare ORDER BY.
+        checkAnswer(
+          spark.sql(s"SELECT bin_start FROM $binBy ORDER BY _metadata.file_size"),
+          Seq(Row(tsAt("2024-01-01 00:00:00")), Row(tsAt("2024-01-01 00:05:00"))))
+
+        // Also selectable through BIN BY.
+        checkAnswer(
+          spark.sql(s"SELECT bin_start, _metadata.file_size > 0 FROM $binBy"),
+          Seq(Row(tsAt("2024-01-01 00:00:00"), true), Row(tsAt("2024-01-01 00:05:00"), true)))
+      }
+    }
+  }
 }

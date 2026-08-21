@@ -264,6 +264,46 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(projected.queryExecution.executedPlan.toString.contains("InMemoryTableScan"))
   }
 
+  test("column projection prunes columns on load for every projection shape") {
+    // The read path reads only the selected columns' buffers out of the cached bytes. Exercise a
+    // spread of projection shapes -- reordering, single column at each position, complex columns
+    // mixed with primitives, and duplicate selection -- under both the row and vectorized read
+    // paths, so the buffer-span arithmetic (which must skip the exact node/buffer runs of
+    // unselected columns, including the child buffers of complex columns) is covered end to end.
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val df = (1 to 50).map { i =>
+          (i, s"str$i", Seq(i, i + 1), (i.toLong, s"n$i"))
+        }.toDF("a", "b", "arr", "st")
+        df.cache()
+        try {
+          def expected(cols: Seq[String]): Seq[Row] = (1 to 50).map { i =>
+            Row.fromSeq(cols.map {
+              case "a" => i
+              case "b" => s"str$i"
+              case "arr" => Seq(i, i + 1)
+              case "st" => Row(i.toLong, s"n$i")
+            })
+          }
+          // Selecting a complex column after skipping a var-width one exercises skipping the
+          // multi-buffer runs (offset + data) of the unselected string.
+          checkAnswer(df.select("arr"), expected(Seq("arr")))
+          checkAnswer(df.select("st"), expected(Seq("st")))
+          checkAnswer(df.select("b"), expected(Seq("b")))
+          // Reordered projection: the loaded root must be in output (columnIndices) order.
+          checkAnswer(df.select("st", "a"), expected(Seq("st", "a")))
+          checkAnswer(df.select("arr", "b", "a"), expected(Seq("arr", "b", "a")))
+          // Duplicate selection maps two output columns to one cached column.
+          checkAnswer(df.select("a", "a"), (1 to 50).map(i => Row(i, i)))
+          // Full projection (no pruning) still round-trips.
+          checkAnswer(df.select("a", "b", "arr", "st"), expected(Seq("a", "b", "arr", "st")))
+        } finally {
+          df.unpersist()
+        }
+      }
+    }
+  }
+
   test("caching with multiple batches") {
     withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "10") {
       val df = (1 to 50).map(i => (i, s"str$i")).toDF("a", "b")

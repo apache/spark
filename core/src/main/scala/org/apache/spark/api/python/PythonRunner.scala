@@ -95,6 +95,11 @@ private[spark] object PythonEvalType {
   val SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF = 255
   val SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF = 256
 
+  // Window aggregation with an incremental Arrow aggregator. A window has no shuffle, so it needs
+  // neither the PARTIAL nor the FINAL eval type above: the operator sends each frame's rows to the
+  // worker, which folds them with `reduce` (from `zero`) and produces the value with `finish`.
+  val SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF = 257
+
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
   val SQL_ARROW_UDTF = 302
@@ -142,6 +147,7 @@ private[spark] object PythonEvalType {
       "SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF"
     case SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF =>
       "SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF"
+    case SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF => "SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF"
   }
 
   // The eval types produced by ExtractPythonUDFFromLambda: a scalar UDF lifted out of a

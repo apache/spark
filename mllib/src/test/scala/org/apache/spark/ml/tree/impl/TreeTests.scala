@@ -266,8 +266,9 @@ private[ml] object TreeTests extends SparkFunSuite {
     val leaf2 = new LeafNode(0.0, Double.NaN, null)
     val node1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, leaf1,
       new ContinuousSplit(0, 0.0), null)
-    new InternalNode(0.0, Double.NaN, Double.NaN, node1, leaf2,
-      new CategoricalSplit(1, Array(0.0, 2.0), 3), null)
+    Node.withLeafIndices(
+      new InternalNode(0.0, Double.NaN, Double.NaN, node1, leaf2,
+        new CategoricalSplit(1, Array(0.0, 2.0), 3), null))
   }
 
   /**
@@ -294,8 +295,9 @@ private[ml] object TreeTests extends SparkFunSuite {
     val leaf2 = new LeafNode(0.0, Double.NaN, null)
     val node1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf1, leaf2,
       new CategoricalSplit(1, Array(0.0, 1.0), 3), null)
-    new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, node1,
-      new ContinuousSplit(2, 1.0), null)
+    Node.withLeafIndices(
+      new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, node1,
+        new ContinuousSplit(2, 1.0), null))
   }
 
   /**

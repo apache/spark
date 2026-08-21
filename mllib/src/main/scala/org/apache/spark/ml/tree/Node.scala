@@ -77,7 +77,35 @@ sealed abstract class Node extends Serializable {
    * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
    */
   private[ml] def maxSplitFeatureIndex(): Int
+
+  private[ml] def computeStats: NodeStats = {
+    var numDescendants = 0
+    var subtreeDepth = 0
+    var numLeaves = 0
+
+    def visit(node: Node, depth: Int): Unit = {
+      if (depth > 0) {
+        numDescendants += 1
+      }
+      subtreeDepth = math.max(subtreeDepth, depth)
+      node match {
+        case _: LeafNode =>
+          numLeaves += 1
+        case internal: InternalNode =>
+          visit(internal.leftChild, depth + 1)
+          visit(internal.rightChild, depth + 1)
+      }
+    }
+
+    visit(this, 0)
+    NodeStats(subtreeDepth, numDescendants, numLeaves)
+  }
 }
+
+private[ml] case class NodeStats(
+    subtreeDepth: Int,
+    numDescendants: Int,
+    numLeaves: Int)
 
 private[ml] object Node {
 
@@ -107,6 +135,25 @@ private[ml] object Node {
   val dummyNode: Node = {
     new LeafNode(0.0, 0.0, ImpurityCalculator.getCalculator("gini", Array.empty, 0))
   }
+
+  /** Return a copy of the tree with left-to-right DFS indices assigned to leaves. */
+  private[ml] def withLeafIndices(rootNode: Node): Node = {
+    withLeafIndices(rootNode, 0)._1
+  }
+
+  private def withLeafIndices(node: Node, nextLeafIndex: Int): (Node, Int) = {
+    node match {
+      case n: LeafNode =>
+        (new LeafNode(n.prediction, n.impurity, n.impurityStats, nextLeafIndex),
+          nextLeafIndex + 1)
+      case n: InternalNode =>
+        val (leftChild, nextIndex) = withLeafIndices(n.leftChild, nextLeafIndex)
+        val (rightChild, endIndex) = withLeafIndices(n.rightChild, nextIndex)
+        val newNode = new InternalNode(n.prediction, n.impurity, n.gain, leftChild, rightChild,
+          n.split, n.impurityStats)
+        (newNode, endIndex)
+    }
+  }
 }
 
 /**
@@ -117,7 +164,8 @@ private[ml] object Node {
 class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
-    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
+    override private[ml] val impurityStats: ImpurityCalculator,
+    private[tree] val leafIndex: Int = -1) extends Node {
 
   override def toString: String =
     s"LeafNode(prediction = $prediction, impurity = $impurity)"

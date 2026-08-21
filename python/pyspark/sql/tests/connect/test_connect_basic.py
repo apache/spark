@@ -34,6 +34,8 @@ from pyspark.sql.types import (
     IntegerType,
     MapType,
     ArrayType,
+    CharType,
+    VarcharType,
     Row,
 )
 from pyspark.testing import assertDataFrameEqual
@@ -486,6 +488,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql(query).schema,
         )
         self._check_print_schema(query)
+
+    def test_char_varchar_result_schema(self):
+        # SPARK-58794: Python Connect maps first-class CHAR/VARCHAR the same as classic.
+        query = "SELECT CAST('ab' AS CHAR(4)) AS c, CAST('cd' AS VARCHAR(6)) AS v"
+        conf = {"spark.sql.charVarchar.standardSemantics.enabled": "true"}
+        with self.both_conf(conf):
+            classic_df = self.spark.sql(query)
+            connect_df = self.connect.sql(query)
+            self.assertEqual(classic_df.schema, connect_df.schema)
+            self.assertEqual(classic_df.schema["c"].dataType, CharType(4))
+            self.assertEqual(classic_df.schema["v"].dataType, VarcharType(6))
+            self.assertEqual(classic_df.collect(), connect_df.collect())
+            self.assertEqual(connect_df.collect(), [Row(c="ab  ", v="cd")])
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()

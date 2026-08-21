@@ -20,6 +20,7 @@ package org.apache.spark.kafka010
 import java.{util => ju}
 import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.ExecutionException
 import java.util.regex.Pattern
 
 import scala.jdk.CollectionConverters._
@@ -32,14 +33,17 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.{AdminClient, CreateDelegationTokenOptions}
 import org.apache.kafka.common.config.{SaslConfigs, SslConfigs}
+import org.apache.kafka.common.errors.{DelegationTokenAuthorizationException, UnsupportedVersionException}
 import org.apache.kafka.common.security.JaasContext
+import org.apache.kafka.common.security.auth.KafkaPrincipal
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 import org.apache.kafka.common.security.scram.ScramLoginModule
 import org.apache.kafka.common.security.token.delegation.DelegationToken
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.USER_NAME
 import org.apache.spark.internal.config._
 import org.apache.spark.util.{SecurityUtils, Utils}
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
@@ -65,13 +69,21 @@ object KafkaTokenUtil extends Logging {
   def obtainToken(
       sparkConf: SparkConf,
       clusterConf: KafkaTokenClusterConf): (Token[KafkaDelegationTokenIdentifier], Long) = {
-    checkProxyUser()
-
+    val options = createDelegationTokenOptions()
     val adminClient = AdminClient.create(createAdminClientProperties(sparkConf, clusterConf))
     val token = try {
-      val createDelegationTokenOptions = new CreateDelegationTokenOptions()
-      val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
-      createResult.delegationToken().get()
+      adminClient.createDelegationToken(options).delegationToken().get()
+    } catch {
+      case e: ExecutionException if options.owner().isPresent =>
+        e.getCause match {
+          case _: UnsupportedVersionException =>
+            throw new SparkException("Obtaining delegation token for proxy user requires " +
+              "Kafka 3.3.0 or later brokers (KAFKA-6945).", e)
+          case _: DelegationTokenAuthorizationException =>
+            throw new SparkException("The real user must be granted the CreateTokens operation " +
+              s"on the ${options.owner().get()} resource.", e)
+          case _ => throw e
+        }
     } finally {
       Utils.closeQuietly(adminClient)
     }
@@ -85,12 +97,26 @@ object KafkaTokenUtil extends Logging {
     ), token.tokenInfo.expiryTimestamp)
   }
 
-  def checkProxyUser(): Unit = {
+  /**
+   * When impersonating, the token is requested with the real user's credentials but owned by the
+   * proxy user, so connectors authenticate to Kafka as the proxy user. This needs Kafka 3.3.0 or
+   * later brokers (KAFKA-6945), and the real user must be granted the `CreateTokens` operation on
+   * the `User:<proxy user>` resource.
+   *
+   * Must be invoked under the UGI that should own the token. HadoopDelegationTokenManager
+   * preserves a proxy UGI only when no principal/keytab is configured (spark-submit forbids
+   * combining --proxy-user with --principal) or when direct credential providers are used;
+   * a keytab re-login drops the proxy identity and the token is then owned by the real user.
+   */
+  private[kafka010] def createDelegationTokenOptions(): CreateDelegationTokenOptions = {
+    val options = new CreateDelegationTokenOptions()
     val currentUser = UserGroupInformation.getCurrentUser()
-    // Obtaining delegation token for proxy user is planned but not yet implemented
-    // See https://issues.apache.org/jira/browse/KAFKA-6945
-    require(!SparkHadoopUtil.get.isProxyUser(currentUser), "Obtaining delegation token for proxy " +
-      "user is not yet supported.")
+    if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
+      val owner = currentUser.getUserName
+      logInfo(log"Obtaining kafka delegation token for proxy user ${MDC(USER_NAME, owner)}.")
+      options.owner(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, owner))
+    }
+    options
   }
 
   def createAdminClientProperties(
@@ -229,13 +255,14 @@ object KafkaTokenUtil extends Logging {
 
   private def printToken(token: DelegationToken): Unit = {
     if (log.isDebugEnabled) {
-      logDebug("%-15s %-30s %-15s %-25s %-15s %-15s %-15s".format(
-        "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
+      logDebug("%-15s %-30s %-15s %-15s %-25s %-15s %-15s %-15s".format(
+        "TOKENID", "HMAC", "OWNER", "REQUESTER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
       val tokenInfo = token.tokenInfo
-      logDebug("%-15s %-15s %-15s %-25s %-15s %-15s %-15s".format(
+      logDebug("%-15s %-30s %-15s %-15s %-25s %-15s %-15s %-15s".format(
         tokenInfo.tokenId,
         REDACTION_REPLACEMENT_TEXT,
         tokenInfo.owner,
+        tokenInfo.tokenRequester,
         tokenInfo.renewersAsString,
         DATE_TIME_FORMATTER.format(Instant.ofEpochMilli(tokenInfo.issueTimestamp)),
         DATE_TIME_FORMATTER.format(Instant.ofEpochMilli(tokenInfo.expiryTimestamp)),

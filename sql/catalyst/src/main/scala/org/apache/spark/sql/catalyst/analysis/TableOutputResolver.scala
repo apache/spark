@@ -236,7 +236,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     if (canWriteValue) {
       val nullCheckedValue = checkNullability(value, attr, conf, colPath)
       val casted = cast(nullCheckedValue, attrTypeWithoutCharVarchar, conf, colPath.quoted)
-      val exprWithStrLenCheck = if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
+      val exprWithStrLenCheck = if (!attrTypeHasCharVarchar ||
+          !CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)) {
         casted
       } else {
         CharVarcharUtils.stringLengthCheck(casted, attr.dataType)
@@ -333,7 +334,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedCol: Attribute,
       conf: SQLConf): NamedExpression = {
     val rawType = CharVarcharUtils.getRawType(expectedCol.metadata).getOrElse(expectedCol.dataType)
-    val checked = if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(rawType)) {
+    val checked = if (CharVarcharUtils.hasCharVarchar(rawType) &&
+        CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)) {
       val value = defaultExpr match {
         case a: Alias => a.child
         case other => other
@@ -854,7 +856,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         } else {
           val udtUnwrapped = unwrapUDT(queryExpr)
           val casted = cast(udtUnwrapped, attrTypeWithoutCharVarchar, conf, colPath.quoted)
-          if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
+          if (!attrTypeHasCharVarchar ||
+              !CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)) {
             casted
           } else {
             CharVarcharUtils.stringLengthCheck(casted, tableAttr.dataType)
