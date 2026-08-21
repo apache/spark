@@ -31,7 +31,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.collection.{OpenHashMap, Utils}
@@ -192,61 +191,40 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     }
 
     val vocSize = $(vocabSize)
-    val input = dataset.select($(inputCol)).rdd.map(_.getSeq[String](0))
-    val countingRequired = $(minDF) < 1.0 || $(maxDF) < 1.0
-    val maybeInputSize = if (countingRequired) {
-      if (dataset.storageLevel == StorageLevel.NONE) {
-        input.persist(StorageLevel.MEMORY_AND_DISK)
-      }
-      Some(input.count())
-    } else {
-      None
-    }
-    val minDf = if ($(minDF) >= 1.0) {
-      $(minDF)
-    } else {
-      $(minDF) * maybeInputSize.get
-    }
-    val maxDf = if ($(maxDF) >= 1.0) {
-      $(maxDF)
-    } else {
-      $(maxDF) * maybeInputSize.get
-    }
-    require(maxDf >= minDf, "maxDF must be >= minDF.")
-    val allWordCounts = input.flatMap { tokens =>
-      val wc = new OpenHashMap[String, Long]
-      tokens.foreach { w =>
-        wc.changeValue(w, 1L, _ + 1L)
-      }
-      wc.map { case (word, count) => (word, (count, 1)) }
-    }.reduceByKey { (wcdf1, wcdf2) =>
-      (wcdf1._1 + wcdf2._1, wcdf1._2 + wcdf2._2)
-    }
-
+    val input = dataset.select($(inputCol))
+    val inputSizeCol = input.select(count(lit(0))).scalar()
+    val minDfCol = if ($(minDF) >= 1.0) lit($(minDF)) else inputSizeCol * lit($(minDF))
+    val maxDfCol = if ($(maxDF) >= 1.0) lit($(maxDF)) else inputSizeCol * lit($(maxDF))
     val filteringRequired = isSet(minDF) || isSet(maxDF)
-    val maybeFilteredWordCounts = if (filteringRequired) {
-      allWordCounts.filter { case (_, (_, df)) => df >= minDf && df <= maxDf }
+    val wordCounts = if (filteringRequired) {
+      input
+        .select(
+          monotonically_increasing_id().as("docId"),
+          col($(inputCol)).as("doc"))
+        .select(
+          col("docId"),
+          explode(col("doc")).as("word"))
+        .groupBy("docId", "word")
+        .agg(count(lit(0)).as("wordCountInDoc"))
+        .groupBy("word")
+        .agg(
+          sum("wordCountInDoc").as("count"),
+          count(lit(0)).as("docCount"))
+        .filter(minDfCol <= col("docCount") && col("docCount") <= maxDfCol)
+        .select("word", "count")
     } else {
-      allWordCounts
+      input
+        .select(explode(col($(inputCol))).as("word"))
+        .groupBy("word")
+        .agg(count(lit(0)).as("count"))
     }
-
-    val wordCounts = maybeFilteredWordCounts
-      .map { case (word, (count, _)) => (word, count) }
-      .persist(StorageLevel.MEMORY_AND_DISK)
-
-    val fullVocabSize = wordCounts.count()
-
-    val ordering = Ordering.Tuple2(Ordering.Long, Ordering.String.reverse)
-      .on[(String, Long)] { case (word, count) => (count, word) }
 
     val vocab = wordCounts
-      .top(math.min(fullVocabSize, vocSize).toInt)(ordering)
-      .map(_._1)
-
-    if (input.getStorageLevel != StorageLevel.NONE) {
-      input.unpersist()
-    }
-    wordCounts.unpersist()
+      .orderBy(col("count").desc, col("word").asc)
+      .limit(vocSize)
+      .select("word")
+      .collect()
+      .map(_.getString(0))
 
     if (vocab.isEmpty) {
       this.logWarning("The vocabulary size is empty. " +
