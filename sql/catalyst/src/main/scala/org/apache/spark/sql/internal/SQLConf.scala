@@ -6938,6 +6938,7 @@ object SQLConf {
         "(oracle.jdbc.mapDateToTimestamp=false, mapped to DateType), TIMESTAMP WITH TIME ZONE, " +
         "and TIMESTAMP WITH LOCAL TIME ZONE are unaffected.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
