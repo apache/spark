@@ -64,6 +64,7 @@ The committed golden files were generated with pandas 2.3.3, pyarrow 24.0.0, and
 numpy 2.4.1.
 """
 
+import platform
 import unittest
 
 from pyspark.loose_version import LooseVersion
@@ -272,6 +273,13 @@ class PyArrowArrayFromPandasTypeScalarTests(
                 overrides[("large_binary[pyarrow]:standard", col)] = (
                     "[b'hello', b'world']@large_binary"
                 )
+        # inf -> int is undefined behavior in C++; x86 (the golden's platform) yields the
+        # "integer indefinite" INT_MIN, while ARM's FCVT saturates to INT_MAX.  Linux
+        # aarch64 and macOS arm64 agree on these two cells (safe=True rejects inf -> int on
+        # every platform, so only this unsafe method needs the override).
+        if platform.machine() in ("aarch64", "arm64"):
+            overrides[("float64:infinity", "int8")] = "[-1, 1]@int8"
+            overrides[("float64:infinity", "int64")] = "[9223372036854775807, 1]@int64"
         self._compare_type_matrix(
             safe=False,
             golden_file_prefix="golden_pyarrow_array_from_pandas_type_scalar_unsafe",
