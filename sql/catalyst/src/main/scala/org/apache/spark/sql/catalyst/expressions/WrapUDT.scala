@@ -34,8 +34,8 @@ import org.apache.spark.sql.types.{DataType, UserDefinedType}
 case class WrapUDT(child: Expression, udt: UserDefinedType[_])
   extends UnaryExpression with NonSQLExpression {
 
-  def this(expressions: Seq[Expression]) = {
-    this(expressions.head, WrapUDT.parseUDT(expressions(1)))
+  def this(child: Expression, udt: Expression) = {
+    this(child, WrapUDT.parseUDT(udt))
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

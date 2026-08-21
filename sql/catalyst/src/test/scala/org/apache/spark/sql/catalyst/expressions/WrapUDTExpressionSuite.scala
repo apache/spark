@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -44,7 +46,7 @@ class WrapUDTExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val target = Concat(Seq(
       Literal.create(json.substring(0, 8), StringType),
       Literal.create(json.substring(8), StringType)))
-    val wrapUDTExpression = new WrapUDT(Seq(Literal.create(data, udt.sqlType), target))
+    val wrapUDTExpression = new WrapUDT(Literal.create(data, udt.sqlType), target)
 
     assert(wrapUDTExpression.checkInputDataTypes().isSuccess)
     assert(wrapUDTExpression.dataType == udt)
@@ -55,7 +57,7 @@ class WrapUDTExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val target = Literal.create("int", StringType)
     checkError(
       exception = intercept[AnalysisException] {
-        new WrapUDT(Seq(Literal.create(1, IntegerType), target))
+        new WrapUDT(Literal.create(1, IntegerType), target)
       },
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
@@ -70,10 +72,31 @@ class WrapUDTExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val target = AttributeReference("udt", StringType)()
     checkError(
       exception = intercept[AnalysisException] {
-        new WrapUDT(Seq(Literal.create(1, IntegerType), target))
+        new WrapUDT(Literal.create(1, IntegerType), target)
       },
       condition = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> toSQLExpr(target)))
+  }
+
+  test("WrapUDT should reject wrong number of arguments through FunctionRegistry") {
+    val expression = Literal.create(1, IntegerType)
+    val target = Literal.create(new TestUDT.MyDenseVectorUDT().json, StringType)
+
+    Seq(
+      Seq(expression) -> "1",
+      Seq(expression, target, Literal.create("extra", StringType)) -> "3").foreach {
+      case (arguments, actualNum) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            FunctionRegistry.builtin.lookupFunction(FunctionIdentifier("wrap_udt"), arguments)
+          },
+          condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+          parameters = Map(
+            "functionName" -> "`wrap_udt`",
+            "expectedNum" -> "2",
+            "actualNum" -> actualNum,
+            "docroot" -> SPARK_DOC_ROOT))
+    }
   }
 
   test("WrapUDT input type should match target UDT SQL type") {
