@@ -38,7 +38,7 @@ select timestampdiff(MILLISECOND, timestamp_ntz'2022-02-14 23:59:59.123', date'2
 
 -- SPARK-57819: months_between derives its time zone from the first operand's family, mirroring
 -- the existing `timestamp - timestamp` convention: TIMESTAMP_NTZ is evaluated in UTC and
--- TIMESTAMP_LTZ in the session time zone. A same-family pair is therefore zone-independent,
+-- TIMESTAMP_LTZ in the session time zone. An NTZ/NTZ pair is therefore zone-independent,
 -- while a cross-family pair reads the second operand in the first operand's zone.
 select months_between(timestamp_ntz'1997-02-28 10:30:00', timestamp_ntz'1996-10-30 00:00:00');
 select months_between(timestamp_ntz'1997-02-28 10:30:00', timestamp_ltz'1996-10-30 00:00:00');
