@@ -1296,7 +1296,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     // Comparisons promote the string side to the other atomic type; COALESCE uses the same
     // STRING promotion (and the same BOOLEAN path). CHAR/VARCHAR extend StringType, so they must
     // match the STRING analogue on schema, values, and analysis errors. Exact-length CHAR keeps
-    // padding from confounding vs the unpadded STRING value.
+    // padding from confounding comparisons with the unpadded STRING value.
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       def followString(cvSql: String, strSql: String): Unit = {
         val strResult = Try {
@@ -1689,8 +1689,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           assert(spark.read.orc(path).schema.head.dataType === CharType(4))
         }
       }
-      // Collated unbounded STRING is not stamped; file-only ORC infers plain STRING,
-      // same as Avro (no catalyst property on unbounded STRING).
+      // ORC stamps collated unbounded STRING as plain "string"; the inferred type is the
+      // same as Avro, which omits the catalyst property on unbounded STRING.
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         spark.range(1).selectExpr("cast('ab' AS STRING COLLATE UTF8_LCASE) AS c")
@@ -1700,7 +1700,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
       // Avro conversion stamps CHAR/VARCHAR (including nested fields and CHAR map keys).
       // The avro data source lives in connector/avro; sql/core still owns toAvroType,
-      // serializer, and deserializer, so round-trip them here with a DataFileWriter.
+      // serializer, and deserializer, so round-trip CHAR/VARCHAR here with a DataFileWriter.
       val converters = org.apache.spark.sql.avro.SchemaConverters
       Seq(CharType(5), VarcharType(7)).foreach { dt =>
         val avro = converters.toAvroType(dt, nullable = false)
