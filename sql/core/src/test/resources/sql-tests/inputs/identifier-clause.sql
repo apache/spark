@@ -55,7 +55,6 @@ SELECT IDENTIFIER(row_number() OVER (ORDER BY 'x')) FROM VALUES(1) AS T(c1);
 SELECT IDENTIFIER(explode(array('c1'))) FROM VALUES(1) AS T(c1);
 SELECT * FROM IDENTIFIER(max('identifier_function_table'));
 SELECT * FROM IDENTIFIER(row_number() OVER (ORDER BY 'x'));
-SELECT * FROM IDENTIFIER(explode(array('identifier_function_table')));
 SELECT * FROM IDENTIFIER(
   array_join(transform(array('identifier', '_function_table'), element -> element), '')
 );

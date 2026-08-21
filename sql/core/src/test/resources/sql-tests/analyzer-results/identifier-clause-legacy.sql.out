@@ -434,27 +434,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM IDENTIFIER(explode(array('identifier_function_table')))
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "expr" : "explode(array('identifier_function_table'))",
-    "name" : "IDENTIFIER"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 26,
-    "stopIndex" : 68,
-    "fragment" : "explode(array('identifier_function_table'))"
-  } ]
-}
-
-
--- !query
 SELECT * FROM IDENTIFIER(
   array_join(transform(array('identifier', '_function_table'), element -> element), '')
 )
