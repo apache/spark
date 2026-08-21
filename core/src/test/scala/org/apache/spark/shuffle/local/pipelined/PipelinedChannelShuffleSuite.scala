@@ -189,6 +189,43 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
+  test("the tracker-less cleanup arm is scoped to shuffles the manager actually holds") {
+    // The tracker-less arm of doCleanupShuffle must fire only for a shuffle the channel manager
+    // OWNS, not for any shuffle that happens to be in neither tracker while the manager is active.
+    // A REGULAR shuffle in a feature-on session is eagerly cleaned (RDD.cleanShuffleDependencies
+    // unregisters it from the MapOutputTracker), then GC re-cleans it -- reaching this arm. Before
+    // the holdsShuffle gate that fired a duplicate cluster-wide RemoveShuffle RPC + shuffleCleaned
+    // callback for it; now holdsShuffle is false for a shuffle the manager never registered, so the
+    // arm is a no-op. Assert the gating predicate directly on the manager.
+    withPipelinedSparkContext(cores = 8) { sc =>
+      val mgr = SparkEnv.get.pipelinedShuffleManager
+        .asInstanceOf[PipelinedChannelShuffleManager]
+
+      // A channel (pipelined) shuffle: registered with the manager, so it is held...
+      val keyed: RDD[(Int, Int)] = sc.parallelize(0 until 1000, 3).map(v => (v, v))
+      val rdd = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(4))
+      val pipelinedId = rdd.dependencies.head
+        .asInstanceOf[org.apache.spark.ShuffleDependency[_, _, _]].shuffleId
+      rdd.collect()
+      assert(mgr.holdsShuffle(pipelinedId),
+        "the manager must hold a pipelined shuffle it registered")
+
+      // A REGULAR shuffle in the same feature-on context routes to the DEFAULT manager, never the
+      // channel manager, so the channel manager does not hold it -- the arm must skip it.
+      val regular = sc.parallelize(0 until 1000, 3).map(v => (v, v)).reduceByKey(_ + _)
+      val regularId = regular.dependencies.head
+        .asInstanceOf[org.apache.spark.ShuffleDependency[_, _, _]].shuffleId
+      regular.collect()
+      assert(!mgr.holdsShuffle(regularId),
+        "the channel manager must NOT hold a regular shuffle (it never registered it)")
+
+      // Unregister drops the pipelined id from the held set, so a GC-time re-clean is a no-op.
+      mgr.unregisterShuffle(pipelinedId)
+      assert(!mgr.holdsShuffle(pipelinedId),
+        "unregisterShuffle must drop the shuffle from the held set")
+    }
+  }
+
   test("a failing producer map task fails the job promptly, without parking the reader forever") {
     // If a producer map task throws before emitting end-of-stream, the reduce task for a
     // partition it never fed would park in the queue wait. The reader polls interruptibly and

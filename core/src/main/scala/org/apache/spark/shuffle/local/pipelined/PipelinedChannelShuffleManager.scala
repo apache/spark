@@ -77,10 +77,25 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   // SQL layer must detach each row from the producer's reused buffer before the writer sees it.
   override def requiresDetachedRecords: Boolean = true
 
+  // Shuffle ids this manager currently holds rendezvous state for: added at registration (driver
+  // side, once per shuffle), removed at unregister. A channel shuffle registers with NO output
+  // tracker (usesStreamingShuffleOutputTracker = false), so the ContextCleaner cannot tell one of
+  // ours apart from an already-cleaned regular shuffle by tracker membership alone; it asks
+  // holdsShuffle instead, so its tracker-less cleanup arm fires only for a shuffle we actually
+  // own. This is the ONE registry the manager keeps -- deliberately just a membership set, not the
+  // per-shuffle metadata an earlier design kept and lost to a mid-job unregister (see class doc);
+  // a stale entry cannot mis-serve a reader (numMaps lives in the handle), only scope cleanup.
+  private val registeredShuffleIds =
+    java.util.concurrent.ConcurrentHashMap.newKeySet[Int]()
+
   override def registerShuffle[K, V, C](
       shuffleId: Int,
-      dependency: ShuffleDependency[K, V, C]): ShuffleHandle =
+      dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
+    registeredShuffleIds.add(shuffleId)
     new ChannelShuffleHandle(shuffleId, dependency, dependency.rdd.partitions.length)
+  }
+
+  override def holdsShuffle(shuffleId: Int): Boolean = registeredShuffleIds.contains(shuffleId)
 
   override def getWriter[K, V](
       handle: ShuffleHandle,
@@ -101,10 +116,12 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
     // A reduce task reads the reduce-partition range [startPartition, endPartition). The channel
     // transport serves exactly ONE reduce partition per reader task -- ChannelShuffleReader
     // require()s endPartition - startPartition == 1 (its class doc explains why a coalesced
-    // multi-partition range cannot be drained safely). Core ShuffledRDD and SQL's ShuffledRowRDD
-    // both hand a width-1 spec here today (AQE keeps a pipelined exchange out of a
-    // ShuffleQueryStage, so it is never coalesced); the require makes any future wider range fail
-    // loud rather than deadlock. Map-index bounds are irrelevant (all map tasks share each
+    // multi-partition range cannot be drained safely). A width-1 spec is what actually arrives:
+    // the SQL rules (EnablePipelinedShuffle / AQEEnablePipelinedShuffle) refuse to pipeline any
+    // shuffle read by a CoalesceExec, and AQE also keeps a pipelined exchange out of a
+    // ShuffleQueryStage so CoalesceShufflePartitions never coalesces it -- so both core ShuffledRDD
+    // and SQL's ShuffledRowRDD hand a width-1 spec here. The require makes any future wider range
+    // fail loud rather than deadlock. Map-index bounds are irrelevant (all map tasks share each
     // partition's queue). The final 5-arg getReader forwards here with the partition range.
     //
     // numMaps -- how many end-of-stream markers to expect per queue -- was stamped into the
@@ -114,14 +131,16 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   }
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {
+    registeredShuffleIds.remove(shuffleId)
     ChannelShuffleRendezvous.removeShuffle(shuffleId)
     true
   }
 
   // Called from SparkEnv.stop() when the SparkContext stops. Drop the process-wide rendezvous
-  // state: it is keyed only by (shuffleId, reducePartitionId) with no application scoping, so a
-  // fresh SparkContext in the same JVM (a test fork, a REPL/notebook restart) would restart
-  // shuffle ids at 0 and could read rows or end-of-stream markers this context left behind.
+  // state: it is keyed by (shuffleId, epoch, reducePartitionId) with no application scoping, so a
+  // fresh SparkContext in the same JVM (a test fork, a REPL/notebook restart) would restart both
+  // shuffle ids and epochs (jobIds) at 0 and could read rows or end-of-stream markers this context
+  // left behind under the same key.
   override def stop(): Unit = ChannelShuffleRendezvous.clear()
 }
 
