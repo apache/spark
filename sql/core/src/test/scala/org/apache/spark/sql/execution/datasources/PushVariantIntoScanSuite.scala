@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 
 trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
   override def sparkConf: SparkConf =
@@ -2719,6 +2720,7 @@ abstract class PushVariantIntoScanV2SuiteBase extends QueryTest with PushVariant
 }
 
 // V2 DataSource tests - Row-based reader
+@ExtendedSQLTest
 class PushVariantIntoScanV2Suite extends PushVariantIntoScanV2SuiteBase {
   override protected def vectorizedReaderEnabled: Boolean = false
   override protected def readerName: String = "row-based reader"

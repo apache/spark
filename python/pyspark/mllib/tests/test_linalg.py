@@ -418,6 +418,10 @@ class VectorUDTTests(MLlibTestCase):
     def test_json_schema(self):
         self.assertEqual(VectorUDT.fromJson(self.udt.jsonValue()), self.udt)
 
+    def test_singleton(self):
+        self.assertIs(VectorUDT(), VectorUDT())
+        self.assertIs(VectorUDT.fromJson(self.udt.jsonValue()), self.udt)
+
     def test_serialization(self):
         for v in [self.dv0, self.dv1, self.sv0, self.sv1]:
             self.assertEqual(v, self.udt.deserialize(self.udt.serialize(v)))
@@ -478,6 +482,10 @@ class MatrixUDTTests(MLlibTestCase):
 
     def test_json_schema(self):
         self.assertEqual(MatrixUDT.fromJson(self.udt.jsonValue()), self.udt)
+
+    def test_singleton(self):
+        self.assertIs(MatrixUDT(), MatrixUDT())
+        self.assertIs(MatrixUDT.fromJson(self.udt.jsonValue()), self.udt)
 
     def test_serialization(self):
         for m in [self.dm1, self.dm2, self.sm1, self.sm2]:

@@ -489,6 +489,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "BITMAP_INPUT_TOO_LARGE" : {
+    "message" : [
+      "The input bitmap has <inputNumBytes> bytes, which exceeds the maximum supported size of <maxNumBytes> bytes."
+    ],
+    "sqlState" : "22001"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -1961,6 +1967,16 @@
       "INVALID_JSON_PATH" : {
         "message" : [
           "<functionName> has an invalid or unsupported JSON path <path>."
+        ]
+      },
+      "INVALID_JSON_QUERY_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a string type."
+        ]
+      },
+      "INVALID_JSON_QUERY_WRAPPER_AND_QUOTES" : {
+        "message" : [
+          "<functionName> cannot combine an OMIT QUOTES clause with a WITH ARRAY WRAPPER clause. OMIT QUOTES applies only to an unwrapped result."
         ]
       },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
@@ -4836,6 +4852,11 @@
           "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got '<invalidValue>'."
         ]
       },
+      "TRIM_ARRAY_LENGTH" : {
+        "message" : [
+          "Expects a value between 0 and the array cardinality (<numElements>), but got <length>."
+        ]
+      },
       "ZERO_INDEX" : {
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."
@@ -5614,6 +5635,24 @@
     "message" : [
       "<functionName> could not evaluate the path <path>: the input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
     ],
+    "sqlState" : "2203G"
+  },
+  "JSON_QUERY_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not extract a value at path <path>."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The path matched no value. This error was requested by the ERROR ON EMPTY clause."
+        ]
+      },
+      "ERROR" : {
+        "message" : [
+          "The input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
+        ]
+      }
+    },
     "sqlState" : "2203G"
   },
   "JSON_VALUE_ON_ERROR" : {

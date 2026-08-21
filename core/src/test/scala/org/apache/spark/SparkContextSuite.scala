@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.File
 import java.net.{MalformedURLException, URI}
 import java.nio.file.Files
-import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, Semaphore, TimeUnit}
 
 import scala.concurrent.duration._
 import scala.io.Source
@@ -33,6 +33,8 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.logging.log4j.{Level, LogManager}
 import org.json4s.{DefaultFormats, Extraction}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
+import org.mockito.Mockito.{mock, verify, when}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers._
 
@@ -42,10 +44,14 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.network.TransportContext
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.shuffle.ExternalBlockHandler
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerStageSubmitted, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -1577,6 +1583,149 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
     assert(err.getMessage.contains("Int.MaxValue"))
     assert(err.getMessage.contains("overflowed"))
+  }
+
+  test("SPARK-58828: holdExecutors and resumeExecutors are unsupported by the local scheduler") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    assert(!sc.executorHoldSupported)
+    assert(!sc.holdExecutors())
+    assert(!sc.resumeExecutors())
+  }
+
+  test("SPARK-58828: holdExecutors requires external shuffle service and decommission support") {
+    sc = new SparkContext(
+      new SparkConf().setAppName("test").setMaster("local-cluster[1,1,1024]"))
+    assert(!sc.executorHoldSupported)
+    val err = intercept[IllegalArgumentException] {
+      sc.holdExecutors()
+    }
+    assert(err.getMessage.contains(SHUFFLE_SERVICE_ENABLED.key))
+    assert(err.getMessage.contains(DECOMMISSION_ENABLED.key))
+  }
+
+  private def withExternalShuffleServer(conf: SparkConf)(body: => Unit): Unit = {
+    // The executors register with the external shuffle service on startup, so run one
+    val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 2)
+    val rpcHandler = new ExternalBlockHandler(transportConf, null)
+    val transportContext = new TransportContext(transportConf, rpcHandler)
+    val server = transportContext.createServer()
+    try {
+      conf.set(SHUFFLE_SERVICE_PORT, server.getPort)
+      body
+    } finally {
+      Utils.tryLogNonFatalError(server.close())
+      Utils.tryLogNonFatalError(rpcHandler.close())
+      Utils.tryLogNonFatalError(transportContext.close())
+    }
+  }
+
+  private def verifyHoldAndResumeExecutors(conf: SparkConf): Unit = {
+    withExternalShuffleServer(conf) {
+      sc = new SparkContext(conf)
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+      assert(sc.executorHoldSupported)
+      assert(!sc.executorsHeld)
+
+      // Shuffle output written before the hold must survive the drain
+      val shuffled = sc.parallelize(1 to 100, 4).map(i => (i % 8, i)).reduceByKey(_ + _)
+      assert(shuffled.count() === 8)
+      val shuffleId =
+        shuffled.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
+      val tracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      assert(tracker.getNumAvailableOutputs(shuffleId) === 4)
+
+      assert(sc.holdExecutors())
+      assert(sc.executorsHeld)
+      // The executor finishes decommissioning and exits, and no new one replaces it
+      eventually(timeout(60.seconds)) {
+        assert(sc.getExecutorIds().isEmpty)
+      }
+      // And stays drained: a transiently empty poll would also pass the check above under a
+      // register-and-drain churn, so verify the zero requirement actually settled
+      Thread.sleep(2000)
+      assert(sc.getExecutorIds().isEmpty)
+
+      assert(sc.resumeExecutors())
+      assert(!sc.executorsHeld)
+      // The restored requirement brings an executor back
+      eventually(timeout(60.seconds)) {
+        assert(sc.getExecutorIds().nonEmpty)
+      }
+
+      // The map output survived the drain: only the reduce stage re-runs when the shuffle is
+      // read again. Asserted after the job, since the executor removal is processed
+      // asynchronously on the DAGScheduler event loop.
+      val submitted = new ConcurrentLinkedQueue[Int]()
+      sc.addSparkListener(new SparkListener {
+        override def onStageSubmitted(e: SparkListenerStageSubmitted): Unit =
+          submitted.add(e.stageInfo.stageId)
+      })
+      assert(shuffled.collect().length === 8)
+      sc.listenerBus.waitUntilEmpty()
+      assert(submitted.size() === 1, s"expected only the reduce stage, got $submitted")
+      assert(tracker.getNumAvailableOutputs(shuffleId) === 4)
+    }
+  }
+
+  test("SPARK-58828: holdExecutors drains the executors and resumeExecutors brings them back") {
+    verifyHoldAndResumeExecutors(
+      new SparkConf().setAppName("test").setMaster("local-cluster[1,1,1024]")
+        .set(SHUFFLE_SERVICE_ENABLED, true)
+        .set(DECOMMISSION_ENABLED, true))
+  }
+
+  test("SPARK-58828: hold and resume the executors with dynamic allocation") {
+    verifyHoldAndResumeExecutors(
+      new SparkConf().setAppName("test").setMaster("local-cluster[1,1,1024]")
+        .set(SHUFFLE_SERVICE_ENABLED, true)
+        .set(DECOMMISSION_ENABLED, true)
+        .set(DYN_ALLOCATION_ENABLED, true)
+        .set(DYN_ALLOCATION_INITIAL_EXECUTORS, 1)
+        .set(DYN_ALLOCATION_MIN_EXECUTORS, 1))
+  }
+
+  test("SPARK-58828: a task running at the hold finishes and a pending one runs after resume") {
+    val conf = new SparkConf().setAppName("test").setMaster("local-cluster[1,1,1024]")
+      .set(SHUFFLE_SERVICE_ENABLED, true)
+      .set(DECOMMISSION_ENABLED, true)
+    withExternalShuffleServer(conf) {
+      sc = new SparkContext(conf)
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+      val taskStarted = new Semaphore(0)
+      sc.addSparkListener(new SparkListener {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = taskStarted.release()
+      })
+      // Two tasks on one core: the second is still pending when the hold starts
+      val result = sc.parallelize(1 to 2, 2).map { i => Thread.sleep(2000); i * 10 }.collectAsync()
+      assert(taskStarted.tryAcquire(1, 60, TimeUnit.SECONDS))
+      assert(sc.holdExecutors())
+      // The running task finishes before the executor exits
+      eventually(timeout(60.seconds)) {
+        assert(sc.getExecutorIds().isEmpty)
+      }
+      assert(sc.resumeExecutors())
+      // The pending task runs after the resume and the job completes with no lost work
+      assert(ThreadUtils.awaitResult(result, 2.minutes).sorted === Seq(10, 20))
+    }
+  }
+
+  test("SPARK-58828: restoring the hold invariant pushes a zero requirement and drains") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    val backend = mock(classOf[CoarseGrainedSchedulerBackend])
+    when(backend.republishRequestedTotals()).thenReturn(true)
+    when(backend.getExecutorIds()).thenReturn(Seq("1", "2"))
+    when(backend.decommissionExecutors(any(), any(), any())).thenReturn(Seq("1", "2"))
+    assert(sc.zeroExecutorRequirementAndDrain(backend))
+    verify(backend).republishRequestedTotals()
+    verify(backend).decommissionExecutors(any(), meq(false), meq(false))
+
+    // A failed publish must not abort the drain
+    val failing = mock(classOf[CoarseGrainedSchedulerBackend])
+    when(failing.republishRequestedTotals()).thenThrow(new RuntimeException("boom"))
+    when(failing.getExecutorIds()).thenReturn(Seq("3"))
+    when(failing.decommissionExecutors(any(), any(), any())).thenReturn(Seq("3"))
+    assert(!sc.zeroExecutorRequirementAndDrain(failing))
+    verify(failing).decommissionExecutors(any(), meq(false), meq(false))
   }
 }
 

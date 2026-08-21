@@ -409,6 +409,27 @@ class GoldenFileTestMixin:
         return f"{v_str}@RecordBatch[{schema}]"
 
     @classmethod
+    def repr_arrow_schema_value(cls, value: "pa.Schema", max_len: int = 32) -> str:
+        """
+        Format a PyArrow Schema for golden file.
+
+        Renders each field as "name: type nullable=...".  A Schema carries no data, so
+        nullability is included (unlike the Table/RecordBatch schema string): Spark reads
+        ``field.nullable`` to build its StructType, so a change there silently alters the
+        inferred Spark schema.
+
+        Returns
+        -------
+        str
+            "[name: type nullable=True, ...]@Schema"
+        """
+        fields = [f"{f.name}: {cls.repr_type(f.type)} nullable={f.nullable}" for f in value]
+        v_str = "[" + ", ".join(fields) + "]"
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@Schema"
+
+    @classmethod
     def repr_pandas_value(cls, value: "pd.DataFrame", max_len: int = 32) -> str:
         """
         Format a pandas DataFrame for golden file.
@@ -483,6 +504,7 @@ class GoldenFileTestMixin:
         - PyArrow Array/ChunkedArray -> repr_arrow_value
         - PyArrow Table -> repr_arrow_table_value
         - PyArrow RecordBatch -> repr_arrow_record_batch_value
+        - PyArrow Schema -> repr_arrow_schema_value
         - pandas DataFrame -> repr_pandas_value
         - numpy ndarray -> repr_numpy_value
         - Everything else -> repr_python_value
@@ -505,6 +527,8 @@ class GoldenFileTestMixin:
             return cls.repr_arrow_table_value(value, max_len)
         if have_pyarrow and isinstance(value, pa.RecordBatch):
             return cls.repr_arrow_record_batch_value(value, max_len)
+        if have_pyarrow and isinstance(value, pa.Schema):
+            return cls.repr_arrow_schema_value(value, max_len)
 
         if have_pandas and isinstance(value, pd.DataFrame):
             return cls.repr_pandas_value(value, max_len)
