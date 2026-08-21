@@ -17,20 +17,24 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{DataOutputStream, InterruptedIOException}
+import java.net.InetSocketAddress
 import java.nio.channels.{
   AsynchronousCloseException,
   ClosedByInterruptException,
   ClosedChannelException,
   ServerSocketChannel
 }
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
+import scala.concurrent.duration._
 
 import com.google.protobuf.ByteString
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{Encoder, Row}
@@ -44,7 +48,8 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with BeforeAndAfterEach {
+class TransformWithStateInPySparkStateServerSuite
+  extends SparkFunSuite with BeforeAndAfterEach with Eventually {
   val stateName = "test"
   val iteratorId = "testId"
   val serverSocket: ServerSocketChannel = mock(classOf[ServerSocketChannel])
@@ -681,6 +686,49 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
       assert(!Thread.currentThread().isInterrupted)
       verify(statefulProcessorHandle).setHandleState(StatefulProcessorHandleState.CLOSED)
       verify(outputStream, times(0)).writeInt(any[Int])
+    }
+  }
+
+  Seq(
+    ("before accept", true),
+    ("while blocked in accept", false)
+  ).foreach { case (name, interruptBeforeRun) =>
+    test(s"run handles real channel shutdown $name") {
+      val socket = ServerSocketChannel.open()
+      socket.bind(new InetSocketAddress("127.0.0.1", 0))
+      val failure = new AtomicReference[Throwable]()
+      val listener = new Thread(() => {
+        if (interruptBeforeRun) {
+          Thread.currentThread().interrupt()
+        }
+        try {
+          newStateServer(socket).run()
+        } catch {
+          case t: Throwable => failure.set(t)
+        }
+      })
+
+      try {
+        listener.start()
+        if (!interruptBeforeRun) {
+          eventually(timeout(10.seconds)) {
+            assert(listener.getStackTrace.exists(_.getMethodName == "accept"))
+          }
+          listener.interrupt()
+        }
+        socket.close()
+        listener.join(10000)
+
+        assert(!listener.isAlive)
+        assert(failure.get() == null)
+        assert(!socket.isOpen)
+        verify(statefulProcessorHandle).setHandleState(StatefulProcessorHandleState.CLOSED)
+        verify(outputStream, times(0)).writeInt(any[Int])
+      } finally {
+        listener.interrupt()
+        socket.close()
+        listener.join(10000)
+      }
     }
   }
 
