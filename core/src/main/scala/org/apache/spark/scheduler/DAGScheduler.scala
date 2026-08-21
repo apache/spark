@@ -1826,6 +1826,66 @@ private[spark] class DAGScheduler(
   }
 
   /**
+   * The set of reduce partitions of `targetShuffleId` that the result stage actually reads, given
+   * the result RDD and the subset of ITS partitions the job runs (`liveResultPartitions`). Used to
+   * tell a pipelined producer which of its reduce partitions have a consumer, so it can drop the
+   * rest (a partial read -- LIMIT / executeTake -- runs only some result partitions).
+   *
+   * Walk from `rdd` toward the target shuffle, threading the live partition-index set. Each hop is
+   * either a `NarrowDependency` -- map the live set through its generic `getParents(p)` contract
+   * (OneToOne is identity, RangeDependency is an offset, a coalesce dependency is a range, etc.;
+   * no per-operator special-casing) and recurse into the parent -- or the target
+   * `ShuffleDependency` itself, at which point the reader RDD's partition index equals the reduce
+   * partition index (the pipelined reader always uses a width-1 CoalescedPartitionSpec(i, i+1);
+   * the count check below guards against a future offset spec). A node with several dependencies
+   * (a join's ZippedPartitionsRDD) contributes from every branch that reaches the target shuffle.
+   *
+   * Returns None if an edge cannot be mapped (a non-target ShuffleDependency in the path -- which a
+   * result-feeding producer never has, since pipelined-below-regular is rejected earlier -- or a
+   * reader RDD whose partition count does not match the shuffle's, i.e. a non-identity spec).
+   * The caller treats None as "cannot determine": safe to ignore for a full read, fail-fast for a
+   * partial read.
+   */
+  private def liveReduceSet(
+      rdd: RDD[_], liveResultPartitions: Set[Int], targetShuffleId: Int): Option[Set[Int]] = {
+    // Reached the target shuffle: the reader RDD's live partition indices ARE the reduce indices
+    // (width-1 reader spec), verified by the partition-count identity guard.
+    val reachesTarget = rdd.dependencies.collectFirst {
+      case sd: ShuffleDependency[_, _, _] if sd.shuffleId == targetShuffleId => sd
+    }
+    reachesTarget match {
+      case Some(sd) =>
+        if (rdd.partitions.length == sd.partitioner.numPartitions) Some(liveResultPartitions)
+        else None // a non-identity reader spec (e.g. an offset coalesce) -- cannot map safely
+      case None =>
+        // Follow every dependency whose subtree reaches the target shuffle, mapping the live set
+        // through that (narrow) dependency's getParents. A non-narrow edge that is not the target
+        // is unmappable.
+        val branches = rdd.dependencies.filter(d => dependencyReachesShuffle(d, targetShuffleId))
+        if (branches.isEmpty) {
+          None
+        } else {
+          val mapped = branches.map {
+            case nd: NarrowDependency[_] =>
+              val parentLive = liveResultPartitions.flatMap(nd.getParents)
+              liveReduceSet(nd.rdd, parentLive, targetShuffleId)
+            case _ => None // a non-target ShuffleDependency on the path -- unmappable
+          }
+          if (mapped.contains(None)) None else Some(mapped.flatMap(_.get).toSet)
+        }
+    }
+  }
+
+  /** Whether the RDD graph reachable through `dep` contains `targetShuffleId`. */
+  private def dependencyReachesShuffle(dep: Dependency[_], targetShuffleId: Int): Boolean =
+    dep match {
+      case sd: ShuffleDependency[_, _, _] => sd.shuffleId == targetShuffleId
+      case nd: NarrowDependency[_] =>
+        nd.rdd.dependencies.exists(dependencyReachesShuffle(_, targetShuffleId))
+      case _ => false
+    }
+
+  /**
    * The total concurrent-task demand of a pipelined job's group, computed from the RDD graph
    * BEFORE any stage is created (so a rejection based on it leaves no partial scheduler state,
    * exactly as the barrier slot check and the speculation/DA reject do). A pipelined job's group
@@ -2703,58 +2763,63 @@ private[spark] class DAGScheduler(
       .getOrElse(new Properties())
     addPySparkConfigsToProperties(stage, properties)
 
-    // For a pipelined PRODUCER stage, tell its tasks which reduce partitions the job actually
-    // reads (the result stage's partitions). The in-process channel writer drops records
-    // routed to partitions no consumer will drain -- otherwise a partial-read job (LIMIT /
-    // executeTake reads a subset) fills the unread partitions' bounded queues and deadlocks
-    // the writer. The result stage is created before submitStage, so its partitions are known
-    // here. Only the map-side producer needs this; a regular full-read job's result stage
-    // covers every partition, so the property (if written) lists them all and drops nothing.
-    // The live set is per-SHUFFLE-EDGE, not per-job: it is the reduce partitions the
-    // consumer of THIS shuffle reads. It equals the job's result partitions ONLY for the
-    // producer whose shuffle the result stage reads DIRECTLY (result partition i maps to
-    // that producer's reduce partition i). A middle pipelined exchange in a chain (e.g. a
-    // subquery's hash below a single-partition agg) is consumed by another map stage that
-    // reads ALL its partitions, so it must stay fully live -- setting the result's subset
-    // there would make it drop partitions the downstream stage still needs, deadlocking.
-    // So set the property only on the result-feeding producer.
+    // For a pipelined PRODUCER stage, tell its tasks which of its reduce partitions the job
+    // actually reads. The in-process channel writer drops records routed to partitions no
+    // consumer will drain -- otherwise a partial-read job (LIMIT / executeTake reads a subset)
+    // fills the unread partitions' bounded queues and deadlocks the writer. The result stage
+    // is created before submitStage, so its partitions are known here.
+    //
+    // The live set is per-SHUFFLE-EDGE, not per-job: it is the reduce partitions the consumer of
+    // THIS shuffle reads. liveReduceSet computes it by walking the narrow chain from the result
+    // RDD down to this shuffle, threading the read partition subset through each dependency's
+    // getParents. A MIDDLE pipelined exchange in a chain (e.g. a subquery's hash below a
+    // single-partition agg) is consumed by another map stage that reads ALL its partitions, and
+    // its shuffle is not narrow-reachable from the result RDD (an intervening shuffle blocks the
+    // walk), so liveReduceSet returns None and the property is left unset -- fully live -- which
+    // is correct. See the None handling below for the fail-fast case.
     stage match {
       case sms: ShuffleMapStage if isPipelinedProducer(stage) =>
-        jobIdToActiveJob.get(jobId).map(_.finalStage).collect { case rs: ResultStage => rs }
-          .foreach { rs =>
-            // The live set is the result stage's partition ids. Those are the shuffle's reduce
-            // partition ids -- so partition i means reduce partition i -- ONLY when the result RDD
-            // reaches this shuffle through an IDENTITY-PRESERVING chain: every hop a 1:1,
-            // same-index OneToOneDependency (e.g. the mapPartitions wrapper executeTake/collect
-            // adds over the ShuffledRowRDD, which preserves partition count and index). It is NOT
-            // enough for the shuffle to be merely reachable: a narrow operator that REMAPS
-            // partitions (coalesce -> a custom NarrowDependency, union -> a RangeDependency offset)
-            // makes result partition ids differ from reduce partition ids, and treating them as
-            // the live set would drop partitions a downstream operator still pulls -- hanging the
-            // reader. When the chain is not identity-preserving the property is left unset (all
-            // partitions live) and that operator drains every reduce partition.
-            def readsShuffleByIdentity(rdd: RDD[_]): Boolean = rdd.dependencies match {
-              case Seq(sd: ShuffleDependency[_, _, _]) =>
-                // Reached the shuffle through OneToOneDependency hops only. Also require the
-                // reader RDD to expose exactly one partition per reduce partition: ShuffledRowRDD
-                // maps its partition i to a reducer index through partitionSpecs, which is
-                // identity only for the default CoalescedPartitionSpec(i, i + 1). An offset spec
-                // (e.g. CoalescedPartitionSpec(5, 6) at index 0) passes ChannelShuffleReader's
-                // width-1 require yet breaks the index identity, so the partition-count equality
-                // is the extra guard: nothing produces an offset spec for a pipelined shuffle
-                // today, but if that path ever opens this degrades to "all partitions live"
-                // (property unset) instead of dropping a live partition and hanging.
-                sd.shuffleId == sms.shuffleDep.shuffleId &&
-                  rdd.partitions.length == sd.partitioner.numPartitions
-              case Seq(o: OneToOneDependency[_]) =>
-                readsShuffleByIdentity(o.rdd)
-              case _ => false
-            }
-            if (readsShuffleByIdentity(rs.rdd)) {
+        val resultStage = jobIdToActiveJob.get(jobId).map(_.finalStage)
+          .collect { case rs: ResultStage => rs }
+        resultStage.foreach { rs =>
+          // Tell this pipelined producer's tasks which of ITS reduce partitions the job's readers
+          // will actually drain, so the writer can drop records routed to partitions no consumer
+          // reads (a partial read -- LIMIT / executeTake -- runs only a subset of the result
+          // stage's partitions; feeding the rest fills their bounded queues and deadlocks the
+          // writer). This is the reduce-partition set the result stage's partition subset maps to
+          // through the narrow chain down to this shuffle (see liveReduceSet).
+          liveReduceSet(rs.rdd, rs.partitions.toSet, sms.shuffleDep.shuffleId) match {
+            case Some(reduceSet) =>
               properties.setProperty(
-                SparkContext.SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS, rs.partitions.mkString(","))
-            }
+                SparkContext.SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS,
+                reduceSet.toArray.sorted.mkString(","))
+            case None =>
+              // liveReduceSet is None in two very different situations:
+              //
+              //  (a) the result stage does NOT narrow-reach THIS shuffle -- a MIDDLE pipelined
+              //      exchange in a chain, whose shuffle sits below an intervening shuffle the
+              //      narrow walk cannot cross. Its consumer (the next map stage) reads ALL of its
+              //      reduce partitions, so it must stay fully live. Leave the property unset
+              //      regardless of partial vs full read -- never fail here.
+              //
+              //  (b) the result stage DOES narrow-reach this shuffle but the mapping is
+              //      uncomputable (a non-identity reader spec, or an unrecognized narrow edge on
+              //      the reaching path). For a FULL read that is safe (all partitions get a
+              //      reader, all-live drops nothing). For a PARTIAL read it is the one unsafe
+              //      case: the writer would feed reduce partitions with no reader and hang.
+              //
+              // Only (b) with a partial read fails fast; every other None leaves it fully live.
+              val reaches = rs.rdd.dependencies
+                .exists(dependencyReachesShuffle(_, sms.shuffleDep.shuffleId))
+              val partialRead = rs.partitions.length < rs.rdd.partitions.length
+              if (reaches && partialRead) {
+                abortStage(sms, "Pipelined shuffle cannot determine the live reduce-partition " +
+                  "set for a partial read (LIMIT/take) through this plan shape; disable " +
+                  "spark.sql.pipelinedShuffle.enabled for this query.", None)
+                return
+              }
           }
+        }
       case _ =>
     }
 
