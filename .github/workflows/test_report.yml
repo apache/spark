@@ -48,6 +48,7 @@ jobs:
         files: "**/target/test-reports/*.xml"
         comment_mode: off
         large_files: true
+        commit: ${{ github.event.workflow_run.head_commit.id }}
         github_token: ${{ secrets.GITHUB_TOKEN }}
         compare_to_earlier_commit: false
         test_changes_limit: 0
