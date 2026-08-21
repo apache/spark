@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import com.ibm.icu.text.RawCollationKey
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeRow}
@@ -25,6 +27,7 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
+import org.apache.spark.unsafe.types.UTF8String
 
 /** Hashes and compares unsafe grouping keys containing non-binary collated strings. */
 final class UnsafeRowKeyOperations(val schema: StructType)
@@ -35,7 +38,7 @@ final class UnsafeRowKeyOperations(val schema: StructType)
     schema.forall(field => supportsDataType(field.dataType)),
     s"Unsupported grouping key schema: $schema")
 
-  private val operations = new RowOperations(schema)
+  private val operations = new RowOperations(schema, new HashScratch)
 
   def hash(row: UnsafeRow): Int = operations.hash(row, HASH_SEED)
 
@@ -44,7 +47,7 @@ final class UnsafeRowKeyOperations(val schema: StructType)
   }
 
   override def create(): BytesToBytesMap.KeyOperations = new BytesToBytesMap.KeyOperations {
-    private val localOperations = new RowOperations(schema)
+    private val localOperations = new RowOperations(schema, new HashScratch)
     private val left = new UnsafeRow(schema.length)
     private val right = new UnsafeRow(schema.length)
 
@@ -88,6 +91,17 @@ object UnsafeRowKeyOperations {
     var base: AnyRef = _
     var offset: Long = 0L
     var length: Int = 0
+  }
+
+  private final class HashScratch {
+    private var reusableRawCollationKey: RawCollationKey = _
+
+    def rawCollationKey: RawCollationKey = {
+      if (reusableRawCollationKey == null) {
+        reusableRawCollationKey = new RawCollationKey()
+      }
+      reusableRawCollationKey
+    }
   }
 
   private sealed trait FieldOperations {
@@ -162,13 +176,37 @@ object UnsafeRowKeyOperations {
     }
   }
 
-  private final class CollatedStringOperations(dataType: StringType) extends FieldOperations {
+  private final class CollatedStringOperations(
+      dataType: StringType,
+      hashScratch: HashScratch) extends FieldOperations {
     private val collation = CollationFactory.fetchCollation(dataType.collationId)
+    private val useRawCollationKey = collation.provider == CollationFactory.PROVIDER_ICU
 
     override protected def hashNonNull(
         input: SpecializedGetters, ordinal: Int, seed: Int): Int = {
-      val key = collation.sortKeyFunction.apply(input.getUTF8String(ordinal))
-      Murmur3_x86_32.hashUnsafeBytes(key, Platform.BYTE_ARRAY_OFFSET, key.length, seed)
+      val value = input.getUTF8String(ordinal)
+      if (useRawCollationKey) {
+        hashICUCollationKey(value, seed)
+      } else {
+        val key = collation.sortKeyFunction.apply(value)
+        Murmur3_x86_32.hashUnsafeBytes(key, Platform.BYTE_ARRAY_OFFSET, key.length, seed)
+      }
+    }
+
+    /**
+     * Hashes an ICU sort key from a reusable buffer after applying configured space trimming.
+     * `toValidString` applies Spark's replacement policy for malformed UTF-8 before calling ICU.
+     */
+    private def hashICUCollationKey(value: UTF8String, seed: Int): Int = {
+      val normalizedValue = if (collation.supportsSpaceTrimming) {
+        CollationFactory.applyTrimmingPolicy(value, dataType.collationId)
+      } else {
+        value
+      }
+      val key = collation.getCollator.getRawCollationKey(
+        normalizedValue.toValidString, hashScratch.rawCollationKey)
+      Murmur3_x86_32.hashUnsafeBytes(
+        key.bytes, Platform.BYTE_ARRAY_OFFSET, key.size, seed)
     }
 
     override protected def areEqualNonNull(
@@ -181,8 +219,10 @@ object UnsafeRowKeyOperations {
     }
   }
 
-  private final class ArrayOperations(elementType: DataType) extends FieldOperations {
-    private val elementOperations = createFieldOperations(elementType)
+  private final class ArrayOperations(
+      elementType: DataType,
+      hashScratch: HashScratch) extends FieldOperations {
+    private val elementOperations = createFieldOperations(elementType, hashScratch)
 
     override protected def hashNonNull(
         input: SpecializedGetters, ordinal: Int, seed: Int): Int = {
@@ -217,8 +257,10 @@ object UnsafeRowKeyOperations {
     }
   }
 
-  private final class StructOperations(dataType: StructType) extends FieldOperations {
-    private val operations = new RowOperations(dataType)
+  private final class StructOperations(
+      dataType: StructType,
+      hashScratch: HashScratch) extends FieldOperations {
+    private val operations = new RowOperations(dataType, hashScratch)
 
     override protected def hashNonNull(
         input: SpecializedGetters, ordinal: Int, seed: Int): Int = {
@@ -236,9 +278,9 @@ object UnsafeRowKeyOperations {
     }
   }
 
-  private final class RowOperations(dataType: StructType) {
+  private final class RowOperations(dataType: StructType, hashScratch: HashScratch) {
     private val fieldOperations =
-      dataType.fields.map(field => createFieldOperations(field.dataType))
+      dataType.fields.map(field => createFieldOperations(field.dataType, hashScratch))
 
     def hash(row: InternalRow, seed: Int): Int = {
       var result = seed
@@ -262,14 +304,16 @@ object UnsafeRowKeyOperations {
     }
   }
 
-  private def createFieldOperations(dataType: DataType): FieldOperations = {
+  private def createFieldOperations(
+      dataType: DataType,
+      hashScratch: HashScratch): FieldOperations = {
     if (UnsafeRowUtils.isBinaryStable(dataType)) {
       new BinaryStableOperations(dataType)
     } else {
       dataType match {
-        case stringType: StringType => new CollatedStringOperations(stringType)
-        case ArrayType(elementType, _) => new ArrayOperations(elementType)
-        case structType: StructType => new StructOperations(structType)
+        case stringType: StringType => new CollatedStringOperations(stringType, hashScratch)
+        case ArrayType(elementType, _) => new ArrayOperations(elementType, hashScratch)
+        case structType: StructType => new StructOperations(structType, hashScratch)
         case _ =>
           throw SparkException.internalError(s"Unsupported grouping key type: $dataType")
       }

@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, Spec
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, CalendarIntervalType, Decimal, DecimalType, GeographyType, GeometryType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, UTF8String}
 
 class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
@@ -320,6 +322,43 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
                 right.getBaseOffset,
                 right.getSizeInBytes))
             }
+          }
+        }
+    }
+  }
+
+  test("UnsafeRowKeyOperations raw ICU keys match materialized sort-key hashes") {
+    val values = Seq(
+      "a" * 4096,
+      "short",
+      "R\u00e9sum\u00e9",
+      "resume   ",
+      "")
+
+    Seq("UNICODE", "UNICODE_CI", "UNICODE_RTRIM", "UNICODE_CI_RTRIM").foreach {
+      collationName =>
+        val stringType = StringType(CollationFactory.collationNameToId(collationName))
+        val schema = StructType(StructField("value", stringType) :: Nil)
+        val projection = UnsafeProjection.create(schema)
+        val keyOperations = new UnsafeRowKeyOperations(schema)
+        val serializedOperations = keyOperations.create()
+        val collation = CollationFactory.fetchCollation(stringType.collationId)
+
+        values.foreach { value =>
+          val row = projection(InternalRow(UTF8String.fromString(value))).copy()
+          val materializedKey = collation.sortKeyFunction.apply(row.getUTF8String(0))
+          val expectedHash = Murmur3_x86_32.hashUnsafeBytes(
+            materializedKey,
+            Platform.BYTE_ARRAY_OFFSET,
+            materializedKey.length,
+            42)
+
+          withClue(s"$collationName: $value: ") {
+            assert(keyOperations.hash(row) == expectedHash)
+            assert(serializedOperations.hash(
+              row.getBaseObject,
+              row.getBaseOffset,
+              row.getSizeInBytes) == expectedHash)
           }
         }
     }
