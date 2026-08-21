@@ -1167,23 +1167,46 @@ private[spark] class DAGScheduler(
   /** Classify `finalRDD`'s shuffle graph; see [[JobShuffleShape]] for the shape semantics. */
   private def classifyJobShuffleShape(finalRDD: RDD[_]): JobShuffleShape = {
     var hasPipelined = false
-    // Regular shuffle boundaries reachable from the final RDD without crossing another regular
-    // boundary, deduped by shuffle ID. The walk descends through pipelined and narrow edges but
-    // stops at regular ones: what lies below them is examined separately below.
+    var pipelinedBelow = false
+    // Frontier regular shuffle boundaries: those reachable from the final RDD WITHOUT crossing
+    // another regular boundary, deduped by shuffle ID. Only these matter for the materialization
+    // check (a regular boundary below another one is never a runnable suffix member).
     val regularBoundaries = new HashMap[Int, ShuffleDependency[_, _, _]]
-    traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
-      rdd.dependencies.foreach {
-        case pd: PipelinedShuffleDependency[_, _, _] =>
-          hasPipelined = true
-          enqueue(pd.rdd)
-        case sd: ShuffleDependency[_, _, _] =>
-          regularBoundaries.getOrElseUpdate(sd.shuffleId, sd)
-        case narrowDep =>
-          enqueue(narrowDep.rdd)
+
+    // ONE walk, carrying `belowRegular` (true once the path from the final RDD has crossed a
+    // regular boundary), computes hasPipelined and pipelinedBelow together -- replacing the old
+    // per-boundary rddGraphHasPipelinedDependency re-walks (O(K x graph) on shared ancestors).
+    // A node reachable BOTH above and below a regular boundary must be explored in BOTH contexts:
+    // a pipelined dep under it counts as pipelinedBelow on the below path but not on the above
+    // path. So the visited set is keyed on (RDD, belowRegular), NOT on the RDD alone -- keying on
+    // the RDD alone would let the first-reached context win and drop the other, missing a
+    // pipelined-below-regular dep (a wrongly-accepted job). A node is thus visited at most twice,
+    // keeping the cost O(graph) rather than O(K x graph). hasPipelined is set only above a regular
+    // boundary, matching the old walk (which stopped at boundaries): a below-boundary pipelined
+    // dep is the pipelinedBelow reject case, never a runnable group member.
+    val visited = new HashSet[(RDD[_], Boolean)]
+    val stack = new ListBuffer[(RDD[_], Boolean)]
+    stack += ((finalRDD, false))
+    while (stack.nonEmpty) {
+      val entry = stack.remove(0)
+      val rdd = entry._1
+      val belowRegular = entry._2
+      if (visited.add(entry)) {
+        rdd.dependencies.foreach {
+          case pd: PipelinedShuffleDependency[_, _, _] =>
+            if (belowRegular) pipelinedBelow = true else hasPipelined = true
+            stack.prepend((pd.rdd, belowRegular))
+          case sd: ShuffleDependency[_, _, _] =>
+            // A frontier boundary only when not already below one; descend with belowRegular set.
+            if (!belowRegular) regularBoundaries.getOrElseUpdate(sd.shuffleId, sd)
+            stack.prepend((sd.rdd, true))
+          case narrowDep =>
+            stack.prepend((narrowDep.rdd, belowRegular))
+        }
       }
     }
+
     var hasUnmaterialized = false
-    var pipelinedBelow = false
     regularBoundaries.values.foreach { sd =>
       // Materialized means every MAP partition has a registered output: the tracker counts map
       // outputs, so compare against the producer RDD's partition count (matching how
@@ -1198,9 +1221,6 @@ private[spark] class DAGScheduler(
       // resubmit into the held slots -- the job reruns from scratch rather than deadlocking.
       if (mapOutputTracker.getNumAvailableOutputs(sd.shuffleId) != sd.rdd.partitions.length) {
         hasUnmaterialized = true
-      }
-      if (rddGraphHasPipelinedDependency(sd.rdd)) {
-        pipelinedBelow = true
       }
     }
     JobShuffleShape(hasPipelined, hasUnmaterialized, pipelinedBelow)

@@ -75,8 +75,26 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
       return plan
     }
 
+    flipEligibleExchanges(plan)
+  }
+
+  /**
+   * The plan-shape core of the rule, factored out of [[apply]]'s environment guards (opt-in flag,
+   * local mode, channel manager) so it can be unit-tested on a hand-built plan directly. Collects
+   * the eligible exchanges and returns the plan with each flipped to `pipelined = true`.
+   */
+  private[adaptive] def flipEligibleExchanges(plan: SparkPlan): SparkPlan = {
     val shared = if (conf.exchangeReuseEnabled) duplicatedShuffleForms(plan) else Set.empty[Any]
-    val toFlip = mutable.HashSet.empty[ShuffleExchangeExec]
+    // Collect the exchanges to flip BY IDENTITY (SparkPlan.id, unique per instance), not by the
+    // node itself: TreeNode overrides hashCode but not equals, so a HashSet[ShuffleExchangeExec]
+    // matches structurally, and the transformDown below would then flip EVERY exchange
+    // structurally equal to a collected one -- including a twin the collector deliberately left
+    // regular on a blocked path. That twin, if it sits below a regular boundary, makes
+    // classifyJobShuffleShape reject the whole job. Keying on the instance id flips exactly the
+    // nodes the collector chose, regardless of spark.sql.exchange.reuse (duplicatedShuffleForms,
+    // the only other guard, is empty when reuse is off). transformDown matches each ORIGINAL node
+    // before rebuilding it, so its id is the same instance id the collector recorded.
+    val toFlip = mutable.HashSet.empty[Int]
     collectCandidates(plan, blocked = false, shared, toFlip)
     if (toFlip.isEmpty) return plan
 
@@ -88,7 +106,7 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
     // rejects. transformDown hands each candidate to the pattern before its subtree is
     // rebuilt, so both nested flips apply.
     plan.transformDown {
-      case s: ShuffleExchangeExec if toFlip.contains(s) => s.copy(pipelined = true)
+      case s: ShuffleExchangeExec if toFlip.contains(s.id) => s.copy(pipelined = true)
     }
   }
 
@@ -103,11 +121,11 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
       plan: SparkPlan,
       blocked: Boolean,
       shared: Set[Any],
-      out: mutable.HashSet[ShuffleExchangeExec]): Unit = plan match {
+      out: mutable.HashSet[Int]): Unit = plan match {
     case s: ShuffleExchangeExec =>
       val flipped = !blocked && isCandidate(s, shared)
       if (flipped) {
-        out += s
+        out += s.id
       }
       // A flipped SinglePartition exchange keeps the walk going: AQE makes no decision at
       // it (it cannot be coalesced or skew-split), so free candidates BELOW it flip too,
@@ -129,8 +147,8 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
       val rightCandidate = immediateShuffleInput(j.right, shared)
       (leftCandidate, rightCandidate) match {
         case (Some(l), Some(r)) =>
-          out += l
-          out += r
+          out += l.id
+          out += r.id
         case _ => // asymmetric (a broadcast side, a materialized stage, no clean input): skip
       }
       // Anything deeper is below a join input; blocked either way.
