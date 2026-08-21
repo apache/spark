@@ -202,7 +202,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-39481: avoid evaluating scalar Python UDFs twice") {
+  test("SPARK-47672: avoid evaluating scalar Python UDFs twice") {
     val evalTypes = Seq(
       "regular" -> PythonEvalType.SQL_BATCHED_UDF,
       "Arrow-optimized" -> PythonEvalType.SQL_ARROW_BATCHED_UDF,
@@ -237,7 +237,7 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
-  test("SPARK-39481: all Python function expressions are expensive") {
+  test("SPARK-47672: all Python function expressions are expensive") {
     val pythonExpressions = Seq(
       "mapInPandas" -> PythonUDF(
         "mapInPandas", null, StructType(Nil), Seq(attrA),
