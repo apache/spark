@@ -904,23 +904,26 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("SPARK-58442: IN subquery under a null-observing operator keeps three-valued result") {
-    withTempView("tn", "t") {
-      Seq(Some(1), Some(2), None).toDF("c").createOrReplaceTempView("tn")
-      Seq(Some(3), None).toDF("c").createOrReplaceTempView("t")
+    withTempView("tn58442", "t58442") {
+      Seq(Some(1), Some(2), None).toDF("c").createOrReplaceTempView("tn58442")
+      Seq(Some(3), None).toDF("c").createOrReplaceTempView("t58442")
 
-      // c = NULL never matches, and t contains NULL, so `c IN (...)` is NULL for every row.
+      // c = NULL never matches, and t58442 contains NULL, so `c IN (...)` is NULL for every row.
       checkAnswer(
-        sql("SELECT c FROM tn WHERE (c IN (SELECT c FROM t)) IS NULL"),
+        sql("SELECT c FROM tn58442 WHERE (c IN (SELECT c FROM t58442)) IS NULL"),
         Row(1) :: Row(2) :: Row(null) :: Nil)
       checkAnswer(
-        sql("SELECT c FROM tn WHERE (c NOT IN (SELECT c FROM t)) IS NULL"),
+        sql("SELECT c FROM tn58442 WHERE (c NOT IN (SELECT c FROM t58442)) IS NULL"),
         Row(1) :: Row(2) :: Row(null) :: Nil)
       checkAnswer(
-        sql("SELECT c FROM tn WHERE (c IN (SELECT c FROM t)) <=> true"),
+        sql("SELECT c FROM tn58442 WHERE (c IN (SELECT c FROM t58442)) <=> true"),
+        Nil)
+      checkAnswer(
+        sql("SELECT c FROM tn58442 WHERE (c NOT IN (SELECT c FROM t58442)) <=> true"),
         Nil)
       // The rewrite is still sound below AND/OR, so those keep the ExistenceJoin plan.
       checkAnswer(
-        sql("SELECT c FROM tn WHERE c = 1 OR c IN (SELECT c FROM t)"),
+        sql("SELECT c FROM tn58442 WHERE c = 1 OR c IN (SELECT c FROM t58442)"),
         Row(1) :: Nil)
     }
   }
