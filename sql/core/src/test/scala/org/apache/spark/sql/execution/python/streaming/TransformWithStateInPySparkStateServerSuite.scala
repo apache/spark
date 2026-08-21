@@ -17,7 +17,9 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.DataOutputStream
-import java.nio.channels.ServerSocketChannel
+import java.net.Socket
+import java.nio.ByteBuffer
+import java.nio.channels.{ServerSocketChannel, SocketChannel}
 
 import scala.collection.mutable
 
@@ -108,6 +110,34 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
       .thenReturn(Seq(getIntegerRow(1)))
     when(transformWithStateInPySparkDeserializer.readListElements(any, any))
       .thenReturn(Seq(getIntegerRow(1)))
+  }
+
+  test("run closes the accepted socket once the request loop ends") {
+    val acceptedSocket = mock(classOf[SocketChannel])
+    when(serverSocket.accept()).thenReturn(acceptedSocket)
+    when(acceptedSocket.socket()).thenReturn(mock(classOf[Socket]))
+    // Ends the request loop right away: this test is about the socket, not the requests.
+    when(acceptedSocket.isConnected).thenReturn(false)
+
+    stateServer.run()
+
+    verify(acceptedSocket).close()
+  }
+
+  test("run closes the accepted socket when the client disconnects") {
+    val acceptedSocket = mock(classOf[SocketChannel])
+    when(serverSocket.accept()).thenReturn(acceptedSocket)
+    when(acceptedSocket.socket()).thenReturn(mock(classOf[Socket]))
+    when(acceptedSocket.isConnected).thenReturn(true)
+    // Channels.newInputStream synchronizes on this before reading.
+    when(acceptedSocket.blockingLock()).thenReturn(new Object)
+    when(acceptedSocket.isBlocking).thenReturn(true)
+    // No bytes ever arrive, so the read hits EOF and the loop returns early.
+    when(acceptedSocket.read(any(classOf[ByteBuffer]))).thenReturn(-1)
+
+    stateServer.run()
+
+    verify(acceptedSocket).close()
   }
 
   test("set handle state") {
