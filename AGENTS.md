@@ -9,7 +9,7 @@ Before the first code edit or running test in a session, ensure a clean working 
 3. If there are uncommitted changes (check with `git status`), ask the user to stash them before proceeding.
 4. Switch to the appropriate branch:
    - **Existing PR**: resolve the PR branch name via `gh api repos/apache/spark/pulls/<number> --jq '.head.ref'`, then look for a local branch matching that name. If found, switch to it and inform the user. If not found, ask whether to fetch it or if there is a local branch under a different name.
-   - **New edits**: ask the user to choose: create a new git worktree from `<upstream>/master` and work from there (recommended), or create and switch to a new branch from `<upstream>/master`.
+   - **New edits**: ask the user to choose: create a new git worktree from `<origin>/master` and work from there (recommended), or create and switch to a new branch from `<origin>/master`.
    - **Running tests**: use `<upstream>/master`.
 
 ## Development Notes
