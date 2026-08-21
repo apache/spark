@@ -214,9 +214,11 @@ private[spark] class ChannelShuffleWriter[K, V](
  * drain the range's queues in some order, but the map-side writer interleaves all partitions
  * on ONE thread and blocks on a full bounded queue; if the reader drains partition `start` to
  * completion before touching `start+1` while the writer has parked filling `start+1`, the two
- * deadlock with no timeout escape. Spark never sends a coalesced spec here today -- AQE keeps a
- * pipelined exchange out of any ShuffleQueryStage, so CoalesceShufflePartitions never coalesces
- * it, and both the AQE and non-AQE readers use width-1 CoalescedPartitionSpec(i, i+1). The
+ * deadlock with no timeout escape. The SQL layer keeps a coalesced spec from ever reaching a
+ * pipelined dependency: `EnablePipelinedShuffle` / `AQEEnablePipelinedShuffle` refuse to
+ * pipeline any shuffle read by a `CoalesceExec` (leaving it regular), and AQE also keeps a
+ * pipelined exchange out of any ShuffleQueryStage so CoalesceShufflePartitions never coalesces
+ * it -- so both the AQE and non-AQE readers use width-1 CoalescedPartitionSpec(i, i+1). The
  * `require` below makes that a hard, fail-loud invariant rather than a silent hang if a future
  * change ever lets a coalesced spec reach a pipelined dependency.
  */

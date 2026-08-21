@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import org.apache.spark.SparkEnv
 import org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{CoalesceExec, SparkPlan, UnaryExecNode}
 
 /**
  * Opt-in (SPARK-57399). Rewrites EVERY [[ShuffleExchangeExec]] in a
@@ -38,9 +38,24 @@ import org.apache.spark.sql.execution.SparkPlan
  * the DAGScheduler requires: a mix of pipelined and regular shuffles in one job is rejected.
  * SinglePartition and RangePartitioning exchanges pipeline fine -- the channel transport only
  * routes by `partitioner.getPartition(key)` and does not care which partitioning produced the
- * id (SinglePartition is the numPartitions == 1 degenerate case). The only remaining gate is
- * reuse: a pipelined producer with more than one consumer (fan-out) is rejected, so if any
- * exchange in the plan is reused the rule leaves the whole plan regular.
+ * id (SinglePartition is the numPartitions == 1 degenerate case).
+ *
+ * Two shapes make the rule leave the whole plan regular:
+ *   - reuse: a pipelined producer with more than one consumer (fan-out) is rejected, so if any
+ *     exchange in the plan is reused the rule bails out.
+ *   - coalesce over a shuffle: a `CoalesceExec` (user `.coalesce(n)`, a narrow no-shuffle
+ *     partition reduction) reading from a shuffle makes ONE reduce task drain SEVERAL reduce
+ *     partitions sequentially (a core `CoalescedRDD` over the `ShuffledRowRDD`). The channel
+ *     transport cannot serve that -- the map-side writer interleaves all partitions on one
+ *     thread and parks on a full bounded queue, so a reader draining partition `start` to
+ *     completion before touching `start + 1` deadlocks with the parked writer, and there is no
+ *     "combine adjacent partitions" narrow read the transport could substitute without giving
+ *     up the bounded-queue backpressure the transport relies on. `coalesce`'s API contract is a
+ *     narrow dependency that merges adjacent partitions, so we cannot honor it by re-hashing to
+ *     `n` partitions either. So if any shuffle in the plan is read by a coalesce (directly or
+ *     through a narrow chain) the rule leaves the whole plan regular; the query runs correctly,
+ *     just not pipelined. (Leaving only that one exchange regular would put a pipelined exchange
+ *     below a regular boundary, which the scheduler rejects -- so it must be all-or-nothing.)
  */
 case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
 
@@ -89,8 +104,38 @@ case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
       return plan
     }
 
+    // A CoalesceExec reading from a shuffle would make one reduce task drain several reduce
+    // partitions sequentially, which the channel transport cannot serve (see class doc). Leave
+    // the whole plan regular -- like the reuse fallback, this is a normal, expected outcome the
+    // user has nothing to act on, so log at DEBUG rather than WARN.
+    if (readsShuffleByCoalesce(plan)) {
+      logDebug("EnablePipelinedShuffle: a coalesce reads from a shuffle; leaving the plan " +
+        "regular to avoid a coalesced multi-partition read the channel transport cannot serve.")
+      return plan
+    }
+
     plan.transformUp {
       case s: ShuffleExchangeExec if !s.pipelined => s.copy(pipelined = true)
+    }
+  }
+
+  /**
+   * True if any [[ShuffleExchangeExec]] in `plan` is read by a [[CoalesceExec]] above it through
+   * a chain of only narrow (unary, non-exchange) operators. Such a shuffle would be drained
+   * multi-partition-per-task by a `CoalescedRDD` and cannot be pipelined (see class doc). A
+   * shuffle underneath that shuffle is NOT affected: its own reader reads one reduce partition
+   * per task, so the walk from a coalesce stops at the FIRST shuffle it reaches.
+   */
+  private def readsShuffleByCoalesce(plan: SparkPlan): Boolean = {
+    // Does a narrow chain from `p` reach a ShuffleExchangeExec before any other exchange?
+    def reachesShuffle(p: SparkPlan): Boolean = p match {
+      case _: ShuffleExchangeExec => true
+      case u: UnaryExecNode => reachesShuffle(u.child)
+      case _ => false
+    }
+    plan.exists {
+      case c: CoalesceExec => reachesShuffle(c.child)
+      case _ => false
     }
   }
 }

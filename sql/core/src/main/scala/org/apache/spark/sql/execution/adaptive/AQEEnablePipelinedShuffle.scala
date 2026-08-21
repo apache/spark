@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkEnv
 import org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
+import org.apache.spark.sql.execution.{BinaryExecNode, CoalesceExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ShuffledJoin
 
@@ -156,10 +156,20 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
     case _ => None
   }
 
-  /** Nodes below which AQE typically consumes map output statistics from stages. */
+  /**
+   * Nodes below which a candidate exchange must NOT be flipped. Two reasons a node lands here:
+   *   - AQE consumes map output statistics from the stages below it ([[BinaryExecNode]], another
+   *     [[ShuffleExchangeExec]]); flipping below it would give up stats a decision needs.
+   *   - [[CoalesceExec]] reads its child shuffle multi-partition-per-task (a `CoalescedRDD` over
+   *     the `ShuffledRowRDD`), which the channel transport cannot serve; the shuffle it reads
+   *     must stay regular. Blocking here keeps that shuffle -- and everything deeper -- regular,
+   *     so no pipelined exchange ends up below the coalesce's regular boundary (which the
+   *     scheduler would reject). See the non-AQE `EnablePipelinedShuffle` for the full rationale.
+   */
   private def isStatsSensitive(plan: SparkPlan): Boolean = plan match {
     case _: BinaryExecNode => true
     case _: ShuffleExchangeExec => true
+    case _: CoalesceExec => true
     case _ => false
   }
 

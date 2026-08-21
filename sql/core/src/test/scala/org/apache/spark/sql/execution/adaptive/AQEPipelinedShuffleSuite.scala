@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import java.util.concurrent.{Executors, TimeUnit}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -165,6 +167,41 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
       spark.conf.set("spark.sql.pipelinedShuffle.enabled", "true")
       val pipelined = run()
       assert(pipelined === baseline)
+    }
+  }
+
+  test("coalesce over a shuffle stays regular under AQE") {
+    // A CoalesceExec reading from a shuffle drains several reduce partitions per task (a
+    // CoalescedRDD over the ShuffledRowRDD), which the channel transport cannot serve without
+    // deadlocking (see EnablePipelinedShuffle / ChannelShuffleReader). AQEEnablePipelinedShuffle
+    // blocks below a CoalesceExec (it is stats-sensitive for this purpose), so the shuffle it
+    // reads -- and everything deeper -- stays regular. The query still runs correctly. Guard with
+    // a deadline so a regression (the shuffle went pipelined and the coalesced read hung) surfaces
+    // as a failure rather than a hung suite.
+    val pool = Executors.newSingleThreadExecutor()
+    val fut = pool.submit(new Runnable {
+      override def run(): Unit = withAqePipelinedSession { spark =>
+        import spark.implicits._
+        // Enough rows that a regression would fill a bounded queue and truly deadlock, not fit.
+        val ds = spark.range(0, 2000000L, 1, 4).withColumn("k", ($"id" % 10))
+          .groupBy($"k").count().coalesce(2).as[(Long, Long)]
+        val n = ds.collect().length
+        require(n == 10, s"expected 10 groups, got $n")
+        val plan = ds.queryExecution.executedPlan
+        require(pipelinedExchanges(plan).isEmpty,
+          s"coalesce over a shuffle must stay regular under AQE; found a pipelined exchange:" +
+            s"\n$plan")
+      }
+    })
+    try {
+      fut.get(90, TimeUnit.SECONDS)
+    } catch {
+      case _: java.util.concurrent.TimeoutException =>
+        fut.cancel(true)
+        fail("coalesce over a pipelined shuffle hung under AQE: the shuffle was pipelined " +
+          "despite a coalesce reading it, and the coalesced read deadlocked the writer")
+    } finally {
+      pool.shutdownNow()
     }
   }
 }

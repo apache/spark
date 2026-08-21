@@ -318,23 +318,37 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
     }
   }
 
-  test("a narrow operator between the shuffle and the result does not truncate the live set") {
-    // The DAGScheduler tells the pipelined producer which reduce partitions the job reads, using
-    // the result stage's partition ids -- but those are reduce partition ids ONLY when the result
-    // RDD reads the shuffle DIRECTLY. A narrow operator that changes the partition count (here a
-    // coalesce) makes the result ids (0,1) differ from the reduce ids (0..N). If the producer
-    // treated the result ids as the live set it would drop every reduce partition >= 2, emit no
-    // end-of-stream for them, and the coalesced reader -- which still pulls ALL reduce partitions
-    // -- would block forever. The fix requires a DIRECT dependency before setting the live set, so
-    // here it stays unset (all live) and the coalesce drains every partition. Guard with a
-    // deadline so a regression surfaces as a failure, not a hung suite.
+  test("coalesce over a shuffle falls back to a regular (non-pipelined) shuffle") {
+    // A CoalesceExec (user .coalesce(n), a narrow no-shuffle partition reduction) reading from a
+    // shuffle makes ONE reduce task drain SEVERAL reduce partitions sequentially -- a core
+    // CoalescedRDD over the ShuffledRowRDD. The channel transport cannot serve that: the map-side
+    // writer interleaves all partitions on one thread and parks on a full bounded queue, so a
+    // reader draining partition `start` to completion before touching `start + 1` deadlocks the
+    // parked writer, with no timeout escape. `coalesce`'s API contract is a narrow dependency that
+    // merges adjacent partitions, which we cannot honor by re-hashing to `n` partitions either. So
+    // EnablePipelinedShuffle leaves the WHOLE plan regular when any shuffle is read by a coalesce
+    // (leaving only that exchange regular would put a pipelined exchange below a regular boundary,
+    // which the scheduler rejects). The query still runs correctly, just not pipelined. Guard with
+    // a deadline so a regression (a coalesce that DID go pipelined and hung) surfaces as a failure,
+    // not a hung suite.
     val pool = Executors.newSingleThreadExecutor()
     val fut = pool.submit(new Runnable {
       override def run(): Unit = withPipelinedSession { spark =>
         import spark.implicits._
-        val n = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 10))
-          .groupBy($"k").count().coalesce(2).collect().length
+        // Enough rows that, had this gone pipelined, the writer would fill a bounded queue and
+        // park -- so a regression is a real deadlock, not a too-small case that happens to fit.
+        val df = spark.range(0, 2000000L, 1, 4).withColumn("k", ($"id" % 10))
+          .groupBy($"k").count().coalesce(2)
+        val n = df.collect().length
         require(n == 10, s"expected 10 groups, got $n")
+
+        // The fallback fired: NO exchange in the plan is pipelined.
+        val pipelined = collect(df.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec if s.pipelined => s
+        }
+        require(pipelined.isEmpty,
+          s"coalesce over a shuffle must leave the plan regular; found a pipelined exchange in:" +
+            s"\n${df.queryExecution.executedPlan}")
       }
     })
     try {
@@ -342,8 +356,8 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
     } catch {
       case _: java.util.concurrent.TimeoutException =>
         fut.cancel(true)
-        fail("coalesce over a pipelined shuffle hung: the live set was truncated to the " +
-          "coalesced partition ids and reduce partitions with no end-of-stream stalled the reader")
+        fail("coalesce over a pipelined shuffle hung: the shuffle was pipelined despite a " +
+          "coalesce reading it, and the coalesced multi-partition read deadlocked the writer")
     } finally {
       pool.shutdownNow()
     }
