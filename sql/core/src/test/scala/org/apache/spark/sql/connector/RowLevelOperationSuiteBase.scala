@@ -85,6 +85,7 @@ abstract class RowLevelOperationSuiteBase
       .putBoolean(MetadataColumn.PRESERVE_ON_UPDATE, value = false)
       .build())
   protected final val INDEX_FIELD_NULLABLE = INDEX_FIELD.copy(nullable = true)
+  protected final val DEP_FIELD = StructField("dep", StringType, nullable = true)
 
   protected val namespace: Array[String] = Array("ns1")
   protected val ident: Identifier = Identifier.of(namespace, "test_table")

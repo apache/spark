@@ -91,9 +91,6 @@ class InMemoryRowLevelOperationTable private (
   private final val COLUMN_UPDATE_SPLIT = "column-update-split"
   private final val COLUMN_UPDATE_SPLIT_REQ_ATTRS = "column-update-split-req-attrs"
   private final val COLUMN_UPDATE_EMPTY_REQ_ATTRS = "column-update-empty-req-attrs"
-  private final val COLUMN_UPDATE_SCAN_ONLY = "column-update-scan-only"
-  private final val COLUMN_UPDATE_OVERLAP = "column-update-overlap"
-  private final val COLUMN_UPDATE_MISSING_PARTITION = "column-update-missing-partition"
   private final val COLUMN_UPDATE_SPLIT_MISSING_ROW_ID = "column-update-split-missing-row-id"
 
   // used in row-level operation tests to verify replaced partitions
@@ -172,13 +169,6 @@ class InMemoryRowLevelOperationTable private (
       () => new DeltaBasedColumnUpdateSplitOperationWithReqAttrs(info.command, reqCols)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT_MISSING_ROW_ID, "false") == "true") {
       () => new DeltaBasedColumnUpdateSplitMissingRowIdOperation(
-        info.command, info.updatedColumns().toSeq)
-    } else if (properties.getOrDefault(COLUMN_UPDATE_SCAN_ONLY, "false") == "true") {
-      () => new DeltaBasedColumnUpdateScanOnlyOperation(info.command, info.updatedColumns().toSeq)
-    } else if (properties.getOrDefault(COLUMN_UPDATE_OVERLAP, "false") == "true") {
-      () => new DeltaBasedColumnUpdateOverlapOperation(info.command, info.updatedColumns().toSeq)
-    } else if (properties.getOrDefault(COLUMN_UPDATE_MISSING_PARTITION, "false") == "true") {
-      () => new DeltaBasedColumnUpdateMissingPartitionOperation(
         info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") {
       () => DeltaBasedOperation(info.command, info.options)
@@ -310,8 +300,9 @@ class InMemoryRowLevelOperationTable private (
 
   // A delta-based operation that supports column-level updates: Spark sends only the
   // declared + assigned columns in the row projection instead of the full row schema. The base
-  // class composes its required-attrs set as `pk` (the row-lookup key) plus whatever columns
-  // Spark reports as being assigned via `RowLevelOperationInfo#updatedColumns()`.
+  // class composes its required-attrs set as `pk` (the row-lookup key) and `dep` (the write-side
+  // clustering key, see `clusterColumnRef`) plus whatever columns Spark reports as being
+  // assigned via `RowLevelOperationInfo#updatedColumns()`.
   class DeltaBasedColumnUpdateOperation(
       command: Command,
       updatedCols: Seq[NamedReference] = Nil)
@@ -319,15 +310,9 @@ class InMemoryRowLevelOperationTable private (
         with SupportsColumnUpdates {
     override def representUpdateAsDeleteAndInsert(): Boolean = false
     override def requiredDataAttributes(): Array[NamedReference] = {
-      val pk: NamedReference = FieldReference("pk")
-      val updatedNames = updatedCols.map(_.describe()).toSet
-      if (updatedNames.contains("pk")) updatedCols.toArray
-      else (pk +: updatedCols).toArray
-    }
-
-    override def scanOnlyDataAttributes(): Array[NamedReference] = {
-      val required = requiredDataAttributes().map(_.describe()).toSet
-      if (required.contains("dep")) Array.empty else Array(FieldReference("dep"))
+      val base = Seq(FieldReference("pk"), FieldReference("dep"))
+      val baseNames = base.map(_.describe()).toSet
+      (base ++ updatedCols.filterNot(r => baseNames.contains(r.describe()))).toArray
     }
 
     protected def clusterColumnRef: NamedReference = PARTITION_COLUMN_REF
@@ -430,43 +415,6 @@ class InMemoryRowLevelOperationTable private (
       command: Command,
       updatedCols: Seq[NamedReference])
       extends DeltaBasedColumnUpdateOperation(command, updatedCols) {
-  }
-
-  // Declares `dep` as the write-side clustering key via `scanOnlyDataAttributes()`. `dep` must be
-  // present in the narrow scan / write query for `RequiresDistributionAndOrdering` to resolve it,
-  // but is excluded from `requiredDataAttributes()` so it never reaches the writer.
-  class DeltaBasedColumnUpdateScanOnlyOperation(
-      command: Command,
-      updatedCols: Seq[NamedReference] = Nil)
-      extends DeltaBasedColumnUpdateOperation(command, updatedCols) {
-    private final val DEP_COLUMN_REF = FieldReference("dep")
-
-    override def scanOnlyDataAttributes(): Array[NamedReference] = Array(DEP_COLUMN_REF)
-
-    override protected def clusterColumnRef: NamedReference = DEP_COLUMN_REF
-  }
-
-  // Test-only: declares `dep` in both `requiredDataAttributes()` and
-  // `scanOnlyDataAttributes()` so we can verify Spark rejects the overlapping contract.
-  class DeltaBasedColumnUpdateOverlapOperation(
-      command: Command,
-      updatedCols: Seq[NamedReference] = Nil)
-      extends DeltaBasedColumnUpdateOperation(command, updatedCols) {
-    private final val DEP_COLUMN_REF = FieldReference("dep")
-
-    override def requiredDataAttributes(): Array[NamedReference] =
-      super.requiredDataAttributes() :+ DEP_COLUMN_REF
-
-    override def scanOnlyDataAttributes(): Array[NamedReference] = Array(DEP_COLUMN_REF)
-  }
-
-  // Test-only: declares `dep` (the partition column) in neither `requiredDataAttributes()` nor
-  // `scanOnlyDataAttributes()`, to exercise the guard that rejects an undeclared partition column.
-  class DeltaBasedColumnUpdateMissingPartitionOperation(
-      command: Command,
-      updatedCols: Seq[NamedReference] = Nil)
-      extends DeltaBasedColumnUpdateOperation(command, updatedCols) {
-    override def scanOnlyDataAttributes(): Array[NamedReference] = Array.empty
   }
 
   class DeltaBasedColumnUpdateSplitOperation(

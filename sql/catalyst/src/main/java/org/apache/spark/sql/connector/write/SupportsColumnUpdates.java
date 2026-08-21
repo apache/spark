@@ -45,24 +45,13 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * <p>
    * For updates on nested fields such as {@code SET t.s.c1 = -1} the connector should declare the
    * root struct column {@code s} rather than any nested field.
+   * <p>
+   * This also covers columns needed only for planning, e.g. resolving the table's partitioning
+   * expressions against the scan output, or clustering keys returned from
+   * {@link RequiresDistributionAndOrdering#requiredDistribution()}. Such columns will appear in
+   * the row passed to {@link DataWriter#writeUpdate(Object, Object)} / {@link DeltaWriter#update}
+   * / {@link DeltaWriter#reinsert}; a connector that does not want to persist them should project
+   * them away itself before writing.
    */
   NamedReference[] requiredDataAttributes();
-
-  /**
-   * Returns additional data column references that must be present in the narrow scan but are
-   * NOT delivered to the writer.
-   * <p>
-   * Use this for columns needed only for planning -- e.g. resolving the table's partitioning
-   * expressions against the scan output, or as clustering keys returned from
-   * {@link RequiresDistributionAndOrdering#requiredDistribution()} -- where the column itself
-   * should not appear in the row passed to
-   * {@link DataWriter#writeUpdate(Object, Object)} / {@link DeltaWriter#update} /
-   * {@link DeltaWriter#reinsert}. Columns returned here are not reflected in
-   * {@link LogicalWriteInfo#updateSchema()}.
-   * <p>
-   * Must not overlap with {@link #requiredDataAttributes()}; defaults to an empty array.
-   */
-  default NamedReference[] scanOnlyDataAttributes() {
-    return new NamedReference[0];
-  }
 }

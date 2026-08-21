@@ -56,6 +56,7 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
       expectedUpdateSchema = Some(StructType(Seq(
         PK_FIELD,
+        DEP_FIELD,
         StructField("id", IntegerType, nullable = false)
       ))))
   }
@@ -73,8 +74,8 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
       expectedUpdateSchema = Some(StructType(Seq(
         PK_FIELD,
-        StructField("id", IntegerType, nullable = false),
-        StructField("dep", StringType, nullable = false)
+        StructField("dep", StringType, nullable = false),
+        StructField("id", IntegerType, nullable = false)
       ))))
   }
 
@@ -86,11 +87,12 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     sql(s"UPDATE $tableNameAsString SET id = id, dep = dep WHERE pk = 1")
 
     // All assignments are identity, so updatedColumns is empty -- the connector still declares
-    // pk for row lookup, so the narrow update schema is just [pk].
+    // pk (row lookup) and dep (write-side clustering key), so the narrow update schema is
+    // just [pk, dep].
     checkLastWriteInfo(
       expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
       expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
-      expectedUpdateSchema = Some(StructType(Array(PK_FIELD))))
+      expectedUpdateSchema = Some(StructType(Array(PK_FIELD, DEP_FIELD))))
   }
 
   test("column-update: row filter condition is orthogonal to column narrowing") {
@@ -125,6 +127,7 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
       expectedUpdateSchema = Some(StructType(Seq(
         PK_FIELD,
+        DEP_FIELD,
         StructField("salary", IntegerType, nullable = true)
       ))))
   }
@@ -159,6 +162,7 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
       expectedUpdateSchema = Some(StructType(Seq(
         PK_FIELD,
+        DEP_FIELD,
         StructField("id", IntegerType, nullable = false)
       ))))
   }
@@ -175,11 +179,12 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       s"expected [s] in updatedColumns (root struct) but got: $updatedNames")
 
     // info.updateSchema() carries the narrow row layout; info.schema() is the full table.
+    // `dep` is present because the connector also declares it as the write-side clustering key.
     val updateSchema = table.lastWriteInfo.updateSchema().get()
     assert(updateSchema.fieldNames.contains("s"),
       s"s must be in update schema: $updateSchema")
-    assert(!updateSchema.fieldNames.contains("dep"),
-      s"dep must not be in update schema: $updateSchema")
+    assert(updateSchema.fieldNames.contains("dep"),
+      s"dep must be in update schema: $updateSchema")
   }
 
   test("column-update: nested field identity update reports root struct as updated") {
@@ -419,7 +424,7 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     append(schemaString, jsonData)
   }
 
-  test("column-update from-info: write schema is updatedColumns + pk pass-through") {
+  test("column-update from-info: write schema is updatedColumns + pk/dep pass-through") {
     createAndInitTableFromInfo("pk INT NOT NULL, salary INT, id INT, dep STRING",
       """{ "pk": 1, "salary": 100, "id": 10, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "id": 20, "dep": "software" }
@@ -434,8 +439,8 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       s"pk must be in update schema: $updateSchema")
     assert(!updateSchema.fieldNames.contains("id"),
       s"id must not be in update schema: $updateSchema")
-    assert(!updateSchema.fieldNames.contains("dep"),
-      s"dep must not be in update schema: $updateSchema")
+    assert(updateSchema.fieldNames.contains("dep"),
+      s"dep must be in update schema: $updateSchema")
   }
 
   test("column-update from-info: pk already in updatedColumns is not duplicated") {
@@ -481,7 +486,7 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     append(schemaString, jsonData)
   }
 
-  test("column-update split: write schema is narrow (assigned + pk pass-through)") {
+  test("column-update split: write schema is narrow (assigned + pk/dep pass-through)") {
     createAndInitTableSplit("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
@@ -496,6 +501,7 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
       expectedUpdateSchema = Some(StructType(Seq(
         PK_FIELD,
+        DEP_FIELD,
         StructField("id", IntegerType, nullable = false)
       ))))
   }
@@ -515,9 +521,12 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
   }
 
   test("column-update split: row-ID reassignment on narrow write is rejected") {
-    createAndInitTableSplit("pk INT NOT NULL, salary INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "dep": "hr" }
-        |{ "pk": 2, "salary": 200, "dep": "software" }
+    // `extra` is neither declared, updated, nor referenced, so requiredDataAttributes()
+    // ([pk, dep, salary]) doesn't cover every table column -- the write stays genuinely narrow
+    // and reassigning the row ID must be rejected.
+    createAndInitTableSplit("pk INT NOT NULL, salary INT, dep STRING, extra STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr", "extra": "x" }
+        |{ "pk": 2, "salary": 200, "dep": "software", "extra": "y" }
         |""".stripMargin)
 
     val ex = intercept[org.apache.spark.sql.AnalysisException] {
@@ -587,99 +596,6 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       schemaString: String, jsonData: String): Unit = {
     val props = new java.util.HashMap[String, String]()
     props.put("column-update-split-missing-row-id", "true")
-    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
-    val transforms = Array[Transform](identity(reference(Seq("dep"))))
-    val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
-      .withPartitions(transforms)
-      .withProperties(props)
-      .build()
-    catalog.createTable(ident, tableInfo)
-    append(schemaString, jsonData)
-  }
-
-  private def createAndInitTableScanOnly(schemaString: String, jsonData: String): Unit = {
-    val props = new java.util.HashMap[String, String]()
-    props.put("column-update-scan-only", "true")
-    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
-    val transforms = Array[Transform](identity(reference(Seq("dep"))))
-    val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
-      .withPartitions(transforms)
-      .withProperties(props)
-      .build()
-    catalog.createTable(ident, tableInfo)
-    append(schemaString, jsonData)
-  }
-
-  test("column-update: scanOnlyDataAttributes resolves write-side clustering on a data " +
-    "column without leaking it into the write payload") {
-    createAndInitTableScanOnly("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "software" }
-        |{ "pk": 3, "id": 3, "dep": "hr" }
-        |""".stripMargin)
-
-    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
-
-    // `dep` must not appear in the narrow write payload -- it was declared scan-only, not
-    // required -- even though it drove write clustering.
-    checkLastWriteInfo(
-      expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
-      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
-      expectedUpdateSchema = Some(StructType(Seq(
-        PK_FIELD,
-        StructField("id", IntegerType, nullable = false)
-      ))))
-
-    checkAnswer(
-      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
-      Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
-  }
-
-  test("column-update: requiredDataAttributes and scanOnlyDataAttributes overlap is rejected") {
-    createAndInitTableOverlap("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }""".stripMargin)
-
-    val ex = intercept[org.apache.spark.sql.AnalysisException] {
-      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
-    }
-    val expectedCondition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES"
-    assert(ex.getCondition == expectedCondition,
-      s"expected $expectedCondition but got: ${ex.getCondition}")
-  }
-
-  private def createAndInitTableOverlap(schemaString: String, jsonData: String): Unit = {
-    val props = new java.util.HashMap[String, String]()
-    props.put("column-update-overlap", "true")
-    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
-    val transforms = Array[Transform](identity(reference(Seq("dep"))))
-    val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
-      .withPartitions(transforms)
-      .withProperties(props)
-      .build()
-    catalog.createTable(ident, tableInfo)
-    append(schemaString, jsonData)
-  }
-
-  test("column-update: undeclared partition column on narrow write is rejected") {
-    createAndInitTableMissingPartition("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }""".stripMargin)
-
-    val ex = intercept[org.apache.spark.sql.AnalysisException] {
-      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
-    }
-    val expectedCondition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS"
-    assert(ex.getCondition == expectedCondition,
-      s"expected $expectedCondition but got: ${ex.getCondition}")
-    assert(ex.getMessage.contains("dep"),
-      s"error message must name the undeclared partition column `dep`: ${ex.getMessage}")
-  }
-
-  private def createAndInitTableMissingPartition(schemaString: String, jsonData: String): Unit = {
-    val props = new java.util.HashMap[String, String]()
-    props.put("column-update-missing-partition", "true")
     val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
     val transforms = Array[Transform](identity(reference(Seq("dep"))))
     val tableInfo = new TableInfo.Builder()
