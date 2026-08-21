@@ -548,16 +548,17 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # the second operand must not fire when the first already decided the
         # result.
         #
-        # RED UNTIL `RaiseError` overrides `Expression.throwable` -- deliberately,
-        # to pin the prerequisite. Without the override,
-        # `splitConjunctivePredicates` decomposes the `And` and
-        # `PushPredicateThroughJoin` pushes the guard to one side of the join,
-        # where it fires on rows Python short-circuits past and raises
-        # USER_RAISED_EXCEPTION instead of returning False.
+        # This is the regression test for SPARK-58627. Before `RaiseError`
+        # overrode `Expression.throwable`, `splitConjunctivePredicates` decomposed
+        # the `And` and `PushPredicateThroughJoin` pushed the guard to one side of
+        # the join, where it fired on rows Python short-circuits past and raised
+        # USER_RAISED_EXCEPTION instead of returning False. Keep it: the override
+        # is what makes the `&` / `|` fold survive the optimizer, so this is the
+        # test that notices if it regresses.
         #
-        # The join case disables AQE and broadcast on purpose: by default whether
-        # the pushed-down guard fires races AQE eliminating the empty join, so the
-        # failure would be intermittent rather than a clean red.
+        # The join case disables AQE and broadcast on purpose: otherwise whether
+        # the pushed-down guard fires races AQE eliminating the empty join, and the
+        # test would pass for the wrong reason.
         def both_positive(a, c):
             return a > 0 and c > 0
 
@@ -590,8 +591,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             joined = left.join(right, "k")
             self.assertEqual([False], [r[0] for r in joined.select(and_udf("a", "c")).collect()])
 
-            # Filtering must return Python's answer rather than raising. RED
-            # until `RaiseError` overrides `Expression.throwable`; see above.
+            # Filtering must return Python's answer rather than raising. This is
+            # the assertion SPARK-58627 fixed; see above.
             filtered = joined.filter(and_udf("a", "c"))
             self.assertEqual([], filtered.select("k").collect())
 

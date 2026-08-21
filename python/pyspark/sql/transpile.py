@@ -101,30 +101,31 @@ evaluates the right. ``and`` / ``or`` operands must therefore be provably boolea
 and non-NULL (see ``_is_never_null_boolean``); chain links need no such gate,
 because every comparison lowering is total.
 
-That short-circuit is an EVALUATION-time property only, and it does not survive
-the optimizer. Three divergences, all measured rather than reasoned about:
+That short-circuit is an EVALUATION-time property only, and it does not by itself
+survive the optimizer. Three divergences, all measured rather than reasoned about:
 
-* Predicate pushdown. The fold is splittable by ``splitConjunctivePredicates``,
-  and ``Optimizer`` partitions on ``cond.deterministic && !cond.throwable``,
-  which ``RaiseError`` fails to set. So a guard can be pushed below a join and
-  run on rows the join drops. Measured on a PURE chain with no ``and`` / ``or``:
-  ``lambda a, b, c: a < b < c`` over a join, ``select`` returns False correctly
-  but ``filter`` raises USER_RAISED_EXCEPTION where Python returns False. Fixed
-  by ``RaiseError`` overriding ``Expression.throwable`` (SPARK-58627), which is
-  a prerequisite for this lowering rather than a nice-to-have.
-* Subexpression elimination. ``spark.sql.subexpressionElimination.enabled``
+* Predicate pushdown -- CLOSED by SPARK-58627. ``Optimizer`` partitions on
+  ``cond.deterministic && !cond.throwable``, and the fold is splittable by
+  ``splitConjunctivePredicates``, so while ``RaiseError`` still reported
+  non-throwable a guard could be pushed below a join and run on rows the join
+  drops. That hit a PURE chain with no ``and`` / ``or``:
+  ``lambda a, b, c: a < b < c`` over a join returned False correctly under
+  ``select`` but raised USER_RAISED_EXCEPTION under ``filter``. ``RaiseError``
+  now overrides ``throwable``, and the same repro returns Python's answer.
+  ``test_udf_transpile_boolop_short_circuits`` is the regression test.
+* Subexpression elimination -- OPEN. ``spark.sql.subexpressionElimination.enabled``
   defaults true while ``...skipForShortcutExpr`` defaults FALSE, so a conjunct
   living only in a short-circuited position is hoisted and evaluated
   unconditionally. Measured on a plain ``select``, no join and no filter:
   ``(a < b < c) or (d > 0 and b < c)`` on ``(5, 1, None, -1)`` raises where
   Python returns False, and setting ``skipForShortcutExpr=true`` alone fixes it.
-  ``Expression.throwable`` does NOT help here -- this rule never consults it.
-* NaN. Spark orders NaN above every value and treats ``NaN = NaN`` as true where
-  Python does neither (SPARK-58781).
+  ``Expression.throwable`` does NOT help -- this rule never consults it, so
+  SPARK-58627 does not cover this one.
+* NaN -- OPEN. Spark orders NaN above every value and treats ``NaN = NaN`` as
+  true where Python does neither (SPARK-58781).
 
 A chain duplicates every interior operand by construction, so it manufactures
-the common subexpressions the second bullet needs. Treat both of the first two
-as open, not theoretical.
+the common subexpressions the second bullet needs. Treat that one as live.
 """
 
 import ast
