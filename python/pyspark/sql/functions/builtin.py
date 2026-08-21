@@ -20455,6 +20455,62 @@ def slice(
 
 
 @_try_remote_functions
+def trim_array(x: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
+    """
+    Array function: Returns the given array column with the last ``n`` elements removed.
+    Raises an error if ``n`` is negative or greater than the number of elements in the array.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    x : :class:`~pyspark.sql.Column` or str
+        Input array column or column name to be trimmed.
+        A column that evaluates to an array.
+    n : :class:`~pyspark.sql.Column`, str, or int
+        The number of elements to remove from the end of the array. Must be between 0 and
+        the number of elements in the array (inclusive).
+        A column that evaluates to an integer.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new Column object of Array type, where each value is the corresponding input array
+        with its last ``n`` elements removed.
+        Returns a column that evaluates to an array.
+
+    Examples
+    --------
+    Example 1: Basic usage of the trim_array function.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 4, 5],), ([4, 5],)], ['x'])
+    >>> df.select(sf.trim_array(df.x, 2)).show()
+    +----------------+
+    |trim_array(x, 2)|
+    +----------------+
+    |       [1, 2, 3]|
+    |              []|
+    +----------------+
+
+    Example 2: trim_array function with a column input for n.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 4, 5], 1), ([4, 5], 0)], ['x', 'n'])
+    >>> df.select(sf.trim_array(df.x, df.n)).show()
+    +----------------+
+    |trim_array(x, n)|
+    +----------------+
+    |    [1, 2, 3, 4]|
+    |          [4, 5]|
+    +----------------+
+    """
+    n = _enum_to_value(n)
+    n = lit(n) if isinstance(n, int) else n
+    return _invoke_function_over_columns("trim_array", x, n)
+
+
+@_try_remote_functions
 def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:

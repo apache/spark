@@ -13235,6 +13235,40 @@ object functions {
     Column.fn("slice", x, start, length)
 
   /**
+   * Returns the given array `x` with the last `n` elements removed. Raises an error if `n` is
+   * negative or greater than the number of elements in the array.
+   *
+   * @param x
+   *   the array column to be trimmed. A column that evaluates to an array.
+   * @param n
+   *   the number of elements to remove from the end of the array. Must be between 0 and the
+   *   number of elements in the array (inclusive).
+   *
+   * @group array_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
+   */
+  def trim_array(x: Column, n: Int): Column = trim_array(x, lit(n))
+
+  /**
+   * Returns the given array `x` with the last `n` elements removed. Raises an error if `n` is
+   * negative or greater than the number of elements in the array.
+   *
+   * @param x
+   *   the array column to be trimmed. A column that evaluates to an array.
+   * @param n
+   *   the number of elements to remove from the end of the array. Must be between 0 and the
+   *   number of elements in the array (inclusive).
+   *
+   * @group array_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
+   */
+  def trim_array(x: Column, n: Column): Column = Column.fn("trim_array", x, n)
+
+  /**
    * Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
    * `nullReplacement`.
    * @param column
