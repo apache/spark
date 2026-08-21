@@ -48,6 +48,9 @@ jobs:
         reporter: java-junit
         token: ${{ secrets.GITHUB_TOKEN }}
         path: "**/target/test-reports/*.xml"
+        list-suites: failed
+        list-tests: failed
+        list-files: failed
         # annotations need to be disabled so the action does not rely on the
         # repo being existed, otherwise we need to checkout the repo
         max-annotations: 0
