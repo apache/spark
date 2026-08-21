@@ -162,12 +162,20 @@ case class HashAggregateExec(
    * may bypass partial aggregation at runtime and pass the remaining input rows through as
    * single-row partial buffers (see [[SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED]]). It only
    * applies to a pre-shuffle partial aggregation with grouping keys:
-   *   - `Partial` mode only: the downstream `Final` aggregation merges the passed-through
-   *     single-row buffers. `Final`/`Complete` produce the result themselves and have no such
-   *     downstream. `PartialMerge` does have one and could be
-   *     supported by passing its incoming buffer through unchanged, but that is left for later.
-   *     The mode check is also what excludes the intermediate phase of a DISTINCT plan, whose
-   *     modes are `PartialMerge ++ Partial`.
+   *   - `Partial` and `PartialMerge` modes only: the downstream `Final` aggregation merges the
+   *     passed-through single-row buffers. `Final`/`Complete` produce the result themselves and
+   *     have no such downstream. A `PartialMerge` member is the non-distinct aggregate of the
+   *     DISTINCT intermediate phase (`AggUtils.planAggregateWithOneDistinct`): its input row is
+   *     already a partial buffer, so the pass-through applies the merge to an empty buffer, which
+   *     leaves the incoming buffer unchanged, and the downstream `Final` re-merges it. A pure
+   *     `PartialMerge` phase (the de-duplication on keys ++ distinct columns) must not bypass, or
+   *     duplicate (key, distinct column) rows would over-count DISTINCT. The built-in planner
+   *     never emits such a phase without a required distribution, so the
+   *     `requiredChildDistributionExpressions` check below already keeps it out. The
+   *     `exists(_.mode == Partial)` check is a defensive guard on top of it, and only for a
+   *     de-duplication phase that carries non-distinct aggregates: one with none at all has an
+   *     empty `aggregateExpressions`, is admitted by the `isEmpty` disjunct, and still relies on
+   *     the distribution check alone.
    *   - grouping keys present: a global aggregation produces a single output row, so partial
    *     aggregation achieves the maximum reduction and must never be bypassed.
    *   - no required distribution: with no aggregate functions (a group-by-only aggregate) the
@@ -176,9 +184,10 @@ case class HashAggregateExec(
    *     not. It is not a general pre-shuffle test, because `AggUtils.planAggregateWithOneDistinct`
    *     leaves it `None` on a post-shuffle aggregate. DISTINCT aggregate functions are allowed:
    *     the phase that de-duplicates on (keys ++ distinct columns) requires a distribution, so
-   *     this check keeps it out, while the distinct `Partial` phase that groups on the keys
-   *     alone is eligible even though it sits after a shuffle: another `Exchange` and a `Final`
-   *     follow it, so its passed-through buffers are still merged.
+   *     this check keeps it out, while the distinct partial phase that groups on the keys alone
+   *     (carrying the non-distinct aggregates as `PartialMerge`) is eligible even though it sits
+   *     after a shuffle: another `Exchange` and a `Final` follow it, so its passed-through
+   *     buffers are still merged.
    *   - batch only: a streaming partial aggregate keeps state across batches, and it is built
    *     with all-`Partial` modes and no required distribution, so it would otherwise qualify.
    *     A batch `session_window` grouping likewise qualifies, but its partial aggregate feeds a
@@ -191,7 +200,8 @@ case class HashAggregateExec(
       groupingExpressions.nonEmpty &&
       !isStreaming &&
       !groupingExpressions.exists(_.metadata.contains(SessionWindow.marker)) &&
-      aggregateExpressions.forall(a => a.mode == Partial) &&
+      aggregateExpressions.forall(a => a.mode == Partial || a.mode == PartialMerge) &&
+      (aggregateExpressions.exists(_.mode == Partial) || aggregateExpressions.isEmpty) &&
       requiredChildDistributionExpressions.isEmpty
   }
 
