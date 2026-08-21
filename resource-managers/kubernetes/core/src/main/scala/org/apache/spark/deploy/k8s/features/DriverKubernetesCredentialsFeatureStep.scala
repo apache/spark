@@ -29,9 +29,10 @@ import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.buildPodWithServiceAccount
+import org.apache.spark.internal.Logging
 
 private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf)
-  extends KubernetesFeatureConfigStep {
+  extends KubernetesFeatureConfigStep with Logging {
 
   private val maybeMountedOAuthTokenFile = kubernetesConf.getOption(
     s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$OAUTH_TOKEN_FILE_CONF_SUFFIX")
@@ -59,10 +60,18 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX",
     "Driver client cert file")
 
-  private val shouldMountSecret = oauthTokenBase64.isDefined ||
-    caCertDataBase64.isDefined ||
-    clientKeyDataBase64.isDefined ||
-    clientCertDataBase64.isDefined
+  private val activeCredentialsConfs = Seq(
+    s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$OAUTH_TOKEN_CONF_SUFFIX" ->
+      oauthTokenBase64.isDefined,
+    s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX" ->
+      caCertDataBase64.isDefined,
+    s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CLIENT_KEY_FILE_CONF_SUFFIX" ->
+      clientKeyDataBase64.isDefined,
+    s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX" ->
+      clientCertDataBase64.isDefined
+  ).collect { case (conf, true) => conf }
+
+  private val shouldMountSecret = activeCredentialsConfs.nonEmpty
 
   private val driverCredentialsSecretName =
     s"${kubernetesConf.resourceNamePrefix}-kubernetes-credentials"
@@ -71,6 +80,15 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     if (!shouldMountSecret) {
       pod.copy(pod = buildPodWithServiceAccount(driverServiceAccount, pod).getOrElse(pod.pod))
     } else {
+      val accountMsg = driverServiceAccount.map(sa => s"'$sa'")
+        .getOrElse("specified service account")
+      val credsMsg = activeCredentialsConfs.mkString(", ")
+      logWarning(
+        s"Driver service account $accountMsg is dropped because client credentials " +
+        s"($credsMsg) were provided. If you want to specify both a service account " +
+        s"and credentials, use '$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.*' " +
+        "configurations instead.")
+
       val driverPodWithMountedKubernetesCredentials =
         new PodBuilder(pod.pod)
           .editOrNewSpec()

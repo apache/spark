@@ -127,6 +127,22 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
     assert(driverContainerVolumeMount.head.getMountPath === DRIVER_CREDENTIALS_SECRETS_BASE_DIR)
   }
 
+  test("SPARK-58872: Log warning when driver credentials drop the driver service account") {
+    val submissionSparkConf = new SparkConf(false)
+      .set(
+        s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$OAUTH_TOKEN_CONF_SUFFIX",
+        "token")
+      .set(KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME, "test-sa")
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = submissionSparkConf)
+    val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
+    val logAppender = new LogAppender
+    withLogAppender(logAppender) {
+      kubernetesCredentialsStep.configurePod(BASE_DRIVER_POD)
+    }
+    val expectedMsg = "Driver service account 'test-sa' is dropped because client credentials"
+    assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(expectedMsg)))
+  }
+
   private def writeCredentials(credentialsFileName: String, credentialsContents: String): File = {
     val credentialsFile = new File(credentialsTempDirectory, credentialsFileName)
     Files.writeString(credentialsFile.toPath, credentialsContents)
