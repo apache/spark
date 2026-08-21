@@ -34,14 +34,9 @@ the transpiler directly live in ``test_udf_transpile_unit.py`` and
 ``test_udf_transpile_hypothesis.py``.
 
 Note on configuration: enabling transpilation requires ANSI mode, so an "on"
-run is unavoidably also an ANSI run. Inherited tests pass as-is apart from the
-two join-condition tests overridden in ``TranspiledUDFParityTests``, which
-assert restrictions that only apply while a Python UDF survives in the plan. If
-a future change makes an inherited test diverge purely due to ANSI semantics,
-because transpilation bypasses a Python-side effect, or because lowering removes
-a Python-UDF-specific planner restriction (rather than a genuine result change),
-override it here with a documented ``unittest.skip`` rather than editing the
-inherited test body.
+run is unavoidably also an ANSI run. Two tests in `TranspiledUDFParityTests``
+are overridin here with a documented ``unittest.skip`` because they assert
+restrictions that are removed post-transpilation.
 """
 
 import unittest
