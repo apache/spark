@@ -870,12 +870,6 @@ def _get_ast_from_func(func: Callable) -> Optional[ast.AST]:
     Used only by the structural (``def`` / callable-class) path; a lambda is
     located by position and does not go through here.
     """
-    # Note: consider maybe dill? (see the JYTHON PR)
-    # inspect getsource does not work for functions defined in vanilla
-    # repl, but does for those in files or in ipython.
-    # It also fails when we give it an instance of a callable class -- hence the
-    # fallback to ``_call_dunder``, which resolves ``__call__`` the way the call
-    # protocol does (on the TYPE), so it is the body that actually runs.
     for candidate in (func, _call_dunder(func)):
         try:
             return ast.parse(textwrap.dedent(inspect.getsource(candidate)).strip())
@@ -899,30 +893,10 @@ _Extent = Tuple[Tuple[int, Optional[int]], Tuple[int, Optional[int]]]
 def _instruction_extent(code: CodeType) -> Optional[_Extent]:
     """The (start, end) source bounds enclosing every instruction of ``code``.
 
-    Column-precise when any instruction carries usable columns, and LINE-ONLY
-    (``None`` columns) when none does. The fallback is not hypothetical: a lambda
-    whose body is a bare constant (``lambda x: 42``) emits only a synthetic
-    ``RESUME`` plus a ``RETURN_CONST``, and some CPython builds report ``(0, 0)``
-    columns for both -- which is how ``lambda x: 42`` stopped lowering on Spark's
-    CI while lowering fine locally, where ``RETURN_CONST`` does carry columns.
-
-    Returning ``None`` there would silently disable lowering, so degrade instead.
-    Line-only bounds admit every candidate on the line rather than one exact span,
-    and ``_verifies`` is what makes the choice safe: it recompiles and compares a
-    code signature, so a wrong candidate is rejected rather than lowered. ``None``
-    is now reserved for a code object carrying no positions AT ALL, which is the
-    genuine ``-X no_debug_ranges`` case the caller reports as such.
-
-    The cost of widening is bounded and falls the safe way, measured on blanked
-    columns. Lambdas sharing a line still resolve to their own body whenever their
-    COMPILED CODE differs -- including an outer and an inner one on the same line,
-    which both enclose line-only bounds and are separated by CONFIRM. Ones that
-    compile identically both verify, so the caller reports them ambiguous and falls
-    back to interpreted Python: byte-identical twins, and also lambdas differing
-    ONLY in a parameter default, since ``_defaults_stripped`` removes exactly that
-    before comparing. Position was what told those apart, and without columns they
-    are genuinely indistinguishable -- falling back is the only honest answer, and
-    it costs a lowering rather than risking a wrong one.
+    Column-precise when instruction carries usable columns, and LINE-ONLY
+    (``None`` columns) when none does.  Lambdas sharing a line still resolve
+    to their own body whenever their compiled rep differs including an outer and
+    an inner one on the same line, which both enclose line-only bounds.
     """
     starts = []
     ends = []
@@ -960,11 +934,7 @@ def _node_encloses(node: ast.expr, extent: _Extent) -> bool:
 
 
 # ``ast.FunctionDef``'s overloads in mypy's typeshed require keyword-only
-# ``type_params`` on 3.12+, which does not exist at runtime on every Python we
-# support (the field was added in 3.12 -- before that, passing it raises). Going
-# through an ``Any`` alias avoids the overload resolution entirely; constructing the
-# node via keyword args is well-defined at runtime even when the typed overloads
-# disagree. Both places that synthesize a ``FunctionDef`` use this.
+# ``type_params`` on 3.12+, which does not exist at in previous versions.
 _FunctionDefCtor: Any = ast.FunctionDef
 
 
