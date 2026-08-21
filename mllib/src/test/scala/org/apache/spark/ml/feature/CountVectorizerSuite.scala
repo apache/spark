@@ -160,6 +160,23 @@ class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("CountVectorizer document frequency ignores duplicate tokens") {
+    val df = Seq(
+      Array("a", "a", "a", "b"),
+      Array("a", "b", "b", "b"),
+      Array("b")
+    ).toDF("words")
+
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMinDF(2)
+      .setMaxDF(2)
+      .fit(df)
+
+    assert(cvModel.vocabulary === Array("a"))
+  }
+
   test("CountVectorizer using both minDF and maxDF") {
     // Ignore terms with count more than 3 AND less than 2
     val df = Seq(
