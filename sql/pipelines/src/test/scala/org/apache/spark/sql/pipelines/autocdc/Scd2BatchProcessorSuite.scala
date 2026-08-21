@@ -1256,14 +1256,17 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val keySchema = new StructType().add("id", IntegerType)
     val userSchema = keySchema.add("value", StringType)
 
-    val aux = auxTableOf(userSchema)(Row(1, "aux", 42L, null, Row(42L), null))
-    val target = targetTableOf(userSchema)(Row(1, "target", 40L, null, Row(40L)))
+    // A delete at 42 closed the target's run and left a tombstone behind it, so the auxiliary
+    // table holds the later of the two rows.
+    val aux = auxTableOf(userSchema)(Row(1, null, 42L, 42L, Row(42L), null))
+    val target = targetTableOf(userSchema)(Row(1, "target", 40L, 42L, Row(40L)))
     val minSeq = minSeqOf(keySchema)(Row(1, 50L))
 
-    // The auxiliary row at 42 is the cutoff, so the target's row at 40 falls below it.
+    // The tombstone at 42 is the cutoff, so the target's row at 40 falls below it - correctly,
+    // since that interval already closed at 42, before anything in the microbatch.
     checkAnswer(
       df = findAffectedAuxRows(processor, aux = aux, target = target, minSeq = minSeq),
-      expectedAnswer = Seq(Row(1, "aux", 42L, null, Row(42L)))
+      expectedAnswer = Seq(Row(1, null, 42L, 42L, Row(42L)))
     )
     checkAnswer(
       df = findAffectedTargetRows(processor, target = target, aux = aux, minSeq = minSeq),

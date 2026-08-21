@@ -104,11 +104,16 @@ case class Scd2BatchProcessor(
         // if the user's change feed source did not emit duplicate sequences: the auxiliary merge
         // commits before the target merge, which re-reads that table, so a row this batch wrote to
         // the auxiliary table re-enters the window beside the copy the microbatch or the target
-        // table still holds. The copies differ only in the boundaries each one recorded, so
-        // descending order keeps the earliest of them - dropRedundantRowsPostDecomposition drops a
-        // tie's leading row - and nulls sort first so a copy that recorded no boundary never
-        // displaces one that did.
+        // table still holds. The copies differ only in the boundaries each one recorded, and the
+        // two keys below break that tie deterministically - dropRedundantRowsPostDecomposition
+        // drops a tie's leading row, so the copy sorting last is the one that survives.
+        //
+        // A batch that moves a run's start leaves the copies disagreeing on where their interval
+        // begins. Nulls are inert on this key: only decomposition tails carry a null startAt, and
+        // orderDecompositionTailsFirst has already separated those by the time it is consulted.
         startAtCol.desc_nulls_first,
+        // Copies agreeing on their run start may still disagree on its closure, so nulls sort
+        // first and are dropped: a copy that recorded no boundary never displaces one that did.
         endAtCol.desc_nulls_first
       )
   }
@@ -355,6 +360,19 @@ case class Scd2BatchProcessor(
 
   /**
    * Per key, keep only rows in [[rowsDf]] that are included by the sequence cutoff.
+   *
+   * A plain `effectiveRecordStartAt >= cutoff` threshold suffices, in both directions:
+   *
+   * 1. Nothing needed for reconciliation is missed. Once a row is pulled in, every later row for
+   *    that key must come with it, so that boundaries reconcile and rows are promoted or demoted
+   *    correctly - even when the two live in different tables, as when a run's visible tail sits
+   *    in the target table after the run's hidden head in the auxiliary table. The cutoff is a
+   *    single threshold per key over the unified ordering across both tables, and so selects
+   *    exactly a complete suffix of the global, unified view. This includes the live rows (open
+   *    upserts in the target) too.
+   * 2. Nothing dropped was needed for reconciliation. The cutoff is the position of the last row
+   *    preceding the microbatch per key, so every row below it is separated from the microbatch
+   *    by at least one intervening row, and cannot be affected by it.
    */
   private def selectRowsAtOrAfterCutoff(
       rowsDf: DataFrame,
@@ -1519,7 +1537,7 @@ object Scd2BatchProcessor {
    *
    * Temporary in that the column has no observable side effect or persistence across microbatches.
    */
-  private[autocdc] val affectedSequenceCutoffColName: String =
+  private val affectedSequenceCutoffColName: String =
     s"${AutoCdcReservedNames.prefix}affected_sequence_cutoff"
 
   /**

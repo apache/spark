@@ -780,6 +780,67 @@ class Scd2ForeachBatchHandlerSuite
     )
   }
 
+  test("a demoted row's two copies reconcile even when they disagree on where the run starts") {
+    // Same cross-merge duplication as the test above, but here the batch also moves the run's
+    // start, so the two copies of the demoted event disagree on startAt rather than only on
+    // endAt - the case the startAt sort key exists to decide.
+    //
+    // Seed: the "a" run covers [10, 20) as a single visible event, closed by "b" at 20. Nothing
+    // is hidden yet.
+    createAuxTable()
+    createTargetTable(
+      targetRow(1, "a", 10L, 20L, 10L),
+      targetRow(1, "b", 20L, null, 20L)
+    )
+
+    // Two no-op "a" events. The one at 5 predates the run and pulls its start back to 5; the one
+    // at 15 becomes the run's visible tail, demoting the event at 10 into the auxiliary table.
+    val batchId = 11L
+    val batchDf = microbatchOf(sourceSchema)(upsert(1, "a", 5L), upsert(1, "a", 15L))
+    val reconciled = exec.reconcileMicrobatch(batchDf, batchId)
+    val sourceTheAuxMergeReads = reconciled.reconciledAndRoutedDf.collect().toSeq
+    processor.mergeRowsIntoAuxiliaryTable(
+      reconciledDfWithAuxRowsTagged = reconciled.reconciledAndRoutedDf,
+      originalAffectedRowsFromAuxiliaryTable = reconciled.affectedRowsFromAuxiliaryTable,
+      auxiliaryTableIdentifier = defaultAuxTableIdentifier,
+      batchId = batchId
+    )
+
+    // Both hidden members of the run now record the run's new start at 5, while the target table
+    // still holds its own copy of the event at 10 recording the old start at 10.
+    checkAnswer(
+      auxTable,
+      Seq(
+        auxRow(1, "a", 5L, null, 5L, null),
+        auxRow(1, "a", 5L, null, 10L, null)
+      )
+    )
+    checkAnswer(targetTable.filter("value = 'a'"), targetRow(1, "a", 10L, 20L, 10L))
+
+    // The target merge re-evaluates the same plan against the auxiliary table as the merge above
+    // left it, so the two disagreeing copies of the event at 10 meet in the window. They must
+    // collapse back to what the auxiliary merge already consumed.
+    checkAnswer(
+      Dataset.ofRows(spark, reconciled.reconciledAndRoutedDf.logicalPlan),
+      sourceTheAuxMergeReads
+    )
+
+    processor.mergeRowsIntoTargetTable(
+      reconciledDfWithAuxRowsTagged = reconciled.reconciledAndRoutedDf,
+      affectedRowsFromTargetTable = reconciled.affectedRowsFromTargetTable,
+      targetTableIdentifier = defaultTargetTableIdentifier
+    )
+
+    // The run now covers [5, 20) with the event at 15 as its visible tail, and "b" is untouched.
+    checkAnswer(
+      targetTable,
+      Seq(
+        targetRow(1, "a", 5L, 20L, 15L),
+        targetRow(1, "b", 20L, null, 20L)
+      )
+    )
+  }
+
   test("duplicate events at the same key and sequence in one microbatch collapse to one record") {
     createAuxTable()
     createTargetTable()
