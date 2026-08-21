@@ -16,20 +16,17 @@ Before the first code edit or test in a session, complete these checks:
     git fetch origin master
     ```
 4. Choose the work path:
-     - **Review or continue work on an existing PR**: resolve its head repository, ref, and SHA:
+   - **Review or continue work on an existing PR**: resolve its head repository, ref, and SHA:
 
-         ```sh
-         gh api repos/apache/spark/pulls/<number> \
-             --jq '{repo: .head.repo.full_name, ref: .head.ref, sha: .head.sha}'
-         ```
+     ```sh
+     gh api repos/apache/spark/pulls/<number> \
+       --jq '{repo: .head.repo.full_name, ref: .head.ref, sha: .head.sha}'
+     ```
 
-         For a review, use a local branch at the returned SHA. To continue edits, switch to a
-         matching local branch if one exists and inform the user. If the needed branch is not local,
-         ask whether to fetch the returned head repository and ref or use a differently named local
-         branch.
-     - **New PR**: ask the user to choose:
-         - **Linked worktree (recommended)**: follow Creating a Worktree below.
-         - **New branch**: create and switch to a new branch from `origin/master`.
+     For a review, use a local branch at the returned SHA.
+   - **New PR**: ask the user to choose:
+     - **Linked worktree (recommended)**: follow "Creating a Worktree" below.
+     - **New branch**: create and switch to a new branch from `origin/master`.
 
 ### Creating a Worktree
 
