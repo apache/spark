@@ -44,7 +44,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
     assert(kubernetesCredentialsStep.configurePod(BASE_DRIVER_POD) === BASE_DRIVER_POD)
     assert(kubernetesCredentialsStep.getAdditionalPodSystemProperties().isEmpty)
-    assert(kubernetesCredentialsStep.getAdditionalKubernetesResources().isEmpty)
+    assert(kubernetesCredentialsStep.getAdditionalPreKubernetesResources().isEmpty)
   }
 
   test("Only set credentials that are manually mounted.") {
@@ -64,7 +64,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = submissionSparkConf)
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
     assert(kubernetesCredentialsStep.configurePod(BASE_DRIVER_POD) === BASE_DRIVER_POD)
-    assert(kubernetesCredentialsStep.getAdditionalKubernetesResources().isEmpty)
+    assert(kubernetesCredentialsStep.getAdditionalPreKubernetesResources().isEmpty)
     val resolvedProperties = kubernetesCredentialsStep.getAdditionalPodSystemProperties()
     resolvedProperties.foreach { case (propKey, propValue) =>
       assert(submissionSparkConf.get(propKey) === propValue)
@@ -102,9 +102,9 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
       s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX" ->
         DRIVER_CREDENTIALS_CA_CERT_PATH)
     assert(resolvedProperties === expectedSparkConf)
-    assert(kubernetesCredentialsStep.getAdditionalKubernetesResources().size === 1)
+    assert(kubernetesCredentialsStep.getAdditionalPreKubernetesResources().size === 1)
     val credentialsSecret = kubernetesCredentialsStep
-      .getAdditionalKubernetesResources()
+      .getAdditionalPreKubernetesResources()
       .head
       .asInstanceOf[Secret]
     assert(credentialsSecret.getMetadata.getName ===
