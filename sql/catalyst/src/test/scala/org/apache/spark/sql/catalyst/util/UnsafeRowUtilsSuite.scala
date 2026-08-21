@@ -328,12 +328,14 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
   }
 
   test("UnsafeRowKeyOperations raw ICU keys match materialized sort-key hashes") {
+    // scalastyle:off nonascii
     val values = Seq(
       "a" * 4096,
       "short",
-      "R\u00e9sum\u00e9",
+      "Résumé",
       "resume   ",
       "")
+    // scalastyle:on nonascii
 
     Seq("UNICODE", "UNICODE_CI", "UNICODE_RTRIM", "UNICODE_CI_RTRIM").foreach {
       collationName =>
