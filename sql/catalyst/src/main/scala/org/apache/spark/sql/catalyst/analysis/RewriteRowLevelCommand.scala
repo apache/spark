@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ReplaceDataProjectio
   WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsColumnUpdates, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -73,7 +73,8 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       table: SupportsRowLevelOperations,
       command: Command,
       options: CaseInsensitiveStringMap,
-      updatedColumns: Seq[NamedReference] = Nil): RowLevelOperationTable = {
+      updatedAttrs: Seq[AttributeReference] = Nil): RowLevelOperationTable = {
+    val updatedColumns = updatedAttrs.map(attr => FieldReference(Seq(attr.name)))
     val info = RowLevelOperationInfoImpl(command, options, updatedColumns)
     val operation = table.newRowLevelOperationBuilder(info).build()
     RowLevelOperationTable(table, operation)
@@ -162,13 +163,17 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   }
 
   protected def isIdentityAssignment(key: Attribute, value: Expression): Boolean = {
-    val unwrapped = value match {
+    val valueWithoutAlias = value match {
       case Alias(child, _) => child
       case other => other
     }
-    unwrapped match {
-      case attr: Attribute => AttributeSet(Seq(key)).contains(attr)
-      case _ => false
+    key.semanticEquals(valueWithoutAlias)
+  }
+
+  // returns the table attributes that are genuinely updated (non-identity) by these assignments
+  protected def collectUpdatedAttrs(assignments: Seq[Assignment]): Seq[AttributeReference] = {
+    assignments.collect {
+      case Assignment(key: AttributeReference, value) if !isIdentityAssignment(key, value) => key
     }
   }
 
