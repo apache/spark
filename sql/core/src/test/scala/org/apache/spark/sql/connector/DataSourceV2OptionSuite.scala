@@ -904,6 +904,64 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-58392: view and nested table keep independent state options") {
+    registerCatalog("nestedviewrel", classOf[StateAwareV2InMemoryRelationCatalog])
+    val t1 = "nestedviewrel.ns1.ns2.table"
+    val v1 = "nestedviewrel.ns1.ns2.view"
+    withTable(t1) {
+      withView(v1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+        sql(s"CREATE VIEW $v1 AS SELECT * FROM $t1 WITH ('snapshot' = 'inner')")
+
+        val relCatalog =
+          catalog("nestedviewrel").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
+        relCatalog.resetLoadRelationCalls()
+        spark.read
+          .option("snapshot", "outer")
+          .option("split-size", "5")
+          .table(v1)
+          .collect()
+
+        val calls = relCatalog.loadRelationCalls
+        assert(calls.map(_.get("snapshot")) === Seq("outer", "inner", "inner"))
+        assert(calls.forall(_.size() === 1))
+      }
+    }
+  }
+
+  test("SPARK-58392: loadRelation table pins use the state-option projection") {
+    registerCatalog("pinningrel", classOf[StateAwareV2InMemoryRelationCatalog])
+    val t1 = "pinningrel.ns1.ns2.table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+      val relCatalog =
+        catalog("pinningrel").asInstanceOf[StateAwareV2InMemoryRelationCatalog]
+
+      relCatalog.resetLoadRelationCalls()
+      val sameState = sql(s"SELECT a.id FROM $t1 " +
+        s"WITH (`snapshot` = 's1', `split-size` = 5) a JOIN $t1 " +
+        s"WITH (`snapshot` = 's1', `split-size` = 9) b ON a.id = b.id")
+      val sameStateRelations = sameState.queryExecution.analyzed.collect {
+        case r: DataSourceV2Relation if r.options.containsKey("split-size") => r
+      }
+      assertOnlySnapshotRelationOptions(relCatalog, "s1", expectedCalls = 1)
+      assert(sameStateRelations.size === 2)
+      assert(sameStateRelations.map(_.options.get("split-size")).sorted === Seq("5", "9"))
+      assert(sameStateRelations.head.table eq sameStateRelations.last.table)
+
+      relCatalog.resetLoadRelationCalls()
+      val differentStates = sql(s"SELECT a.id FROM $t1 " +
+        s"WITH (`snapshot` = 's1') a JOIN $t1 " +
+        s"WITH (`snapshot` = 's2') b ON a.id = b.id")
+      val differentStateRelations = differentStates.queryExecution.analyzed.collect {
+        case r: DataSourceV2Relation if r.options.containsKey("snapshot") => r
+      }
+      assert(differentStateRelations.size === 2)
+      assert(relCatalog.loadRelationCalls.map(_.get("snapshot")).sorted === Seq("s1", "s2"))
+      assert(relCatalog.loadRelationCalls.forall(_.size() === 1))
+    }
+  }
+
   test("SPARK-58392: execution refresh forwards only table-state options") {
     registerCatalog("loadcountingrel", classOf[StateAwareV2InMemoryRelationCatalog])
     val relCatalog =
