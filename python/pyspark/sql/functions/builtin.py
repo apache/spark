@@ -33044,6 +33044,194 @@ def bitmap_count(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def bitmap_and(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_or`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_and(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[70 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_and", left, right)
+
+
+@_try_remote_functions
+def bitmap_or(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise OR of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("10", "20")], ["left", "right"])
+    >>> df.select(sf.bitmap_or(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[30 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_or", left, right)
+
+
+@_try_remote_functions
+def bitmap_andnot(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND NOT of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_or`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_andnot(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[80 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_andnot", left, right)
+
+
+@_try_remote_functions
+def bitmap_xor(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise XOR of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_or`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_xor(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[80 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_xor", left, right)
+
+
+@_try_remote_functions
 def bitmap_or_agg(col: "ColumnOrName") -> Column:
     """
     Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column.

@@ -5663,6 +5663,34 @@ def bitmap_count(col: "ColumnOrName") -> Column:
 bitmap_count.__doc__ = pysparkfuncs.bitmap_count.__doc__
 
 
+def bitmap_and(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_and", left, right)
+
+
+bitmap_and.__doc__ = pysparkfuncs.bitmap_and.__doc__
+
+
+def bitmap_or(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_or", left, right)
+
+
+bitmap_or.__doc__ = pysparkfuncs.bitmap_or.__doc__
+
+
+def bitmap_andnot(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_andnot", left, right)
+
+
+bitmap_andnot.__doc__ = pysparkfuncs.bitmap_andnot.__doc__
+
+
+def bitmap_xor(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_xor", left, right)
+
+
+bitmap_xor.__doc__ = pysparkfuncs.bitmap_xor.__doc__
+
+
 def bitmap_or_agg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_or_agg", col)
 
