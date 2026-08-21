@@ -2227,9 +2227,12 @@ class SubquerySuite extends SharedSparkSession
       checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) != false"), Seq.empty)
       checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) != false"),
         Row(4, null) :: Nil)
-      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t)) <=> false)"), Seq.empty)
+      // SPARK-58442: NOT IN evaluates to NULL for these rows, and NOT(NULL <=> false) is TRUE,
+      // so they are returned. Before that fix NULL was collapsed to FALSE and they were not.
+      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t)) <=> false)"),
+        Row(4, null) :: Row(null, 0) :: Nil)
       checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> false)"),
-        Row(4, null) :: Nil)
+        Row(4, null) :: Row(null, 0) :: Nil)
     }
   }
 

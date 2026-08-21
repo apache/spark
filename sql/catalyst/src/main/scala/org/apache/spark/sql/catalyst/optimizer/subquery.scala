@@ -432,7 +432,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           introducedAttrs += exists
           exists
         case Not(InSubquery(values, l @ ListQuery(sub, _, _, _, conditions, subHint)))
-            if canRewriteToExistenceJoin(l, conditions, nullInsensitive) =>
+            if canRewriteToExistenceJoin(values, l, conditions, nullInsensitive) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
@@ -458,7 +458,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           introducedAttrs += exists
           Not(exists)
         case InSubquery(values, l @ ListQuery(sub, _, _, _, conditions, subHint))
-            if canRewriteToExistenceJoin(l, conditions, nullInsensitive) =>
+            if canRewriteToExistenceJoin(values, l, conditions, nullInsensitive) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
@@ -488,14 +488,17 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * An IN/NOT IN subquery is three-valued but an [[ExistenceJoin]]'s `exists` flag is not, so the
-   * rewrite maps NULL to FALSE. Only rewrite where that is unobservable, or where the subquery is
-   * correlated and must therefore be decorrelated into a join. See SPARK-58442.
+   * rewrite maps NULL to FALSE. Rewrite only where that is unobservable, or where leaving the
+   * subquery in place is not an option: a correlated subquery must be decorrelated into a join, and
+   * a multi-column probe is compared as a whole struct by `InSubqueryExec`, which treats NULL as
+   * equal to NULL rather than comparing row-wise. See SPARK-58442.
    */
   private def canRewriteToExistenceJoin(
+      values: Seq[Expression],
       query: ListQuery,
       conditions: Seq[Expression],
       nullInsensitive: Boolean): Boolean = {
-    nullInsensitive || query.isCorrelated || conditions.nonEmpty
+    nullInsensitive || query.isCorrelated || conditions.nonEmpty || values.length > 1
   }
 }
 
