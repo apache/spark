@@ -339,8 +339,7 @@ class RelationResolution(
               t <- table
               if pinnedTable.isEmpty && finalTimeTravelSpec.isEmpty &&
                 writePrivileges == null && !u.isStreaming
-              cached <- lookupSharedRelationCacheWithStateOptions(
-                catalog, ident, t, tableKey.stateOptions)
+              cached <- lookupSharedRelationCache(catalog, ident, t, finalOptions)
             } yield {
               val updatedRelation = cached.copy(options = finalOptions)
               updatedRelation.copyTagsFrom(cached)
@@ -406,19 +405,6 @@ class RelationResolution(
       table: Table,
       options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
     CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, options, conf)
-  }
-
-  private def lookupSharedRelationCacheWithStateOptions(
-      catalog: CatalogPlugin,
-      ident: Identifier,
-      table: Table,
-      stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
-    sharedRelationCache.lookup(
-      catalog,
-      ident,
-      Some(table.id),
-      stateOptions,
-      conf.resolver).collect { case r: DataSourceV2Relation => r }
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
