@@ -1151,6 +1151,19 @@ class QueryCompilationErrorsSuite
       parameters = Map("identifier" -> identifier.toString)
     )
   }
+
+  test("ADD_COLUMN_NOT_NULL_UNSUPPORTED: v1 table ADD COLUMN with NOT NULL") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t ADD COLUMN c INT NOT NULL")
+        },
+        condition = "ADD_COLUMN_NOT_NULL_UNSUPPORTED",
+        sqlState = "0A000",
+        parameters = Map())
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
