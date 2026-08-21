@@ -108,7 +108,10 @@ def _copysign_func(c1: Column, c2: Column) -> Column:
     sign = F.when((c2 < 0) | (c2.cast("string") == "-0.0"), F.lit(-1.0)).otherwise(F.lit(1.0))
     # An integer y column's NULL is a genuine missing value and propagates. A
     # float/double column instead stores its missing value as NaN (surfaced as a
-    # Spark NULL by pandas-on-Spark), for which copysign(x, NaN) returns |x|.
+    # Spark NULL by pandas-on-Spark), for which copysign(x, NaN) returns |x|. A
+    # nullable Float64 <NA> collapses to that same Spark NULL, so it is likewise
+    # treated as NaN and returns |x| rather than propagating; this cannot be
+    # distinguished here and matches the prior pandas_udf behavior.
     return F.when(
         c2.isNull() & ~F.typeof(c2).isin("float", "double"), F.lit(None).cast("double")
     ).otherwise(F.abs(c1.cast("double")) * sign)
