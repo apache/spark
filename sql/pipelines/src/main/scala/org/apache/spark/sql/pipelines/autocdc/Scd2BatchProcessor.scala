@@ -372,7 +372,9 @@ case class Scd2BatchProcessor(
    *    upserts in the target) too.
    * 2. Nothing dropped was needed for reconciliation. The cutoff is the position of the last row
    *    preceding the microbatch per key, so every row below it is separated from the microbatch
-   *    by at least one intervening row, and cannot be affected by it.
+   *    by at least one intervening row, and cannot be affected by it. An open row is the one case
+   *    that does not follow from separation alone, since it is affected by anything after it -
+   *    but no row can intervene above an open row, as that row would have closed it.
    */
   private def selectRowsAtOrAfterCutoff(
       rowsDf: DataFrame,
