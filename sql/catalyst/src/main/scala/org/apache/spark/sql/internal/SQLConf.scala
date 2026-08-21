@@ -5378,10 +5378,11 @@ object SQLConf {
         "worker before it is sent back to the JVM. Without it a UDF that emits one Arrow batch " +
         "per unit of work (e.g. applyInPandas, which produces one batch per group) can yield a " +
         "single oversized batch that strains the JVM and downstream operators; when this is set " +
-        "the worker slices such a batch into row-balanced pieces each within the cap (a single " +
-        "row larger than the cap still yields a one-row batch). Currently only applyInPandas " +
-        "(SQL_GROUPED_MAP_PANDAS_UDF) honors this; other Arrow-based Python UDFs ignore it. " +
-        "-1 (the default) means no limit.")
+        "the worker splits such a batch into ceil(nbytes / max_bytes) row-balanced pieces. This " +
+        "is a best-effort estimate that assumes roughly uniform row size (the per-slice byte " +
+        "size is not measured), so a skewed batch may still exceed the cap. Currently only " +
+        "applyInPandas (SQL_GROUPED_MAP_PANDAS_UDF) honors this; other Arrow-based Python UDFs " +
+        "ignore it. -1 (the default) means no limit.")
       .version("4.4.0")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(x => x == -1 || (x > 0 && x <= Int.MaxValue),

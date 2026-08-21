@@ -102,7 +102,9 @@ class ArrowBatchTransformer:
         ``ceil(nbytes / max_bytes)`` slices, with the rows divided as evenly as
         possible across them; a batch already within ``max_bytes`` (or empty) is
         yielded unchanged. Slicing is zero-copy: each slice is a view over the
-        input batch's buffers, not a copy.
+        input batch's buffers, not a copy. This is a best-effort estimate: the
+        per-slice byte size is not measured, so a skewed, variable-width batch
+        can still exceed ``max_bytes``.
 
         The examples below use ``max_bytes = 256 MB``.
 
