@@ -2541,7 +2541,7 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // SPARK-46625: INSERT INTO REPLACE WHERE parses into `InsertIntoStatement`, with
+  // SPARK-46625: An INSERT INTO statement with a REPLACE WHERE clause parses into
   // `PlanWithUnresolvedIdentifier` as its table child. Verify that the placeholder lives in the
   // command instead of wrapping it -- running the analyzer fully would require a v2 catalog.
   test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
@@ -2629,7 +2629,7 @@ class ParametersSuite extends SharedSparkSession {
   }
 
   // `INSERT INTO IDENTIFIER(<sql-variable>) ...` places a
-  // `PlanWithUnresolvedIdentifier` in `InsertIntoStatement.table`, whose `identifierExpr`
+  // `PlanWithUnresolvedIdentifier` in `InsertIntoStatement.table`. The plan's `identifierExpr`
   // holds an `UnresolvedAttribute` for the variable name. Verify that normal child traversal
   // rewrites the attribute to a `VariableReference` and the insert completes end-to-end.
   test("SPARK-46625: INSERT INTO IDENTIFIER(<sql-variable>) resolves variable in table slot") {
