@@ -29,8 +29,10 @@ migrate queries from other systems such as Oracle, DB2, and MySQL. Unlike
 `JSON_VALUE` is an expression that can appear anywhere a scalar is allowed.
 
 The function returns a scalar only. A path that matches an object or array is an *error* case (see
-`ON ERROR`), not a value. Use [JSON_TABLE](sql-ref-syntax-qry-select-json-table.html) or the
-built-in `get_json_object` function to extract structured fragments.
+`ON ERROR`), not a value. To extract an object or array as a JSON fragment, use
+[JSON_QUERY](sql-ref-syntax-qry-select-json-query.html); to produce rows from a JSON array, use
+[JSON_TABLE](sql-ref-syntax-qry-select-json-table.html) (the built-in `get_json_object` function
+also extracts fragments).
 
 ### Syntax
 

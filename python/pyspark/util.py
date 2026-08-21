@@ -88,6 +88,7 @@ if typing.TYPE_CHECKING:
         ArrowGroupedAggIterUDFType,
         ArrowGroupedAggIncrementalPartialUDFType,
         ArrowGroupedAggIncrementalFinalUDFType,
+        ArrowWindowAggIncrementalUDFType,
         ArrowWindowAggUDFType,
     )
     from pyspark.sql._typing import (
@@ -707,6 +708,10 @@ class PythonEvalType:
     # ``Aggregator.finish`` after the shuffle.
     SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF: "ArrowGroupedAggIncrementalPartialUDFType" = 255
     SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF: "ArrowGroupedAggIncrementalFinalUDFType" = 256
+
+    # Window aggregation with an incremental ``Aggregator``. A window has no shuffle, so each
+    # frame's rows are folded with ``reduce`` (from ``zero``) and finished with ``finish``.
+    SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: "ArrowWindowAggIncrementalUDFType" = 257
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301

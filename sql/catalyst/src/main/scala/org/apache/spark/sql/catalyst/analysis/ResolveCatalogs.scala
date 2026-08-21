@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarch
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -127,6 +128,18 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
       c.copy(name = resolvedIdentifier)
 
+    case c @ CreateTableAsSelect(
+        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
+      rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
+      c.copy(name = resolvedIdentifier)
+
+    case r @ ReplaceTableAsSelect(
+        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
+      rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
+      r.copy(name = resolvedIdentifier)
+
     case UnresolvedIdentifier(nameParts, allowTemp) =>
       resolveIdentifier(nameParts, allowTemp, Nil)
 
@@ -157,6 +170,15 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val CatalogAndIdentifier(catalog, identifier) = nameParts
       ResolvedIdentifier(catalog, identifier, columnOutput)
     }
+  }
+
+  private def rejectTimeTravelOptionsForWrite(
+      resolvedIdentifier: ResolvedIdentifier,
+      writeOptions: Map[String, String]): Unit = {
+    CatalogV2Util.rejectTimeTravelOptionsForWrite(
+      resolvedIdentifier.catalog,
+      resolvedIdentifier.identifier,
+      new CaseInsensitiveStringMap(writeOptions.asJava))
   }
 
   private def isSystemBuiltinName(nameParts: Seq[String]): Boolean = {

@@ -139,6 +139,11 @@ a.kill-link {
   color: var(--bs-secondary-color);
 }
 
+a.confirm-link {
+  margin-left: 4px;
+  color: var(--bs-secondary-color);
+}
+
 a.name-link {
   word-wrap: break-word;
 }

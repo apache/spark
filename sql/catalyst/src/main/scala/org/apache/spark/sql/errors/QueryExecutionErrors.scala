@@ -269,6 +269,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def bitmapInputTooLargeError(inputNumBytes: Int, maxNumBytes: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "BITMAP_INPUT_TOO_LARGE",
+      messageParameters = Map(
+        "inputNumBytes" -> inputNumBytes.toString,
+        "maxNumBytes" -> maxNumBytes.toString),
+      cause = null)
+  }
+
   def invalidFractionOfSecondError(secAndMicros: Double): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
@@ -1475,6 +1484,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId(prettyName)))
   }
 
+  def invalidElementCountForTrimArrayError(
+      prettyName: String, numElements: Int, length: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.TRIM_ARRAY_LENGTH",
+      messageParameters = Map(
+        "parameter" -> toSQLId("n"),
+        "functionName" -> toSQLId(prettyName),
+        "numElements" -> numElements.toString,
+        "length" -> length.toString))
+  }
+
   def invalidIndexOfZeroError(context: QueryContext): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "INVALID_INDEX_OF_ZERO",
@@ -1623,6 +1643,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "badRecord" -> badRecord,
         "failFastMode" -> FailFastMode.name),
       cause = e)
+  }
+
+  def jsonQueryOnEmptyError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_QUERY_ON_ERROR.EMPTY",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
+  }
+
+  def jsonQueryOnErrorError(functionName: String, path: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "JSON_QUERY_ON_ERROR.ERROR",
+      messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)),
+      cause = cause)
   }
 
   def jsonValueOnEmptyError(functionName: String, path: String, cause: Throwable): Throwable = {

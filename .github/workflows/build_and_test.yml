@@ -66,7 +66,7 @@ jobs:
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       # Pinned so every downstream job checks out the same snapshot, even if `master` advances mid-run.
-      head_sha: ${{ steps.resolve-sha.outputs.head_sha }}
+      head_sha: ${{ steps.checkout.outputs.head_sha }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
       image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
       image_lint_url: ${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}
@@ -76,22 +76,13 @@ jobs:
       image_pyspark_url: ${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}
       image_pyspark_url_link: ${{ steps.infra-image-link.outputs.image_pyspark_url_link }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      id: checkout
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ inputs.branch }}
-    - name: Resolve apache/spark HEAD SHA
-      id: resolve-sha
-      run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Check all modules
       id: set-outputs
       run: |
@@ -259,7 +250,7 @@ jobs:
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).build == 'true'
+    if: fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     strategy:
@@ -340,20 +331,12 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
-      # In order to fetch changed files
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -374,6 +357,8 @@ jobs:
           coursier-${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-
           coursier-${{ runner.os }}-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: |
         if [ -f ./dev/free_disk_space ]; then
           ./dev/free_disk_space
@@ -398,16 +383,10 @@ jobs:
         python3.12 -m pip install 'numpy>=1.23.2' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
         python3.12 -m pip list
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v6
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
         zstd -dc compile-artifact.tar.zst | tar -xf -
         rm compile-artifact.tar.zst
@@ -420,10 +399,8 @@ jobs:
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         export SERIAL_SBT_TESTS=1
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
@@ -473,20 +450,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Checkout Spark repository
+      - name: Bootstrap composite actions
         uses: actions/checkout@v6
-        # In order to fetch changed files
+      - name: Checkout and sync Spark repository
+        uses: ./.github/actions/checkout-and-sync
         with:
-          fetch-depth: 0
-          repository: apache/spark
           ref: ${{ needs.precondition.outputs.head_sha }}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Set up QEMU
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8
       - name: Set up Docker Buildx
@@ -559,27 +528,17 @@ jobs:
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Optional optimization: if this job fails or is cancelled, the pyspark
-    # matrix entries fall back to running the SBT build locally as before.
-    continue-on-error: true
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
       uses: actions/cache@v5
       with:
@@ -691,23 +650,13 @@ jobs:
       # Cap CI fuzz volume; the explicit @example edge seeds still always run.
       RUN_HYPOTHESIS_MAX_EXAMPLES: 50
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
-      # In order to fetch changed files
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -727,6 +676,8 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
@@ -747,16 +698,10 @@ jobs:
           echo ""
         done
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v6
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
         zstd -dc compile-artifact.tar.zst | tar -xf -
         rm compile-artifact.tar.zst
@@ -766,10 +711,8 @@ jobs:
       if: ${{ matrix.modules != 'pyspark-connect-old-client' }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         if [[ "$MODULES_TO_TEST" == *"pyspark-install"* ]]; then
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
@@ -782,13 +725,6 @@ jobs:
         SPARK_CONNECT_TESTING_REMOTE: sc://localhost
       if: ${{ matrix.modules == 'pyspark-connect-old-client' && inputs.branch == 'master' }}
       run: |
-        # Build Spark
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        else
-          ./build/sbt -Phive Test/package
-        fi
-
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
         sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
@@ -871,23 +807,13 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
-      # In order to fetch changed files
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -907,6 +833,8 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
@@ -914,16 +842,10 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v6
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
         zstd -dc compile-artifact.tar.zst | tar -xf -
         rm compile-artifact.tar.zst
@@ -934,10 +856,8 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
@@ -961,18 +881,12 @@ jobs:
     name: Protobuf breaking change detection and Python CodeGen check
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Install Buf
       uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
       with:
@@ -1061,22 +975,13 @@ jobs:
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -1103,6 +1008,8 @@ jobs:
         restore-keys: |
           docs-maven-${{ runner.os }}-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
@@ -1195,22 +1102,13 @@ jobs:
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -1237,6 +1135,8 @@ jobs:
         restore-keys: |
           docs-maven-${{ runner.os }}-
     - name: Free up disk space
+      timeout-minutes: 10
+      continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
@@ -1292,25 +1192,19 @@ jobs:
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
+    if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       SPARK_LOCAL_IP: localhost
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
       uses: actions/cache@v5
       with:
@@ -1334,16 +1228,10 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
         zstd -dc compile-artifact.tar.zst | tar -xf -
         rm compile-artifact.tar.zst
@@ -1416,7 +1304,7 @@ jobs:
 
   docker-integration-tests:
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
+    if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1429,19 +1317,12 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
       uses: actions/cache@v5
       with:
@@ -1465,26 +1346,18 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Download precompiled artifact
-      id: download-precompiled
-      if: needs.precompile.result == 'success'
-      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
-      id: extract-precompiled
-      if: steps.download-precompiled.outcome == 'success'
-      continue-on-error: true
       run: |
         zstd -dc compile-artifact.tar.zst | tar -xf -
         rm compile-artifact.tar.zst
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
-        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-          export SKIP_SCALA_BUILD=true
-          echo "Reusing precompiled artifact, skipping local SBT build."
-        fi
+        export SKIP_SCALA_BUILD=true
+        echo "Reusing precompiled artifact, skipping local SBT build."
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
@@ -1510,24 +1383,17 @@ jobs:
 
   k8s-integration-tests:
     needs: [precondition, precompile]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
+    if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - name: Checkout Spark repository
+      - name: Bootstrap composite actions
         uses: actions/checkout@v6
+      - name: Checkout and sync Spark repository
+        uses: ./.github/actions/checkout-and-sync
         with:
-          fetch-depth: 0
-          repository: apache/spark
           ref: ${{ needs.precondition.outputs.head_sha }}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Cache SBT and Maven
         uses: actions/cache@v5
         with:
@@ -1546,6 +1412,8 @@ jobs:
           restore-keys: |
             coursier-${{ runner.os }}-
       - name: Free up disk space
+        timeout-minutes: 10
+        continue-on-error: true
         run: |
           if [ -f ./dev/free_disk_space ]; then
             ./dev/free_disk_space
@@ -1556,16 +1424,10 @@ jobs:
           distribution: zulu
           java-version: ${{ inputs.java }}
       - name: Download precompiled artifact
-        id: download-precompiled
-        if: needs.precompile.result == 'success'
-        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
       - name: Extract precompiled artifact
-        id: extract-precompiled
-        if: steps.download-precompiled.outcome == 'success'
-        continue-on-error: true
         run: |
           zstd -dc compile-artifact.tar.zst | tar -xf -
           rm compile-artifact.tar.zst

@@ -19,6 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -62,7 +63,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
   // Protected by this.synchronized (always accessed inside withRetries, which holds the lock).
   private var cachedPartitions: Set[TopicPartition] = Set.empty
-  private var cacheTimestampMs: Long = 0L
+  private var cacheTimestampNanos: Option[Long] = None
 
   /**
    * An AdminClient used in the driver to query the latest Kafka offsets.
@@ -451,16 +452,20 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     if (partitionMetadataCacheTtlMs <= 0) {
       return consumerStrategy.assignedTopicPartitions(admin)
     }
-    val now = System.currentTimeMillis()
-    if (cacheTimestampMs > 0 && (now - cacheTimestampMs) < partitionMetadataCacheTtlMs) {
-      logDebug(s"Reusing cached partitions (age ${now - cacheTimestampMs}ms < " +
-        s"${partitionMetadataCacheTtlMs}ms TTL): $cachedPartitions")
-      cachedPartitions
-    } else {
-      val fresh = consumerStrategy.assignedTopicPartitions(admin)
-      cachedPartitions = fresh
-      cacheTimestampMs = now
-      fresh
+    val nowNanos = System.nanoTime()
+    cacheTimestampNanos match {
+      case Some(timestampNanos)
+          if nowNanos - timestampNanos <
+            TimeUnit.MILLISECONDS.toNanos(partitionMetadataCacheTtlMs) =>
+        val cacheAgeMs = TimeUnit.NANOSECONDS.toMillis(nowNanos - timestampNanos)
+        logDebug(s"Reusing cached partitions (age ${cacheAgeMs}ms < " +
+          s"${partitionMetadataCacheTtlMs}ms TTL): $cachedPartitions")
+        cachedPartitions
+      case _ =>
+        val fresh = consumerStrategy.assignedTopicPartitions(admin)
+        cachedPartitions = fresh
+        cacheTimestampNanos = Some(nowNanos)
+        fresh
     }
   }
 
@@ -519,6 +524,6 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     stopAdmin()
     _admin = null  // will automatically get reinitialized again
     cachedPartitions = Set.empty
-    cacheTimestampMs = 0L
+    cacheTimestampNanos = None
   }
 }
