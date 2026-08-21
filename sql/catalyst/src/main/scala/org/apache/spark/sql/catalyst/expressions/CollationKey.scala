@@ -49,6 +49,25 @@ case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsIn
 }
 
 object CollationKey {
+  // Some optimizer rules replace grouping expressions with attributes. Keep collation-key
+  // provenance on those attributes so physical planning can still recognize normalized keys.
+  // This is a best-effort performance hint (used to prefer object-hash over sort aggregation),
+  // not a correctness signal: if a later rule reconstructs an attribute without carrying the
+  // metadata, aggregation simply falls back to a sort.
+  private[sql] val COLLATION_KEY_METADATA_KEY = "__collation_key"
+
+  def hasCollationKey(expr: Expression): Boolean =
+    expr.exists(_.isInstanceOf[CollationKey]) ||
+      expr.references.exists(_.metadata.contains(COLLATION_KEY_METADATA_KEY))
+
+  def withCollationKeyMetadata(attr: Attribute): Attribute = {
+    val metadata = new MetadataBuilder()
+      .withMetadata(attr.metadata)
+      .putBoolean(COLLATION_KEY_METADATA_KEY, true)
+      .build()
+    attr.withMetadata(metadata)
+  }
+
   /**
    * Recursively process the expression in order to recursively replace non-binary collated strings
    * with their associated collation key.
@@ -99,7 +118,9 @@ object CollationKey {
           expr
         }
 
-      // Joins are not supported on maps, so there's no special handling for MapType.
+      // Collation-key normalization for MapType is not implemented, so maps (including maps that
+      // contain collated strings) are left unchanged. Callers must not assume the result is
+      // binary-stable for such inputs.
       case _ =>
         expr
     }

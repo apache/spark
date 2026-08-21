@@ -367,7 +367,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNearestByJoin,
       EvalInlineTables,
       ReplaceTranspose,
-      RewriteCollationJoin
+      RewriteCollationJoin,
+      // Runs after `PullOutGroupingExpressions` so the injected `CollationKey` is not pulled out
+      // and survives as a grouping expression, which the physical planner uses to select
+      // hash-based aggregation. Runs before "Replace Operators" and "Distinct Aggregate Rewrite"
+      // so it does not observe the aggregates those rules synthesize (e.g. RewriteExceptAll builds
+      // an Aggregate under a Generate whose references the rewrite cannot safely remap).
+      RewriteCollationAggregate
     )
 
     override def apply(plan: LogicalPlan): LogicalPlan = {

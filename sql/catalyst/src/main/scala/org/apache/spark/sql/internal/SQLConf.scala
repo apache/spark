@@ -1422,6 +1422,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val COLLATION_HASH_AGGREGATION_ENABLED =
+    buildConf("spark.sql.collation.hashAggregation.enabled")
+      .doc("When true, aggregations whose grouping keys use non-binary (collated) strings are " +
+        "rewritten to group on the collation key so that they can be executed with hash-based " +
+        "aggregation instead of falling back to sort-based aggregation. This avoids the " +
+        "expensive sort (and possible spill) that GROUP BY on collated keys would otherwise " +
+        "incur. The original grouping value is preserved in the output as an arbitrary " +
+        "representative of each collation-equal group. Projected grouping keys and other " +
+        "non-mutable aggregate buffers may use object-hash aggregation when object-hash " +
+        "aggregation is enabled; that operator keeps group buffers in memory until it falls back " +
+        "to sorting by entry count. Set this to false if that memory profile is undesirable for " +
+        "low-cardinality groups with very large collated keys.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val ICU_CASE_MAPPINGS_ENABLED =
     buildConf("spark.sql.icu.caseMappings.enabled")
       .doc("When enabled we use the ICU library (instead of the JVM) to implement case mappings" +

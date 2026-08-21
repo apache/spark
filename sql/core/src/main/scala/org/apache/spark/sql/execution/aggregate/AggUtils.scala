@@ -21,6 +21,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{ProjectAggregationBufferExec, StatefulStreamlineAggregateExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful._
@@ -75,6 +77,7 @@ object AggUtils {
       aggregateAttributes: Seq[Attribute] = Nil,
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
+      collationNormalizedGrouping: Boolean = false,
       child: SparkPlan): SparkPlan = {
     val useHash = child.conf.useHashAggregation && Aggregate.supportsHashAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes), groupingExpressions)
@@ -97,7 +100,21 @@ object AggUtils {
       val useObjectHash = Aggregate.supportsObjectHashAggregate(
         aggregateExpressions, groupingExpressions)
 
-      if (forceObjHashAggregate || (objectHashEnabled && useObjectHash)) {
+      // For aggregations whose collated grouping keys were normalized by
+      // `RewriteCollationAggregate`, regular hash aggregation may still be impossible when the
+      // aggregate buffer is not mutable, for example when a projected key is carried via `First`.
+      // Prefer object-hash aggregation to avoid the sort: `ObjectHashAggregateExec` supports
+      // non-mutable buffers and falls back to sorting when its hash map exceeds the entry-count
+      // threshold. This requires all grouping keys to be binary-stable: the rewrite may leave keys
+      // it cannot normalize (e.g. maps containing collated strings) as-is, and grouping those by
+      // raw bytes would be wrong.
+      val preferObjectHashForCollation = collationNormalizedGrouping &&
+        groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType)) &&
+        !Aggregate.isAggregateBufferMutable(DataTypeUtils.fromAttributes(
+          aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)))
+
+      if (forceObjHashAggregate ||
+          (objectHashEnabled && (useObjectHash || preferObjectHashForCollation))) {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           isStreaming = isStreaming,
@@ -130,6 +147,14 @@ object AggUtils {
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use HashAggregate.
 
+    // Collated grouping keys are normalized to their collation key by `RewriteCollationAggregate`.
+    // Detecting that `CollationKey` here (before the grouping expressions are turned into plain
+    // attributes for the final aggregate) lets `createAggregate` consistently prefer object-hash
+    // aggregation over a sort for the partial and final aggregates when the buffer is not mutable
+    // (for example, a projected key carried via `First`). When the buffer is mutable, regular hash
+    // aggregation is used and this flag has no effect.
+    val collationNormalizedGrouping = groupingExpressions.exists(CollationKey.hasCollationKey)
+
     // When partial aggregation is bypassed, skip the pre-shuffle partial aggregation and run a
     // single Complete-mode aggregation after the shuffle. This can improve performance when the
     // group cardinality is high and the pre-shuffle reduction ratio is low.
@@ -156,6 +181,7 @@ object AggUtils {
         aggregateAttributes = completeAggregateAttributes,
         initialInputBufferOffset = 0,
         resultExpressions = resultExpressions,
+        collationNormalizedGrouping = collationNormalizedGrouping,
         child = child)
       return completeAggregate :: Nil
     }
@@ -177,6 +203,7 @@ object AggUtils {
         aggregateAttributes = partialAggregateAttributes,
         initialInputBufferOffset = 0,
         resultExpressions = partialResultExpressions,
+        collationNormalizedGrouping = collationNormalizedGrouping,
         child = child)
 
     // If we have session window expression in aggregation, we add MergingSessionExec to
@@ -197,6 +224,7 @@ object AggUtils {
         aggregateAttributes = finalAggregateAttributes,
         initialInputBufferOffset = groupingExpressions.length,
         resultExpressions = resultExpressions,
+        collationNormalizedGrouping = collationNormalizedGrouping,
         child = interExec)
 
     finalAggregate :: Nil
@@ -219,6 +247,12 @@ object AggUtils {
     val distinctAttributes = normalizedNamedDistinctExpressions.map(_.toAttribute)
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
+    // See `planAggregateWithoutDistinct`. `createAggregate` additionally requires all of the
+    // grouping keys it receives to be binary-stable before preferring object-hash aggregation, so
+    // it is safe to pass this flag even to the intermediate aggregates that also group by the
+    // (possibly non-binary-stable) distinct columns.
+    val collationNormalizedGrouping = groupingExpressions.exists(CollationKey.hasCollationKey)
+
     // 1. Create an Aggregate Operator for partial aggregations.
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
@@ -232,6 +266,7 @@ object AggUtils {
         aggregateAttributes = aggregateAttributes,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        collationNormalizedGrouping = collationNormalizedGrouping,
         child = maySessionChild)
     }
 
@@ -248,6 +283,7 @@ object AggUtils {
         initialInputBufferOffset = (groupingAttributes ++ distinctAttributes).length,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        collationNormalizedGrouping = collationNormalizedGrouping,
         child = partialAggregate)
     }
 
@@ -296,6 +332,7 @@ object AggUtils {
         aggregateAttributes = mergeAggregateAttributes ++ distinctAggregateAttributes,
         initialInputBufferOffset = (groupingAttributes ++ distinctAttributes).length,
         resultExpressions = partialAggregateResult,
+        collationNormalizedGrouping = collationNormalizedGrouping,
         child = partialMergeAggregate)
     }
 
@@ -326,6 +363,7 @@ object AggUtils {
         aggregateAttributes = finalAggregateAttributes ++ distinctAggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = resultExpressions,
+        collationNormalizedGrouping = collationNormalizedGrouping,
         child = partialDistinctAggregate)
     }
 

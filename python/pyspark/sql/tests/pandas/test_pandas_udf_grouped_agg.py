@@ -1146,6 +1146,23 @@ class GroupedAggPandasUDFTestsMixin:
         expected = [Row(id=1, avg_age=27.5), Row(id=2, avg_age=37.5)]
         self.assertEqual(actual, expected)
 
+    def test_grouped_agg_with_collated_grouping_key(self):
+        # SPARK-58927: an Aggregate containing a pandas (Python) aggregate UDF must not be
+        # rewritten to inject a JVM First for a projected collated grouping key. Doing so would
+        # produce a mix of Python and JVM aggregate functions that the planner cannot place.
+        # With the projected collated key present, the query must still plan and run.
+        # Distinct base names keep the expected grouping independent of how the Python aggregate
+        # path handles collation equality (which this change does not alter, since the rewrite is
+        # skipped here); the point is that the query plans and runs with a projected collated key.
+        df = self.spark.createDataFrame(
+            [("apple", 1.0), ("banana", 3.0)], ("name", "v")
+        ).selectExpr("name COLLATE UTF8_LCASE AS name", "v")
+        sum_udf = self.pandas_agg_sum_udf
+
+        result = df.groupby("name").agg(sum_udf("v").alias("s")).collect()
+        actual = sorted((row["name"], row["s"]) for row in result)
+        self.assertEqual(actual, [("apple", 1.0), ("banana", 3.0)])
+
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):
     pass

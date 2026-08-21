@@ -455,7 +455,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("hash agg is not used for non binary collations") {
+  test("hash agg is used for non binary collations") {
     val tableNameNonBinary = "T_NON_BINARY"
     val tableNameBinary = "T_BINARY"
     withTable(tableNameNonBinary) {
@@ -465,15 +465,26 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"CREATE TABLE $tableNameBinary (c STRING COLLATE UTF8_BINARY) USING PARQUET")
         sql(s"INSERT INTO $tableNameBinary VALUES ('aaa')")
 
+        // Non-binary collated grouping keys are normalized to their collation key, so hash-based
+        // aggregation is used. Here the key is projected and carried via First, so the plan uses
+        // object hash aggregation.
         val dfNonBinary = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
         assert(collectFirst(dfNonBinary.queryExecution.executedPlan) {
           case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
-        }.isEmpty)
+        }.nonEmpty)
 
         val dfBinary = sql(s"SELECT COUNT(*), c FROM $tableNameBinary GROUP BY c")
         assert(collectFirst(dfBinary.queryExecution.executedPlan) {
           case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
         }.nonEmpty)
+
+        // With the feature disabled, non-binary collated keys fall back to sort aggregation.
+        withSQLConf(SQLConf.COLLATION_HASH_AGGREGATION_ENABLED.key -> "false") {
+          val df = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
+          assert(collectFirst(df.queryExecution.executedPlan) {
+            case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
+          }.isEmpty)
+        }
       }
     }
   }

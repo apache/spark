@@ -252,8 +252,18 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       // Create the attributes for the grouping id and the group by clause.
       val gid = AttributeReference("gid", IntegerType, nullable = false)()
       val groupByMap = a.groupingExpressions.collect {
-        case ne: NamedExpression => ne -> ne.toAttribute
-        case e => e -> AttributeReference(e.sql, e.dataType, e.nullable)()
+        case ne: NamedExpression =>
+          val attr = ne.toAttribute
+          ne -> {
+            if (CollationKey.hasCollationKey(ne)) CollationKey.withCollationKeyMetadata(attr)
+            else attr
+          }
+        case e =>
+          val attr = AttributeReference(e.sql, e.dataType, e.nullable)()
+          e -> {
+            if (CollationKey.hasCollationKey(e)) CollationKey.withCollationKeyMetadata(attr)
+            else attr
+          }
       }
       val groupByAttrs = groupByMap.map(_._2)
 

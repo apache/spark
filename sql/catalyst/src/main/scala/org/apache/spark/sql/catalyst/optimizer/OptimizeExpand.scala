@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -47,6 +48,8 @@ import org.apache.spark.sql.internal.SQLConf
  *    the inner aggregate's (minus gid), which rejects composite
  *    distinct expressions (e.g. `col1 + col2`) that introduce
  *    extra leaf attributes and inflate the Cartesian product.
+ *  - The pre-aggregate does not group directly on non-binary-stable
+ *    child attributes.
  *  - The Expand child is not already an Aggregate (idempotency)
  *
  * Controlled by `spark.sql.optimizer.optimizeExpandRatio`
@@ -92,6 +95,9 @@ object OptimizeExpand extends Rule[LogicalPlan] {
    *     expressions like `col1 + col2` fan out into more leaf
    *     attributes, inflating the Cartesian product and making
    *     pre-aggregation counterproductive.
+   *  4. The inserted pre-aggregate would not group directly on
+   *     non-binary-stable child attributes, as that can reintroduce
+   *     sort aggregation after another rule normalized those keys.
    */
   private def canOptimize(
       innerAgg: Aggregate,
@@ -107,10 +113,16 @@ object OptimizeExpand extends Rule[LogicalPlan] {
       innerAgg.groupingExpressions.flatMap(_.references))
     if (!expand.producedAttributes.subsetOf(innerGroupByAttrs)) return false
 
+    val preAggGroupBy = collectPreAggGroupBy(expand)
+
+    if (preAggGroupBy.exists(a => !UnsafeRowUtils.isBinaryStable(a.dataType))) {
+      return false
+    }
+
     // Check 3: composite expressions like col1 + col2 fan out into
     // more leaf attributes than inner group-by slots, making the
     // pre-aggregate's Cartesian product too large for effective dedup.
-    val preAggSize = expand.child.output.count(expand.references.contains)
+    val preAggSize = preAggGroupBy.size
     val innerGroupBySize = innerAgg.groupingExpressions.size - 1 // minus gid
     preAggSize <= innerGroupBySize
   }
