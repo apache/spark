@@ -2704,8 +2704,10 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("shredded variant filter: negated predicate is not pushed") {
-    // not(or(leaf, isNotNull(residual))) is rewritten by parquet-mr into an unsound
-    // and(notEq(leaf), eq(residual, null)), so a negated shredded predicate must not be pushed.
+    // not(or(leaf, and(anyResidualNotNull, isNull(leaf)))) is rewritten by parquet-mr into
+    // and(not(leaf), or(and(eq(residual, null)...), notEq(leaf, null))), which is droppable once
+    // some residual has no nulls AND the leaf is entirely NULL -- an all-fallback row group. So a
+    // negated shredded predicate must not be pushed.
     val parquetSchema =
       """message spark_schema {
         |  optional group v {

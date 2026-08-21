@@ -36,12 +36,12 @@ import org.apache.spark.util.AccumulatorContext
  * the physical leaf and guards it so a row group is skipped only when the leaf cannot match AND
  * every value for the path is provably in the leaf (see `makeShreddedFilter`).
  *
- * Scope: the optimization fires on the DSv1 read path only. On the DSv2 path variant extraction is
- * pushed through the separate SupportsPushDownVariantExtractions mechanism, and the filter is never
- * rewritten into `v.`0``, so it cannot be pushed for row-group skipping (see the comment in
- * ParquetScanBuilder). DSv2 reads remain correct -- the variant filter is applied post-scan -- they
- * just do not skip row groups. These tests therefore assert skipping only on DSv1, and assert
- * correctness on both DSv1 and DSv2.
+ * Scope: the optimization fires on the DSv1 read path only. DSv2 does rewrite variant extractions
+ * into `v.`0`` struct accesses, but only after filter pushdown has run, so the filters offered to
+ * the Parquet scan builder are still `variant_get(v, ...)` predicates and cannot be pushed for
+ * row-group skipping (see the comment in ParquetScanBuilder). DSv2 reads remain correct -- the
+ * variant filter is applied post-scan -- they just do not skip row groups. These tests therefore
+ * assert skipping only on DSv1, and assert correctness on both DSv1 and DSv2.
  *
  * The central correctness concern is soundness under fallback: shredding is per-row and per-file
  * best-effort, so values that don't fit the shredded type (overflow / type mismatch) or that are

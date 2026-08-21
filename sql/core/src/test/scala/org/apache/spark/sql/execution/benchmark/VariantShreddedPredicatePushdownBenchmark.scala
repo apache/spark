@@ -87,16 +87,20 @@ object VariantShreddedPredicatePushdownBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  // A tiny block size makes one file hold many row groups, which is the layout row-group skipping
+  // needs. `blockSize = None` uses the Parquet default (one row group for this dataset), used to
+  // show the skip-none overhead disappears when a file is not deliberately dense.
   private def createAndRunBenchmark(
       name: String,
       withFilter: DataFrame => DataFrame,
-      data: DataFrame = df): Unit = {
+      data: DataFrame = df,
+      blockSize: Option[Int] = Some(128 * 1024)): Unit = {
     withTempPath { tempDir =>
       val outputPath = tempDir.getCanonicalPath
       withSQLConf(writeConf: _*) {
-        data.write.mode(SaveMode.Overwrite)
-          .option("parquet.block.size", (128 * 1024).toString)
-          .parquet(outputPath)
+        val writer = data.write.mode(SaveMode.Overwrite)
+        blockSize.foreach(bs => writer.option("parquet.block.size", bs.toString))
+        writer.parquet(outputPath)
       }
       val benchmark = new Benchmark(name, N, NUMBER_OF_ITER, output = output)
       addCase(benchmark, outputPath, enablePushdown = "false",
@@ -124,10 +128,22 @@ object VariantShreddedPredicatePushdownBenchmark extends SqlBasedBenchmark {
 
   /**
    * Filter that matches the whole range, so no row group can be skipped -- measures the overhead
-   * of building and evaluating the pushed predicate when it never helps.
+   * of building and evaluating the pushed predicate when it never helps. Written with the tiny
+   * block size (many row groups), so this is the worst case for the overhead: it is paid per row
+   * group. Compare with `runSkipNoRowGroupsDefaultBlockSize`.
    */
   def runSkipNoRowGroups(): Unit = {
     createAndRunBenchmark("Can skip no row groups", _.filter(s"a >= 0 and a <= $N"))
+  }
+
+  /**
+   * Same skip-none filter but written at the default Parquet block size (one row group for this
+   * dataset), the layout a default-configured writer produces. The per-row-group overhead
+   * effectively vanishes here -- it scales with row-group count, the same knob as the benefit.
+   */
+  def runSkipNoRowGroupsDefaultBlockSize(): Unit = {
+    createAndRunBenchmark("Can skip no row groups (default block size)",
+      _.filter(s"a >= 0 and a <= $N"), blockSize = None)
   }
 
   /**
@@ -144,6 +160,7 @@ object VariantShreddedPredicatePushdownBenchmark extends SqlBasedBenchmark {
     runSkipAllRowGroups()
     runSkipSomeRowGroups()
     runSkipNoRowGroups()
+    runSkipNoRowGroupsDefaultBlockSize()
     runSkipSomeRowGroupsPartialObject()
   }
 }
