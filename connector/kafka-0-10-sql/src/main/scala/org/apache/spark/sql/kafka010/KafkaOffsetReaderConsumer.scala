@@ -125,10 +125,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     uninterruptibleThreadRunner.shutdown()
   }
 
-  /**
-   * @return The Set of TopicPartitions for a given topic
-   */
-  private def fetchTopicPartitions(): Set[TopicPartition] =
+  override protected def fetchTopicPartitions(): Set[TopicPartition] =
     uninterruptibleThreadRunner.runUninterruptibly {
       assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
       // Poll to get the latest assigned partitions
@@ -172,9 +169,10 @@ private[kafka010] class KafkaOffsetReaderConsumer(
   override def fetchSpecificOffsets(
       offsets: SpecificOffsetRangeLimit,
       reportDataLoss: (String, () => Throwable) => Unit): KafkaSourceOffset = {
-    val partitionOffsets = offsets.resolve(fetchTopicPartitions())
-
+    // Topic-level offsets are expanded against the partitions the fetch is actually run with,
+    // so that metadata changing in between cannot make valid offsets fail the assertion below
     val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
+      val partitionOffsets = offsets.resolve(partitions.asScala.toSet)
       assert(partitions.asScala == partitionOffsets.keySet,
         "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
           "Use -1 for latest, -2 for earliest, if you don't care.\n" +
@@ -182,12 +180,14 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
     }
 
-    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = { _ =>
-      partitionOffsets
+    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = {
+      partitions => offsets.resolve(partitions.asScala.toSet)
     }
 
     val fnAssertFetchedOffsets: Map[TopicPartition, Long] => Unit = { fetched =>
-      partitionOffsets.foreach {
+      // Only the explicitly specified offsets can be checked here. Topic-level ones always
+      // expand to the earliest/latest sentinels, which have no expected value to compare to.
+      offsets.partitionOffsets.foreach {
         case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
           off != KafkaOffsetRangeLimit.EARLIEST =>
           if (fetched(tp) != off) {

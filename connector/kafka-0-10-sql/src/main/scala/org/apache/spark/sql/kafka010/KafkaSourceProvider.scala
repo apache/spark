@@ -376,15 +376,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         throw new IllegalArgumentException("starting offset can't be latest " +
           "for batch queries on Kafka")
       case SpecificOffsetRangeLimit(partitionOffsets, topicOffsets) =>
-        partitionOffsets.foreach {
-          case (tp, off) if off == KafkaOffsetRangeLimit.LATEST =>
-            throw new IllegalArgumentException(s"startingOffsets for $tp can't " +
-              "be latest for batch queries on Kafka")
-          case _ => // ignore
-        }
-        topicOffsets.foreach {
-          case (topic, off) if off == KafkaOffsetRangeLimit.LATEST =>
-            throw new IllegalArgumentException(s"startingOffsets for $topic can't " +
+        (partitionOffsets.map { case (tp, off) => tp.toString -> off } ++ topicOffsets).foreach {
+          case (name, off) if off == KafkaOffsetRangeLimit.LATEST =>
+            throw new IllegalArgumentException(s"startingOffsets for $name can't " +
               "be latest for batch queries on Kafka")
           case _ => // ignore
         }
@@ -400,15 +394,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           "for batch queries on Kafka")
       case LatestOffsetRangeLimit => // good to go
       case SpecificOffsetRangeLimit(partitionOffsets, topicOffsets) =>
-        partitionOffsets.foreach {
-          case (tp, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
-            throw new IllegalArgumentException(s"ending offset for $tp can't be " +
-              "earliest for batch queries on Kafka")
-          case _ => // ignore
-        }
-        topicOffsets.foreach {
-          case (topic, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
-            throw new IllegalArgumentException(s"ending offset for $topic can't be " +
+        (partitionOffsets.map { case (tp, off) => tp.toString -> off } ++ topicOffsets).foreach {
+          case (name, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
+            throw new IllegalArgumentException(s"ending offset for $name can't be " +
               "earliest for batch queries on Kafka")
           case _ => // ignore
         }

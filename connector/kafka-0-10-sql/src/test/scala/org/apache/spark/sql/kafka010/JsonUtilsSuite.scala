@@ -76,6 +76,14 @@ class JsonUtilsSuite extends SparkFunSuite {
       "topicC" -> KafkaOffsetRangeLimit.LATEST))
   }
 
+  test("parsing specificOffsets rejects a topic given in both forms") {
+    val ex = intercept[IllegalArgumentException] {
+      JsonUtils.specificOffsets("""{"topicA":"earliest","topicA":{"0":23}}""")
+    }
+    assert(ex.getMessage.contains("topicA"))
+    assert(ex.getMessage.contains("both a topic-level offset"))
+  }
+
   test("parsing specificOffsets rejects malformed json") {
     Seq(
       """{"topicA":"first"}""",

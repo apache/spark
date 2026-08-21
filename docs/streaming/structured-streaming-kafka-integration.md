@@ -404,7 +404,8 @@ The following configurations are optional:
   <td>startingOffsets</td>
   <td>"earliest", "latest" (streaming only), or json string
   """ {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}} """ or
-  """ {"topicA":"earliest","topicB":"latest"} """
+  """ {"topicA":"earliest","topicB":"latest"} """ or a mix of both forms
+  """ {"topicA":"earliest","topicB":{"0":23,"1":-1},"topicC":"latest"} """
   </td>
   <td>"latest" for streaming, "earliest" for batch</td>
   <td>streaming and batch</td>
@@ -452,6 +453,7 @@ The following configurations are optional:
   <td>endingOffsets</td>
   <td>latest or json string
   {"topicA":{"0":23,"1":-1},"topicB":{"0":-1}} or {"topicA":"latest","topicB":"latest"}
+  or a mix of both forms {"topicA":"latest","topicB":{"0":23,"1":-1}}
   </td>
   <td>latest</td>
   <td>batch query</td>

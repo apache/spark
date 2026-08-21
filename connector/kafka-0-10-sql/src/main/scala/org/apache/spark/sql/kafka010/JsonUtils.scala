@@ -113,6 +113,13 @@ private object JsonUtils {
     } catch {
       case NonFatal(_) => fail()
     }
+    val bothForms = topicOffsets.keySet.intersect(partitionOffsets.keySet.map(_.topic))
+    if (bothForms.nonEmpty) {
+      throw new IllegalArgumentException(
+        s"""Topic(s) ${bothForms.toSeq.sorted.mkString(", ")} are given both a topic-level offset
+           |and per-partition offsets, only one of the two forms is allowed per topic,
+           |got $str""".stripMargin)
+    }
     SpecificOffsetRangeLimit(partitionOffsets.toMap, topicOffsets.toMap)
   }
 

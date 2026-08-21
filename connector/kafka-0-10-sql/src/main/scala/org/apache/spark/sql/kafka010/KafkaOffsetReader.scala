@@ -179,6 +179,11 @@ private[kafka010] object KafkaOffsetReader extends Logging {
 private[kafka010] abstract class KafkaOffsetReaderBase extends KafkaOffsetReader with Logging {
   protected val rangeCalculator: KafkaOffsetRangeCalculator
 
+  /**
+   * @return The set of TopicPartitions currently assigned to the query.
+   */
+  protected def fetchTopicPartitions(): Set[TopicPartition]
+
   private def getSortedExecutorList: Array[String] = {
     def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
       if (a.host == b.host) {

@@ -123,6 +123,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     stopAdmin()
   }
 
+  override protected def fetchTopicPartitions(): Set[TopicPartition] =
+    withRetries { resolvePartitions() }
+
   override def fetchPartitionOffsets(
       offsetRangeLimit: KafkaOffsetRangeLimit,
       isStartingOffsets: Boolean): Map[TopicPartition, Long] = {
@@ -134,7 +137,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
       partitionOffsets
     }
-    val partitions = withRetries { resolvePartitions() }
+    val partitions = fetchTopicPartitions()
     // Obtain TopicPartition offsets with late binding support
     offsetRangeLimit match {
       case EarliestOffsetRangeLimit => partitions.map {
@@ -157,9 +160,10 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   override def fetchSpecificOffsets(
       offsets: SpecificOffsetRangeLimit,
       reportDataLoss: (String, () => Throwable) => Unit): KafkaSourceOffset = {
-    val partitionOffsets = offsets.resolve(withRetries { resolvePartitions() })
-
+    // Topic-level offsets are expanded against the partitions the fetch is actually run with,
+    // so that metadata changing in between cannot make valid offsets fail the assertion below
     val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
+      val partitionOffsets = offsets.resolve(partitions.asScala.toSet)
       assert(partitions.asScala == partitionOffsets.keySet,
         "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
           "Use -1 for latest, -2 for earliest, if you don't care.\n" +
@@ -167,8 +171,8 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
     }
 
-    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = { _ =>
-      partitionOffsets
+    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = {
+      partitions => offsets.resolve(partitions.asScala.toSet)
     }
 
     fetchSpecificOffsets0(fnAssertParametersWithPartitions, fnRetrievePartitionOffsets)
