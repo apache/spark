@@ -90,6 +90,14 @@ public interface BoundFunction extends Function {
    * functions in other catalogs. For example, many catalogs may define a "bucket" function with a
    * different implementation. Adding context, like "com.mycompany.bucket(string)", is recommended
    * to avoid unintentional collisions.
+   * <p>
+   * Two functions that partition data differently must not return the same name; Spark may
+   * otherwise treat unrelated data as co-partitioned. An override should return a stable name
+   * across {@code bind} calls, since Spark may bind a function multiple times and has only this
+   * name to relate two bound instances by. Equal functions must share the same canonical name;
+   * the reverse is not true, as this name is deliberately coarser and says nothing about the
+   * rest of a function's state. For whether two transform expressions are the same expression,
+   * see {@link #equals(Object)}.
    *
    * @return a canonical name for this function
    */
@@ -100,4 +108,38 @@ public interface BoundFunction extends Function {
     // bugs if not replaced before release.
     return UUID.randomUUID().toString();
   }
+
+  /**
+   * Implementations SHOULD override {@link Object#equals(Object)} and {@link Object#hashCode()}.
+   * <p>
+   * Spark may bind a function multiple times, so the same transform can be represented by two
+   * different bound instances. Without a semantic {@code equals} it cannot tell they are the
+   * same, and misses optimizations such as:
+   * <ul>
+   *   <li>keeping a union's keyed partitioning</li>
+   *   <li>retaining a reported ordering that matches the partitioning</li>
+   *   <li>reusing identical bucketed scans</li>
+   *   <li>recognizing two identical subplans</li>
+   * </ul>
+   * Missed matches cost performance only, never correctness.
+   * <p>
+   * Compare whatever state affects behaviour, and keep it stable across {@code bind} calls.
+   * {@link #canonicalName()} alone is not always enough: two functions can share a name and still
+   * differ in, say, {@link #resultType()} or a {@link ReducibleFunction}'s reducers. Two functions
+   * that can produce different values must not compare equal -- the same comparison decides whether
+   * two ordinary calls to a {@link ScalarFunction} or an {@link AggregateFunction} are the same
+   * expression, so Spark may otherwise evaluate one where the query asked for the other.
+   * {@code hashCode} must agree with {@code equals}.
+   * <p>
+   * If this method is overridden, {@link #canonicalName()} should be overridden as well, so that
+   * equal functions share the same name.
+   */
+  @Override
+  boolean equals(Object other);
+
+  /**
+   * Must agree with {@link #equals(Object)}. See that method.
+   */
+  @Override
+  int hashCode();
 }
