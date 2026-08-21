@@ -344,6 +344,7 @@ __all__ = [  # noqa: F405
     "shuffle",
     "slice",
     "sort_array",
+    "trim_array",
     # Struct Functions
     "named_struct",
     "struct",

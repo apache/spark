@@ -1227,7 +1227,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     "coalesce", "collect_list", "collect_set", "collect_union", "concat", "explode",
     "explode_outer", "first", "first_value", "get", "greatest", "ifnull", "last", "last_value",
     "least", "map", "max", "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif",
-    "nullifzero", "nvl", "reverse", "shuffle", "sort_array", "struct", "when")
+    "nullifzero", "nvl", "reverse", "shuffle", "sort_array", "struct", "trim_array", "when")
 
   test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
     val argumentShapes = Seq(

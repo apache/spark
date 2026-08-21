@@ -1475,6 +1475,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId(prettyName)))
   }
 
+  def invalidElementCountForTrimArrayError(
+      prettyName: String, numElements: Int, length: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.TRIM_ARRAY_LENGTH",
+      messageParameters = Map(
+        "parameter" -> toSQLId("n"),
+        "functionName" -> toSQLId(prettyName),
+        "numElements" -> numElements.toString,
+        "length" -> length.toString))
+  }
+
   def invalidIndexOfZeroError(context: QueryContext): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "INVALID_INDEX_OF_ZERO",

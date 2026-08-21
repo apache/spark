@@ -4846,6 +4846,11 @@
           "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got '<invalidValue>'."
         ]
       },
+      "TRIM_ARRAY_LENGTH" : {
+        "message" : [
+          "Expects a value between 0 and the array cardinality (<numElements>), but got <length>."
+        ]
+      },
       "ZERO_INDEX" : {
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."

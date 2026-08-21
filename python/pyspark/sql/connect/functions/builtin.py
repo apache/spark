@@ -2520,6 +2520,28 @@ def slice(
 slice.__doc__ = pysparkfuncs.slice.__doc__
 
 
+def trim_array(x: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
+    n = _enum_to_value(n)
+    if isinstance(n, (Column, str)):
+        _n = n
+    elif isinstance(n, int):
+        _n = lit(n)
+    else:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "n",
+                "arg_type": type(n).__name__,
+            },
+        )
+
+    return _invoke_function_over_columns("trim_array", x, _n)
+
+
+trim_array.__doc__ = pysparkfuncs.trim_array.__doc__
+
+
 def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     return _invoke_function("sort_array", _to_col(col), lit(asc))
 

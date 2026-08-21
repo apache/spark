@@ -813,6 +813,7 @@ object FunctionRegistry {
     expression[MapConcat]("map_concat"),
     expression[Size]("size"),
     expression[Slice]("slice"),
+    expression[TrimArray]("trim_array"),
     expression[Size]("cardinality", true, Some("2.4.0")),
     expression[ArraysZip]("arrays_zip"),
     expression[SortArray]("sort_array"),
