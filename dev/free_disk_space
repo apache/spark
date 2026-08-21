@@ -48,18 +48,18 @@ package_patterns=(
   '^aspnet.*'
   '^dotnet-.*'
   '^llvm-.*'
+  '^mongodb-.*'
   '^temurin-.*'
   'php.*'
-  '^mongodb-.*'
-  snapd
-  google-chrome-stable
-  microsoft-edge-stable
-  firefox
   azure-cli
+  firefox
+  google-chrome-stable
   google-cloud-sdk
+  libgl1-mesa-dri
+  microsoft-edge-stable
   mono-devel
   powershell
-  libgl1-mesa-dri
+  snapd
 )
 for package_pattern in "${package_patterns[@]}"; do
   sudo apt-get remove --purge -y "$package_pattern" || true
