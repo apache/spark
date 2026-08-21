@@ -2836,9 +2836,11 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     _.containsPattern(LOCAL_RELATION), ruleId) {
     case Project(projectList, LocalRelation(output, data, isStreaming, stream))
         if !projectList.exists(hasUnevaluableExpr) =>
-      val projection = new InterpretedMutableProjection(projectList, output)
+      val freshProjectList = projectList.map(
+        _.freshCopyIfContainsStatefulExpression().asInstanceOf[NamedExpression])
+      val projection = new InterpretedMutableProjection(freshProjectList, output)
       projection.initialize(0)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection(_).copy()),
+      LocalRelation(freshProjectList.map(_.toAttribute), data.map(projection(_).copy()),
         isStreaming, stream)
 
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
@@ -2849,7 +2851,8 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 
     case Filter(condition, LocalRelation(output, data, isStreaming, stream))
         if !hasUnevaluableExpr(condition) =>
-      val predicate = Predicate.create(condition, output)
+      val freshCondition = condition.freshCopyIfContainsStatefulExpression()
+      val predicate = Predicate.create(freshCondition, output)
       predicate.initialize(0)
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
   }
