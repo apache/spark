@@ -25,9 +25,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
-import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 /**
  * This rule rewrites Aggregate grouping expressions to ensure that non-binary collated strings
@@ -50,7 +47,7 @@ object RewriteCollationAggregate extends Rule[LogicalPlan] {
             if a.resolved && groupingExpressions.exists(e => !UnsafeRowUtils.isBinaryStable(e.dataType)) =>
           val keyMapping = mutable.LinkedHashMap.empty[Expression, Expression]
           val newGroupingExpressions = groupingExpressions.map { ge =>
-            val processed = processExpression(ge, ge.dataType)
+            val processed = CollationKey.injectCollationKey(ge)
             if (!processed.fastEquals(ge)) {
               keyMapping.put(ge.canonicalized, ge)
               processed
@@ -76,12 +73,23 @@ object RewriteCollationAggregate extends Rule[LogicalPlan] {
               case a @ Alias(child, name) =>
                 val newChild = replaceGroupingKeyReferences(child)
                 if (!newChild.fastEquals(child)) {
-                  Alias(newChild, name)(exprId = a.exprId, explicitMetadata = a.explicitMetadata)
+                  Alias(newChild, name)(exprId = a.exprId, qualifier = a.qualifier, explicitMetadata = a.explicitMetadata)
                 } else {
                   a
                 }
+              case attr: Attribute =>
+                val newChild = replaceGroupingKeyReferences(attr)
+                if (!newChild.fastEquals(attr)) {
+                  Alias(newChild, attr.name)(exprId = attr.exprId, qualifier = attr.qualifier)
+                } else {
+                  attr
+                }
               case other =>
-                replaceGroupingKeyReferences(other).asInstanceOf[NamedExpression]
+                val newOther = replaceGroupingKeyReferences(other)
+                newOther match {
+                  case ne: NamedExpression => ne
+                  case expr => Alias(expr, expr.prettyName)()
+                }
             }
 
             a.copy(
@@ -91,55 +99,6 @@ object RewriteCollationAggregate extends Rule[LogicalPlan] {
             a
           }
       }
-    }
-  }
-
-  /**
-   * Recursively process the expression in order to replace non-binary collated strings with their
-   * associated collation keys. This is necessary to ensure grouping is evaluated correctly for all
-   * types containing non-binary collated strings, including structs and arrays.
-   */
-  private def processExpression(expr: Expression, dt: DataType): Expression = {
-    dt match {
-      // For binary stable expressions, no special handling is needed.
-      case _ if UnsafeRowUtils.isBinaryStable(dt) =>
-        expr
-
-      // Inject CollationKey for non-binary collated strings.
-      case _: StringType =>
-        CollationKey(expr)
-
-      // Recursively process struct fields for non-binary structs.
-      case StructType(fields) =>
-        processStruct(expr, fields)
-
-      // Recursively process array elements for non-binary arrays.
-      case ArrayType(et, containsNull) =>
-        processArray(expr, et, containsNull)
-
-      case _ =>
-        expr
-    }
-  }
-
-  private def processStruct(str: Expression, fields: Array[StructField]): Expression = {
-    val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
-      Seq(Literal(f.name), processExpression(GetStructField(str, i, Some(f.name)), f.dataType))
-    }.toImmutableArraySeq)
-    if (str.nullable) {
-      If(IsNull(str), Literal(null, struct.dataType), struct)
-    } else {
-      struct
-    }
-  }
-
-  private def processArray(arr: Expression, et: DataType, containsNull: Boolean): Expression = {
-    val param: NamedExpression = NamedLambdaVariable("a", et, containsNull)
-    val funcBody: Expression = processExpression(param, et)
-    if (!funcBody.fastEquals(param)) {
-      ArrayTransform(arr, LambdaFunction(funcBody, Seq(param)))
-    } else {
-      arr
     }
   }
 }
