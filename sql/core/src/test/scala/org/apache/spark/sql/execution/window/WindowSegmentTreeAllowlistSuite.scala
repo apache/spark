@@ -31,11 +31,13 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Coverage for the explicit segment-tree aggregate allowlist
  * ([[WindowSegmentTree.EligibleAggregates]]):
  *   - allowlisted aggregates route to segtree (`numSegmentTreeFrames` bumps).
- *   - non-allowlisted aggregates fall through to the sliding path without crashing or producing
- *     wrong results (segtree counters stay at 0).
- * Eligibility gating only; exhaustive equivalence lives in [[SegmentTreeWindowFunctionSuite]].
+ *   - non-allowlisted aggregates fall through to the sliding path without
+ *     crashing or producing wrong results (segtree counters stay at 0).
+ * Eligibility gating only; exhaustive equivalence lives in
+ * [[SegmentTreeWindowFunctionSuite]].
  */
-class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetricsTestUtils {
+class WindowSegmentTreeAllowlistSuite
+    extends SharedSparkSession with SQLMetricsTestUtils {
 
   import testImplicits._
 
@@ -48,9 +50,8 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
     SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true",
     SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false")
 
-  private def baseDF = spark
-    .range(0, 120)
-    .selectExpr("id", "(id % 3) AS pk", "CAST(id AS INT) AS v", "CAST(id AS DOUBLE) AS vd")
+  private def baseDF = spark.range(0, 120).selectExpr(
+    "id", "(id % 3) AS pk", "CAST(id AS INT) AS v", "CAST(id AS DOUBLE) AS vd")
 
   private val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-3, 3)
 
@@ -71,8 +72,7 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
         "-?\\d+".r.findFirstIn(raw).map(_.toLong).getOrElse(0L)
       }.getOrElse(0L)
     }
-    (
-      total("number of segment-tree frames prepared"),
+    (total("number of segment-tree frames prepared"),
       total("number of segment-tree fallback frames prepared"))
   }
 
@@ -185,7 +185,8 @@ class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetrics
 
   test("mix of allowlisted + non-allowlisted aggregates falls through entirely") {
     withSQLConf(enableSegTree.toSeq: _*) {
-      val df = baseDF.withColumn("s", sum($"v").over(winSpec))
+      val df = baseDF
+        .withColumn("s", sum($"v").over(winSpec))
         .withColumn("cl", collect_list($"v").over(winSpec))
       val (seg, _) = segTreeCounters(df)
       // Both aggregates share the same Window node; gating is forall(isEligible),

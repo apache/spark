@@ -47,15 +47,19 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
 
   // Spill-safety: when `input` (ExternalAppendOnlyUnsafeRowArray) spills, its
   // iterator reuses a single UnsafeRow whose pointer is rebound on each next().
-  // This is safe because both cursors follow a read-before-advance pattern:
-  // `lowerRow`/`nextRow` are used for comparison *before* calling getNextOrNull.
-  // Values are extracted from the row via `evaluateAndCopy` before advancing.
-  // DO NOT cache a historical row without an explicit .copy(); the shared
-  // reusable UnsafeRow would silently mutate.
+  // This is safe because nextRow (and lowerRow on RANGE frames) are used for
+  // comparison *before* calling getNextOrNull. Values are extracted from the row
+  // via `evaluateAndCopy` before advancing. DO NOT cache a historical row without
+  // an explicit .copy(); the shared reusable UnsafeRow would silently mutate.
   private[this] var lowerIterator: Iterator[UnsafeRow] = _
   private[this] var inputIterator: Iterator[UnsafeRow] = _
 
-  /** The row at lowerBound. */
+  // RowBoundOrdering.compare ignores its inputRow (it only uses the index), so
+  // the lower cursor is only needed for RANGE frames. Passing a null lowerRow to
+  // lbound.compare is safe on the ROWS path for exactly this reason.
+  private[this] val needsLowerRow = !lbound.isInstanceOf[RowBoundOrdering]
+
+  /** The row at lowerBound. Only valid when needsLowerRow is true. */
   private[this] var lowerRow: UnsafeRow = null
 
   /** The next row from `input`. */
@@ -97,8 +101,13 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     numMonotonicDequeFrames.foreach(_ += 1)
     input = rows
-    lowerIterator = input.generateIterator()
-    lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
+    if (needsLowerRow) {
+      lowerIterator = input.generateIterator()
+      lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
+    } else {
+      lowerIterator = null
+      lowerRow = null
+    }
     var di = 0
     while (di < deques.length) { deques(di).clear(); di += 1 }
     lowerBound = 0
@@ -115,7 +124,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     // the output row lower bound.
     while (lowerBound < upperBound && lbound.compare(lowerRow, lowerBound, current, index) < 0) {
       lowerBound += 1
-      lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
+      if (needsLowerRow) lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
       bufferUpdated = true
     }
 
@@ -124,7 +133,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     while (nextRow != null && ubound.compare(nextRow, upperBound, current, index) <= 0) {
       if (lbound.compare(nextRow, lowerBound, current, index) < 0) {
         lowerBound += 1
-        lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
+        if (needsLowerRow) lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
       } else {
         var di = 0
         while (di < deques.length) { deques(di).admit(nextRow, upperBound); di += 1 }
