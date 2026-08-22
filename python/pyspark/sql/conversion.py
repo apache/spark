@@ -19,7 +19,18 @@ import array
 import datetime
 import decimal
 import functools
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
+import math
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Union,
+    overload,
+)
 
 import pyspark
 from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError, PySparkValueError
@@ -73,9 +84,73 @@ if TYPE_CHECKING:
 
 class ArrowBatchTransformer:
     """
-    Pure functions that transform RecordBatch -> RecordBatch.
+    Pure functions to transform:
+    - RecordBatch -> RecordBatch
+    - Iterator[RecordBatch] -> Iterator[RecordBatch]
+
     They should have no side effects (no I/O, no writing to streams).
     """
+
+    @staticmethod
+    def resize_batches(
+        batches: Iterator["pa.RecordBatch"], max_bytes: int
+    ) -> Iterator["pa.RecordBatch"]:
+        """
+        Slice each RecordBatch down toward ``max_bytes``.
+
+        A batch estimated larger than ``max_bytes`` is split into
+        ``ceil(nbytes / max_bytes)`` slices, with the rows divided as evenly as
+        possible across them; a batch already within ``max_bytes`` (or empty) is
+        yielded unchanged. Slicing is zero-copy: each slice is a view over the
+        input batch's buffers, not a copy. This is a best-effort estimate: the
+        per-slice byte size is not measured, so a skewed, variable-width batch
+        can still exceed ``max_bytes``.
+
+        The examples below use ``max_bytes = 256 MB``.
+
+        Case 1 - larger than max_bytes, so it is split. A 700 MB batch of
+        1,000,000 rows -> ceil(700 / 256) = 3 slices; the rows do not divide
+        evenly, so they are balanced to 333,333 / 333,333 / 333,334:
+
+          in   +-----------------------------------+
+               |       700 MB, 1,000,000 rows      |
+               +-----------------------------------+
+          out  +-----------+-----------+-----------+
+               |  ~233 MB  |  ~233 MB  |  ~233 MB  |
+               |  333,333  |  333,333  |  333,334  |
+               +-----------+-----------+-----------+
+
+        Case 2 - within max_bytes, so it is passed through unchanged. An 80 MB
+        batch of 500,000 rows -> 1 batch, identical to the input:
+
+          in   +-- 80 MB, 500,000 rows --+
+               +-------------------------+
+          out  +-- 80 MB, 500,000 rows --+
+               +-------------------------+
+
+        Case 3 - empty (0 rows), so it is passed through unchanged:
+
+          in   +-- 0 rows --+
+               +------------+
+          out  +-- 0 rows --+
+               +------------+
+        """
+        for batch in batches:
+            num_rows = batch.num_rows
+            if num_rows == 0:
+                yield batch
+                continue
+
+            nbytes = batch.nbytes
+            if nbytes <= max_bytes:
+                yield batch
+                continue
+
+            num_slices = min(math.ceil(nbytes / max_bytes), num_rows)
+            for i in range(num_slices):
+                offset = i * num_rows // num_slices
+                length = (i + 1) * num_rows // num_slices - offset
+                yield batch.slice(offset, length)
 
     @staticmethod
     def flatten_struct(batch: "pa.RecordBatch", column_index: int = 0) -> "pa.RecordBatch":
