@@ -156,7 +156,7 @@ public abstract class WritableColumnVector extends ColumnVector {
         "refer to " + SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().key() +
         " (default " + SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().defaultValueString() +
         ") and " + SQLConf.ORC_VECTORIZED_READER_ENABLED().key() + ".";
-    throw new RuntimeException(message, cause);
+    throw new VectorizedReaderCapacityOverflowException(message, cause);
   }
 
   @Override
