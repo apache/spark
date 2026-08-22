@@ -300,10 +300,16 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
-    def selectExpr(self, *expr: Union[str, List[str]]) -> ParentDataFrame:
+    @overload
+    def selectExpr(self, *expr: str) -> ParentDataFrame: ...
+
+    @overload
+    def selectExpr(self, __expr: Sequence[str]) -> ParentDataFrame: ...
+
+    def selectExpr(self, *expr: Union[str, Sequence[str]]) -> ParentDataFrame:
         sql_expr = []
-        if len(expr) == 1 and isinstance(expr[0], list):
-            expr = expr[0]  # type: ignore[assignment]
+        if len(expr) == 1 and not isinstance(expr[0], str) and isinstance(expr[0], Sequence):
+            expr = tuple(expr[0])
         for element in expr:
             if isinstance(element, str):
                 sql_expr.append(F.expr(element))
@@ -1601,9 +1607,15 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
-    def describe(self, *cols: Union[str, List[str]]) -> ParentDataFrame:
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]  # type: ignore[assignment]
+    @overload
+    def describe(self, *cols: str) -> ParentDataFrame: ...
+
+    @overload
+    def describe(self, __cols: Sequence[str]) -> ParentDataFrame: ...
+
+    def describe(self, *cols: Union[str, Sequence[str]]) -> ParentDataFrame:
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
+            cols = tuple(cols[0])
 
         _cols = []
         for column in cols:
