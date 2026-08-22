@@ -82,6 +82,19 @@ private[spark] class TaskSetManager(
   private val isShuffleMapTasks = tasks(0).isInstanceOf[ShuffleMapTask]
   // shuffleId is only available when isShuffleMapTasks=true
   private val shuffleId = taskSet.shuffleId
+  // Scopes stale-push reducer fallback to indeterminate stages (deterministic stages reproduce
+  // identical output across attempts, so a stale push there is benign). Defaults to false when the
+  // stage isn't registered (e.g. tests). Uses taskSet.stageId (constructor param) because the
+  // `stageId` field below is not initialized yet at this source position.
+  private val isIndeterminateShuffleMapStage: Boolean = isShuffleMapTasks &&
+    sched.dagScheduler.stageIdToStage.get(taskSet.stageId)
+      .collect {
+        case sms: ShuffleMapStage => sms.isStaticallyIndeterminate || sms.isRuntimeIndeterminate
+      }
+      .getOrElse(false)
+  private val stalePushFallbackEnabled = conf.get(config.STALE_PUSH_FALLBACK_ENABLED)
+  private val stalePushDetectAllStagesEnabled =
+    conf.get(config.STALE_PUSH_DETECT_ALL_STAGES_ENABLED)
   private[scheduler] val partitionToIndex = tasks.zipWithIndex
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
@@ -944,10 +957,14 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * For ShuffleMapTasks, detect stale push: if a partition already has
-   * a registered MapStatus with a different mapId, it means another attempt for the same
-   * partition also pushed data to the merger. Mark this partition so that reducers will
-   * skip the merged block and fallback to unmerged blocks.
+   * Detect stale push for late/killed duplicate map attempts (called from handleSuccessfulTask
+   * when another attempt already succeeded). Every such attempt is reported (logged) on the
+   * driver with its indeterminacy so it is observable regardless of the fallback setting.
+   *
+   * Reducer fallback (marking the partition so reducers skip the merged block) is off by
+   * default (spark.shuffle.push.stale.fallback.enabled); when enabled it covers indeterminate
+   * stages only, and is extended to all map stages via
+   * spark.shuffle.push.stale.detectAllStages.enabled.
    *
    * This is called from handleSuccessfulTask for late-arriving or killed attempt results,
    * where the task result won't be forwarded to DAGScheduler (so DAGScheduler's own
@@ -964,11 +981,17 @@ private[spark] class TaskSetManager(
     val mapStatus = result.value().asInstanceOf[MapStatus]
     val sid = shuffleId.get
     val partitionId = tasks(index).partitionId
-    // Mark its mapIndex (== partitionId, NOT MapStatus.mapId) as stale so reducers can detect
-    // the stale data in merged block chunks via chunkBitmaps and fallback if needed.
     logInfo(s"[StalePush] Late/killed attempt tid=$tid for partition=$partitionId " +
-      s"(index=$index), attemptMapId=${mapStatus.mapId}. Marked as stale push.")
-    sched.mapOutputTracker.markStalePushedPartition(sid, partitionId)
+      s"(index=$index), attemptMapId=${mapStatus.mapId}, " +
+      s"indeterminate=$isIndeterminateShuffleMapStage.")
+    // Report every duplicate map attempt; gate reducer fallback by the fallback switch first,
+    // then by stage scope (indeterminate stages only, unless detectAllStages is enabled).
+    if (stalePushFallbackEnabled &&
+        (stalePushDetectAllStagesEnabled || isIndeterminateShuffleMapStage)) {
+      // Mark its mapIndex (== partitionId, NOT MapStatus.mapId) as stale so reducers can detect
+      // the stale data in merged block chunks via chunkBitmaps and fallback if needed.
+      sched.mapOutputTracker.markStalePushedPartition(sid, partitionId)
+    }
   }
 
   private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
