@@ -498,6 +498,12 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     new ResourceProfileBuilder().require(treqs).build()
   }
 
+  test("SPARK-58362: Custom RP ID does not collide with DEFAULT_RESOURCE_PROFILE_ID") {
+    val rp = new ResourceProfileBuilder().build()
+    assert(rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    assert(rp.id > ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+  }
+
   private def withMockSparkEnv(conf: SparkConf)(f: => Unit): Unit = {
     val previousEnv = SparkEnv.get
     val mockEnv = mock[SparkEnv]
