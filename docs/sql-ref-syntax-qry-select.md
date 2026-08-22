@@ -53,6 +53,12 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
     [ QUALIFY boolean_expression ]
 ```
 
+A table relation in `from_item` can include dynamic table options:
+
+```sql
+table_identifier [ WITH ( option_key = option_value [ , ... ] ) ] [ [ AS ] table_alias ]
+```
+
 ### Parameters
 
 * **with_query**
@@ -98,6 +104,11 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      * [UNNEST relation](sql-ref-syntax-qry-select-unnest.html)
      * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )
      * [File](sql-ref-syntax-qry-select-file.html)
+
+* **WITH ( option_key = option_value [ , ... ] )**
+
+     Specifies dynamic table options for a table relation. These options are passed to the data
+     source connector when reading the table. The supported options depend on the connector.
      
 * **PIVOT**
 
@@ -191,6 +202,16 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * **TRANSFORM**
 
      Specifies a hive-style transform query specification to transform the input by forking and running user-specified command or script.
+
+### Examples
+
+#### Select Using Dynamic Table Options
+
+```sql
+-- Option names and values are specific to the table's
+-- data source connector.
+SELECT * FROM students WITH (`split-size` = 5);
+```
 
 ### Related Statements
 
