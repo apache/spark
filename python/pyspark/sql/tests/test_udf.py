@@ -71,6 +71,8 @@ class BaseUDFTestsMixin:
         pudf = UserDefinedFunction(call, LongType())
         res = data.select(pudf(data["number"]).alias("plus_four"))
         self.assertEqual(res.agg({"plus_four": "sum"}).collect()[0][0], 85)
+        # TODO:REMOVE THIS!
+        self.assertEqual(1, 2)
 
     def test_udf_with_partial_function(self):
         data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])
