@@ -52,7 +52,11 @@ from pyspark.sql.types import (
     MapType,
     NumericType,
     _from_numpy_type,
+    UserDefinedType as _UserDefinedType,
 )
+
+if TYPE_CHECKING:
+    from pyspark.sql.types import UserDefinedType
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
@@ -29199,6 +29203,10 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         The underlying representation.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.wrap_udt`
+
     Examples
     --------
     Example 1: Unwrap ML-specific UDT - VectorUDT
@@ -29242,6 +29250,107 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
     from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("unwrap_udt", _to_java_column(col))
+
+
+@_try_remote_functions
+def wrap_udt(col: "ColumnOrName", udt: "Union[UserDefinedType, Column]") -> Column:
+    """
+    Wrap a column as a user-defined type.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column to wrap. The column data type must match the UDT's underlying SQL type.
+    udt : :class:`~pyspark.sql.types.UserDefinedType` or :class:`~pyspark.sql.Column`
+        The target user-defined type, or a constant string column containing its JSON
+        representation.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column of the target user-defined type.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.unwrap_udt`
+
+    Examples
+    --------
+    Example 1: Wrapping a vector struct as VectorUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.types import StructField, StructType
+    >>> from pyspark.ml.linalg import VectorUDT
+    >>> vector_schema = StructType([StructField("vec", VectorUDT.sqlType(), True)])
+    >>> df = spark.createDataFrame(
+    ...     [(Row(type=1, size=None, indices=None, values=[1.0, 2.0, 3.0]),)],
+    ...     vector_schema)
+    >>> df.select("*", sf.wrap_udt("vec", VectorUDT())).show()
+    +--------------------+...+
+    |                 vec|wrap_udt(vec...|
+    +--------------------+...+
+    |{1, NULL, NULL, [...|...[1.0,2.0,3.0]|
+    +--------------------+...+
+    >>> row = df.select(sf.wrap_udt("vec", VectorUDT())).first()
+    >>> type(row[0])
+    <class 'pyspark.ml.linalg.DenseVector'>
+
+    Example 2: Wrapping a matrix struct as MatrixUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.types import StructField, StructType
+    >>> from pyspark.mllib.linalg import MatrixUDT
+    >>> matrix_schema = StructType([StructField("mat", MatrixUDT.sqlType(), True)])
+    >>> df = spark.createDataFrame(
+    ...     [(
+    ...         Row(
+    ...             type=1,
+    ...             numRows=2,
+    ...             numCols=2,
+    ...             colPtrs=None,
+    ...             rowIndices=None,
+    ...             values=[1.0, 2.0, 3.0, 4.0],
+    ...             isTransposed=False),
+    ...     )],
+    ...     matrix_schema)
+    >>> df.select("*", sf.wrap_udt("mat", MatrixUDT())).printSchema()
+    root
+     |-- mat: struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- numRows: integer (nullable = false)
+     |    |-- numCols: integer (nullable = false)
+     |    |-- colPtrs: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- rowIndices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+     |    |-- isTransposed: boolean (nullable = false)
+     |-- wrap_udt(mat...: matrix... (nullable = true)
+    >>> row = df.select(sf.wrap_udt("mat", MatrixUDT())).first()
+    >>> type(row[0])
+    <class 'pyspark.mllib.linalg.DenseMatrix'>
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    if isinstance(udt, _UserDefinedType):
+        udt_col = lit(udt.json())
+    elif isinstance(udt, Column):
+        udt_col = udt
+    else:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "UserDefinedType or Column",
+                "arg_name": "udt",
+                "arg_type": type(udt).__name__,
+            },
+        )
+    return _invoke_function("wrap_udt", _to_java_column(col), _to_java_column(udt_col))
 
 
 # ---------------------- Datasketch functions ------------------------------

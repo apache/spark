@@ -628,4 +628,5 @@ __all__ = [  # noqa: F405
     "udtf",
     "arrow_udtf",
     "unwrap_udt",
+    "wrap_udt",
 ]
