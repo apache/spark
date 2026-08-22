@@ -1236,11 +1236,13 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val keySchema = new StructType().add("id", IntegerType)
     val userSchema = keySchema.add("value", StringType)
 
-    val aux = auxTableOf(userSchema)(Row(1, "aux", 40L, null, Row(40L), null))
+    // A standalone delete at 40 found nothing live to close, so it survives in the auxiliary
+    // table as a tombstone. The upsert at 42 then opened a run in the gap after it.
+    val aux = auxTableOf(userSchema)(Row(1, null, 40L, 40L, Row(40L), null))
     val target = targetTableOf(userSchema)(Row(1, "target", 42L, null, Row(42L)))
     val minSeq = minSeqOf(keySchema)(Row(1, 50L))
 
-    // The target's row at 42 is the cutoff, so the auxiliary row at 40 falls below it.
+    // The target's row at 42 is the cutoff, so the auxiliary tombstone at 40 falls below it.
     checkAnswer(
       df = findAffectedTargetRows(processor, target = target, aux = aux, minSeq = minSeq),
       expectedAnswer = Seq(Row(1, "target", 42L, null, Row(42L)))
