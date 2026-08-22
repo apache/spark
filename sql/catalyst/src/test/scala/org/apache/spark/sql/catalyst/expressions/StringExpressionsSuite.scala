@@ -836,6 +836,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(-10, IntegerType)), "__park SQL")
     checkEvaluation(Overlay(Literal("Spark SQL"), Literal("__"),
       Literal.create(-10, IntegerType), Literal.create(4, IntegerType)), "__rk SQL")
+    // SPARK-58713: `pos - 1` and `pos + len` must not overflow the int range. Before the
+    // fix each of these duplicated the input around the replacement.
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MaxValue, IntegerType), Literal.create(5, IntegerType)), "Spark SQL_")
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MaxValue, IntegerType)), "Spark SQL_")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MaxValue - 2, IntegerType), Literal.create(10, IntegerType)),
+      "Spark SQL_")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(1, IntegerType)), "_Spark SQL")
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MinValue, IntegerType)), "_Spark SQL")
   }
 
   test("overlay for byte array") {
@@ -874,6 +887,21 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(-10, IntegerType)), Array[Byte](-1, -1, 2, 3, 4, 5, 6, 7, 8, 9))
     checkEvaluation(Overlay(input, Literal(Array[Byte](-1, -1)), Literal.create(-10, IntegerType),
       Literal.create(4, IntegerType)), Array[Byte](-1, -1, 4, 5, 6, 7, 8, 9))
+    // SPARK-58713: `pos - 1` and `pos + len` must not overflow the int range. Before the
+    // fix each of these duplicated the input around the replacement.
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MaxValue, IntegerType), Literal.create(5, IntegerType)),
+      Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MaxValue, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MaxValue - 2, IntegerType), Literal.create(10, IntegerType)),
+      Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(1, IntegerType)),
+      Array[Byte](-1, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MinValue, IntegerType)), Array[Byte](-1, 1, 2, 3, 4, 5, 6, 7, 8, 9))
   }
 
   test("Check Overlay.checkInputDataTypes results") {
