@@ -182,7 +182,10 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /** Create a handler for proxying request to Workers and Application Drivers */
-  def createProxyHandler(idToUiAddress: String => Option[String]): ServletContextHandler = {
+  def createProxyHandler(
+      idToUiAddress: String => Option[String],
+      reverseProxyUrl: String = ""): ServletContextHandler = {
+    val normalizedReverseProxyUrl = reverseProxyUrl.stripSuffix("/")
     val servlet = new ProxyServlet {
       override def rewriteTarget(request: HttpServletRequest): String = {
         val path = request.getPathInfo
@@ -206,6 +209,25 @@ private[spark] object JettyUtils extends Logging {
           .orNull
       }
 
+      override def addProxyHeaders(
+          clientRequest: HttpServletRequest,
+          proxyRequest: org.eclipse.jetty.client.api.Request): Unit = {
+        super.addProxyHeaders(clientRequest, proxyRequest)
+        val path = clientRequest.getPathInfo
+        if (path != null) {
+          val prefixTrailingSlashIndex = path.indexOf('/', 1)
+          val prefix = if (prefixTrailingSlashIndex == -1) {
+            path
+          } else {
+            path.substring(0, prefixTrailingSlashIndex)
+          }
+          val existingContext = Option(clientRequest.getHeader("X-Forwarded-Context")).getOrElse("")
+          val contextPath = Option(clientRequest.getContextPath).getOrElse("")
+          val proxyContext = existingContext + normalizedReverseProxyUrl + contextPath + prefix
+          proxyRequest.headers(headers => headers.put("X-Forwarded-Context", proxyContext))
+        }
+      }
+
       override def newHttpClient(): HttpClient = {
         // SPARK-21176: Use the Jetty logic to calculate the number of selector threads (#CPUs/2),
         // but limit it to 8 max.
@@ -222,6 +244,15 @@ private[spark] object JettyUtils extends Logging {
           val newHeader = createProxyLocationHeader(headerValue, clientRequest,
             serverResponse.getRequest().getURI())
           if (newHeader != null) {
+            if (normalizedReverseProxyUrl.nonEmpty) {
+              val scheme = clientRequest.getScheme
+              val host = Option(clientRequest.getHeader("host")).getOrElse("")
+              val rootProxyPrefix = s"$scheme://$host/proxy/"
+              if (newHeader.startsWith(rootProxyPrefix)) {
+                val rest = newHeader.substring(rootProxyPrefix.length)
+                return s"$normalizedReverseProxyUrl/proxy/$rest"
+              }
+            }
             return newHeader
           }
         }

@@ -1371,6 +1371,49 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(msg.contains("Cannot use the keyword 'proxy' or 'history' in reverse proxy URL"))
   }
 
+  test("SPARK-58893: propagate UI_REVERSE_PROXY_URL to spark.ui.proxyBase in SparkContext") {
+    val conf = new SparkConf().setAppName("testReverseProxyBase")
+      .setMaster("local")
+      .set(UI_REVERSE_PROXY, true)
+      .set(UI_REVERSE_PROXY_URL, "http://proxyhost:8080/myprefix")
+    sc = new SparkContext(conf)
+    assert(System.getProperty("spark.ui.proxyBase") ===
+      s"http://proxyhost:8080/myprefix/proxy/${sc.applicationId}")
+  }
+
+  test("SPARK-58893: fallback spark.ui.proxyBase when UI_REVERSE_PROXY_URL is empty") {
+    val sysProxyBase = "http://proxyhost:8080/sysprefix"
+    System.setProperty("spark.ui.proxyBase", sysProxyBase)
+    try {
+      val conf = new SparkConf().setAppName("testReverseProxyBaseSys")
+        .setMaster("local")
+        .set(UI_REVERSE_PROXY, true)
+      sc = new SparkContext(conf)
+      assert(System.getProperty("spark.ui.proxyBase") ===
+        s"$sysProxyBase/proxy/${sc.applicationId}")
+    } finally {
+      resetSparkContext()
+      System.clearProperty("spark.ui.proxyBase")
+    }
+  }
+
+  test("SPARK-58893: avoid compounding derived proxy root across multiple SparkContexts") {
+    val conf1 = new SparkConf().setAppName("testApp1")
+      .setMaster("local")
+      .set(UI_REVERSE_PROXY, true)
+    sc = new SparkContext(conf1)
+    val app1Id = sc.applicationId
+    assert(System.getProperty("spark.ui.proxyBase") === s"/proxy/$app1Id")
+    resetSparkContext()
+
+    val conf2 = new SparkConf().setAppName("testApp2")
+      .setMaster("local")
+      .set(UI_REVERSE_PROXY, true)
+    sc = new SparkContext(conf2)
+    val app2Id = sc.applicationId
+    assert(System.getProperty("spark.ui.proxyBase") === s"/proxy/$app2Id")
+  }
+
   test("SPARK-39957: ExitCode HEARTBEAT_FAILURE should be counted as network failure") {
     // This test is used to prove that driver will receive executorExitCode before onDisconnected
     // removes the executor. If the executor is removed by onDisconnected, the executor loss will be
