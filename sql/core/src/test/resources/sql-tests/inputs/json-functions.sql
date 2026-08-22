@@ -285,3 +285,81 @@ select json_query('{"a":[1,2]}', '$.a[*]');
 select json_query('{"a":1}', '$.a' RETURNING INT);
 -- invalid: OMIT QUOTES combined with an array wrapper
 select json_query('{"name":"Ada"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES);
+-- IS [NOT] JSON
+-- basic well-formedness
+select '{"a":1}' IS JSON;
+select '[1,2]' IS JSON;
+select '42' IS JSON;
+select '"hello"' IS JSON;
+select 'not json' IS JSON;
+select '' IS JSON;
+-- IS NOT JSON
+select '{"a":1}' IS NOT JSON;
+select 'bad' IS NOT JSON;
+-- NULL propagates
+select cast(null as string) IS JSON;
+select cast(null as string) IS NOT JSON;
+-- shape qualifiers
+select '{"a":1}' IS JSON OBJECT;
+select '[1,2]' IS JSON OBJECT;
+select '[1,2]' IS JSON ARRAY;
+select '{"a":1}' IS JSON ARRAY;
+-- IS JSON VALUE: any valid JSON value (including objects and arrays)
+select '42' IS JSON VALUE;
+select '"hello"' IS JSON VALUE;
+select '{"a":1}' IS JSON VALUE;
+select '[1,2]' IS JSON VALUE;
+select 'bad' IS JSON VALUE;
+-- IS JSON SCALAR: only primitives (string, number, boolean, null -- not object/array)
+select '42' IS JSON SCALAR;
+select '"hello"' IS JSON SCALAR;
+select 'true' IS JSON SCALAR;
+select 'false' IS JSON SCALAR;
+select '[1]' IS JSON SCALAR;
+select '{"a":1}' IS JSON SCALAR;
+-- IS NOT JSON with shape qualifiers
+select '{"a":1}' IS NOT JSON OBJECT;
+select '[1,2]' IS NOT JSON ARRAY;
+select '{"a":1}' IS NOT JSON VALUE;
+select 'bad' IS NOT JSON VALUE;
+select '{"a":1}' IS NOT JSON SCALAR;
+select '42' IS NOT JSON SCALAR;
+-- JSON null literal is valid JSON and counts as a scalar
+select 'null' IS JSON;
+select 'null' IS JSON SCALAR;
+select 'null' IS JSON VALUE;
+select 'null' IS JSON OBJECT;
+-- keywords usable as identifiers (non-reserved)
+select 1 AS OBJECT;
+select 1 AS SCALAR;
+
+-- IS JSON with a table: filtering rows by JSON shape
+-- includes 'null' (JSON null literal) as a scalar, and a SQL NULL row
+CREATE TEMPORARY VIEW events(id, payload) AS
+  SELECT * FROM VALUES
+    (1, '{"event":"click","user":42}'),
+    (2, '[1, 2, 3]'),
+    (3, '"hello"'),
+    (4, '99'),
+    (5, 'null'),
+    (6, 'not-json'),
+    (7, NULL);
+
+-- NULL propagation in WHERE: SQL-NULL rows absent from IS JSON and IS NOT JSON results
+SELECT id, payload FROM events WHERE payload IS JSON ORDER BY id;
+SELECT id, payload FROM events WHERE payload IS NOT JSON ORDER BY id;
+
+-- IS NOT JSON OBJECT vs IS NOT JSON: contrast (array/scalar/invalid all pass the former)
+SELECT id, payload FROM events WHERE payload IS NOT JSON OBJECT ORDER BY id;
+
+-- CASE covers all four shapes in one pass; 'null' JSON literal classifies as scalar
+SELECT id,
+       CASE
+         WHEN payload IS JSON OBJECT THEN 'object'
+         WHEN payload IS JSON ARRAY  THEN 'array'
+         WHEN payload IS JSON SCALAR THEN 'scalar'
+         ELSE 'invalid or null'
+       END AS kind
+FROM events ORDER BY id;
+
+DROP VIEW events;

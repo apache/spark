@@ -1725,3 +1725,349 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "json_query('{\"name\":\"Ada\"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES)"
   } ]
 }
+
+
+-- !query
+select '{"a":1}' IS JSON
+-- !query analysis
+Project [is_json({"a":1}, Any) AS ({"a":1} IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '[1,2]' IS JSON
+-- !query analysis
+Project [is_json([1,2], Any) AS ([1,2] IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '42' IS JSON
+-- !query analysis
+Project [is_json(42, Any) AS (42 IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '"hello"' IS JSON
+-- !query analysis
+Project [is_json("hello", Any) AS ("hello" IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select 'not json' IS JSON
+-- !query analysis
+Project [is_json(not json, Any) AS (not json IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '' IS JSON
+-- !query analysis
+Project [is_json(, Any) AS ( IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS NOT JSON
+-- !query analysis
+Project [NOT is_json({"a":1}, Any) AS (NOT ({"a":1} IS JSON))#x]
++- OneRowRelation
+
+
+-- !query
+select 'bad' IS NOT JSON
+-- !query analysis
+Project [NOT is_json(bad, Any) AS (NOT (bad IS JSON))#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as string) IS JSON
+-- !query analysis
+Project [is_json(cast(null as string), Any) AS (CAST(NULL AS STRING) IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as string) IS NOT JSON
+-- !query analysis
+Project [NOT is_json(cast(null as string), Any) AS (NOT (CAST(NULL AS STRING) IS JSON))#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS JSON OBJECT
+-- !query analysis
+Project [is_json({"a":1}, Object) AS ({"a":1} IS JSON OBJECT)#x]
++- OneRowRelation
+
+
+-- !query
+select '[1,2]' IS JSON OBJECT
+-- !query analysis
+Project [is_json([1,2], Object) AS ([1,2] IS JSON OBJECT)#x]
++- OneRowRelation
+
+
+-- !query
+select '[1,2]' IS JSON ARRAY
+-- !query analysis
+Project [is_json([1,2], Array) AS ([1,2] IS JSON ARRAY)#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS JSON ARRAY
+-- !query analysis
+Project [is_json({"a":1}, Array) AS ({"a":1} IS JSON ARRAY)#x]
++- OneRowRelation
+
+
+-- !query
+select '42' IS JSON VALUE
+-- !query analysis
+Project [is_json(42, Value) AS (42 IS JSON VALUE)#x]
++- OneRowRelation
+
+
+-- !query
+select '"hello"' IS JSON VALUE
+-- !query analysis
+Project [is_json("hello", Value) AS ("hello" IS JSON VALUE)#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS JSON VALUE
+-- !query analysis
+Project [is_json({"a":1}, Value) AS ({"a":1} IS JSON VALUE)#x]
++- OneRowRelation
+
+
+-- !query
+select '[1,2]' IS JSON VALUE
+-- !query analysis
+Project [is_json([1,2], Value) AS ([1,2] IS JSON VALUE)#x]
++- OneRowRelation
+
+
+-- !query
+select 'bad' IS JSON VALUE
+-- !query analysis
+Project [is_json(bad, Value) AS (bad IS JSON VALUE)#x]
++- OneRowRelation
+
+
+-- !query
+select '42' IS JSON SCALAR
+-- !query analysis
+Project [is_json(42, Scalar) AS (42 IS JSON SCALAR)#x]
++- OneRowRelation
+
+
+-- !query
+select '"hello"' IS JSON SCALAR
+-- !query analysis
+Project [is_json("hello", Scalar) AS ("hello" IS JSON SCALAR)#x]
++- OneRowRelation
+
+
+-- !query
+select 'true' IS JSON SCALAR
+-- !query analysis
+Project [is_json(true, Scalar) AS (true IS JSON SCALAR)#x]
++- OneRowRelation
+
+
+-- !query
+select 'false' IS JSON SCALAR
+-- !query analysis
+Project [is_json(false, Scalar) AS (false IS JSON SCALAR)#x]
++- OneRowRelation
+
+
+-- !query
+select '[1]' IS JSON SCALAR
+-- !query analysis
+Project [is_json([1], Scalar) AS ([1] IS JSON SCALAR)#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS JSON SCALAR
+-- !query analysis
+Project [is_json({"a":1}, Scalar) AS ({"a":1} IS JSON SCALAR)#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS NOT JSON OBJECT
+-- !query analysis
+Project [NOT is_json({"a":1}, Object) AS (NOT ({"a":1} IS JSON OBJECT))#x]
++- OneRowRelation
+
+
+-- !query
+select '[1,2]' IS NOT JSON ARRAY
+-- !query analysis
+Project [NOT is_json([1,2], Array) AS (NOT ([1,2] IS JSON ARRAY))#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS NOT JSON VALUE
+-- !query analysis
+Project [NOT is_json({"a":1}, Value) AS (NOT ({"a":1} IS JSON VALUE))#x]
++- OneRowRelation
+
+
+-- !query
+select 'bad' IS NOT JSON VALUE
+-- !query analysis
+Project [NOT is_json(bad, Value) AS (NOT (bad IS JSON VALUE))#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1}' IS NOT JSON SCALAR
+-- !query analysis
+Project [NOT is_json({"a":1}, Scalar) AS (NOT ({"a":1} IS JSON SCALAR))#x]
++- OneRowRelation
+
+
+-- !query
+select '42' IS NOT JSON SCALAR
+-- !query analysis
+Project [NOT is_json(42, Scalar) AS (NOT (42 IS JSON SCALAR))#x]
++- OneRowRelation
+
+
+-- !query
+select 'null' IS JSON
+-- !query analysis
+Project [is_json(null, Any) AS (null IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select 'null' IS JSON SCALAR
+-- !query analysis
+Project [is_json(null, Scalar) AS (null IS JSON SCALAR)#x]
++- OneRowRelation
+
+
+-- !query
+select 'null' IS JSON VALUE
+-- !query analysis
+Project [is_json(null, Value) AS (null IS JSON VALUE)#x]
++- OneRowRelation
+
+
+-- !query
+select 'null' IS JSON OBJECT
+-- !query analysis
+Project [is_json(null, Object) AS (null IS JSON OBJECT)#x]
++- OneRowRelation
+
+
+-- !query
+select 1 AS OBJECT
+-- !query analysis
+Project [1 AS OBJECT#x]
++- OneRowRelation
+
+
+-- !query
+select 1 AS SCALAR
+-- !query analysis
+Project [1 AS SCALAR#x]
++- OneRowRelation
+
+
+-- !query
+CREATE TEMPORARY VIEW events(id, payload) AS
+  SELECT * FROM VALUES
+    (1, '{"event":"click","user":42}'),
+    (2, '[1, 2, 3]'),
+    (3, '"hello"'),
+    (4, '99'),
+    (5, 'null'),
+    (6, 'not-json'),
+    (7, NULL)
+-- !query analysis
+CreateViewCommand `events`, [(id,None), (payload,None)], SELECT * FROM VALUES
+    (1, '{"event":"click","user":42}'),
+    (2, '[1, 2, 3]'),
+    (3, '"hello"'),
+    (4, '99'),
+    (5, 'null'),
+    (6, 'not-json'),
+    (7, NULL), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x]
+      +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT id, payload FROM events WHERE payload IS JSON ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, payload#x]
+   +- Filter is_json(payload#x, Any)
+      +- SubqueryAlias events
+         +- View (`events`, [id#x, payload#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS payload#x]
+               +- Project [col1#x, col2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT id, payload FROM events WHERE payload IS NOT JSON ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, payload#x]
+   +- Filter NOT is_json(payload#x, Any)
+      +- SubqueryAlias events
+         +- View (`events`, [id#x, payload#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS payload#x]
+               +- Project [col1#x, col2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT id, payload FROM events WHERE payload IS NOT JSON OBJECT ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, payload#x]
+   +- Filter NOT is_json(payload#x, Object)
+      +- SubqueryAlias events
+         +- View (`events`, [id#x, payload#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS payload#x]
+               +- Project [col1#x, col2#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT id,
+       CASE
+         WHEN payload IS JSON OBJECT THEN 'object'
+         WHEN payload IS JSON ARRAY  THEN 'array'
+         WHEN payload IS JSON SCALAR THEN 'scalar'
+         ELSE 'invalid or null'
+       END AS kind
+FROM events ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, CASE WHEN is_json(payload#x, Object) THEN object WHEN is_json(payload#x, Array) THEN array WHEN is_json(payload#x, Scalar) THEN scalar ELSE invalid or null END AS kind#x]
+   +- SubqueryAlias events
+      +- View (`events`, [id#x, payload#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS payload#x]
+            +- Project [col1#x, col2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+DROP VIEW events
+-- !query analysis
+DropTempViewCommand events, false

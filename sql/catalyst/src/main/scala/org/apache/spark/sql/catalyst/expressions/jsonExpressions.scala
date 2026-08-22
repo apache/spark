@@ -1631,3 +1631,66 @@ case class JsonTypeof(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): JsonTypeof =
     copy(child = newChild)
 }
+
+// Shape qualifier for IS [NOT] JSON: which top-level JSON type to require.
+sealed trait IsJsonShape
+object IsJsonShape {
+  // Per ANSI SQL:2016 T801, IS JSON VALUE is semantically equivalent to bare IS JSON:
+  // both accept any well-formed JSON value (object, array, or scalar). They are kept as
+  // separate shapes so the sql() output round-trips faithfully.
+  case object Any extends IsJsonShape    // IS JSON (no qualifier)
+  case object Value extends IsJsonShape  // IS JSON VALUE
+  case object Scalar extends IsJsonShape // IS JSON SCALAR -- primitives only (not object/array)
+  case object Array extends IsJsonShape  // IS JSON ARRAY
+  case object Object extends IsJsonShape // IS JSON OBJECT
+}
+
+case class IsJson(child: Expression, shape: IsJsonShape = IsJsonShape.Any)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def dataType: DataType = BooleanType
+  // NULL input propagates as NULL (three-valued logic). Invalid JSON yields false, not NULL,
+  // because json_typeof returns NULL for both cases and the If(IsNull(child), ...) wrapper
+  // in replacement distinguishes them before the shape check runs.
+  override def nullable: Boolean = true
+
+  override def prettyName: String = "is_json"
+
+  override def sql: String = {
+    val shapeSql = shape match {
+      case IsJsonShape.Any => ""
+      case IsJsonShape.Value => " VALUE"
+      case IsJsonShape.Object => " OBJECT"
+      case IsJsonShape.Array => " ARRAY"
+      case IsJsonShape.Scalar => " SCALAR"
+    }
+    s"(${child.sql} IS JSON$shapeSql)"
+  }
+
+  // json_typeof returns NULL for both null input and invalid JSON. The If(IsNull) wrapper
+  // propagates NULL input as NULL; for invalid JSON json_typeof also returns NULL but the
+  // child is not NULL, so shapeCheck evaluates to false via IsNotNull.
+  override def replacement: Expression = {
+    val jsonType = JsonTypeof(child)
+    val shapeCheck: Expression = shape match {
+      case IsJsonShape.Any | IsJsonShape.Value =>
+        IsNotNull(jsonType)
+      case IsJsonShape.Object =>
+        And(IsNotNull(jsonType), EqualTo(jsonType, Literal("object")))
+      case IsJsonShape.Array =>
+        And(IsNotNull(jsonType), EqualTo(jsonType, Literal("array")))
+      case IsJsonShape.Scalar =>
+        And(IsNotNull(jsonType),
+          Not(In(jsonType, Seq(Literal("object"), Literal("array")))))
+    }
+    If(IsNull(child), Literal.create(null, BooleanType), shapeCheck)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): IsJson =
+    copy(child = newChild)
+}
