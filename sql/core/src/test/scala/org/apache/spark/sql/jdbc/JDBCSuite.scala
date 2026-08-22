@@ -2927,6 +2927,74 @@ class JDBCSuite extends SharedSparkSession {
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("Connection reset", "08001")))
   }
 
+  test("MySQLDialect syntax error detection") {
+    val dialect = MySQLDialect()
+    assert(dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "You have an error in your SQL syntax; check the manual that corresponds to your " +
+          "MySQL server version for the right syntax to use near 'SELCT' at line 1",
+        "42000",
+        1064)))
+    // Permission / limit failures share SQLSTATE 42000; detect by error code.
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "Access denied for user 'testuser'@'%' to database 'testdb'",
+        "42000",
+        1044)))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "SELECT command denied to user 'testuser'@'%' for table 't1'",
+        "42000",
+        1142)))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "SELECT command denied to user 'testuser'@'%' for column 'c1' in table 't1'",
+        "42000",
+        1143)))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "The used command is not allowed with this MySQL version",
+        "42000",
+        1148)))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "User testuser already has more than 'max_user_connections' active connections",
+        "42000",
+        1203)))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "User 'testuser' has exceeded the 'max_queries_per_hour' resource (current value: 1000)",
+        "42000",
+        1226)))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "Access denied; you need (at least one of) the SUPER privilege(s) for this operation",
+        "42000",
+        1227)))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "execute command denied to user 'testuser'@'%' for routine 'p1'",
+        "42000",
+        1370)))
+    // Best-effort message fallback when the vendor error code is absent.
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "execute command denied to user 'testuser'@'%' for table 't1'",
+        "42000")))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "You must have privileges to update tables in the mysql database to be able to " +
+          "change passwords for others",
+        "42000")))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(
+        "Access denied for user 'testuser'@'%' to database 'testdb'",
+        "42000")))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException(null, "42000", 1142)))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("Connection reset", "08001")))
+  }
+
   test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)
