@@ -104,13 +104,6 @@ case class Scd2BatchProcessor(
         // if the user's change feed source did not emit duplicate sequences: the auxiliary merge
         // commits before the target merge, which re-reads that table, so a row this batch wrote to
         // the auxiliary table re-enters the window beside the copy the microbatch or the target
-<<<<<<< HEAD
-        // table still holds. The copies differ only in the boundaries each one recorded, so
-        // descending order keeps the earliest of them - dropRedundantRowsPostDecomposition drops a
-        // tie's leading row - and nulls sort first so a copy that recorded no boundary never
-        // displaces one that did.
-        startAtCol.desc_nulls_first,
-=======
         // table still holds. The copies differ only in the boundaries each one recorded, and the
         // two keys below break that tie deterministically - dropRedundantRowsPostDecomposition
         // drops a tie's leading row, so the copy sorting last is the one that survives.
@@ -121,7 +114,6 @@ case class Scd2BatchProcessor(
         startAtCol.desc_nulls_first,
         // Copies agreeing on their run start may still disagree on its closure, so nulls sort
         // first and are dropped: a copy that recorded no boundary never displaces one that did.
->>>>>>> master
         endAtCol.desc_nulls_first
       )
   }
@@ -368,8 +360,6 @@ case class Scd2BatchProcessor(
 
   /**
    * Per key, keep only rows in [[rowsDf]] that are included by the sequence cutoff.
-<<<<<<< HEAD
-=======
    *
    * A plain `effectiveRecordStartAt >= cutoff` threshold suffices, in both directions:
    *
@@ -385,7 +375,6 @@ case class Scd2BatchProcessor(
    *    by at least one intervening row, and cannot be affected by it. An open row is the one case
    *    that does not follow from separation alone, since it is affected by anything after it -
    *    but no row can intervene above an open row, as that row would have closed it.
->>>>>>> master
    */
   private def selectRowsAtOrAfterCutoff(
       rowsDf: DataFrame,
@@ -1550,11 +1539,7 @@ object Scd2BatchProcessor {
    *
    * Temporary in that the column has no observable side effect or persistence across microbatches.
    */
-<<<<<<< HEAD
-  private[autocdc] val affectedSequenceCutoffColName: String =
-=======
   private val affectedSequenceCutoffColName: String =
->>>>>>> master
     s"${AutoCdcReservedNames.prefix}affected_sequence_cutoff"
 
   /**
