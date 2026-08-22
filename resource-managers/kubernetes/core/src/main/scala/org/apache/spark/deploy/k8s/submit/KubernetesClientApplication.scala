@@ -136,7 +136,10 @@ private[spark] class Client(
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
     // setup resources before pod creation
-    val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources
+    // SPARK-38079: the driver's own base config map (mounted as SPARK_CONF_VOLUME_DRIVER
+    // above) must also be created before the pod itself, to avoid a "configmap ... not
+    // found" mount race between the driver pod and the config map it depends on.
+    val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources ++ Seq(configMap)
     try {
       kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
     } catch {
@@ -172,7 +175,7 @@ private[spark] class Client(
 
     // setup resources after pod creation, and refresh all resources' owner references
     try {
-      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
+      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources
       addOwnerReference(createdDriverPod, otherKubernetesResources)
       kubernetesClient.resourceList(otherKubernetesResources: _*).forceConflicts().serverSideApply()
     } catch {

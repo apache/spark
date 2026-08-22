@@ -211,7 +211,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       loggingPodStatusWatcher)
     submissionClient.run()
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues.asScala.flatten
-    assert(otherCreatedResources.size === 2)
+    // SPARK-38079: the driver's own config map is now a pre-resource, so it is sent via
+    // resourceList() twice (once before pod creation, once for the owner-reference
+    // refresh) -- 2 for the config map, 1 for the (post-resource) secret.
+    assert(otherCreatedResources.size === 3)
     val secrets = otherCreatedResources.toArray.filter(_.isInstanceOf[Secret]).toSeq
     assert(secrets === ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES)
     val configMaps = otherCreatedResources.toArray
@@ -225,6 +228,35 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf2key=conf2value"))
+  }
+
+  test("SPARK-38079: driver's own config map is created before the driver pod, " +
+      "to avoid a mount race") {
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+    submissionClient.run()
+    // The first resourceList(...) call is always the pre-resources application, which
+    // happens before the driver pod is created. The driver's own config map must be
+    // included there so that it exists in Kubernetes before the pod that mounts it.
+    val firstResourceListCall = createdResourcesArgumentCaptor.getAllValues.get(0)
+    val configMaps = firstResourceListCall.filter(_.isInstanceOf[ConfigMap])
+    assert(configMaps.nonEmpty,
+      "the driver's own config map must be sent as a pre-resource, before the driver pod " +
+        "is created, to avoid a \"configmap ... not found\" mount race (SPARK-38079)")
+
+    // Safety check: the pre-resource owner-reference refresh (the second resourceList()
+    // call) must still set an owner reference on the config map, same as before this
+    // change, so that it is still garbage-collected along with the driver pod.
+    val secondResourceListCall = createdResourcesArgumentCaptor.getAllValues.get(1)
+    val refreshedConfigMap = secondResourceListCall
+      .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap]).head
+    val ownerReferences = refreshedConfigMap.getMetadata.getOwnerReferences
+    assert(ownerReferences.size() === 1)
+    assert(ownerReferences.get(0).getName === POD_NAME)
+    assert(ownerReferences.get(0).getUid === DRIVER_POD_UID)
   }
 
   test("SPARK-37331: The client should create Kubernetes resources with pre resources") {
@@ -248,8 +280,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     submissionClient.run()
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues.asScala.flatten
 
-    // 2 for pre-resource creation/update, 1 for resource creation, 1 for config map
-    assert(otherCreatedResources.size === 4)
+    // 2 for pre-resource creation/update, 1 for (post-resource) secret creation, and
+    // 2 for the driver's own config map (SPARK-38079: now also a pre-resource, so it is
+    // sent twice -- once before pod creation, once for the owner-reference refresh)
+    assert(otherCreatedResources.size === 5)
     val preRes = otherCreatedResources.toArray
       .filter(_.isInstanceOf[CustomResourceDefinition]).toSeq
 
