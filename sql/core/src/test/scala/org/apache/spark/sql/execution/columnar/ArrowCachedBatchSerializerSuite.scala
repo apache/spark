@@ -1413,19 +1413,18 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(tsNtzStats.getLong(0) < tsNtzStats.getLong(1))
     tsNtzDf.unpersist()
 
-    // FloatType: NaN is included but IEEE 754 comparisons with NaN are always false,
-    // so NaN never updates min/max; lower=1.0f, upper=10.0f
+    // FloatType: NaN sorts after all finite values; lower=1.0f, upper=NaN
     val floatDf = singlePartDf(Seq(1.0f, Float.NaN, 10.0f), FloatType).cache()
     val floatStats = cachedStats(floatDf)
     assert(!floatStats.isNullAt(0) && !floatStats.isNullAt(1))
-    assert(floatStats.getFloat(0) == 1.0f && floatStats.getFloat(1) == 10.0f)
+    assert(floatStats.getFloat(0) == 1.0f && floatStats.getFloat(1).isNaN)
     floatDf.unpersist()
 
-    // DoubleType: same NaN-exclusion behavior via IEEE 754; lower=1.0, upper=10.0
+    // DoubleType: NaN sorts after all finite values; lower=1.0, upper=NaN
     val doubleDf = singlePartDf(Seq(1.0, Double.NaN, 10.0), DoubleType).cache()
     val doubleStats = cachedStats(doubleDf)
     assert(!doubleStats.isNullAt(0) && !doubleStats.isNullAt(1))
-    assert(doubleStats.getDouble(0) == 1.0 && doubleStats.getDouble(1) == 10.0)
+    assert(doubleStats.getDouble(0) == 1.0 && doubleStats.getDouble(1).isNaN)
     doubleDf.unpersist()
 
     // StringType (UTF8_BINARY): "apple" < "zebra" in binary order
@@ -1537,35 +1536,17 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assertNullBounds(spark.sql("SELECT parse_json('{\"k\":1}') AS v").cache())
   }
 
-  test("row path stats: all-NaN Float/Double column produces inverted sentinel bounds") {
-    // FloatColumnStats and DoubleColumnStats initialize upper=MinValue, lower=MaxValue as
-    // sentinels. IEEE 754 comparisons with NaN are always false, so NaN never beats either
-    // sentinel. When every value is NaN, the sentinels are returned unchanged: lower=MaxValue,
-    // upper=MinValue (lower > upper). This differs from the Arrow path, which returns null bounds
-    // for all-NaN input (because calculateMinMaxFloat/Double explicitly skips NaN with !_.isNaN
-    // and returns (null, null) when hasValue stays false).
+  test("row path stats: all-NaN Float/Double columns produce NaN bounds") {
     val floatDf = singlePartDf(Seq(Float.NaN), FloatType).cache()
     val floatStats = cachedStats(floatDf)
-    assert(!floatStats.isNullAt(0),
-      "FloatType lower should not be null for all-NaN (sentinel used)")
-    assert(!floatStats.isNullAt(1),
-      "FloatType upper should not be null for all-NaN (sentinel used)")
-    assert(floatStats.getFloat(0) == Float.MaxValue,
-      s"FloatType lower expected Float.MaxValue (sentinel), got ${floatStats.getFloat(0)}")
-    assert(floatStats.getFloat(1) == Float.MinValue,
-      s"FloatType upper expected Float.MinValue (sentinel), got ${floatStats.getFloat(1)}")
+    assert(!floatStats.isNullAt(0) && floatStats.getFloat(0).isNaN)
+    assert(!floatStats.isNullAt(1) && floatStats.getFloat(1).isNaN)
     floatDf.unpersist()
 
     val doubleDf = singlePartDf(Seq(Double.NaN), DoubleType).cache()
     val doubleStats = cachedStats(doubleDf)
-    assert(!doubleStats.isNullAt(0),
-      "DoubleType lower should not be null for all-NaN (sentinel used)")
-    assert(!doubleStats.isNullAt(1),
-      "DoubleType upper should not be null for all-NaN (sentinel used)")
-    assert(doubleStats.getDouble(0) == Double.MaxValue,
-      s"DoubleType lower expected Double.MaxValue (sentinel), got ${doubleStats.getDouble(0)}")
-    assert(doubleStats.getDouble(1) == Double.MinValue,
-      s"DoubleType upper expected Double.MinValue (sentinel), got ${doubleStats.getDouble(1)}")
+    assert(!doubleStats.isNullAt(0) && doubleStats.getDouble(0).isNaN)
+    assert(!doubleStats.isNullAt(1) && doubleStats.getDouble(1).isNaN)
     doubleDf.unpersist()
   }
 
@@ -1631,12 +1612,12 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       dtiVector.setSafe(0, 86400000000L)       // 1 day in microseconds
       timeVector.setSafe(0, 28800000000000L)   // 08:00:00 in nanoseconds
 
-      // Row 1: mid values -- Float/Double use NaN to verify NaN is excluded from min/max
+      // Row 1: mid values -- Float/Double use NaN to verify Catalyst ordering
       boolVector.setSafe(1, 1)               // true -- becomes the max
       byteVector.setSafe(1, 5.toByte)
       shortVector.setSafe(1, 500.toShort)
-      floatVector.setSafe(1, Float.NaN)      // NaN: must not affect lower=1.0f or upper=10.0f
-      doubleVector.setSafe(1, Double.NaN)    // NaN: must not affect lower=1.0 or upper=10.0
+      floatVector.setSafe(1, Float.NaN)      // NaN becomes the upper bound
+      doubleVector.setSafe(1, Double.NaN)    // NaN becomes the upper bound
       dateVector.setSafe(1, 19000)
       tsVector.setSafe(1, 1700000000000000L)
       tsNtzVector.setSafe(1, 1700000000000000L)
@@ -1680,13 +1661,13 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       assert(stats.getShort(10) == 100.toShort, s"ShortType lower=${stats.getShort(10)}")
       assert(stats.getShort(11) == 1000.toShort, s"ShortType upper=${stats.getShort(11)}")
 
-      // col3 FloatType (offset 15): lower=1.0f, upper=10.0f
+      // col3 FloatType (offset 15): lower=1.0f, upper=NaN
       assert(stats.getFloat(15) == 1.0f, s"FloatType lower=${stats.getFloat(15)}")
-      assert(stats.getFloat(16) == 10.0f, s"FloatType upper=${stats.getFloat(16)}")
+      assert(stats.getFloat(16).isNaN, s"FloatType upper=${stats.getFloat(16)}")
 
-      // col4 DoubleType (offset 20): lower=1.0, upper=10.0
+      // col4 DoubleType (offset 20): lower=1.0, upper=NaN
       assert(stats.getDouble(20) == 1.0, s"DoubleType lower=${stats.getDouble(20)}")
-      assert(stats.getDouble(21) == 10.0, s"DoubleType upper=${stats.getDouble(21)}")
+      assert(stats.getDouble(21).isNaN, s"DoubleType upper=${stats.getDouble(21)}")
 
       // col5 DateType (offset 25): lower=18262 (2020-01-01), upper=20000
       assert(stats.getInt(25) == 18262, s"DateType lower=${stats.getInt(25)}")
@@ -1927,11 +1908,7 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
         "equal sizes mean the configured level is being ignored")
   }
 
-  test("collectStatistics returns null bounds when all Float/Double values are NaN") {
-    // When every non-null value in a Float or Double column is NaN, calculateMinMaxFloat/Double
-    // finds no valid (non-NaN) values. hasValue stays false -> returns (null, null) -> null bounds.
-    // Null bounds disable partition pruning, ensuring NaN-only batches are never incorrectly
-    // pruned.
+  test("collectStatistics returns NaN bounds when all Float/Double values are NaN") {
     val schema = Seq(
       AttributeReference("float_col", FloatType)(),
       AttributeReference("double_col", DoubleType)()
@@ -1953,13 +1930,13 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
 
       val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
 
-      // FloatType (col0, offset 0): no valid values -> null bounds
-      assert(stats.isNullAt(0), "FloatType lower bound should be null when all values are NaN")
-      assert(stats.isNullAt(1), "FloatType upper bound should be null when all values are NaN")
+      // FloatType (col0, offset 0): lower=NaN, upper=NaN
+      assert(!stats.isNullAt(0) && stats.getFloat(0).isNaN)
+      assert(!stats.isNullAt(1) && stats.getFloat(1).isNaN)
 
-      // DoubleType (col1, offset 5): no valid values -> null bounds
-      assert(stats.isNullAt(5), "DoubleType lower bound should be null when all values are NaN")
-      assert(stats.isNullAt(6), "DoubleType upper bound should be null when all values are NaN")
+      // DoubleType (col1, offset 5): lower=NaN, upper=NaN
+      assert(!stats.isNullAt(5) && stats.getDouble(5).isNaN)
+      assert(!stats.isNullAt(6) && stats.getDouble(6).isNaN)
 
       root.close()
     } catch {
