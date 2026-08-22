@@ -1634,6 +1634,55 @@ class JDBCSuite extends SharedSparkSession {
       Some(TimestampType))
   }
 
+  test("SPARK-58876: Oracle DATE and TIMESTAMP map to TimestampNTZType by default") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    // Oracle DATE and TIMESTAMP are zoneless and arrive as JDBC Types.TIMESTAMP (bare typeName,
+    // precision in scale), so by default they map to TimestampNTZType, independent of
+    // the preferTimestampNTZ read option.
+    Seq("DATE", "TIMESTAMP").foreach { typeName =>
+      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, typeName, 0, null) ===
+        Some(TimestampNTZType), s"typeName=$typeName")
+    }
+    // The legacy flag restores the pre-4.4 behavior: defer to the shared default mapping, which
+    // yields TimestampType (or TimestampNTZType only when preferTimestampNTZ is set).
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, null) === None)
+    }
+  }
+
+  test("SPARK-58876: Oracle NTZ read preserves the wall-clock value across time zones") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    // The driver decodes an Oracle DATE/TIMESTAMP into a java.sql.Timestamp using the JVM zone;
+    // convertJavaTimestampToTimestampNTZ must read those same fields back with no zone shift.
+    val expected = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
+    Seq("UTC", "America/Los_Angeles", "Asia/Kolkata").foreach { tz =>
+      DateTimeTestUtils.withDefaultTimeZone(java.time.ZoneId.of(tz)) {
+        assert(oracleDialect.convertJavaTimestampToTimestampNTZ(
+          Timestamp.valueOf("1991-11-09 00:00:00")) === expected, s"tz=$tz")
+      }
+    }
+  }
+
+  test("SPARK-58876: Oracle compileValue renders a LocalDateTime as a JDBC timestamp literal") {
+    // Filters on an NTZ-mapped Oracle column push down a LocalDateTime; it must become a valid
+    // Oracle literal rather than LocalDateTime.toString.
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    assert(oracleDialect.compileValue(LocalDateTime.of(2018, 7, 6, 6, 0, 0)) ===
+      "{ts '2018-07-06 06:00:00.0'}")
+  }
+
+  test("SPARK-58876: Oracle TIMESTAMP stays microsecond TimestampNTZType under the nanos preview") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    // Even with the nanosecond timestamp preview enabled, the Oracle mapping is microsecond
+    // TimestampNTZType and does not engage that preview (no nanosecond type, no deferral).
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val md = new MetadataBuilder()
+        .putBoolean("preferTimestampNanos", value = true).putLong("scale", 9)
+      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, md) ===
+        Some(TimestampNTZType))
+    }
+  }
+
   test("SPARK-42469: OracleDialect Limit query test") {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))

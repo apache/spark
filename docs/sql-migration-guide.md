@@ -24,6 +24,7 @@ license: |
 
 ## Upgrading from Spark SQL 4.3 to 4.4
 
+- Since Spark 4.4, the Oracle JDBC datasource reads Oracle TIMESTAMP as TimestampNTZType (and Oracle DATE too, when the driver default `oracle.jdbc.mapDateToTimestamp=true` surfaces it as TIMESTAMP), regardless of the JDBC read option `preferTimestampNTZ`; in 4.3 and earlier these were read as TimestampType (or TimestampNTZType when `preferTimestampNTZ=true`). This faithfully represents these zoneless Oracle types. Unaffected: Oracle DATE read with `oracle.jdbc.mapDateToTimestamp=false` (mapped to DateType, as before), and TIMESTAMP WITH TIME ZONE / TIMESTAMP WITH LOCAL TIME ZONE. To restore the previous behavior, set `spark.sql.legacy.oracle.timestampNTZMapping.enabled` to `true`.
 - Since Spark 4.4, for storage-partitioned joins, `spark.sql.requireAllClusterKeysForCoPartition` requires every join key to be covered by some partition key instead of matching the partition keys positionally. As a result, a join-key column partitioned by more than one transform no longer prevents shuffle elimination, and `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` no longer additionally requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false` when the join keys are a subset of the partition keys. As before, when the partition keys cover only part of the join keys, eliminating the shuffle still requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false`.
 
 ## Upgrading from Spark SQL 4.2 to 4.3
