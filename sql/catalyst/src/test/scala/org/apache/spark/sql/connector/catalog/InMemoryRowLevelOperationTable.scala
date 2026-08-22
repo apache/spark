@@ -77,6 +77,7 @@ class InMemoryRowLevelOperationTable private (
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
   private final val SUPPORTS_DELTAS = "supports-deltas"
   private final val SPLIT_UPDATES = "split-updates"
+  private final val ROW_ID = "row-id"
   private final val NO_METADATA = "no-metadata"
   private final val USE_CATALYST_RUNTIME_FILTERING = "use-catalyst-runtime-filtering"
   private final val noMetadata = properties.getOrDefault(NO_METADATA, "false") == "true"
@@ -202,7 +203,7 @@ class InMemoryRowLevelOperationTable private (
 
   case class DeltaBasedOperation(command: Command, options: CaseInsensitiveStringMap)
     extends RowLevelOperation with SupportsDelta with RowLevelOperationWithOptions {
-    private final val PK_COLUMN_REF = FieldReference("pk")
+    private final val rowIdRef = FieldReference(properties.getOrDefault(ROW_ID, "pk"))
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
       if (noMetadata) {
@@ -212,7 +213,7 @@ class InMemoryRowLevelOperationTable private (
       }
     }
 
-    override def rowId(): Array[NamedReference] = Array(PK_COLUMN_REF)
+    override def rowId(): Array[NamedReference] = Array(rowIdRef)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       newRowLevelScanBuilder(options)(_ => ())

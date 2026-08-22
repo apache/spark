@@ -602,9 +602,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         r.name) :: Nil
 
     case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
-        notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>
+        notMatchedInstructions, notMatchedBySourceInstructions, cardinalityRowId, output, child) =>
       MergeRowsExec(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
-        notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality,
+        notMatchedInstructions, notMatchedBySourceInstructions, cardinalityRowId,
         output, planLater(child)) :: Nil
 
     case WriteToContinuousDataSource(writer, query, customMetrics) =>

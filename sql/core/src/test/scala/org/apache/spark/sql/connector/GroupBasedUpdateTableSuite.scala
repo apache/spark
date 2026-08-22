@@ -50,6 +50,27 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
       writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")))
   }
 
+  test("SPARK-58815: preserve metadata identity when metadata and data names conflict") {
+    createAndInitTable("pk INT NOT NULL, index INT, dep STRING",
+      """{ "pk": 1, "index": 100, "dep": "hr" }
+        |{ "pk": 2, "index": 200, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET index = index + 1 WHERE pk = 1")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 101, "hr") :: Row(2, 200, "hr") :: Nil)
+
+    checkLastWriteInfo(
+      expectedRowSchema = table.schema,
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+    checkLastWriteLog(
+      writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(1, 101, "hr")),
+      writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(2, 200, "hr")))
+  }
+
   test("update with subquery handles metadata columns correctly") {
     withTempView("updated_dep") {
       createAndInitTable("pk INT NOT NULL, id INT, dep STRING",

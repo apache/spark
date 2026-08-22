@@ -78,7 +78,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
+    val projections = buildReplaceDataProjections(
+      query, relation.output, metadataAttrs, readRelation.output)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
@@ -113,7 +114,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
+    val projections = buildReplaceDataProjections(
+      query, relation.output, metadataAttrs, readRelation.output)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
@@ -167,15 +169,26 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)
+    val rowIdAssignments = if (operation.representUpdateAsDeleteAndInsert) Nil else assignments
+    val originalRowIdValues =
+      buildOriginalRowIdValues(rowIdAttrs, rowIdAssignments, metadataAttrs)
     val rowDeltaPlan = if (operation.representUpdateAsDeleteAndInsert) {
-      buildDeletesAndInserts(matchedRowsPlan, assignments, rowIdAttrs)
+      buildDeletesAndInserts(
+        matchedRowsPlan, assignments, rowIdAttrs, originalRowIdValues)
     } else {
-      buildWriteDeltaUpdateProjection(matchedRowsPlan, assignments, rowIdAttrs)
+      buildWriteDeltaUpdateProjection(matchedRowsPlan, assignments, originalRowIdValues)
     }
 
     // build a plan to write the row delta to the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections = buildWriteDeltaProjections(rowDeltaPlan, rowAttrs, rowIdAttrs, metadataAttrs)
+    val originalRowIdAttrs = originalRowIdValues.map(_.child.asInstanceOf[Attribute])
+    val projections = buildWriteDeltaProjections(
+      rowDeltaPlan,
+      rowAttrs,
+      rowIdAttrs,
+      metadataAttrs,
+      readRelation.output,
+      originalRowIdAttrs)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     WriteDelta(writeRelation, cond, rowDeltaPlan, relation, projections, groupFilterCond)
   }
@@ -184,7 +197,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   private def buildWriteDeltaUpdateProjection(
       plan: LogicalPlan,
       assignments: Seq[Assignment],
-      rowIdAttrs: Seq[Attribute]): LogicalPlan = {
+      originalRowIdValues: Seq[Alias]): LogicalPlan = {
 
     // the plan output may include immutable metadata columns at the end
     // that's why the number of assignments may not match the number of plan output columns
@@ -203,10 +216,6 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       }
     }
 
-    // original row ID values must be preserved and passed back to the table to encode updates
-    // if there are any assignments to row ID attributes, add extra columns for the original values
-    val originalRowIdValues = buildOriginalRowIdValues(rowIdAttrs, assignments)
-
     val operationType = Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)()
 
     Project(Seq(operationType) ++ updatedValues ++ originalRowIdValues, plan)
@@ -215,16 +224,19 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   private def buildDeletesAndInserts(
       matchedRowsPlan: LogicalPlan,
       assignments: Seq[Assignment],
-      rowIdAttrs: Seq[Attribute]): Expand = {
+      rowIdAttrs: Seq[Attribute],
+      originalRowIdValues: Seq[Alias]): Expand = {
 
     val (metadataAttrs, rowAttrs) = matchedRowsPlan.output.partition { attr =>
       MetadataAttribute.isValid(attr.metadata)
     }
-    val deleteOutput = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs)
-    val insertOutput = deltaReinsertOutput(assignments, metadataAttrs)
+    val deleteOutput = deltaDeleteOutput(
+      rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues)
+    val insertOutput = deltaReinsertOutput(assignments, metadataAttrs, originalRowIdValues)
     val outputs = Seq(deleteOutput, insertOutput)
     val operationTypeAttr = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)()
-    val attrs = operationTypeAttr +: matchedRowsPlan.output
+    val originalRowIdAttrs = originalRowIdValues.map(_.toAttribute)
+    val attrs = Seq(operationTypeAttr) ++ matchedRowsPlan.output ++ originalRowIdAttrs
     val expandOutput = generateExpandOutput(attrs, outputs)
     Expand(outputs, expandOutput, matchedRowsPlan)
   }

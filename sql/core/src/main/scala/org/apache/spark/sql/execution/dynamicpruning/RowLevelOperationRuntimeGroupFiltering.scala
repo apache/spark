@@ -155,19 +155,13 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
   private def buildTableToScanAttrMap(
       tableAttrs: Seq[Attribute],
       scanAttrs: Seq[Attribute]): AttributeMap[Attribute] = {
-
-    val attrMapping = tableAttrs.map { tableAttr =>
-      scanAttrs
-        .find(scanAttr => conf.resolver(scanAttr.name, tableAttr.name))
-        .map(scanAttr => tableAttr -> scanAttr)
-        .getOrElse {
-          throw new AnalysisException(
-            errorClass = "_LEGACY_ERROR_TEMP_3075",
-            messageParameters = Map(
-              "tableAttr" -> tableAttr.toString,
-              "scanAttrs" -> scanAttrs.mkString(",")))
-        }
+    if (tableAttrs.length > scanAttrs.length) {
+      throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3075",
+        messageParameters = Map(
+          "tableAttr" -> tableAttrs.mkString(","),
+          "scanAttrs" -> scanAttrs.mkString(",")))
     }
-    AttributeMap(attrMapping)
+    AttributeMap(tableAttrs.zip(scanAttrs))
   }
 }

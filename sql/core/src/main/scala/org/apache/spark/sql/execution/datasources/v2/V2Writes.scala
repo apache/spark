@@ -21,7 +21,8 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.expressions.PredicateHelper
+import org.apache.spark.sql.catalyst.ProjectingInternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertOnlyMerge, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -114,14 +115,21 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
       val writeBuilder = newWriteBuilder(r.table, writeOptions, rowSchema, metadataSchema)
       val write = writeBuilder.build()
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
+      val writeAttrs = projections.metadataProjection.toSeq.flatMap(projectedAttrs(query, _)) ++
+        projectedAttrs(query, projections.rowProjection)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(
+        write, query, r.funCatalog, writeAttrs)
       rd.copy(write = Some(write), query = newQuery)
 
     case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
       val deltaWriteBuilder = newDeltaWriteBuilder(r.table, writeOptions, projections)
       val deltaWrite = deltaWriteBuilder.build()
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(deltaWrite, query, r.funCatalog)
+      val writeAttrs = projectedAttrs(query, projections.rowIdProjection) ++
+        projections.metadataProjection.toSeq.flatMap(projectedAttrs(query, _)) ++
+        projections.rowProjection.toSeq.flatMap(projectedAttrs(query, _))
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(
+        deltaWrite, query, r.funCatalog, writeAttrs)
       wd.copy(write = Some(deltaWrite), query = newQuery)
   }
 
@@ -132,6 +140,14 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
     // for SQL cases, options are only carried by DataSourceV2Relation
     assert(commandOptions == dsOptions || commandOptions.isEmpty || dsOptions.isEmpty)
     commandOptions ++ dsOptions
+  }
+
+  private def projectedAttrs(
+      query: LogicalPlan,
+      projection: ProjectingInternalRow): Seq[Attribute] = {
+    projection.schema.fields.zip(projection.colOrdinals).map { case (field, ordinal) =>
+      query.output(ordinal).withName(field.name)
+    }.toImmutableArraySeq
   }
 
   private def buildWriteForMicroBatch(

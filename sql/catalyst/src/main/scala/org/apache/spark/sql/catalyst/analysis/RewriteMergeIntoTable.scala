@@ -43,6 +43,12 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   private final val ROW_FROM_SOURCE = "__row_from_source"
   private final val ROW_FROM_TARGET = "__row_from_target"
 
+  private case class MergeJoin(
+      plan: LogicalPlan,
+      rowFromSource: Attribute,
+      rowFromTarget: Attribute,
+      cardinalityRowId: Option[Attribute])
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(MERGE_INTO_TABLE)) {
     // aligned is false when schema evolution is pending (see ResolveRowLevelCommandAssignments)
@@ -113,7 +119,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             matchedInstructions = Nil,
             notMatchedInstructions = notMatchedInstructions,
             notMatchedBySourceInstructions = Nil,
-            checkCardinality = false,
+            cardinalityRowId = None,
             output = generateExpandOutput(r.output, outputs),
             joinPlan)
 
@@ -168,11 +174,11 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // use left outer join if there is no NOT MATCHED action, unmatched source rows can be discarded
     // use full outer join in all other cases, unmatched source rows may be needed
     val joinType = if (notMatchedActions.isEmpty) LeftOuter else FullOuter
-    val joinPlan = join(readRelation, source, joinType, cond, checkCardinality)
+    val mergeJoin = join(readRelation, source, joinType, cond, checkCardinality)
 
     val mergeRowsPlan = buildReplaceDataMergeRowsPlan(
-      readRelation, joinPlan, matchedActions, notMatchedActions,
-      notMatchedBySourceActions, metadataAttrs, checkCardinality)
+      readRelation, mergeJoin, matchedActions, notMatchedActions,
+      notMatchedBySourceActions, metadataAttrs)
 
     // predicates of the ON condition can be used to filter the target table (planning & runtime)
     // only if there is no NOT MATCHED BY SOURCE clause
@@ -188,18 +194,18 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections = buildReplaceDataProjections(mergeRowsPlan, relation.output, metadataAttrs)
+    val projections = buildReplaceDataProjections(
+      mergeRowsPlan, relation.output, metadataAttrs, readRelation.output)
     ReplaceData(writeRelation, pushableCond, mergeRowsPlan, relation, projections, groupFilterCond)
   }
 
   private def buildReplaceDataMergeRowsPlan(
       targetTable: LogicalPlan,
-      joinPlan: LogicalPlan,
+      mergeJoin: MergeJoin,
       matchedActions: Seq[MergeAction],
       notMatchedActions: Seq[MergeAction],
       notMatchedBySourceActions: Seq[MergeAction],
-      metadataAttrs: Seq[Attribute],
-      checkCardinality: Boolean): MergeRows = {
+      metadataAttrs: Seq[Attribute]): MergeRows = {
 
     // target records that were read but did not match any MATCHED or NOT MATCHED BY SOURCE actions
     // must be copied over and included in the new state of the table as groups are being replaced
@@ -221,9 +227,6 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       toInstruction(action, metadataAttrs)
     } :+ keepCarryoverRowsInstruction
 
-    val rowFromSourceAttr = resolveAttrRef(ROW_FROM_SOURCE, joinPlan)
-    val rowFromTargetAttr = resolveAttrRef(ROW_FROM_TARGET, joinPlan)
-
     val outputs = matchedInstructions.flatMap(_.outputs) ++
       notMatchedInstructions.flatMap(_.outputs) ++
       notMatchedBySourceInstructions.flatMap(_.outputs)
@@ -232,14 +235,14 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val attrs = operationTypeAttr +: targetTable.output
 
     MergeRows(
-      isSourceRowPresent = IsNotNull(rowFromSourceAttr),
-      isTargetRowPresent = IsNotNull(rowFromTargetAttr),
+      isSourceRowPresent = IsNotNull(mergeJoin.rowFromSource),
+      isTargetRowPresent = IsNotNull(mergeJoin.rowFromTarget),
       matchedInstructions = matchedInstructions,
       notMatchedInstructions = notMatchedInstructions,
       notMatchedBySourceInstructions = notMatchedBySourceInstructions,
-      checkCardinality = checkCardinality,
+      cardinalityRowId = mergeJoin.cardinalityRowId,
       output = generateExpandOutput(attrs, outputs),
-      joinPlan)
+      mergeJoin.plan)
   }
 
   // converts a MERGE condition into an EXISTS subquery for runtime filtering
@@ -289,16 +292,34 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val checkCardinality = shouldCheckCardinality(matchedActions)
 
     val joinType = chooseWriteDeltaJoinType(notMatchedActions, notMatchedBySourceActions)
-    val joinPlan = join(filteredReadRelation, source, joinType, joinCond, checkCardinality)
+    val mergeJoin = join(filteredReadRelation, source, joinType, joinCond, checkCardinality)
+
+    val updateAssignments = if (operation.representUpdateAsDeleteAndInsert) {
+      Seq.empty
+    } else {
+      (matchedActions ++ notMatchedBySourceActions).flatMap {
+        case UpdateAction(_, assignments, _) => assignments
+        case _ => Nil
+      }
+    }
+    val originalRowIdValues =
+      buildOriginalRowIdValues(rowIdAttrs, updateAssignments, metadataAttrs)
 
     val mergeRowsPlan = buildWriteDeltaMergeRowsPlan(
-      readRelation, joinPlan, matchedActions, notMatchedActions,
-      notMatchedBySourceActions, rowIdAttrs, checkCardinality,
+      readRelation, mergeJoin, matchedActions, notMatchedActions,
+      notMatchedBySourceActions, rowIdAttrs, originalRowIdValues,
       operation.representUpdateAsDeleteAndInsert)
 
     // build a plan to write the row delta to the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections = buildWriteDeltaProjections(mergeRowsPlan, rowAttrs, rowIdAttrs, metadataAttrs)
+    val originalRowIdAttrs = originalRowIdValues.map(_.child.asInstanceOf[Attribute])
+    val projections = buildWriteDeltaProjections(
+      mergeRowsPlan,
+      rowAttrs,
+      rowIdAttrs,
+      metadataAttrs,
+      readRelation.output,
+      originalRowIdAttrs)
     val groupFilterCond = if (notMatchedBySourceActions.isEmpty && groupFilterEnabled) {
       Some(toGroupFilterCondition(relation, source, cond))
     } else {
@@ -327,28 +348,16 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
   private def buildWriteDeltaMergeRowsPlan(
       targetTable: DataSourceV2Relation,
-      joinPlan: LogicalPlan,
+      mergeJoin: MergeJoin,
       matchedActions: Seq[MergeAction],
       notMatchedActions: Seq[MergeAction],
       notMatchedBySourceActions: Seq[MergeAction],
       rowIdAttrs: Seq[Attribute],
-      checkCardinality: Boolean,
+      originalRowIdValues: Seq[Alias],
       splitUpdates: Boolean): MergeRows = {
 
     val (metadataAttrs, rowAttrs) = targetTable.output.partition { attr =>
       MetadataAttribute.isValid(attr.metadata)
-    }
-
-    val originalRowIdValues = if (splitUpdates) {
-      Seq.empty
-    } else {
-      // original row ID values must be preserved and passed back to the table to encode updates
-      // if there are any assignments to row ID attributes, add extra columns for original values
-      val updateAssignments = (matchedActions ++ notMatchedBySourceActions).flatMap {
-        case UpdateAction(_, assignments, _) => assignments
-        case _ => Nil
-      }
-      buildOriginalRowIdValues(rowIdAttrs, updateAssignments)
     }
 
     val matchedInstructions = matchedActions.map { action =>
@@ -363,9 +372,6 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       toInstruction(action, rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues, splitUpdates)
     }
 
-    val rowFromSourceAttr = resolveAttrRef(ROW_FROM_SOURCE, joinPlan)
-    val rowFromTargetAttr = resolveAttrRef(ROW_FROM_TARGET, joinPlan)
-
     val outputs = matchedInstructions.flatMap(_.outputs) ++
       notMatchedInstructions.flatMap(_.outputs) ++
       notMatchedBySourceInstructions.flatMap(_.outputs)
@@ -375,14 +381,14 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val attrs = Seq(operationTypeAttr) ++ targetTable.output ++ originalRowIdAttrs
 
     MergeRows(
-      isSourceRowPresent = IsNotNull(rowFromSourceAttr),
-      isTargetRowPresent = IsNotNull(rowFromTargetAttr),
+      isSourceRowPresent = IsNotNull(mergeJoin.rowFromSource),
+      isTargetRowPresent = IsNotNull(mergeJoin.rowFromTarget),
       matchedInstructions = matchedInstructions,
       notMatchedInstructions = notMatchedInstructions,
       notMatchedBySourceInstructions = notMatchedBySourceInstructions,
-      checkCardinality = checkCardinality,
+      cardinalityRowId = mergeJoin.cardinalityRowId,
       output = generateExpandOutput(attrs, outputs),
-      joinPlan)
+      mergeJoin.plan)
   }
 
   private def pushDownTargetPredicates(
@@ -403,17 +409,17 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       source: LogicalPlan,
       joinType: JoinType,
       joinCond: Expression,
-      checkCardinality: Boolean): LogicalPlan = {
+      checkCardinality: Boolean): MergeJoin = {
 
     // project an extra column to check if a target row exists after the join
     // if needed, project a synthetic row ID used to perform the cardinality check later
     val rowFromTarget = Alias(TrueLiteral, ROW_FROM_TARGET)()
-    val targetTableProjExprs = if (checkCardinality) {
-      val rowId = Alias(MonotonicallyIncreasingID(), ROW_ID)()
-      targetTable.output ++ Seq(rowFromTarget, rowId)
+    val cardinalityRowId = if (checkCardinality) {
+      Some(Alias(MonotonicallyIncreasingID(), ROW_ID)())
     } else {
-      targetTable.output :+ rowFromTarget
+      None
     }
+    val targetTableProjExprs = targetTable.output ++ Seq(rowFromTarget) ++ cardinalityRowId
     val targetTableProj = Project(targetTableProjExprs, targetTable)
 
     // project an extra column to check if a source row exists after the join
@@ -428,7 +434,12 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     } else {
       JoinHint.NONE
     }
-    Join(targetTableProj, sourceTableProj, joinType, Some(joinCond), joinHint)
+    val joinPlan = Join(targetTableProj, sourceTableProj, joinType, Some(joinCond), joinHint)
+    MergeJoin(
+      joinPlan,
+      rowFromSource.toAttribute,
+      rowFromTarget.toAttribute,
+      cardinalityRowId.map(_.toAttribute))
   }
 
   // skip the cardinality check in these cases:

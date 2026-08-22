@@ -170,3 +170,35 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 }
+
+class DeltaBasedMetadataRowIdDeleteFromTableSuite extends RowLevelOperationSuiteBase {
+
+  import testImplicits._
+
+  override protected lazy val extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("supports-deltas", "true")
+    props.put("row-id", "index")
+    props
+  }
+
+  test("SPARK-58815: preserve a metadata row ID when deleting a row") {
+    withTempView("deleted_pks") {
+      createAndInitTable("pk INT NOT NULL, index INT, dep STRING",
+        """{ "pk": 0, "index": 100, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq(0).toDF("pk").createOrReplaceTempView("deleted_pks")
+
+      sql(s"DELETE FROM $tableNameAsString WHERE pk IN (SELECT pk FROM deleted_pks)")
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+
+      checkLastWriteInfo(
+        expectedRowIdSchema = Some(StructType(Array(INDEX_FIELD))),
+        expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+      checkLastWriteLog(deleteWriteLogEntry(id = 0, metadata = Row("hr", null)))
+    }
+  }
+}

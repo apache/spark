@@ -1290,6 +1290,29 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-58815: MERGE cardinality check uses the generated row ID") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, __row_id INT, dep STRING",
+        """{ "pk": 1, "__row_id": 10, "dep": "hr" }
+          |{ "pk": 2, "__row_id": 10, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq(1, 2).toDF("pk").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString AS t
+           |USING source AS s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET t.dep = 'software'
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(1, 10, "software"), Row(2, 10, "software")))
+    }
+  }
+
   test("merge cardinality check with unconditional MATCHED clause (delete)") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
