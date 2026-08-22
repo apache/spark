@@ -186,7 +186,12 @@ class SingleStatementExec(
    */
   def getText: String = {
     assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
-    origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+    origin.positionMapper match {
+      case Some(mapper) =>
+        mapper.originalFragment(origin.startIndex.get, origin.stopIndex.get)
+      case None =>
+        origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+    }
   }
 
   /**
