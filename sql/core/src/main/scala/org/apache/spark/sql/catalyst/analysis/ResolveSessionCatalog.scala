@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, RelationCatalog, SupportsNamespaces, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -233,9 +233,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output) =>
       DescribeTableCommand(resolvedChild, ident, spec, isExtended, output)
 
-    // `DESCRIBE TABLE <view> PARTITION (...)` against a non-session v2 view: the v1 rewrite
-    // above is gated on `ResolvedV1TableOrViewIdentifier` (session-only), so non-session v2
-    // views fall through. Reject early with the same `FORBIDDEN_OPERATION` v1 raises at
+    // `DESCRIBE TABLE <view> PARTITION (...)` against a v2 view: the v1 rewrite above is gated
+    // on `ResolvedV1TableOrViewIdentifier`, so ViewCatalog-backed views fall through. Reject
+    // early with the same `FORBIDDEN_OPERATION` v1 raises at
     // runtime in `DescribeTableCommand.describeDetailedPartitionInfo`. Without this rewrite,
     // CheckAnalysis surfaces a generic "Found the unresolved operator" INTERNAL_ERROR
     // because `UnresolvedPartitionSpec` is never resolved on the v2 view path.
@@ -249,7 +249,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // typically resolves the column to an `Attribute` here. We also accept the legacy
       // `UnresolvedAttribute` form (e.g. the parser referenced a non-existent column whose
       // resolution was skipped) so the rewrite stays robust across analyzer ordering changes.
-      // The unwrap logic is shared with the non-session v2 view path in `DataSourceV2Strategy`.
+      // The unwrap logic is shared with the v2 view path in `DataSourceV2Strategy`.
       val nameParts = DescribeColumn.extractColumnNameParts(column)
       DescribeColumnCommand(ident, nameParts, isExtended, output)
 
@@ -368,7 +368,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // ViewCatalog catalogs fall through to `DataSourceV2Strategy`, which routes DROP VIEW to
     // `ViewCatalog.dropView` (this also covers METRIC_VIEW since metric views are persisted
-    // through the same ViewCatalog interface). Other non-session catalogs get
+    // through the same ViewCatalog interface). Other catalogs get
     // `MISSING_CATALOG_ABILITY.VIEWS`, matching the error raised from `CheckViewReferences` for
     // CREATE/ALTER VIEW and from the analyzer gate on UnresolvedView.
     case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
@@ -595,11 +595,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
 
-    // CREATE VIEW ... WITH METRICS on the session catalog -> V1 runnable command. Non-session
-    // v2 catalogs leave [[CreateMetricView]] in place for `DataSourceV2Strategy` to dispatch
-    // to `CreateV2MetricViewExec`.
+    // Session catalogs without ViewCatalog use the V1 runnable command. ViewCatalog
+    // implementations, including custom session catalogs, leave [[CreateMetricView]] in place
+    // for `DataSourceV2Strategy` to dispatch to `CreateV2MetricViewExec`.
     case cm @ CreateMetricView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _)
-        if isSessionCatalog(catalog) =>
+        if useV1ViewCommands(catalog) =>
       CreateMetricViewCommand(
         cm.child,
         cm.userSpecifiedColumns,
@@ -610,8 +610,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         cm.replace)
 
     // ViewCatalog catalogs are handled by the v2 strategy (enumerates via listViews); we skip
-    // the match here so the plan flows through unchanged. Only non-session, non-ViewCatalog
-    // catalogs hit the MISSING_CATALOG_ABILITY.VIEWS rejection.
+    // the match here so the plan flows through unchanged. Session catalogs without ViewCatalog
+    // use the V1 command; other catalogs without ViewCatalog are rejected.
     case ShowViews(ns: ResolvedNamespace, pattern, output)
         if !ns.catalog.isInstanceOf[ViewCatalog] =>
       ns match {
@@ -844,15 +844,29 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     )
   }
 
+  private def useV1ViewCommands(catalog: CatalogPlugin): Boolean = {
+    isSessionCatalog(catalog) && !catalog.isInstanceOf[ViewCatalog]
+  }
+
+  private def isDelegatedV1View(catalog: CatalogPlugin, ident: Identifier): Boolean = {
+    catalog match {
+      case relationCatalog: RelationCatalog if isSessionCatalog(catalog) =>
+        try {
+          relationCatalog.loadRelation(ident).isInstanceOf[V1View]
+        } catch {
+          case _: NoSuchNamespaceException | _: NoSuchTableException => false
+        }
+      case _ => false
+    }
+  }
+
   object ResolvedViewIdentifier {
-    // Only matches session-catalog persistent views. Non-session-catalog persistent views
-    // (produced for `DelegatingTable`) fall through and are picked up by dedicated v2 strategy
-    // cases in `DataSourceV2Strategy` -- AlterViewAs, SET/UNSET TBLPROPERTIES, ALTER VIEW ...
-    // WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW COLUMNS, DESCRIBE
-    // [COLUMN] all dispatch to v2 view execs that consume `ResolvedPersistentView.info`
-    // directly.
+    // Only matches persistent views loaded from the V1 session catalog. A custom session
+    // ViewCatalog can still delegate table lookup to the built-in catalog, so route based on
+    // the resolved V1View payload rather than the catalog's capabilities. Native ViewCatalog
+    // views fall through to dedicated v2 strategy cases in `DataSourceV2Strategy`.
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedPersistentView(catalog, ident, _) if isSessionCatalog(catalog) =>
+      case ResolvedPersistentView(catalog, ident, _: V1View) if isSessionCatalog(catalog) =>
         Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
       case ResolvedTempView(ident, _) =>
@@ -900,11 +914,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   private object CreateViewInSessionCatalog
-    extends ResolvedIdentifierInSessionCatalog("CREATE", "VIEW")
+    extends ResolvedIdentifierInSessionCatalog(
+      "CREATE", "VIEW", (catalog, _) => useV1ViewCommands(catalog))
   private object DropViewInSessionCatalog
-    extends ResolvedIdentifierInSessionCatalog("DROP", "VIEW")
+    extends ResolvedIdentifierInSessionCatalog(
+      "DROP", "VIEW",
+      (catalog, ident) => useV1ViewCommands(catalog) || isDelegatedV1View(catalog, ident))
   private object CreateFunctionInSessionCatalog
-    extends ResolvedIdentifierInSessionCatalog("CREATE", "FUNCTION")
+    extends ResolvedIdentifierInSessionCatalog(
+      "CREATE", "FUNCTION", (catalog, _) => isSessionCatalog(catalog))
 
   /**
    * Extractor for resolved identifiers in the session catalog.
@@ -912,10 +930,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
    *
    * @param statement the SQL statement (e.g. "CREATE", "DROP") for error messages
    * @param objectType the object type (e.g. "FUNCTION", "VIEW") for error messages
+   * @param identifierPredicate whether the catalog and identifier should use the V1 command
    */
-  class ResolvedIdentifierInSessionCatalog(statement: String, objectType: String) {
+  class ResolvedIdentifierInSessionCatalog(
+      statement: String,
+      objectType: String,
+      identifierPredicate: (CatalogPlugin, Identifier) => Boolean) {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
+      case ResolvedIdentifier(catalog, ident) if identifierPredicate(catalog, ident) =>
         if (ident.namespace().length != 1) {
           if (ident.namespace().length >= 1 &&
               ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
