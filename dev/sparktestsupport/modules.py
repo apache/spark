@@ -176,7 +176,9 @@ class Module(object):
         """
         path = Path(filename)
         last_part = path.parts[-1]
-        if not re.match(r"test_.*\.py", last_part):
+        # Anchored: only Python modules are test files, not the files that merely
+        # start with a module name (e.g. a `test_x.py.out` golden file).
+        if not re.match(r"test_.*\.py$", last_part):
             return False
         module_path = ".".join(path.parts)[:-3]  # Remove the ".py" suffix
         return not any(module_path.endswith(test) for test in self.python_test_goals)
@@ -742,7 +744,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.coercion.test_python_udf_input_type",
         "pyspark.sql.tests.coercion.test_pandas_udf_return_type",
         "pyspark.sql.tests.coercion.test_python_udf_return_type",
-        "pyspark.sql.tests.df_golden.test_df_golden",
+        "pyspark.sql.tests.df_golden.inputs.test_group_by",
         "pyspark.sql.tests.df_golden.test_df_golden_framework",
     ],
 )
