@@ -259,8 +259,22 @@ private case class PostgresDialect()
   }
 
   // See https://www.postgresql.org/docs/current/errcodes-appendix.html
+  // Class 42 is "Syntax Error or Access Rule Violation", so it bundles genuine syntax errors
+  // together with authorization failures. 42501 is the insufficient_privilege state (e.g.
+  // "permission denied for table ..."), an access rule violation, not a syntax error. Additionally
+  // guard by message: some Postgres-compatible engines surface permission errors under the generic
+  // 42000 state, and access-control failures ("permission denied", "access denied", "unauthorized")
+  // must never be wrapped as JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+    lazy val isAccessControlError = Option(exception.getMessage)
+      .map(_.toLowerCase(Locale.ROOT))
+      .exists { message =>
+        message.contains("permission denied") ||
+          message.contains("access denied") ||
+          message.contains("unauthorized")
+      }
+    Option(exception.getSQLState).exists(s => s.startsWith("42") && s != "42501") &&
+      !isAccessControlError
   }
 
   // SHOW INDEX syntax
