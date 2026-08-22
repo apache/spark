@@ -69,6 +69,7 @@ import org.apache.spark.sql.types.{
   IntegerType,
   LongType,
   MetadataBuilder,
+  NullType,
   ObjectType,
   StructField,
   StructType,
@@ -1252,6 +1253,16 @@ class QueryExecutionErrorsSuite
       },
       condition = "_LEGACY_ERROR_TEMP_2249",
       parameters = Map("maxBroadcastTableBytes" -> "1024.0 MiB", "dataSize" -> "2048.0 MiB"))
+  }
+
+  test("SPARK-38719: CANNOT_CAST_DATATYPE") {
+    checkError(
+      exception = intercept[SparkException] {
+        throw QueryExecutionErrors.cannotCastFromNullTypeError(IntegerType)
+      },
+      condition = "CANNOT_CAST_DATATYPE",
+      parameters = Map("sourceType" -> NullType.typeName, "targetType" -> IntegerType.typeName),
+      sqlState = "42846")
   }
 
   test("V1 table don't support time travel") {
