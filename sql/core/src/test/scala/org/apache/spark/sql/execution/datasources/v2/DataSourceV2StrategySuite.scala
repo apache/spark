@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -323,6 +325,32 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
   test("SPARK-36644: Push down boolean column filter") {
     testTranslateFilter($"col".boolean,
       Some(new Predicate("=", Array(FieldReference("col"), LiteralValue(true, BooleanType)))))
+  }
+
+  test("SPARK-57512: V2 pushdown sees through a DelegateExpression wrapper") {
+    val pred = GreaterThan($"cint".int, Literal(1))
+    val delegate = DelegateExpression("wrap", Seq($"cint".int, Literal(1)), pred)
+    // The wrapper is unfolded to its definition, so it pushes down exactly like the bare predicate.
+    assert(DataSourceV2Strategy.translateFilterV2(delegate).isDefined)
+    assert(DataSourceV2Strategy.translateFilterV2(delegate) ==
+      DataSourceV2Strategy.translateFilterV2(pred))
+  }
+
+  test("SPARK-57512: a compound-definition DelegateExpression round-trips through filter rebuild") {
+    val a = $"cint".int
+    val b = $"`c.int`".int
+    // The definition is a compound predicate, so the wrapper translates to a structural V2And.
+    val definition = And(GreaterThan(a, Literal(1)), LessThan(b, Literal(2)))
+    val delegate = DelegateExpression("wrap", Seq(a, b), definition)
+    val map = mutable.HashMap.empty[Predicate, Expression]
+    val translated = DataSourceV2Strategy.translateFilterV2WithMapping(delegate, Some(map))
+    assert(translated.isDefined, "the compound delegate should translate via its definition")
+    // The whole V2And is mapped back to the delegate (it was translated as a single leaf).
+    // Rebuilding must restore the delegate via the exact map entry, not descend into the synthetic
+    // children that have no map entries -- descending would throw
+    // "Failed to rebuild Expression for filter".
+    val rebuilt = DataSourceV2Strategy.rebuildExpressionFromFilter(translated.get, map)
+    assert(rebuilt == delegate, s"expected the original delegate, got $rebuilt")
   }
 
   test("inability to convert unknown expressions and predicates") {

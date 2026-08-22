@@ -664,7 +664,7 @@ object FunctionRegistry {
     expression[Substring]("substr", true),
     expression[Substring]("substring"),
     expression[Left]("left"),
-    expression[Right]("right"),
+    expressionBuilder("right", Right),
     expression[SubstringIndex]("substring_index"),
     expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),

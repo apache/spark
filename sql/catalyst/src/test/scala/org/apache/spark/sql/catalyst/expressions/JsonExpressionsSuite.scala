@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
 import org.apache.spark.sql.internal.SQLConf
@@ -1085,7 +1086,14 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val multiGetJsonObject = MultiGetJsonObject(Literal("{}"), Seq("$.a", "$.b"))
     assert(multiGetJsonObject.stateful)
-    assert(multiGetJsonObject.freshCopyIfContainsStatefulExpression() ne multiGetJsonObject)
+    val freshMultiGetJsonObject =
+      multiGetJsonObject.freshCopyIfContainsStatefulExpression().asInstanceOf[DelegateExpression]
+    assert(freshMultiGetJsonObject ne multiGetJsonObject)
+    val evaluator = multiGetJsonObject.definition.asInstanceOf[Invoke]
+      .targetObject.eval().asInstanceOf[AnyRef]
+    val freshEvaluator = freshMultiGetJsonObject.definition.asInstanceOf[Invoke]
+      .targetObject.eval().asInstanceOf[AnyRef]
+    assert(freshEvaluator ne evaluator)
 
     // JsonValue reuses a mutable row to cast the extracted scalar, so it must be stateful.
     val jsonValue = JsonValue(
