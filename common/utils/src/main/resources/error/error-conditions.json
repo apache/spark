@@ -9241,9 +9241,9 @@
           "Write for the binary file data source."
         ]
       },
-      "WRITE_ORDERING_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
+      "WRITE_ORDERING_WITH_UNKNOWN_COLUMN" : {
         "message" : [
-          "Invalid write ordering: <cols> is missing or is in a map or array."
+          "Invalid write ordering: <cols> is not a column of the table."
         ]
       }
     },

@@ -131,13 +131,13 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       c.copy(name = resolvedIdentifier)
 
     case c @ CreateTableAsSelect(
-        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _) =>
+        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _, _, _) =>
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
       rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
       c.copy(name = resolvedIdentifier)
 
     case r @ ReplaceTableAsSelect(
-        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _) =>
+        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _, _, _) =>
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
       rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
       r.copy(name = resolvedIdentifier)

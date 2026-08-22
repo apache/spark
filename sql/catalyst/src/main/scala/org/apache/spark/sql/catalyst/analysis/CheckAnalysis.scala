@@ -945,7 +945,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
             if (badOrderingReferences.nonEmpty) {
               create.failAnalysis(
-                errorClass = "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+                errorClass = "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
                 messageParameters = Map(
                   "cols" -> badOrderingReferences.map(r => toSQLId(r)).mkString(", ")))
             }
