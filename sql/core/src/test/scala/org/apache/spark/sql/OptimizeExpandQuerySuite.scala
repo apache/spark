@@ -177,6 +177,33 @@ class OptimizeExpandQuerySuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58387: correctness: count distinct with a non-distinct count(1)") {
+    withTempView("t") {
+      spark.sql(
+        """SELECT * FROM VALUES
+          |  (1, 5, 7), (1, 5, 7), (1, 5, 7), (1, 6, 8), (2, 9, 9)
+          |AS t(k, a, b)""".stripMargin)
+        .createOrReplaceTempView("t")
+
+      val sqlText =
+        """SELECT k, count(distinct a), count(distinct b), count(1)
+          |FROM t GROUP BY k""".stripMargin
+
+      withSQLConf(SQLConf.OPTIMIZE_EXPAND_RATIO.key -> "2") {
+        checkAnswer(spark.sql(sqlText), Seq(Row(1, 2, 2, 4), Row(2, 1, 1, 1)))
+      }
+    }
+  }
+
+  test("SPARK-58387: correctness: count distinct with a non-distinct count(*)") {
+    checkOptimizationCorrectness(
+      """SELECT key,
+        |  count(distinct col1),
+        |  count(distinct col2),
+        |  count(*)
+        |FROM t GROUP BY key""".stripMargin)
+  }
+
   test("skips optimization for expression-based distinct (col1 + col2)") {
     withTempView("t") {
       spark.range(10000)
