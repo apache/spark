@@ -384,6 +384,8 @@ class BooleanOpsTestsMixin:
         psser, other_psser = psdf["this"], psdf["that"]
         self.assert_eq(pser < other_pser, psser < other_psser)
         self.assert_eq(pser < pser, psser < psser)
+        self.assertRaises(TypeError, lambda: self.psdf["bool"] < self.psdf["string"])
+        self.assertRaises(TypeError, lambda: self.psdf["bool"] < "True")
 
     def test_le(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf
@@ -391,6 +393,8 @@ class BooleanOpsTestsMixin:
         psser, other_psser = psdf["this"], psdf["that"]
         self.assert_eq(pser <= other_pser, psser <= other_psser)
         self.assert_eq(pser <= pser, psser <= psser)
+        self.assertRaises(TypeError, lambda: self.psdf["bool"] <= self.psdf["string"])
+        self.assertRaises(TypeError, lambda: self.psdf["bool"] <= "True")
 
     def test_gt(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf
@@ -398,6 +402,8 @@ class BooleanOpsTestsMixin:
         psser, other_psser = psdf["this"], psdf["that"]
         self.assert_eq(pser > other_pser, psser > other_psser)
         self.assert_eq(pser > pser, psser > psser)
+        self.assertRaises(TypeError, lambda: self.psdf["bool"] > self.psdf["string"])
+        self.assertRaises(TypeError, lambda: self.psdf["bool"] > "True")
 
     def test_ge(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf
@@ -405,6 +411,8 @@ class BooleanOpsTestsMixin:
         psser, other_psser = psdf["this"], psdf["that"]
         self.assert_eq(pser >= other_pser, psser >= other_psser)
         self.assert_eq(pser >= pser, psser >= psser)
+        self.assertRaises(TypeError, lambda: self.psdf["bool"] >= self.psdf["string"])
+        self.assertRaises(TypeError, lambda: self.psdf["bool"] >= "True")
 
 
 @unittest.skipIf(

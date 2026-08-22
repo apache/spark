@@ -137,6 +137,11 @@ def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
     return left_dtype != right_dtype and not are_both_numeric(left_dtype, right_dtype)
 
 
+def _raise_type_error_for_ordered_comparison(left: IndexOpsLike, right: Any) -> None:
+    if _should_return_all_false(left, right):
+        raise TypeError("Comparison can not be applied to given types.")
+
+
 def _as_categorical_type(
     index_ops: IndexOpsLike, dtype: CategoricalDtype, spark_type: DataType
 ) -> IndexOpsLike:

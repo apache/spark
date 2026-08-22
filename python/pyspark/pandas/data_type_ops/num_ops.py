@@ -45,6 +45,7 @@ from pyspark.pandas.data_type_ops.base import (
     _is_valid_for_logical_operator,
     _is_boolean_type,
     _should_return_all_false,
+    _raise_type_error_for_ordered_comparison,
 )
 from pyspark.pandas.typedef.typehints import (
     as_spark_type,
@@ -282,18 +283,22 @@ class NumericOps(DataTypeOps):
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        _raise_type_error_for_ordered_comparison(left, right)
         return pyspark_column_op("__lt__", left, right, fillna=False)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        _raise_type_error_for_ordered_comparison(left, right)
         return pyspark_column_op("__le__", left, right, fillna=False)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        _raise_type_error_for_ordered_comparison(left, right)
         return pyspark_column_op("__ge__", left, right, fillna=False)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        _raise_type_error_for_ordered_comparison(left, right)
         return pyspark_column_op("__gt__", left, right, fillna=False)
 
 
