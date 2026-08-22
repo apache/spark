@@ -17,6 +17,7 @@
 import unittest
 from inspect import getmembers, isfunction
 
+from pyspark import Row
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
@@ -2549,6 +2550,41 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         self.assert_eq(
             cdf.select(CF.sha2(cdf.c, 256), CF.sha2("d", 512)).toPandas(),
             sdf.select(SF.sha2(sdf.c, 256), SF.sha2("d", 512)).toPandas(),
+        )
+
+    def test_ipv4_functions(self):
+        addresses = self.connect.createDataFrame(
+            [("192.168.1.1",), ("192.168.1",), ("010.000.000.001",), (None,)],
+            ["address"],
+        )
+        classic_addresses = self.spark.createDataFrame(
+            [("192.168.1.1",), ("192.168.1",), ("010.000.000.001",), (None,)],
+            ["address"],
+        )
+        connect_rows = addresses.select(
+            CF.inet_aton("address"), CF.try_inet_aton("address")
+        ).collect()
+        classic_rows = classic_addresses.select(
+            SF.inet_aton("address"), SF.try_inet_aton("address")
+        ).collect()
+        self.assertEqual(connect_rows, classic_rows)
+
+        values = self.connect.createDataFrame(
+            [(0,), (4294967295,), (3232235777,), (None,)], ["value"]
+        )
+        classic_values = self.spark.createDataFrame(
+            [(0,), (4294967295,), (3232235777,), (None,)], ["value"]
+        )
+        connect_rows = values.select(CF.inet_ntoa("value"), CF.try_inet_ntoa("value")).collect()
+        classic_rows = classic_values.select(
+            SF.inet_ntoa("value"), SF.try_inet_ntoa("value")
+        ).collect()
+        self.assertEqual(connect_rows, classic_rows)
+
+        invalid_values = self.connect.createDataFrame([(-1,), (4294967296,)], ["value"])
+        self.assertEqual(
+            invalid_values.select(CF.try_inet_ntoa("value")).collect(),
+            [Row(None), Row(None)],
         )
 
     def test_call_udf(self):

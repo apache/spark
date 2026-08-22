@@ -7465,6 +7465,59 @@ object functions {
    */
   def bitmap_xor_agg(col: Column): Column = Column.fn("bitmap_xor_agg", col)
 
+  /**
+   * Converts an IPv4 address string to an unsigned 32-bit value represented as a 64-bit Long.
+   * Returns NULL if the input is invalid (non-ANSI mode).
+   *
+   * @param col
+   *   A string expression containing an IPv4 address in dotted-decimal notation.
+   * @group misc_funcs
+   * @since 5.0.0
+   * @return
+   *   Returns a column that evaluates to a long.
+   */
+  def inet_aton(col: Column): Column = Column.fn("inet_aton", col)
+
+  /**
+   * Converts an unsigned 32-bit value represented as a 64-bit Long to an IPv4 address string in
+   * dotted-decimal notation. Returns NULL if the value is out of valid IPv4 range in non-ANSI
+   * mode.
+   *
+   * @param col
+   *   A long expression representing an unsigned 32-bit IPv4 value.
+   * @group misc_funcs
+   * @since 5.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
+   */
+  def inet_ntoa(col: Column): Column = Column.fn("inet_ntoa", col)
+
+  /**
+   * This is a special version of `inet_aton` that performs the same operation, but returns NULL
+   * instead of raising an error if the input is not a valid IPv4 address.
+   *
+   * @param col
+   *   A string expression containing a potential IPv4 address.
+   * @group misc_funcs
+   * @since 5.0.0
+   * @return
+   *   Returns a column that evaluates to a long or NULL.
+   */
+  def try_inet_aton(col: Column): Column = Column.fn("try_inet_aton", col)
+
+  /**
+   * This is a special version of `inet_ntoa` that performs the same operation, but returns NULL
+   * instead of raising an error if the value is outside the valid IPv4 range.
+   *
+   * @param col
+   *   A long expression representing a potential unsigned IPv4 value.
+   * @group misc_funcs
+   * @since 5.0.0
+   * @return
+   *   Returns a column that evaluates to a string or NULL.
+   */
+  def try_inet_ntoa(col: Column): Column = Column.fn("try_inet_ntoa", col)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////

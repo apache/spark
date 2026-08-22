@@ -33337,6 +33337,136 @@ def bitmap_xor_agg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_xor_agg", col)
 
 
+@_try_remote_functions
+def inet_aton(col: "ColumnOrName") -> Column:
+    """
+    Converts an IPv4 address string to an unsigned 32-bit value represented as a 64-bit integer.
+    Returns NULL if the input is invalid (non-ANSI mode).
+
+    .. versionadded:: 5.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        A string expression containing an IPv4 address in dotted-decimal notation.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.inet_ntoa`
+    :meth:`pyspark.sql.functions.try_inet_aton`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("192.168.1.1",)], ["a"])
+    >>> df.select(sf.inet_aton(df.a)).show()
+    +------------+
+    |inet_aton(a)|
+    +------------+
+    |  3232235777|
+    +------------+
+    """
+    return _invoke_function_over_columns("inet_aton", col)
+
+
+@_try_remote_functions
+def inet_ntoa(col: "ColumnOrName") -> Column:
+    """
+    Converts an unsigned 32-bit value represented as a 64-bit integer to an IPv4 address string
+    in dotted-decimal notation.
+    Returns NULL if the value is out of valid IPv4 range (<0 or >4294967295) in
+    non-ANSI mode.
+
+    .. versionadded:: 5.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        A long expression representing an unsigned 32-bit IPv4 value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.inet_aton`
+    :meth:`pyspark.sql.functions.try_inet_ntoa`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(3232235777,)], ["a"])
+    >>> df.select(sf.inet_ntoa(df.a)).show()
+    +------------+
+    |inet_ntoa(a)|
+    +------------+
+    | 192.168.1.1|
+    +------------+
+    """
+    return _invoke_function_over_columns("inet_ntoa", col)
+
+
+@_try_remote_functions
+def try_inet_aton(col: "ColumnOrName") -> Column:
+    """
+    This is a special version of `inet_aton` that performs the same operation, but
+    returns NULL instead of raising an error if the input is not a valid IPv4 address.
+
+    .. versionadded:: 5.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        A string expression containing a potential IPv4 address.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.inet_aton`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("192.168.1.1",), ("invalid",)], ["a"])
+    >>> df.select(sf.try_inet_aton(df.a)).show()
+    +----------------+
+    |try_inet_aton(a)|
+    +----------------+
+    |      3232235777|
+    |            NULL|
+    +----------------+
+    """
+    return _invoke_function_over_columns("try_inet_aton", col)
+
+
+@_try_remote_functions
+def try_inet_ntoa(col: "ColumnOrName") -> Column:
+    """
+    This is a special version of `inet_ntoa` that performs the same operation, but
+    returns NULL instead of raising an error if the value is outside the valid IPv4 range.
+
+    .. versionadded:: 5.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        A long expression representing a potential unsigned IPv4 value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.inet_ntoa`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(3232235777,), (-1,)], ["a"])
+    >>> df.select(sf.try_inet_ntoa(df.a)).show()
+    +----------------+
+    |try_inet_ntoa(a)|
+    +----------------+
+    |     192.168.1.1|
+    |            NULL|
+    +----------------+
+    """
+    return _invoke_function_over_columns("try_inet_ntoa", col)
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 

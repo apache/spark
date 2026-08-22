@@ -5712,6 +5712,34 @@ def bitmap_xor_agg(col: "ColumnOrName") -> Column:
 bitmap_xor_agg.__doc__ = pysparkfuncs.bitmap_xor_agg.__doc__
 
 
+def inet_aton(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("inet_aton", col)
+
+
+inet_aton.__doc__ = pysparkfuncs.inet_aton.__doc__
+
+
+def inet_ntoa(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("inet_ntoa", col)
+
+
+inet_ntoa.__doc__ = pysparkfuncs.inet_ntoa.__doc__
+
+
+def try_inet_aton(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_inet_aton", col)
+
+
+try_inet_aton.__doc__ = pysparkfuncs.try_inet_aton.__doc__
+
+
+def try_inet_ntoa(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_inet_ntoa", col)
+
+
+try_inet_ntoa.__doc__ = pysparkfuncs.try_inet_ntoa.__doc__
+
+
 # Geospatial ST Functions
 
 

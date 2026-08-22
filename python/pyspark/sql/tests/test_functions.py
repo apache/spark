@@ -449,6 +449,42 @@ class FunctionsTestsMixin:
         actual = df.select(F.try_parse_url(df.url, df.part, df.key))
         assertDataFrameEqual(actual, [Row(None)])
 
+    def test_inet_functions(self):
+        df = self.spark.createDataFrame(
+            [("192.168.1.1",), ("192.168.1",), ("010.000.000.001",)], ["address"]
+        )
+        actual = df.select(F.inet_aton("address"), F.try_inet_aton("address"))
+        assertDataFrameEqual(
+            actual,
+            [
+                Row(3232235777, 3232235777),
+                Row(3232235521, 3232235521),
+                Row(167772161, 167772161),
+            ],
+        )
+
+        invalid = self.spark.createDataFrame([("invalid",), (None,)], ["address"])
+        actual = invalid.select(F.try_inet_aton("address"))
+        assertDataFrameEqual(actual, [Row(None), Row(None)])
+
+        values = self.spark.createDataFrame(
+            [(0,), (4294967295,), (3232235777,), (None,)], ["value"]
+        )
+        actual = values.select(F.inet_ntoa("value"), F.try_inet_ntoa("value"))
+        assertDataFrameEqual(
+            actual,
+            [
+                Row("0.0.0.0", "0.0.0.0"),
+                Row("255.255.255.255", "255.255.255.255"),
+                Row("192.168.1.1", "192.168.1.1"),
+                Row(None, None),
+            ],
+        )
+
+        invalid_values = self.spark.createDataFrame([(-1,), (4294967296,)], ["value"])
+        actual = invalid_values.select(F.try_inet_ntoa("value"))
+        assertDataFrameEqual(actual, [Row(None), Row(None)])
+
     def test_try_make_timestamp(self):
         """Comprehensive test cases for try_make_timestamp with various arguments."""
 

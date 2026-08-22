@@ -982,6 +982,12 @@ object FunctionRegistry {
     expression[BitmapAndAgg]("bitmap_and_agg"),
     expression[BitmapXorAgg]("bitmap_xor_agg"),
 
+    // ipv4 functions
+    expression[InetAton]("inet_aton"),
+    expression[InetNtoa]("inet_ntoa"),
+    expression[TryInetAton]("try_inet_aton"),
+    expression[TryInetNtoa]("try_inet_ntoa"),
+
     // json
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
