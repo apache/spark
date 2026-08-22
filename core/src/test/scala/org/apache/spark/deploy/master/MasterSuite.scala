@@ -28,7 +28,7 @@ import org.apache.spark.deploy._
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
-import org.apache.spark.internal.config.UI.UI_HOLD_ENABLED
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv}
 
@@ -303,5 +303,41 @@ class MasterSuite extends MasterSuiteBase {
     noException should be thrownBy {
       makeMaster(conf)
     }
+  }
+
+  test("SPARK-58893: Master injects reverseProxyUrl into driver javaOpts") {
+    val conf = new SparkConf()
+      .set(UI_REVERSE_PROXY, true)
+      .set(UI_REVERSE_PROXY_URL, "http://proxyhost:8080/path")
+    val master = makeMaster(conf)
+    val command = Command("mainClass", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq.empty)
+    val desc = DriverDescription("", 1, 1, false, command)
+    val result = master.invokePrivate(_maybeAddReverseProxyConfig(desc))
+    val opt = "-Dspark.ui.reverseProxyUrl=http://proxyhost:8080/path"
+    assert(result.command.javaOpts.contains(opt))
+  }
+
+  test("SPARK-58893: Master does not inject reverseProxyUrl when reverseProxy is disabled") {
+    val conf = new SparkConf()
+      .set(UI_REVERSE_PROXY, false)
+      .set(UI_REVERSE_PROXY_URL, "http://proxyhost:8080/path")
+    val master = makeMaster(conf)
+    val command = Command("mainClass", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq.empty)
+    val desc = DriverDescription("", 1, 1, false, command)
+    val result = master.invokePrivate(_maybeAddReverseProxyConfig(desc))
+    val opt = "-Dspark.ui.reverseProxyUrl=http://proxyhost:8080/path"
+    assert(!result.command.javaOpts.contains(opt))
+  }
+
+  test("SPARK-58893: Master avoids duplicating reverseProxyUrl in driver javaOpts") {
+    val conf = new SparkConf()
+      .set(UI_REVERSE_PROXY, true)
+      .set(UI_REVERSE_PROXY_URL, "http://proxyhost:8080/path")
+    val master = makeMaster(conf)
+    val opt = "-Dspark.ui.reverseProxyUrl=http://proxyhost:8080/path"
+    val command = Command("mainClass", Seq.empty, Map.empty, Seq.empty, Seq(opt), Seq.empty)
+    val desc = DriverDescription("", 1, 1, false, command)
+    val result = master.invokePrivate(_maybeAddReverseProxyConfig(desc))
+    assert(result.command.javaOpts.count(_ == opt) === 1)
   }
 }
