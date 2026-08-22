@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.IOException
 import java.util.{HashMap => JHashMap}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, ThreadPoolExecutor, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future, TimeoutException}
@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{BlockTtlCleaner, MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
@@ -96,6 +96,12 @@ class BlockManagerMasterEndpoint(
   // rddId without scanning the whole map.
   private val sealedBlocksByRdd = new mutable.HashMap[Int, mutable.HashSet[RDDBlockId]]
 
+  // Keep track of last access times if we're using block TTLs. "Close" is good enough for atimes,
+  // but the TTL cleaner thread iterates and removes from this map while the dispatcher thread puts
+  // to it, so it must be concurrent: plain HashMap structural mutation from two threads can corrupt
+  // the map, not merely skew a timestamp.
+  private[spark] val rddAccessTime = new ConcurrentHashMap[Int, Long]
+
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
   // Record the RDD blocks which are not visible yet, a block will be removed from this collection
@@ -114,6 +120,40 @@ class BlockManagerMasterEndpoint(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
   private implicit val askExecutionContext: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(askThreadPool)
+
+
+  // Cache the (immutable-after-start) RDD TTL config once rather than re-parsing the time string on
+  // every updateBlockAtime, which is on the hot path of block-location lookups.
+  private val rddTtl: Option[Long] = conf.get(config.SPARK_TTL_RDD_CLEANER)
+
+  // Whether either TTL is set, so updateBlockAtime can bail out before allocating on the dispatcher
+  // thread's hot path in the default (both-unset) configuration.
+  private val anyTtlEnabled: Boolean =
+    rddTtl.isDefined || conf.get(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined
+
+  // Gate consulted before the TTL cleaner reaps an RDD. Wired by SparkContext (which can see the
+  // live RDDs) to refuse locally-checkpointed RDDs: localCheckpoint truncates lineage, so its cache
+  // blocks are the only copy of the data and reaping them loses it unrecoverably. Defaults to
+  // allowing everything for the (test-only) case where nothing wired it.
+  @volatile private[spark] var rddReapable: Int => Boolean = _ => true
+
+  // How the TTL cleaner reaps an RDD. Wired by SparkContext to SparkContext.unpersistRDD so the
+  // reap also clears `persistentRdds` and posts SparkListenerUnpersistRDD (keeping the Storage UI
+  // and getPersistentRDDs accurate); it still removes the blocks through the same RemoveRdd RPC.
+  // When unwired we fall back to sending ourselves RemoveRdd, which frees the blocks but leaves
+  // that bookkeeping stale.
+  @volatile private[spark] var rddReaper: Option[Int => Unit] = None
+
+  // Created here so onStop can shut it down, but the cleaner is not started until onStart: it
+  // routes removals through self.ask(RemoveRdd(...)), and self is only valid once the endpoint is
+  // registered (i.e. from onStart onward).
+  private[spark] val cleanerThreadpool: Option[ThreadPoolExecutor] = {
+    if (rddTtl.isDefined) {
+      Some(ThreadUtils.newDaemonFixedThreadPool(1, "rdd-ttl-cleaner"))
+    } else {
+      None
+    }
+  }
 
   private val topologyMapper = {
     val topologyMapperClassName = conf.get(
@@ -154,6 +194,8 @@ class BlockManagerMasterEndpoint(
     case _updateBlockInfo @
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size, checksum) =>
 
+      // We don't update the block access times here because the update block infos are triggered by
+      // migrations rather than actual access.
       @inline def handleResult(success: Boolean): Unit = {
         // SPARK-30594: we should not post `SparkListenerBlockUpdated` when updateBlockInfo
         // returns false since the block info would be updated again later.
@@ -270,6 +312,30 @@ class BlockManagerMasterEndpoint(
       context.reply(updateRDDBlockVisibility(taskId, visible))
   }
 
+  private def updateBlockAtime(blockId: BlockId): Unit = {
+    // Both TTLs are unset by default, and this runs on the dispatcher thread for every block
+    // location lookup (O(partitions) per stage via DAGScheduler.getCacheLocs), so return before
+    // doing any work -- including the Option allocations below -- when the feature is off.
+    if (anyTtlEnabled) {
+      blockId match {
+        case rddBlockId: RDDBlockId =>
+          // Only RDD cache blocks are TTL-tracked (not broadcast). Record an access only for a
+          // block we actually track: a lookup of an absent/evicted block must not create a phantom
+          // rddAccessTime entry that the cleaner would later try to reap (broadcasting a RemoveRdd
+          // for an RDD that has nothing to remove). Timestamp races are "close enough" so we don't
+          // check the return value.
+          if (rddTtl.isDefined && blockLocations.containsKey(blockId)) {
+            rddAccessTime.put(rddBlockId.rddId, System.currentTimeMillis())
+          }
+        case shuffleBlockId: ShuffleId =>
+          // Shuffle blocks are tracked in the map output tracker (which self-guards on its own TTL
+          // config); everything else (e.g. broadcast) is not TTL-tracked.
+          mapOutputTracker.updateShuffleAtime(shuffleBlockId.shuffleId)
+        case _ =>
+      }
+    }
+  }
+
   private def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
     if (trackingCacheVisibility) {
       blockLocations.containsKey(blockId) &&
@@ -366,7 +432,10 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
-    // First remove the metadata for the given RDD, and then asynchronously remove the blocks
+    // Drop the RDD from TTL tracking (a bare no-op when the map is empty / TTL disabled).
+    rddAccessTime.remove(rddId)
+
+    // Then remove the metadata for the given RDD, and then asynchronously remove the blocks
     // from the storage endpoints.
 
     // The message sent to the storage endpoints to remove the RDD
@@ -438,6 +507,7 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
+    // Start with removing shuffle blocks without an associated executor (e.g. ESS only).
     // Find all shuffle blocks on executors that are no longer running
     val blocksToDeleteByShuffleService =
       new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
@@ -495,6 +565,7 @@ class BlockManagerMasterEndpoint(
         }
       }.getOrElse(Seq.empty)
 
+    // Remove shuffle blocks from running executors.
     val removeMsg = RemoveShuffle(shuffleId)
     val removeShuffleFromExecutorsFutures = blockManagerInfo.values.map { bm =>
       bm.storageEndpoint.ask[Boolean](removeMsg).recover {
@@ -580,6 +651,7 @@ class BlockManagerMasterEndpoint(
   }
 
   private def addMergerLocation(blockManagerId: BlockManagerId): Unit = {
+    logDebug(log"Adding merger location ${MDC(BLOCK_MANAGER_ID, blockManagerId)}")
     if (!blockManagerId.isDriver && !shuffleMergerLocations.contains(blockManagerId.host)) {
       val shuffleServerId = BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER,
         blockManagerId.host, externalShuffleServicePort)
@@ -799,7 +871,8 @@ class BlockManagerMasterEndpoint(
   }
 
  private def updateShuffleBlockInfo(blockId: BlockId, blockManagerId: BlockManagerId)
-    : Future[Boolean] = {
+     : Future[Boolean] = {
+   logDebug(s"Updating shuffle block info ${blockId} on ${blockManagerId}")
    blockId match {
      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
        // SPARK-36782: Invoke `MapOutputTracker.updateMapOutput` within the thread
@@ -857,6 +930,15 @@ class BlockManagerMasterEndpoint(
     } else {
       locations = new mutable.HashSet[BlockManagerId]
       blockLocations.put(blockId, locations)
+      // Since it's the initial put we register this as an access as well -- but only for a report
+      // that actually stores the block. A report with an invalid level is a *removal* (e.g. the
+      // UpdateBlockInfo replies that follow a RemoveRdd broadcast, or an eviction report arriving
+      // after the last replica is gone); those also land here, and stamping them would resurrect an
+      // access time for an RDD with no blocks left, which one TTL later fires a pointless
+      // cluster-wide RemoveRdd.
+      if (storageLevel.isValid) {
+        updateBlockAtime(blockId)
+      }
     }
 
     if (storageLevel.isValid) {
@@ -1012,12 +1094,14 @@ class BlockManagerMasterEndpoint(
   }
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
+    updateBlockAtime(blockId)
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
   private def getLocationsAndStatus(
       blockId: BlockId,
       requesterHost: String): Option[BlockLocationsAndStatus] = {
+    updateBlockAtime(blockId)
     val allLocations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val blockStatusWithBlockManagerId: Option[(BlockStatus, BlockManagerId)] =
       (if (externalShuffleServiceRddFetchEnabled && blockId.isRDD) {
@@ -1130,8 +1214,33 @@ class BlockManagerMasterEndpoint(
     }
   }
 
+  override def onStart(): Unit = {
+    // Start the TTL cleaner only now that the endpoint is registered: it reaps by routing through
+    // self.ask(RemoveRdd(...)) (so blockLocations et al. are mutated only on the single dispatcher
+    // thread, preserving the IsolatedThreadSafeRpcEndpoint invariant), and self is only valid from
+    // onStart onward. RemoveRdd is the existing message; its reply is the async removal Future.
+    cleanerThreadpool.foreach { pool =>
+      pool.execute(new BlockTtlCleaner(
+        name = "RDD",
+        ttlMillis = rddTtl.get,
+        accessTimes = rddAccessTime,
+        shouldReap = rddId => rddReapable(rddId),
+        reap = rddId => rddReaper match {
+          case Some(reaper) => reaper(rddId)
+          case None =>
+            // Unwired fallback (nothing attached the SparkContext hook). Observe the returned
+            // removal future the way BlockManagerMaster.removeRdd does, so a failure to remove
+            // blocks on some executor is not silently dropped.
+            self.askSync[Future[Seq[Int]]](RemoveRdd(rddId)).failed.foreach { e =>
+              logWarning(log"Failed to remove RDD ${MDC(RDD_ID, rddId)} in the TTL cleaner", e)
+            }(ThreadUtils.sameThread)
+        }))
+    }
+  }
+
   override def onStop(): Unit = {
     askThreadPool.shutdownNow()
+    cleanerThreadpool.foreach(_.shutdownNow())
   }
 }
 
