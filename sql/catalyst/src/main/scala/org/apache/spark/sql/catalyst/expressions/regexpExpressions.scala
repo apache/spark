@@ -127,6 +127,7 @@ private[catalyst] object StringRegexExpression {
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
       * pattern - a string expression. The pattern is a string which is matched literally, with
           exception to the following special symbols:<br><br>
           _ matches any one character in the input (similar to . in posix regular expressions)\
@@ -140,9 +141,11 @@ private[catalyst] object StringRegexExpression {
           enabled, the pattern to match "\abc" should be "\abc".<br><br>
           It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
           special characters in the pattern string if exists.
+        An expression that evaluates to a string.
       * escape - an character added since Spark 3.0. The default escape character is the '\'.
           If an escape character precedes a special symbol or another escape character, the
           following character is matched literally. It is invalid to escape any other character.
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:
@@ -251,6 +254,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
       * pattern - a string expression. The pattern is a string which is matched literally and
           case-insensitively, with exception to the following special symbols:<br><br>
           _ matches any one character in the input (similar to . in posix regular expressions)<br><br>
@@ -264,9 +268,11 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
           enabled, the pattern to match "\abc" should be "\abc".<br><br>
           It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
           special characters in the pattern string if exists.
+        An expression that evaluates to a string.
       * escape - an character added since Spark 3.0. The default escape character is the '\'.
           If an escape character precedes a special symbol or another escape character, the
           following character is matched literally. It is invalid to escape any other character.
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:
@@ -374,7 +380,12 @@ sealed abstract class LikeAllBase extends MultiLikeBase {
     val javaDataType = CodeGenerator.javaType(child.dataType)
     val pattern = ctx.freshName("pattern")
     val valueArg = ctx.freshName("valueArg")
-    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
+    // Cast to a parameterized List so the generated for-each binds elements to Pattern
+    // (javac rejects iterating a raw collection into a typed loop var; Janino allows it),
+    // and so the cast targets the public List interface rather than the non-public
+    // Scala collection wrapper's runtime class.
+    val patternCache = ctx.addReferenceObj(
+      "patternCache", cache.asJava, "java.util.List<java.util.regex.Pattern>")
 
     val checkNotMatchCode = if (isNotSpecified) {
       s"$pattern.matcher($valueArg.toString()).matches()"
@@ -434,7 +445,12 @@ sealed abstract class LikeAnyBase extends MultiLikeBase {
     val javaDataType = CodeGenerator.javaType(child.dataType)
     val pattern = ctx.freshName("pattern")
     val valueArg = ctx.freshName("valueArg")
-    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
+    // Cast to a parameterized List so the generated for-each binds elements to Pattern
+    // (javac rejects iterating a raw collection into a typed loop var; Janino allows it),
+    // and so the cast targets the public List interface rather than the non-public
+    // Scala collection wrapper's runtime class.
+    val patternCache = ctx.addReferenceObj(
+      "patternCache", cache.asJava, "java.util.List<java.util.regex.Pattern>")
 
     val checkMatchCode = if (isNotSpecified) {
       s"!$pattern.matcher($valueArg.toString()).matches()"
@@ -481,7 +497,9 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
       * regexp - a string expression. The regex string should be a Java regular expression.
+        An expression that evaluates to a string.
 
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser, see the unescaping rules at <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#string-literal">String Literal</a>.
@@ -573,14 +591,17 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   arguments = """
     Arguments:
       * str - a string expression to split.
+        An expression that evaluates to a string.
       * regex - a string representing a regular expression. The regex string should be a
         Java regular expression.
+        An expression that evaluates to a string.
       * limit - an integer expression which controls the number of times the regex is applied.
           * limit > 0: The resulting array's length will not be more than `limit`,
             and the resulting array's last entry will contain all input
             beyond the last matched regex.
           * limit <= 0: `regex` will be applied as many times as possible, and
             the resulting array can be of any size.
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:
@@ -596,7 +617,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
-  override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
+  override def dataType: DataType =
+    ArrayType(StringHelper.transformingStringResultType(str.dataType), containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeBinaryLcase, StringTypeWithCollation, IntegerType)
   override def first: Expression = str
@@ -654,6 +676,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   arguments = """
     Arguments:
       * str - a string expression to search for a regular expression pattern match.
+        An expression that evaluates to a string.
       * regexp - a string representing a regular expression. The regex string should be a
           Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
@@ -664,9 +687,12 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
           It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
           special characters in the pattern string if exists.
+        An expression that evaluates to a string.
       * rep - a string expression to replace matched substrings.
+        An expression that evaluates to a string.
       * position - a positive integer literal that indicates the position within `str` to begin searching.
           The default is 1. If position is greater than the number of characters in `str`, the result is `str`.
+        An expression that evaluates to an integer. Must be a constant.
   """,
   examples = """
     Examples:
@@ -723,6 +749,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   // last replacement string, we don't want to convert a UTF8String => java.langString every time.
   @transient private var lastReplacement: String = _
   @transient private var lastReplacementInUTF8: UTF8String = _
+  override def stateful: Boolean = true
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_REPLACE)
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
@@ -739,7 +766,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     RegExpUtils.replace(pattern, s.toString, lastReplacement, i.asInstanceOf[Int])
   }
 
-  override def dataType: DataType = subject.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(subject.dataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeBinaryLcase,
       StringTypeWithCollation, StringTypeBinaryLcase, IntegerType)
@@ -840,6 +868,7 @@ abstract class RegExpExtractBase
   @transient private var lastRegex: UTF8String = _
   // last regex pattern, we cache it for performance concern
   @transient private var pattern: Pattern = _
+  override def stateful: Boolean = true
 
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_EXTRACT_FAMILY)
 
@@ -876,6 +905,7 @@ abstract class RegExpExtractBase
   arguments = """
     Arguments:
       * str - a string expression.
+        An expression that evaluates to a string.
       * regexp - a string representing a regular expression. The regex string should be a
           Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
@@ -886,11 +916,13 @@ abstract class RegExpExtractBase
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
           It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
           special characters in the pattern string if exists.
+        An expression that evaluates to a string.
       * idx - an integer expression that representing the group index. The regex maybe contains
           multiple groups. `idx` indicates which regex group to extract. The group index should
           be non-negative. The minimum value of `idx` is 0, which means matching the entire
           regular expression. If `idx` is not specified, the default group index value is 1. The
           `idx` parameter is the Java regex Matcher group() method index.
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:
@@ -910,7 +942,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     RegExpExtractBase.extract(getLastMatcher(s, p), r.asInstanceOf[Int], prettyName)
   }
 
-  override def dataType: DataType = subject.dataType
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(subject.dataType)
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -949,6 +982,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   arguments = """
     Arguments:
       * str - a string expression.
+        An expression that evaluates to a string.
       * regexp - a string representing a regular expression. The regex string should be a
           Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
@@ -959,11 +993,13 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
           It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
           special characters in the pattern string if exists.
+        An expression that evaluates to a string.
       * idx - an integer expression that representing the group index. The regex may contains
           multiple groups. `idx` indicates which regex group to extract. The group index should
           be non-negative. The minimum value of `idx` is 0, which means matching the entire
           regular expression. If `idx` is not specified, the default group index value is 1. The
           `idx` parameter is the Java regex Matcher group() method index.
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:
@@ -983,7 +1019,8 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
     RegExpExtractBase.extractAll(getLastMatcher(s, p), r.asInstanceOf[Int], prettyName)
   }
 
-  override def dataType: DataType = ArrayType(subject.dataType)
+  override def dataType: DataType =
+    ArrayType(StringHelper.transformingStringResultType(subject.dataType))
   override def prettyName: String = "regexp_extract_all"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1018,8 +1055,10 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   arguments = """
     Arguments:
       * str - a string expression.
+        An expression that evaluates to a string.
       * regexp - a string representing a regular expression. The regex string should be a
           Java regular expression.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1057,7 +1096,9 @@ case class RegExpCount(left: Expression, right: Expression)
   arguments = """
     Arguments:
       * str - a string expression.
+        An expression that evaluates to a string.
       * regexp - a string representing a regular expression. The regex string should be a Java regular expression.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1097,6 +1138,7 @@ case class RegExpSubStr(left: Expression, right: Expression)
   arguments = """
     Arguments:
       * str - a string expression.
+        An expression that evaluates to a string.
       * regexp - a string representing a regular expression. The regex string should be a
           Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
@@ -1107,6 +1149,10 @@ case class RegExpSubStr(left: Expression, right: Expression)
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
           It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
           special characters in the pattern string if exists.
+        An expression that evaluates to a string.
+      * idx - the group index of the regular expression to search for. The default value is 0
+          if not specified.
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:

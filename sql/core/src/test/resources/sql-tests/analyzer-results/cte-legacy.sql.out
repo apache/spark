@@ -62,7 +62,7 @@ SELECT (
 ) FROM range(1)
 -- !query analysis
 Project [scalar-subquery#x [id#xL] AS scalarsubquery(id)#xL]
-:  +- Project [outer(id#xL)]
+:  +- Project [outer(id#xL) AS id#xL]
 :     +- OneRowRelation
 +- Range (0, 1, step=1)
 

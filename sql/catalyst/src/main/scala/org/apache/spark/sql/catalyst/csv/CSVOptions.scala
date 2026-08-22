@@ -107,15 +107,15 @@ class CSVOptions(
   }
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
-    val param = parameters.getOrElse(paramName, default.toString)
-    if (param == null) {
-      default
-    } else if (param.toLowerCase(Locale.ROOT) == "true") {
-      true
-    } else if (param.toLowerCase(Locale.ROOT) == "false") {
-      false
-    } else {
-      throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
+    val paramValue = parameters.get(paramName)
+    paramValue match {
+      case None => default
+      case Some(null) => default
+      case Some(value) => value.toLowerCase(Locale.ROOT) match {
+        case "true" => true
+        case "false" => false
+        case _ => throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
+      }
     }
   }
 

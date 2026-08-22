@@ -259,6 +259,111 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("BIN BY places multi-bin civil-time boundaries on the absolute grid across DST") {
+    val la = ZoneId.of("America/Los_Angeles")
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      // Boundaries of a 36h width must lie on the grid bin_start(k) = ALIGN_TO + k * 36h. Across
+      // the 2024-03-10 spring-forward, a forward walk would drift 1h off the grid from bin 1 on.
+      // This range spans four bins.
+      val df = spark.sql(
+        """SELECT bin_start, bin_end, bin_distribute_ratio, value
+          |FROM VALUES
+          |  (TIMESTAMP '2024-03-09 06:00:00', TIMESTAMP '2024-03-13 18:00:00', 100.0D)
+          |  AS metrics(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '36' HOUR
+          |  ALIGN TO TIMESTAMP '2024-03-09 00:00:00' DISTRIBUTE UNIFORM (value))
+          |ORDER BY bin_start""".stripMargin)
+      val h = 3600L * 1000000L
+      val total = 107 * h      // 30h + 35h + 36h + 6h
+      // Bin 2 starts at 2024-03-12 00:00 LA (07:00 UTC); a forward walk would report 08:00 UTC.
+      checkAnswer(df, Seq(
+        Row(tsAt("2024-03-09 00:00:00", la), tsAt("2024-03-10 13:00:00", la),
+          ratio(30 * h, total), 100.0 * ratio(30 * h, total)),
+        Row(tsAt("2024-03-10 13:00:00", la), tsAt("2024-03-12 00:00:00", la),
+          ratio(35 * h, total), 100.0 * ratio(35 * h, total)),
+        Row(tsAt("2024-03-12 00:00:00", la), tsAt("2024-03-13 12:00:00", la),
+          ratio(36 * h, total), 100.0 * ratio(36 * h, total)),
+        Row(tsAt("2024-03-13 12:00:00", la), tsAt("2024-03-15 00:00:00", la),
+          ratio(6 * h, total), 100.0 * ratio(6 * h, total))))
+    }
+  }
+
+  test("BIN BY reports the same civil-time bin boundary regardless of where a row starts") {
+    val la = ZoneId.of("America/Los_Angeles")
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      // Both rows span the bin starting 2024-03-12 00:00 LA: one walks into it from bin 0, the
+      // other starts inside it. Both must report the same bin_start; a forward walk would report it
+      // an hour apart, splitting GROUP BY bin_start.
+      val df = spark.sql(
+        """SELECT ts_start, bin_start, bin_end
+          |FROM VALUES
+          |  (TIMESTAMP '2024-03-09 06:00:00', TIMESTAMP '2024-03-13 06:00:00', 1.0D),
+          |  (TIMESTAMP '2024-03-12 03:00:00', TIMESTAMP '2024-03-13 06:00:00', 1.0D)
+          |  AS metrics(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '36' HOUR
+          |  ALIGN TO TIMESTAMP '2024-03-09 00:00:00' DISTRIBUTE UNIFORM (value))
+          |WHERE bin_start = TIMESTAMP '2024-03-12 00:00:00'
+          |ORDER BY ts_start""".stripMargin)
+      checkAnswer(df, Seq(
+        Row(tsAt("2024-03-09 06:00:00", la), tsAt("2024-03-12 00:00:00", la),
+          tsAt("2024-03-13 12:00:00", la)),
+        Row(tsAt("2024-03-12 03:00:00", la), tsAt("2024-03-12 00:00:00", la),
+          tsAt("2024-03-13 12:00:00", la))))
+    }
+  }
+
+  test("BIN BY emits a zero-width bin at a whole-day zone skip") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Pacific/Apia") {
+      // Apia skipped all of 2011-12-30 (UTC-11 -> UTC+13), so two grid boundaries land on the same
+      // instant, emitting a zero-width ratio-0 bin (bin_start == bin_end). The real bins still tile
+      // the range, so ratios sum to 1.0. Compared as UTC instants: a civil label on the skipped day
+      // is ambiguous.
+      val utc = ZoneOffset.UTC
+      val df = spark.sql(
+        """SELECT bin_start, bin_end, bin_distribute_ratio, value
+          |FROM VALUES
+          |  (TIMESTAMP '2011-12-29 12:00:00', TIMESTAMP '2011-12-31 12:00:00', 100.0D)
+          |  AS metrics(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '1' DAY
+          |  ALIGN TO TIMESTAMP '2011-12-25 00:00:00' DISTRIBUTE UNIFORM (value))
+          |ORDER BY bin_start, bin_end""".stripMargin)
+      checkAnswer(df, Seq(
+        Row(tsAt("2011-12-29 10:00:00", utc), tsAt("2011-12-30 10:00:00", utc), 0.5, 50.0),
+        Row(tsAt("2011-12-30 10:00:00", utc), tsAt("2011-12-30 10:00:00", utc), 0.0, 0.0),
+        Row(tsAt("2011-12-30 10:00:00", utc), tsAt("2011-12-31 10:00:00", utc), 0.5, 50.0)))
+    }
+  }
+
+  test("BIN BY places the zero-length range bin on the grid for a non-whole-day width") {
+    val la = ZoneId.of("America/Los_Angeles")
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      // A zero-length range emits one ratio-1.0 row for its bin. Its bin's 36h step crosses the
+      // spring-forward, so bin_end must be the grid boundary (2024-03-12 00:00), not the walked
+      // bin_start + 36h (2024-03-12 01:00).
+      val df = spark.sql(
+        """SELECT bin_start, bin_end, bin_distribute_ratio, value
+          |FROM VALUES
+          |  (TIMESTAMP '2024-03-11 12:00:00', TIMESTAMP '2024-03-11 12:00:00', 100.0D)
+          |  AS metrics(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '36' HOUR
+          |  ALIGN TO TIMESTAMP '2024-03-09 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin)
+      checkAnswer(df, Seq(
+        Row(tsAt("2024-03-10 13:00:00", la), tsAt("2024-03-12 00:00:00", la), 1.0, 100.0)))
+    }
+  }
+
   test("BIN BY executes on NTZ inputs with the epoch default origin") {
     withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
       val df = spark.sql(
@@ -353,6 +458,113 @@ class BinBySuite extends QueryTest with SharedSparkSession {
       checkAnswer(df, Seq(
         Row(1, null, null, null, null),
         Row(2, null, null, null, null)))
+    }
+  }
+
+  test("ORDER BY on a column BIN BY re-outputs without its qualifier is rejected") {
+    // BIN BY re-outputs its input columns without the original qualifier, so `ORDER BY t.value`
+    // cannot resolve against them; hidden-output insertion appends the column to an operator whose
+    // child does not produce it, and analysis fails with MISSING_ATTRIBUTES.
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(
+            """SELECT * FROM VALUES
+              |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:05:00', 100.0D)
+              |  AS t(ts_start, ts_end, value)
+              |BIN BY (
+              |  RANGE ts_start TO ts_end
+              |  BIN WIDTH INTERVAL '5' MINUTE
+              |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00'
+              |  DISTRIBUTE UNIFORM (value))
+              |ORDER BY t.value""".stripMargin)
+        },
+        condition = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+        parameters = Map(
+          "missingAttributes" -> "\"value\"",
+          "input" -> ("\"ts_start\", \"ts_end\", \"value\", \"bin_start\", \"bin_end\", " +
+            "\"bin_distribute_ratio\""),
+          "operator" -> "!Sort \\[value#\\d+ ASC NULLS FIRST\\], true",
+          "operation" -> "\"value\""),
+        matchPVals = true,
+        queryContext =
+          Array(ExpectedContext(fragment = "ORDER BY t.value", start = 271, stop = 286)))
+    }
+  }
+
+  test("BIN BY resolves a bare ORDER BY on a re-output DISTRIBUTE column that is not projected") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // A bare ORDER BY on the re-output DISTRIBUTE column resolves even when it is not projected.
+      val df = spark.sql(
+        """SELECT bin_start
+          |FROM VALUES
+          |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:10:00', 100.0D)
+          |  AS metrics(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))
+          |ORDER BY value""".stripMargin)
+      checkAnswer(df, Seq(
+        Row(tsAt("2024-01-01 00:00:00")),
+        Row(tsAt("2024-01-01 00:05:00"))))
+    }
+  }
+
+  test("BIN BY rejects a source-qualified reference to a re-output DISTRIBUTE column") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // The re-output DISTRIBUTE column drops its source qualifier, so `metrics.value` fails.
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(
+            """SELECT metrics.value
+              |FROM VALUES
+              |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:10:00', 100.0D)
+              |  AS metrics(ts_start, ts_end, value)
+              |BIN BY (
+              |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+              |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00'
+              |  DISTRIBUTE UNIFORM (value))""".stripMargin)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
+          "objectName" -> "`metrics`.`value`",
+          "proposal" -> ("`metrics`.`ts_end`, `value`, `bin_start`, " +
+            "`metrics`.`ts_start`, `bin_end`")),
+        queryContext =
+          Array(ExpectedContext(fragment = "metrics.value", start = 7, stop = 19)))
+    }
+  }
+
+  test("BIN BY keeps a file-source metadata column reachable in ORDER BY and SELECT") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTempDir { dir =>
+        val path = new java.io.File(dir, "metrics").getCanonicalPath
+        spark.sql(
+          """SELECT TIMESTAMP '2024-01-01 00:00:00' AS ts_start,
+            |       TIMESTAMP '2024-01-01 00:10:00' AS ts_end, 100.0D AS value""".stripMargin)
+          .write.mode("overwrite").parquet(path)
+        val binBy =
+          s"""parquet.`$path` BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+             |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin
+
+        // `_metadata` is a hidden metadata column; BIN BY carries it through for a bare ORDER BY.
+        checkAnswer(
+          spark.sql(s"SELECT bin_start FROM $binBy ORDER BY _metadata.file_size"),
+          Seq(Row(tsAt("2024-01-01 00:00:00")), Row(tsAt("2024-01-01 00:05:00"))))
+
+        // Also selectable through BIN BY.
+        checkAnswer(
+          spark.sql(s"SELECT bin_start, _metadata.file_size > 0 FROM $binBy"),
+          Seq(Row(tsAt("2024-01-01 00:00:00"), true), Row(tsAt("2024-01-01 00:05:00"), true)))
+      }
     }
   }
 }

@@ -21,6 +21,7 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A fake credential provider for testing. Supports schemes "fake" and "shared".
@@ -30,13 +31,14 @@ public class FakeCredentialProvider implements CredentialProvider {
   /** Sentinel URI host that triggers a CredentialResolutionException. */
   public static final String ERROR_HOST = "error.example.com";
 
-  private Map<String, String> initConf;
-  private int initCount;
+  private volatile Map<String, String> initConf;
+  private final AtomicInteger initCount = new AtomicInteger();
+  private final AtomicInteger closeCount = new AtomicInteger();
 
   @Override
   public void init(Map<String, String> conf) {
     this.initConf = conf;
-    this.initCount++;
+    this.initCount.incrementAndGet();
   }
 
   @Override
@@ -55,6 +57,11 @@ public class FakeCredentialProvider implements CredentialProvider {
     return new ServiceCredential(Map.of("provider", "fake"), expiresAt);
   }
 
+  @Override
+  public void close() {
+    this.closeCount.incrementAndGet();
+  }
+
   /** Returns the configuration map passed to {@link #init(Map)}, or null if not yet called. */
   public Map<String, String> getInitConf() {
     return initConf;
@@ -62,6 +69,17 @@ public class FakeCredentialProvider implements CredentialProvider {
 
   /** Returns the number of times {@link #init(Map)} has been called. */
   public int getInitCount() {
-    return initCount;
+    return initCount.get();
+  }
+
+  /** Returns the number of times {@link #close()} has been called. */
+  public int getCloseCount() {
+    return closeCount.get();
+  }
+
+  @Override
+  public Map<String, String> additionalSparkProperties() {
+    return Map.of("spark.hadoop.fs.fake.credentials.provider",
+        "org.apache.spark.security.FakeExecutorCredentialProvider");
   }
 }

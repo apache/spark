@@ -19,6 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -56,6 +57,13 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
   private[kafka010] val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
+
+  private val partitionMetadataCacheTtlMs: Long =
+    readerOptions.getOrElse(KafkaSourceProvider.PARTITION_METADATA_CACHE_TTL_MS, "-1").toLong
+
+  // Protected by this.synchronized (always accessed inside withRetries, which holds the lock).
+  private var cachedPartitions: Set[TopicPartition] = Set.empty
+  private var cacheTimestampNanos: Option[Long] = None
 
   /**
    * An AdminClient used in the driver to query the latest Kafka offsets.
@@ -127,7 +135,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
       partitionOffsets
     }
-    val partitions = withRetries { consumerStrategy.assignedTopicPartitions(admin) }
+    val partitions = withRetries { resolvePartitions() }
     // Obtain TopicPartition offsets with late binding support
     offsetRangeLimit match {
       case EarliestOffsetRangeLimit => partitions.map {
@@ -439,12 +447,34 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     }
   }
 
+  // Must be called inside withRetries (which holds this.synchronized).
+  private def resolvePartitions(): Set[TopicPartition] = {
+    if (partitionMetadataCacheTtlMs <= 0) {
+      return consumerStrategy.assignedTopicPartitions(admin)
+    }
+    val nowNanos = System.nanoTime()
+    cacheTimestampNanos match {
+      case Some(timestampNanos)
+          if nowNanos - timestampNanos <
+            TimeUnit.MILLISECONDS.toNanos(partitionMetadataCacheTtlMs) =>
+        val cacheAgeMs = TimeUnit.NANOSECONDS.toMillis(nowNanos - timestampNanos)
+        logDebug(s"Reusing cached partitions (age ${cacheAgeMs}ms < " +
+          s"${partitionMetadataCacheTtlMs}ms TTL): $cachedPartitions")
+        cachedPartitions
+      case _ =>
+        val fresh = consumerStrategy.assignedTopicPartitions(admin)
+        cachedPartitions = fresh
+        cacheTimestampNanos = Some(nowNanos)
+        fresh
+    }
+  }
+
   private def partitionsAssignedToAdmin(
       body: ju.Set[TopicPartition] => Map[TopicPartition, Long])
     : Map[TopicPartition, Long] = {
 
     withRetries {
-      val partitions = consumerStrategy.assignedTopicPartitions(admin).asJava
+      val partitions = resolvePartitions().asJava
       logDebug(s"Partitions assigned: $partitions.")
       body(partitions)
     }
@@ -493,5 +523,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   private def resetAdmin(): Unit = synchronized {
     stopAdmin()
     _admin = null  // will automatically get reinitialized again
+    cachedPartitions = Set.empty
+    cacheTimestampNanos = None
   }
 }

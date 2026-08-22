@@ -48,7 +48,7 @@ class AutoCdcScd1KeyDriftSuite
     // declaration differs between the two pipelines.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, region STRING NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, region STRING NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1 declares one key (`id`). Aux table is created with schema (id, _cdc_metadata).
@@ -83,7 +83,7 @@ class AutoCdcScd1KeyDriftSuite
     "KEY_SCHEMA_DRIFT") {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(region STRING NOT NULL, id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(region STRING NOT NULL, id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1 declares two keys [region, id]. Without strict-equality, the dropped `region`
@@ -119,7 +119,7 @@ class AutoCdcScd1KeyDriftSuite
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, region STRING NOT NULL, country STRING NOT NULL, " +
-      s"version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1 declares [id, region].
@@ -156,10 +156,10 @@ class AutoCdcScd1KeyDriftSuite
     "triggers KEY_SCHEMA_DRIFT") {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
-      s"""CREATE TABLE ${auxTableNameFor("target")} (id BIGINT NOT NULL, $cdcMetadataDdl) """ +
+      s"""CREATE TABLE ${auxTableNameFor("target")} (id BIGINT NOT NULL, $scd1MetadataDdl) """ +
       s"""TBLPROPERTIES ('${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '["id"]')"""
     )
 
@@ -184,7 +184,7 @@ class AutoCdcScd1KeyDriftSuite
   test("a composite key reorder ([a,b] -> [b,a]) does NOT trigger drift validation") {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(a INT NOT NULL, b STRING NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(a INT NOT NULL, b STRING NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1 declares keys [a, b] (in that order). Drift validation is order-independent:
@@ -209,7 +209,7 @@ class AutoCdcScd1KeyDriftSuite
     // Target's `id` is nullable so the second pipeline's nullable-`id` source is accepted.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1: source carries `id INT NOT NULL` (Scala primitive `Int`), no metadata.
@@ -236,7 +236,7 @@ class AutoCdcScd1KeyDriftSuite
     // adding or removing backticks around the same logical column must NOT be detected as drift.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long)]
@@ -256,7 +256,7 @@ class AutoCdcScd1KeyDriftSuite
     // pipeline #2's expected keys are matched against the recorded set).
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long)]
@@ -277,7 +277,7 @@ class AutoCdcScd1KeyDriftSuite
     // `id` are distinct identifiers under that resolver, drift validation must fail.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long)]
@@ -307,6 +307,46 @@ class AutoCdcScd1KeyDriftSuite
     }
   }
 
+  test("AutoCDC key drift validation uses pipeline case sensitivity, not session default") {
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
+    )
+
+    val stream1 = MemoryStream[(Int, Long)]
+    stream1.addData((1, 1L))
+    runPipeline(buildPipeline("flow_v1", stream1.toDF().toDF("id", "version"), Seq("id")))
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val stream2 = MemoryStream[(Int, Long)]
+      stream2.addData((1, 2L))
+      val ctx2 = new TestGraphRegistrationContext(
+        spark,
+        Map(SQLConf.CASE_SENSITIVE.key -> "true")) {
+        registerTable("target", catalog = Some(catalog), database = Some(namespace))
+        registerFlow(autoCdcFlow(
+          name = "flow_v2",
+          target = "target",
+          query = dfFlowFunc(stream2.toDF().toDF("Id", "version")),
+          keys = Seq("Id"),
+          sequencing = $"version"))
+      }
+
+      val ex = intercept[RuntimeException] { runPipeline(ctx2) }
+      checkErrorInPipelineFailure(
+        failure = ex,
+        condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
+        sqlState = Some("42000"),
+        parameters = Map(
+          "tableName" ->
+            fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
+          "expectedKeySchema" -> "Id INT NOT NULL",
+          "recordedKeySchema" -> "id INT NOT NULL"
+        )
+      )
+    }
+  }
+
   test("under the default (case-insensitive) resolver, an AutoCDC flow whose key differs only " +
     "in case from the recorded key does NOT trigger drift") {
     // Pairs with the case-sensitive test above: same recorded key, but under the default
@@ -315,14 +355,14 @@ class AutoCdcScd1KeyDriftSuite
     // case-sensitive resolver in the validator is caught.
     //
     // Note that only the *key declaration* (`Seq("Id")`) has different casing here -- the
-    // source DF column name still matches the target's `id` exactly. Differing the source DF
-    // column casing as well would not exercise drift: [[SchemaMergingUtils.mergeSchemas]] is
-    // case-sensitive on column names and would add `Id` as a new column to the target,
-    // producing AMBIGUOUS_REFERENCE during the streaming write rather than letting drift
-    // validation make the call.
+    // source DF column name still matches the target's `id` exactly. This keeps the test focused
+    // on the drift validator: whether the source DF column were `id` or `Id`, under the default
+    // (case-insensitive) resolver schema evolution folds it onto the existing `id` (SPARK-58517),
+    // so the streaming write itself would not fail either way and drift validation remains the
+    // sole decision-maker.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long)]
@@ -341,10 +381,10 @@ class AutoCdcScd1KeyDriftSuite
     // surface a structured AUTOCDC_INVALID_STATE error rather than silently mis-validating keys.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
-      s"CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $cdcMetadataDdl)"
+      s"CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, Long)]
@@ -372,10 +412,10 @@ class AutoCdcScd1KeyDriftSuite
     val malformedKeysArray = "not-a-json-array"
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
-      s"CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $cdcMetadataDdl) " +
+      s"CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $scd1MetadataDdl) " +
       s"TBLPROPERTIES ('${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '$malformedKeysArray')"
     )
 
@@ -406,10 +446,10 @@ class AutoCdcScd1KeyDriftSuite
     // validator cannot run without resolving every recorded key first.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
-      s"""CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $cdcMetadataDdl) """ +
+      s"""CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $scd1MetadataDdl) """ +
       s"""TBLPROPERTIES ('${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '["region"]')"""
     )
 

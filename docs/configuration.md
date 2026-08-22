@@ -1606,6 +1606,21 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.ui.holdEnabled</code></td>
+  <td>true</td>
+  <td>
+    Allows the whole application to be held and resumed from the web UI. Holding gracefully
+    decommissions all executors and stops requesting new ones. Cached blocks are not preserved
+    and are recomputed after resuming. This takes effect only when
+    <code>spark.decommission.enabled</code> is true, the shuffle data is kept outside the
+    executors (through either <code>spark.shuffle.service.enabled</code> or a
+    <code>ShuffleDataIO</code> with reliable storage), and the cluster manager can hold
+    executors: Standalone, YARN, and Kubernetes with
+    <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.threadDumpsEnabled</code></td>
   <td>true</td>
   <td>
@@ -3132,9 +3147,11 @@ Apart from these, the following properties are also available, and may be useful
     slots on a single executor and the task is taking longer time than the threshold. This config
     helps speculate stage with very few tasks. Regular speculation configs may also apply if the
     executor slots are large enough. E.g. tasks might be re-launched if there are enough successful
-    runs even though the threshold hasn't been reached. The number of slots is computed based on
-    the conf values of spark.executor.cores and spark.task.cpus minimum 1.
-    Default unit is bytes, unless otherwise specified.
+    runs even though the threshold hasn't been reached. The number of slots is the maximum
+    number of concurrent tasks per executor for the stage's resource profile, computed from
+    the executor cores and the task cpus amount (which may be fractional), or 1 when the
+    executor cores are not known.
+    Default unit is milliseconds, unless otherwise specified.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -3142,7 +3159,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.speculation.efficiency.processRateMultiplier</code></td>
   <td>0.75</td>
   <td>
-    A multiplier that used when evaluating inefficient tasks. The higher the multiplier
+    A multiplier that is used when evaluating inefficient tasks. The higher the multiplier
     is, the more tasks will be possibly considered as inefficient.
   </td>
   <td>3.4.0</td>
@@ -3177,7 +3194,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.cpus</code></td>
   <td>1</td>
   <td>
-    Number of cores to allocate for each task.
+    Number of cores to allocate for each task. This can also be set to a fractional value,
+    either below 1 (e.g. <code>0.2</code>) to allow multiple tasks to share a CPU core, or
+    above 1 (e.g. <code>1.5</code>). In either case the number of tasks that can run
+    concurrently on an executor is <code>floor(executor cores / spark.task.cpus)</code>.
   </td>
   <td>0.5.0</td>
 </tr>

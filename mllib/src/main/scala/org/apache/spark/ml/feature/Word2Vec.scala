@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{BLAS, SQLDataTypes, Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -34,6 +34,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils, VersionUtils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for [[Word2Vec]] and [[Word2VecModel]].
@@ -112,7 +113,7 @@ private[feature] trait Word2VecBase extends Params
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val typeCandidates = List(new ArrayType(StringType, true), new ArrayType(StringType, false))
     SchemaUtils.checkColumnTypes(schema, $(inputCol), typeCandidates)
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), SQLDataTypes.VectorType)
   }
 }
 
@@ -215,6 +216,17 @@ class Word2VecModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", null)
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (wordVectors != null) {
+      // wordIndex: Map[String, Int]
+      size += SizeEstimator.estimate(wordVectors.wordIndex)
+      // wordVectors: Array[Float]
+      size += SizeEstimator.estimate(wordVectors.wordVectors)
+    }
+    size
+  }
 
   /**
    * Returns a dataframe with two fields, "word" and "vector", with "word" being a String and

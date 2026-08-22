@@ -23,6 +23,7 @@ import java.util.{Base64, Locale, UUID}
 import java.util.concurrent.{Executor, TimeUnit}
 
 import scala.collection.mutable
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.Properties
 import scala.util.control.NonFatal
@@ -55,6 +56,14 @@ private[sql] class SparkConnectClient(
   private val userContext: UserContext = configuration.userContext
 
   private[this] val stubState = new SparkConnectStubState(channel, configuration)
+
+  if (configuration.metadata.keys.exists(
+      _.equalsIgnoreCase(SparkConnectClient.OPERATION_ID_HEADER))) {
+    logWarning(
+      s"Connection option ${SparkConnectClient.OPERATION_ID_HEADER} is ignored because " +
+        "Spark Connect sets it for each ExecutePlan request.")
+  }
+
   private[this] val bstub =
     new CustomSparkConnectBlockingStub(channel, stubState)
   private[this] val stub =
@@ -317,13 +326,12 @@ private[sql] class SparkConnectClient(
 
       serverSideSessionId.foreach(session =>
         request.setClientObservedServerSideSessionId(session))
-      operationId.foreach { opId =>
-        require(
-          isValidUUID(opId),
-          s"Invalid operationId: $opId. The id must be an UUID string of " +
-            "the format `00112233-4455-6677-8899-aabbccddeeff`")
-        request.setOperationId(opId)
-      }
+      val resolvedOperationId = operationId.getOrElse(UUID.randomUUID.toString)
+      require(
+        isValidUUID(resolvedOperationId),
+        s"Invalid operationId: $resolvedOperationId. The id must be an UUID string of " +
+          "the format `00112233-4455-6677-8899-aabbccddeeff`")
+      request.setOperationId(resolvedOperationId)
       if (configuration.useReattachableExecute) {
         bstub.executePlanReattachable(request.build())
       } else {
@@ -698,7 +706,30 @@ private[sql] class SparkConnectClient(
 // Options for plan compression
 case class PlanCompressionOptions(thresholdBytes: Int, algorithm: String)
 
+private final class SparkConnectOperationIdException(val operationId: String)
+    extends RuntimeException(s"Spark Connect operation ID: $operationId", null, false, false)
+
 object SparkConnectClient {
+
+  private[connect] val OPERATION_ID_HEADER = "spark-connect-operation-id"
+
+  /**
+   * Returns the ExecutePlan operation ID attached to a Spark Connect failure, when available.
+   *
+   * @since 4.3.0
+   */
+  @DeveloperApi
+  def getOperationId(error: Throwable): Option[String] = {
+    error.getSuppressed.collectFirst { case marker: SparkConnectOperationIdException =>
+      marker.operationId
+    }
+  }
+
+  private[client] def attachOperationId(error: Throwable, operationId: String): Unit = {
+    if (getOperationId(error).isEmpty) {
+      error.addSuppressed(new SparkConnectOperationIdException(operationId))
+    }
+  }
 
   private[sql] val SPARK_REMOTE: String = "SPARK_REMOTE"
 
@@ -806,6 +837,20 @@ object SparkConnectClient {
 
     def rpcDeadlines(deadlines: RpcDeadlines): Builder = {
       _configuration = _configuration.copy(rpcDeadlines = deadlines)
+      this
+    }
+
+    /**
+     * Sets the maximum cumulative wall-clock time the client will keep retrying a
+     * [[GrpcRetryHandler.RetryException]] (raised internally when a reattach attempt keeps
+     * hitting DEADLINE_EXCEEDED, or when the initial ExecutePlan never reached the server) before
+     * giving up and surfacing the underlying error. Defaults to 1 hour.
+     *
+     * @return
+     *   this builder.
+     */
+    def maxRetryExceptionElapsedTime(duration: FiniteDuration): Builder = {
+      _configuration = _configuration.copy(maxRetryExceptionElapsedTime = duration)
       this
     }
 
@@ -1094,6 +1139,8 @@ object SparkConnectClient {
         sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
       retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
       rpcDeadlines: RpcDeadlines = RpcDeadlines(),
+      maxRetryExceptionElapsedTime: FiniteDuration =
+        GrpcRetryHandler.DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None,
@@ -1141,9 +1188,11 @@ object SparkConnectClient {
 
       // Workaround LocalChannelCredentials are added in
       // https://github.com/grpc/grpc-java/issues/9900
-      var metadataWithOptionalToken = metadata
+      var metadataWithOptionalToken = metadata.filterNot { case (key, _) =>
+        key.equalsIgnoreCase(OPERATION_ID_HEADER)
+      }
       if (!isSslEnabled.contains(true) && isLocal && token.isDefined) {
-        metadataWithOptionalToken = metadata + (("Authorization", s"Bearer ${token.get}"))
+        metadataWithOptionalToken += (("Authorization", s"Bearer ${token.get}"))
       }
 
       if (metadataWithOptionalToken.nonEmpty) {
@@ -1190,7 +1239,7 @@ object SparkConnectClient {
           applier.apply(headers)
         } catch {
           case e: Throwable =>
-            applier.fail(Status.UNAUTHENTICATED.withCause(e));
+            applier.fail(Status.UNAUTHENTICATED.withCause(e))
         }
       })
     }

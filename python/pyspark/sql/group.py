@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+# mypy: disable-error-code="empty-body"
+
 import sys
 
 from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
@@ -189,7 +191,7 @@ class GroupedData(PandasGroupedOpsMixin):
         return DataFrame(jdf, self.session)
 
     @dfapi
-    def count(self) -> "DataFrame":  # type: ignore[empty-body]
+    def count(self) -> "DataFrame":
         """Counts the number of records for each group.
 
         .. versionadded:: 1.3.0
@@ -223,7 +225,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def mean(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
+    def mean(self, *cols: str) -> DataFrame:
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
@@ -240,7 +242,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def avg(self, *cols: str) -> "DataFrame":  # type: ignore[empty-body]
+    def avg(self, *cols: str) -> "DataFrame":
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
@@ -291,7 +293,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def max(self, *cols: str) -> "DataFrame":  # type: ignore[empty-body]
+    def max(self, *cols: str) -> "DataFrame":
         """Computes the max value for each numeric columns for each group.
 
         .. versionadded:: 1.3.0
@@ -335,7 +337,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def min(self, *cols: str) -> "DataFrame":  # type: ignore[empty-body]
+    def min(self, *cols: str) -> "DataFrame":
         """Computes the min value for each numeric column for each group.
 
         .. versionadded:: 1.3.0
@@ -384,7 +386,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def sum(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
+    def sum(self, *cols: str) -> DataFrame:
         """Computes the sum for each numeric columns for each group.
 
         .. versionadded:: 1.3.0

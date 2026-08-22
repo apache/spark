@@ -1054,6 +1054,42 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
   }
 
+  test("RocksDB: split maintenance methods upload snapshots and clean up separately") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()
+    val conf = dbConf.copy(enableChangelogCheckpointing = true,
+      minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 3)
+    withDB(remoteDir, conf = conf) { db =>
+      // Commit 5 versions, uploading snapshots after each via doSnapshotMaintenance.
+      for (version <- 0 to 4) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+        db.doSnapshotMaintenance()
+      }
+      assert(snapshotVersionsPresent(remoteDir) == (1 to 5))
+      assert(changelogVersionsPresent(remoteDir) == (1 to 5))
+
+      // Commit 1 more version without maintenance.
+      // stale versions: (1, 2, 3), keep versions: (4, 5, 6)
+      db.load(5)
+      db.put("5", "5")
+      db.commit()
+      assert(snapshotVersionsPresent(remoteDir) == (1 to 5))
+      assert(changelogVersionsPresent(remoteDir) == (1 to 6))
+
+      // doSnapshotMaintenance should upload version 6 and not clean up.
+      db.doSnapshotMaintenance()
+      assert(snapshotVersionsPresent(remoteDir) == (1 to 6))
+      assert(changelogVersionsPresent(remoteDir) == (1 to 6))
+
+      // doCleanupMaintenance should delete stale versions (1, 2, 3) and not upload a snapshot.
+      db.doCleanupMaintenance()
+      assert(snapshotVersionsPresent(remoteDir) == Seq(4, 5, 6))
+      assert(changelogVersionsPresent(remoteDir) == Seq(4, 5, 6))
+    }
+  }
+
   testWithStateStoreCheckpointIdsAndColumnFamilies(
     "RocksDB: minDeltasForSnapshot",
     TestWithChangelogCheckpointingEnabled) {

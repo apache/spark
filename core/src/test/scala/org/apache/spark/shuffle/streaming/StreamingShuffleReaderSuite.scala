@@ -26,7 +26,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext.withSpark
-import org.apache.spark.internal.config.SHUFFLE_MANAGER
+import org.apache.spark.internal.config.SHUFFLE_MANAGER_INCREMENTAL
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.shuffle.streaming.{DataMessage, StreamingShuffleMessage, TerminationControlMessage}
@@ -43,7 +43,10 @@ class StreamingShuffleReaderSuite
   with MockitoSugar {
 
   private def newConf(): SparkConf =
-    new SparkConf().set(SHUFFLE_MANAGER, classOf[StreamingShuffleManager].getName)
+    // StreamingShuffleManager is pipelined, so it belongs in the incremental slot (the default
+    // spark.shuffle.manager must be a BlockingShuffleManager). This is what initializes the
+    // streaming output tracker that the reader constructor asserts.
+    new SparkConf().set(SHUFFLE_MANAGER_INCREMENTAL, classOf[StreamingShuffleManager].getName)
 
   private def createTaskContext(conf: SparkConf, partitionId: Int): TaskContextImpl = {
     val properties = new Properties()
@@ -59,7 +62,7 @@ class StreamingShuffleReaderSuite
       taskMemoryManager = taskMemoryManager,
       localProperties = properties,
       metricsSystem = mock[MetricsSystem],
-      cpus = 1)
+      cpuAmount = 1)
   }
 
   // A minimal DataMessage that is only used to exercise the iterator factory's type dispatch;

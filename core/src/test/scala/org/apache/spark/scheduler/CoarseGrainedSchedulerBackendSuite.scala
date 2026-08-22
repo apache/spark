@@ -18,7 +18,8 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.{Callable, CountDownLatch, FutureTask, LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -81,7 +82,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   test("compute max number of concurrent tasks can be launched when spark.task.cpus > 1") {
     val conf = new SparkConf()
-      .set(CPUS_PER_TASK, 2)
+      .set(CPUS_PER_TASK, BigDecimal(2))
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)
@@ -95,7 +96,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   test("compute max number of concurrent tasks can be launched when some executors are busy") {
     val conf = new SparkConf()
-      .set(CPUS_PER_TASK, 2)
+      .set(CPUS_PER_TASK, BigDecimal(2))
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)
@@ -143,7 +144,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       val discoveryScript = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0", "1", "2", "3"]}""")
       val conf = new SparkConf()
-        .set(CPUS_PER_TASK, 1)
+        .set(CPUS_PER_TASK, BigDecimal(1))
         .setMaster("local-cluster[1, 20, 1024]")
         .setAppName("test")
         .set(WORKER_GPU_ID.amountConf, "4")
@@ -199,7 +200,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         val discoveryScript = createTempScriptWithExpectedOutput(
           dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0", "1", "2", "3"]}""")
         val conf = new SparkConf()
-          .set(CPUS_PER_TASK, taskCpus)
+          .set(CPUS_PER_TASK, BigDecimal(taskCpus))
           .setMaster("local-cluster[1, 4, 1024]")
           .setAppName("test")
           .set(WORKER_GPU_ID.amountConf, "4")
@@ -216,7 +217,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         val numPartitions = Seq(4 / taskCpus, 4 / taskGpus).min
         val ret = sc.parallelize(1 to 20, numPartitions).mapPartitions { _ =>
           val tc = TaskContext.get()
-          assert(tc.cpus() == taskCpus)
+          assert(tc.cpuAmount() == taskCpus)
           val gpus = tc.resources()("gpu").addresses
           Iterator.single(gpus)
         }.collect()
@@ -348,7 +349,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, taskResources, bytebuffer)))
+      taskCpus, taskResources, None, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -455,7 +456,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, taskResources, bytebuffer)))
+      taskCpus, taskResources, None, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -548,7 +549,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskCpus = 2
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, Map.empty, bytebuffer)))
+      taskCpus, Map.empty, None, bytebuffer)))
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
     backend.driverEndpoint.send(ReviveOffers)
@@ -580,6 +581,153 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     }
   }
 
+  Seq(false, true).foreach { isBarrier =>
+    test("SPARK-58879: idle decommission rejects tasks assigned before LaunchTask " +
+      s"(barrier=$isBarrier)") {
+      val numTasks = if (isBarrier) 2 else 1
+      val conf = new SparkConf().set(EXECUTOR_CORES, 2)
+      val backend = createDecommissionBackend(conf)
+      val scheduler = backend.taskScheduler
+      val executor = registerDecommissionExecutor(backend, "1", 2)
+      val decommissionCalled = new AtomicBoolean(false)
+      backend.beforeDecommission = (_, _, _) => decommissionCalled.set(true)
+      val launchEntered = new CountDownLatch(1)
+      val allowLaunch = new CountDownLatch(1)
+      executor.beforeLaunch = _ => {
+        launchEntered.countDown()
+        require(allowLaunch.await(30, TimeUnit.SECONDS), "LaunchTask was not released")
+      }
+      val taskSet = if (isBarrier) {
+        FakeTask.createBarrierTaskSet(numTasks)
+      } else {
+        FakeTask.createTaskSet(numTasks)
+      }
+      scheduler.submitTasks(taskSet)
+      backend.driverEndpoint.send(ReviveOffers)
+
+      var requestThread: Thread = null
+      try {
+        assert(launchEntered.await(10, TimeUnit.SECONDS))
+        assert(scheduler.runningTasksByExecutors("1") === numTasks)
+        val (thread, request) = startDecommissionRequest {
+          backend.decommissionExecutorsIfIdle(
+            Array("1" -> ExecutorDecommissionInfo("idle timeout")), false)
+        }
+        requestThread = thread
+        assert(request.get(10, TimeUnit.SECONDS).isEmpty)
+        assert(backend.isExecutorActive("1"))
+        assert(!executor.decommissionReceived)
+        assert(!decommissionCalled.get())
+      } finally {
+        allowLaunch.countDown()
+        if (requestThread != null) {
+          requestThread.join(TimeUnit.SECONDS.toMillis(10))
+          assert(!requestThread.isAlive)
+        }
+      }
+
+      val tasks = (0 until numTasks).map(_ => executor.nextTask())
+      flushDecommissionBackend(backend)
+      tasks.foreach(completeDecommissionTestTask(backend, _))
+      assert(!scheduler.isExecutorBusy("1"))
+      assert(backend.getExecutorAvailableCpus("1").contains(BigDecimal(2)))
+      assert(backend.decommissionExecutorsIfIdle(
+        Array("1" -> ExecutorDecommissionInfo("idle timeout")), false) === Seq("1"))
+      assert(executor.decommissionReceived)
+    }
+  }
+
+  test("SPARK-58879: idle decommission fences an executor before concurrent resource offers") {
+    val backend = createDecommissionBackend()
+    val retired = registerDecommissionExecutor(backend, "1")
+    val survivor = registerDecommissionExecutor(backend, "2")
+    backend.taskScheduler.submitTasks(FakeTask.createTaskSet(1))
+    val admissionEntered = new CountDownLatch(1)
+    val allowAdmission = new CountDownLatch(1)
+    val offerEntered = new CountDownLatch(1)
+    val locksHeld = new AtomicBoolean(false)
+    val decommissionReleased = new AtomicBoolean(false)
+    backend.beforeDecommission = (_, _, _) => {
+      locksHeld.set(Thread.holdsLock(backend.taskScheduler) && Thread.holdsLock(backend))
+      admissionEntered.countDown()
+      decommissionReleased.set(allowAdmission.await(30, TimeUnit.SECONDS))
+    }
+    backend.beforeOffers = () => offerEntered.countDown()
+
+    val (requestThread, request) = startDecommissionRequest {
+      backend.decommissionExecutorsIfIdle(
+        Array("1" -> ExecutorDecommissionInfo("idle timeout")), false)
+    }
+    try {
+      assert(admissionEntered.await(10, TimeUnit.SECONDS))
+      backend.driverEndpoint.send(ReviveOffers)
+      assert(offerEntered.await(10, TimeUnit.SECONDS))
+    } finally {
+      allowAdmission.countDown()
+      requestThread.join(TimeUnit.SECONDS.toMillis(10))
+      assert(!requestThread.isAlive)
+    }
+    assert(request.get(10, TimeUnit.SECONDS) === Seq("1"))
+    assert(locksHeld.get())
+    assert(decommissionReleased.get())
+    flushDecommissionBackend(backend)
+    assert(retired.launchedTasks.isEmpty)
+    assert(retired.decommissionReceived)
+    val task = survivor.nextTask()
+    assert(task.executorId === "2")
+    completeDecommissionTestTask(backend, task)
+  }
+
+  test("SPARK-58879: idle decommission skips duplicates and does not replay rejected requests") {
+    // Retention defaults to zero. Enable it so an incorrectly queued request is observable.
+    val conf = new SparkConf().set(SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS, 1)
+    val backend = createDecommissionBackend(conf)
+    val first = registerDecommissionExecutor(backend, "1")
+    val second = registerDecommissionExecutor(backend, "2")
+    val info = ExecutorDecommissionInfo("idle timeout")
+    val requests = mutable.ArrayBuffer.empty[(Seq[String], Boolean, Boolean)]
+    backend.beforeDecommission = (ids, adjustTarget, triggeredByExecutor) => {
+      requests += ((ids, adjustTarget, triggeredByExecutor))
+    }
+
+    assert(backend.decommissionExecutorsIfIdle(
+      Array("1" -> info, "1" -> info, "3" -> info), false) === Seq("1"))
+    assert(backend.decommissionExecutorsIfIdle(Array("1" -> info), false).isEmpty)
+    assert(requests.toSeq === Seq((Seq("1"), false, false)))
+    assert(first.decommissionReceived)
+    assert(!second.decommissionReceived)
+    assert(!backend.hasUnknownDecommission("1"))
+    assert(!backend.hasUnknownDecommission("3"))
+
+    val third = registerDecommissionExecutor(backend, "3")
+    assert(!third.decommissionReceived)
+    assert(backend.isExecutorActive("3"))
+
+    assert(backend.decommissionExecutors(Array("4" -> info), false, false).isEmpty)
+    assert(backend.hasUnknownDecommission("4"))
+    val fourth = registerDecommissionExecutor(backend, "4")
+    assert(fourth.decommissionReceived)
+    assert(!backend.isExecutorActive("4"))
+    assert(!backend.hasUnknownDecommission("4"))
+  }
+
+  test("SPARK-58879: forced decommission still accepts a busy executor") {
+    val backend = createDecommissionBackend()
+    val executor = registerDecommissionExecutor(backend, "1")
+    backend.taskScheduler.submitTasks(FakeTask.createTaskSet(1))
+    backend.driverEndpoint.send(ReviveOffers)
+    val task = executor.nextTask()
+    assert(backend.taskScheduler.isExecutorBusy("1"))
+
+    assert(backend.decommissionExecutors(
+      Array("1" -> ExecutorDecommissionInfo("host drain")), false, false) === Seq("1"))
+    assert(executor.decommissionReceived)
+    assert(!backend.isExecutorActive("1"))
+    completeDecommissionTestTask(backend, task)
+    assert(!backend.taskScheduler.isExecutorBusy("1"))
+    assert(executor.launchedTasks.isEmpty)
+  }
+
   test("SPARK-41766: New registered executor should receive decommission request" +
     " sent before registration") {
     val conf = new SparkConf()
@@ -606,6 +754,325 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(mockEndpointRef.decommissionReceived)
   }
 
+  test("SPARK-58886: requestExecutors should saturate instead of overflowing a huge" +
+    " requested total") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    sc.requestTotalExecutors(Int.MaxValue - 1, 0, Map.empty)
+    backend.requestExecutors(2)
+
+    val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+    assert(backend.getRequestedTotalExecutors()(defaultProf) === Int.MaxValue)
+
+    // Only the applied increase (1, not the requested 2) may be recorded as a pending
+    // request time. Shrink the total to 1 to consume the huge seed entry, leaving just
+    // that increment: exactly one of the two executors registered below should get a
+    // request time.
+    sc.requestTotalExecutors(1, 0, Map.empty)
+
+    val infos = mutable.ArrayBuffer[ExecutorInfo]()
+    sc.addSparkListener(new SparkListener() {
+      override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+        infos += executorAdded.executorInfo
+      }
+    })
+    val mockAddress = mock[RpcAddress]
+    Seq("1", "2").foreach { id =>
+      backend.driverEndpoint.askSync[Boolean](
+        RegisterExecutor(id, new MockExecutorRpcEndpointRef(conf), mockAddress.host, 1,
+          Map(), Map(), Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    }
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    assert(infos.size === 2)
+    assert(infos.head.requestTime.isDefined)
+    assert(infos.last.requestTime.isEmpty)
+  }
+
+  test("SPARK-58828: New registered executor should be decommissioned while held") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+    val mockEndpointRef = new MockExecutorRpcEndpointRef(conf)
+    val mockAddress = mock[RpcAddress]
+
+    backend.setExecutorsHeld(true)
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map(), Map(),
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    assert(mockEndpointRef.decommissionReceived)
+    // The zero requirement is re-published without touching the requested totals
+    assert(backend.getRequestedTotalExecutors().isEmpty)
+  }
+
+  test("SPARK-58828: reset clears the explicit request record with the requested totals") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+    val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+    sc.requestTotalExecutors(2, 0, Map.empty)
+    assert(backend.hasExplicitExecutorRequests)
+
+    // While held, reset() preserves the requested totals and the explicit record
+    backend.setExecutorsHeld(true)
+    backend.reset()
+    assert(backend.hasExplicitExecutorRequests)
+    assert(backend.getRequestedTotalExecutors().getOrElse(defaultProf, -1) === 2)
+
+    // Not held, reset() clears both
+    backend.setExecutorsHeld(false)
+    backend.reset()
+    assert(!backend.hasExplicitExecutorRequests)
+    assert(backend.getRequestedTotalExecutors().isEmpty)
+  }
+
+  test("SPARK-58828: the restore sentinel is published without being recorded") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+    val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+    assert(backend.publishTotalsWithoutRecording(Map(defaultProf -> Int.MaxValue)))
+    // Neither the totals nor the explicit-request record change, so killExecutors' empty-map
+    // seeding and a later hold's kill-seeded restore keep their pre-hold behavior
+    assert(backend.getRequestedTotalExecutors().isEmpty)
+    assert(!backend.hasExplicitExecutorRequests)
+  }
+
+  test("SPARK-58828: executor requests made while held are retained until resume") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+    val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+    assert(!backend.hasExplicitExecutorRequests)
+
+    backend.setExecutorsHeld(true)
+    // Both public request APIs keep recording the requested totals while held
+    sc.requestTotalExecutors(3, 0, Map.empty)
+    assert(backend.getRequestedTotalExecutors().getOrElse(defaultProf, -1) === 3)
+    sc.requestExecutors(2)
+    assert(backend.getRequestedTotalExecutors().getOrElse(defaultProf, -1) === 5)
+    assert(backend.hasExplicitExecutorRequests)
+
+    // A held reassertion publishes zero but does not overwrite the requested totals
+    backend.reassertHeldRequirement()
+    assert(backend.getRequestedTotalExecutors().getOrElse(defaultProf, -1) === 5)
+
+    // Resume republishes the requested totals as-is, and a stale reassertion after the hold
+    // is lifted leaves them alone
+    backend.setExecutorsHeld(false)
+    assert(backend.republishRequestedTotals())
+    backend.reassertHeldRequirement()
+    assert(backend.getRequestedTotalExecutors().getOrElse(defaultProf, -1) === 5)
+  }
+
+  test("UpdateUserCredentials is broadcast to all registered executors") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    // Register two mock executors
+    val mockEndpointRef1 = new MockExecutorRpcEndpointRef(conf)
+    val mockEndpointRef2 = new MockExecutorRpcEndpointRef(conf)
+    val mockAddress = mock[RpcAddress]
+
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef1, mockAddress.host, 1, Map(), Map(),
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("2", mockEndpointRef2, mockAddress.host, 1, Map(), Map(),
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+
+    // Neither executor should have received credentials yet
+    assert(mockEndpointRef1.receivedUserCredentials.isEmpty)
+    assert(mockEndpointRef2.receivedUserCredentials.isEmpty)
+
+    // Send UpdateUserCredentials via DriverEndpoint
+    val testCredentials = Array[Byte](1, 2, 3, 4, 5)
+    backend.driverEndpoint.send(UpdateUserCredentials(1L, testCredentials))
+
+    // Wait for the message to be processed
+    eventually(timeout(5 seconds)) {
+      assert(mockEndpointRef1.receivedUserCredentials.isDefined)
+      assert(mockEndpointRef2.receivedUserCredentials.isDefined)
+    }
+
+    assert(mockEndpointRef1.receivedUserCredentials.get._2 === testCredentials)
+    assert(mockEndpointRef2.receivedUserCredentials.get._2 === testCredentials)
+
+    // Verify SparkEnv credential store is also updated
+    assert(SparkEnv.get.userCredentials.get().bytes === testCredentials)
+  }
+
+  test("SparkAppConfig includes current user credentials for late-registering executors") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    // Simulate credential acquisition by setting credentials before any executor registers
+    val testCredentials = Array[Byte](10, 20, 30, 40, 50)
+    backend.driverEndpoint.send(UpdateUserCredentials(1L, testCredentials))
+
+    // Wait for the message to be processed
+    eventually(timeout(5 seconds)) {
+      assert(SparkEnv.get.userCredentials.get() != null)
+    }
+
+    // Now retrieve SparkAppConfig as a late-registering executor would
+    val appConfig = backend.driverEndpoint.askSync[SparkAppConfig](
+      RetrieveSparkAppConfig(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    // Verify that userCredentials is present in the response
+    assert(appConfig.userCredentials.isDefined,
+      "SparkAppConfig should include user credentials for late-registering executors")
+    assert(appConfig.userCredentials.get._2 === testCredentials)
+  }
+
+  test("version guard prevents stale credentials from overwriting newer ones") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    // Send version 3 credentials first
+    val credsV3 = Array[Byte](30, 30, 30)
+    backend.driverEndpoint.send(UpdateUserCredentials(3L, credsV3))
+
+    eventually(timeout(5 seconds)) {
+      assert(SparkEnv.get.userCredentials.get() != null)
+      assert(SparkEnv.get.userCredentials.get().version === 3L)
+    }
+
+    // Now send version 1 (stale) -- should be rejected
+    val credsV1 = Array[Byte](10, 10, 10)
+    backend.driverEndpoint.send(UpdateUserCredentials(1L, credsV1))
+
+    // Flush the DriverEndpoint mailbox by sending a synchronous request.
+    // Since DriverEndpoint is single-threaded, when this returns, v1 has been processed.
+    backend.driverEndpoint.askSync[SparkAppConfig](
+      RetrieveSparkAppConfig(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    // Store should still hold v3 (stale v1 was rejected by version guard)
+    assert(SparkEnv.get.userCredentials.get().version === 3L,
+      "Stale version 1 should not overwrite newer version 3")
+
+    // Send version 5 (newer) -- should be accepted
+    val credsV5 = Array[Byte](50, 50, 50)
+    backend.driverEndpoint.send(UpdateUserCredentials(5L, credsV5))
+
+    eventually(timeout(5 seconds)) {
+      assert(SparkEnv.get.userCredentials.get().version === 5L)
+    }
+
+    // Verify version 5 credentials are in the store (not v1 or v3)
+    assert(SparkEnv.get.userCredentials.get().bytes === credsV5)
+  }
+
+  test("executor-side credential store version guard rejects stale and accepts newer") {
+    // This tests VersionedCredentials.updateIfNewer -- the same method used in
+    // CoarseGrainedExecutorBackend.receive and Executor.TaskRunner.
+    val store = new AtomicReference[VersionedCredentials]()
+
+    // Initial write to null store should succeed
+    VersionedCredentials.updateIfNewer(store, 2L, Array[Byte](20, 20))
+    assert(store.get().version === 2L)
+    assert(store.get().bytes === Array[Byte](20, 20))
+
+    // Stale version (1) should be rejected
+    VersionedCredentials.updateIfNewer(store, 1L, Array[Byte](10, 10))
+    assert(store.get().version === 2L, "Stale version should not overwrite newer")
+
+    // Same version (2) should also be rejected (strict >)
+    VersionedCredentials.updateIfNewer(store, 2L, Array[Byte](22, 22))
+    assert(store.get().version === 2L)
+    assert(store.get().bytes === Array[Byte](20, 20), "Same version should not overwrite")
+
+    // Newer version (5) should be accepted
+    VersionedCredentials.updateIfNewer(store, 5L, Array[Byte](50, 50))
+    assert(store.get().version === 5L)
+    assert(store.get().bytes === Array[Byte](50, 50))
+  }
+
+  private def createDecommissionBackend(
+      conf: SparkConf = new SparkConf()): DecommissionTestSchedulerBackend = {
+    conf.setMaster(s"coarseclustermanager[${classOf[DecommissionTestSchedulerBackend].getName}]")
+      .setAppName("idle decommission test")
+      .set(EXECUTOR_INSTANCES, 0)
+      .set(DYN_ALLOCATION_ENABLED, false)
+      .set(DECOMMISSION_ENABLED, true)
+    sc = new SparkContext(conf)
+    sc.schedulerBackend.asInstanceOf[DecommissionTestSchedulerBackend]
+  }
+
+  private def registerDecommissionExecutor(
+      backend: DecommissionTestSchedulerBackend,
+      executorId: String,
+      cores: Int = 1)
+      : DecommissionTestExecutorRpcEndpointRef = {
+    val executor = new DecommissionTestExecutorRpcEndpointRef(sc.conf, executorId)
+    assert(backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor(executorId, executor, "localhost", cores, Map.empty, Map.empty,
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)))
+    backend.driverEndpoint.send(LaunchedExecutor(executorId))
+    flushDecommissionBackend(backend)
+    executor
+  }
+
+  private def flushDecommissionBackend(backend: DecommissionTestSchedulerBackend): Unit = {
+    // Any synchronous request flushes earlier driver-endpoint messages. Ignore its result:
+    // executor "1" may not be registered or may already be retired.
+    backend.driverEndpoint.askSync[Boolean](IsExecutorAlive("1"))
+  }
+
+  private def completeDecommissionTestTask(
+      backend: DecommissionTestSchedulerBackend,
+      task: TaskDescription): Unit = {
+    val result = new DirectTaskResult[Int](
+      sc.env.serializer.newInstance().serialize(0), Seq.empty, Array.emptyLongArray)
+    val serializedResult = sc.env.closureSerializer.newInstance().serialize(result)
+    backend.driverEndpoint.send(StatusUpdate(
+      task.executorId, task.taskId, TaskState.FINISHED, new SerializableBuffer(serializedResult),
+      task.cpus, task.resources))
+    flushDecommissionBackend(backend)
+  }
+
+  private def startDecommissionRequest[T](body: => T): (Thread, FutureTask[T]) = {
+    val request = new FutureTask[T](new Callable[T] {
+      override def call(): T = body
+    })
+    val thread = new Thread(request, "idle-decommission-test")
+    thread.setDaemon(true)
+    thread.start()
+    (thread, request)
+  }
+
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {
     sc.submitJob(
       rdd,
@@ -617,7 +1084,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   }
 }
 
-/** Simple cluster manager that wires up our mock backend for the resource tests. */
+/** Cluster manager for the mock resource tests and real-scheduler decommission tests. */
 private class CSMockExternalClusterManager extends ExternalClusterManager {
 
   private var ts: TaskSchedulerImpl = _
@@ -628,12 +1095,18 @@ private class CSMockExternalClusterManager extends ExternalClusterManager {
   override def createTaskScheduler(
       sc: SparkContext,
       masterURL: String): TaskScheduler = {
-    ts = mock[TaskSchedulerImpl]
-    when(ts.sc).thenReturn(sc)
-    when(ts.applicationId()).thenReturn("appid1")
-    when(ts.applicationAttemptId()).thenReturn(Some("attempt1"))
-    when(ts.schedulingMode).thenReturn(SchedulingMode.FIFO)
-    when(ts.excludedNodes()).thenReturn(Set.empty[String])
+    masterURL match {
+      case MOCK_REGEX(backendClassName)
+          if backendClassName == classOf[DecommissionTestSchedulerBackend].getName =>
+        ts = new TaskSchedulerImpl(sc, sc.conf.get(TASK_MAX_FAILURES))
+      case _ =>
+        ts = mock[TaskSchedulerImpl]
+        when(ts.sc).thenReturn(sc)
+        when(ts.applicationId()).thenReturn("appid1")
+        when(ts.applicationAttemptId()).thenReturn(Some("attempt1"))
+        when(ts.schedulingMode).thenReturn(SchedulingMode.FIFO)
+        when(ts.excludedNodes()).thenReturn(Set.empty[String])
+    }
     ts
   }
 
@@ -661,18 +1134,90 @@ class TestCoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, override v
   def getTaskSchedulerImpl(): TaskSchedulerImpl = scheduler
 }
 
+private[spark] class DecommissionTestSchedulerBackend(
+    scheduler: TaskSchedulerImpl,
+    override val rpcEnv: RpcEnv)
+  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
+
+  val taskScheduler = scheduler
+  @volatile var beforeOffers: () => Unit = () => ()
+  @volatile var beforeDecommission: (Seq[String], Boolean, Boolean) => Unit = (_, _, _) => ()
+
+  // Tests drive the real offer paths explicitly, without periodic or scheduler-triggered offers.
+  override protected def createDriverEndpoint(): DriverEndpoint = new DriverEndpoint {
+    override def onStart(): Unit = {}
+
+    override def receive: PartialFunction[Any, Unit] = {
+      case ReviveOffers =>
+        beforeOffers()
+        super.receive(ReviveOffers)
+      case message => super.receive(message)
+    }
+  }
+
+  override def reviveOffers(): Unit = {}
+
+  override def decommissionExecutors(
+      executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
+      adjustTargetNumExecutors: Boolean,
+      triggeredByExecutor: Boolean): Seq[String] = {
+    beforeDecommission(
+      executorsAndDecomInfo.map(_._1).toSeq, adjustTargetNumExecutors, triggeredByExecutor)
+    super.decommissionExecutors(
+      executorsAndDecomInfo, adjustTargetNumExecutors, triggeredByExecutor)
+  }
+
+  def hasUnknownDecommission(executorId: String): Boolean = synchronized {
+    unknownExecutorsPendingDecommission.getIfPresent(executorId) != null
+  }
+}
+
+private[spark] class DecommissionTestExecutorRpcEndpointRef(
+    conf: SparkConf,
+    executorId: String) extends RpcEndpointRef(conf) {
+
+  val launchedTasks = new LinkedBlockingQueue[TaskDescription]()
+  @volatile var decommissionReceived = false
+  @volatile var beforeLaunch: TaskDescription => Unit = (_: TaskDescription) => ()
+
+  override def address: RpcAddress = RpcAddress("localhost", 10000 + executorId.toInt)
+  override def name: String = s"executor-$executorId"
+
+  override def send(message: Any): Unit = message match {
+    case LaunchTask(data) =>
+      val task = TaskDescription.decode(data.value)
+      beforeLaunch(task)
+      launchedTasks.add(task)
+    case DecommissionExecutor => decommissionReceived = true
+    case _ =>
+  }
+
+  override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
+    Future.successful(true.asInstanceOf[T])
+  }
+
+  def nextTask(): TaskDescription = {
+    val task = launchedTasks.poll(10, TimeUnit.SECONDS)
+    require(task != null, s"No task was launched on executor $executorId")
+    task
+  }
+}
+
 private[spark] class MockExecutorRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
   // scalastyle:off executioncontextglobal
   import scala.concurrent.ExecutionContext.Implicits.global
   // scalastyle:on executioncontextglobal
 
-  var decommissionReceived = false
+  @volatile var decommissionReceived = false
+  @volatile var receivedUserCredentials: Option[(Long, Array[Byte])] = None
 
   override def address: RpcAddress = null
   override def name: String = "executor"
   override def send(message: Any): Unit =
     message match {
       case DecommissionExecutor => decommissionReceived = true
+      case UpdateUserCredentials(version, creds) => receivedUserCredentials = Some((version, creds))
+      case _ =>
     }
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
     Future{true.asInstanceOf[T]}

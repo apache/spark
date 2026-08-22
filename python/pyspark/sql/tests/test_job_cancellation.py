@@ -20,6 +20,7 @@ import threading
 import time
 
 from pyspark import InheritableThread, inheritable_thread_target
+from pyspark.errors import IllegalArgumentException, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import eventually
 
@@ -34,6 +35,27 @@ class JobCancellationTestsMixin:
         self.assertEqual(self.spark.getTags(), {"b"})
         self.spark.addTag("c")
         self.spark.clearTags()
+        self.assertEqual(self.spark.getTags(), set())
+        self.spark.clearTags()
+
+    def test_invalid_tags(self):
+        # A tag cannot be an empty string or contain the ',' separator (documented on
+        # SparkSession.addTag / removeTag). Both the classic and Spark Connect paths reject
+        # such tags. The two paths raise different types -- a JVM-backed
+        # IllegalArgumentException in Classic and a PySparkValueError in Connect -- so accept
+        # either while still rejecting unrelated session/transport failures.
+        invalid_tag_errors = (IllegalArgumentException, PySparkValueError)
+        self.spark.clearTags()
+        for invalid_tag in ["", "a,b", ","]:
+            with self.assertRaises(invalid_tag_errors):
+                self.spark.addTag(invalid_tag)
+            with self.assertRaises(invalid_tag_errors):
+                self.spark.removeTag(invalid_tag)
+        # A rejected tag must not have been recorded.
+        self.assertEqual(self.spark.getTags(), set())
+
+        # Removing a valid but absent tag is a no-op in both modes (does not raise).
+        self.spark.removeTag("absent")
         self.assertEqual(self.spark.getTags(), set())
         self.spark.clearTags()
 

@@ -74,9 +74,10 @@ private[scheduler] case class JobGroupCancelled(
 private[scheduler] case class JobTagCancelled(
     tagName: String,
     reason: Option[String],
-    cancelledJobs: Option[Promise[Seq[ActiveJob]]]) extends DAGSchedulerEvent
+    cancelledJobs: Option[Promise[Seq[CancelledJobInfo]]]) extends DAGSchedulerEvent
 
-private[scheduler] case object AllJobsCancelled extends DAGSchedulerEvent
+private[scheduler] case class AllJobsCancelled(reason: Option[String] = None)
+  extends DAGSchedulerEvent
 
 private[scheduler] case class CleanupQueryJobs(executionId: Long) extends DAGSchedulerEvent
 

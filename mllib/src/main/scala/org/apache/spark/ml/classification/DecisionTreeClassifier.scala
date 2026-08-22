@@ -201,7 +201,9 @@ class DecisionTreeClassificationModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Node.dummyNode, -1, -1)
 
-  private[spark] override def estimatedSize: Long = getEstimatedSize()
+  override private[ml] val treeStats: NodeStats = rootNode.computeStats
+
+  private[spark] override def estimatedSize: Long = estimateMatadataSize + getEstimatedSize()
 
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
@@ -341,7 +343,7 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
-    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
+    val rootNode = Node.withLeafIndices(Node.fromOld(oldModel.topNode, categoricalFeatures))
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
     // Can't infer number of features from old model, so default to -1
     new DecisionTreeClassificationModel(uid, rootNode, numFeatures, -1)

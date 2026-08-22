@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
+import org.apache.spark.sql.sources.CreatableRelationProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -176,16 +177,22 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
 
-              (catalog.loadTable(ident), Some(catalog), Some(ident))
+              val table = CatalogV2Util.loadTableForV2Write(
+                catalog, ident, getWritePrivileges, dsOptions)
+              (table, Some(catalog), Some(ident))
             case _: TableProvider =>
               val t = getTable
               if (t.supports(BATCH_WRITE)) {
                 (t, None, None)
-              } else {
-                // Streaming also uses the data source V2 API. So it may be that the data source
-                // implements v2, but has no v2 implementation for batch writes. In that case, we
-                // fall back to saving as though it's a V1 source.
+              } else if (t.supports(V1_BATCH_WRITE) ||
+                  provider.isInstanceOf[CreatableRelationProvider]) {
+                // Fall back to V1 write path. V1_BATCH_WRITE is the explicit capability
+                // for DSv2 tables that opt into the V1 write path. We also check
+                // CreatableRelationProvider for backward compatibility with sources that
+                // predate the V1_BATCH_WRITE capability (SPARK-28334).
                 return saveToV1SourceCommand(path)
+              } else {
+                throw QueryCompilationErrors.unsupportedBatchWriteError(t)
               }
           }
 
@@ -229,15 +236,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                 finalOptions,
                 ignoreIfExists = createMode == SaveMode.Ignore)
             case _: TableProvider =>
-              if (getTable.supports(BATCH_WRITE)) {
+              val t = getTable
+              if (t.supports(BATCH_WRITE)) {
                 throw QueryCompilationErrors.writeWithSaveModeUnsupportedBySourceError(
                   source, createMode.name())
-              } else {
-                // Streaming also uses the data source V2 API. So it may be that the data source
-                // implements v2, but has no v2 implementation for batch writes. In that case, we
-                // fallback to saving as though it's a V1 source.
+              } else if (t.supports(V1_BATCH_WRITE) ||
+                  provider.isInstanceOf[CreatableRelationProvider]) {
+                // Fall back to V1 write path (see comment in Append/Overwrite branch above).
                 assertSchemaEvolutionNotEnabledForV1Write()
                 saveToV1SourceCommand(path)
+              } else {
+                throw QueryCompilationErrors.unsupportedBatchWriteError(t)
               }
           }
       }
@@ -308,7 +317,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    *    +---+---+
    * }}}
    *
-   * Because it inserts data to an existing table, format or options will be ignored.
+   * Because it inserts data to an existing table, the format is ignored. For data source V2
+   * tables, catalog-declared table-state options are forwarded to the table load and all options
+   * are forwarded to the write; for V1 tables the options are ignored.
    *
    * @since 1.4.0
    */
@@ -347,13 +358,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
   }
 
   private def insertIntoCommand(catalog: CatalogPlugin, ident: Identifier): LogicalPlan = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-    val table = catalog.asTableCatalog.loadTable(ident, getWritePrivileges.toSet.asJava) match {
+    val tableOptions = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
+    val table = CatalogV2Util.loadTableForWrite(
+      catalog, ident, getWritePrivileges, tableOptions) match {
       case _: V1Table =>
         return insertIntoCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
-        DataSourceV2Relation.create(t, Some(catalog), Some(ident))
+        CatalogV2Util.rejectTimeTravelOptionsForWrite(catalog, ident, tableOptions)
+        DataSourceV2Relation.create(t, Some(catalog), Some(ident), tableOptions)
     }
 
     curmode match {
@@ -479,18 +491,27 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
       v2ProviderOpt: Option[TableProvider],
       ident: Identifier,
       nameParts: Seq[String]): LogicalPlan = {
-    val tableOpt = try Option(catalog.loadTable(ident, getWritePrivileges.toSet.asJava)) catch {
+    val tableOptions = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
+    val tableOpt = try {
+      Option(CatalogV2Util.loadTableForWrite(catalog, ident, getWritePrivileges, tableOptions))
+    } catch {
       case _: NoSuchTableException => None
     }
 
-    (curmode, tableOpt) match {
-      case (_, Some(_: V1Table)) =>
+    tableOpt match {
+      case Some(_: V1Table) =>
         assertSchemaEvolutionNotEnabledForV1Write()
-        saveAsV1TableCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
+        return saveAsV1TableCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
+      case _ => ()
+    }
 
+    CatalogV2Util.rejectTimeTravelOptionsForWrite(catalog, ident, tableOptions)
+
+    (curmode, tableOpt) match {
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
-        val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+        val v2Relation =
+          DataSourceV2Relation.create(table, Some(catalog), Some(ident), tableOptions)
         AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap, _withSchemaEvolution)
 
       case (SaveMode.Overwrite, _) =>

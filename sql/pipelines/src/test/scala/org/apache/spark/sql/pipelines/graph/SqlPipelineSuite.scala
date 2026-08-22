@@ -30,6 +30,12 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
   private val externalTable1Ident = fullyQualifiedIdentifier("external_t1")
   private val externalTable2Ident = fullyQualifiedIdentifier("external_t2")
 
+  private def resolveGraph(graph: DataflowGraph): DataflowGraph =
+    graph.resolve(spark.sessionState.conf.caseSensitiveAnalysis)
+
+  private def validateGraph(graph: DataflowGraph): DataflowGraph =
+    graph.validate(spark.sessionState.conf.caseSensitiveAnalysis)
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     // Create mock external tables that tests can reference, ex. to stream from.
@@ -53,7 +59,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
                    |SELECT * FROM STREAM $externalTable2Ident;
                    |""".stripMargin
     )
-    val resolvedDataflowGraph = unresolvedDataflowGraph.resolve()
+    val resolvedDataflowGraph = resolveGraph(unresolvedDataflowGraph)
 
     assert(resolvedDataflowGraph.flows.size == 4)
     assert(resolvedDataflowGraph.tables.size == 2)
@@ -127,7 +133,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
         "CREATE MATERIALIZED VIEW a COMMENT 'this is a comment' AS SELECT * FROM range(1, 4)"
     )
 
-    val resolvedDataflowGraph = unresolvedDataflowGraph.resolve()
+    val resolvedDataflowGraph = resolveGraph(unresolvedDataflowGraph)
 
     val flowA =
       resolvedDataflowGraph.resolvedFlows
@@ -144,7 +150,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
                   |""".stripMargin
     )
 
-    val resolvedDataflowGraph = unresolvedDataflowGraph.resolve()
+    val resolvedDataflowGraph = resolveGraph(unresolvedDataflowGraph)
 
     assert(
       resolvedDataflowGraph.resolvedFlows
@@ -168,7 +174,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
                   |""".stripMargin
     )
 
-    val resolvedDataflowGraph = unresolvedDataflowGraph.resolve()
+    val resolvedDataflowGraph = resolveGraph(unresolvedDataflowGraph)
 
     Seq("a", "b", "c", "d").foreach { datasetName =>
       val backingFlow = resolvedDataflowGraph.resolvedFlows
@@ -258,7 +264,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
                   |PARTITIONED BY (id1, id2)
                   |AS SELECT id as id1, id as id2 FROM range(1,2) """.stripMargin
     )
-    val resolvedDataflowGraph = unresolvedDataflowGraph.resolve()
+    val resolvedDataflowGraph = resolveGraph(unresolvedDataflowGraph)
 
     assert(
       resolvedDataflowGraph.tables
@@ -363,7 +369,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
       sqlText = "CREATE STREAMING TABLE st TBLPROPERTIES ('prop1'='foo', 'prop2'='bar') AS SELECT 1"
     )
-    val resolvedDataflowGraph = unresolvedDataflowGraph.resolve()
+    val resolvedDataflowGraph = resolveGraph(unresolvedDataflowGraph)
     assert(
       resolvedDataflowGraph.tables
         .find(_.identifier == fullyQualifiedIdentifier("st"))
@@ -387,7 +393,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
                   |""".stripMargin
     )
 
-    val resolvedDataflowGraph = unresolvedDataflowGraph.resolve()
+    val resolvedDataflowGraph = resolveGraph(unresolvedDataflowGraph)
 
     assert(
       resolvedDataflowGraph.flows
@@ -518,7 +524,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
                      |""".stripMargin
       )
 
-      val resolvedDataflowGraph = unresolvedDataflowGraph.resolve()
+      val resolvedDataflowGraph = resolveGraph(unresolvedDataflowGraph)
 
       assert(
         resolvedDataflowGraph.resolutionFailedFlows
@@ -577,10 +583,10 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
                   |""".stripMargin
     )
 
-    val resolvedDataflowGraph = unresolvedDataflowGraph.resolve()
+    val resolvedDataflowGraph = resolveGraph(unresolvedDataflowGraph)
 
     // Let inferred/declared schema mismatch detection execute
-    resolvedDataflowGraph.validate()
+    validateGraph(resolvedDataflowGraph)
 
     val expectedSchema = new StructType().add(name = "id", dataType = LongType, nullable = false)
 
@@ -651,7 +657,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
       sqlText = s"CREATE VIEW b COMMENT 'my persisted comment' AS SELECT * FROM range(1, 4);"
     )
-    val graph = unresolvedDataflowGraph.resolve().validate()
+    val graph = validateGraph(resolveGraph(unresolvedDataflowGraph))
 
     val view = graph.views.last
 
@@ -897,9 +903,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
 
     checkError(
       exception = intercept[AnalysisException] {
-        unresolvedDataflowGraph
-          .resolve()
-          .validate()
+        validateGraph(resolveGraph(unresolvedDataflowGraph))
       },
       condition = "PIPELINE_DATASET_WITHOUT_FLOW",
       sqlState = Option("0A000"),
@@ -1120,7 +1124,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
   // Two SQL forms register an [[AutoCdcFlow]] into the dataflow graph:
   //   1. CREATE STREAMING TABLE <name> FLOW AUTO CDC FROM <source> KEYS (...) SEQUENCE BY <expr>
   //   2. CREATE FLOW <name> AS AUTO CDC INTO <target> FROM <source> KEYS (...) SEQUENCE BY <expr>
-  // SQL AUTO CDC only supports SCD Type 1.
+  // Both forms support STORED AS SCD TYPE 1|2 and, under SCD2, TRACK HISTORY ON ....
   // ===========================================================================
 
   /** Returns the single unresolved [[AutoCdcFlow]] registered for the given flow identifier. */
@@ -1213,6 +1217,99 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       case Some(ColumnSelection.IncludeColumns(cols)) => assert(cols.map(_.name) == Seq("id"))
       case other => fail(s"Expected IncludeColumns(id), got $other")
     }
+  }
+
+  test("AUTO CDC STORED AS SCD TYPE 2 maps onto ChangeArgs") {
+    val graph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE STREAMING TABLE st
+                   |FLOW AUTO CDC
+                   |FROM STREAM $externalTable1Ident
+                   |KEYS (id)
+                   |SEQUENCE BY id
+                   |STORED AS SCD TYPE 2
+                   |""".stripMargin
+    )
+
+    val flow = autoCdcFlowFor(graph, "st")
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type2)
+    assert(flow.changeArgs.trackHistorySelection.isEmpty)
+  }
+
+  test("AUTO CDC STORED AS SCD TYPE 2 with TRACK HISTORY ON maps onto ChangeArgs") {
+    val graph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE STREAMING TABLE target;
+                   |CREATE FLOW f AS AUTO CDC INTO target
+                   |FROM STREAM $externalTable1Ident
+                   |KEYS (id)
+                   |SEQUENCE BY id
+                   |STORED AS SCD TYPE 2
+                   |TRACK HISTORY ON (id)
+                   |""".stripMargin
+    )
+
+    val flow = autoCdcFlowFor(graph, "f")
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type2)
+    flow.changeArgs.trackHistorySelection match {
+      case Some(ColumnSelection.IncludeColumns(cols)) => assert(cols.map(_.name) == Seq("id"))
+      case other => fail(s"Expected IncludeColumns(id), got $other")
+    }
+  }
+
+  test("AUTO CDC STORED AS SCD TYPE 2 with TRACK HISTORY ON * EXCEPT maps onto ChangeArgs") {
+    val graph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE STREAMING TABLE st
+                   |FLOW AUTO CDC
+                   |FROM STREAM $externalTable1Ident
+                   |KEYS (id)
+                   |SEQUENCE BY id
+                   |STORED AS SCD TYPE 2
+                   |TRACK HISTORY ON * EXCEPT (id)
+                   |""".stripMargin
+    )
+
+    val flow = autoCdcFlowFor(graph, "st")
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type2)
+    flow.changeArgs.trackHistorySelection match {
+      case Some(ColumnSelection.ExcludeColumns(cols)) => assert(cols.map(_.name) == Seq("id"))
+      case other => fail(s"Expected ExcludeColumns(id), got $other")
+    }
+  }
+
+  test("AUTO CDC TRACK HISTORY without SCD TYPE 2 is rejected") {
+    val ex = intercept[SqlGraphElementRegistrationException] {
+      unresolvedDataflowGraphFromSql(
+        sqlText = s"""
+                     |CREATE STREAMING TABLE st
+                     |FLOW AUTO CDC
+                     |FROM STREAM $externalTable1Ident
+                     |KEYS (id)
+                     |SEQUENCE BY id
+                     |TRACK HISTORY ON (id)
+                     |""".stripMargin
+      )
+    }
+    assert(ex.getMessage.contains("TRACK HISTORY requires STORED AS SCD TYPE 2"))
+  }
+
+  test("AUTO CDC TRACK HISTORY with explicit STORED AS SCD TYPE 1 is rejected") {
+    // The implicit-default-SCD1 case is covered above; this pins the explicit SCD TYPE 1 path.
+    val ex = intercept[SqlGraphElementRegistrationException] {
+      unresolvedDataflowGraphFromSql(
+        sqlText = s"""
+                     |CREATE STREAMING TABLE st
+                     |FLOW AUTO CDC
+                     |FROM STREAM $externalTable1Ident
+                     |KEYS (id)
+                     |SEQUENCE BY id
+                     |STORED AS SCD TYPE 1
+                     |TRACK HISTORY ON (id)
+                     |""".stripMargin
+      )
+    }
+    assert(ex.getMessage.contains("TRACK HISTORY requires STORED AS SCD TYPE 2"))
   }
 
   test("Explicit column list is rejected for CREATE STREAMING TABLE FLOW AUTO CDC") {

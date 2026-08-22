@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.types.variant.VariantBuilder
+import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils.createArray
@@ -686,6 +686,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on nonascii
     testVariantGet("[1, 2, 3]", "$[2147483647]", IntegerType, null)
 
+    Seq("variant_get" -> true, "try_variant_get" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantGet(BoundReference(0, VariantType, nullable = true), Literal(".a"),
+            IntegerType, failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_GET_PATH",
+          Map("path" -> ".a", "functionName" -> s"`$name`"))
+    }
+
     checkInvalidPath("")
     checkInvalidPath(".a")
     checkInvalidPath("$1")
@@ -696,6 +706,31 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkInvalidPath("$[\"\"\"]")
     checkInvalidPath("$[\"\\\"\"]")
+  }
+
+  test("SPARK-58672: validate char/varchar target types in variant_get") {
+    def check(dataType: DataType, expected: Boolean): Unit = {
+      assert(
+        variantGet("""{"a": 1}""", "$", dataType)
+          .checkInputDataTypes().isSuccess == expected)
+    }
+
+    def targetTypes(stringType: StringType): Seq[DataType] = Seq(
+      stringType,
+      ArrayType(stringType),
+      MapType(stringType, IntegerType),
+      MapType(StringType, stringType),
+      StructType(Seq(StructField("v", stringType))))
+
+    targetTypes(StringType).foreach { dataType =>
+      check(dataType, expected = true)
+    }
+
+    Seq(CharType(10), VarcharType(10)).foreach { stringType =>
+      targetTypes(stringType).foreach { dataType =>
+        check(dataType, expected = false)
+      }
+    }
   }
 
   test("cast from variant") {
@@ -974,6 +1009,94 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkFailure(true, toVariantObject = true)
     checkFailure(Literal.create(Literal.create(Period.ofMonths(0))), toVariantObject = true)
     checkFailure(Map(1 -> 1), toVariantObject = true)
+  }
+
+  test("SPARK-58672: validate char/varchar input types in to_variant_object") {
+    def check(dataType: DataType, expected: Boolean): Unit = {
+      assert(
+        ToVariantObject(Literal.create(null, dataType))
+          .checkInputDataTypes().isSuccess == expected)
+    }
+
+    def nestedTypes(stringType: StringType): Seq[DataType] = Seq(
+      ArrayType(stringType),
+      MapType(stringType, IntegerType),
+      MapType(StringType, stringType),
+      StructType(Seq(StructField("v", stringType))))
+
+    nestedTypes(StringType).foreach { dataType =>
+      check(dataType, expected = true)
+    }
+
+    Seq(CharType(10), VarcharType(10)).foreach { stringType =>
+      nestedTypes(stringType).foreach { dataType =>
+        check(dataType, expected = false)
+      }
+    }
+  }
+
+  test("variant_from_arrays and variant_from_entries") {
+    def keysValues(keys: Any, values: Any, valueType: DataType): VariantFromArrays =
+      VariantFromArrays(
+        Literal.create(keys, ArrayType(StringType)),
+        Literal.create(values, ArrayType(valueType)))
+
+    def entriesOf(entries: Any, valueType: DataType,
+        containsNull: Boolean = false): VariantFromEntries =
+      VariantFromEntries(Literal.create(entries, ArrayType(
+        StructType(Seq(StructField("k", StringType), StructField("v", valueType))), containsNull)))
+
+    // Basic object construction; keys are sorted in the resulting variant object.
+    checkEvaluation(StructsToJson(Map.empty,
+      keysValues(Array("z", "a"), Array(1, 2), IntegerType)), """{"a":2,"z":1}""")
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", 1), Row("b", 2)), IntegerType)), """{"a":1,"b":2}""")
+
+    // Empty input produces an empty object.
+    checkEvaluation(StructsToJson(Map.empty,
+      keysValues(Array.empty[String], Array.empty[Int], IntegerType)), "{}")
+
+    // Null values are kept as variant null; nested values are converted recursively.
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", 1), Row("b", null)), IntegerType)), """{"a":1,"b":null}""")
+    checkEvaluation(StructsToJson(Map.empty,
+      keysValues(Array("a"), Array(Array(1, 2, 3)), ArrayType(IntegerType))), """{"a":[1,2,3]}""")
+    checkEvaluation(StructsToJson(Map.empty, keysValues(Array("a"), Array(Row(1)),
+      StructType(Seq(StructField("i", IntegerType))))), """{"a":{"i":1}}""")
+
+    // A null entry makes the whole result null.
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", 1), null), IntegerType, containsNull = true)), null)
+
+    // A null entry dominates a value-conversion failure in an earlier entry (matches
+    // map_from_entries: the null check runs for every entry before any value is converted).
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", Row(1, 2)), null),
+        StructType(Seq(StructField("x", IntegerType), StructField("x", IntegerType))),
+        containsNull = true)), null)
+
+    // A null array input produces null.
+    checkEvaluation(StructsToJson(Map.empty, VariantFromArrays(
+      Literal.create(null, ArrayType(StringType)),
+      Literal.create(Array(1), ArrayType(IntegerType)))), null)
+
+    // A null key is rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      keysValues(Array("a", null), Array(1, 2), IntegerType),
+      "NULL_MAP_KEY", Map.empty[String, String])
+
+    // Duplicate keys are rejected for both forms.
+    checkErrorInExpression[SparkRuntimeException](
+      keysValues(Array("a", "a"), Array(1, 2), IntegerType),
+      "VARIANT_DUPLICATE_KEY", Map("key" -> "a"))
+    checkErrorInExpression[SparkRuntimeException](
+      entriesOf(Array(Row("a", 1), Row("a", 2)), IntegerType),
+      "VARIANT_DUPLICATE_KEY", Map("key" -> "a"))
+
+    // Mismatched array lengths are rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      keysValues(Array("a", "b"), Array(1), IntegerType),
+      "_LEGACY_ERROR_TEMP_2128", Map.empty[String, String])
   }
 
   test("schema_of_variant - unknown type") {
@@ -1487,6 +1610,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "abc", "functionName" -> s"`$name`"))
 
+    Seq("variant_insert" -> true, "try_variant_insert" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantInsert(BoundReference(0, VariantType, nullable = true),
+            Literal.create("abc", StringType), Literal(1), failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_PATH",
+          Map("path" -> "abc", "functionName" -> s"`$name`"))
+    }
+
     val tooBig = "x".repeat(16 * 1024 * 1024)
     checkInsertUnrecoverableError("{}", "$.a[2000000000]", Literal(1),
       "VARIANT_SIZE_LIMIT",
@@ -1503,14 +1636,55 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         value: Expression,
         expected: String,
         createIfMissing: Boolean = true): Unit = {
-      val expr = VariantSet(
-        Literal(parseJson(input)),
-        Literal.create(path, StringType),
-        value,
-        Literal(createIfMissing))
+      // On success `variant_set` and `try_variant_set` behave identically.
+      Seq(true, false).foreach { failOnError =>
+        val expr = VariantSet(
+          Literal(parseJson(input)),
+          Literal.create(path, StringType),
+          value,
+          Literal(createIfMissing),
+          failOnError)
+        checkEvaluation(
+          ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+          expected)
+      }
+    }
+
+    // A recoverable error: `variant_set` throws, but `try_variant_set` returns NULL.
+    def checkSetRecoverableError(
+        input: String,
+        path: String,
+        value: Expression,
+        condition: String,
+        parameters: Map[String, String],
+        createIfMissing: Boolean = true): Unit = {
+      checkErrorInExpression[SparkRuntimeException](
+        VariantSet(Literal(parseJson(input)), Literal.create(path, StringType), value,
+          Literal(createIfMissing)),
+        condition,
+        parameters)
       checkEvaluation(
-        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
-        expected)
+        VariantSet(Literal(parseJson(input)), Literal.create(path, StringType), value,
+          Literal(createIfMissing), failOnError = false),
+        null)
+    }
+
+    // An unrecoverable error (a malformed path or a size overflow): both functions throw, and only
+    // the `functionName` in the error message differs.
+    def checkSetUnrecoverableError(
+        input: String,
+        path: String,
+        value: Expression,
+        condition: String,
+        parameters: String => Map[String, String]): Unit = {
+      Seq("variant_set" -> true, "try_variant_set" -> false).foreach {
+        case (name, failOnError) =>
+          checkErrorInExpression[SparkRuntimeException](
+            VariantSet(Literal(parseJson(input)), Literal.create(path, StringType), value,
+              Literal(true), failOnError),
+            condition,
+            parameters(name))
+      }
     }
 
     // Object sets: replace an existing key, or add a missing one.
@@ -1561,59 +1735,71 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkSet(
       "{}", "$.a", Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), """{"a":[1,2,3]}""")
 
-    // NULL-intolerant: any NULL argument yields NULL.
-    checkEvaluation(
-      VariantSet(Literal.create(null, VariantType), Literal("$.a"), Literal(1), Literal(true)),
-      null)
+    Seq(true, false).foreach { failOnError =>
+      checkEvaluation(
+        VariantSet(Literal.create(null, VariantType), Literal("$.a"), Literal(1), Literal(true),
+          failOnError),
+        null)
+      checkEvaluation(
+        VariantSet(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2),
+          Literal.create(null, BooleanType), failOnError),
+        null)
+    }
     checkSet("""{"a": 1}""", null, Literal(1), null)
     checkSet("""{"a": 1}""", "$.a", Literal.create(null, VariantType), null)
     checkSet("""{"a": 1}""", "$.a", Literal.create(null, NullType), null)
-    checkEvaluation(
-      VariantSet(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2),
-        Literal.create(null, BooleanType)),
-      null)
 
-    // Dynamic (non-foldable) path and create_if_missing.
-    val dynamic = VariantSet(
-      Literal(parseJson("""{"a": 1}""")),
-      BoundReference(0, StringType, nullable = true),
-      Literal(2),
-      BoundReference(1, BooleanType, nullable = true))
-    checkEvaluation(
-      ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
-      """{"a":1,"b":2}""",
-      InternalRow(UTF8String.fromString("$.b"), true))
-    checkEvaluation(
-      ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
-      """{"a":1}""",
-      InternalRow(UTF8String.fromString("$.b"), false))
-
-    // Type mismatch throws regardless of create_if_missing.
-    Seq(true, false).foreach { create =>
-      checkErrorInExpression[SparkRuntimeException](
-        VariantSet(Literal(parseJson("""{"a": 1}""")), Literal("$.a.b"), Literal(2),
-          Literal(create)),
-        "VARIANT_PATH_TYPE_MISMATCH",
-        Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_set`"))
+    Seq(true, false).foreach { failOnError =>
+      val dynamicCreate = VariantSet(
+        Literal(parseJson("""{"a": 1}""")),
+        BoundReference(0, StringType, nullable = true),
+        Literal(2),
+        Literal(true),
+        failOnError)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(dynamicCreate, StringType)),
+        """{"a":1,"b":2}""",
+        InternalRow(UTF8String.fromString("$.b")))
+      val dynamicNoCreate = VariantSet(
+        Literal(parseJson("""{"a": 1}""")),
+        BoundReference(0, StringType, nullable = true),
+        Literal(2),
+        Literal(false),
+        failOnError)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(dynamicNoCreate, StringType)),
+        """{"a":1}""",
+        InternalRow(UTF8String.fromString("$.b")))
     }
-    checkErrorInExpression[SparkRuntimeException](
-      VariantSet(Literal(parseJson("5")), Literal("$.a"), Literal(2), Literal(true)),
+
+    // create_if_missing must be a constant, for both variant_set and try_variant_set.
+    Seq(true, false).foreach { failOnError =>
+      assert(VariantSet(
+        Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2),
+        BoundReference(0, BooleanType, nullable = true), failOnError)
+        .checkInputDataTypes().isFailure)
+    }
+
+    // Recoverable errors: `variant_set` throws; `try_variant_set` returns NULL. Every shape of
+    // path type mismatch is recoverable, regardless of create_if_missing.
+    Seq(true, false).foreach { create =>
+      checkSetRecoverableError("""{"a": 1}""", "$.a.b", Literal(2),
+        "VARIANT_PATH_TYPE_MISMATCH",
+        Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_set`"),
+        create)
+    }
+    checkSetRecoverableError("5", "$.a", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_set`"))
-
     // Segment kind not matching the container: array index on an object, object key on an array.
-    checkErrorInExpression[SparkRuntimeException](
-      VariantSet(Literal(parseJson("""{"a": 1}""")), Literal("$[0]"), Literal(2), Literal(true)),
+    checkSetRecoverableError("""{"a": 1}""", "$[0]", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_set`"))
-    checkErrorInExpression[SparkRuntimeException](
-      VariantSet(Literal(parseJson("[1, 2]")), Literal("$.a"), Literal(2), Literal(true)),
+    checkSetRecoverableError("[1, 2]", "$.a", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_set`"))
     // A key that needs bracket notation is rendered with brackets in `failedAt`.
-    checkErrorInExpression[SparkRuntimeException](
-      VariantSet(Literal(parseJson("""{"a.b": 5}""")), Literal("""$['a.b'].c"""), Literal(2),
-        Literal(true)),
+    checkSetRecoverableError("""{"a.b": 5}""", """$['a.b'].c""", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_set`"))
 
@@ -1622,9 +1808,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, MapType(StringType, IntegerType)),
       Literal.create(null, StructType(Seq(StructField("x", IntegerType))))
     ).foreach { v =>
-      assert(
-        VariantSet(Literal(parseJson("{}")), Literal("$.a"), v, Literal(true))
-          .checkInputDataTypes().isFailure)
+      Seq(true, false).foreach { failOnError =>
+        assert(
+          VariantSet(Literal(parseJson("{}")), Literal("$.a"), v, Literal(true), failOnError)
+            .checkInputDataTypes().isFailure)
+      }
     }
 
     val structVal = ToVariantObject(Literal.create(create_row(1, "x"),
@@ -1639,29 +1827,78 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkSet("""{"k": 1}""", "$.k", mapVal, """{"k":{"x":3,"y":2,"z":1}}""")
     checkSet("""{"a": {"b": 1}}""", "$.a.b", structVal, """{"a":{"b":{"a":1,"b":"x"}}}""")
 
-    checkErrorInExpression[SparkRuntimeException](
-      VariantSet(Literal(parseJson("{}")), Literal("$"), Literal(1), Literal(true)),
+    // Unrecoverable errors: both functions throw.
+    checkSetUnrecoverableError("{}", "$", Literal(1),
       "INVALID_VARIANT_PATH",
-      Map("path" -> "$", "functionName" -> "`variant_set`"))
-
-    checkErrorInExpression[SparkRuntimeException](
-      VariantSet(Literal(parseJson("{}")), Literal("$.a[2000000000]"), Literal(1), Literal(true)),
-      "VARIANT_SIZE_LIMIT",
-      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_set`"))
+      name => Map("path" -> "$", "functionName" -> s"`$name`"))
     val tooBig = "x".repeat(16 * 1024 * 1024)
-    checkErrorInExpression[SparkRuntimeException](
-      VariantSet(Literal(parseJson("{}")), Literal("$.a"), Literal(tooBig), Literal(true)),
+    checkSetUnrecoverableError("{}", "$.a[2000000000]", Literal(1),
       "VARIANT_SIZE_LIMIT",
-      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_set`"))
+      name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
+    checkSetUnrecoverableError("{}", "$.a", Literal(tooBig),
+      "VARIANT_SIZE_LIMIT",
+      name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
+
+    Seq("variant_set" -> true, "try_variant_set" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantSet(
+            BoundReference(0, VariantType, nullable = true),
+            Literal.create("$", StringType),
+            Literal(1),
+            Literal(true),
+            failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_PATH",
+          Map("path" -> "$", "functionName" -> s"`$name`"))
+    }
   }
 
   test("variant_array_append") {
     def checkAppend(input: String, path: String, value: Expression, expected: String): Unit = {
-      val expr = VariantArrayAppend(
-        Literal(parseJson(input)), Literal.create(path, StringType), value)
+      Seq(true, false).foreach { failOnError =>
+        val expr = VariantArrayAppend(
+          Literal(parseJson(input)), Literal.create(path, StringType), value, failOnError)
+        checkEvaluation(
+          ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+          expected)
+      }
+    }
+
+    // A recoverable error: `variant_array_append` throws, but `try_variant_array_append` returns
+    // NULL.
+    def checkAppendRecoverableError(
+        input: String,
+        path: String,
+        value: Expression,
+        condition: String,
+        parameters: Map[String, String]): Unit = {
+      checkErrorInExpression[SparkRuntimeException](
+        VariantArrayAppend(Literal(parseJson(input)), Literal.create(path, StringType), value),
+        condition,
+        parameters)
       checkEvaluation(
-        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
-        expected)
+        VariantArrayAppend(Literal(parseJson(input)), Literal.create(path, StringType), value,
+          failOnError = false),
+        null)
+    }
+
+    // An unrecoverable error (a malformed path or a size overflow): both functions throw, and only
+    // the `functionName` in the error message differs.
+    def checkAppendUnrecoverableError(
+        input: String,
+        path: String,
+        value: Expression,
+        condition: String,
+        parameters: String => Map[String, String]): Unit = {
+      Seq("variant_array_append" -> true, "try_variant_array_append" -> false).foreach {
+        case (name, failOnError) =>
+          checkErrorInExpression[SparkRuntimeException](
+            VariantArrayAppend(Literal(parseJson(input)), Literal.create(path, StringType), value,
+              failOnError),
+            condition,
+            parameters(name))
+      }
     }
 
     // Append to the root array, and to nested arrays reached through object keys / array indices.
@@ -1691,46 +1928,45 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkAppend("""{"a": [1]}""", "$.missing", Literal(2), """{"a":[1]}""")
     checkAppend("[[1]]", "$[5]", Literal(2), "[[1]]")
 
-    // NULL-intolerant: any NULL argument yields NULL.
-    checkEvaluation(
-      VariantArrayAppend(Literal.create(null, VariantType), Literal("$"), Literal(1)),
-      null)
+    Seq(true, false).foreach { failOnError =>
+      checkEvaluation(
+        VariantArrayAppend(
+          Literal.create(null, VariantType), Literal("$"), Literal(1), failOnError),
+        null)
+    }
     checkAppend("[1]", null, Literal(1), null)
     checkAppend("[1]", "$", Literal.create(null, VariantType), null)
     checkAppend("[1]", "$", Literal.create(null, NullType), null)
 
-    // Dynamic (non-foldable) path.
-    val dynamic = VariantArrayAppend(
-      Literal(parseJson("""{"a": [1, 2]}""")),
-      BoundReference(0, StringType, nullable = true),
-      Literal(3))
-    checkEvaluation(
-      ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
-      """{"a":[1,2,3]}""",
-      InternalRow(UTF8String.fromString("$.a")))
+    Seq(true, false).foreach { failOnError =>
+      val dynamic = VariantArrayAppend(
+        Literal(parseJson("""{"a": [1, 2]}""")),
+        BoundReference(0, StringType, nullable = true),
+        Literal(3),
+        failOnError)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+        """{"a":[1,2,3]}""",
+        InternalRow(UTF8String.fromString("$.a")))
+    }
 
+    // Recoverable errors: `variant_array_append` throws; `try_variant_array_append` returns NULL.
     // The target is not an array (a scalar leaf, or an object at the root).
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2)),
+    checkAppendRecoverableError("""{"a": 1}""", "$.a", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a", "failedAt" -> "$.a", "functionName" -> "`variant_array_append`"))
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$"), Literal(2)),
+    checkAppendRecoverableError("""{"a": 1}""", "$", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$", "failedAt" -> "$", "functionName" -> "`variant_array_append`"))
-
     // A segment applied to an incompatible container: descending into a scalar, an array index on
     // an object, or an object key on an array.
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$.a.b"), Literal(2)),
+    checkAppendRecoverableError("""{"a": 1}""", "$.a.b", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_array_append`"))
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$[0]"), Literal(2)),
+    checkAppendRecoverableError("""{"a": 1}""", "$[0]", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_array_append`"))
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("[1, 2]")), Literal("$.a"), Literal(2)),
+    checkAppendRecoverableError("[1, 2]", "$.a", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_array_append`"))
 
@@ -1739,26 +1975,105 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, MapType(StringType, IntegerType)),
       Literal.create(null, StructType(Seq(StructField("x", IntegerType))))
     ).foreach { v =>
-      assert(
-        VariantArrayAppend(Literal(parseJson("[]")), Literal("$"), v).checkInputDataTypes()
-          .isFailure)
+      Seq(true, false).foreach { failOnError =>
+        assert(
+          VariantArrayAppend(Literal(parseJson("[]")), Literal("$"), v, failOnError)
+            .checkInputDataTypes().isFailure)
+      }
     }
 
-    // The root `$` is a valid target here, but a malformed path is still rejected.
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("[]")), Literal("abc"), Literal(1)),
+    // Unrecoverable errors: both functions throw. The root `$` is a valid target, but a malformed
+    // path is still rejected, and a size overflow surfaces as VARIANT_SIZE_LIMIT.
+    checkAppendUnrecoverableError("[]", "abc", Literal(1),
       "INVALID_VARIANT_PATH",
-      Map("path" -> "abc", "functionName" -> "`variant_array_append`"))
+      name => Map("path" -> "abc", "functionName" -> s"`$name`"))
+
+    Seq("variant_array_append" -> true, "try_variant_array_append" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantArrayAppend(BoundReference(0, VariantType, nullable = true),
+            Literal.create("abc", StringType), Literal(1), failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_PATH",
+          Map("path" -> "abc", "functionName" -> s"`$name`"))
+    }
     checkErrorInExpression[SparkRuntimeException](
       VariantArrayAppend(Literal(parseJson("[]")), Literal(""), Literal(1)),
       "INVALID_VARIANT_PATH",
       Map("path" -> "", "functionName" -> "`variant_array_append`"))
-
-    // Appending a value that overflows the variant size limit surfaces as VARIANT_SIZE_LIMIT.
     val tooBig = "x".repeat(16 * 1024 * 1024)
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("[]")), Literal("$"), Literal(tooBig)),
+    checkAppendUnrecoverableError("[]", "$", Literal(tooBig),
       "VARIANT_SIZE_LIMIT",
-      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_array_append`"))
+      name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
+  }
+
+  test("variant_strip_nulls") {
+    // Strip `input`, render the result back to JSON, and compare. `includeArrays` defaults to true.
+    def check(input: String, expected: String, includeArrays: Boolean = true): Unit = {
+      val expr = VariantStripNulls(Literal(parseJson(input)), Literal(includeArrays))
+      val result = replace(expr).eval().asInstanceOf[VariantVal]
+      val json = if (result == null) null
+        else new Variant(result.getValue, result.getMetadata).toJson(ZoneOffset.UTC)
+      assert(json == expected)
+    }
+
+    // The optional `include_arrays` argument defaults to true in the function signature.
+    assert(VariantStripNullsExpressionBuilder.functionSignature.get.parameters.last.default
+      .contains(Literal.create(true, BooleanType)))
+
+    // include_arrays must be a constant; a non-foldable expression is rejected.
+    assert(VariantStripNulls(
+      Literal(parseJson("[1, null]")), BoundReference(0, BooleanType, nullable = true))
+      .checkInputDataTypes().isFailure)
+
+    check("""{"a": 1, "b": null, "c": 3}""", """{"a":1,"c":3}""")
+    check("[1, null, 3]", "[1,3]")
+    check("""{"user": {"name": "Alice", "age": null}}""", """{"user":{"name":"Alice"}}""")
+    check("""{"a": [1, null, {"b": null, "c": 2}]}""", """{"a":[1,{"c":2}]}""")
+    check("[[1, null], [null]]", "[[1],[]]")
+
+    // Empty containers are preserved; the parent is never collapsed.
+    check("""{"a": null}""", "{}")
+    check("[null]", "[]")
+    check("""{"a": {"b": null}}""", """{"a":{}}""")
+    check("""{"a": [null]}""", """{"a":[]}""")
+    check("{}", "{}")
+    check("[]", "[]")
+
+    // Top-level variant null and scalars are returned unchanged.
+    check("null", "null")
+    check("42", "42")
+    check("\"hi\"", "\"hi\"")
+
+    check("""{"a": {"b": {"c": null, "d": 4}}}""", """{"a":{"b":{"d":4}}}""")
+
+    check("""{"a": 300, "b": null, "c": 100000, "d": 10000000000}""",
+      """{"a":300,"c":100000,"d":10000000000}""")
+    check("""[1000000, null, "hello world", null, 10000000000]""",
+      """[1000000,"hello world",10000000000]""")
+    val bigStr = "x".repeat(300)
+    check(s"""{"k": "$bigStr", "n": null, "m": 3}""", s"""{"k":"$bigStr","m":3}""")
+    check(s"""[null, "$bigStr", null, 100000]""", s"""["$bigStr",100000]""")
+
+    // `includeArrays = false`.
+    check("""{"a": [1, null, 3], "b": null}""", """{"a":[1,null,3]}""", includeArrays = false)
+    check(
+      """[{"a": 1, "b": null}, null, {"c": null, "d": 4}]""",
+      """[{"a":1},null,{"d":4}]""",
+      includeArrays = false)
+    // `includeArrays = true` (explicit) strips array nulls.
+    check("""{"a": [1, null, 3]}""", """{"a":[1,3]}""", includeArrays = true)
+
+    // SQL NULL variant input yields SQL NULL.
+    checkEvaluation(
+      Cast(VariantStripNulls(Literal.create(null, VariantType), Literal(true)), StringType),
+      null)
+    // NULL `includeArrays` yields SQL NULL (the expression is null intolerant).
+    checkEvaluation(
+      Cast(
+        VariantStripNulls(
+          Literal(parseJson("""{"a": null}""")), Literal.create(null, BooleanType)),
+        StringType),
+      null)
   }
 }

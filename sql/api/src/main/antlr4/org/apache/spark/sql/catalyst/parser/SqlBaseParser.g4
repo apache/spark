@@ -395,6 +395,9 @@ statement
     | COMMENT ON namespace identifierReference IS
         comment                                                        #commentNamespace
     | COMMENT ON TABLE identifierReference IS comment                  #commentTable
+    | COMMENT ON TABLE identifierReference COLUMN
+        LEFT_PAREN columns=columnCommentList RIGHT_PAREN               #commentColumn
+    | COMMENT ON COLUMN columnComment                                  #commentColumn
     | REFRESH TABLE identifierReference                                #refreshTable
     | REFRESH FUNCTION identifierReference                             #refreshFunction
     | REFRESH (stringLit | .*?)                                        #refreshResource
@@ -594,7 +597,7 @@ query
 insertInto
     : INSERT (WITH SCHEMA EVOLUTION)? OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
     | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? (BY NAME)?
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? ((BY NAME) | identifierList)?
         REPLACE (WHERE | ON) replaceCondition=booleanExpression        #insertIntoReplaceBooleanCond
     | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? (BY NAME)?
         REPLACE USING identifierList                                   #insertIntoReplaceUsing
@@ -744,10 +747,11 @@ resource
 dmlStatementNoWith
     : insertInto (query | LEFT_PAREN query RIGHT_PAREN queryAlias=tableAlias)      #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
-    | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
+    | DELETE FROM identifierReference tableAlias optionsClause? whereClause?       #deleteFromTable
     | UPDATE identifierReference tableAlias optionsClause? setClause whereClause?  #updateTable
     | MERGE (WITH SCHEMA EVOLUTION)? INTO target=identifierReference targetAlias=tableAlias
-        USING (source=identifierReference |
+        targetOptions=optionsClause?
+        USING (source=identifierReference sourceOptions=optionsClause? |
           LEFT_PAREN sourceQuery=query RIGHT_PAREN) sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
         matchedClause*
@@ -767,9 +771,11 @@ autoCdcBody
 autoCdcParameters
     : FROM source=relationPrimary
         KEYS LEFT_PAREN keys=identifierSeq RIGHT_PAREN
-        autoCdcDeleteClause?
-        autoCdcSequenceByClause
-        autoCdcColumnsClause?
+        (autoCdcDeleteClause
+        | autoCdcSequenceByClause
+        | autoCdcColumnsClause
+        | autoCdcStoredAsClause
+        | autoCdcTrackHistoryClause)*
     ;
 
 autoCdcDeleteClause
@@ -784,6 +790,16 @@ autoCdcColumnsClause
     : COLUMNS (
         LEFT_PAREN columns=identifierSeq RIGHT_PAREN |
         ASTERISK EXCEPT LEFT_PAREN exceptCols=identifierSeq RIGHT_PAREN)
+    ;
+
+autoCdcStoredAsClause
+    : STORED AS SCD TYPE scdType=INTEGER_VALUE
+    ;
+
+autoCdcTrackHistoryClause
+    : TRACK HISTORY ON (
+        LEFT_PAREN trackCols=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN nonTrackCols=identifierSeq RIGHT_PAREN)
     ;
 
 identifierReference
@@ -1192,7 +1208,38 @@ relationPrimary
     | LEFT_PAREN relation RIGHT_PAREN sample?
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
+    | unnest                                                #unnestTable
+    | jsonTable                                             #jsonTableRelation
     | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
+    ;
+
+// ANSI SQL UNNEST of one or more arrays in the FROM clause, with an optional
+// trailing ordinality column (WITH ORDINALITY). Multiple arrays are expanded in
+// parallel, padded with NULLs to the length of the longest array.
+unnest
+    : UNNEST LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+      (WITH ORDINALITY)? tableAlias
+    ;
+
+// The ANSI SQL:2016 JSON_TABLE table-valued function. Because the COLUMNS clause is not a normal
+// function-argument list, it has a dedicated production rather than going through
+// tableFunctionCall. Only the flat (non-NESTED) subset is currently supported.
+jsonTable
+    : JSON_TABLE LEFT_PAREN jsonExpr=expression COMMA rowPath=stringLit
+        COLUMNS LEFT_PAREN jsonTableColumn (COMMA jsonTableColumn)* RIGHT_PAREN
+        jsonTableOnErrorClause?
+      RIGHT_PAREN tableAlias
+    ;
+
+jsonTableColumn
+    : colName=errorCapturingIdentifier FOR ORDINALITY                           #jsonTableOrdinalityColumn
+    | colName=errorCapturingIdentifier dataType
+        EXISTS (PATH path=stringLit)?                                           #jsonTableExistsColumn
+    | colName=errorCapturingIdentifier dataType (PATH path=stringLit)?          #jsonTableValueColumn
+    ;
+
+jsonTableOnErrorClause
+    : (NULL | ERROR) ON ERROR
     ;
 
 optionsClause
@@ -1415,6 +1462,18 @@ primaryExpression
     | ANY_VALUE LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                              #any_value
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
     | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
+    | JSON_VALUE LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (RETURNING returning=dataType)?
+      (emptyBehavior=jsonValueBehavior ON EMPTY)?
+      (errorBehavior=jsonValueBehavior ON ERROR)? RIGHT_PAREN                                  #jsonValue
+    | JSON_EXISTS LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (errorBehavior=jsonExistsErrorBehavior ON ERROR)? RIGHT_PAREN                             #jsonExists
+    | JSON_QUERY LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (RETURNING returning=dataType)?
+      wrapper=jsonQueryArrayWrapper?
+      quotes=jsonQueryQuotes?
+      (emptyBehavior=jsonQueryBehavior ON EMPTY)?
+      (errorBehavior=jsonQueryBehavior ON ERROR)? RIGHT_PAREN                                  #jsonQuery
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
@@ -1439,6 +1498,46 @@ primaryExpression
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
+    ;
+
+// The behavior selected by a JSON_VALUE `... ON EMPTY` / `... ON ERROR` clause. NULL and ERROR are
+// keywords; DEFAULT carries an expression evaluated in place of the missing/erroring value.
+jsonValueBehavior
+    : NULL                                                                                     #jsonValueBehaviorNull
+    | ERROR                                                                                     #jsonValueBehaviorError
+    | DEFAULT defaultExpr=expression                                                            #jsonValueBehaviorDefault
+    ;
+
+// The behavior selected by a JSON_EXISTS `... ON ERROR` clause: the boolean (or UNKNOWN, i.e. a
+// BOOLEAN NULL) to produce when the input is not a single well-formed JSON value.
+jsonExistsErrorBehavior
+    : TRUE
+    | FALSE
+    | UNKNOWN
+    | ERROR
+    ;
+
+// The JSON_QUERY array-wrapper clause. `WITH [UNCONDITIONAL]` always wraps the result in `[...]`;
+// `WITH CONDITIONAL` wraps only a non-array/object (scalar) result; `WITHOUT` (default) never wraps.
+// The `ARRAY` word is optional, matching the SQL standard (`WITH WRAPPER` == `WITH ARRAY WRAPPER`).
+jsonQueryArrayWrapper
+    : WITHOUT ARRAY? WRAPPER                                                                    #jsonQueryWrapperWithout
+    | WITH wrapperType=(CONDITIONAL | UNCONDITIONAL)? ARRAY? WRAPPER                            #jsonQueryWrapperWith
+    ;
+
+// The JSON_QUERY quotes clause: `OMIT QUOTES` strips the surrounding quotes from a scalar string
+// result; `KEEP QUOTES` (default) leaves them.
+jsonQueryQuotes
+    : KEEP QUOTES                                                                              #jsonQueryQuotesKeep
+    | OMIT QUOTES                                                                              #jsonQueryQuotesOmit
+    ;
+
+// The behavior selected by a JSON_QUERY `... ON EMPTY` / `... ON ERROR` clause.
+jsonQueryBehavior
+    : NULL                                                                                     #jsonQueryBehaviorNull
+    | ERROR                                                                                     #jsonQueryBehaviorError
+    | EMPTY ARRAY                                                                              #jsonQueryBehaviorEmptyArray
+    | EMPTY OBJECT                                                                             #jsonQueryBehaviorEmptyObject
     ;
 
 semiStructuredExtractionPath
@@ -1938,6 +2037,14 @@ alterColumnAction
     | dropDefault=DROP DEFAULT
     ;
 
+columnCommentList
+    : columnComment (COMMA columnComment)*
+    ;
+
+columnComment
+    : column=multipartIdentifier IS comment
+    ;
+
 // Matches exactly one string literal without coalescing or parameter markers.
 // Used in type constructors where coalescing is not allowed.
 singleStringLitWithoutMarker
@@ -2074,6 +2181,7 @@ ansiNonReserved
     | COMPUTE
     | CONCATENATE
     | CONDITION
+    | CONDITIONAL
     | CONTAINS
     | CONTINUE
     | COST
@@ -2116,7 +2224,9 @@ ansiNonReserved
     | DOUBLE
     | DROP
     | ELSEIF
+    | EMPTY
     | ENFORCED
+    | ERROR
     | ESCAPED
     | EVOLUTION
     | EXACT
@@ -2148,6 +2258,7 @@ ansiNonReserved
     | GLOBAL
     | GROUPING
     | HANDLER
+    | HISTORY
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -2174,6 +2285,11 @@ ansiNonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_EXISTS
+    | JSON_QUERY
+    | JSON_TABLE
+    | JSON_VALUE
+    | KEEP
     | KEY
     | KEYS
     | LANGUAGE
@@ -2225,10 +2341,13 @@ ansiNonReserved
     | NORELY
     | NULLS
     | NUMERIC
+    | OBJECT
     | OF
+    | OMIT
     | OPEN
     | OPTION
     | OPTIONS
+    | ORDINALITY
     | OUT
     | OUTPUTFORMAT
     | OVER
@@ -2251,6 +2370,7 @@ ansiNonReserved
     | QUALIFY
     | QUARTER
     | QUERY
+    | QUOTES
     | RANGE
     | READ
     | READS
@@ -2271,6 +2391,7 @@ ansiNonReserved
     | RESPECT
     | RESTRICT
     | RETURN
+    | RETURNING
     | RETURNS
     | REVOKE
     | RLIKE
@@ -2280,6 +2401,7 @@ ansiNonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SCD
     | SCHEMA
     | SCHEMAS
     | SECOND
@@ -2334,6 +2456,7 @@ ansiNonReserved
     | TIMESTAMPDIFF
     | TINYINT
     | TOUCH
+    | TRACK
     | TRANSACTION
     | TRANSACTIONS
     | TRANSFORM
@@ -2345,8 +2468,10 @@ ansiNonReserved
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
+    | UNCONDITIONAL
     | UNIFORM
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL
@@ -2369,6 +2494,7 @@ ansiNonReserved
     | WIDTH
     | WINDOW
     | WITHOUT
+    | WRAPPER
     | YEAR
     | YEARS
     | ZONE
@@ -2478,6 +2604,7 @@ nonReserved
     | COMPUTE
     | CONCATENATE
     | CONDITION
+    | CONDITIONAL
     | CONSTRAINT
     | CONTAINS
     | CONTINUE
@@ -2530,8 +2657,10 @@ nonReserved
     | DROP
     | ELSE
     | ELSEIF
+    | EMPTY
     | END
     | ENFORCED
+    | ERROR
     | ESCAPE
     | ESCAPED
     | EVOLUTION
@@ -2574,6 +2703,7 @@ nonReserved
     | GROUPING
     | HANDLER
     | HAVING
+    | HISTORY
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -2603,6 +2733,11 @@ nonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_EXISTS
+    | JSON_QUERY
+    | JSON_TABLE
+    | JSON_VALUE
+    | KEEP
     | KEY
     | KEYS
     | LANGUAGE
@@ -2659,14 +2794,17 @@ nonReserved
     | NULL
     | NULLS
     | NUMERIC
+    | OBJECT
     | OF
     | OFFSET
+    | OMIT
     | ONLY
     | OPEN
     | OPTION
     | OPTIONS
     | OR
     | ORDER
+    | ORDINALITY
     | OUT
     | OUTER
     | OUTPUTFORMAT
@@ -2692,6 +2830,7 @@ nonReserved
     | QUALIFY
     | QUARTER
     | QUERY
+    | QUOTES
     | RANGE
     | READ
     | READS
@@ -2714,6 +2853,7 @@ nonReserved
     | RESPECT
     | RESTRICT
     | RETURN
+    | RETURNING
     | RETURNS
     | REVOKE
     | RLIKE
@@ -2723,6 +2863,7 @@ nonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SCD
     | SCHEMA
     | SCHEMAS
     | SECOND
@@ -2783,6 +2924,7 @@ nonReserved
     | TINYINT
     | TO
     | TOUCH
+    | TRACK
     | TRAILING
     | TRANSACTION
     | TRANSACTIONS
@@ -2795,10 +2937,12 @@ nonReserved
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
+    | UNCONDITIONAL
     | UNIFORM
     | UNIQUE
     | UNKNOWN
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL
@@ -2826,6 +2970,7 @@ nonReserved
     | WITH
     | WITHIN
     | WITHOUT
+    | WRAPPER
     | YEAR
     | YEARS
     | ZONE

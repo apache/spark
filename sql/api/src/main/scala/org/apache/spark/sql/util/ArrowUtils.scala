@@ -38,6 +38,51 @@ private[sql] object ArrowUtils {
 
   // todo: support more types.
 
+  /**
+   * Check if a Spark DataType is supported by Arrow. This recursively checks complex types
+   * (Array, Struct, Map).
+   *
+   * Note: This checks compatibility with toArrowField(), not toArrowType(). Types like
+   * GeometryType, GeographyType, and VariantType are not supported by toArrowType() (which only
+   * handles primitive Arrow types), but ARE supported by toArrowField() which converts them to
+   * Arrow Struct representations with metadata. Since Arrow cache uses toArrowField() via
+   * toArrowSchema() to create the schema, these types are supported.
+   */
+  def isSupportedByArrow(dt: DataType): Boolean = {
+    dt match {
+      // Primitive types
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
+          _: StringType | BinaryType | NullType =>
+        true
+
+      // Decimal
+      case _: DecimalType => true
+
+      // Temporal types
+      case DateType | TimestampType | TimestampNTZType | _: TimeType => true
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType => true
+
+      // Interval types
+      case _: YearMonthIntervalType | _: DayTimeIntervalType | CalendarIntervalType => true
+
+      // Complex types - recursively check element types
+      case ArrayType(elementType, _) => isSupportedByArrow(elementType)
+      case StructType(fields) => fields.forall(f => isSupportedByArrow(f.dataType))
+      case MapType(keyType, valueType, _) =>
+        isSupportedByArrow(keyType) && isSupportedByArrow(valueType)
+
+      // Special types
+      // Note: These are not in toArrowType(), but are handled by toArrowField()
+      case udt: UserDefinedType[_] => isSupportedByArrow(udt.sqlType)
+      case _: GeometryType => true // Converted to Struct with srid + wkb fields
+      case _: GeographyType => true // Converted to Struct with srid + wkb fields
+      case _: VariantType => true // Converted to Struct with value + metadata fields
+
+      // Unsupported types
+      case _ => false
+    }
+  }
+
   /** Maps data type from Spark to Arrow. NOTE: timeZoneId required for TimestampTypes */
   def toArrowType(dt: DataType, timeZoneId: String, largeVarTypes: Boolean = false): ArrowType =
     TypeApiOps(dt)
@@ -510,6 +555,69 @@ private[sql] object ArrowUtils {
       children.get(0).getMetadata.getOrDefault(calendarIntervalStructKey, "false") == "true"
     }
   }
+
+  /**
+   * Whether an Arrow field tree (from an upstream vector) is physically congruent with the
+   * declared field of the stream it would be forwarded into: same Arrow type, same child count,
+   * congruent children, and no dictionary encoding. An IPC consumer decodes a RecordBatch body
+   * strictly by the declared schema, walking a flattened sequence of field nodes and buffers, so
+   * ANY structural divergence silently shifts the node/buffer assignment of every following
+   * column or mis-binds buffers within one: the lossless internal struct encodings where the
+   * declared schema has the interchange types, a var-width vector whose offset width disagrees
+   * with the declared one, a tagged Variant/Geometry/Geography struct carrying an extra child
+   * that the recognizers tolerate but the declared canonical field does not include, or
+   * dictionary-encoded data whose values live in dictionary batches the stream never writes.
+   *
+   * This compares against the declared field rather than allowlisting "declarable" shapes: the
+   * declared schema is the exact header the consumer will decode with, so congruence with it is
+   * the complete correctness condition, not an approximation of it. Field names, nullability, and
+   * metadata are ignored -- they do not affect the buffer layout -- except for Map entry
+   * children, whose names carry the key/value semantics (see mapEntryNamesMatchDeclared). The two
+   * failure directions stay asymmetric: a false reject merely takes the row-based re-encoding
+   * fallback (slower, still correct, and with the value-domain guards such as DATETIME_OVERFLOW
+   * reinstated), while a false accept corrupts the stream -- so anything not provably congruent
+   * must be rejected.
+   */
+  def isCompatibleWithDeclaredField(actual: Field, declared: Field): Boolean = {
+    actual.getDictionary == null &&
+    sameLayoutArrowType(actual.getType, declared.getType) &&
+    actual.getChildren.size == declared.getChildren.size &&
+    mapEntryNamesMatchDeclared(actual, declared) &&
+    actual.getChildren.asScala.zip(declared.getChildren.asScala).forall { case (a, d) =>
+      isCompatibleWithDeclaredField(a, d)
+    }
+  }
+
+  // An Arrow Map binds its key/value semantics to the entry-struct children by name (the spec
+  // puts the key first and MapVector addresses the children as "key"/"value"), yet Arrow
+  // tolerates vectors whose entry children sit in the opposite order. Such a vector is
+  // positionally indistinguishable from the canonical one when the key and value types agree,
+  // and forwarding its buffers verbatim under the declared header silently swaps keys and
+  // values -- so at Map nodes the entry children must also match the declared names. Field
+  // names remain ignored everywhere else: Spark's semantics are positional there and names
+  // carry no meaning.
+  private def mapEntryNamesMatchDeclared(actual: Field, declared: Field): Boolean =
+    !declared.getType.isInstanceOf[ArrowType.Map] || {
+      val actualNames = actual.getChildren.asScala.flatMap(_.getChildren.asScala).map(_.getName)
+      val declaredNames =
+        declared.getChildren.asScala.flatMap(_.getChildren.asScala).map(_.getName)
+      actualNames == declaredNames
+    }
+
+  // Physical-layout type comparison, mirroring ArrowFileReadWrite.checkLayoutMatch: the
+  // timestamp timezone label does not affect the layout (values are int64 epoch numbers either
+  // way) and differs across Spark's own paths (a worker's output comes back labeled UTC while
+  // the next stream declares the session time zone), so comparing it would only cause false
+  // rejects. Presence-vs-absence must still match: it distinguishes TimestampType from
+  // TimestampNTZType, whose identical-looking values are interpreted differently. Map equality
+  // includes the keysSorted flag, which has no layout impact.
+  private def sameLayoutArrowType(actual: ArrowType, declared: ArrowType): Boolean =
+    (actual, declared) match {
+      case (a: ArrowType.Timestamp, d: ArrowType.Timestamp) =>
+        a.getUnit == d.getUnit && (a.getTimezone == null) == (d.getTimezone == null)
+      case (_: ArrowType.Map, _: ArrowType.Map) => true
+      case (a, d) => a == d
+    }
 
   def fromArrowField(field: Field): DataType = {
     field.getType match {

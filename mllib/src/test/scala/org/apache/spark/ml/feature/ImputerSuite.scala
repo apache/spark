@@ -27,6 +27,15 @@ import org.apache.spark.sql.types._
 
 class ImputerSuite extends MLTest with DefaultReadWriteTest {
 
+  test("model estimated size") {
+    val df = spark.createDataFrame(Seq((1.0, 2.0), (3.0, 4.0))).toDF("a", "b")
+    val model = new Imputer().setInputCols(Array("a", "b")).setOutputCols(Array("x", "y"))
+      .fit(df)
+    val maxSize = 1024 * 4
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("Imputer for Double with default missing Value NaN") {
     val df = spark.createDataFrame(Seq(
       (0, 1.0, 4.0, 1.0, 1.0, 1.0, 4.0, 4.0, 4.0),

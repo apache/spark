@@ -45,6 +45,7 @@ from typing import (
 import numpy as np
 
 from pyspark.sql.types import (
+    DataTypeSingleton,
     UserDefinedType,
     StructField,
     StructType,
@@ -157,7 +158,7 @@ def _double_to_long_bits(value: float) -> int:
     return struct.unpack("Q", struct.pack("d", value))[0]
 
 
-class VectorUDT(UserDefinedType):
+class VectorUDT(UserDefinedType, metaclass=DataTypeSingleton):
     """
     SQL user-defined type (UDT) for Vector.
     """
@@ -212,7 +213,7 @@ class VectorUDT(UserDefinedType):
         return "vector"
 
 
-class MatrixUDT(UserDefinedType):
+class MatrixUDT(UserDefinedType, metaclass=DataTypeSingleton):
     """
     SQL user-defined type (UDT) for Matrix.
     """

@@ -688,7 +688,7 @@ private[arrow] class IntervalYearWriter(val valueVector: IntervalYearVector)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueVector.setSafe(count, input.getInt(ordinal));
+    valueVector.setSafe(count, input.getInt(ordinal))
   }
 }
 

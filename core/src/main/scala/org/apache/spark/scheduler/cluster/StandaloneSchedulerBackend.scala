@@ -248,6 +248,10 @@ private[spark] class StandaloneSchedulerBackend(
     }
   }
 
+  // The Master honors a zero executor limit without killing the running executors, so the
+  // executors can be held gracefully.
+  private[spark] override def supportsExecutorHold: Boolean = true
+
   /**
    * Kill the given list of executors through the Master.
    * @return whether the kill request is acknowledged.

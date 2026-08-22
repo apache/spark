@@ -20,11 +20,14 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
-import org.apache.spark.sql.types.{BooleanType, DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, LongType, StringType, StructField,
+  StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -91,17 +94,27 @@ case class Scd2BatchProcessor(
         // tail can detect its own redundancy via LEAD(1): if the next row is a non-tail at
         // the same instant, the synthetic close the tail encodes is already represented by
         // that event and the tail is dropped downstream.
-        //
-        // Any tiebreaking beyond this rule only meaningfully fires when the user's source
-        // has emitted two or more events at the same sequence, violating the uniqueness
-        // contract above. Behavior in that case is publicly undefined and the remaining
-        // tiebreaker clauses exist as a best-effort to keep retries and replays deterministic.
         orderDecompositionTailsFirst,
         // Upsert-representing rows sort before tombstones because rows detect if they are being
         // bisected by LEAD(1). This allows upserts to match against same-sequence deletes, an
         // arbitrary but deterministic convention. When this happens, the delete event will survive
         // and persist as a tombstone in the auxiliary table.
-        orderUpsertRepresentingRowsFirst
+        orderUpsertRepresentingRowsFirst,
+        // Amongst upsert-representing rows, there's one valid case where rows are still tied, even
+        // if the user's change feed source did not emit duplicate sequences: the auxiliary merge
+        // commits before the target merge, which re-reads that table, so a row this batch wrote to
+        // the auxiliary table re-enters the window beside the copy the microbatch or the target
+        // table still holds. The copies differ only in the boundaries each one recorded, and the
+        // two keys below break that tie deterministically - dropRedundantRowsPostDecomposition
+        // drops a tie's leading row, so the copy sorting last is the one that survives.
+        //
+        // A batch that moves a run's start leaves the copies disagreeing on where their interval
+        // begins. Nulls are inert on this key: only decomposition tails carry a null startAt, and
+        // orderDecompositionTailsFirst has already separated those by the time it is consulted.
+        startAtCol.desc_nulls_first,
+        // Copies agreeing on their run start may still disagree on its closure, so nulls sort
+        // first and are dropped: a copy that recorded no boundary never displaces one that did.
+        endAtCol.desc_nulls_first
       )
   }
 
@@ -196,7 +209,7 @@ case class Scd2BatchProcessor(
   private def projectTargetColumnsOntoMicrobatch(
       microbatch: DataFrame
   ): DataFrame = {
-    val caseSensitive = microbatch.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val resolver = microbatch.sparkSession.sessionState.conf.resolver
 
     // Strip the framework columns through the same case-aware path as the user selection, for
     // consistency with Scd1BatchProcessor.projectTargetColumnsOntoMicrobatch.
@@ -208,14 +221,14 @@ case class Scd2BatchProcessor(
           Scd2BatchProcessor.reservedFrameworkColNames.toSeq.map(UnqualifiedColumnName(_))
         )
       ),
-      caseSensitive = caseSensitive
+      resolver = resolver
     )
     val userSelectedDataSchema =
       ColumnSelection.applyToSchema(
         schemaName = "microbatch",
         schema = dataSchema,
         columnSelection = changeArgs.columnSelection,
-        caseSensitive = caseSensitive
+        resolver = resolver
       )
     val finalColumnsToSelect: Seq[Column] =
       userSelectedDataSchema.fieldNames.toSeq.map(colName => {
@@ -251,33 +264,15 @@ case class Scd2BatchProcessor(
   }
 
   /**
-   * Find the auxiliary-table rows whose state matters for reconciling the microbatch.
-   *
-   * @param rawAuxiliaryTableDf
-   *   the auxiliary table in its native schema, which is expected to contain
-   *   [[deletedByBatchIdColName]] in addition to all of the columns in the target table.
-   * @param perKeyMinimumSequenceInMicrobatchDf
-   *   one row per distinct key as produced by [[computeMinimumSequencePerKey]], representing
-   *   the minimum sequence for that key in the microbatch.
-   * @param batchId
-   *   the underlying Spark streaming query's batchId, used to scope aux-row visibility for
-   *   replay-stability across retries of the same microbatch.
-   * @return
-   *   a dataframe containing all the affected aux rows, with the aux-only
-   *   [[deletedByBatchIdColName]] column dropped so the result is union-compatible with
-   *   preprocessed microbatch rows and target-table rows downstream.
+   * Restrict the auxiliary table to the rows that are live for this microbatch, and drop the
+   * aux-only [[deletedByBatchIdColName]] column so the result shares the canonical SCD2 row
+   * schema with target-table rows and preprocessed-microbatch rows.
    */
-  private[autocdc] def findAffectedRowsFromAuxiliaryTable(
+  private def filterLiveAuxiliaryRows(
       rawAuxiliaryTableDf: DataFrame,
-      perKeyMinimumSequenceInMicrobatchDf: DataFrame,
-      batchId: Long
-  ): DataFrame = {
-    val auxTableRecordStartAtField = Scd2BatchProcessor.recordStartAtOf(
-      F.col(AutoCdcReservedNames.cdcMetadataColName)
-    )
+      batchId: Long): DataFrame = {
     val auxTableDeletedByBatchIdCol = F.col(Scd2BatchProcessor.deletedByBatchIdColName)
-
-    val reducedAuxiliaryTableDf = rawAuxiliaryTableDf
+    rawAuxiliaryTableDf
       .filter(
         // [[deletedByBatchIdColName]] carries the batchId whose MERGE logically deleted the
         // row, or null on live aux rows. Rows deleted by other batches are excluded - those
@@ -287,115 +282,136 @@ case class Scd2BatchProcessor(
         auxTableDeletedByBatchIdCol.isNull ||
           auxTableDeletedByBatchIdCol === F.lit(batchId)
       )
-      // Drop the aux-only idempotency column so the output schema matches target-table rows
-      // and preprocessed-microbatch rows (which share the same canonical SCD2 row schema).
       .drop(Scd2BatchProcessor.deletedByBatchIdColName)
-
-    val perKeyMinimumSequenceInMicrobatchCol = F.col(Scd2BatchProcessor.minSequenceColName)
-
-    // Per key, identify the sequence value associated with the anchor row in the aux table.
-    //
-    // The anchor row is the aux row with the largest [[recordStartAtFieldName]] strictly less
-    // than the min sequence in the incoming microbatch for that key. The reconciler needs this
-    // "left context" in two cases:
-    //   (1) Incoming no-op upsert: without the anchor, it would look like a new run head, when in
-    //       reality it's a part of an existing no-op run/head.
-    //   (2) Incoming state-changing upsert that bisects two aux no-ops: the anchor surfaces
-    //       the before-half so both halves can be promoted to target. (The after-half is
-    //       picked up by the >= minSeq branch.)
-    //
-    // Because no-op upserts are stored only in the aux table, the anchor concept only exists when
-    // pulling in rows from the aux table, and is not relevant for the target table.
-    //
-    // Keys with no aux row strictly before the min sequence have no anchor; their affected set
-    // reduces to "all aux rows at or after the min sequence."
-    //
-    // The shape of this DataFrame is: [key1, key2, ... keyN, anchorSequence]
-    val perKeyAnchorSequenceDf = reducedAuxiliaryTableDf
-      // The number of rows in [[perKeyMinimumSequenceInMicrobatchDf]] is bounded by the
-      // number of unique keys in the microbatch, which should typically be small. The
-      // auxiliary table should generally also be small, containing only no-op upsert runs
-      // and tombstones per key. Therefore this join should be cheap, and broadcast joinable.
-      .join(perKeyMinimumSequenceInMicrobatchDf, keysRaw)
-      .filter(auxTableRecordStartAtField < perKeyMinimumSequenceInMicrobatchCol)
-      .groupBy(keysQuoted.map(F.col): _*)
-      .agg(
-        F.max(auxTableRecordStartAtField).as(Scd2BatchProcessor.anchorSequenceColName)
-      )
-    val anchorSequenceCol = F.col(Scd2BatchProcessor.anchorSequenceColName)
-    val auxRowIsAnchorRow = auxTableRecordStartAtField === anchorSequenceCol
-
-    // Now that we have the minimum sequence in the microbatch and the sequence of the anchor row,
-    // we have enough information to compute the full set of auxiliary rows that may affect or
-    // be affected by the microbatch. Membership here is a conservative superset: every row that
-    // could possibly participate in reconciliation is included, but downstream reconciliation
-    // determines the actual outcome per row.
-    val auxRowIsAtOrAfterMinSequenceInMicrobatch =
-      auxTableRecordStartAtField >= perKeyMinimumSequenceInMicrobatchCol
-
-    val auxRowAffectsMicrobatch = auxRowIsAtOrAfterMinSequenceInMicrobatch || auxRowIsAnchorRow
-
-    val affectedRowsFromAuxiliaryTable = reducedAuxiliaryTableDf
-      // Per row, project the minimum microbatch sequence and anchor sequence for that row's key
-      // set onto the row, so the affected-row predicate can be evaluated in a single filter.
-      .join(perKeyMinimumSequenceInMicrobatchDf, keysRaw)
-      .join(
-        perKeyAnchorSequenceDf,
-        keysRaw,
-        joinType = "left"
-      )
-      .filter(auxRowAffectsMicrobatch)
-      .drop(perKeyMinimumSequenceInMicrobatchCol, anchorSequenceCol)
-
-    affectedRowsFromAuxiliaryTable
   }
 
   /**
-   * Find the target-table rows whose state matters for reconciling the microbatch.
+   * Project a table of canonical SCD2 rows down to `[key1, ... keyN, effectiveRecordStartAt]`.
+   */
+  private def projectEffectiveRecordStartAtPerRow(rowsDf: DataFrame): DataFrame =
+    rowsDf.select(
+      keysQuoted.map(F.col) :+
+        Scd2BatchProcessor.canonicalRowIntervalColumns.effectiveRecordStartAt
+          .as(Scd2BatchProcessor.effectiveRecordStartAtColName): _*
+    )
+
+  /**
+   * Per key; calculate the earliest point in time (sequence) at or after which all existing rows
+   * across the auxiliary and target tables may be affected by the microbatch, and therefore should
+   * be pulled in for reconciliation. The row sitting exactly at the cutoff is itself included.
    *
-   * @param targetTableDf
-   *   the target table in its native schema.
-   * @param perKeyMinimumSequenceInMicrobatchDf
-   *   one row per distinct key as produced by [[computeMinimumSequencePerKey]], representing
-   *   the minimum sequence for that key in the microbatch.
-   * @return
-   *   a dataframe containing the affected target rows, with all columns passed-through.
+   * Returns a dataframe with one row per distinct key in [[perKeyMinimumSequenceInMicrobatchDf]],
+   * with the key columns and the calculated [[affectedSequenceCutoffColName]] column.
+   */
+  private[autocdc] def computePerKeyAffectedSequenceCutoff(
+      rawAuxiliaryTableDf: DataFrame,
+      targetTableDf: DataFrame,
+      perKeyMinimumSequenceInMicrobatchDf: DataFrame,
+      batchId: Long
+  ): DataFrame = {
+    val effectiveRecordStartAtCol = F.col(Scd2BatchProcessor.effectiveRecordStartAtColName)
+    val perKeyMinimumSequenceInMicrobatchCol = F.col(Scd2BatchProcessor.minSequenceColName)
+    val latestSequenceBeforeMicrobatchCol =
+      F.col(Scd2BatchProcessor.latestSequenceBeforeMicrobatchColName)
+
+    // In order to determine the affected sequence cutoff per key, we first need a "global" (across
+    // both auxiliary and target tables, hence unioned) timeline of existing effective sequences per
+    // key.
+    val allRowsByEffectiveRecordStartAt =
+      projectEffectiveRecordStartAtPerRow(filterLiveAuxiliaryRows(rawAuxiliaryTableDf, batchId))
+        .unionByName(projectEffectiveRecordStartAtPerRow(targetTableDf))
+
+    // Across all existing rows per key, we need to find the latest one that starts
+    // (i.e effectiveRecordStartAt) before the first event for that key in the microbatch. This is
+    // an "anchor", where any existing row that predates this one on the timeline will definitely
+    // not be affected by the microbatch.
+    val perKeyLatestSequenceBeforeMicrobatchDf = allRowsByEffectiveRecordStartAt
+      // The number of rows in [[perKeyMinimumSequenceInMicrobatchDf]] is bounded by the
+      // number of unique keys in the microbatch, which should typically be small, so this
+      // join should be cheap and broadcast joinable.
+      .join(perKeyMinimumSequenceInMicrobatchDf, keysRaw)
+      // We only care about rows that definitely start before the first event for the same key in
+      // the microbatch.
+      .filter(effectiveRecordStartAtCol < perKeyMinimumSequenceInMicrobatchCol)
+      .groupBy(keysQuoted.map(F.col): _*)
+      // Of all the existing rows that start before the earliest event in the microbatch, we want
+      // the latest, hence max-by.
+      .agg(
+        F.max(effectiveRecordStartAtCol)
+          .as(Scd2BatchProcessor.latestSequenceBeforeMicrobatchColName)
+      )
+
+    // Now for all unique keys in the microbatch, we need to calculate its affected sequence
+    // cutoff. If a key has existing rows and at least one of them precedes the earliest event
+    // for that same key in the microbatch, use its sequence as the cutoff. In all other cases
+    // (key does not yet exist in aux/target, or microbatch contains event for key that precedes
+    // all existing rows), the min sequence in the microbatch will be the cutoff point for the key;
+    // all existing rows will necessarily be considered affected. This is a very cheap join to
+    // make, where both dataframes cardinality is limited by the number of unique keys in the
+    // microbatch.
+    perKeyMinimumSequenceInMicrobatchDf
+      .join(perKeyLatestSequenceBeforeMicrobatchDf, keysRaw, joinType = "left")
+      .select(
+        keysQuoted.map(F.col) :+
+          F.coalesce(latestSequenceBeforeMicrobatchCol, perKeyMinimumSequenceInMicrobatchCol)
+            .as(Scd2BatchProcessor.affectedSequenceCutoffColName): _*
+      )
+  }
+
+  /**
+   * Per key, keep only rows in [[rowsDf]] that are included by the sequence cutoff.
+   *
+   * A plain `effectiveRecordStartAt >= cutoff` threshold suffices, in both directions:
+   *
+   * 1. Nothing needed for reconciliation is missed. Once a row is pulled in, every later row for
+   *    that key must come with it, so that boundaries reconcile and rows are promoted or demoted
+   *    correctly - even when the two live in different tables, as when a run's visible tail sits
+   *    in the target table after the run's hidden head in the auxiliary table. The cutoff is a
+   *    single threshold per key over the unified ordering across both tables, and so selects
+   *    exactly a complete suffix of the global, unified view. This includes the live rows (open
+   *    upserts in the target) too.
+   * 2. Nothing dropped was needed for reconciliation. The cutoff is the position of the last row
+   *    preceding the microbatch per key, so every row below it is separated from the microbatch
+   *    by at least one intervening row, and cannot be affected by it. An open row is the one case
+   *    that does not follow from separation alone, since it is affected by anything after it -
+   *    but no row can intervene above an open row, as that row would have closed it.
+   */
+  private def selectRowsAtOrAfterCutoff(
+      rowsDf: DataFrame,
+      perKeyAffectedSequenceCutoffDf: DataFrame): DataFrame = {
+    val affectedSequenceCutoffCol = F.col(Scd2BatchProcessor.affectedSequenceCutoffColName)
+    rowsDf
+      .join(perKeyAffectedSequenceCutoffDf, keysRaw)
+      .filter(
+        Scd2BatchProcessor.canonicalRowIntervalColumns.effectiveRecordStartAt >=
+          affectedSequenceCutoffCol)
+      .drop(affectedSequenceCutoffCol)
+  }
+
+  /**
+   * Retrieve all rows from the auxiliary table that are possibly affected by this microbatch, and
+   * need to participate in reconciliation.
+   */
+  private[autocdc] def findAffectedRowsFromAuxiliaryTable(
+      rawAuxiliaryTableDf: DataFrame,
+      perKeyAffectedSequenceCutoffDf: DataFrame,
+      batchId: Long
+  ): DataFrame = selectRowsAtOrAfterCutoff(
+    rowsDf = filterLiveAuxiliaryRows(rawAuxiliaryTableDf, batchId),
+    perKeyAffectedSequenceCutoffDf = perKeyAffectedSequenceCutoffDf
+  )
+
+  /**
+   * Retrieve all rows from the target table that are possibly affected by this microbatch, and
+   * need to participate in reconciliation.
    */
   private[autocdc] def findAffectedRowsFromTargetTable(
       targetTableDf: DataFrame,
-      perKeyMinimumSequenceInMicrobatchDf: DataFrame
-  ): DataFrame = {
-    val targetEndAtCol = F.col(Scd2BatchProcessor.endAtColName)
-    val perKeyMinimumSequenceInMicrobatchCol = F.col(Scd2BatchProcessor.minSequenceColName)
-
-    // Per key, identify all the rows in the target table that may be affected by the
-    // incoming microbatch.
-    //
-    // Unlike the auxiliary table, the target table holds visible rows only: no hidden open
-    // no-op upsert rows, no tombstones. Visible rows for a given key form a non-overlapping
-    // interval partition over the sequencing axis, and at most one row has a null [[endAtColName]]
-    // (the currently active row per key).
-    //
-    // Hence we can simply grab all rows that were active at some point after the min sequencing
-    // per key, which can be determined entirely by the row's [[endAtColName]].
-    val isCurrentlyActiveRow = targetEndAtCol.isNull
-
-    // `>=` (rather than strict `>`) additionally pulls in the row that closes exactly at the
-    // smallest incoming sequence: the consecutive left neighbor of that incoming event. This
-    // provides "left context" for the smallest event, analogous to the anchor row in
-    // [[findAffectedRowsFromAuxiliaryTable]]. It may need to be demoted from a target run
-    // boundary to an aux no-op continuation if the incoming event at minSeq turns out to
-    // extend an earlier run.
-    val rowEndsAfterMinimumSequence = targetEndAtCol >= perKeyMinimumSequenceInMicrobatchCol
-    val rowMayBeAffected = isCurrentlyActiveRow || rowEndsAfterMinimumSequence
-
-    val affectedRowsFromTargetTable = targetTableDf
-      .join(perKeyMinimumSequenceInMicrobatchDf, keysRaw)
-      .filter(rowMayBeAffected)
-      .drop(perKeyMinimumSequenceInMicrobatchCol)
-
-    affectedRowsFromTargetTable
-  }
+      perKeyAffectedSequenceCutoffDf: DataFrame
+  ): DataFrame = selectRowsAtOrAfterCutoff(
+    rowsDf = targetTableDf,
+    perKeyAffectedSequenceCutoffDf = perKeyAffectedSequenceCutoffDf
+  )
 
   /**
    * For every closed non-tombstone row in the input dataframe whose immediate window-order
@@ -439,9 +455,12 @@ case class Scd2BatchProcessor(
    *   a dataframe with the same schema as the input. Every closed non-tombstone row that
    *   was bisected has been replaced by its head + tail pair; every other row is carried
    *   through as-is. Each output row can be classified as one of: {decomposition head,
-   *   decomposition tail, instantaneous delete, open upsert, closed-and-unbisected row}. It's
-   *   possible that some of the returned decomposition tails are logically redundant, as
-   *   deletion markers that are immediately overtaken by a succeeding row.
+   *   decomposition tail, tombstone, open upsert, closed-and-unbisected row}. Tombstones here
+   *   are aux-table-only rows representing early-arriving deletes (SCD2 has no tombstone in the
+   *   target table - a delete there is just a closed history record); see the "tombstone" and
+   *   "aux table" concepts in this class's scaladoc. It's possible that some of the returned
+   *   decomposition tails are logically redundant, as deletion markers that are immediately
+   *   overtaken by a succeeding row.
    */
   private[autocdc] def decomposeOutOfOrderRows(rowsToDecomposePerKey: DataFrame): DataFrame = {
     val recordStartAtField =
@@ -532,8 +551,8 @@ case class Scd2BatchProcessor(
 
   /**
    * Asserts that every row in `decomposedRowsPerKey` conforms to one of the four canonical
-   * post-decomposition shapes - instantaneous delete, open upsert, closed upsert, or
-   * decomposition tail - and is otherwise a structural identity transform.
+   * post-decomposition shapes - tombstone, open upsert, closed upsert, or decomposition
+   * tail - and is otherwise a structural identity transform.
    *
    * @param decomposedRowsPerKey
    *   the output of [[decomposeOutOfOrderRows]]: a dataframe conforming to the canonical
@@ -556,7 +575,7 @@ case class Scd2BatchProcessor(
     val row = Scd2IntervalColumns(recordStartAtField, startAtCol, endAtCol)
     val isWellFormedRow =
       RowClassifier.isDecompositionTail(row) ||
-        RowClassifier.isDeleteRepresentingRow(row) ||
+        RowClassifier.isTombstone(row) ||
         RowClassifier.isUpsertRepresentingRow(row)
 
     def stringOrNullLit(c: Column): Column = F.coalesce(c.cast(StringType), F.lit("null"))
@@ -605,6 +624,12 @@ case class Scd2BatchProcessor(
    * upsert drops in favor of a same-sequence tombstone (delete wins over upsert at the
    * same instant).
    *
+   * Two copies of one row that differ only in the boundaries each recorded - which the
+   * auxiliary merge can produce for the target merge to read - collide the same way, and
+   * are ordered by [[startAtColName]] first and [[endAtColName]] second, each descending
+   * with nulls first. A copy that recorded no boundary therefore never outlives one that
+   * did, so of an open and a closed copy at the same recordStartAt the closed one survives.
+   *
    * @param decomposedRowsPerKey
    *   the output of [[decomposeOutOfOrderRows]]: a dataframe conforming to the canonical
    *   SCD2 row schema `[user_cols..., [[startAtColName]], [[endAtColName]],
@@ -638,6 +663,600 @@ case class Scd2BatchProcessor(
     withNextEffectiveRecordStartAt
       .filter(!isRedundantAtSameEffectiveSequence)
       .drop(Scd2BatchProcessor.nextEffectiveRecordStartAtColName)
+  }
+
+  /**
+   * Recompute every row's [[startAtColName]] and [[endAtColName]] over the per-key chronological
+   * window so the dataframe reflects the canonical SCD2 timeline that the downstream aux- and
+   * target-table merges consume.
+   *
+   * Decomposition tails and tombstones round-trip unchanged. An open upsert may close at its
+   * successor's effective sequence (becoming closed); the closing successor may be either a
+   * later state-changing upsert or a delete, which is represented as an instantaneous tombstone
+   * (see the "tombstone" concept in this class's scaladoc), so a delete closes the preceding
+   * upsert at the tombstone's sequence like any other successor. A closed upsert may conversely
+   * have its endAt cleared when absorbed into a run as a no-op continuation (becoming open).
+   * [[recordStartAtFieldName]] is never modified.
+   *
+   * @param decomposedAndCleanedDf
+   *   the output of [[dropRedundantRowsPostDecomposition]]: a dataframe conforming to the
+   *   canonical SCD2 row schema `[user_cols..., [[startAtColName]], [[endAtColName]],
+   *   [[cdcMetadataColName]]]` where every row is in one of the four canonical post-
+   *   decomposition shapes (decomposition tail, tombstone, open upsert, closed upsert).
+   *   If a row is a closed upsert in the input, it is assumed to not be bisected by any other
+   *   row in the input.
+   * @return
+   *   a dataframe with the same schema and row count as the input, with each row's
+   *   [[startAtColName]] / [[endAtColName]] replaced by their reconciled values.
+   */
+  private[autocdc] def reconcileStartAndEndAt(
+      decomposedAndCleanedDf: DataFrame): DataFrame = {
+    val trackedHistoryColumns = computeTrackedHistoryColumns(decomposedAndCleanedDf)
+
+    val recordStartAtField =
+      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAtCol = F.col(Scd2BatchProcessor.startAtColName)
+    val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
+
+    // Decomposition tails carry no recordStartAt of their own, so they take the closing
+    // sequence (`endAt`) as their effective ordering position - the same convention used by
+    // [[orderChronologicallyPerKeyWindow]] and [[dropRedundantRowsPostDecomposition]].
+    val current = Scd2IntervalColumns(recordStartAtField, startAtCol, endAtCol)
+    val previous = current.lagBy(1, orderChronologicallyPerKeyWindow)
+    val next = current.leadBy(1, orderChronologicallyPerKeyWindow)
+
+    // A row is the last in its per-key window when `LEAD(1)` has no successor; a constant
+    // literal is sufficient since we only care whether one exists.
+    val isLastRowInKeyWindow =
+      F.lead(F.lit(true), 1).over(orderChronologicallyPerKeyWindow).isNull
+
+    // The current row's tracked-history equality is computed against both its predecessor and
+    // its successor so the same window scan can decide both run-head start (LAG-side) and no-op
+    // continuation closure (LEAD-side) without an extra pass. The comparison is null-safe
+    // (`<=>`), so two rows with matching null values in the same tracked column register as
+    // equal. An empty tracked-history column set collapses to a constant `true`, which makes
+    // every consecutive upsert pair a no-op continuation - the correct degenerate behavior when
+    // the user tracks nothing.
+    val areTrackedColumnsEqualInPreviousRow = trackedHistoryColumns
+      .map { c =>
+        val col = F.col(QuotingUtils.quoteIdentifier(c))
+        col <=> F.lag(col, 1).over(orderChronologicallyPerKeyWindow)
+      }
+      .reduceOption(_ && _)
+      .getOrElse(F.lit(true))
+
+    val areTrackedColumnsEqualInNextRow = trackedHistoryColumns
+      .map { c =>
+        val col = F.col(QuotingUtils.quoteIdentifier(c))
+        col <=> F.lead(col, 1).over(orderChronologicallyPerKeyWindow)
+      }
+      .reduceOption(_ && _)
+      .getOrElse(F.lit(true))
+
+    // Reconciliation of start/end at is dependent on the class of row being reconciled. Build
+    // row classification predicates.
+    val isDecompositionTail = RowClassifier.isDecompositionTail(current)
+    val isUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(current)
+
+    // From the previous row's perspective, the current row is its successor.
+    val previousIsNoOpUpsertWithCurrent =
+      RowClassifier.isNoOpUpsertContinuation(
+        row = previous,
+        next = current,
+        areTrackedColumnsEqual = areTrackedColumnsEqualInPreviousRow
+      )
+
+    // "Window-local run head" means the current row begins a new run within the affected
+    // window. The first row in the window is automatically considered local-run-head since
+    // there's no predecessor to coalesce with. A non-first row is a local run head iff its
+    // predecessor is not a no-op continuation that absorbs it.
+    val isWindowLocalUpsertRunHead =
+      isUpsertRepresentingRow && !previousIsNoOpUpsertWithCurrent
+    val isFirstRowInKeyWindow = previous.effectiveRecordStartAt.isNull
+    val runHeadStartAt =
+      F.when(
+        isWindowLocalUpsertRunHead,
+        // The first row in the window may be a window-local run head but not a global run
+        // head (e.g., the row at the affected sequence cutoff, pulled in from either the
+        // auxiliary or the target table for left context). In that case, `startAt`
+        // may be strictly less than `recordStartAt`, encoding the true global run start, and
+        // we propagate it forward to later in-window continuations of the same run.
+        // For every later window-local upsert run head, `recordStartAt` is the run start.
+        F.when(isFirstRowInKeyWindow, startAtCol).otherwise(recordStartAtField)
+      )
+
+    // Propagate the run head's `startAt` forward to every row in the run via a running
+    // `last(...)` over `[unboundedPreceding, currentRow]`. `runHeadStartAt` is non-null
+    // only on run heads, and `ignoreNulls = true` makes intermediate rows inherit the most
+    // recent head's value.
+    val runStartAt =
+      F.last(runHeadStartAt, ignoreNulls = true).over(
+        orderChronologicallyPerKeyWindow.rowsBetween(
+          Window.unboundedPreceding,
+          Window.currentRow
+        )
+      )
+
+    val currentIsNoOpUpsertWithNext =
+      RowClassifier.isNoOpUpsertContinuation(
+        row = current,
+        next = next,
+        areTrackedColumnsEqual = areTrackedColumnsEqualInNextRow
+      )
+
+    val finalStartAt =
+      F.when(isDecompositionTail, F.lit(null).cast(resolvedSequencingType))
+        .when(isUpsertRepresentingRow, runStartAt)
+        .otherwise(startAtCol)
+
+    val finalEndAt =
+      F.when(isDecompositionTail, endAtCol)
+        .when(isLastRowInKeyWindow, endAtCol)
+        // A no-op continuation collapses into its run head, so its own visible interval is
+        // erased by clearing `endAt` to null. Note this cleared `endAt` is NOT by itself the
+        // aux-routing signal: the run tail is the row that represents the run to the user, and
+        // a tail can also carry `endAt = null` (an open run whose latest event is still active),
+        // so `endAt = null` alone does not mean "route to aux". Deciding which reconciled rows
+        // land in the target table (the run tail) versus the aux table (interior no-op rows)
+        // happens in a later transform (SPARK-57378), keyed off the reconciled run shape rather
+        // than `endAt` alone. A run therefore never fully disappears from the target.
+        .when(currentIsNoOpUpsertWithNext, F.lit(null).cast(resolvedSequencingType))
+        // The row already closes strictly before the next event (e.g., a tombstone or a
+        // closed upsert that ended before the next event arrived), so there is nothing to
+        // re-close.
+        .when(
+          RowClassifier.rowClosesStrictlyBeforeNextRow(endAtCol, next.effectiveRecordStartAt),
+          endAtCol)
+        .otherwise(next.effectiveRecordStartAt)
+
+    // Stage the recomputed start/end values into temporary columns first, then project them
+    // back over the originals via `select`. Both staged values reference the original
+    // `startAt`/`endAt`, so we cannot replace the originals in a single `withColumn` step.
+    val staged = decomposedAndCleanedDf
+      .withColumn(Scd2BatchProcessor.finalStartAtColName, finalStartAt)
+      .withColumn(Scd2BatchProcessor.finalEndAtColName, finalEndAt)
+
+    // Determine columns for selection from staged dataframe using the original input dataframe's
+    // schema. The final startAt/endAt should be remapped, all other columns should pass through
+    // as-is.
+    val outputColumns = decomposedAndCleanedDf.columns.map {
+      case col if col == Scd2BatchProcessor.startAtColName =>
+        val startAtMetadata = decomposedAndCleanedDf.schema(col).metadata
+        F.col(Scd2BatchProcessor.finalStartAtColName)
+          .as(Scd2BatchProcessor.startAtColName, startAtMetadata)
+      case col if col == Scd2BatchProcessor.endAtColName =>
+        val endAtMetadata = decomposedAndCleanedDf.schema(col).metadata
+        F.col(Scd2BatchProcessor.finalEndAtColName)
+          .as(Scd2BatchProcessor.endAtColName, endAtMetadata)
+      case col =>
+        F.col(QuotingUtils.quoteIdentifier(col))
+    }
+    staged.select(outputColumns.toImmutableArraySeq: _*)
+  }
+
+  /**
+   * Drop delete-encoded rows (tombstones and decomposition tails) that became redundant after
+   * reconciliation.
+   *
+   * The rule is the same for both row kinds: a delete-encoded row encodes a delete boundary in its
+   * [[endAtColName]], and it is redundant once the immediately preceding reconciled upsert closes
+   * (its [[endAtColName]]) exactly on that same boundary. When they coincide, the closed upsert
+   * already carries the boundary, so the standalone delete-encoded row can be dropped rather than
+   * routed to aux. Only the preceding upsert's `endAt` matters here; its `startAt` (identity) is
+   * irrelevant to the comparison.
+   *
+   * Both examples reduce to that single check - the preceding upsert's reconciled `endAt` equals
+   * the delete-encoded row's boundary:
+   *   - Tombstone: an open upsert `[startAt=10, endAt=null)` followed by a tombstone at `15`
+   *     reconciles into a closed upsert `[10, 15)`. Its `endAt=15` matches the tombstone's
+   *     boundary `15`, so the tombstone is redundant.
+   *   - Decomposition tail: an existing closed `[10, 20)` is bisected by an out-of-order event at
+   *     `15`. Decomposition first splits the original row into an open head `[10, null)` plus a
+   *     decomposition tail `[null, 20)` - a synthetic row with a null recordStartAt that carries
+   *     the original right boundary `20` so it can be re-closed later. The bisecting event then
+   *     reconciles into `[15, 20)`, whose `endAt=20` matches the tail's boundary `20`, so the tail
+   *     is redundant. (A tail that does *not* coincide with a preceding upsert survives and is
+   *     later turned into a tombstone by [[promoteDecompositionTailsToTombstones]].)
+   */
+  private[autocdc] def dropLeftoverDeletesPostReconciliation(
+      reconciledDf: DataFrame): DataFrame = {
+    val recordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAt = F.col(Scd2BatchProcessor.startAtColName)
+    val endAt = F.col(Scd2BatchProcessor.endAtColName)
+
+    // Both tombstones and decomposition tails encode a delete boundary in their `endAt`. Either
+    // becomes redundant when the immediately preceding upsert was reconciled to close exactly on
+    // that boundary, since the resulting closed upsert already carries it.
+    val row = Scd2IntervalColumns(recordStartAt, startAt, endAt)
+    val isTombstone = RowClassifier.isTombstone(row)
+    val isDecompositionTail = RowClassifier.isDecompositionTail(row)
+    val isDeleteEncodedRow = isTombstone || isDecompositionTail
+
+    // The immediately preceding chronologically-ordered row for the same key.
+    val previous = row.lagBy(1, orderChronologicallyPerKeyWindow)
+
+    val withWindowCols = reconciledDf
+      .withColumn(
+        Scd2BatchProcessor.isRedundantDeleteEncodingColName,
+        isDeleteEncodedRow &&
+          // Defensive: the predecessor should always be an upsert, because upstream cleanup
+          // prevents adjacent delete-encoded rows sharing the same boundary from reaching here.
+          // Asserting it directly keeps this method's redundancy rule matching its documented
+          // "immediately preceding upsert" invariant, rather than dropping a delete-encoded row
+          // that merely happens to abut another delete-encoded row on the same boundary.
+          RowClassifier.isUpsertRepresentingRow(previous) &&
+          (previous.endAt <=> endAt)
+      )
+
+    withWindowCols
+      .filter(!F.col(Scd2BatchProcessor.isRedundantDeleteEncodingColName))
+      .drop(Scd2BatchProcessor.isRedundantDeleteEncodingColName)
+  }
+
+  /**
+   * Convert surviving decomposition tails into tombstones.
+   *
+   * A decomposition tail that survives deletion cleanup is an unmatched delete boundary; setting
+   * [[recordStartAtFieldName]], and [[startAtColName]] to the tail's end sequence lets downstream
+   * aux handling preserve it as a tombstone.
+   *
+   * For example, if an existing closed upsert `[startAt=10, endAt=20)` is bisected by an event at
+   * `15`, decomposition first produces an open head `[10, null)` plus a tail `[null, 20)`;
+   * reconciliation may close the head as `[10, 15)`, leaving the tail's boundary at `20` to be
+   * promoted into a tombstone.
+   */
+  private[autocdc] def promoteDecompositionTailsToTombstones(
+      reconciledDf: DataFrame): DataFrame = {
+    val recordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAt = F.col(Scd2BatchProcessor.startAtColName)
+    val endAt = F.col(Scd2BatchProcessor.endAtColName)
+    val isDecompositionTail =
+      RowClassifier.isDecompositionTail(Scd2IntervalColumns(recordStartAt, startAt, endAt))
+
+    val outputColumns = reconciledDf.columns.map {
+      case c if c == AutoCdcReservedNames.cdcMetadataColName =>
+        val metadata = reconciledDf.schema(c).metadata
+        F.when(
+          isDecompositionTail,
+          Scd2BatchProcessor.constructCdcMetadataCol(
+            recordStartAt = endAt,
+            sequencingType = resolvedSequencingType
+          )
+        ).otherwise(F.col(c)).as(c, metadata)
+      case c if c == Scd2BatchProcessor.startAtColName =>
+        val metadata = reconciledDf.schema(c).metadata
+        F.when(isDecompositionTail, endAt).otherwise(startAt).as(c, metadata)
+      // The other cases match framework columns whose names are known and identifier-safe; only
+      // this default case handles arbitrary user-column names, which may contain dots or other
+      // special characters, so it is the only one that needs quoting.
+      case c =>
+        F.col(QuotingUtils.quoteIdentifier(c))
+    }
+
+    reconciledDf.select(outputColumns.toImmutableArraySeq: _*)
+  }
+
+  /**
+   * Return the schema field names of columns selected for history-tracking on `df`:
+   * the eligible user-data columns (those not in [[ChangeArgs.keys]] or the framework
+   * reserved set) filtered through [[ChangeArgs.trackHistorySelection]].
+   */
+  private def computeTrackedHistoryColumns(df: DataFrame): Seq[String] =
+    Scd2BatchProcessor.computeTrackedHistoryColumns(
+      schema = df.schema,
+      changeArgs = changeArgs,
+      resolver = df.sparkSession.sessionState.conf.resolver
+    )
+
+  /**
+   * Tag each post-reconciliation row with [[Scd2BatchProcessor.shouldRouteToAuxTableColName]]:
+   * `true` for rows that belong in the auxiliary table (tombstones and hidden no-op upserts),
+   * `false` for rows that do not. The flag's contract is solely about aux-table membership; it
+   * makes no claim about whether a `false` row belongs in the target table.
+   *
+   * @param reconciledDf the canonical post-reconciliation rows for the affected keys.
+   * @return `reconciledDf` with an added boolean
+   *         [[Scd2BatchProcessor.shouldRouteToAuxTableColName]] column; no rows are added or
+   *         removed.
+   */
+  private[autocdc] def identifyAndTagAuxRows(reconciledDf: DataFrame): DataFrame = {
+    val recordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAt = F.col(Scd2BatchProcessor.startAtColName)
+    val endAt = F.col(Scd2BatchProcessor.endAtColName)
+    val current = Scd2IntervalColumns(recordStartAt, startAt, endAt)
+    val next = current.leadBy(1, orderChronologicallyPerKeyWindow)
+
+    val trackedHistoryColumns = computeTrackedHistoryColumns(reconciledDf)
+    val areTrackedColumnsEqualInNextRow = trackedHistoryColumns
+      .map { c =>
+        val col = F.col(QuotingUtils.quoteIdentifier(c))
+        col <=> F.lead(col, 1).over(orderChronologicallyPerKeyWindow)
+      }
+      .reduceOption(_ && _)
+      .getOrElse(F.lit(true))
+
+    val isTombstone = RowClassifier.isTombstone(current)
+    val isHiddenNoOpUpsert = RowClassifier.isNoOpUpsertContinuation(
+      row = current,
+      next = next,
+      areTrackedColumnsEqual = areTrackedColumnsEqualInNextRow
+    )
+
+    reconciledDf.withColumn(
+      Scd2BatchProcessor.shouldRouteToAuxTableColName,
+      isTombstone || isHiddenNoOpUpsert
+    )
+  }
+
+  /**
+   * Merge the reconciled rows that belong in the auxiliary table (tombstones and hidden no-op
+   * upserts, as tagged by [[identifyAndTagAuxRows]]) onto the auxiliary table, and logically
+   * delete any previously-affected aux row that did not survive reconciliation.
+   *
+   * Idempotency across `foreachBatch` retries: rows this batch logically deletes are not
+   * physically removed but stamped with [[Scd2BatchProcessor.deletedByBatchIdColName]] `=
+   * batchId`, so a retry of the same `batchId` still observes them via
+   * [[findAffectedRowsFromAuxiliaryTable]] and re-derives the same reconciliation output. Aux
+   * rows logically deleted by an older, already-committed batch
+   * ([[Scd2BatchProcessor.deletedByBatchIdColName]] `!= batchId`) are physically
+   * garbage-collected as part of this same merge.
+   *
+   * @param reconciledDfWithAuxRowsTagged reconciled rows tagged by [[identifyAndTagAuxRows]].
+   * @param originalAffectedRowsFromAuxiliaryTable the affected aux rows pulled in for this
+   *        microbatch, in canonical SCD2 row schema (i.e. as returned by
+   *        [[findAffectedRowsFromAuxiliaryTable]], with the aux-only
+   *        [[Scd2BatchProcessor.deletedByBatchIdColName]] already dropped).
+   * @param auxiliaryTableIdentifier the identifier of the auxiliary table to merge into.
+   * @param batchId the underlying Spark streaming query's batchId, used to stamp logical deletes
+   *        and scope garbage collection.
+   */
+  private[autocdc] def mergeRowsIntoAuxiliaryTable(
+      reconciledDfWithAuxRowsTagged: DataFrame,
+      originalAffectedRowsFromAuxiliaryTable: DataFrame,
+      auxiliaryTableIdentifier: TableIdentifier,
+      batchId: Long): Unit = {
+    val resolver = reconciledDfWithAuxRowsTagged.sparkSession.sessionState.conf.resolver
+    val deletedByBatchIdCol = Scd2BatchProcessor.deletedByBatchIdColName
+
+    val reconciledAuxRows = reconciledDfWithAuxRowsTagged
+      .filter(F.col(Scd2BatchProcessor.shouldRouteToAuxTableColName))
+      .drop(Scd2BatchProcessor.shouldRouteToAuxTableColName)
+
+    // All of the reconciledAuxRows will be landing in the aux table as alive (non-deleted) rows,
+    // so tag them with a null deleted-by batch id.
+    val auxRowsToUpsert = reconciledAuxRows
+      .withColumn(deletedByBatchIdCol, F.lit(null).cast(LongType))
+
+    // Any aux row pulled in for reconciliation but absent from the post-reconciliation aux rows
+    // was either dropped as redundant or promoted to the (now-visible) target table. Either way
+    // it must leave the aux table; stamp it with this batch's id for deleted-by batch id. On this
+    // batch's MERGE, the existing aux row will be considered logically deleted. In a future
+    // microbatch's merge, it will be physically deleted.
+    val auxRowsToDelete = antiJoinRowsByRecordStartAtPerKey(
+        leftRows = originalAffectedRowsFromAuxiliaryTable,
+        rightRows = reconciledAuxRows
+      )
+      .withColumn(deletedByBatchIdCol, F.lit(batchId))
+
+    val mergeSource = auxRowsToUpsert
+      .unionByName(auxRowsToDelete)
+      .as("source")
+
+    // At this point [[mergeSource]] must have the same columns/shape as the persisted aux table.
+    val auxTableColumns = mergeSource.columns.toImmutableArraySeq
+
+    // Build predicate for whether rows represent the same event (match). In SCD2 each key can have
+    // multiple records, so a row's identity is defined by (keys, sequencing).
+    val auxIdentQuoted = auxiliaryTableIdentifier.quotedString
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+
+    val mergeSourceRecordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(s"source.`$meta`"))
+    val auxTableRecordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(s"$auxIdentQuoted.`$meta`"))
+
+    val doKeysMatch = changeArgs.keys
+      .map(k => F.col(s"source.${k.quoted}") === F.col(s"$auxIdentQuoted.${k.quoted}"))
+      .reduce(_ && _)
+    val doRowsMatch = doKeysMatch && (mergeSourceRecordStartAt <=> auxTableRecordStartAt)
+
+    // On updates, MERGE requires only non-key columns are updated (remapped). For inserts, all of
+    // the row's columns must explicitly be mapped.
+    val keyNames = changeArgs.keys.map(_.name)
+    def upsertAssignments(columnName: String): (String, Column) = {
+      val quoted = QuotingUtils.quoteIdentifier(columnName)
+      s"$auxIdentQuoted.$quoted" -> F.col(s"source.$quoted")
+    }
+    val nonKeyUpdateAssignments = auxTableColumns
+      .filterNot(c => keyNames.exists(resolver(_, c)))
+      .map(upsertAssignments)
+      .toMap
+    val insertAssignments = auxTableColumns.map(upsertAssignments).toMap
+
+    // Physically garbage-collect aux rows logically deleted by some other, already-committed
+    // batch. Such rows are always excluded when pulling in the current microbatch's affected set,
+    // so they can never match against a row being merged in.
+    val auxTableDeletedByBatchId = F.col(s"$auxIdentQuoted.`$deletedByBatchIdCol`")
+    val isGarbageCollectableAuxRow =
+      auxTableDeletedByBatchId.isNotNull && auxTableDeletedByBatchId =!= F.lit(batchId)
+
+    // Whether a row in the MERGE source represents a row being [logically] deleted, as opposed to
+    // being upserted.
+    val shouldLogicallyDeleteAuxRow = F.col(s"source.`$deletedByBatchIdCol`").isNotNull
+
+    mergeSource
+      .mergeInto(auxIdentQuoted, doRowsMatch)
+      // Keys in source row match against existing row in aux table, and declare intent to delete
+      // the corresponding row in the aux; mark the row as logically deleted in the aux table.
+      .whenMatched(shouldLogicallyDeleteAuxRow)
+      .update(
+        Map(
+          s"$auxIdentQuoted.`$deletedByBatchIdCol`" ->
+            F.col(s"source.`$deletedByBatchIdCol`")
+        )
+      )
+      // Keys in source row match against existing row in aux table and does not represent a row
+      // being deleted; update the data/operational columns
+      .whenMatched(!shouldLogicallyDeleteAuxRow)
+      .update(nonKeyUpdateAssignments)
+      // Keys in source do not match against an existing row in aux table and does not represent a
+      // row being deleted; insert the new key's row.
+      .whenNotMatched(!shouldLogicallyDeleteAuxRow)
+      .insert(insertAssignments)
+      // If this is a row not affected by the current microbatch but is eligible for garbage
+      // collection now, proactively hard-delete it.
+      // TODO: This GC triggers a full scan of the aux table; revisit whether to GC only
+      // periodically rather than on every microbatch.
+      .whenNotMatchedBySource(isGarbageCollectableAuxRow)
+      .delete()
+      .merge()
+  }
+
+  /**
+   * Merge the reconciled rows that are visible in the target table (run tails that are
+   * upsert-representing and not routed to the aux table) onto the target table, and delete any
+   * previously-affected target row that did not survive reconciliation.
+   *
+   * A previously-affected target row is deleted when it is absent from the post-reconciliation
+   * visible rows. This covers both (a) a row reconciled away entirely (e.g. closed by a
+   * coincident tombstone) and (b) a row demoted to a hidden aux row (e.g. a previously-visible
+   * no-op tail superseded within its run by a later no-op upsert). In either case the
+   * corresponding target row must go.
+   *
+   * @param reconciledDfWithAuxRowsTagged reconciled rows tagged by [[identifyAndTagAuxRows]].
+   * @param affectedRowsFromTargetTable the affected target rows pulled in for this microbatch.
+   * @param targetTableIdentifier the identifier of the target table to merge into.
+   */
+  private[autocdc] def mergeRowsIntoTargetTable(
+      reconciledDfWithAuxRowsTagged: DataFrame,
+      affectedRowsFromTargetTable: DataFrame,
+      targetTableIdentifier: TableIdentifier): Unit = {
+    val targetIdentQuoted = targetTableIdentifier.quotedString
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+
+    val resolver = reconciledDfWithAuxRowsTagged.sparkSession.sessionState.conf.resolver
+    val keyNames = changeArgs.keys.map(_.name)
+
+    // Find the reconciled rows that should specifically land in the target table, as per SCD2.
+    val recordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(reconciledDfWithAuxRowsTagged.col(meta))
+    val startAt = reconciledDfWithAuxRowsTagged.col(Scd2BatchProcessor.startAtColName)
+    val endAt = reconciledDfWithAuxRowsTagged.col(Scd2BatchProcessor.endAtColName)
+    val isVisibleTargetRow =
+      // Aux table by definition only holds rows that should not be visible to users, but are
+      // required for cross-microbatch stateful reconciliation (tombstones and currently no-op
+      // upserts).
+      !F.col(Scd2BatchProcessor.shouldRouteToAuxTableColName) &&
+        // While rows headed to aux are mutually exclusive to rows that should land in the target,
+        // it's possible there are rows that belong to neither aux nor target (ex. decomposition
+        // tails). Only non-no-op upsert-representing rows should land in the target, and no-op
+        // upsert-representing rows would have been marked as routed to aux table; hence all
+        // remaining upserts should land in the target table.
+        RowClassifier.isUpsertRepresentingRow(Scd2IntervalColumns(recordStartAt, startAt, endAt))
+
+    // Compute the set of affected rows that should be upserted back into the target table, as well
+    // as rows that have been dropped or demoted out of the target table.
+    val reconciledTargetRows = reconciledDfWithAuxRowsTagged
+      .filter(isVisibleTargetRow)
+      .drop(Scd2BatchProcessor.shouldRouteToAuxTableColName)
+
+    val rowsToDeleteFromTarget = antiJoinRowsByRecordStartAtPerKey(
+      leftRows = affectedRowsFromTargetTable,
+      rightRows = reconciledTargetRows
+    )
+
+    // At this point, [[reconciledTargetRows]] shares the same columns/shape as the target table.
+    val targetTableColumns = reconciledTargetRows.columns.toImmutableArraySeq
+
+    // Unlike the aux table the target table does not persist any delete marker (logical or not),
+    // so we need to augment a column to all MERGE source rows to indicate whether the row
+    // represents that a corresponding target table row should be deleted. Once we explicitly mark
+    // each row as a deletion or not, we can union them without losing information.
+    val shouldDeleteTargetRowCol = Scd2BatchProcessor.shouldDeleteTargetRowColName
+    val mergeSource = reconciledTargetRows
+      .withColumn(shouldDeleteTargetRowCol, F.lit(false))
+      .unionByName(rowsToDeleteFromTarget.withColumn(shouldDeleteTargetRowCol, F.lit(true)))
+      .select(
+        targetTableColumns.map(c => F.col(QuotingUtils.quoteIdentifier(c))) :+
+          F.col(shouldDeleteTargetRowCol): _*
+      )
+      .as("source")
+
+    val mergeSourceRecordStartAt = Scd2BatchProcessor.recordStartAtOf(F.col(s"source.`$meta`"))
+    val targetTableRecordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(s"$targetIdentQuoted.`$meta`"))
+    val doKeysMatch = changeArgs.keys
+      .map(k => F.col(s"source.${k.quoted}") === F.col(s"$targetIdentQuoted.${k.quoted}"))
+      .reduce(_ && _)
+    val doRowsMatch = doKeysMatch && (mergeSourceRecordStartAt <=> targetTableRecordStartAt)
+
+    // On updates, MERGE requires only non-key columns are updated (remapped). For inserts, all of
+    // the row's columns must explicitly be mapped.
+    def upsertAssignments(columnName: String): (String, Column) = {
+      val quoted = QuotingUtils.quoteIdentifier(columnName)
+      s"$targetIdentQuoted.$quoted" -> F.col(s"source.$quoted")
+    }
+    val nonKeyUpdateAssignments = targetTableColumns
+      .filterNot(c => keyNames.exists(resolver(_, c)))
+      .map(upsertAssignments)
+      .toMap
+    val insertAssignments = targetTableColumns.map(upsertAssignments).toMap
+
+    // Whether a row in the MERGE source represents a row being deleted, as opposed to being
+    // upserted. Unlike the aux table, target deletes are physical (hard) deletes.
+    val shouldDeleteTargetRow = F.col(s"source.`$shouldDeleteTargetRowCol`")
+
+    mergeSource
+      .mergeInto(targetIdentQuoted, doRowsMatch)
+      // Keys in source row match against an existing row in the target table, and declare intent
+      // to delete the corresponding row; physically remove it from the target table.
+      .whenMatched(shouldDeleteTargetRow)
+      .delete()
+      // Keys in source row match against an existing row in the target table and does not
+      // represent a row being deleted; update the data/operational columns.
+      .whenMatched(!shouldDeleteTargetRow)
+      .update(nonKeyUpdateAssignments)
+      // Keys in source do not match against an existing row in the target table and does not
+      // represent a row being deleted; insert the new key's row.
+      .whenNotMatched(!shouldDeleteTargetRow)
+      .insert(insertAssignments)
+      .merge()
+  }
+
+  /**
+   * Left-anti-join `leftRows` against `rightRows`, matching on the key columns and
+   * [[Scd2BatchProcessor.recordStartAtFieldName]] (null-safe). Returns the `leftRows` that have
+   * no counterpart in `rightRows` - i.e. the rows that were dropped between the two sets -
+   * preserving `leftRows`' schema.
+   *
+   * Both inputs must carry the key columns and the [[AutoCdcReservedNames.cdcMetadataColName]]
+   * column.
+   */
+  private[autocdc] def antiJoinRowsByRecordStartAtPerKey(
+      leftRows: DataFrame,
+      rightRows: DataFrame): DataFrame = {
+    val leftAlias = "left"
+    val rightAlias = "right"
+    val leftRecordStartAt = Scd2BatchProcessor.recordStartAtOf(
+      F.col(s"$leftAlias.`${AutoCdcReservedNames.cdcMetadataColName}`")
+    )
+    val rightRecordStartAt = Scd2BatchProcessor.recordStartAtOf(
+      F.col(s"$rightAlias.`${AutoCdcReservedNames.cdcMetadataColName}`")
+    )
+    val doKeysMatch = changeArgs.keys
+      .map(k => F.col(s"$leftAlias.${k.quoted}") === F.col(s"$rightAlias.${k.quoted}"))
+      .reduce(_ && _)
+
+    leftRows
+      .as(leftAlias)
+      .join(
+        rightRows.as(rightAlias),
+        doKeysMatch && (leftRecordStartAt <=> rightRecordStartAt),
+        joinType = "left_anti"
+      )
   }
 }
 
@@ -736,7 +1355,7 @@ object Scd2BatchProcessor {
    * CDC metadata column field that represents the exact time (sequence) of the CDC event that
    * produced this row. Null only for synthetic decomposition tails.
    */
-  private[autocdc] val recordStartAtFieldName: String = "__RECORD_START_AT"
+  private[pipelines] val recordStartAtFieldName: String = "__RECORD_START_AT"
 
   /**
    * Aux-table only column that holds the microbatch id by which a row was logically
@@ -748,7 +1367,7 @@ object Scd2BatchProcessor {
    * idempotency, should a microbatch fail between a MERGE executed against the auxiliary
    * table and the MERGE executed against the target table.
    */
-  private[autocdc] val deletedByBatchIdColName: String =
+  private[pipelines] val deletedByBatchIdColName: String =
     s"${AutoCdcReservedNames.prefix}deleted_by_batch_id"
 
   /**
@@ -765,7 +1384,7 @@ object Scd2BatchProcessor {
    * The invariant in both tables is: startAtColName <= recordStartAtFieldName. If an event was
    * generated at time X, it is active by time X, or earlier if it is not a run head.
    */
-  private[autocdc] val startAtColName: String = "__START_AT"
+  private[pipelines] val startAtColName: String = "__START_AT"
 
   /**
    * What this column represents depends on which AutoCDC artifact table it is read from.
@@ -779,22 +1398,59 @@ object Scd2BatchProcessor {
    *    Else this row is a coalesced no-op row that is part of an upsert run, and by
    *    convention the value will always be null.
    */
-  private[autocdc] val endAtColName: String = "__END_AT"
+  private[pipelines] val endAtColName: String = "__END_AT"
 
   /**
-   * Column names reserved by AutoCDC that will be projected onto the microbatch and
-   * eventually persisted in the target table. If the user's source dataframe contains any of
-   * these columns, SCD2 reconciliation will fail.
+   * Column names reserved by AutoCDC that are projected onto the microbatch and persisted in the
+   * target table. A source dataframe must not contain any of them.
    *
-   * TODO(SPARK-57251): validate at [[AutoCdcMergeFlow]] construction time that the source
-   *   schema and column selection do not collide with these reserved names, so we fail fast
-   *   with a user-actionable error instead of silently overwriting them at preprocess time.
+   * [[startAtColName]] and [[endAtColName]] do NOT carry the reserved
+   * [[AutoCdcReservedNames.prefix]], so a source-column collision with them is not caught by the
+   * prefix-based guard; [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] validates the
+   * source schema against the non-prefixed names in this set at construction time, failing fast
+   * instead of silently overwriting them at preprocess time.
    */
-  private val reservedFrameworkColNames: Set[String] = Set(
+  private[pipelines] val reservedFrameworkColNames: Set[String] = Set(
     startAtColName,
     endAtColName,
     AutoCdcReservedNames.cdcMetadataColName
   )
+
+  /**
+   * Resolve [[ChangeArgs.trackHistorySelection]] against `schema` and return the field names of
+   * the history-tracking columns: the eligible user-data columns (those that are neither
+   * [[ChangeArgs.keys]] nor framework reserved columns) filtered through the selection.
+   *
+   * This is the single source of truth for which columns define an SCD2 run. It is called both
+   * per-microbatch (against the reconciled dataframe's schema) and at
+   * [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction time (against the
+   * user-selected source schema), so an unresolvable or ineligible selection fails fast with a
+   * user-actionable [[org.apache.spark.sql.AnalysisException]] instead of surfacing mid-stream.
+   *
+   * Throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` if the selection references a column that is not
+   * an eligible history-tracking column in `schema` (i.e. absent, or a key/framework column).
+   */
+  private[pipelines] def computeTrackedHistoryColumns(
+      schema: StructType,
+      changeArgs: ChangeArgs,
+      resolver: Resolver): Seq[String] = {
+    val keyColNames = changeArgs.keys.map(_.name)
+
+    val eligibleSchema = StructType(schema.fields.filterNot { field =>
+      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
+        keyColNames.exists(resolver(_, field.name))
+    })
+
+    ColumnSelection
+      .applyToSchema(
+        schemaName = "trackHistorySelection",
+        schema = eligibleSchema,
+        columnSelection = changeArgs.trackHistorySelection,
+        resolver = resolver
+      )
+      .fieldNames
+      .toImmutableArraySeq
+  }
 
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
@@ -834,16 +1490,93 @@ object Scd2BatchProcessor {
     s"${AutoCdcReservedNames.prefix}next_effective_record_start_at"
 
   /**
-   * Name of the temporary column used to identify the sequence associated with the anchor
-   * row found in the auxiliary table for the incoming microbatch. Since sequences must be unique
-   * amongst all rows for a key (or risk undefined behavior), this sequence value uniquely
-   * identifies an exact row in the aux.
+   * Names of temporary columns used by [[reconcileStartAndEndAt]] to stage the recomputed
+   * [[startAtColName]] / [[endAtColName]] values before projecting them back over the originals.
+   *
+   * Temporary in that the columns have no observable side effect or persistence across
+   * microbatches.
    */
-  private val anchorSequenceColName: String = s"${AutoCdcReservedNames.prefix}anchor_sequence"
+  private val finalStartAtColName: String =
+    s"${AutoCdcReservedNames.prefix}final_start_at"
+  private val finalEndAtColName: String =
+    s"${AutoCdcReservedNames.prefix}final_end_at"
+
+  /**
+   * Name of the temporary column used by [[dropLeftoverDeletesPostReconciliation]] to flag
+   * delete-encoded rows (tombstones and decomposition tails) already encoded by the immediately
+   * preceding upsert row's [[endAtColName]].
+   *
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
+   */
+  private val isRedundantDeleteEncodingColName: String =
+    s"${AutoCdcReservedNames.prefix}is_redundant_delete_encoding"
+
+  /**
+   * Name of the temporary column carrying a row's [[Scd2IntervalColumns.effectiveRecordStartAt]]
+   * in the narrow, key-plus-ordering-metadata union of the auxiliary and target tables that
+   * [[Scd2BatchProcessor.computePerKeyAffectedSequenceCutoff]] aggregates over.
+   *
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
+   */
+  private val effectiveRecordStartAtColName: String =
+    s"${AutoCdcReservedNames.prefix}effective_record_start_at"
+
+  /**
+   * Name of the temporary column holding, per key, the largest effective ordering position
+   * strictly below the key's minimum microbatch sequence, across the auxiliary AND target tables
+   * jointly. Null for a key with no such row, in which case the affected sequence cutoff falls
+   * back to the microbatch minimum.
+   *
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
+   */
+  private val latestSequenceBeforeMicrobatchColName: String =
+    s"${AutoCdcReservedNames.prefix}latest_sequence_before_microbatch"
+
+  /**
+   * Name of the temporary column holding the single per-key cutoff on effective ordering
+   * position that gates affected-row selection from both the auxiliary and the target table, as
+   * computed by [[Scd2BatchProcessor.computePerKeyAffectedSequenceCutoff]].
+   *
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
+   */
+  private val affectedSequenceCutoffColName: String =
+    s"${AutoCdcReservedNames.prefix}affected_sequence_cutoff"
+
+  /**
+   * Name of the temporary column projected by [[Scd2BatchProcessor.identifyAndTagAuxRows]] to
+   * mark rows destined for the auxiliary table (tombstones and hidden no-op upserts) rather than
+   * the target table.
+   *
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
+   */
+  private[autocdc] val shouldRouteToAuxTableColName: String =
+    s"${AutoCdcReservedNames.prefix}should_route_to_aux_table"
+
+  /**
+   * Name of the temporary column used by [[Scd2BatchProcessor.mergeRowsIntoTargetTable]] to flag,
+   * within the unioned merge source, which rows should be deleted from (rather than upserted
+   * into) the target table.
+   *
+   * Temporary in that the column has no observable side effect or persistence across
+   * microbatches.
+   */
+  private val shouldDeleteTargetRowColName: String =
+    s"${AutoCdcReservedNames.prefix}should_delete_target_row"
 
   /** Project the [[recordStartAtFieldName]] out of an SCD2 CDC metadata column. */
   private def recordStartAtOf(cdcMetadataCol: Column): Column =
     cdcMetadataCol.getField(recordStartAtFieldName)
+
+  /**
+   * The [[Scd2IntervalColumns]] of a row read from either the auxiliary or the target table, in
+   * the canonical SCD2 row schema. The columns are unresolved name references, so they read from
+   * whichever dataframe the expressions are applied to.
+   */
+  private def canonicalRowIntervalColumns: Scd2IntervalColumns = Scd2IntervalColumns(
+    recordStartAt = recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName)),
+    startAt = F.col(startAtColName),
+    endAt = F.col(endAtColName)
+  )
 
   /**
    * Schema of the CDC metadata struct column for SCD2 rows.
@@ -862,7 +1595,7 @@ object Scd2BatchProcessor {
    * Construct the CDC metadata struct column for SCD2 rows, following the exact schema and
    * field ordering defined by [[cdcMetadataColSchema]].
    */
-  private def constructCdcMetadataCol(
+  private[pipelines] def constructCdcMetadataCol(
       recordStartAt: Column,
       sequencingType: DataType
   ): Column = {
@@ -896,6 +1629,20 @@ private[autocdc] case class Scd2IntervalColumns(
    * [[Scd2BatchProcessor.orderChronologicallyPerKeyWindow]].
    */
   def effectiveRecordStartAt: Column = F.coalesce(recordStartAt, endAt)
+
+  /** The same interval columns read from the row `offset` positions earlier in `window`. */
+  def lagBy(offset: Int, window: WindowSpec): Scd2IntervalColumns =
+    Scd2IntervalColumns(
+      F.lag(recordStartAt, offset).over(window),
+      F.lag(startAt, offset).over(window),
+      F.lag(endAt, offset).over(window))
+
+  /** The same interval columns read from the row `offset` positions later in `window`. */
+  def leadBy(offset: Int, window: WindowSpec): Scd2IntervalColumns =
+    Scd2IntervalColumns(
+      F.lead(recordStartAt, offset).over(window),
+      F.lead(startAt, offset).over(window),
+      F.lead(endAt, offset).over(window))
 }
 
 object RowClassifier {
@@ -942,18 +1689,50 @@ object RowClassifier {
     isOpenUpsert(row) || isClosedUpsert(row)
 
   /**
-   * Delete-representing row, encoded as an instantaneous (zero-width) interval at `recordStartAt`
-   * (`startAt == endAt == recordStartAt`). Never materializes in the target table.
+   * Tombstone (delete-boundary) row, encoded as an instantaneous interval at
+   * `recordStartAt`. Never materializes in the target table, only in the aux table.
    *
-   * User-data column values on these rows are not part of the SCD2 contract: they may reflect
-   * the originating delete event, the values of the upsert whose closed-interval row was bisected
-   * (when promoted from a decomposition tail), or be null altogether. Reconciliation does not
-   * consume these values for any semantic decision.
+   * User-data column values on tombstones are not part of the SCD2 contract: they may
+   * reflect the originating delete event, the values of the upsert whose closed-interval
+   * row was bisected (when the tombstone was promoted from a decomposition tail), or be
+   * null altogether. Reconciliation does not consume these values for any semantic
+   * decision.
    */
-  private[autocdc] def isDeleteRepresentingRow(row: Scd2IntervalColumns): Column =
+  private[autocdc] def isTombstone(row: Scd2IntervalColumns): Column =
     row.recordStartAt.isNotNull &&
       row.startAt.isNotNull &&
       row.endAt.isNotNull &&
       row.startAt === row.recordStartAt &&
       row.endAt === row.recordStartAt
+
+  /**
+   * Whether a row closes (`endAt`) strictly before the next chronologically-ordered row for the
+   * same key begins (`nextEffectiveRecordStartAt`), leaving a gap in the visible timeline.
+   */
+  private[autocdc] def rowClosesStrictlyBeforeNextRow(
+      endAt: Column,
+      nextEffectiveRecordStartAt: Column
+  ): Column =
+    endAt.isNotNull && endAt < nextEffectiveRecordStartAt
+
+  /**
+   * Whether `row` carries no new information beyond its immediate successor `next` and so
+   * collapses into that successor's run instead of standing as its own visible interval. It is
+   * the caller's responsibility to pass `row` and `next` as successive rows in chronological
+   * order, and `areTrackedColumnsEqual` as true iff the two rows hold equal values for every
+   * tracked-history column.
+   *
+   * Returns true iff `row` and `next` are both upsert-representing, `row`'s interval reaches
+   * `next` without leaving a gap, and the two are tracked-history equal. It is false whenever
+   * there is no successor (the last row in a key window) or either row is not upsert-representing.
+   */
+  private[autocdc] def isNoOpUpsertContinuation(
+      row: Scd2IntervalColumns,
+      next: Scd2IntervalColumns,
+      areTrackedColumnsEqual: Column
+  ): Column =
+    isUpsertRepresentingRow(row) &&
+      isUpsertRepresentingRow(next) &&
+      !rowClosesStrictlyBeforeNextRow(row.endAt, next.effectiveRecordStartAt) &&
+      areTrackedColumnsEqual
 }

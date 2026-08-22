@@ -77,7 +77,7 @@ public class CredentialProviderLoaderSuite {
         "Should mention multiple providers: " + e.getMessage());
     assertTrue(e.getMessage().contains("shared"),
         "Should mention the scheme: " + e.getMessage());
-    assertTrue(e.getMessage().contains("spark.security.credentials.provider.shared"),
+    assertTrue(e.getMessage().contains("spark.security.oidc.provider.shared"),
         "Should mention the config key: " + e.getMessage());
     assertTrue(e.getMessage().contains(FakeCredentialProvider.class.getName()),
         "Should list FakeCredentialProvider: " + e.getMessage());
@@ -90,7 +90,7 @@ public class CredentialProviderLoaderSuite {
     // An empty-string value for the explicit provider conf key should be equivalent to unset,
     // meaning the ambiguity error is still raised for multi-candidate schemes.
     Map<String, String> conf = new HashMap<>();
-    conf.put("spark.security.credentials.provider.shared", "");
+    conf.put("spark.security.oidc.provider.shared", "");
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> CredentialProviderLoader.providerFor("shared", conf));
     assertTrue(e.getMessage().contains("Multiple credential providers"),
@@ -100,7 +100,7 @@ public class CredentialProviderLoaderSuite {
   @Test
   public void testSharedSchemeWithExplicitConfSelectsFake() {
     Map<String, String> conf = Map.of(
-        "spark.security.credentials.provider.shared",
+        "spark.security.oidc.provider.shared",
         FakeCredentialProvider.class.getName());
     Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("shared", conf);
     assertTrue(result.isPresent());
@@ -110,7 +110,7 @@ public class CredentialProviderLoaderSuite {
   @Test
   public void testSharedSchemeWithExplicitConfSelectsAnother() {
     Map<String, String> conf = Map.of(
-        "spark.security.credentials.provider.shared",
+        "spark.security.oidc.provider.shared",
         AnotherFakeCredentialProvider.class.getName());
     Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("shared", conf);
     assertTrue(result.isPresent());
@@ -120,7 +120,7 @@ public class CredentialProviderLoaderSuite {
   @Test
   public void testConfNamingUnknownClassThrowsClearError() {
     Map<String, String> conf = Map.of(
-        "spark.security.credentials.provider.fake",
+        "spark.security.oidc.provider.fake",
         "com.example.NonExistentProvider");
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> CredentialProviderLoader.providerFor("fake", conf));
@@ -136,7 +136,7 @@ public class CredentialProviderLoaderSuite {
   public void testConfNamingNonSupportingClassThrowsClearError() {
     // AnotherFakeCredentialProvider does NOT support "fake" scheme
     Map<String, String> conf = Map.of(
-        "spark.security.credentials.provider.fake",
+        "spark.security.oidc.provider.fake",
         AnotherFakeCredentialProvider.class.getName());
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> CredentialProviderLoader.providerFor("fake", conf));
@@ -152,7 +152,7 @@ public class CredentialProviderLoaderSuite {
   public void testSingleCandidateWithCorrectExplicitConfSelectsIt() {
     // "fake" is supported only by FakeCredentialProvider; conf names the correct class.
     Map<String, String> conf = Map.of(
-        "spark.security.credentials.provider.fake",
+        "spark.security.oidc.provider.fake",
         FakeCredentialProvider.class.getName());
     Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("fake", conf);
     assertTrue(result.isPresent());
@@ -164,7 +164,7 @@ public class CredentialProviderLoaderSuite {
     // "fake" is supported only by FakeCredentialProvider but conf names a different class.
     // This validates that explicit conf is enforced even for single-candidate schemes.
     Map<String, String> conf = Map.of(
-        "spark.security.credentials.provider.fake",
+        "spark.security.oidc.provider.fake",
         "org.apache.spark.security.SomeOtherProvider");
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> CredentialProviderLoader.providerFor("fake", conf));
@@ -187,17 +187,17 @@ public class CredentialProviderLoaderSuite {
   @Test
   public void testInitConfIsInvokedOnSelectedProvider() {
     Map<String, String> conf = new HashMap<>();
-    conf.put("spark.security.credentials.endpoint", "https://sts.example.com");
-    conf.put("spark.security.credentials.roleArn", "arn:aws:iam::123456:role/test");
+    conf.put("spark.security.oidc.endpoint", "https://sts.example.com");
+    conf.put("spark.security.oidc.roleArn", "arn:aws:iam::123456:role/test");
 
     Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("fake", conf);
     assertTrue(result.isPresent());
     FakeCredentialProvider fake = (FakeCredentialProvider) result.get();
     assertNotNull(fake.getInitConf(), "init() should have been called");
     assertEquals("https://sts.example.com",
-        fake.getInitConf().get("spark.security.credentials.endpoint"));
+        fake.getInitConf().get("spark.security.oidc.endpoint"));
     assertEquals("arn:aws:iam::123456:role/test",
-        fake.getInitConf().get("spark.security.credentials.roleArn"));
+        fake.getInitConf().get("spark.security.oidc.roleArn"));
   }
 
   @Test
@@ -206,9 +206,9 @@ public class CredentialProviderLoaderSuite {
     // (a) the SAME provider instance is returned
     // (b) init was invoked EXACTLY ONCE
     Map<String, String> conf1 = new HashMap<>();
-    conf1.put("spark.security.credentials.tag", "first-call");
+    conf1.put("spark.security.oidc.tag", "first-call");
     Map<String, String> conf2 = new HashMap<>();
-    conf2.put("spark.security.credentials.tag", "second-call");
+    conf2.put("spark.security.oidc.tag", "second-call");
 
     Optional<CredentialProvider> result1 = CredentialProviderLoader.providerFor("fake", conf1);
     Optional<CredentialProvider> result2 = CredentialProviderLoader.providerFor("fake", conf2);
@@ -221,7 +221,7 @@ public class CredentialProviderLoaderSuite {
     FakeCredentialProvider fake = (FakeCredentialProvider) result1.get();
     assertEquals(1, fake.getInitCount(),
         "init() should be called exactly once (first-conf-wins)");
-    assertEquals("first-call", fake.getInitConf().get("spark.security.credentials.tag"),
+    assertEquals("first-call", fake.getInitConf().get("spark.security.oidc.tag"),
         "First call's conf should win");
   }
 
@@ -296,7 +296,7 @@ public class CredentialProviderLoaderSuite {
   public void testExplicitSelectionWithUppercaseSchemeNormalizesConfKey() {
     // The conf key uses normalized (lowercase) scheme
     Map<String, String> conf = Map.of(
-        "spark.security.credentials.provider.shared",
+        "spark.security.oidc.provider.shared",
         FakeCredentialProvider.class.getName());
     Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("SHARED", conf);
     assertTrue(result.isPresent());
@@ -328,13 +328,13 @@ public class CredentialProviderLoaderSuite {
   }
 
   @Test
-  public void testInitConfScopedToCredentialsKeysOnly() {
-    // Verify that init() receives only spark.security.credentials.* keys,
+  public void testInitConfScopedToOidcKeysOnly() {
+    // Verify that init() receives only spark.security.oidc.* keys,
     // and foreign secrets from other subsystems are NOT leaked to providers.
     Map<String, String> conf = new HashMap<>();
-    conf.put("spark.security.credentials.provider.fake",
+    conf.put("spark.security.oidc.provider.fake",
         FakeCredentialProvider.class.getName());
-    conf.put("spark.security.credentials.endpoint", "https://sts.example.com");
+    conf.put("spark.security.oidc.endpoint", "https://sts.example.com");
     conf.put("spark.authenticate.secret", "TOPSECRET");
     conf.put("spark.ssl.keyPassword", "keypass");
 
@@ -344,10 +344,10 @@ public class CredentialProviderLoaderSuite {
     Map<String, String> initConf = fake.getInitConf();
     assertNotNull(initConf, "init() should have been called");
 
-    // Credentials keys should be present
+    // OIDC keys should be present
     assertEquals("https://sts.example.com",
-        initConf.get("spark.security.credentials.endpoint"));
-    assertTrue(initConf.containsKey("spark.security.credentials.provider.fake"),
+        initConf.get("spark.security.oidc.endpoint"));
+    assertTrue(initConf.containsKey("spark.security.oidc.provider.fake"),
         "Provider selection key should be included (it starts with the prefix)");
 
     // Foreign secrets must NOT be present
@@ -364,6 +364,70 @@ public class CredentialProviderLoaderSuite {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> CredentialProviderLoader.providerFor("", Map.of()));
     assertEquals("scheme must not be empty", e.getMessage());
+  }
+
+  @Test
+  public void testCloseAllClosesInitializedProviders() throws Exception {
+    // Initialize a provider by calling providerFor
+    Map<String, String> conf = Map.of();
+    Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("fake", conf);
+    assertTrue(result.isPresent());
+    FakeCredentialProvider fake = (FakeCredentialProvider) result.get();
+    assertEquals(0, fake.getCloseCount(), "close() not yet called");
+
+    // Call closeAll
+    CredentialProviderLoader.closeAll();
+
+    assertEquals(1, fake.getCloseCount(), "close() should be called exactly once");
+  }
+
+  @Test
+  public void testCloseAllSuppressesExceptionsAndClosesAll() throws Exception {
+    // Two providers: first throws on close, second should still be closed
+    CredentialProvider throwingProvider = new CredentialProvider() {
+      @Override
+      public void init(Map<String, String> conf) {}
+
+      @Override
+      public Set<String> supportedSchemes() {
+        return Set.of("throwing");
+      }
+
+      @Override
+      public ServiceCredential resolve(UserContext user, URI target) {
+        return new ServiceCredential(Map.of(), Instant.now().plusSeconds(60));
+      }
+
+      @Override
+      public void close() throws Exception {
+        throw new RuntimeException("Simulated close failure");
+      }
+    };
+
+    FakeCredentialProvider fakeProvider = new FakeCredentialProvider();
+
+    CredentialProviderLoader.setProvidersForTesting(
+        List.of(throwingProvider, fakeProvider));
+
+    // Initialize both by selecting them
+    Map<String, String> conf = new HashMap<>();
+    conf.put("spark.security.oidc.provider.throwing", throwingProvider.getClass().getName());
+    CredentialProviderLoader.providerFor("throwing", conf);
+    CredentialProviderLoader.providerFor("fake", conf);
+
+    // closeAll should throw (from throwingProvider) but still close fakeProvider
+    Exception e = assertThrows(Exception.class,
+        () -> CredentialProviderLoader.closeAll());
+    assertTrue(e.getMessage().contains("Simulated close failure"));
+    assertEquals(1, fakeProvider.getCloseCount(),
+        "Second provider should still be closed even when first throws");
+  }
+
+  @Test
+  public void testCloseAllWithNoInitializedProvidersIsNoOp() throws Exception {
+    // No providers initialized — closeAll should not throw
+    CredentialProviderLoader.closeAll();
+    // If we reach here, no exception was thrown — success
   }
 
   @Test

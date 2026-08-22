@@ -478,8 +478,37 @@ private[connect] object PipelinesHandler extends Logging {
       case proto.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_1 |
           proto.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_UNSPECIFIED =>
         ScdType.Type1
+      case proto.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_2 =>
+        ScdType.Type2
       case other =>
         throw new UnsupportedOperationException(s"Unsupported AutoCDC SCD type: $other")
+    }
+
+    // SCD2-only history-tracking column selection. Mirrors the column_list/except_column_list
+    // handling above: at most one side may be non-empty, and an empty selection means "track
+    // every eligible column" (None).
+    val trackHistorySelection: Option[ColumnSelection] = {
+      val included = autoCdcDetails.getTrackHistoryColumnListList.asScala.toSeq
+      val excluded = autoCdcDetails.getTrackHistoryExceptColumnListList.asScala.toSeq
+      if (included.nonEmpty && excluded.nonEmpty) {
+        throw new AnalysisException(
+          "AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST",
+          Map.empty)
+      } else if (included.nonEmpty) {
+        Some(ColumnSelection.IncludeColumns(included.map(asUnqualifiedColumnName)))
+      } else if (excluded.nonEmpty) {
+        Some(ColumnSelection.ExcludeColumns(excluded.map(asUnqualifiedColumnName)))
+      } else {
+        None
+      }
+    }
+
+    // History-tracking columns only make sense under SCD2. The Python client rejects this
+    // client-side, but a raw Connect client can still send it, so mirror the check here to
+    // surface a clean user-facing error rather than the internal error the [[ChangeArgs]]
+    // guard would otherwise raise.
+    if (scdType != ScdType.Type2 && trackHistorySelection.isDefined) {
+      throw new AnalysisException("AUTOCDC_TRACK_HISTORY_REQUIRES_SCD2", Map.empty)
     }
 
     val changeArgs = ChangeArgs(
@@ -488,7 +517,8 @@ private[connect] object PipelinesHandler extends Logging {
       storedAsScdType = scdType,
       deleteCondition =
         Option.when(autoCdcDetails.hasApplyAsDeletes)(toColumn(autoCdcDetails.getApplyAsDeletes)),
-      columnSelection = columnSelection)
+      columnSelection = columnSelection,
+      trackHistorySelection = trackHistorySelection)
 
     AutoCdcFlow(
       identifier = flowIdentifier,

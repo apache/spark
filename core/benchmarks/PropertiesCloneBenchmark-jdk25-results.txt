@@ -2,39 +2,39 @@
 Properties Cloning
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Empty Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              0           0          0.3        3015.0       1.0X
-Utils.cloneProperties                                 0              0           0         25.0          40.0      75.4X
+SerializationUtils.clone                              0              0           0          0.3        3006.0       1.0X
+Utils.cloneProperties                                 0              0           0         25.0          40.0      75.1X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 System Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              0           0          0.0      121077.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.3        3667.0      33.0X
+SerializationUtils.clone                              0              0           0          0.0      112632.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.3        3666.0      30.7X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Small Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              0           0          0.0      221956.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.2        5520.0      40.2X
+SerializationUtils.clone                              0              0           0          0.0      225083.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.2        5390.0      41.8X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Medium Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              1              1           0          0.0      789229.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.0       29104.0      27.1X
+SerializationUtils.clone                              1              1           0          0.0      790173.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.0       28894.0      27.3X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Large Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              1              2           0          0.0     1490994.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.0       58309.0      25.6X
+SerializationUtils.clone                              1              2           0          0.0     1492151.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.0       57978.0      25.7X
 
 

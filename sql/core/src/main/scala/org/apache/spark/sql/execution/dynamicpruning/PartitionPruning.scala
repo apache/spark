@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
+import org.apache.spark.sql.catalyst.optimizer.{JoinSelectionHelper, ReusableBroadcastValueProjection}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
+import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 /**
  * Dynamic partition pruning optimization is performed based on the type and
  * selectivity of the join operation. During query optimization, we insert a
@@ -86,6 +87,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         } else {
           None
         }
+      case (resExp, r @ ExtractV2Scan(scan: SupportsRuntimeCatalystFiltering)) =>
+        val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
+          scan.filterAttributes(), r.output)
+        if (resExp.references.subsetOf(filterAttrs)) {
+          Some(r)
+        } else {
+          None
+        }
       case _ => None
     }
   }
@@ -110,6 +119,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     require(filteringKeys.size == 1, "DPP Filters should only have a single broadcasting key " +
       "since there are no usage for multiple broadcasting keys at the moment.")
     val indices = Seq(joinKeys.indexOf(filteringKeys.head))
+    val broadcastValueProjection = if (conf.dynamicPartitionPruningBroadcastProjectionEnabled) {
+      ReusableBroadcastValueProjection.find(filteringKeys.head, filteringPlan, partScan)
+    } else {
+      None
+    }
     lazy val hasBenefit = pruningHasBenefit(
       pruningKey, partScan, filteringKeys.head, filteringPlan, hasSelectivePredicate(filteringPlan))
     if (reuseEnabled || hasBenefit) {
@@ -120,7 +134,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           filteringPlan,
           joinKeys,
           indices,
-          conf.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit),
+          conf.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit)(broadcastValueProjection),
         pruningPlan)
     } else {
       // abort dynamic partition pruning

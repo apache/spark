@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Column}
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, Resolver}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.types.StructType
@@ -71,26 +73,25 @@ object ColumnSelection {
    * @param schema          The schema to filter.
    * @param columnSelection The user-provided selection. `None` is a no-op and returns `schema`
    *                        unchanged.
-   * @param caseSensitive   Whether to match column names case-sensitively against the schema.
-   *                        Callers should derive this from the session, e.g.
-   *                        `session.sessionState.conf.caseSensitiveAnalysis`, so column matching
-   *                        stays consistent with `spark.sql.caseSensitive`.
+   * @param resolver        Determines whether two column names are considered equal. Callers
+   *                        should pass the resolver for the effective `spark.sql.caseSensitive`
+   *                        of the operation being validated.
    */
   def applyToSchema(
       schemaName: String,
       schema: StructType,
       columnSelection: Option[ColumnSelection],
-      caseSensitive: Boolean): StructType = columnSelection match {
+      resolver: Resolver): StructType = columnSelection match {
     case None =>
       // A None column selection is interpreted as a no-op.
       schema
     case Some(IncludeColumns(cols)) =>
-      val keepIndices = lookupFieldIndices(schemaName, schema, cols, caseSensitive)
+      val keepIndices = lookupFieldIndices(schemaName, schema, cols, resolver)
       StructType(schema.fields.zipWithIndex.collect {
         case (field, idx) if keepIndices.contains(idx) => field
       })
     case Some(ExcludeColumns(cols)) =>
-      val dropIndices = lookupFieldIndices(schemaName, schema, cols, caseSensitive)
+      val dropIndices = lookupFieldIndices(schemaName, schema, cols, resolver)
       StructType(schema.fields.zipWithIndex.collect {
         case (field, idx) if !dropIndices.contains(idx) => field
       })
@@ -100,17 +101,20 @@ object ColumnSelection {
       schemaName: String,
       schema: StructType,
       fields: Seq[UnqualifiedColumnName],
-      caseSensitive: Boolean): Set[Int] = {
-    val caseAwareGetFieldIndex: String => Option[Int] =
-      if (caseSensitive) schema.getFieldIndex else schema.getFieldIndexCaseInsensitive
+      resolver: Resolver): Set[Int] = {
+    def resolveFieldIndex(name: String): Option[Int] =
+      schema.fieldNames.indexWhere(resolver(_, name)) match {
+        case -1 => None
+        case idx => Some(idx)
+      }
 
-    val fieldIndexResolutions = fields.map(f => f -> caseAwareGetFieldIndex(f.name))
+    val fieldIndexResolutions = fields.map(f => f -> resolveFieldIndex(f.name))
     val missingFieldNames = fieldIndexResolutions.collect { case (f, None) => f.name }.distinct
     if (missingFieldNames.nonEmpty) {
       throw new AnalysisException(
         errorClass = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
         messageParameters = Map(
-          "caseSensitivity" -> CaseSensitivityLabels.of(caseSensitive),
+          "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
           "schemaName" -> schemaName,
           "missingColumns" -> missingFieldNames.mkString(", "),
           "availableColumns" -> schema.fieldNames.mkString(", ")
@@ -126,8 +130,20 @@ private[pipelines] object CaseSensitivityLabels {
   val CaseSensitive: String = "case-sensitive"
   val CaseInsensitive: String = "case-insensitive"
 
-  def of(caseSensitive: Boolean): String =
-    if (caseSensitive) CaseSensitive else CaseInsensitive
+  /**
+   * Maps a [[Resolver]] to its user-facing label. Classifies by reference identity against the
+   * two session resolver singletons, matching `SchemaUtils.isCaseSensitiveAnalysis`.
+   */
+  def of(resolver: Resolver): String = {
+    if (resolver == caseSensitiveResolution) {
+      CaseSensitive
+    } else if (resolver == caseInsensitiveResolution) {
+      CaseInsensitive
+    } else {
+      // this should be unreachable because `conf.resolver` only ever returns one of these two.
+      throw SparkException.internalError(s"Unknown resolver: $resolver")
+    }
+  }
 }
 
 /** The SCD (Slowly Changing Dimension) strategy for a CDC flow. */
@@ -153,23 +169,34 @@ object ScdType {
 /**
  * Configuration for an AutoCDC flow.
  *
- * @param keys            The column(s) that uniquely identify a row in the source data.
- * @param sequencing      Expression ordering CDC events to correctly resolve out-of-order
- *                        arrivals. Must be a sortable type.
- * @param deleteCondition Expression that marks a source row as a DELETE. When None, all
- *                        rows are treated as upserts.
- * @param storedAsScdType The SCD strategy these args should be applied to.
- * @param columnSelection Which source columns to select in the target table. None means
- *                        all columns.
+ * @param keys                   The column(s) that uniquely identify a row in the source data.
+ * @param sequencing             Expression ordering CDC events to correctly resolve out-of-order
+ *                               arrivals. Must be a sortable type.
+ * @param deleteCondition        Expression that marks a source row as a DELETE. When None, all
+ *                               rows are treated as upserts.
+ * @param storedAsScdType        The SCD strategy these args should be applied to.
+ * @param columnSelection        Which source columns to select in the target table. None means
+ *                               all columns.
+ * @param trackHistorySelection  SCD2 only. Selects the selected user-data columns whose values
+ *                               define a run: two consecutive upsert events for the same key are
+ *                               coalesced into the same run iff they agree on every selected
+ *                               tracking column. None means every eligible selected user column
+ *                               (i.e. every selected source column that is neither a key nor a
+ *                               framework column) is considered tracked. Must be None under SCD1,
+ *                               which has no run concept and therefore no history-tracking columns.
+ *                               See the "run of upsert events" concept in the `Scd2BatchProcessor`
+ *                               scaladoc for the precise definition of a run.
  */
 case class ChangeArgs(
     keys: Seq[UnqualifiedColumnName],
     sequencing: Column,
     storedAsScdType: ScdType,
     deleteCondition: Option[Column] = None,
-    columnSelection: Option[ColumnSelection] = None
+    columnSelection: Option[ColumnSelection] = None,
+    trackHistorySelection: Option[ColumnSelection] = None
 ) {
   ChangeArgs.validateNonEmptyKeys(keys)
+  ChangeArgs.validateTrackHistoryOnlyForScd2(storedAsScdType, trackHistorySelection)
 }
 
 object ChangeArgs {
@@ -183,6 +210,24 @@ object ChangeArgs {
       throw new AnalysisException(
         errorClass = "AUTOCDC_EMPTY_KEYS",
         messageParameters = Map.empty
+      )
+    }
+  }
+
+  /**
+   * Validates that [[ChangeArgs.trackHistorySelection]] is only set under SCD2. SCD1 has no run
+   * concept and therefore no history-tracking columns, so a non-None selection is meaningless.
+   *
+   * User-facing validation is expected to reject this at the API (GraphRegistration) layer; this
+   * is a defensive internal guard so downstream SCD1 code can assume the selection is None. Hence
+   * it raises an internal error rather than a user-facing [[AnalysisException]].
+   */
+  private def validateTrackHistoryOnlyForScd2(
+      storedAsScdType: ScdType,
+      trackHistorySelection: Option[ColumnSelection]): Unit = {
+    if (storedAsScdType == ScdType.Type1 && trackHistorySelection.isDefined) {
+      throw SparkException.internalError(
+        "trackHistorySelection must be None under SCD1; it has no history-tracking columns."
       )
     }
   }

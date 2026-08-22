@@ -302,9 +302,9 @@ message Expression {
       // Microseconds since the UNIX epoch (without timezone information).
       int64 epoch_micros = 1;
       // Additional nanoseconds within epoch_micros, in [0, 999].
-      uint32 nanos_within_micro = 2;
+      int32 nanos_within_micro = 2;
       // Number of fractional-second digits (7, 8, or 9). If omitted, defaults to 9 (nanoseconds).
-      optional uint32 precision = 3;
+      optional int32 precision = 3;
     }
 
     // A TIMESTAMP_LTZ literal with nanosecond-capable precision. See TimestampNTZNanos for the
@@ -313,9 +313,9 @@ message Expression {
       // Microseconds since the UNIX epoch.
       int64 epoch_micros = 1;
       // Additional nanoseconds within epoch_micros, in [0, 999].
-      uint32 nanos_within_micro = 2;
+      int32 nanos_within_micro = 2;
       // Number of fractional-second digits (7, 8, or 9). If omitted, defaults to 9 (nanoseconds).
-      optional uint32 precision = 3;
+      optional int32 precision = 3;
     }
   }
 
@@ -475,6 +475,9 @@ message PythonUDF {
   string python_ver = 4;
   // (Optional) Additional includes for the Python UDF.
   repeated string additional_includes = 5;
+  // (Optional) Intermediate buffer schema for an incremental Python aggregator
+  // (see PythonAggregate). Set only for the incremental aggregator eval types.
+  optional DataType buffer_type = 6;
 }
 
 message ScalarScalaUDF {
