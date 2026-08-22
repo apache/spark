@@ -709,7 +709,16 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT randstr(-1, 0) AS result
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.LENGTH",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`randstr`",
+    "length" : "-1",
+    "parameter" : "`length`"
+  }
+}
 
 
 -- !query

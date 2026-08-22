@@ -425,6 +425,9 @@ case class RandStr(
               "inputExpr" -> toSQLExpr(expr)))
         }
     }
+    if (result == TypeCheckResult.TypeCheckSuccess) {
+      lengthInteger()
+    }
     result
   }
 
