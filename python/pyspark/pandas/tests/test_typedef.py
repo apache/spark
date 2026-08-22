@@ -41,6 +41,7 @@ from pyspark.sql.types import (
     DateType,
     DecimalType,
     DoubleType,
+    TimeType,
     TimestampType,
 )
 
@@ -379,6 +380,8 @@ class TypeHintTestsMixin:
             ),
             # DateType
             datetime.date: (np.dtype("object"), DateType()),
+            # TimeType
+            datetime.time: (np.dtype("object"), TimeType()),
             # DecimalType
             decimal.Decimal: (np.dtype("object"), DecimalType(38, 18)),
             # ArrayType

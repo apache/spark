@@ -190,6 +190,9 @@ def as_spark_type(
     # DateType
     elif tpe in (datetime.date,):
         return types.DateType()
+    # TimeType
+    elif tpe in (datetime.time,):
+        return types.TimeType()
     # NumericType
     elif tpe in (np.int8, np.byte, "int8", "byte", "b"):
         return types.ByteType()
@@ -297,6 +300,7 @@ def spark_type_to_pandas_dtype(
         spark_type,
         (
             types.DateType,
+            types.TimeType,
             types.NullType,
             types.ArrayType,
             types.MapType,
