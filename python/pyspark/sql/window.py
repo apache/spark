@@ -18,7 +18,7 @@
 # mypy: disable-error-code="empty-body"
 
 import sys
-from typing import Sequence, TYPE_CHECKING, Union
+from typing import overload, Sequence, TYPE_CHECKING, Union
 
 from pyspark.sql.utils import dispatch_window_method
 from pyspark.util import (
@@ -65,6 +65,14 @@ class Window:
     unboundedFollowing: int = JVM_LONG_MAX
 
     currentRow: int = 0
+
+    @overload
+    @staticmethod
+    def partitionBy(*cols: "ColumnOrName") -> "WindowSpec": ...
+
+    @overload
+    @staticmethod
+    def partitionBy(__cols: Sequence["ColumnOrName"]) -> "WindowSpec": ...
 
     @staticmethod
     @dispatch_window_method
@@ -117,6 +125,14 @@ class Window:
         +---+--------+----------+
         """
         ...
+
+    @overload
+    @staticmethod
+    def orderBy(*cols: "ColumnOrName") -> "WindowSpec": ...
+
+    @overload
+    @staticmethod
+    def orderBy(__cols: Sequence["ColumnOrName"]) -> "WindowSpec": ...
 
     @staticmethod
     @dispatch_window_method
@@ -344,6 +360,12 @@ class WindowSpec:
 
         return WindowSpec.__new__(WindowSpec, jspec)
 
+    @overload
+    def partitionBy(self, *cols: "ColumnOrName") -> "WindowSpec": ...
+
+    @overload
+    def partitionBy(self, __cols: Sequence["ColumnOrName"]) -> "WindowSpec": ...
+
     def partitionBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         """
         Defines the partitioning columns in a :class:`WindowSpec`.
@@ -356,6 +378,12 @@ class WindowSpec:
             names of columns or expressions
         """
         ...
+
+    @overload
+    def orderBy(self, *cols: "ColumnOrName") -> "WindowSpec": ...
+
+    @overload
+    def orderBy(self, __cols: Sequence["ColumnOrName"]) -> "WindowSpec": ...
 
     def orderBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         """

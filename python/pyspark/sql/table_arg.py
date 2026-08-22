@@ -17,7 +17,7 @@
 
 # mypy: disable-error-code="empty-body"
 
-from typing import TYPE_CHECKING
+from typing import overload, Sequence, TYPE_CHECKING, Union
 
 from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 from pyspark.sql.utils import dispatch_table_arg_method
@@ -35,8 +35,14 @@ class TableArg(TableValuedFunctionArgument):
     to TVF(Table-Valued Function)s including UDTF(User-Defined Table Function)s.
     """
 
+    @overload
+    def partitionBy(self, *cols: "ColumnOrName") -> "TableArg": ...
+
+    @overload
+    def partitionBy(self, __cols: Sequence["ColumnOrName"]) -> "TableArg": ...
+
     @dispatch_table_arg_method
-    def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
+    def partitionBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "TableArg":
         """
         Partitions the data based on the specified columns.
 
@@ -95,8 +101,14 @@ class TableArg(TableValuedFunctionArgument):
         """
         ...
 
+    @overload
+    def orderBy(self, *cols: "ColumnOrName") -> "TableArg": ...
+
+    @overload
+    def orderBy(self, __cols: Sequence["ColumnOrName"]) -> "TableArg": ...
+
     @dispatch_table_arg_method
-    def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
+    def orderBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "TableArg":
         """
         Orders the data within each partition by the specified columns.
 

@@ -17,6 +17,7 @@
 
 from typing import (
     Iterable,
+    overload,
     TYPE_CHECKING,
     Union,
     Sequence,
@@ -39,8 +40,8 @@ if TYPE_CHECKING:
 
 
 def _to_cols(cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]) -> List[Column]:
-    if len(cols) == 1 and isinstance(cols[0], list):
-        cols = cols[0]  # type: ignore[assignment]
+    if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
+        cols = tuple(cols[0])
     return [F._to_col(c) for c in cast(Iterable["ColumnOrName"], cols)]
 
 
@@ -54,7 +55,13 @@ class TableArg(ParentTableArg):
             self._subquery_expr._with_single_partition
         )
 
-    def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
+    @overload
+    def partitionBy(self, *cols: "ColumnOrName") -> "TableArg": ...
+
+    @overload
+    def partitionBy(self, __cols: Sequence["ColumnOrName"]) -> "TableArg": ...
+
+    def partitionBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "TableArg":
         if self._is_partitioned():
             raise IllegalArgumentException(
                 "Cannot call partitionBy() after partitionBy() or "
@@ -72,7 +79,13 @@ class TableArg(ParentTableArg):
         )
         return TableArg(new_expr)
 
-    def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
+    @overload
+    def orderBy(self, *cols: "ColumnOrName") -> "TableArg": ...
+
+    @overload
+    def orderBy(self, __cols: Sequence["ColumnOrName"]) -> "TableArg": ...
+
+    def orderBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "TableArg":
         if not self._is_partitioned():
             raise IllegalArgumentException(
                 "Please call partitionBy() or withSinglePartition() before orderBy()."
