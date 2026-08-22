@@ -19,14 +19,13 @@ Experimental tools for transpiling UDFS.
 
 Transpilation is only attempted when both
 ``spark.sql.experimental.optimizer.transpilePyUDFs=true`` and
-``spark.sql.ansi.enabled=true``. The generated Catalyst expressions
-target ANSI-mode SQL semantics (overflow raises, divide-by-zero raises,
-etc.); running them under non-ANSI mode would silently diverge from the
-Python interpretation in ways we don't currently track. If you flip
+``spark.sql.ansi.enabled=true``. Numeric arithmetic is not transpiled because
+Spark's fixed-width arithmetic cannot preserve Python's arbitrary-precision
+integer semantics. If you flip
 transpilation on with ANSI off the UDF will fall back to interpreted
 Python execution and a warning is logged at UDF construction time.
 
-Python's ``+`` and ``*`` are overloaded for text (concat / repeat), so an
+Python's ``+`` is overloaded for text, so an
 untyped parameter is transpiled into one option per input-type category
 (numeric and string) and the JVM picks the one matching the bound column
 types -- falling back to interpreted Python when none fit. Annotating the
@@ -52,14 +51,12 @@ from pyspark.sql.types import (
     StringType,
 )
 from pyspark.sql.functions import (
-    abs as _abs,
     coalesce,
     col,
     concat,
+    isnan,
     lit,
-    pmod,
     raise_error,
-    repeat,
     when,
 )
 
@@ -273,9 +270,9 @@ class CatalystTranspiler(AbstractTranspiler):
         back to interpreted Python. A ``None`` literal operand stays allowed
         (the four-branch NULL handling above reproduces Python exactly).
 
-        One value-level difference remains (needs runtime values, so it is
-        documented, not guarded): Spark treats ``NaN = NaN`` as true, while
-        Python's ``nan == nan`` is False.
+        Spark treats ``NaN = NaN`` as true, while Python's ``nan == nan`` is
+        False. Numeric variants therefore handle NaN before evaluating the
+        Spark comparison.
         """
         lc = self._safe_category(params, left_node)
         rc = self._safe_category(params, right_node)
@@ -289,17 +286,23 @@ class CatalystTranspiler(AbstractTranspiler):
         right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
         right_null = right_col.isNull()
+        numeric_nan = (
+            isnan(left_col) | isnan(right_col) if lc == rc == "numeric" else lit(False)
+        )
         if equal:
             both_null_val: Column = lit(True)
             one_null_val: Column = lit(False)
+            nan_val: Column = lit(False)
             value_cmp = left_col == right_col
         else:
             both_null_val = lit(False)
             one_null_val = lit(True)
+            nan_val = lit(True)
             value_cmp = left_col != right_col
         return (
             when(left_null & right_null, both_null_val)
             .when(left_null | right_null, one_null_val)
+            .when(numeric_nan, nan_val)
             .otherwise(value_cmp)
         )
 
@@ -328,10 +331,9 @@ class CatalystTranspiler(AbstractTranspiler):
         mismatch raises so this variant is dropped and the UDF falls back to
         interpreted Python rather than silently diverging.
 
-        One value-level difference from Python remains (it needs runtime
-        value info, so it is documented, not guarded): Spark orders ``NaN``
-        as greater than every value, whereas Python's ``NaN`` comparisons
-        are all ``False``.
+        Spark orders ``NaN`` as greater than every value, whereas Python's
+        ``NaN`` comparisons are all ``False``. Numeric variants therefore
+        return false when either operand is NaN.
         """
         lc = self._category(params, left_node)
         rc = self._category(params, right_node)
@@ -344,12 +346,17 @@ class CatalystTranspiler(AbstractTranspiler):
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         null_guard = left_col.isNull() | right_col.isNull()
+        nan_guard = isnan(left_col) | isnan(right_col) if lc == "numeric" else lit(False)
         err = lit(
             "Python UDF transpiler: cannot compare NULL with operator "
             f"`{op_repr}`; Python would raise TypeError here. Add an "
             "`is not None` guard or filter NULLs upstream."
         )
-        return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
+        return (
+            when(null_guard, raise_error(err))
+            .when(nan_guard, lit(False))
+            .otherwise(op(left_col, right_col))
+        )
 
     def _category(self, params: List[str], node: ast.AST) -> str:
         """Infer ``"numeric"`` or ``"string"`` for ``node`` under the current
@@ -481,6 +488,12 @@ class CatalystTranspiler(AbstractTranspiler):
                         "coerce or fail analysis); the transpiler falls back "
                         "to interpreted Python"
                     )
+                if not isinstance(operand, ast.Constant):
+                    raise UnsupportedOperationException(
+                        "numeric unary arithmetic is not transpiled because Spark's "
+                        "fixed-width arithmetic can overflow where Python promotes "
+                        "integers; falling back to interpreted Python"
+                    )
                 if isinstance(op, ast.USub):
                     # Handles both literal negative ints (USub on a Constant)
                     # and runtime negation of a column.
@@ -611,64 +624,31 @@ class CatalystTranspiler(AbstractTranspiler):
                             "is not supported by the transpiler"
                         )
             case ast.BinOp(left=left, op=op, right=right):
-                # Operator selection is driven by the operand *categories* under
-                # the current input-type variant (see ``_category``): Python's
-                # `+` / `*` are overloaded for text. `+` -> add (num,num) or
-                # concat (str,str); `*` -> multiply (num,num) or repeat (str,int
-                # / int,str); `-` / `%` are numeric-only. Combos that don't fit
-                # (str+int, str-str, ...) raise so this variant is dropped and
-                # the JVM picks another option or falls back to the Python UDF.
-                #
-                # `**` is intentionally NOT lowered: Spark's `pow` is DOUBLE and
-                # loses precision for large integers, so it would silently return
-                # wrong results. TODO (SPARK-55210): add an exact integer-power
-                # lowering and re-enable it.
-                #
-                # Value-level divergences remain documented (need runtime value
-                # info, not type): overflow raises ARITHMETIC_OVERFLOW under ANSI
-                # where Python promotes to a big int; arithmetic is not
-                # NULL-guarded (`x + 1` on NULL -> NULL vs Python TypeError).
-                # TODO (SPARK-55210): map overflow / divide-by-zero precisely.
+                # Numeric arithmetic is never lowered: fixed-width Catalyst
+                # arithmetic can overflow where Python promotes integers. String
+                # concatenation is safe after guarding NULL, which raises in
+                # Python but would otherwise propagate as NULL in Catalyst.
                 lc = self._category(params, left)
                 rc = self._category(params, right)
+                if "numeric" in (lc, rc):
+                    raise UnsupportedOperationException(
+                        "numeric arithmetic is not transpiled because Spark's "
+                        "fixed-width arithmetic can overflow where Python promotes "
+                        "integers; falling back to interpreted Python"
+                    )
                 left_col = self._convert_chunk(params, left)
                 right_col = self._convert_chunk(params, right)
+                null_guard = left_col.isNull() | right_col.isNull()
+                null_error = lit(
+                    "Python UDF transpiler: arithmetic with NULL would raise "
+                    "TypeError in Python"
+                )
                 match op:
                     case ast.Add():
                         if lc == rc == "string":
-                            return concat(left_col, right_col)
-                        if lc == rc == "numeric":
-                            return left_col.__add__(right_col)
-                    case ast.Sub():
-                        if lc == rc == "numeric":
-                            return left_col.__sub__(right_col)
-                    case ast.Mult():
-                        if lc == "numeric" and rc == "numeric":
-                            return left_col.__mul__(right_col)
-                        if lc == "string" and rc == "numeric":
-                            return repeat(left_col, right_col.cast("int"))
-                        if lc == "numeric" and rc == "string":
-                            return repeat(right_col, left_col.cast("int"))
-                    case ast.Mod():
-                        if lc == rc == "numeric":
-                            # Python's `%` takes the sign of the divisor; Spark's
-                            # takes the dividend's. `sign(b) * pmod(sign(b) * a,
-                            # abs(b))` reproduces Python for every non-zero divisor
-                            # except at the LongType overflow boundaries -- `a =
-                            # Long.MinValue` with `b < 0` (the `sign(b) * a` negate
-                            # overflows) and `b = Long.MinValue` (the `abs(b)`
-                            # overflows) -- where this raises ARITHMETIC_OVERFLOW
-                            # under ANSI while Python returns a value. That matches
-                            # the documented overflow caveat for `+`/`-`/`*` above.
-                            # Use a CASE-based integer sign rather than sign() to
-                            # avoid promoting operands to DoubleType, which loses
-                            # precision near LongType boundaries.
-                            sb = (
-                                when(right_col > 0, lit(1))
-                                .when(right_col < 0, lit(-1))
-                                .otherwise(lit(0))
+                            return when(null_guard, raise_error(null_error)).otherwise(
+                                concat(left_col, right_col)
                             )
-                            return sb * pmod(sb * left_col, _abs(right_col))
                     case _:
                         raise UnsupportedOperationException(
                             f"binary operator {type(op).__name__} is not "
