@@ -73,7 +73,7 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
    * All window expressions should use the same expanding window and do not contains
    * `SizeBasedWindowFunction`, so that we can safely do the early stop.
    */
-  private def isExpandingWindow(
+  private[optimizer] def isExpandingWindow(
       windowExpression: NamedExpression): Boolean = windowExpression match {
     case Alias(WindowExpression(windowFunction, WindowSpecDefinition(_, _,
     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _)
@@ -81,7 +81,7 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  private def support(windowFunction: Expression): Boolean = windowFunction match {
+  private[optimizer] def support(windowFunction: Expression): Boolean = windowFunction match {
     case _: Rank | _: DenseRank | _: RowNumber => true
     case _ => false
   }
