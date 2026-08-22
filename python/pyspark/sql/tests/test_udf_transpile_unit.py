@@ -1601,6 +1601,37 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     self.assertEqual([], u.transpiled)
                     self.assertEqual(expected, num.select(u("a")).first()[0])
 
+    def test_udf_transpile_resolves_call_on_the_type_not_the_instance(self):
+        # Python's call protocol looks ``__call__`` up on the TYPE, so an instance
+        # attribute of that name is never what runs. ``getattr(obj, "__call__")``
+        # finds it anyway, so the transpiler used to lower the shadowing body and
+        # return 5*99 / 5*77 where Python returns 5*4 -- silently wrong. The type's
+        # ``__call__`` must win, and it still lowers.
+        class Shadowed:
+            def __call__(self, x):
+                return x * 4
+
+        def replacement(x):
+            return x * 77
+
+        by_lambda = Shadowed()
+        # Each assignment stays alone on its line: a leading statement would make
+        # the shadowing body unreachable for a different reason and prove nothing.
+        by_lambda.__call__ = lambda x: x * 99
+        by_def = Shadowed()
+        by_def.__call__ = replacement
+
+        self.assertEqual(20, by_lambda(5), "the type's __call__ is what Python runs")
+        self.assertEqual(20, by_def(5))
+
+        num = self.spark.createDataFrame([(5,)], "a long")
+        with self.sql_conf(_TRANSPILE_ON):
+            for label, func in [("shadowed by lambda", by_lambda), ("shadowed by def", by_def)]:
+                with self.subTest(case=label):
+                    u = UserDefinedFunction(func, LongType())
+                    self.assertTrue(u.transpiled, "the type's __call__ is transpilable")
+                    self.assertEqual(20, num.select(u("a")).first()[0])
+
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
         # a future fix is noticed): unguarded arithmetic on NULL yields NULL

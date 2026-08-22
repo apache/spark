@@ -863,6 +863,22 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     return [{i: choice[i] for i in range(n)} for choice in itertools.product(*candidates)] or [{}]
 
 
+def _call_dunder(func: Callable) -> Any:
+    """``func``'s ``__call__`` as Python's call protocol resolves it: on the TYPE.
+
+    ``getattr(func, "__call__")`` is wrong in two ways that both end with the
+    transpiler lowering a body that never runs. An instance attribute
+    ``obj.__call__ = f`` shadows the type's for ``getattr`` but is ignored when
+    ``obj`` is called, so ``obj.__call__ = lambda x: x * 99`` over a
+    ``def __call__(self, x): return x * 4`` used to lower the 99. And on a CLASS
+    object it finds the ``__call__`` its instances use, while calling the class
+    runs ``__init__``.
+
+    Returns ``None`` when the type has no ``__call__`` at all.
+    """
+    return getattr(type(func), "__call__", None)
+
+
 def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.AST]]:
     """Try and get the AST from a given callable"""
     # Note: consider maybe dill? (see the JYTHON PR)
@@ -875,9 +891,7 @@ def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.
         ast_info = ast.parse(src)
     except Exception:
         try:
-            # getattr keeps mypy happy: `__call__` on a bare Callable is
-            # not attribute-accessible in the type system.
-            src = inspect.getsource(getattr(func, "__call__"))
+            src = inspect.getsource(_call_dunder(func))
             src = textwrap.dedent(src).strip()
             ast_info = ast.parse(src)
         except Exception:
@@ -1015,7 +1029,7 @@ def _transpile_func(
         # silently reproduce the wrong behavior, so refuse and fall back.
         if (
             getattr(func, "__wrapped__", None) is not None
-            or getattr(getattr(func, "__call__", None), "__wrapped__", None) is not None
+            or getattr(_call_dunder(func), "__wrapped__", None) is not None
         ):
             return (
                 [],
