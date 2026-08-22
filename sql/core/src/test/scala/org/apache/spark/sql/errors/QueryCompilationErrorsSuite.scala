@@ -1151,6 +1151,35 @@ class QueryCompilationErrorsSuite
       parameters = Map("identifier" -> identifier.toString)
     )
   }
+
+  test("SPARK-58267: INVALID_FILE_FORMAT_FOR_STORED_AS: unknown STORED AS file format") {
+    withTable("s", "t") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE t (c1 INT) STORED AS UNKNOWN_FORMAT")
+        },
+        condition = "INVALID_FILE_FORMAT_FOR_STORED_AS",
+        sqlState = "42601",
+        parameters = Map("serdeInfo" -> "UNKNOWN_FORMAT"))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE t STORED AS UNKNOWN_FORMAT AS SELECT 1")
+        },
+        condition = "INVALID_FILE_FORMAT_FOR_STORED_AS",
+        sqlState = "42601",
+        parameters = Map("serdeInfo" -> "UNKNOWN_FORMAT"))
+
+      sql("CREATE TABLE s (c1 INT) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE t LIKE s STORED AS UNKNOWN_FORMAT")
+        },
+        condition = "INVALID_FILE_FORMAT_FOR_STORED_AS",
+        sqlState = "42601",
+        parameters = Map("serdeInfo" -> "UNKNOWN_FORMAT"))
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
