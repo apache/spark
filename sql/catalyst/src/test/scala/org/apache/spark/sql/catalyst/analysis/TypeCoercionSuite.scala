@@ -1117,9 +1117,20 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
 
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        Upper(charLit),
+        Upper(Cast(charLit, StringType)))
+    }
+  }
+
+  test("coerce JsonTuple children without the NullType rewrite") {
     val json = Literal("""{"a":1}""")
     val nullField = Literal.create(null, NullType)
     val intField = Literal(1)
+
+    // JsonTuple keeps its own NON_STRING_TYPE check, so these stay for checkInputDataTypes.
     ruleTest(TypeCoercion.ImplicitTypeCasts,
       JsonTuple(Seq(json, nullField)),
       JsonTuple(Seq(json, nullField)))
@@ -1129,9 +1140,6 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
 
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val charLit = Literal.create("ab", CharType(2))
-      ruleTest(TypeCoercion.ImplicitTypeCasts,
-        Upper(charLit),
-        Upper(Cast(charLit, StringType)))
       ruleTest(TypeCoercion.ImplicitTypeCasts,
         JsonTuple(Seq(charLit, charLit)),
         JsonTuple(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))

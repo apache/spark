@@ -715,6 +715,10 @@ abstract class TypeCoercionHelper {
         }
         e.withNewChildren(children)
 
+      // JsonTuple validates its own input types and rejects non-string children with
+      // NON_STRING_TYPE, so it only takes the CHAR/VARCHAR promotion here. Do not fold this into
+      // the ExpectsInputTypes arm below: that would also apply the NullType rewrite and turn
+      // json_tuple(json, null) from an analysis error into a typed STRING null.
       case j: JsonTuple =>
         val expected = StringTypeWithCollation(supportsTrimCollation = true)
         val children = j.children.map { child =>
