@@ -440,6 +440,35 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     }
   }
 
+  test("zero-weight observations do not affect initialization") {
+    val positiveWeightData = Seq(
+      (Vectors.dense(0.0, 0.0), 1.0),
+      (Vectors.dense(0.1, 0.0), 1.0),
+      (Vectors.dense(10.0, 0.0), 1.0),
+      (Vectors.dense(10.1, 0.0), 1.0)
+    ).toDF("features", "weightCol")
+    val zeroWeightOutlierData = positiveWeightData.union(Seq(
+      (Vectors.dense(1000000.0, 1000000.0), 0.0)
+    ).toDF("features", "weightCol"))
+
+    Seq(KMeans.ROW, KMeans.BLOCK).foreach { solver =>
+      Seq(MLlibKMeans.RANDOM, MLlibKMeans.K_MEANS_PARALLEL).foreach { initMode =>
+        val params = new KMeans()
+          .setK(2)
+          .setInitMode(initMode)
+          .setWeightCol("weightCol")
+          .setMaxIter(1)
+          .setSeed(1L)
+          .setSolver(solver)
+
+        val modelWithoutOutlier = params.fit(positiveWeightData)
+        val modelWithOutlier = params.fit(zeroWeightOutlierData)
+
+        assert(modelWithOutlier.clusterCenters === modelWithoutOutlier.clusterCenters)
+        assert(modelWithOutlier.summary.trainingCost === modelWithoutOutlier.summary.trainingCost)
+      }
+    }
+  }
   test("Four centers with weightCol") {
     // no weight
     val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(

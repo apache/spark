@@ -662,9 +662,12 @@ class KMeans @Since("1.5.0") (
       .setEpsilon($(tol))
       .setDistanceMeasure($(distanceMeasure))
 
-    val vectors = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol))
+    val vectors = dataset.select(
+        DatasetUtils.columnToVector(dataset, getFeaturesCol),
+        checkNonNegativeWeights(get(weightCol)))
       .rdd
-      .map { case Row(features: Vector) => OldVectors.fromML(features) }
+      .filter { case Row(_: Vector, weight: Double) => weight > 0 }
+      .map { case Row(features: Vector, _: Double) => OldVectors.fromML(features) }
 
     val centers = algo.initialize(vectors).map(_.asML)
     $(distanceMeasure) match {
