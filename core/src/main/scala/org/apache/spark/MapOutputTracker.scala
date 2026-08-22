@@ -39,8 +39,8 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
-import org.apache.spark.shuffle.MetadataFetchFailedException
+import org.apache.spark.scheduler.{MapStatus, MapStatusChecksum, MergeStatus, ShuffleOutputStatus}
+import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
@@ -1880,6 +1880,14 @@ private[spark] object MapOutputTracker extends Logging {
     assert (mapStatuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
     var enableBatchFetch = true
+    val checksumConf = Option(SparkEnv.get).map(_.conf).orNull
+    val checksumEnabled =
+      checksumConf != null && checksumConf.get(SHUFFLE_MAP_STATUS_CHECKSUM_ENABLED)
+    val checksumAlgorithm = if (checksumEnabled) {
+      checksumConf.get(SHUFFLE_MAP_STATUS_CHECKSUM_ALGORITHM)
+    } else {
+      null
+    }
     // Only use MergeStatus for reduce tasks that fetch all map outputs. Since a merged shuffle
     // partition consists of blocks merged in random order, we are unable to serve map index
     // subrange requests. However, when a reduce task needs to fetch blocks from a subrange of
@@ -1908,6 +1916,9 @@ private[spark] object MapOutputTracker extends Logging {
       // Add location for the mapper shuffle partition blocks
       for ((mapStatus, mapIndex) <- mapStatuses.iterator.zipWithIndex) {
         validateStatus(mapStatus, shuffleId, startPartition)
+        if (checksumEnabled) {
+          verifyChecksumOrFail(mapStatus, shuffleId, startPartition, checksumAlgorithm)
+        }
         for (partId <- startPartition until endPartition) {
           // For the "holes" in this pre-merged shuffle partition, i.e., unmerged mapper
           // shuffle partition blocks, fetch the original map produced shuffle partition blocks
@@ -1926,6 +1937,9 @@ private[spark] object MapOutputTracker extends Logging {
       val iter = mapStatuses.iterator.zipWithIndex
       for ((status, mapIndex) <- iter.slice(startMapIndex, endMapIndex)) {
         validateStatus(status, shuffleId, startPartition)
+        if (checksumEnabled) {
+          verifyChecksumOrFail(status, shuffleId, startPartition, checksumAlgorithm)
+        }
         for (part <- startPartition until endPartition) {
           val size = status.getSizeForBlock(part)
           if (size != 0) {
@@ -1962,10 +1976,21 @@ private[spark] object MapOutputTracker extends Logging {
       tracker: RoaringBitmap): Iterator[(BlockManagerId, collection.Seq[(BlockId, Long, Int)])] = {
     assert (mapStatuses != null && tracker != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
+    val checksumConf = Option(SparkEnv.get).map(_.conf).orNull
+    val checksumEnabled =
+      checksumConf != null && checksumConf.get(SHUFFLE_MAP_STATUS_CHECKSUM_ENABLED)
+    val checksumAlgorithm = if (checksumEnabled) {
+      checksumConf.get(SHUFFLE_MAP_STATUS_CHECKSUM_ALGORITHM)
+    } else {
+      null
+    }
     for ((status, mapIndex) <- mapStatuses.zipWithIndex) {
       // Only add blocks that are merged
       if (tracker.contains(mapIndex)) {
         MapOutputTracker.validateStatus(status, shuffleId, partitionId)
+        if (checksumEnabled) {
+          verifyChecksumOrFail(status, shuffleId, partitionId, checksumAlgorithm)
+        }
         splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
           ((ShuffleBlockId(shuffleId, status.mapId, partitionId),
             status.getSizeForBlock(partitionId), mapIndex))
@@ -1981,6 +2006,35 @@ private[spark] object MapOutputTracker extends Logging {
       // scalastyle:on
       logError(errorMessage)
       throw new MetadataFetchFailedException(shuffleId, partition, errorMessage.message)
+    }
+  }
+
+  def verifyChecksumOrFail(
+      status: MapStatus,
+      shuffleId: Int,
+      reduceId: Int,
+      algorithm: String): Unit = {
+    if (status == null) return
+    status.nonEmptyChecksum.foreach { stored =>
+      val actual = MapStatusChecksum.recompute(status, algorithm)
+      if (!actual.contains(stored)) {
+        val expectedStr = f"0x$stored%08x"
+        val actualStr = actual.map(v => f"0x$v%08x").getOrElse("<empty>")
+        val message = log"MapStatus checksum verification failed for shuffle " +
+          log"${MDC(SHUFFLE_ID, shuffleId)} ${MDC(MAP_ID, status.mapId)} from mapper " +
+          log"${MDC(BLOCK_MANAGER_ID, status.location)}: expected checksum " +
+          log"${MDC(CHECKSUM, expectedStr)} but computed ${MDC(CHECKSUM, actualStr)} " +
+          log"(numPartitions=${MDC(NUM_PARTITIONS, status.numPartitions)}). This indicates " +
+          log"MapStatus metadata was corrupted in transit."
+        logError(message)
+        throw new FetchFailedException(
+          bmAddress = status.location,
+          shuffleId = shuffleId,
+          mapId = status.mapId,
+          mapIndex = -1,
+          reduceId = reduceId,
+          message = message.message)
+      }
     }
   }
 }
