@@ -937,8 +937,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
         LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
 
       case (_, None) =>
-        // If the child has no cap, put the new LocalLimit.
-        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
+        // If the child's cap is not statically known, put the new LocalLimit but keep any
+        // GlobalLimit in place. `None` also covers a GlobalLimit whose limit expression is
+        // foldable but not yet a literal (LimitPushDown runs before ConstantFolding), and
+        // stripping that GlobalLimit would turn a global row cap into a per-partition one.
+        LocalLimit(limitExp, plan)
 
       case _ =>
         // Otherwise, don't put a new LocalLimit.
