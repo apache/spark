@@ -979,7 +979,7 @@ case class AdaptiveSparkPlanExec(
           throw SparkException.internalError(
             "Custom AQE rules cannot transform table scan node to something else.")
         }
-        TableCacheQueryStageExec(currentStageId, newPlan)
+        TableCacheQueryStageExec(currentStageId, newPlan, i.canonicalized)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, plan)
