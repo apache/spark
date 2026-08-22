@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Semaphore, TimeUnit}
 
 import scala.collection.mutable
 
@@ -117,6 +117,60 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
     assert(executorsPendingToRemove(manager).isEmpty)
     assert(addTime(manager) === ExecutorAllocationManager.NOT_SET)
+  }
+
+  test("SPARK-58935: a dropped SparkListenerStageSubmitted event on the executorManagement " +
+      "queue is surfaced via numDroppedExecutorManagementEvents and permanently stalls the " +
+      "\"executors needed\" calculation for that stage") {
+    val conf = createConf(0, 5, 0)
+      .set("spark.scheduler.listenerbus.eventqueue.executorManagement.capacity", "1")
+
+    // A fresh, custom bus (instead of the shared `listenerBus` field) so we can control the
+    // executorManagement queue's capacity independently of the rest of the suite.
+    val customBus = new LiveListenerBus(conf)
+    customBus.start(null, mock(classOf[MetricsSystem]))
+
+    val blockStarted = new Semaphore(0)
+    val blockRelease = new Semaphore(0)
+    // Registered on the same executorManagement queue as ExecutorAllocationListener, ahead
+    // of it, so it occupies the queue's single dispatch thread and lets events pile up (and
+    // eventually drop) behind it -- simulating a slow listener or a burst of events.
+    customBus.addToManagementQueue(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        blockStarted.release()
+        blockRelease.acquire()
+      }
+    })
+
+    val rpManagerLocal = new ResourceProfileManager(conf, customBus)
+    val manager = new ExecutorAllocationManager(client, customBus, conf, clock = new SystemClock(),
+      resourceProfileManager = rpManagerLocal, reliableShuffleStorage = false)
+    manager.start()
+
+    try {
+      assert(manager.numDroppedExecutorManagementEvents === 0)
+
+      customBus.post(SparkListenerJobStart(0, 0, Seq.empty))
+      blockStarted.acquire()
+
+      // Queue capacity is 1: this fills the single slot...
+      customBus.post(SparkListenerJobStart(1, 0, Seq.empty))
+      // ...and this stage-submitted event has nowhere to go, so it's dropped.
+      customBus.post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
+
+      blockRelease.release(2)
+      customBus.waitUntilEmpty()
+
+      assert(manager.numDroppedExecutorManagementEvents === 1)
+      // The dropped event never reached ExecutorAllocationListener, so this manager thinks
+      // there is no work to do, even though a stage with 2 pending tasks was submitted.
+      assert(manager.maxNumExecutorsNeededPerResourceProfile(defaultProfile.id) === 0,
+        "expected the dropped stage-submitted event to leave the manager thinking no " +
+          "executors are needed")
+    } finally {
+      manager.stop()
+      customBus.stop()
+    }
   }
 
   test("add executors default profile") {
