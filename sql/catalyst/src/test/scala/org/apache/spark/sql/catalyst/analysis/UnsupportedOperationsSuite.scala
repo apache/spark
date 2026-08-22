@@ -424,7 +424,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamBatchSupported = false,
     expectedMsg = "FullOuter join")
 
-  // Left outer, left semi, left anti join: *-stream not allowed
+  // Left outer, left semi, left anti join: batch-stream not allowed, and stream-stream join is
+  // allowed 'conditionally' - see the watermark checks below
   Seq((LeftOuter, "LeftOuter join"), (LeftSemi, "LeftSemi join"), (LeftAnti, "LeftAnti join"))
     .foreach { case (joinType, name) =>
       testBinaryOperationInStreamingPlan(
@@ -443,8 +444,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamStreamSupported = false,
     expectedMsg = "RightOuter join")
 
-  // Left outer, right outer, full outer joins: Update mode not allowed
-  Seq(LeftOuter, RightOuter, FullOuter).foreach { joinType =>
+  // Left outer, right outer, full outer, left anti joins: Update mode not allowed. Left anti is
+  // included because its unmatched rows are only emitted at watermark-based eviction, so
+  // early-firing could emit a row which a later batch would invalidate.
+  Seq(LeftOuter, RightOuter, FullOuter, LeftAnti).foreach { joinType =>
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and update mode",
       streamRelation.join(streamRelation, joinType = joinType,
@@ -452,6 +455,20 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       OutputMode.Update(),
       Seq("is not supported in Update output mode"))
   }
+
+  // Supported stream-static joins are not stateful and follow the general output-mode rules for
+  // non-aggregation queries, even when the corresponding stream-stream join is Append-only.
+  Seq((LeftOuter, "LeftOuter join"), (LeftAnti, "LeftAnti join")).foreach {
+    case (joinType, name) =>
+      assertSupportedInStreamingPlan(
+        s"$name with stream-batch relations and update mode",
+        streamRelation.join(batchRelation, joinType = joinType),
+        OutputMode.Update())
+  }
+  assertSupportedInStreamingPlan(
+    "RightOuter join with batch-stream relations and update mode",
+    batchRelation.join(streamRelation, joinType = RightOuter),
+    OutputMode.Update())
 
   // LeftSemi join: Update mode allowed (equivalent to Append mode for non-outer joins)
   assertSupportedInStreamingPlan(
@@ -467,7 +484,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     (LeftSemi, "only in Append and Update output modes"),
     (LeftOuter, "only in Append output mode"),
     (RightOuter, "only in Append output mode"),
-    (FullOuter, "only in Append output mode")
+    (FullOuter, "only in Append output mode"),
+    (LeftAnti, "only in Append output mode")
   ).foreach { case (joinType, allowedModesMsg) =>
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and complete mode",
@@ -477,8 +495,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       Seq("is not supported in Complete output mode", allowedModesMsg))
   }
 
-  // Left outer, right outer, full outer, left semi joins
-  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
+  // Right outer and full outer joins keep the side-insensitive watermark behavior. Left outer,
+  // left semi, and left anti are handled in dedicated blocks below: they have stricter
+  // watermark-placement requirements (see checkStreamStreamJoinWatermarkPlacement), so the
+  // side-insensitive cases here do not all apply to them.
+  Seq(RightOuter, FullOuter).foreach { joinType =>
     // Stream-stream allowed with join on watermark attribute
     // Note that the attribute need not be watermarked on both sides.
     assertSupportedInStreamingPlan(
@@ -523,6 +544,299 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       OutputMode.Append(),
       Seq("is not supported without a watermark in the join keys, or a watermark on " +
         "the nullable side and an appropriate range condition"))
+  }
+
+  // Left outer and left semi joins: stricter watermark-placement requirements, shared with left
+  // anti (see checkStreamStreamJoinWatermarkPlacement) and gated by
+  // STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED. Their left-side state must be
+  // evicted -- left outer emits its unmatched rows from that eviction, left semi cleans up its
+  // never-matched rows there -- and left outer, being outer-like, additionally needs both sides
+  // late-filtered on the eviction key so late rows cannot invalidate already-emitted unmatched
+  // rows. Distinct attributes per side avoid exprId collisions in these synthetic plans.
+  {
+    val leftWm = AttributeReference("olw", IntegerType)().withMetadata(watermarkMetadata)
+    val rightWm = AttributeReference("orw", IntegerType)().withMetadata(watermarkMetadata)
+    val leftPlain = AttributeReference("olp", IntegerType)()
+    val rightPlain = AttributeReference("orp", IntegerType)()
+    val leftOtherWm = AttributeReference("olo", IntegerType)().withMetadata(watermarkMetadata)
+    val rightOtherWm = AttributeReference("oro", IntegerType)().withMetadata(watermarkMetadata)
+    val strictKey = SQLConf.STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED.key
+
+    Seq(LeftOuter, LeftSemi).foreach { joinType =>
+      // Supported: range condition with a watermark on both sides (the left value state is evicted
+      // on its own watermark, derived from the right watermark).
+      assertSupportedInStreamingPlan(
+        s"$joinType join with stream-stream relations and range condition, watermark on both sides",
+        new TestStreamingRelation(leftWm).join(new TestStreamingRelation(rightWm),
+          joinType = joinType, condition = Some(leftWm > rightWm + 10)),
+        OutputMode.Append())
+
+      // Not supported: range condition with a watermark on the right only -- the left state is
+      // never evicted (so left outer never emits its unmatched rows, and left semi's left state
+      // grows without bound).
+      assertNotSupportedInStreamingPlan(
+        s"$joinType join with stream-stream relations and range condition, right watermark only",
+        new TestStreamingRelation(leftPlain).join(new TestStreamingRelation(rightWm),
+          joinType = joinType, condition = Some(leftPlain > rightWm + 10)),
+        OutputMode.Append(),
+        Seq("requires a range bound between watermarked attributes on both sides"))
+
+      // Not supported: the left watermark is unrelated to the range-bound left attribute, so the
+      // runtime eviction predicate would be applied to the wrong column.
+      assertNotSupportedInStreamingPlan(
+        s"$joinType join with stream-stream relations and range condition, unrelated left " +
+          "watermark",
+        new TestStreamingRelation(Seq(leftPlain, leftOtherWm)).join(
+          new TestStreamingRelation(rightWm),
+          joinType = joinType, condition = Some(leftPlain > rightWm + 10)),
+        OutputMode.Append(),
+        Seq("requires a range bound between watermarked attributes on both sides"))
+
+      // Not supported: the right watermark is unrelated to the range-bound right attribute, so the
+      // state watermark cannot be derived from the runtime late-filtering column.
+      assertNotSupportedInStreamingPlan(
+        s"$joinType join with stream-stream relations and range condition, unrelated right " +
+          "watermark",
+        new TestStreamingRelation(leftWm).join(
+          new TestStreamingRelation(Seq(rightPlain, rightOtherWm)),
+          joinType = joinType, condition = Some(leftWm > rightPlain + 10)),
+        OutputMode.Append(),
+        Seq("without a watermark in the join keys"))
+
+      // Kill switch: with the stricter requirements disabled, the right-only range config falls
+      // back to the previous (looser) behavior and is accepted again.
+      assertSupportedInStreamingPlan(
+        s"$joinType join, right watermark only, accepted when stricter requirements disabled",
+        new TestStreamingRelation(leftPlain).join(new TestStreamingRelation(rightWm),
+          joinType = joinType, condition = Some(leftPlain > rightWm + 10)),
+        OutputMode.Append(),
+        strictKey -> "false")
+    }
+
+    // Left semi is not outer-like: it emits on match, never at eviction, so the equi-join path has
+    // no no-invalidation requirement. A one-sided key watermark is enough to evict the left key
+    // state through the shared equality key.
+    assertSupportedInStreamingPlan(
+      "left semi join with stream-stream relations and join key watermarked on the right side only",
+      new TestStreamingRelation(leftPlain).join(new TestStreamingRelation(rightWm),
+        joinType = LeftSemi, condition = Some(leftPlain === rightWm)),
+      OutputMode.Append())
+    assertSupportedInStreamingPlan(
+      "left semi join with stream-stream relations and join key watermarked on the left side only",
+      new TestStreamingRelation(leftWm).join(new TestStreamingRelation(rightPlain),
+        joinType = LeftSemi, condition = Some(leftWm === rightPlain)),
+      OutputMode.Append())
+
+    // Left outer is outer-like, so equality joins require both keys at the eviction ordinal to be
+    // watermarked. Otherwise one side is not late-filtered on the dimension used to evict state.
+    assertSupportedInStreamingPlan(
+      "left outer join with stream-stream relations and both join keys watermarked",
+      new TestStreamingRelation(leftWm).join(new TestStreamingRelation(rightWm),
+        joinType = LeftOuter, condition = Some(leftWm === rightWm)),
+      OutputMode.Append())
+    Seq(
+      ("right side only", leftPlain, rightWm),
+      ("left side only", leftWm, rightPlain)
+    ).foreach { case (side, leftKey, rightKey) =>
+      assertNotSupportedInStreamingPlan(
+        s"left outer join with stream-stream relations and join key watermarked on $side",
+        new TestStreamingRelation(leftKey).join(new TestStreamingRelation(rightKey),
+          joinType = LeftOuter, condition = Some(leftKey === rightKey)),
+        OutputMode.Append(),
+        Seq("requires watermarks on both join keys used for state eviction"))
+    }
+
+    assertNotSupportedInStreamingPlan(
+      "left outer join with stream-stream relations and watermark on an unrelated right column",
+      new TestStreamingRelation(leftWm).join(
+        new TestStreamingRelation(Seq(rightPlain, rightWm)),
+        joinType = LeftOuter, condition = Some(leftWm === rightPlain)),
+      OutputMode.Append(),
+      Seq("requires watermarks on both join keys used for state eviction"))
+
+    // Composite equality keys. State-key eviction uses a single ordinal (the first watermarked
+    // left key), so both keys at that ordinal must be watermarked.
+    val outerLeftWm1 = AttributeReference("olw1", IntegerType)().withMetadata(watermarkMetadata)
+    val outerLeftPlain2 = AttributeReference("olp2", IntegerType)()
+    val outerRightWm1 = AttributeReference("orw1", IntegerType)().withMetadata(watermarkMetadata)
+    val outerRightPlain1 = AttributeReference("orp1", IntegerType)()
+    val outerRightPlain2 = AttributeReference("orp2", IntegerType)()
+    val outerRightWm2 = AttributeReference("orw2", IntegerType)().withMetadata(watermarkMetadata)
+
+    assertSupportedInStreamingPlan(
+      "left outer join with stream-stream relations and composite key watermarked at same ordinal",
+      new TestStreamingRelation(Seq(outerLeftWm1, outerLeftPlain2)).join(
+        new TestStreamingRelation(Seq(outerRightWm1, outerRightPlain2)),
+        joinType = LeftOuter,
+        condition = Some(outerLeftWm1 === outerRightWm1 &&
+          outerLeftPlain2 === outerRightPlain2)),
+      OutputMode.Append())
+
+    assertNotSupportedInStreamingPlan(
+      "left outer join with stream-stream relations and composite key watermarked on mismatched " +
+        "ordinals",
+      new TestStreamingRelation(Seq(outerLeftWm1, outerLeftPlain2)).join(
+        new TestStreamingRelation(Seq(outerRightPlain1, outerRightWm2)),
+        joinType = LeftOuter,
+        condition = Some(outerLeftWm1 === outerRightPlain1 &&
+          outerLeftPlain2 === outerRightWm2)),
+      OutputMode.Append(),
+      Seq("requires watermarks on both join keys used for state eviction"))
+
+    // Kill switch: accepted again when the stricter requirements are disabled.
+    assertSupportedInStreamingPlan(
+      "left outer join, right-only key watermark, accepted when stricter requirements disabled",
+      new TestStreamingRelation(leftPlain).join(new TestStreamingRelation(rightWm),
+        joinType = LeftOuter, condition = Some(leftPlain === rightWm)),
+      OutputMode.Append(),
+      strictKey -> "false")
+    assertSupportedInStreamingPlan(
+      "left outer join, left-only key watermark, accepted when stricter requirements disabled",
+      new TestStreamingRelation(leftWm).join(new TestStreamingRelation(rightPlain),
+        joinType = LeftOuter, condition = Some(leftWm === rightPlain)),
+      OutputMode.Append(),
+      strictKey -> "false")
+  }
+
+  // Left anti join uses the same strict requirements as left outer, but it is new in this PR, so
+  // the compatibility flag does not disable them.
+  {
+    val leftWm = AttributeReference("lw", IntegerType)().withMetadata(watermarkMetadata)
+    val rightWm = AttributeReference("rw", IntegerType)().withMetadata(watermarkMetadata)
+    val leftPlain = AttributeReference("lp", IntegerType)()
+    val rightPlain = AttributeReference("rp", IntegerType)()
+    val leftOtherWm = AttributeReference("lo", IntegerType)().withMetadata(watermarkMetadata)
+    val rightOtherWm = AttributeReference("ro", IntegerType)().withMetadata(watermarkMetadata)
+
+    // Supported: equality join keys watermarked on both sides.
+    assertSupportedInStreamingPlan(
+      "left anti join with stream-stream relations and both join keys watermarked",
+      new TestStreamingRelation(leftWm).join(new TestStreamingRelation(rightWm),
+        joinType = LeftAnti, condition = Some(leftWm === rightWm)),
+      OutputMode.Append())
+
+    // Supported: range condition with a watermark on both sides.
+    assertSupportedInStreamingPlan(
+      "left anti join with stream-stream relations and range condition, watermark on both sides",
+      new TestStreamingRelation(leftWm).join(new TestStreamingRelation(rightWm),
+        joinType = LeftAnti, condition = Some(leftWm > rightWm + 10)),
+      OutputMode.Append())
+
+    Seq(
+      ("right side only", leftPlain, rightWm),
+      ("left side only", leftWm, rightPlain)
+    ).foreach { case (side, leftKey, rightKey) =>
+      assertNotSupportedInStreamingPlan(
+        s"left anti join with stream-stream relations and join key watermarked on $side",
+        new TestStreamingRelation(leftKey).join(new TestStreamingRelation(rightKey),
+          joinType = LeftAnti, condition = Some(leftKey === rightKey)),
+        OutputMode.Append(),
+        Seq("requires watermarks on both join keys used for state eviction"))
+    }
+
+    // Not supported: the watermark is on an unrelated right column, not the right join key, so the
+    // right side is not late-filtered on the key that bounds matching.
+    assertNotSupportedInStreamingPlan(
+      "left anti join with stream-stream relations and watermark on an unrelated right column",
+      new TestStreamingRelation(leftWm).join(
+        new TestStreamingRelation(Seq(rightPlain, rightOtherWm)),
+        joinType = LeftAnti, condition = Some(leftWm === rightPlain)),
+      OutputMode.Append(),
+      Seq("requires watermarks on both join keys used for state eviction"))
+
+    // Composite equality keys. State-key eviction uses a single ordinal (the first watermarked
+    // left key), so both keys at that ordinal must be watermarked.
+    val leftWm1 = AttributeReference("lw1", IntegerType)().withMetadata(watermarkMetadata)
+    val leftPlain2 = AttributeReference("lp2", IntegerType)()
+    val rightWm1 = AttributeReference("rw1", IntegerType)().withMetadata(watermarkMetadata)
+    val rightPlain1 = AttributeReference("rp1", IntegerType)()
+    val rightPlain2 = AttributeReference("rp2", IntegerType)()
+    val rightWm2 = AttributeReference("rw2", IntegerType)().withMetadata(watermarkMetadata)
+
+    // Supported: composite key watermarked at the same ordinal on both sides (ordinal 0).
+    assertSupportedInStreamingPlan(
+      "left anti join with stream-stream relations and composite key watermarked at same ordinal",
+      new TestStreamingRelation(Seq(leftWm1, leftPlain2)).join(
+        new TestStreamingRelation(Seq(rightWm1, rightPlain2)),
+        joinType = LeftAnti,
+        condition = Some(leftWm1 === rightWm1 && leftPlain2 === rightPlain2)),
+      OutputMode.Append())
+
+    // Not supported: composite key watermarked on mismatched ordinals -- left key 0 and right
+    // key 1 are watermarked, but eviction uses ordinal 0, whose right key is not watermarked, so
+    // the right side is not late-filtered on the eviction key.
+    assertNotSupportedInStreamingPlan(
+      "left anti join with stream-stream relations and composite key watermarked on mismatched " +
+        "ordinals",
+      new TestStreamingRelation(Seq(leftWm1, leftPlain2)).join(
+        new TestStreamingRelation(Seq(rightPlain1, rightWm2)),
+        joinType = LeftAnti,
+        condition = Some(leftWm1 === rightPlain1 && leftPlain2 === rightWm2)),
+      OutputMode.Append(),
+      Seq("requires watermarks on both join keys used for state eviction"))
+
+    // Not supported: range condition with a watermark on the right only -- the left state is never
+    // evicted, so no anti row is ever produced.
+    assertNotSupportedInStreamingPlan(
+      "left anti join with stream-stream relations and range condition, right watermark only",
+      new TestStreamingRelation(leftPlain).join(new TestStreamingRelation(rightWm),
+        joinType = LeftAnti, condition = Some(leftPlain > rightWm + 10)),
+      OutputMode.Append(),
+      Seq("requires a range bound between watermarked attributes on both sides"))
+
+    // Not supported: the left watermark is unrelated to the range-bound left attribute.
+    assertNotSupportedInStreamingPlan(
+      "left anti join with stream-stream relations and range condition, unrelated left watermark",
+      new TestStreamingRelation(Seq(leftPlain, leftOtherWm)).join(
+        new TestStreamingRelation(rightWm),
+        joinType = LeftAnti, condition = Some(leftPlain > rightWm + 10)),
+      OutputMode.Append(),
+      Seq("requires a range bound between watermarked attributes on both sides"))
+
+    // Not supported: the right watermark is unrelated to the range-bound right attribute.
+    assertNotSupportedInStreamingPlan(
+      "left anti join with stream-stream relations and range condition, unrelated right watermark",
+      new TestStreamingRelation(leftWm).join(
+        new TestStreamingRelation(Seq(rightPlain, rightOtherWm)),
+        joinType = LeftAnti, condition = Some(leftWm > rightPlain + 10)),
+      OutputMode.Append(),
+      Seq("without a watermark in the join keys"))
+
+    test("streaming plan - left anti strict watermark rules ignore compatibility flag") {
+      withSQLConf(SQLConf.STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED.key -> "false") {
+        val rangeError = intercept[AnalysisException] {
+          UnsupportedOperationChecker.checkForStreaming(
+            wrapInStreaming(new TestStreamingRelation(leftPlain).join(
+              new TestStreamingRelation(rightWm),
+              joinType = LeftAnti,
+              condition = Some(leftPlain > rightWm + 10))),
+            OutputMode.Append())
+        }
+        assert(rangeError.getMessage.contains(
+          "requires a range bound between watermarked attributes on both sides"))
+
+        Seq((leftPlain, rightWm), (leftWm, rightPlain)).foreach { case (leftKey, rightKey) =>
+          val equalityError = intercept[AnalysisException] {
+            UnsupportedOperationChecker.checkForStreaming(
+              wrapInStreaming(new TestStreamingRelation(leftKey).join(
+                new TestStreamingRelation(rightKey),
+                joinType = LeftAnti,
+                condition = Some(leftKey === rightKey))),
+              OutputMode.Append())
+          }
+          assert(equalityError.getMessage.contains(
+            "requires watermarks on both join keys used for state eviction"))
+        }
+      }
+    }
+
+    // Not supported: no watermark at all (rejected by the generic stream-stream join check).
+    assertNotSupportedInStreamingPlan(
+      "left anti join with stream-stream relations and no watermark",
+      new TestStreamingRelation(leftPlain).join(new TestStreamingRelation(rightPlain),
+        joinType = LeftAnti, condition = Some(leftPlain === rightPlain)),
+      OutputMode.Append(),
+      Seq("without a watermark in the join keys"))
   }
 
   // multi-aggregations only supported in Append mode

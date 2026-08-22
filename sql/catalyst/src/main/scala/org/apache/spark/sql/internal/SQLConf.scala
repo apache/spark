@@ -3857,6 +3857,22 @@ object SQLConf {
       .checkValue(v => Set(1, 2, 3, 4).contains(v), "Valid versions are 1, 2, 3, and 4")
       .createWithDefault(2)
 
+  val STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED =
+    buildConf("spark.sql.streaming.join.stricterWatermarkRequirements.enabled")
+      .doc("When true, the analyzer enforces stricter watermark-placement requirements for " +
+        "stream-stream left semi and left outer joins, so that the left-side state which their " +
+        "output (or bounded state size) depends on is actually evicted, and, for left outer, so " +
+        "that late rows cannot invalidate an already-emitted unmatched row. Configurations that " +
+        "would otherwise silently produce incorrect results or unbounded state (e.g. a " +
+        "range-condition join whose range bound is not between watermarked attributes on both " +
+        "sides, or a left outer equality join whose eviction key is not watermarked on both " +
+        "sides) are rejected. Set this to false to restore the previous, looser behavior for " +
+        "left semi and left outer joins. Left anti joins always use the stricter requirements.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
@@ -8693,6 +8709,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreSkipNullsForStreamStreamJoins: Boolean =
     getConf(STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS)
+
+  def streamingJoinStricterWatermarkRequirements: Boolean =
+    getConf(STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED)
 
   def stateStoreCoordinatorMultiplierForMinVersionDiffToLog: Long =
     getConf(STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG)

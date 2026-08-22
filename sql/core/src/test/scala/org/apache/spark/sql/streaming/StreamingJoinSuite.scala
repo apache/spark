@@ -157,7 +157,7 @@ abstract class StreamingJoinSuite
     val windowed2 = df2
       .select($"key", window($"rightTime", "10 second"), $"rightValue")
     val joined = windowed1.join(windowed2, Seq("key", "window"), joinType)
-    val select = if (joinType == "left_semi") {
+    val select = if (joinType == "left_semi" || joinType == "left_anti") {
       joined.select($"key", $"window.end".cast("long"), $"leftValue")
     } else {
       joined.select($"key", $"window.end".cast("long"), $"leftValue",
@@ -185,7 +185,7 @@ abstract class StreamingJoinSuite
         && $"leftValue" > 4,
       joinType)
 
-    val select = if (joinType == "left_semi") {
+    val select = if (joinType == "left_semi" || joinType == "left_anti") {
       joined.select(left("key"), left("window.end").cast("long"), $"leftValue")
     } else if (joinType == "left_outer") {
       joined.select(left("key"), left("window.end").cast("long"), $"leftValue",
@@ -219,7 +219,7 @@ abstract class StreamingJoinSuite
         && $"rightValue".cast("int") > 7,
       joinType)
 
-    val select = if (joinType == "left_semi") {
+    val select = if (joinType == "left_semi" || joinType == "left_anti") {
       joined.select(left("key"), left("window.end").cast("long"), $"leftValue")
     } else if (joinType == "left_outer") {
       joined.select(left("key"), left("window.end").cast("long"), $"leftValue",
@@ -239,16 +239,19 @@ abstract class StreamingJoinSuite
       joinType: String,
       watermark: String = "10 seconds",
       lowerBound: String = "interval 5 seconds",
-      upperBound: String = "interval 5 seconds")
+      upperBound: String = "interval 5 seconds",
+      leftWatermark: Boolean = true)
     : (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], DataFrame) = {
 
     val leftInput = MemoryStream[(Int, Int)]
     val rightInput = MemoryStream[(Int, Int)]
 
-    val df1 = leftInput.toDF().toDF("leftKey", "time")
+    val df1Base = leftInput.toDF().toDF("leftKey", "time")
       .select($"leftKey", timestamp_seconds($"time") as "leftTime",
         ($"leftKey" * 2) as "leftValue")
-      .withWatermark("leftTime", watermark)
+    // Left semi/outer/anti require range bounds over watermarked attributes on both sides. Allow
+    // tests to omit the left watermark to exercise that analyzer path.
+    val df1 = if (leftWatermark) df1Base.withWatermark("leftTime", watermark) else df1Base
 
     val df2 = rightInput.toDF().toDF("rightKey", "time")
       .select($"rightKey", timestamp_seconds($"time") as "rightTime",
@@ -262,7 +265,7 @@ abstract class StreamingJoinSuite
           s"leftTime BETWEEN rightTime - $lowerBound AND rightTime + $upperBound"),
         joinType)
 
-    val select = if (joinType == "left_semi") {
+    val select = if (joinType == "left_semi" || joinType == "left_anti") {
       joined.select($"leftKey", $"leftTime".cast("int"))
     } else {
       joined.select($"leftKey", $"rightKey", $"leftTime".cast("int"),
@@ -270,6 +273,23 @@ abstract class StreamingJoinSuite
     }
 
     (leftInput, rightInput, select)
+  }
+
+  protected def setupEqualityJoinWithZeroWatermark(joinType: String)
+      : (MemoryStream[(String, Int)], MemoryStream[(String, Int)], DataFrame) = {
+    val leftInput = MemoryStream[(String, Int)]
+    val rightInput = MemoryStream[(String, Int)]
+
+    val left = leftInput.toDF()
+      .selectExpr("_1 AS key", "timestamp_seconds(_2) AS eventTime")
+      .withWatermark("eventTime", "0 seconds")
+    val right = rightInput.toDF()
+      .selectExpr("_1 AS key", "timestamp_seconds(_2) AS eventTime")
+      .withWatermark("eventTime", "0 seconds")
+    val joined = left.join(right, Seq("key", "eventTime"), joinType)
+      .selectExpr("key", "CAST(eventTime AS long) AS eventTime")
+
+    (leftInput, rightInput, joined)
   }
 
   protected def setupSelfJoin(joinType: String)
@@ -1983,6 +2003,57 @@ abstract class StreamingOuterJoinSuite extends StreamingOuterJoinBase {
       }
     }
   }
+
+  test("left outer join with a range condition requires watermarked bounds on both sides") {
+    // Only the right side is watermarked. With a range condition (no watermark in the join keys),
+    // the operator never builds a left-side eviction predicate, so the unmatched (null-extended)
+    // left rows would never be emitted. This must be rejected at analysis time rather than silently
+    // dropping the outer output.
+    val (_, _, joined) = setupJoinWithRangeCondition("left_outer", leftWatermark = false)
+
+    val e = intercept[AnalysisException] {
+      joined.writeStream.format("memory").queryName("leftOuterRightWatermarkOnly")
+        .outputMode(OutputMode.Append()).start()
+    }
+    assert(e.getMessage.contains(
+      "requires a range bound between watermarked attributes on both sides"))
+  }
+
+  test("left outer join with an equi join key watermarked on the left only is rejected") {
+    // The join key is watermarked on the left only, so the right side is not late-filtered on the
+    // eviction key: a late right row could match a left row already emitted as a null-extended
+    // outer row. Rejected at analysis time.
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val df1 = leftInput.toDF().toDF("key", "time")
+      .select($"key", timestamp_seconds($"time") as "leftTime")
+      .withWatermark("leftTime", "10 seconds")
+    val df2 = rightInput.toDF().toDF("key", "time")
+      .select($"key", timestamp_seconds($"time") as "rightTime")
+    val joined = df1.join(df2, expr("leftTime = rightTime"), "left_outer")
+
+    val e = intercept[AnalysisException] {
+      joined.writeStream.format("memory").queryName("leftOuterLeftKeyWatermarkOnly")
+        .outputMode(OutputMode.Append()).start()
+    }
+    assert(e.getMessage.contains("requires watermarks on both join keys used for state eviction"))
+  }
+
+  test("stricter watermark requirements can be disabled for left outer join") {
+    // With the kill switch off, the right-only range config that is otherwise rejected is accepted
+    // again (falling back to the previous, looser behavior).
+    withSQLConf(
+      SQLConf.STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED.key -> "false") {
+      val (_, _, joined) = setupJoinWithRangeCondition("left_outer", leftWatermark = false)
+      val query = joined.writeStream.format("memory")
+        .queryName("leftOuterFallback").outputMode(OutputMode.Append()).start()
+      try {
+        query.processAllAvailable()
+      } finally {
+        query.stop()
+      }
+    }
+  }
 }
 
 @SlowSQLTest
@@ -2426,6 +2497,36 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
     )
   }
 
+  testWithAppendAndUpdate("left semi join matches same-batch right row between late and " +
+      "eviction watermarks") { outputMode =>
+    withTempDir { checkpoint =>
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        val (leftInput, rightInput, joined) =
+          setupEqualityJoinWithZeroWatermark("left_semi")
+
+        testStream(joined, outputMode)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          // batch 0
+          // WM: late record = 0, eviction = 0
+          MultiAddData(
+            (leftInput, Seq(("a", 1), ("b", 2))),
+            (rightInput, Seq(("b", 2), ("c", 1)))
+          ),
+          CheckNewAnswer(("b", 2)),
+          // batch 1
+          // WM: late record = 0, eviction = 2. Right ("d", 1) is not late, but it is
+          // evicting in this batch. It still has to be visible to left ("d", 1) from the same
+          // batch before watermark cleanup removes it.
+          MultiAddData(
+            (rightInput, Seq(("d", 1))),
+            (leftInput, Seq(("d", 1)))
+          ),
+          CheckNewAnswer(("d", 1))
+        )
+      }
+    }
+  }
+
   testWithAppendAndUpdate("self left semi join") { outputMode =>
     val (inputStream, query) = setupSelfJoin("left_semi")
 
@@ -2598,6 +2699,36 @@ abstract class StreamingLeftSemiJoinSuite extends StreamingLeftSemiJoinBase {
        */
     }
   }
+
+  test("left semi join with a range condition requires watermarked bounds on both sides") {
+    // With only the right side watermarked and a range condition (no watermark in the join keys),
+    // the left state is never evicted, so never-matched left rows accumulate without bound. This is
+    // rejected at analysis time.
+    val (_, _, joined) = setupJoinWithRangeCondition("left_semi", leftWatermark = false)
+
+    val e = intercept[AnalysisException] {
+      joined.writeStream.format("memory").queryName("leftSemiRightWatermarkOnly")
+        .outputMode(OutputMode.Append()).start()
+    }
+    assert(e.getMessage.contains(
+      "requires a range bound between watermarked attributes on both sides"))
+  }
+
+  test("stricter watermark requirements can be disabled for left semi join") {
+    // With the kill switch off, the right-only range config falls back to the previous behavior and
+    // is accepted again.
+    withSQLConf(
+      SQLConf.STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED.key -> "false") {
+      val (_, _, joined) = setupJoinWithRangeCondition("left_semi", leftWatermark = false)
+      val query = joined.writeStream.format("memory")
+        .queryName("leftSemiFallback").outputMode(OutputMode.Append()).start()
+      try {
+        query.processAllAvailable()
+      } finally {
+        query.stop()
+      }
+    }
+  }
 }
 
 // Concrete single-mode suites for parallel CI execution and failure isolation.
@@ -2632,6 +2763,257 @@ class StreamingFullOuterJoinWithoutVCFSuite extends StreamingFullOuterJoinSuite 
   override protected def testMode = Mode.WithoutVCF
 }
 
+abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
+
+  import testImplicits._
+
+  test("windowed left anti join") {
+    withTempDir { checkpointDir =>
+      val (leftInput, rightInput, joined) = setupWindowedJoin("left_anti")
+
+      testStream(joined, OutputMode.Append())(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
+        // Nothing is emitted yet: left 1 and 2 are unmatched, but the watermark cannot yet rule
+        // out a future match for them. Left 3, 4, 5 matched and are suppressed forever.
+        CheckNewAnswer(),
+        // states
+        // left: 1, 2 (3, 4, 5 matched right rows, so they are not buffered -- see left semi)
+        // right: 3, 4, 5, 6, 7
+        assertNumStateRows(
+          total = Seq(7), updated = Seq(7),
+          droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+        MultiAddData(leftInput, 21)(rightInput, 22),
+        // Watermark = 11, so window=[0,10] is evicted from the left side: the surviving unmatched
+        // left rows 1 and 2 are emitted now (3, 4, 5 were never buffered, having matched).
+        CheckNewAnswer(Row(1, 10, 2), Row(2, 10, 4)),
+        // states
+        // left: 21
+        // right: 22
+        //
+        // states evicted
+        // left: 1, 2 (below watermark)
+        // right: 3, 4, 5, 6, 7 (below watermark)
+        //
+        // Only the 5 right side rows are reported as removed: the left side rows are evicted
+        // through removeAndReturnOldState while generating the anti output, which does not feed
+        // numRemovedStateRows. Left outer join reports removals the same way.
+        assertNumStateRows(
+          total = Seq(2), updated = Seq(2),
+          droppedByWatermark = Seq(0), removed = Some(Seq(5))),
+        StopStream,
+        // Restart the join query from the same checkpoint
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, 22),
+        // Left 22 matches right 22, so it is not buffered and never emitted (as in left semi).
+        CheckNewAnswer(),
+        // states
+        // left: 21
+        // right: 22
+        assertNumStateRows(
+          total = Seq(2), updated = Seq(0),
+          droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+        StopStream,
+        // Restart the query from the same checkpoint
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, 1),
+        // Row not added as 1 < state key watermark = 12.
+        CheckNewAnswer(),
+        // states
+        // left: 21
+        // right: 22
+        assertNumStateRows(
+          total = Seq(2), updated = Seq(0),
+          droppedByWatermark = Seq(1), removed = Some(Seq(0)))
+      )
+    }
+  }
+
+  test("left anti join does not emit a left row matched by a right row in a later batch") {
+    val (leftInput, rightInput, joined) = setupWindowedJoin("left_anti")
+
+    testStream(joined, OutputMode.Append())(
+      AddData(leftInput, 3),
+      // Unmatched so far, but not yet provably unmatched, so nothing is emitted. This is the
+      // window in which a match can still arrive and cancel the eventual anti output -- the
+      // positive "emitted once the watermark passes" case is covered by "windowed left anti join".
+      CheckNewAnswer(),
+      // A matching right row arrives in a later batch, so left 3 must never be emitted.
+      AddData(rightInput, 3),
+      CheckNewAnswer(),
+      // Advance the watermark past window=[0,10].
+      MultiAddData(leftInput, 21)(rightInput, 21),
+      CheckNewAnswer(),
+      // Left 21 matched right 21, and left 3 was matched before eviction, so still nothing.
+      MultiAddData(leftInput, 31)(rightInput, 31),
+      CheckNewAnswer()
+    )
+  }
+
+  test("left anti early state exclusion on left") {
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_anti")
+
+    testStream(joined, OutputMode.Append())(
+      MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
+      // The left rows with leftValue <= 4 (i.e. left 1 and 2) fail the pre-join filter, so they can
+      // never match and are emitted immediately without being added to the state.
+      CheckNewAnswer(Row(1, 10, 2), Row(2, 10, 4)),
+      // states
+      // left: empty (3 matched right 3 in the same batch, so it is not buffered)
+      // right: 3, 4, 5
+      assertNumStateRows(
+        total = Seq(3), updated = Seq(3),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      // Left 3 matched, so advancing the watermark must not produce an anti row for it.
+      MultiAddData(leftInput, 20)(rightInput, 21),
+      CheckNewAnswer(),
+      // states
+      // left: 20
+      // right: 21
+      //
+      // states evicted
+      // left: nothing (3 was never buffered, having matched)
+      // right: 3, 4, 5 (below watermark)
+      //
+      // Only the 3 right side rows are counted as removed.
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(3)))
+    )
+  }
+
+  test("left anti early state exclusion on right") {
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithRightCondition("left_anti")
+
+    testStream(joined, OutputMode.Append())(
+      MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
+      // The right rows with rightValue <= 7 (i.e. right 1 and 2) fail the pre-join filter, so they
+      // are not added to the state and cannot suppress any left row.
+      CheckNewAnswer(),
+      // states
+      // left: 4, 5 (3 matched right 3, so it is not buffered)
+      // right: 3
+      assertNumStateRows(
+        total = Seq(3), updated = Seq(3),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      // Advance the watermark: left 4 and 5 were never matched, so they are emitted now.
+      MultiAddData(leftInput, 20)(rightInput, 21),
+      CheckNewAnswer(Row(4, 10, 8), Row(5, 10, 10)),
+      // states
+      // left: 20
+      // right: 21
+      //
+      // states evicted
+      // left: 4, 5 (below watermark)
+      // right: 3 (below watermark)
+      //
+      // Only the single right side row is counted as removed - the left side rows are evicted
+      // through removeAndReturnOldState while generating the anti output, which does not feed
+      // numRemovedStateRows.
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(1)))
+    )
+  }
+
+  test("left anti join with watermark range condition") {
+    val (leftInput, rightInput, joined) = setupJoinWithRangeCondition("left_anti")
+
+    testStream(joined, OutputMode.Append())(
+      AddData(leftInput, (1, 5), (3, 5)),
+      // Neither left row is provably unmatched yet.
+      CheckNewAnswer(),
+      // states
+      // left: (1, 5), (3, 5)
+      // right: nothing
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      AddData(rightInput, (1, 10), (2, 5)),
+      // Right (1, 10) satisfies the range condition against left (1, 5), so that left row is
+      // removed from state and must never be emitted, exactly as in left semi.
+      CheckNewAnswer(),
+      // states
+      // left: (3, 5) ((1, 5) removed on match)
+      // right: (1, 10), (2, 5)
+      assertNumStateRows(
+        total = Seq(3), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(1))),
+      // Advance the watermark to 20 by adding rows with event time 30 on both sides. A left row is
+      // only safe to evict once no future right row can match it, which the range condition puts
+      // at leftTime + 5 < watermark, so the left rows with leftTime < 15 are evicted here:
+      // (3, 5) was never matched so it is emitted. (1, 5) is not among them -- it was already
+      // removed from state when it matched in the previous batch.
+      AddData(leftInput, (1, 30)),
+      CheckNewAnswer(),
+      AddData(rightInput, (0, 30)),
+      CheckNewAnswer(Row(3, 5)),
+      // Advance the watermark to 50, which evicts the left rows with leftTime < 45. Left (1, 30)
+      // never matched -- the only right row with key 1 was evicted long before -- so it is
+      // emitted now.
+      AddData(leftInput, (2, 60)),
+      CheckNewAnswer(),
+      AddData(rightInput, (0, 60)),
+      CheckNewAnswer(Row(1, 30))
+    )
+  }
+
+  test("left anti join suppresses same-batch right row between late and eviction watermarks") {
+    withTempDir { checkpoint =>
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        val (leftInput, rightInput, joined) = setupEqualityJoinWithZeroWatermark("left_anti")
+
+        testStream(joined, OutputMode.Append())(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          // batch 0
+          // WM: late record = 0, eviction = 0
+          MultiAddData(
+            (leftInput, Seq(("a", 1), ("b", 2))),
+            (rightInput, Seq(("b", 2), ("c", 1)))
+          ),
+          CheckNewAnswer(),
+          // batch 1
+          // WM: late record = 0, eviction = 2. Right ("d", 1) is not late, but it is evicting
+          // in this batch. It must suppress left ("d", 1) from the same batch before cleanup.
+          MultiAddData(
+            (rightInput, Seq(("d", 1))),
+            (leftInput, Seq(("d", 1)))
+          ),
+          CheckNewAnswer(("a", 1))
+        )
+      }
+    }
+  }
+}
+
+abstract class StreamingLeftAntiJoinSuite extends StreamingLeftAntiJoinBase {
+
+  test("left anti join is not supported in Update output mode") {
+    val (_, _, joined) = setupWindowedJoin("left_anti")
+
+    val e = intercept[AnalysisException] {
+      joined.writeStream.format("memory").queryName("leftAntiUpdate")
+        .outputMode(OutputMode.Update()).start()
+    }
+    assert(e.getMessage.contains("LeftAnti join between two streaming DataFrames/Datasets " +
+      "is not supported in Update output mode, only in Append output mode"))
+  }
+
+  test("left anti join with a range condition requires watermarked bounds on both sides") {
+    // Only the right side is watermarked. With a range condition (no watermark in the join keys),
+    // the operator would never build a left-side eviction predicate, so no anti row would ever be
+    // emitted. This must be rejected at analysis rather than silently producing no output.
+    val (_, _, joined) = setupJoinWithRangeCondition("left_anti", leftWatermark = false)
+
+    val e = intercept[AnalysisException] {
+      joined.writeStream.format("memory").queryName("leftAntiRightWatermarkOnly")
+        .outputMode(OutputMode.Append()).start()
+    }
+    assert(e.getMessage.contains(
+      "requires a range bound between watermarked attributes on both sides"))
+  }
+}
+
 @SlowSQLTest
 class StreamingLeftSemiJoinWithVCFSuite extends StreamingLeftSemiJoinSuite {
   override protected def testMode = Mode.WithVCF
@@ -2639,5 +3021,15 @@ class StreamingLeftSemiJoinWithVCFSuite extends StreamingLeftSemiJoinSuite {
 
 @SlowSQLTest
 class StreamingLeftSemiJoinWithoutVCFSuite extends StreamingLeftSemiJoinSuite {
+  override protected def testMode = Mode.WithoutVCF
+}
+
+@SlowSQLTest
+class StreamingLeftAntiJoinWithVCFSuite extends StreamingLeftAntiJoinSuite {
+  override protected def testMode = Mode.WithVCF
+}
+
+@SlowSQLTest
+class StreamingLeftAntiJoinWithoutVCFSuite extends StreamingLeftAntiJoinSuite {
   override protected def testMode = Mode.WithoutVCF
 }

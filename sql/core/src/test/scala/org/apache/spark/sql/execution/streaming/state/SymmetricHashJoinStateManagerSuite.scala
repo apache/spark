@@ -544,6 +544,28 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
     }
   }
 
+  versionsInTest.foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - existsJoinedRow returns match existence") {
+      withJoinStateManager(
+        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
+        implicit val mgr = manager
+
+        append(20, 2)
+        append(20, 3)
+
+        val dummyRow = new GenericInternalRow(0)
+        assert(manager.existsJoinedRow(
+          toJoinKeyRow(20),
+          row => new JoinedRow(row, dummyRow),
+          jr => jr.getInt(1) == 2))
+        assert(!manager.existsJoinedRow(
+          toJoinKeyRow(20),
+          row => new JoinedRow(row, dummyRow),
+          jr => jr.getInt(1) == 99))
+      }
+    }
+  }
+
   // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
   versionsInTest.filter(_ >= 2).foreach { ver =>
     test(s"StreamingJoinStateManager V$ver - matched flag update + eviction roundtrip") {
@@ -578,6 +600,47 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
           val evictedPairs = evicted.map(p => (toValueInt(p.value), p.matched)).toSeq
           val matchedByValue = evictedPairs.toMap
           assert(matchedByValue(2) === true)
+          assert(matchedByValue(3) === false)
+
+          mgr.commit()
+        }
+      }
+    }
+  }
+
+  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
+  versionsInTest.filter(_ >= 2).foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - existsJoinedRow does not update matched flag") {
+      withTempDir { checkpointDir =>
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, ver,
+          checkpointDir, storeVersion = 0, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          append(20, 2)
+          append(20, 3)
+
+          val dummyRow = new GenericInternalRow(0)
+          assert(manager.existsJoinedRow(
+            toJoinKeyRow(20),
+            row => new JoinedRow(row, dummyRow),
+            jr => jr.getInt(1) == 2))
+          assert(!manager.existsJoinedRow(
+            toJoinKeyRow(20),
+            row => new JoinedRow(row, dummyRow),
+            jr => jr.getInt(1) == 99))
+
+          mgr.commit()
+        }
+
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, ver,
+          checkpointDir, storeVersion = 1, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          val evicted = removeAndReturnByKey(25)
+          val matchedByValue = evicted.map(p => (toValueInt(p.value), p.matched)).toMap
+          assert(matchedByValue(2) === false)
           assert(matchedByValue(3) === false)
 
           mgr.commit()
@@ -914,6 +977,27 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
     }
   }
 
+  versionsInTest.foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - existsJoinedRow returns match existence") {
+      withJoinStateManager(
+        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
+        implicit val mgr = manager
+
+        appendAndTest(40, 100, 200, 300)
+
+        val dummyRow = new GenericInternalRow(0)
+        assert(manager.existsJoinedRow(
+          toJoinKeyRow(40),
+          row => new JoinedRow(row, dummyRow),
+          jr => jr.getInt(1) == 100))
+        assert(!manager.existsJoinedRow(
+          toJoinKeyRow(40),
+          row => new JoinedRow(row, dummyRow),
+          jr => jr.getInt(1) == 999))
+      }
+    }
+  }
+
   // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
   versionsInTest.filter(_ >= 2).foreach { ver =>
     test(s"StreamingJoinStateManager V$ver - matched flag update + eviction roundtrip") {
@@ -945,6 +1029,47 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
           val evictedPairs = evicted.map(p => (toValueInt(p.value), p.matched)).toSeq
           val matchedByValue = evictedPairs.toMap
           assert(matchedByValue(100) === true)
+
+          mgr.commit()
+        }
+      }
+    }
+  }
+
+  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
+  versionsInTest.filter(_ >= 2).foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - existsJoinedRow does not update matched flag") {
+      withTempDir { checkpointDir =>
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, ver,
+          checkpointDir, storeVersion = 0, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          appendAndTest(40, 100, 200, 300)
+
+          val dummyRow = new GenericInternalRow(0)
+          assert(manager.existsJoinedRow(
+            toJoinKeyRow(40),
+            row => new JoinedRow(row, dummyRow),
+            jr => jr.getInt(1) == 100,
+            timestampRange = Some((100L, 100L))))
+          assert(!manager.existsJoinedRow(
+            toJoinKeyRow(40),
+            row => new JoinedRow(row, dummyRow),
+            jr => jr.getInt(1) == 999,
+            timestampRange = Some((100L, 100L))))
+
+          mgr.commit()
+        }
+
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, ver,
+          checkpointDir, storeVersion = 1, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          val evicted = removeAndReturnByValue(125)
+          val matchedByValue = evicted.map(p => (toValueInt(p.value), p.matched)).toMap
+          assert(matchedByValue(100) === false)
 
           mgr.commit()
         }
@@ -1063,6 +1188,20 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
     ).map(_.getInt(1)).toSeq.sorted
   }
 
+  private def removeMatchedRowTimestamps(
+      key: Int,
+      range: Option[(Long, Long)],
+      predicate: JoinedRow => Boolean = (_: JoinedRow) => true)(
+      implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
+    val dummyRow = new GenericInternalRow(0)
+    manager.getJoinedRowsAndRemoveMatched(
+      toJoinKeyRow(key),
+      row => new JoinedRow(row, dummyRow),
+      predicate,
+      timestampRange = range
+    ).map(_.getInt(1)).toSeq.sorted
+  }
+
   test("StreamingJoinStateManager V4 - getJoinedRows with timestampRange") {
     withJoinStateManager(
       inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
@@ -1079,6 +1218,52 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
       assert(getJoinedRowTimestamps(40, Some((60L, 100L))) === Seq.empty)
       assert(getJoinedRowTimestamps(40, Some((0L, 5L))) === Seq.empty)
       assert(getJoinedRowTimestamps(40, None) === Seq(10, 20, 30, 40, 50))
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - existsJoinedRow with timestampRange") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+      val dummyRow = new GenericInternalRow(0)
+
+      Seq(10, 20, 30, 40, 50).foreach(append(40, _))
+
+      def existsInRange(range: Option[(Long, Long)]): Boolean = {
+        manager.existsJoinedRow(
+          toJoinKeyRow(40),
+          row => new JoinedRow(row, dummyRow),
+          _ => true,
+          timestampRange = range)
+      }
+
+      assert(existsInRange(Some((20L, 40L))))
+      assert(existsInRange(Some((20L, 20L))))
+      assert(existsInRange(Some((25L, 35L))))
+      assert(!existsInRange(Some((60L, 100L))))
+      assert(!existsInRange(Some((0L, 5L))))
+      assert(existsInRange(None))
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - getJoinedRowsAndRemoveMatched with timestampRange") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+
+      manager.append(toJoinKeyRow(40), toInputValue(40, 5), matched = true)
+      Seq(10, 20, 30, 40, 50).foreach(append(40, _))
+
+      assert(removeMatchedRowTimestamps(40, Some((20L, 40L))) === Seq(20, 30, 40))
+      assert(get(40) === Seq(5, 10, 50))
+
+      Seq(20, 30, 40).foreach(append(40, _))
+      val matched = removeMatchedRowTimestamps(
+        40,
+        Some((20L, 40L)),
+        joinedRow => joinedRow.getInt(1) != 30)
+      assert(matched === Seq(20, 40))
+      assert(get(40) === Seq(5, 10, 30, 50))
     }
   }
 

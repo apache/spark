@@ -491,7 +491,10 @@ object UnsupportedOperationChecker extends Logging {
             joinType match {
               // The behavior for unmatched rows in outer joins with update mode
               // hasn't been defined yet.
-              case LeftOuter | RightOuter | FullOuter =>
+              // LeftAnti is included here because its unmatched rows are only emitted once the
+              // watermark guarantees no future match, so early-firing in Update mode would
+              // produce rows which a later batch could invalidate.
+              case LeftOuter | RightOuter | FullOuter | LeftAnti =>
                 if (outputMode != InternalOutputModes.Append) {
                   throwError(s"$joinType join between two streaming DataFrames/Datasets" +
                     s" is not supported in ${outputMode} output mode, only in Append output mode")
@@ -522,10 +525,16 @@ object UnsupportedOperationChecker extends Logging {
                 checkForStreamStreamJoinWatermark(j)
               }
 
+            // We support streaming left anti joins with stream on both sides under the
+            // appropriate conditions. A streaming right with a static left is not supported:
+            // unmatched left rows are determined at watermark-based eviction of the left state,
+            // which a static left side does not have.
             case LeftAnti =>
-              if (right.isStreaming) {
-                throwError(s"$LeftAnti joins with a streaming DataFrame/Dataset " +
-                    "on the right are not supported")
+              if (!left.isStreaming && right.isStreaming) {
+                throwError(s"$LeftAnti join with a streaming DataFrame/Dataset " +
+                  "on the right and a static DataFrame/Dataset on the left is not supported")
+              } else if (left.isStreaming && right.isStreaming) {
+                checkForStreamStreamJoinWatermark(j)
               }
 
             // We support streaming left outer and left semi joins with static on the right always,
@@ -700,7 +709,7 @@ object UnsupportedOperationChecker extends Logging {
     // Check if the nullable side has a watermark, and there's a range condition which
     // implies a state value watermark on the first side.
     val hasValidWatermarkRange = join.joinType match {
-      case LeftOuter | LeftSemi => StreamingJoinHelper.getStateValueWatermark(
+      case LeftOuter | LeftSemi | LeftAnti => StreamingJoinHelper.getStateValueWatermark(
         join.left.outputSet, join.right.outputSet, join.condition, Some(1000000)).isDefined
       case RightOuter => StreamingJoinHelper.getStateValueWatermark(
         join.right.outputSet, join.left.outputSet, join.condition, Some(1000000)).isDefined
@@ -721,6 +730,117 @@ object UnsupportedOperationChecker extends Logging {
         s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
           "is not supported without a watermark in the join keys, or a watermark on " +
           "the nullable side and an appropriate range condition")(join)
+    }
+
+    // The generic check above is side- and ordinal-insensitive: it accepts any watermark in the
+    // join keys, or any watermark that yields a state value watermark on the nullable side. That is
+    // not enough for the join types whose output (or bounded state size) depends on the left state
+    // being evicted: left semi, left outer, and left anti.
+    //
+    // Left semi/outer are existing join types, so users can temporarily restore the previous loose
+    // behavior with SQLConf.STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED. Left anti is
+    // new, so it always uses the stricter rules.
+    if (join.joinType == LeftAnti || SQLConf.get.streamingJoinStricterWatermarkRequirements) {
+      checkStreamStreamJoinWatermarkPlacement(
+        join,
+        watermarkInJoinKeys,
+        canRestorePreviousBehavior = join.joinType != LeftAnti)
+    }
+  }
+
+  /**
+   * Enforce stricter watermark-placement requirements for the stream-stream join types whose
+   * correctness or bounded state depends on the left-side state being evicted: left semi, left
+   * outer, and left anti. These requirements are stricter than the generic check in
+   * [[checkForStreamStreamJoinWatermark]]. For left semi and left outer, these checks are gated
+   * by [[SQLConf.STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED]]. Left anti is new and
+   * always enforces these requirements.
+   *
+   * Two independent requirements apply:
+   *
+   *  1. Left-state eviction. Left semi/outer/anti all rely on the left state being evicted: left
+   *     outer/anti emit their surviving unmatched left rows from that eviction (so without it the
+   *     unmatched/outer output is never produced), and left semi cleans up its never-matched left
+   *     rows there (so without it the left state grows without bound). In the equi-join path the
+   *     left key state is evicted through the shared watermarked join key. In the range-condition
+   *     path the left *value* state is evicted only when the range condition derives the left state
+   *     watermark from watermarked attributes on both sides.
+   *
+   *  2. No invalidation by late rows. This applies only to the outer-like types (left outer and
+   *     left anti), whose already-emitted unmatched row can be invalidated by a later match. Both
+   *     sides must be late-filtered on the same dimension the left state is evicted by; otherwise
+   *     a row that is old on the eviction key can still match an already-emitted unmatched row. In
+   *     the equi-join path this requires both join keys at the eviction ordinal to be watermarked.
+   *     Left semi does not need this: it emits on match while joining, never at eviction, so there
+   *     is nothing to invalidate.
+   */
+  private def checkStreamStreamJoinWatermarkPlacement(
+      join: Join,
+      watermarkInJoinKeys: Boolean,
+      canRestorePreviousBehavior: Boolean): Unit = {
+    // (requiresLeftStateEviction, isOuterLike) per join type. Only the left-side-eviction join
+    // types are constrained here; inner, right outer, and full outer keep their existing behavior.
+    val (requiresLeftStateEviction, isOuterLike) = join.joinType match {
+      case LeftOuter => (true, true)
+      case LeftAnti => (true, true)
+      case LeftSemi => (true, false)
+      case _ => (false, false)
+    }
+
+    if (requiresLeftStateEviction) {
+      if (watermarkInJoinKeys) {
+        // Equi-join path: the left key state is evicted via the join-key watermark, so the
+        // eviction requirement is met. For the outer-like types we additionally need both sides
+        // late-filtered on the same key ordinal used for eviction. A watermark on only one side, on
+        // an unrelated column, or on a different key position (composite keys) would let a late row
+        // match an already-emitted unmatched row.
+        if (isOuterLike && !StreamingJoinHelper.isWatermarkOnBothEvictionJoinKeys(join)) {
+          val restore = if (canRestorePreviousBehavior) {
+            " To restore the previous behavior, set " +
+              s"${SQLConf.STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED.key}=false."
+          } else {
+            ""
+          }
+          throwError(
+            s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets with " +
+              "a " +
+              "watermarked join key requires watermarks on both join keys used for state " +
+              "eviction (for a composite key, the left and right keys at the same position), so " +
+              "that late rows on either side are dropped and cannot invalidate already-emitted " +
+              "unmatched " +
+              s"rows. A watermark on only one side is not supported.$restore")(join)
+        }
+      } else {
+        // Range-condition path (hasValidWatermarkRange holds here): the left state is evicted only
+        // when the range condition derives its state watermark from watermarked attributes on both
+        // sides. A right-only watermark, or a watermark on an unrelated left/right attribute,
+        // leaves the runtime eviction predicate ineffective or incorrect.
+        val hasWatermarkRangeOnBothSides =
+          StreamingJoinHelper.getStateValueWatermarkOnWatermarkedAttributes(
+            join.left.outputSet, join.right.outputSet, join.condition, Some(1000000)).isDefined
+        if (!hasWatermarkRangeOnBothSides) {
+          val reason =
+            if (isOuterLike) {
+              "so that the left state whose surviving unmatched rows form the " +
+                s"${join.joinType} output is evicted"
+            } else {
+              "so that the left state is evicted and does not grow without bound"
+            }
+          val restore = if (canRestorePreviousBehavior) {
+            " To restore the previous behavior, set " +
+              s"${SQLConf.STREAMING_JOIN_STRICTER_WATERMARK_REQUIREMENTS_ENABLED.key}=false."
+          } else {
+            ""
+          }
+          throwError(
+            s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets with " +
+              "a " +
+              "range condition requires a range bound between watermarked attributes on both " +
+              s"sides, $reason. A watermark on only one side, or on an unrelated attribute, is " +
+              "not " +
+              s"supported.$restore")(join)
+        }
+      }
     }
   }
 }

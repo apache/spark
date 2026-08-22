@@ -34,6 +34,15 @@ import org.apache.spark.unsafe.types.CalendarInterval
  */
 object StreamingJoinHelper extends PredicateHelper with Logging {
 
+  private def isWatermarked(expression: Expression): Boolean = expression match {
+    case ne: NamedExpression => ne.metadata.contains(EventTimeWatermark.delayKey)
+    case _ => false
+  }
+
+  private def watermarkedAttributes(attributes: AttributeSet): AttributeSet = {
+    AttributeSet(attributes.filter(_.metadata.contains(delayKey)).toSeq)
+  }
+
   /**
    * Check the provided logical plan to see if its join keys contain a watermark attribute.
    *
@@ -49,6 +58,60 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         }
       case _ => false
     }
+  }
+
+  /**
+   * Whether both equality join keys at the state-key eviction ordinal are watermarked.
+   *
+   * This is required by outer-like equality joins (left outer and left anti). Eviction of left
+   * state must be aligned with late-event filtering on both sides: a right watermark drops late
+   * right rows after unmatched rows have been emitted, and a left watermark drops late left rows
+   * after the right state that could have matched them has been evicted.
+   *
+   * The eviction ordinal is chosen in the same way as
+   * StreamingSymmetricHashJoinHelper.findJoinKeyOrdinalForWatermark.
+   */
+  def isWatermarkOnBothEvictionJoinKeys(plan: LogicalPlan): Boolean = {
+    plan match {
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
+        joinKeyOrdinalForWatermark(leftKeys, rightKeys).exists { ordinal =>
+          ordinal < leftKeys.length && ordinal < rightKeys.length &&
+            isWatermarked(leftKeys(ordinal)) && isWatermarked(rightKeys(ordinal))
+        }
+      case _ => false
+    }
+  }
+
+  private def joinKeyOrdinalForWatermark(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): Option[Int] = {
+    leftKeys.indexWhere(isWatermarked) match {
+      case i if i >= 0 => Some(i)
+      case _ =>
+        rightKeys.indexWhere(isWatermarked) match {
+          case i if i >= 0 => Some(i)
+          case _ => None
+        }
+    }
+  }
+
+  /**
+   * Like [[getStateValueWatermark]], but only succeeds when the state watermark is derived from
+   * watermarked attributes on both sides. This is useful for analysis-time validation of range
+   * conditions: the runtime value-watermark predicate is applied to the watermarked attribute on
+   * the side being evicted, so accepting a range bound over some other attribute would make the
+   * predicate either ineffective or incorrect.
+   */
+  def getStateValueWatermarkOnWatermarkedAttributes(
+      attributesToFindStateWatermarkFor: AttributeSet,
+      attributesWithEventWatermark: AttributeSet,
+      joinCondition: Option[Expression],
+      eventWatermark: Option[Long]): Option[Long] = {
+    getStateValueWatermark(
+      watermarkedAttributes(attributesToFindStateWatermarkFor),
+      watermarkedAttributes(attributesWithEventWatermark),
+      joinCondition,
+      eventWatermark)
   }
 
   /**

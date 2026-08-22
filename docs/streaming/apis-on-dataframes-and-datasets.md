@@ -1230,7 +1230,7 @@ impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
     """),
-  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  "leftOuter"     # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
 )
 
 {% endhighlight %}
@@ -1248,7 +1248,7 @@ impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
     """),
-  joinType = "leftOuter"      // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  joinType = "leftOuter"  // "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
  )
 
 {% endhighlight %}
@@ -1264,7 +1264,7 @@ impressionsWithWatermark.join(
     "clickAdId = impressionAdId AND " +
     "clickTime >= impressionTime AND " +
     "clickTime <= impressionTime + interval 1 hour "),
-  "leftOuter"                 // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  "leftOuter"     // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi", "leftAnti"
 );
 
 {% endhighlight %}
@@ -1283,7 +1283,7 @@ joined <- join(
       "clickAdId = impressionAdId AND",
       "clickTime >= impressionTime AND",
       "clickTime <= impressionTime + interval 1 hour"),
-  "left_outer"                 # can be "inner", "left_outer", "right_outer", "full_outer", "left_semi"
+  "left_outer"  # "inner", "left_outer", "right_outer", "full_outer", "left_semi", "left_anti"
 ))
 
 {% endhighlight %}
@@ -1292,6 +1292,20 @@ joined <- join(
 
 </div>
 
+
+For a **left outer** join, the surviving unmatched left rows are emitted when the left-side state is
+evicted, and an already-emitted `NULL`-extended row can be invalidated by a right row that arrives
+later. Correct results therefore require the watermark to be placed so that (1) the left state is
+actually evicted and (2) both sides are late-filtered on the dimension that bounds matching.
+Concretely: for an equality join on a watermarked event-time key, that key must be watermarked on
+**both** sides; for a time range condition, the range bound must relate watermarked event-time
+columns from both sides. The recommended, always-correct configuration -- watermarking both sides on
+the event-time column used by the join, as in the example above -- satisfies both. Configurations
+that leave the left state un-evicted (a watermark on only the right side of a range condition) or
+leave either side unfiltered on the eviction key (a watermark on only one equality join key) are
+rejected at analysis time. To restore the previous, looser behavior, set
+`spark.sql.streaming.join.stricterWatermarkRequirements.enabled` to `false`; note that the looser
+behavior can silently produce incorrect (missing) outer results.
 
 ###### Semantic Guarantees of Stream-stream Outer Joins with Watermarking
 Outer joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
@@ -1318,9 +1332,50 @@ constraints must be specified for semi join. This is to evict unmatched input ro
 the engine must know when an input row on left side is not going to match with anything on right
 side in future.
 
+As with a left outer join, the left state must be evicted so that never-matched left rows do not
+accumulate: for an equality join the watermarked join key evicts the left key state; for a time
+range condition the range bound must relate watermarked event-time columns from both sides. Unlike
+outer and anti joins, a semi join has no additional late-filtering requirement, because it emits a
+row on match rather than at eviction, so there is no already-emitted row for a late right row to
+invalidate. A range condition watermarked only on one side is rejected at analysis time; to restore
+the previous, looser behavior (which leaves the left state unbounded), set
+`spark.sql.streaming.join.stricterWatermarkRequirements.enabled` to `false`.
+
 ###### Semantic Guarantees of Stream-stream Semi Joins with Watermarking
 Semi joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
 regarding watermark delays and whether data will be dropped or not.
+
+##### Anti Joins with Watermarking
+An anti join returns values from the left side of the relation that has no match with the right.
+It is also referred to as a left anti join. As with semi joins, watermarking and event-time
+constraints must be specified for an anti join: since a row is emitted precisely because it has
+*no* match, the engine generally has to wait until the watermark guarantees that no matching row
+can arrive on the right side in future before it can emit the row. (The exception is a left row
+that fails a deterministic left-side-only predicate in the join condition: it can never match any
+right row, so it is emitted immediately without waiting for the watermark.)
+
+Like a left outer join, an anti join has stricter watermark requirements, because two independent
+things must both hold. First, both sides must be late-filtered on the matching dimension, so rows
+that arrive too late to matter are dropped rather than processed; without this a late row could
+match a left row that has *already* been emitted as an anti row, silently corrupting the result.
+Second, the left state must be evicted, since eviction is what emits the surviving unmatched left
+rows. Concretely: for an equality join on a watermarked event-time key, that key must be
+watermarked on **both** sides; for a time range condition (for example `leftTime BETWEEN
+rightTime - INTERVAL 1 HOUR AND rightTime`), the range bound must relate watermarked event-time
+columns from both sides. The recommended, always-correct configuration is to watermark both sides on
+the event-time column used by the join. Configurations that leave either side unfiltered on the
+eviction key (for example a watermark on only one equality join key) or leave the left state never
+evicted (a watermark on only one side of a range condition) are rejected at analysis time.
+
+Note that anti join is only supported in Append output mode. Update mode would have to emit rows
+early, before the watermark can rule out a future match, and such a row could be invalidated by a
+later batch.
+
+###### Semantic Guarantees of Stream-stream Anti Joins with Watermarking
+Anti joins have the same guarantees regarding watermark delays and whether data will be dropped as
+[outer joins](#outer-joins-with-watermarking), because surviving unmatched rows are likewise only
+emitted once the watermark has passed them (the sole exception being left rows that fail a
+deterministic left-side-only predicate, which are emitted immediately as noted above).
 
 ##### Support matrix for joins in streaming queries
 
@@ -1343,8 +1398,8 @@ regarding watermark delays and whether data will be dropped or not.
       </td>
   </tr>
   <tr>
-    <td rowspan="5" style="vertical-align: middle;">Stream</td>
-    <td rowspan="5" style="vertical-align: middle;">Static</td>
+    <td rowspan="6" style="vertical-align: middle;">Stream</td>
+    <td rowspan="6" style="vertical-align: middle;">Static</td>
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">Supported, not stateful</td>
   </tr>
@@ -1365,8 +1420,12 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">Supported, not stateful</td>
   </tr>
   <tr>
-    <td rowspan="5" style="vertical-align: middle;">Static</td>
-    <td rowspan="5" style="vertical-align: middle;">Stream</td>
+    <td style="vertical-align: middle;">Left Anti</td>
+    <td style="vertical-align: middle;">Supported, not stateful</td>
+  </tr>
+  <tr>
+    <td rowspan="6" style="vertical-align: middle;">Static</td>
+    <td rowspan="6" style="vertical-align: middle;">Stream</td>
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">Supported, not stateful</td>
   </tr>
@@ -1387,8 +1446,12 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">Not supported</td>
   </tr>
   <tr>
-    <td rowspan="5" style="vertical-align: middle;">Stream</td>
-    <td rowspan="5" style="vertical-align: middle;">Stream</td>
+    <td style="vertical-align: middle;">Left Anti</td>
+    <td style="vertical-align: middle;">Not supported</td>
+  </tr>
+  <tr>
+    <td rowspan="6" style="vertical-align: middle;">Stream</td>
+    <td rowspan="6" style="vertical-align: middle;">Stream</td>
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">
       Supported, optionally specify watermark on both sides +
@@ -1398,8 +1461,9 @@ regarding watermark delays and whether data will be dropped or not.
   <tr>
     <td style="vertical-align: middle;">Left Outer</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on right + time constraints for correct
-      results, optionally specify watermark on left for all state cleanup
+      Conditionally supported. For equality-key joins, watermark both sides of the join key used for
+      eviction. For range-condition joins, the range bound must use watermarked columns from both
+      sides.
     </td>
   </tr>
   <tr>
@@ -1419,8 +1483,16 @@ regarding watermark delays and whether data will be dropped or not.
   <tr>
     <td style="vertical-align: middle;">Left Semi</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on right + time constraints for correct
-      results, optionally specify watermark on left for all state cleanup
+      Conditionally supported. Equality-key joins require a watermark on a join key for state
+      cleanup. Range-condition joins require watermarked range-bound columns from both sides.
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align: middle;">Left Anti</td>
+    <td style="vertical-align: middle;">
+      Conditionally supported. For equality-key joins, watermark both sides of the join key used for
+      eviction. For range-condition joins, the range bound must use watermarked columns from both
+      sides. Append output mode only.
     </td>
   </tr>
   <tr>
@@ -1435,7 +1507,10 @@ Additional details on supported joins:
 
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
-- As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
+- For stream-stream joins, inner and left semi joins support Append and Update output modes.
+  Stream-stream left outer, right outer, full outer, and left anti joins support Append output mode
+  only. Complete output mode is not supported for stream-stream joins. Supported stream-static joins
+  are not stateful and follow the general output-mode rules for non-aggregation queries.
 
 - You cannot use mapGroupsWithState and flatMapGroupsWithState before and after joins.
 
@@ -1512,7 +1587,8 @@ joined = impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
     """),
-  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  "leftOuter"     # "inner", "leftOuter", "rightOuter", "fullOuter" (not "leftSemi"/"leftAnti":
+                  # they output left columns only, which this aggregation on click* does not have)
 )
 
 joined.groupBy(
@@ -1534,7 +1610,9 @@ val joined = impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
   """),
-  joinType = "leftOuter"      // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  // "inner", "leftOuter", "rightOuter", "fullOuter" (not "leftSemi"/"leftAnti": they output left
+  // columns only, which this aggregation on click* does not have)
+  joinType = "leftOuter"
 )
 
 joined
@@ -1553,7 +1631,9 @@ Dataset<Row> joined = impressionsWithWatermark.join(
     "clickAdId = impressionAdId AND " +
     "clickTime >= impressionTime AND " +
     "clickTime <= impressionTime + interval 1 hour "),
-  "leftOuter"                 // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+  // "inner", "leftOuter", "rightOuter", "fullOuter" (not "leftSemi"/"leftAnti": they output left
+  // columns only, which this aggregation on click* does not have)
+  "leftOuter"
 );
 
 joined
@@ -2066,9 +2146,12 @@ Here is the compatibility matrix.
   </tr>
   <tr>
       <td colspan="2" style="vertical-align: middle;">Queries with <code>joins</code></td>
-      <td style="vertical-align: middle;">Append</td>
+      <td style="vertical-align: middle;">Append, Update</td>
       <td style="vertical-align: middle;">
-        Update and Complete mode not supported yet. See the
+        For stream-stream joins, Update mode is supported only for inner and left semi joins.
+        Supported stream-static joins are not stateful and follow the general output-mode rules for
+        non-aggregation queries. Complete mode is not supported.
+        See the
         <a href="#support-matrix-for-joins-in-streaming-queries">support matrix in the Join Operations section</a>
          for more details on what types of joins are supported.
       </td>
