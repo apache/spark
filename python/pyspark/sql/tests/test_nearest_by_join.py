@@ -252,6 +252,80 @@ class NearestByJoinTestsMixin:
             messageParameters={},
         )
 
+    def test_python_udf_two_sided_parity(self):
+        """A two-sided scalar Python UDF ranking (referencing both left and right columns)
+        is routed through the rewrite path regardless of the broadcast flag. Results must
+        be identical across flag ON and flag OFF."""
+        from pyspark.sql.functions import udf
+        from pyspark.sql.types import DoubleType
+
+        dist_udf = udf(lambda a, b: float(abs(a - b)), DoubleType())
+
+        users = self.spark.createDataFrame([(1, 10.0), (2, 20.0), (3, 30.0)], ["user_id", "score"])
+        products = self.spark.createDataFrame(
+            [("A", 11.0), ("B", 22.0), ("C", 5.0)], ["product", "pscore"]
+        )
+
+        def run_with_flag(flag_value):
+            with self.sql_conf(
+                {"spark.sql.join.nearestBy.broadcast.enabled": str(flag_value).lower()}
+            ):
+                return (
+                    users.nearestByJoin(
+                        products,
+                        dist_udf(users.score, products.pscore),
+                        numResults=2,
+                        mode="approx",
+                        direction="distance",
+                    )
+                    .select("user_id", "product")
+                    .orderBy("user_id", "product")
+                    .collect()
+                )
+
+        result_off = run_with_flag(False)
+        result_on = run_with_flag(True)
+        self.assertEqual(result_off, result_on)
+        # Sanity: each user gets 2 products
+        self.assertEqual(len(result_off), 6)
+
+    def test_python_udf_right_side_only_parity(self):
+        """A right-side-only scalar Python UDF ranking reaches BroadcastNearestByJoinExec
+        when the broadcast flag is ON. Results must be identical to the rewrite path
+        (flag OFF)."""
+        from pyspark.sql.functions import udf, lit
+        from pyspark.sql.types import DoubleType
+
+        dist_udf = udf(lambda a, b: float(abs(a - b)), DoubleType())
+
+        users = self.spark.createDataFrame([(1, 10.0), (2, 20.0), (3, 30.0)], ["user_id", "score"])
+        products = self.spark.createDataFrame(
+            [("A", 11.0), ("B", 22.0), ("C", 5.0)], ["product", "pscore"]
+        )
+
+        def run_with_flag(flag_value):
+            with self.sql_conf(
+                {"spark.sql.join.nearestBy.broadcast.enabled": str(flag_value).lower()}
+            ):
+                return (
+                    users.nearestByJoin(
+                        products,
+                        dist_udf(lit(5.0), products.pscore),
+                        numResults=2,
+                        mode="approx",
+                        direction="distance",
+                    )
+                    .select("user_id", "product")
+                    .orderBy("user_id", "product")
+                    .collect()
+                )
+
+        result_off = run_with_flag(False)
+        result_on = run_with_flag(True)
+        self.assertEqual(result_off, result_on)
+        # Sanity: each user gets 2 products
+        self.assertEqual(len(result_off), 6)
+
 
 class NearestByJoinTests(NearestByJoinTestsMixin, ReusedSQLTestCase):
     pass
