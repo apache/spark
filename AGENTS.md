@@ -2,54 +2,25 @@
 
 ## Pre-flight Checks
 
-Before the first code edit or test in a session, complete these checks:
+Before the first code edit or running test in a session, ensure a clean working
+environment. DO NOT skip these checks:
 
-1. Run `git remote -v`: both `origin` fetch and push URLs must be the user's personal fork,
-    and `upstream` must be `apache/spark`. Otherwise, ask the user to configure the remotes.
-2. Run `git status`; if there are uncommitted changes, ask the user to stash them.
-3. Before creating a branch or worktree from `origin/master`, check the age of the commit at
-    local `upstream/master` with `git log -1 --format="%ci" upstream/master`. If it is more than
-    a day old, refresh both refs:
-
-    ```sh
-    git fetch upstream master
-    git fetch origin master
-    ```
-4. Choose the work path:
-   - **Review or continue work on an existing PR**: resolve its head repository, ref, and SHA:
-
-     ```sh
-     gh api repos/apache/spark/pulls/<number> \
-       --jq '{repo: .head.repo.full_name, ref: .head.ref, sha: .head.sha}'
-     ```
-
-     For a review, use a local branch at the returned SHA.
-   - **New PR**: ask the user to choose:
-     - **Linked worktree (recommended)**: follow "Creating a Worktree" below.
-     - **New branch**: create and switch to a new branch from `origin/master`.
-
-### Creating a Worktree
-
-For a new PR or test-only worktree, verify that `origin` is the user's personal fork. Create it
-only with:
-
-```sh
-git worktree add -b <branch> --track <path> origin/master
-```
-
-Do not substitute `upstream/master`, omit `--track`, or use `--force`. A branch worktree must
-never track or push through `upstream` or `apache` (`apache/spark`). Read or fetch `upstream` only
-in the main checkout.
-
-After creating a linked worktree, before editing files or running tests, run:
-
-```sh
-git -C <path> status -sb
-```
-
-Proceed only when the status reports `...origin/...`.
-
-Otherwise, stop and ask the user how to proceed.
+1. Run `git remote -v` to identify the personal fork and upstream (`apache/spark`). If unclear,
+     ask the user to configure their remotes following the standard convention (`origin` for the
+     fork, `upstream` for `apache/spark`).
+2. If the latest commit on `<upstream>/master` is more than a day old (check with
+     `git log -1 --format="%ci" <upstream>/master`), run `git fetch <upstream> master`.
+3. If there are uncommitted changes (check with `git status`), ask the user to stash them before
+     proceeding.
+4. Switch to the appropriate branch:
+     - **Existing PR**: resolve the PR branch name via `gh api repos/apache/spark/pulls/<number> --jq
+         '.head.ref'`, then look for a local branch matching that name. If found, switch to it and
+         inform the user. If not found, ask whether to fetch it or if there is a local branch under a
+         different name.
+     - **New edits**: ask the user to choose: create a new git worktree from
+         `<upstream>/master` with `--no-track` and work from there (recommended), or
+         create and switch to a new branch from `<upstream>/master` with `--no-track`.
+     - **Running tests**: use `<upstream>/master`.
 
 ## Development Notes
 
