@@ -19,7 +19,7 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Optional, Sequence, Tuple, Type, Dict
+from typing import Iterator, List, Optional, Sequence, Tuple, Type, Dict, cast
 
 from pyspark.sql.datasource import (
     DataSource,
@@ -162,11 +162,10 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         it = chain(*entries)
         return it
 
-    def read(
-        self,
-        input_partition: SimpleInputPartition,  # type: ignore[override]
-    ) -> Iterator[Tuple]:
-        return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
+    def read(self, partition: InputPartition) -> Iterator[Tuple]:
+        # partitions() only yields SimpleInputPartition. Cast keeps the ABC override valid.
+        simple_partition = cast(SimpleInputPartition, partition)
+        return self.simple_reader.readBetweenOffsets(simple_partition.start, simple_partition.end)
 
 
 class ReadLimitRegistry:
