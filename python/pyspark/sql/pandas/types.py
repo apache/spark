@@ -75,6 +75,8 @@ if TYPE_CHECKING:
 
 # Should keep in line with org.apache.spark.sql.util.ArrowUtils.metadataKey
 metadata_key = b"SPARK::metadata::json"
+# Keep in line with org.apache.spark.sql.util.ArrowUtils.timePrecisionKey
+time_precision_key = b"SPARK::time::precision"
 
 
 def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:
@@ -89,6 +91,36 @@ def from_arrow_metadata(metadata: Optional[Dict[bytes, bytes]]) -> Optional[Dict
         return json.loads(metadata[metadata_key].decode("utf-8"))
     else:
         return None
+
+
+def _to_arrow_field_metadata(
+    dt: DataType,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[bytes, bytes]]:
+    """Merge user metadata with the TIME precision tag when ``dt`` is TimeType."""
+    arrow_meta = to_arrow_metadata(metadata)
+    if not isinstance(dt, TimeType):
+        return arrow_meta
+    tagged: Dict[bytes, bytes] = {time_precision_key: str(dt.precision).encode("utf-8")}
+    if arrow_meta is not None:
+        tagged = {**arrow_meta, **tagged}
+    return tagged
+
+
+def _time_type_from_arrow_metadata(
+    metadata: Optional[Dict[bytes, bytes]],
+) -> TimeType:
+    """Parse SPARK::time::precision; missing or invalid values become TimeType()."""
+    if metadata is None or time_precision_key not in metadata:
+        return TimeType()
+    try:
+        # Base 10 accepts PyArrow bytes values and str, matching JVM Integer.parse.
+        precision = int(metadata[time_precision_key], 10)
+    except (TypeError, ValueError):
+        return TimeType()
+    if 0 <= precision <= 9:
+        return TimeType(precision)
+    return TimeType()
 
 
 def to_arrow_type(
@@ -158,6 +190,7 @@ def to_arrow_type(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=dt.containsNull,
+            metadata=_to_arrow_field_metadata(dt.elementType),
         )
         arrow_type = pa.list_(field)
     elif isinstance(dt, MapType):
@@ -170,6 +203,7 @@ def to_arrow_type(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=False,
+            metadata=_to_arrow_field_metadata(dt.keyType),
         )
         value_field = pa.field(
             "value",
@@ -180,6 +214,7 @@ def to_arrow_type(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=dt.valueContainsNull,
+            metadata=_to_arrow_field_metadata(dt.valueType),
         )
         arrow_type = pa.map_(key_field, value_field)
     elif isinstance(dt, StructType):
@@ -199,7 +234,7 @@ def to_arrow_type(
                     prefers_large_types=prefers_large_types,
                 ),
                 nullable=field.nullable,
-                metadata=to_arrow_metadata(field.metadata),
+                metadata=_to_arrow_field_metadata(field.dataType, field.metadata),
             )
             for field in dt
         ]
@@ -287,7 +322,7 @@ def to_arrow_schema(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=field.nullable,
-            metadata=to_arrow_metadata(field.metadata),
+            metadata=_to_arrow_field_metadata(field.dataType, field.metadata),
         )
         for field in schema
     ]
@@ -403,6 +438,8 @@ def from_arrow_type(
     elif types.is_date32(at):
         spark_type = DateType()
     elif types.is_time64(at):
+        # Precision lives on the Arrow field (see _from_arrow_field). Bare time64
+        # without field metadata falls back to the default TIME(6).
         spark_type = TimeType()
     elif types.is_timestamp(at):
         if at.tz is None and prefer_timestamp_ntz:
@@ -420,23 +457,23 @@ def from_arrow_type(
         spark_type = YearMonthIntervalType()
     elif types.is_list(at):
         spark_type = ArrayType(
-            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            elementType=_from_arrow_field(at.value_field, prefer_timestamp_ntz),
             containsNull=at.value_field.nullable,
         )
     elif types.is_fixed_size_list(at):
         spark_type = ArrayType(
-            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            elementType=_from_arrow_field(at.value_field, prefer_timestamp_ntz),
             containsNull=at.value_field.nullable,
         )
     elif types.is_large_list(at):
         spark_type = ArrayType(
-            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            elementType=_from_arrow_field(at.value_field, prefer_timestamp_ntz),
             containsNull=at.value_field.nullable,
         )
     elif types.is_map(at):
         spark_type = MapType(
-            keyType=from_arrow_type(at.key_type, prefer_timestamp_ntz),
-            valueType=from_arrow_type(at.item_type, prefer_timestamp_ntz),
+            keyType=_from_arrow_field(at.key_field, prefer_timestamp_ntz),
+            valueType=_from_arrow_field(at.item_field, prefer_timestamp_ntz),
             valueContainsNull=at.item_field.nullable,
         )
     elif types.is_struct(at):
@@ -458,7 +495,7 @@ def from_arrow_type(
             [
                 StructField(
                     field.name,
-                    from_arrow_type(field.type, prefer_timestamp_ntz),
+                    _from_arrow_field(field, prefer_timestamp_ntz),
                     nullable=field.nullable,
                     metadata=from_arrow_metadata(field.metadata),
                 )
@@ -477,6 +514,20 @@ def from_arrow_type(
     return spark_type
 
 
+def _from_arrow_field(
+    field: "pa.Field",
+    prefer_timestamp_ntz: bool = True,
+) -> DataType:
+    """Convert a PyArrow field to a Spark type, recovering TIME precision from metadata."""
+    import pyarrow.types as types
+
+    # JVM ArrowUtils.fromArrowField only reads SPARK::time::precision on Time(NANOSECOND).
+    # Foreign time64[us] stays TIME(6); do not invent precision from the Arrow unit.
+    if types.is_time64(field.type) and field.type.unit == "ns":
+        return _time_type_from_arrow_metadata(field.metadata)
+    return from_arrow_type(field.type, prefer_timestamp_ntz)
+
+
 def from_arrow_schema(
     arrow_schema: "pa.Schema",
     prefer_timestamp_ntz: bool = True,
@@ -486,7 +537,7 @@ def from_arrow_schema(
         [
             StructField(
                 field.name,
-                from_arrow_type(field.type, prefer_timestamp_ntz),
+                _from_arrow_field(field, prefer_timestamp_ntz),
                 nullable=field.nullable,
                 metadata=from_arrow_metadata(field.metadata),
             )

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import datetime
 import os
 import time
 import unittest
@@ -22,6 +23,7 @@ import logging
 from pyspark.sql.utils import PythonException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
+from pyspark.sql.types import TimeType
 from pyspark.testing.utils import (
     assertDataFrameEqual,
     have_pandas,
@@ -54,6 +56,40 @@ class MapInArrowTestsMixin:
         actual = df.mapInArrow(func, "id long").collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
+
+    def test_time_precision_map_in_arrow(self):
+        # SPARK-57696: mapInArrow identity keeps TIME(p) on input metadata and output schema.
+        cases = (
+            ("12:34:56", 0, datetime.time(12, 34, 56)),
+            ("12:34:56.123", 3, datetime.time(12, 34, 56, 123000)),
+            ("12:34:56.123456", 6, datetime.time(12, 34, 56, 123456)),
+            ("12:34:56.123456789", 9, datetime.time(12, 34, 56, 123456)),
+        )
+
+        def identity(iterator):
+            for batch in iterator:
+                yield batch
+
+        for literal, precision, expected in cases:
+            with self.subTest(precision=precision):
+                df = self.spark.sql(
+                    "SELECT CAST('%s' AS TIME(%d)) AS t" % (literal, precision)
+                )
+
+                def check_metadata(iterator):
+                    key = b"SPARK::time::precision"
+                    tagged = str(precision).encode("utf-8")
+                    for batch in iterator:
+                        assert batch.schema.field("t").metadata[key] == tagged
+                        yield batch
+
+                out = df.mapInArrow(identity, df.schema)
+                self.assertEqual(out.schema["t"].dataType, TimeType(precision))
+                self.assertEqual(out.collect(), [Row(t=expected)])
+
+                checked = df.mapInArrow(check_metadata, "t time(%d)" % precision)
+                self.assertEqual(checked.schema["t"].dataType, TimeType(precision))
+                self.assertEqual(checked.collect(), [Row(t=expected)])
 
     def test_map_in_arrow_with_limit(self):
         def get_size(iterator):
