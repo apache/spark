@@ -132,3 +132,14 @@
     df.fillna(value=1, subset="id1")
     df.fillna(value=1, subset=("id1", "id2"))
     df.fillna(value=1, subset=["id1"])
+
+
+- case: dfRddFlatMap
+  main: |
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    df = spark.range(5)
+    rdd = df.rdd
+    rdd.flatMap(lambda x: [x])
+
