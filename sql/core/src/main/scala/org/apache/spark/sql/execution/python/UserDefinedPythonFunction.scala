@@ -28,7 +28,7 @@ import net.razorvine.pickle.Pickler
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, TableArg}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonAggregate, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NamedExpression, NullsFirst, NullsLast, PythonAggregate, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, TranspiledUDFParameter, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
@@ -152,25 +152,35 @@ case class UserDefinedPythonFunction(
       // `udfExpr` itself, whose children are the user's argument expressions. A user
       // column literally named `_udf_param_N` passed as an argument must not be
       // rewritten, so we leave `udfExpr` untouched.
-      def resolveUDFParams(expression: Expression, children: Array[Expression]): Expression = {
-        expression match {
-          case UnresolvedAttribute(nameParts)
-              if nameParts.length == 1 && nameParts.head.startsWith("_udf_param_") =>
-            val suffix = nameParts.head.stripPrefix("_udf_param_")
-            val index = suffix.toIntOption.getOrElse {
-              throw QueryCompilationErrors.invalidUDFParameterPlaceholder(nameParts.head)
-            }
-            if (index >= 0 && index < children.length) {
-              children(index)
-            } else {
-              throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
-                index, children.length)
-            }
-          case _ =>
-            expression.mapChildren(resolveUDFParams(_, children))
-        }
+      def placeholderIndex(expression: Expression): Option[Int] = expression match {
+        case UnresolvedAttribute(nameParts)
+            if nameParts.length == 1 && nameParts.head.startsWith("_udf_param_") =>
+          val suffix = nameParts.head.stripPrefix("_udf_param_")
+          val index = suffix.toIntOption.getOrElse {
+            throw QueryCompilationErrors.invalidUDFParameterPlaceholder(nameParts.head)
+          }
+          if (index >= 0 && index < udfChildren.length) {
+            Some(index)
+          } else {
+            throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
+              index, udfChildren.length)
+          }
+        case _ => None
       }
-      val resolvedOptions = transpiledExprsForUse.map(resolveUDFParams(_, udfChildren))
+      // Filling in a placeholder drops one copy of the argument at each use, and after that nothing
+      // says which copy came from which parameter. So mark each copy here, while we still know,
+      // with one id per parameter -- that tells PreEvaluateTranspiledUDFInputs which copies of a
+      // nondeterministic argument only owe the body one draw. A foldable argument is left unmarked:
+      // constant folding kills it at each use site, which beats reading a shared column.
+      val paramIds = udfChildren.map(_ => NamedExpression.newExprId)
+      def resolveUDFParams(expression: Expression): Expression =
+        placeholderIndex(expression) match {
+          case Some(index) if udfChildren(index).foldable => udfChildren(index)
+          case Some(index) =>
+            TranspiledUDFParameter(udfChildren(index), index, paramIds(index))
+          case None => expression.mapChildren(resolveUDFParams)
+        }
+      val resolvedOptions = transpiledExprsForUse.map(resolveUDFParams)
       TranspiledPythonUDF(name, udfExpr, resolvedOptions, optionInputTypesForUse)
     } else {
       udfExpr

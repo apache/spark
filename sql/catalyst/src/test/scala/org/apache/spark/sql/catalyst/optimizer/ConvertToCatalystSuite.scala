@@ -188,6 +188,29 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
+  test("transpiles a predicate, pre-evaluating its input below the Filter") {
+    transpileOn {
+      val arg = Add(attrA, Literal(1L))
+      val id = NamedExpression.newExprId
+      val option = GreaterThan(
+        Multiply(TranspiledUDFParameter(arg, 0, id), TranspiledUDFParameter(arg, 0, id)),
+        Literal(0L))
+      val tpudf = TranspiledPythonUDF("udf",
+        PythonUDF("udf", null, BooleanType, Seq(arg),
+          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
+        List(option))
+      val rewritten = ConvertToCatalyst(Filter(tpudf, LocalRelation(attrA)))
+      // Project(a, Filter(_udf_input_0 * _udf_input_0 > 0, Project(a, _udf_input_0, rel))).
+      val filter = rewritten.collectFirst { case f: Filter => f }.get
+      val input = filter.child.asInstanceOf[Project].projectList.last.asInstanceOf[Alias]
+      assert(input.child == arg, s"Expected a + 1 pre-evaluated below the Filter: $rewritten")
+      assert(filter.condition == GreaterThan(
+        Multiply(input.toAttribute, input.toAttribute), Literal(0L)),
+        s"Expected a Catalyst predicate reading the column: $rewritten")
+      assert(rewritten.output == Seq(attrA), s"Extra columns leaked out: $rewritten")
+    }
+  }
+
   test("uses pre-coerced transpiledOptions as-is (analysis is responsible for coercion)") {
     // The Analyzer coerces transpiledOptions before the optimizer runs, because
     // TranspiledPythonUDF.children exposes them to the resolver's generic coercion pass.
@@ -232,6 +255,60 @@ class ConvertToCatalystSuite extends PlanTest {
             s"Expected aggregateFunction to be PythonUDAF, got: ${ae.aggregateFunction}")
         case other => fail(s"Expected AggregateExpression(PythonUDAF, ...), got: $other")
       }
+    }
+  }
+
+  test("drops an input the option never uses") {
+    transpileOn {
+      // `lambda a, b: a` over f(a, rand()): substitution dropped b, so nothing evaluates it. The
+      // Python path computes every argument column -- an accepted difference, pinned here.
+      val unused = Rand(Literal(1L))
+      val option = Add(attrA, Literal(1L))
+      val tpudf = TranspiledPythonUDF(
+        "udf",
+        PythonUDF("udf", null, LongType, Seq(attrA, unused),
+          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
+        List(option))
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result == option, s"Expected the option unchanged, got: $result")
+      assert(!result.exists(_.isInstanceOf[Rand]), s"Unused argument survived in: $result")
+    }
+  }
+
+  test("apply keeps a transpilable UDF Python when wrapped by a non-transpiled Python UDF") {
+    // `apply` threads parentIsUdf down from the top expression, so the mid UDF stays Python rather
+    // than splitting the batch pipeline into Python -> Catalyst -> Python. The applyExpr tests
+    // above pass parentIsUdf in directly and so bypass that threading.
+    transpileOn {
+      val plain = makePyUDF(attrA)
+      val midPy = makePyUDF(plain)
+      val midTPUDF = makeTPUDF(midPy, Add(plain, Literal(4L)))
+      assert(midTPUDF.hasOnlyPythonUDFInputs)
+      val outerPy = makePyUDF(midTPUDF)
+      val optimized = ConvertToCatalyst(Project(Seq(Alias(outerPy, "v")()), LocalRelation(attrA)))
+      val exprs = optimized.flatMap(_.expressions)
+      assert(!exprs.exists(_.exists(_.isInstanceOf[TranspiledPythonUDF])),
+        s"TranspiledPythonUDF survived: $optimized")
+      // Three Python UDFs remain (outer, mid, plain); the mid was not converted to its Add option.
+      assert(exprs.map(_.collect { case u: PythonUDF => u }.size).sum == 3,
+        s"Expected the mid UDF to stay Python (3 PythonUDFs), got: $optimized")
+    }
+  }
+
+  test("converts a nested transpiled UDF sitting at the root of the option") {
+    transpileOn {
+      // An option that is nothing but `_udf_param_0`, bound to a transpiled call. Only a custom
+      // transpiler can produce this shape -- the built-in one casts every option to the return
+      // type, so its roots are always Casts. The root is the marker, never the call itself, since
+      // substitution wraps every non-foldable argument; a marker is unary, so recursing into the
+      // children reaches the call. This pins that the call gets converted, not which traversal
+      // does it.
+      val innerTPUDF = makeTPUDF(makePyUDF(attrA), Add(attrA, Literal(1L)))
+      val outerTPUDF = makeTPUDF(makePyUDF(innerTPUDF),
+        TranspiledUDFParameter(innerTPUDF, 0, NamedExpression.newExprId))
+      val result = ConvertToCatalyst.applyExpr(outerTPUDF, parentIsUdf = false)
+      assert(!result.exists(_.isInstanceOf[TranspiledPythonUDF]),
+        s"TranspiledPythonUDF survived at the option root: $result")
     }
   }
 }
