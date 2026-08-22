@@ -238,6 +238,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _files: Seq[String] = _
   private var _archives: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
+  private var _previousProxyBase: Option[String] = None
+  private var _proxyBaseSetByContext: Boolean = false
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
   private var _resources: immutable.Map[String, ResourceInformation] = _
@@ -636,8 +638,20 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     if (_conf.get(UI_REVERSE_PROXY)) {
-      val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL).getOrElse("").stripSuffix("/")
-      System.setProperty("spark.ui.proxyBase", proxyUrl + "/proxy/" + _applicationId)
+      _previousProxyBase = sys.props.get("spark.ui.proxyBase")
+      val deploymentPrefix = _previousProxyBase.filterNot(isAppSpecificProxyBase)
+      val baseProxyUrl = _conf.get(UI_REVERSE_PROXY_URL)
+        .orElse(deploymentPrefix)
+        .getOrElse("")
+        .stripSuffix("/")
+      val newProxyBase = if (baseProxyUrl.nonEmpty) {
+        s"$baseProxyUrl/proxy/${_applicationId}"
+      } else {
+        s"/proxy/${_applicationId}"
+      }
+      _conf.set("spark.ui.proxyBase", newProxyBase)
+      System.setProperty("spark.ui.proxyBase", newProxyBase)
+      _proxyBaseSetByContext = true
     }
     _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
@@ -2399,6 +2413,14 @@ class SparkContext(config: SparkConf) extends Logging {
     if (_statusStore != null) {
       _statusStore.close()
     }
+    if (_proxyBaseSetByContext) {
+      _previousProxyBase match {
+        case Some(oldBase) if !isAppSpecificProxyBase(oldBase) =>
+          System.setProperty("spark.ui.proxyBase", oldBase)
+        case _ =>
+          System.clearProperty("spark.ui.proxyBase")
+      }
+    }
     // Clear this `InheritableThreadLocal`, or it will still be inherited in child threads even this
     // `SparkContext` is stopped.
     localProperties.remove()
@@ -2406,6 +2428,13 @@ class SparkContext(config: SparkConf) extends Logging {
     // Unset YARN mode system env variable, to allow switching between cluster types.
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
+  }
+
+  private def isAppSpecificProxyBase(proxyBase: String): Boolean = {
+    val clean = proxyBase.stripSuffix("/")
+    clean.contains("/proxy/application_") ||
+      clean.contains("/proxy/app-") ||
+      clean.contains("/proxy/spark-")
   }
 
 

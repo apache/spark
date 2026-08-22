@@ -1345,11 +1345,24 @@ private[deploy] class Master(
     desc.copy(command = desc.command.copy(arguments = arguments, javaOpts = javaOpts))
   }
 
+  private def maybeAddReverseProxyConfig(desc: DriverDescription): DriverDescription = {
+    if (!reverseProxy) return desc
+    conf.get(UI_REVERSE_PROXY_URL).map(_.stripSuffix("/")).filter(_.nonEmpty) match {
+      case Some(url) =>
+        val opt = s"-Dspark.ui.reverseProxyUrl=$url"
+        val javaOpts = desc.command.javaOpts
+          .filter(!_.startsWith("-Dspark.ui.reverseProxyUrl=")) :+ opt
+        desc.copy(command = desc.command.copy(javaOpts = javaOpts))
+      case None => desc
+    }
+  }
+
   private def createDriver(desc: DriverDescription): DriverInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
     val id = newDriverId(date)
-    new DriverInfo(now, id, maybeUpdateAppName(desc, id), date)
+    val updatedDesc = maybeAddReverseProxyConfig(maybeUpdateAppName(desc, id))
+    new DriverInfo(now, id, updatedDesc, date)
   }
 
   private def launchDriver(worker: WorkerInfo, driver: DriverInfo): Unit = {
