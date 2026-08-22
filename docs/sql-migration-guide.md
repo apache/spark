@@ -25,6 +25,7 @@ license: |
 ## Upgrading from Spark SQL 4.3 to 4.4
 
 - Since Spark 4.4, for storage-partitioned joins, `spark.sql.requireAllClusterKeysForCoPartition` requires every join key to be covered by some partition key instead of matching the partition keys positionally. As a result, a join-key column partitioned by more than one transform no longer prevents shuffle elimination, and `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` no longer additionally requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false` when the join keys are a subset of the partition keys. As before, when the partition keys cover only part of the join keys, eliminating the shuffle still requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false`.
+- Since Spark 4.4, when the result of casting a decimal value to timestamp falls outside the Long range after scaling and truncating sub-microsecond digits, Spark returns null (non-ANSI mode) or raises `CAST_OVERFLOW` error (ANSI mode) instead of a wrapping value.
 
 ## Upgrading from Spark SQL 4.2 to 4.3
 
