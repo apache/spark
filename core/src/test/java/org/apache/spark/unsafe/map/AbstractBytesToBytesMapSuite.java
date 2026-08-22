@@ -21,6 +21,13 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import scala.Tuple2$;
 
@@ -127,6 +134,104 @@ public abstract class AbstractBytesToBytesMapSuite {
   }
 
   protected abstract boolean useOffHeapMemoryAllocator();
+
+  @Test
+  public void supportsSemanticKeyOperations() throws Exception {
+    AtomicInteger operationsCreated = new AtomicInteger();
+    BytesToBytesMap.KeyOperationsFactory firstByteCaseInsensitive = () -> {
+      operationsCreated.incrementAndGet();
+      return new BytesToBytesMap.KeyOperations() {
+        private final AtomicReference<Thread> owner = new AtomicReference<>();
+
+        private void assertThreadOwnership() {
+          final Thread currentThread = Thread.currentThread();
+          owner.compareAndSet(null, currentThread);
+          assertSame(currentThread, owner.get());
+        }
+
+        @Override
+        public int hash(Object base, long offset, int length) {
+          assertThreadOwnership();
+          return Character.toLowerCase(Platform.getByte(base, offset));
+        }
+
+        @Override
+        public boolean equals(
+            Object leftBase,
+            long leftOffset,
+            int leftLength,
+            Object rightBase,
+            long rightOffset,
+            int rightLength) {
+          assertThreadOwnership();
+          return Character.toLowerCase(Platform.getByte(leftBase, leftOffset)) ==
+            Character.toLowerCase(Platform.getByte(rightBase, rightOffset));
+        }
+      };
+    };
+    BytesToBytesMap map = new BytesToBytesMap(
+      taskMemoryManager, 64, PAGE_SIZE_BYTES, firstByteCaseInsensitive);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    byte[] storedKey = new byte[8];
+    storedKey[0] = 'A';
+    byte[] equivalentKey = new byte[16];
+    equivalentKey[0] = 'a';
+    byte[] value = new byte[8];
+
+    try {
+      BytesToBytesMap.Location location = map.lookup(
+        storedKey, Platform.BYTE_ARRAY_OFFSET, storedKey.length);
+      assertFalse(location.isDefined());
+      assertTrue(location.append(
+        storedKey,
+        Platform.BYTE_ARRAY_OFFSET,
+        storedKey.length,
+        value,
+        Platform.BYTE_ARRAY_OFFSET,
+        value.length));
+
+      location = map.lookup(
+        equivalentKey, Platform.BYTE_ARRAY_OFFSET, equivalentKey.length);
+      assertTrue(location.isDefined());
+      assertEquals(storedKey.length, location.getKeyLength());
+
+      location = map.lookup(
+        equivalentKey,
+        Platform.BYTE_ARRAY_OFFSET,
+        equivalentKey.length,
+        Integer.MAX_VALUE);
+      assertTrue(location.isDefined());
+      assertEquals(1, map.numKeys());
+
+      CountDownLatch ready = new CountDownLatch(2);
+      CountDownLatch start = new CountDownLatch(1);
+      Callable<Void> concurrentLookup = () -> {
+        BytesToBytesMap.Location threadLocation = map.new Location();
+        ready.countDown();
+        start.await();
+        for (int i = 0; i < 100; i++) {
+          map.safeLookup(
+            equivalentKey,
+            Platform.BYTE_ARRAY_OFFSET,
+            equivalentKey.length,
+            threadLocation);
+          assertTrue(threadLocation.isDefined());
+        }
+        return null;
+      };
+      Future<Void> firstLookup = executor.submit(concurrentLookup);
+      Future<Void> secondLookup = executor.submit(concurrentLookup);
+      ready.await();
+      start.countDown();
+      firstLookup.get();
+      secondLookup.get();
+      assertEquals(3, operationsCreated.get());
+    } finally {
+      executor.shutdownNow();
+      map.free();
+    }
+  }
 
   private static byte[] getByteArray(Object base, long offset, int size) {
     final byte[] arr = new byte[size];
