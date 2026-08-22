@@ -175,6 +175,27 @@ class DataSourceV2SQLSuiteV1Filter
       "catalogName" -> s"`${catalogName}`",
       "config" -> s""""spark.sql.catalog.${catalogName}""""))
 
+  test("CreateTable: rejects column types unsupported by the data source") {
+    val formats = Seq("CSV", "JSON", "ORC")
+    val types = Seq("GEOGRAPHY(4326)", "GEOMETRY(0)")
+    formats.foreach { format =>
+      types.foreach { typeName =>
+        val t = "testcat.tbl"
+        withTable(t) {
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"CREATE TABLE $t (g $typeName) USING $format")
+            },
+            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+            parameters = Map(
+              "columnName" -> "`g`",
+              "columnType" -> s""""$typeName"""",
+              "format" -> format))
+        }
+      }
+    }
+  }
+
   test("CreateTable: use v2 plan because catalog is set") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint NOT NULL, data string) USING foo")
 

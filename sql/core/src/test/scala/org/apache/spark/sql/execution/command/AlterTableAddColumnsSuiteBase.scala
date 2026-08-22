@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.time.{Duration, Period}
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. ADD COLUMNS` command that
@@ -48,6 +48,27 @@ trait AlterTableAddColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
       checkAnswer(
         sql(s"SELECT id, ym, dt data FROM $t"),
         Seq(Row(0, Period.ofYears(100), Duration.ofHours(10))))
+    }
+  }
+
+  test("rejects column types unsupported by the data source") {
+    val formats = Seq("CSV", "JSON", "ORC")
+    val types = Seq("GEOGRAPHY(4326)", "GEOMETRY(0)")
+    formats.foreach { format =>
+      types.foreach { typeName =>
+        withNamespaceAndTable("ns", "tbl") { t =>
+          sql(s"CREATE TABLE $t (c1 INT) USING $format")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ALTER TABLE $t ADD COLUMNS (g $typeName)")
+            },
+            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+            parameters = Map(
+              "columnName" -> "`g`",
+              "columnType" -> s""""$typeName"""",
+              "format" -> format))
+        }
+      }
     }
   }
 }

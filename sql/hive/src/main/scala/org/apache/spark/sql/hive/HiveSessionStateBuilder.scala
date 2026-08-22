@@ -143,7 +143,7 @@ class HiveSessionStateBuilder(
       DetectAmbiguousSelfJoin +:
         RelationConversions(catalog) +:
         QualifyLocationWithWarehouse(catalog) +:
-        PreprocessTableCreation(catalog) +:
+        PreprocessTableDDL(catalog) +:
         PreprocessTableInsertion +:
         DataSourceAnalysis +:
         ApplyCharTypePadding +:
