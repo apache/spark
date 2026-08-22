@@ -1337,7 +1337,9 @@ object Aggregate {
       return false
     }
 
-    aggregateExpressions.map(_.aggregateFunction).exists {
+    val schema = DataTypeUtils.fromAttributes(
+      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
+    !isAggregateBufferMutable(schema) || aggregateExpressions.map(_.aggregateFunction).exists {
       case _: TypedImperativeAggregate[_] => true
       case _ => false
     }

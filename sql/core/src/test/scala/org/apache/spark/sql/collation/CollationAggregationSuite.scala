@@ -20,36 +20,64 @@ package org.apache.spark.sql.collation
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class CollationAggregationSuite
   extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
-  test("group by collated column doesn't work with obj hash aggregate") {
+  test("hash aggregate on collated grouping key with RewriteCollationAggregate") {
     val tblName = "grp_by_tbl"
     withTable(tblName) {
       sql(s"CREATE TABLE $tblName (c1 STRING COLLATE UTF8_LCASE, c2 INT) USING PARQUET")
       sql(s"INSERT INTO $tblName VALUES ('hello', 1), ('HELLO', 2), ('HeLlO', 3)")
 
-      // Result is correct without forcing object hash aggregate.
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $tblName GROUP BY c1"),
-        Seq(Row(3)))
+      val df = sql(s"SELECT c1, COUNT(*), SUM(c2) FROM $tblName GROUP BY c1")
+      val executedPlan = df.queryExecution.executedPlan
 
-      withSQLConf("spark.sql.test.forceApplyObjectHashAggregate" -> true.toString) {
-        checkAnswer(
-          sql(s"SELECT COUNT(*) FROM $tblName GROUP BY c1"),
-          Seq(Row(1), Row(1), Row(1)))
+      assert(collectFirst(executedPlan) {
+        case _: ObjectHashAggregateExec => true
+      }.nonEmpty)
+      assert(collectFirst(executedPlan) {
+        case _: SortAggregateExec => true
+      }.isEmpty)
 
-        checkAnswer(
-          sql(s"SELECT COLLECT_LIST(c2) AS c3 FROM $tblName GROUP BY c1 ORDER BY c3"),
-          Seq(Row(Seq(1)), Row(Seq(2)), Row(Seq(3))))
+      val res = df.collect()
+      assert(res.length == 1)
+      assert(res(0).getString(0).toLowerCase() == "hello")
+      assert(res(0).getLong(1) == 3L)
+      assert(res(0).getLong(2) == 6L)
+    }
+  }
+
+  test("disable hash aggregate on collated column via SQLConf") {
+    val tblName = "grp_by_disabled_tbl"
+    withTable(tblName) {
+      sql(s"CREATE TABLE $tblName (c1 STRING COLLATE UTF8_LCASE, c2 INT) USING PARQUET")
+      sql(s"INSERT INTO $tblName VALUES ('hello', 1), ('HELLO', 2), ('HeLlO', 3)")
+
+      withSQLConf(SQLConf.COLLATION_HASH_AGGREGATION_ENABLED.key -> "false") {
+        val df = sql(s"SELECT c1, COUNT(*) FROM $tblName GROUP BY c1")
+        val executedPlan = df.queryExecution.executedPlan
+
+        assert(collectFirst(executedPlan) {
+          case _: SortAggregateExec => true
+        }.nonEmpty)
+        assert(collectFirst(executedPlan) {
+          case _: ObjectHashAggregateExec => true
+          case _: HashAggregateExec => true
+        }.isEmpty)
+
+        val res = df.collect()
+        assert(res.length == 1)
+        assert(res(0).getString(0).toLowerCase() == "hello")
+        assert(res(0).getLong(1) == 3L)
       }
     }
   }
 
-  test("imperative aggregate fn does not use objectHashAggregate when group by collated column") {
+  test("imperative aggregate fn uses objectHashAggregate when group by collated column") {
     val tblName = "imp_agg"
     Seq(true, false).foreach { useObjHashAgg =>
       withTable(tblName) {
@@ -66,16 +94,15 @@ class CollationAggregationSuite
           val df = sql(s"SELECT COLLECT_LIST(c2) as list FROM $tblName GROUP BY c1")
           val executedPlan = df.queryExecution.executedPlan
 
-          // Plan should not have any hash aggregate nodes.
-          collectFirst(executedPlan) {
-            case _: ObjectHashAggregateExec => fail("ObjectHashAggregateExec should not be used.")
-            case _: HashAggregateExec => fail("HashAggregateExec should not be used.")
+          if (useObjHashAgg) {
+            assert(collectFirst(executedPlan) {
+              case _: ObjectHashAggregateExec => true
+            }.nonEmpty)
+          } else {
+            assert(collectFirst(executedPlan) {
+              case _: SortAggregateExec => true
+            }.nonEmpty)
           }
-
-          // Plan should have a [[SortAggregateExec]] node.
-          assert(collectFirst(executedPlan) {
-            case _: SortAggregateExec => true
-          }.nonEmpty)
 
           checkAnswer(
             // Sort the values to get deterministic output.
