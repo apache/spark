@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   ImplicitCastInputTypes,
   In,
   InSubquery,
+  JsonTuple,
   Least,
   ListQuery,
   Literal,
@@ -713,6 +714,15 @@ abstract class TypeCoercionHelper {
             implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
+
+      case j: JsonTuple =>
+        val expected = StringTypeWithCollation(supportsTrimCollation = true)
+        val children = j.children.map { child =>
+          charVarcharToPlainString(child.dataType, expected)
+            .map(dt => if (dt == child.dataType) child else Cast(child, dt))
+            .getOrElse(child)
+        }
+        j.withNewChildren(children)
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do

@@ -1117,11 +1117,24 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
 
+    val json = Literal("""{"a":1}""")
+    val nullField = Literal.create(null, NullType)
+    val intField = Literal(1)
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      JsonTuple(Seq(json, nullField)),
+      JsonTuple(Seq(json, nullField)))
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      JsonTuple(Seq(json, intField)),
+      JsonTuple(Seq(json, intField)))
+
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val charLit = Literal.create("ab", CharType(2))
       ruleTest(TypeCoercion.ImplicitTypeCasts,
         Upper(charLit),
         Upper(Cast(charLit, StringType)))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        JsonTuple(Seq(charLit, charLit)),
+        JsonTuple(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
     }
   }
 
