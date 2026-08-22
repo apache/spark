@@ -1083,6 +1083,13 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     ruleTest(TypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
+
+    // SPARK-57806: a NullType expression with side effects must be wrapped in Cast, not replaced
+    // by a null literal, so that the side effect is preserved.
+    val raiseError = RaiseError(Literal(""))
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      NumericTypeUnaryExpression(raiseError),
+      NumericTypeUnaryExpression(Cast(raiseError, DoubleType)))
   }
 
   test("cast NullType for binary operators") {
@@ -1823,6 +1830,18 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
         ruleTest(rule, EqualNullSafe(strLit, tsn), EqualNullSafe(Cast(strLit, nt), tsn))
       }
     }
+  }
+
+  test("SPARK-57806: NullType expression with side effects is preserved in string promotion") {
+    // raise_error has NullType as its dataType. When compared with a string, the old code
+    // would replace raise_error with Literal(null, StringType), silently discarding the side
+    // effect. The rule must wrap any NullType expression in a Cast so that side effects are
+    // preserved; the optimizer will later constant-fold plain null literals if applicable.
+    val rule = TypeCoercion.PromoteStrings
+    val raiseError = RaiseError(Literal(""))
+    ruleTest(rule,
+      EqualTo(raiseError, Literal("")),
+      EqualTo(Cast(raiseError, StringType), Literal("")))
   }
 
   test("cast WindowFrame boundaries to the type they operate upon") {

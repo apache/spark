@@ -176,9 +176,9 @@ ORDER BY t
 -- !query analysis
 Sort [t#x ASC NULLS FIRST], true
 +- Project [t#x, diff#x]
-   +- Project [t#x, diff#x, diff#x]
-      +- Window [counter_diff(null) windowspecdefinition(t#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS diff#x], [t#x ASC NULLS FIRST]
-         +- Project [t#x]
+   +- Project [t#x, _w0#x, diff#x, diff#x]
+      +- Window [counter_diff(_w0#x) windowspecdefinition(t#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS diff#x], [t#x ASC NULLS FIRST]
+         +- Project [t#x, cast(c#x as double) AS _w0#x]
             +- SubqueryAlias tab
                +- LocalRelation [t#x, c#x]
 
@@ -188,7 +188,13 @@ SELECT t, counter_diff(c, st) OVER (ORDER BY t) AS diff
 FROM VALUES (1, 100, NULL), (2, 200, NULL) AS tab(t, c, st)
 ORDER BY t
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+Sort [t#x ASC NULLS FIRST], true
++- Project [t#x, diff#x]
+   +- Project [t#x, c#x, _w1#x, diff#x, diff#x]
+      +- Window [counter_diff(c#x, _w1#x, Some(UTC)) windowspecdefinition(t#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS diff#x], [t#x ASC NULLS FIRST]
+         +- Project [t#x, c#x, cast(st#x as timestamp) AS _w1#x]
+            +- SubqueryAlias tab
+               +- LocalRelation [t#x, c#x, st#x]
 
 
 -- !query
