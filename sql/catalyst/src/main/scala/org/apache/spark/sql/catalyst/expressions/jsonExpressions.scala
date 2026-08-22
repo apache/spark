@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import com.fasterxml.jackson.core.{JsonFactory, JsonProcessingException}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -31,12 +33,13 @@ import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
   RUNTIME_REPLACEABLE, TreePattern}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, GenericArrayData}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * Extracts json object from a json string based on json path specified, and returns json string
@@ -1201,7 +1204,410 @@ object JsonQuery {
 }
 
 /**
- * Converts an json input string to a [[StructType]], [[ArrayType]] or [[MapType]]
+ * Behavior of `JSON_ARRAY`'s `ON NULL` clause: what to do with NULL elements in the array.
+ */
+sealed trait JsonConstructorNullBehavior
+object JsonConstructorNullBehavior {
+  /** Include NULL elements as JSON `null` values. */
+  case object Null extends JsonConstructorNullBehavior
+  /** Omit NULL elements from the array. */
+  case object Absent extends JsonConstructorNullBehavior
+}
+
+/**
+ * Marker for expressions whose result is JSON text and therefore carry an implicit SQL/JSON
+ * `FORMAT JSON`: when such an expression appears as an argument of a JSON constructor (e.g.
+ * `JSON_ARRAY`), its value is spliced in verbatim rather than quoted as a JSON string, so
+ * `JSON_ARRAY(JSON_ARRAY(1))` yields `[[1]]`, not `[["[1]"]]`. Crucially, the constructor freezes
+ * this decision from the *lexical* argument at parse time (see `AstBuilder.visitJsonArray`) rather
+ * than re-deriving it from the child expression during evaluation, so a later optimizer rewrite
+ * (e.g. `CollapseProject` inlining a `JSON_ARRAY` alias into an argument position) cannot change
+ * whether a value is spliced or quoted. `JSON_OBJECT` / `JSON_QUERY` should extend this as they are
+ * added.
+ */
+trait ImplicitlyFormattedAsJson extends Expression
+
+// scalastyle:off line.size.limit
+/**
+ * The SQL:2016 `JSON_ARRAY` constructor function (feature T811): constructs a JSON array from
+ * a list of values, with optional `(NULL | ABSENT) ON NULL` control and `RETURNING` type clause.
+ *
+ * `NULL ON NULL` (non-default) keeps NULL elements as JSON `null` values.
+ * `ABSENT ON NULL` (default per the standard) omits NULL elements.
+ * RETURNING defaults to STRING.
+ *
+ * `formatJson(i)` marks element `i` as already-JSON text (SQL/JSON `FORMAT JSON`), so it is spliced
+ * in verbatim instead of quoted as a string. It is set once, at parse time, from the lexical
+ * argument -- implicitly for a nested JSON constructor and explicitly for a `... FORMAT JSON`
+ * clause -- and is a plain field (not a child), so optimizer rewrites that swap the child
+ * expression (e.g. `CollapseProject`) leave it unchanged. This keeps the output independent of plan
+ * shape: a value is spliced iff it was written as JSON in the source, never because a rewrite
+ * happened to substitute a JSON constructor into an argument position.
+ *
+ * {{{
+ *   JSON_ARRAY(1, 'x', true)                    -- '[1,"x",true]'
+ *   JSON_ARRAY(1, NULL, 3)                      -- '[1,3]'   (ABSENT ON NULL default)
+ *   JSON_ARRAY(1, NULL, 3 NULL ON NULL)         -- '[1,null,3]'
+ *   JSON_ARRAY()                                -- '[]'
+ *   JSON_ARRAY(JSON_ARRAY(1))                   -- '[[1]]'   (nested constructor: implicit FORMAT JSON)
+ *   JSON_ARRAY('[1,2]')                         -- '["[1,2]"]'   (plain string: quoted)
+ *   JSON_ARRAY('[1,2]' FORMAT JSON)             -- '[[1,2]]'   (explicit FORMAT JSON: spliced raw)
+ * }}}
+ */
+// scalastyle:on line.size.limit
+case class JsonArray(
+    values: Seq[Expression],
+    formatJson: Seq[Boolean],
+    needsValidation: Seq[Boolean],
+    nullBehavior: JsonConstructorNullBehavior,
+    returning: DataType,
+    timeZoneId: Option[String] = None)
+  extends Expression
+  with TimeZoneAwareExpression
+  with CodegenFallback
+  with ExpectsInputTypes
+  with QueryErrorsBase
+  with DefaultStringProducingExpression
+  with ImplicitlyFormattedAsJson {
+
+  // `formatJson(i)` freezes whether element `i` is spliced raw (vs quoted); `needsValidation(i)`
+  // freezes whether its raw text is arbitrary user input that must be JSON-validated at eval (an
+  // explicit `FORMAT JSON` on a non-constructor). Both are decided from the lexical argument at
+  // parse time (see `AstBuilder.visitJsonArray`) and never re-derived from the child expression,
+  // so an analyzer/optimizer rewrite that wraps a child (e.g. a default-collation `Cast` around a
+  // trusted nested constructor) cannot flip splicing or spuriously mark a trusted value as needing
+  // validation. A validated element implies a spliced one.
+  assert(values.length == formatJson.length && values.length == needsValidation.length,
+    "JsonArray requires one formatJson and one needsValidation flag per value")
+  assert(needsValidation.lazyZip(formatJson).forall((nv, fj) => !nv || fj),
+    "JsonArray needsValidation implies formatJson")
+
+  // True iff some element carries an *explicit* `FORMAT JSON` on a non-constructor: such a value is
+  // arbitrary user text validated at eval, so it can throw and must not be constant-folded. A
+  // nested (implicit) constructor produces well-formed JSON by construction and never throws here.
+  // Read straight off the frozen `needsValidation` flags -- never re-derived from the (possibly
+  // rewritten) child expressions -- so it drives both `throwable` and the `foldable` exclusion.
+  private lazy val hasExplicitFormatJson: Boolean = needsValidation.contains(true)
+
+  // Throwable only when the expression can actually throw at eval: when an element carries an
+  // explicit `FORMAT JSON` (validated, may throw on malformed text) or when a child is itself
+  // throwable. A plain `JSON_ARRAY(...)` with no explicit `FORMAT JSON` cannot throw (RETURNING is
+  // restricted to string types at analysis, so the result cast is STRING -> STRING), so leaving it
+  // non-throwable lets `PushPredicateThroughJoin` push safe filters like `JSON_ARRAY(k) = '[42]'`
+  // below a join.
+  override lazy val throwable: Boolean = children.exists(_.throwable) || hasExplicitFormatJson
+
+  // A non-throwing JSON array constructor always yields a value: NULL elements are dropped or
+  // rendered as JSON `null` (never propagated), the empty argument list yields `[]`, and the
+  // STRING -> STRING RETURNING cast cannot null a non-null input. For throwable shapes, report
+  // nullable conservatively so `NullPropagation` does not fold `JSON_ARRAY(...) IS [NOT] NULL` and
+  // accidentally skip evaluation-time validation or child exceptions.
+  override def nullable: Boolean = throwable
+
+  // The default RETURNING is a plain STRING, so mix in `DefaultStringProducingExpression` (above)
+  // to let `ApplyDefaultCollation` cast the result to a non-default object/session collation (e.g.
+  // `CREATE TABLE ... DEFAULT COLLATION UTF8_LCASE AS SELECT JSON_ARRAY(...)`). The `dataType`
+  // override below stays authoritative when RETURNING is given explicitly.
+
+  // A constant argument list has no per-row state, so let `ConstantFolding` evaluate the whole
+  // constructor once instead of serializing JSON row by row. But only fold shapes that cannot throw
+  // at eval: an explicit `FORMAT JSON` value is validated and may throw on malformed text, and
+  // `ConstantFolding` evaluates foldables outside conditional branches eagerly -- folding such a
+  // shape would surface the error at optimization even for rows a later filter/join would drop. A
+  // nested (implicit FORMAT JSON) value is produced by a constructor and is never malformed, so it
+  // stays foldable, and its rawness round-trips through `.sql` via an explicit `FORMAT JSON`.
+  override def foldable: Boolean = children.forall(_.foldable) && !hasExplicitFormatJson
+
+  override def children: Seq[Expression] = values
+
+  override def inputTypes: Seq[AbstractDataType] = values.map(_ => AnyDataType)
+
+  override def dataType: DataType = returning
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // A constructor emits JSON text, so RETURNING is restricted to string types (VARIANT is a
+    // deferred extension). CHAR/VARCHAR are normalized to STRING by the parser.
+    if (!JsonArray.isValidReturningType(returning)) {
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_RETURNING_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName), "returningType" -> toSQLType(returning)))
+    } else {
+      // Validate each element up front rather than failing at runtime: a FORMAT JSON element must
+      // be a string carrying JSON text, and every other element must be serializable to JSON. The
+      // latter mirrors `to_json`'s analysis-time `JacksonUtils.verifyType` check.
+      var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
+      var i = 0
+      while (i < values.length && result == TypeCheckResult.TypeCheckSuccess) {
+        val dt = values(i).dataType
+        if (formatJson(i) && !(dt.isInstanceOf[StringType] || dt == NullType)) {
+          // A FORMAT JSON element must carry JSON text (string), but an untyped NULL literal is
+          // allowed: `eval` handles nulls (ABSENT/NULL ON NULL) before it would ever splice, so
+          // `JSON_ARRAY(NULL FORMAT JSON)` behaves like any other NULL element.
+          result = DataTypeMismatch(
+            errorSubClass = "INVALID_JSON_FORMAT_JSON_INPUT",
+            messageParameters = Map(
+              "functionName" -> toSQLId(prettyName),
+              "position" -> (i + 1).toString,
+              "inputType" -> toSQLType(dt)))
+        } else {
+          val elemCheck = JacksonUtils.verifyType(prettyName, dt)
+          // `verifyType` accepts every `AtomicType`, but `JacksonGenerator` (the writer this shares
+          // with `to_json`) has no serializer for the spatial atomics and would fail at runtime.
+          // Reject them here so a passing analysis implies a serializable element. The scan mirrors
+          // `verifyType`'s traversal (struct fields, array elements, map *values* -- map keys are
+          // written via `toString`, so a spatial key is fine).
+          if (elemCheck.isFailure) {
+            result = elemCheck
+          } else if (JsonArray.containsUnsupportedJsonType(dt)) {
+            result = DataTypeMismatch(
+              errorSubClass = "CANNOT_CONVERT_TO_JSON",
+              messageParameters = Map(
+                "name" -> toSQLId(prettyName),
+                "type" -> toSQLType(dt)))
+          }
+        }
+        i += 1
+      }
+      result
+    }
+  }
+
+  // Reuses the mutable `castInput` row and per-element JSON writers, so it holds evaluation state
+  // and must be fresh-copied before interpreted execution (matches the neighboring JSON
+  // expressions).
+  override def stateful: Boolean = true
+
+  // A JSON array is heterogeneous, so each element is serialized with its own data type rather
+  // than a single shared element type. We build one serializer per child, each configured as a
+  // single-element `ArrayType(child.dataType)`; serializing `[value]` yields the text `[<frag>]`,
+  // whose outer brackets we strip to recover the element fragment `<frag>`. This reuses the same
+  // Jackson generation path as `to_json`, so numbers, decimals, datetimes, and nested structures
+  // are rendered correctly.
+  @transient private lazy val resolvedZoneId: String =
+    timeZoneId.getOrElse(SQLConf.get.sessionLocalTimeZone)
+
+  @transient private lazy val elementEvaluators: Array[StructsToJsonEvaluator] =
+    new Array[StructsToJsonEvaluator](values.length)
+
+  @transient private lazy val cachedValidatedFormatJsonTexts: Array[String] =
+    new Array[String](values.length)
+
+  @transient private lazy val singleElem: Array[Any] = new Array[Any](1)
+
+  // Wraps the reused `singleElem` array by reference (GenericArrayData does not copy), so a single
+  // instance is shared across elements and rows: `renderElement` mutates `singleElem` in place and
+  // the serializer reads it synchronously.
+  @transient private lazy val singleElemArray: GenericArrayData = new GenericArrayData(singleElem)
+
+  @transient private lazy val castInput: GenericInternalRow = new GenericInternalRow(1)
+
+  @transient private lazy val returningCast: Expression =
+    Cast(BoundReference(0, StringType, nullable = true), returning, timeZoneId, EvalMode.ANSI)
+
+  @transient private lazy val formatJsonFactory: JsonFactory = new JsonFactory()
+
+  // A FORMAT JSON element is spliced into the result verbatim, so it must itself be exactly one
+  // well-formed JSON value. `checkInputDataTypes` only guarantees the argument is string-typed; a
+  // string carrying `1,2` or `{bad` would otherwise corrupt the surrounding array into invalid or
+  // unintended JSON (e.g. `JSON_ARRAY('1,2' FORMAT JSON)` -> `[1,2]`). Validate the runtime value
+  // before appending: parse one value and require that nothing follows it.
+  private def validateJsonText(idx: Int, text: String): Unit = {
+    val valid =
+      try {
+        Utils.tryWithResource(formatJsonFactory.createParser(text)) { parser =>
+          if (parser.nextToken() == null) {
+            false // empty / whitespace-only input carries no JSON value
+          } else {
+            // For a scalar this is a no-op; for an array/object it advances to the matching close.
+            parser.skipChildren()
+            parser.nextToken() == null // reject anything trailing the first value
+          }
+        }
+      } catch {
+        case _: JsonProcessingException => false
+      }
+    if (!valid) {
+      throw QueryExecutionErrors.invalidJsonFormatJsonValueError(prettyName, idx + 1, text)
+    }
+  }
+
+  // Render a single non-null element to its JSON fragment via its own-typed serializer.
+  // TODO(SPARK-58730): this serializes each element as a one-element array and strips the brackets,
+  // so a row with N values does N Jackson flushes plus intermediate string/substring allocations.
+  // A JSON_ARRAY-specific evaluator that opens the top-level array once and writes each element
+  // into the shared generator (and codegen for the whole path) would avoid this per-element trip.
+  private def renderElement(idx: Int, value: Any): String = {
+    singleElem(0) = value
+    var evaluator = elementEvaluators(idx)
+    if (evaluator == null) {
+      evaluator = StructsToJsonEvaluator(
+        Map.empty, ArrayType(values(idx).dataType), Some(resolvedZoneId))
+      elementEvaluators(idx) = evaluator
+    }
+    val arrJson = evaluator
+      .evaluate(singleElemArray).asInstanceOf[UTF8String].toString
+    // `arrJson` is "[<frag>]" (compact, no spaces); strip the outer brackets.
+    arrJson.substring(1, arrJson.length - 1)
+  }
+
+  private def formatJsonText(idx: Int, value: Any): String = {
+    val text = value.asInstanceOf[UTF8String].toString
+    if (!needsValidation(idx)) {
+      text
+    } else if (values(idx).foldable) {
+      val cached = cachedValidatedFormatJsonTexts(idx)
+      if (cached != null) {
+        cached
+      } else {
+        validateJsonText(idx, text)
+        cachedValidatedFormatJsonTexts(idx) = text
+        text
+      }
+    } else {
+      validateJsonText(idx, text)
+      text
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val sb = new StringBuilder("[")
+    var first = true
+    var i = 0
+    while (i < values.length) {
+      val v = values(i).eval(input)
+      // ABSENT ON NULL drops NULL elements; NULL ON NULL keeps them as JSON `null`.
+      if (v != null || nullBehavior == JsonConstructorNullBehavior.Null) {
+        if (!first) sb.append(",")
+        first = false
+        if (v == null) {
+          sb.append("null")
+        } else if (formatJson(i)) {
+          // Already-JSON text (a nested JSON constructor or an explicit FORMAT JSON): splice it in
+          // verbatim. `checkInputDataTypes` guarantees a FORMAT JSON element is string-typed. A
+          // nested JSON constructor emits well-formed JSON by construction, but an explicit FORMAT
+          // JSON string is arbitrary user input, so validate it is exactly one well-formed JSON
+          // value before splicing to avoid corrupting the surrounding array. Whether validation is
+          // needed is the frozen parse-time `needsValidation(i)`, not a re-derivation from the
+          // (possibly rewritten) child -- an analyzer cast around a trusted nested constructor must
+          // not turn into a spurious per-row validation.
+          sb.append(formatJsonText(i, v))
+        } else {
+          sb.append(renderElement(i, v))
+        }
+      }
+      i += 1
+    }
+    sb.append("]")
+    val jsonStr = UTF8String.fromString(sb.toString)
+    if (returning == StringType) {
+      jsonStr
+    } else {
+      castInput.update(0, jsonStr)
+      returningCast.eval(castInput)
+    }
+  }
+
+  override def prettyName: String = "json_array"
+
+  override def sql: String = {
+    val valuesSQL = values.zip(formatJson).map { case (v, isJson) =>
+      // Emit SQL that reparses to the same splice/quote decision as the frozen `formatJson` flag.
+      // The parser splices a value iff it is an explicit `FORMAT JSON` or a lexically-nested JSON
+      // constructor (see `AstBuilder.visitJsonArray`), so the rendering depends on the flag and the
+      // (possibly analyzer/optimizer-rewritten) child:
+      //  - spliced + child is not a *bare* JSON constructor: render an explicit `FORMAT JSON` so
+      //    reparse splices it. This covers a plain FORMAT JSON string, an inlined `Cast`, and a
+      //    `Collate`-wrapped nested constructor alike -- crucially without depending on reparse
+      //    re-deriving implicit JSON through the wrapper's rendering (e.g. `Collate.sql` renders
+      //    function-style `collate(child, c)`, which reparse would not recognize as implicit).
+      //  - quoted + child would reparse as implicit JSON (a bare or `Collate`-wrapped constructor
+      //    an optimizer inlined into a quoted position): render through a neutral
+      //    `CAST(... AS STRING)` so reparse keeps it quoted (splicing would flip ["[1]"] to [[1]]).
+      //  - otherwise the child's shape already reproduces the flag, so render it as-is.
+      // Note: the splice test uses the *direct* child class (only a bare constructor round-trips
+      // implicitly); the quote test sees through a value-preserving `Collate` (but not a `Cast`,
+      // since the neutralization above relies on a cast reparsing as not-implicit).
+      val directlyImplicit = v.isInstanceOf[ImplicitlyFormattedAsJson]
+      val transitivelyImplicit = JsonArray.isImplicitlyJson(v)
+      if (isJson && !directlyImplicit) {
+        s"${v.sql} FORMAT JSON"
+      } else if (!isJson && transitivelyImplicit) {
+        s"CAST(${v.sql} AS STRING)"
+      } else {
+        v.sql
+      }
+    }.mkString(", ")
+    // Use reference identity, not value equality: an explicit `RETURNING STRING COLLATE ...`
+    // produces a distinct StringType instance that compares equal (`==`) to the default companion
+    // `StringType`, so `==` would drop it. Only the omitted default (the companion, by reference)
+    // should render nothing.
+    val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
+    val nullSQL = nullBehavior match {
+      case JsonConstructorNullBehavior.Null => " NULL ON NULL"
+      case JsonConstructorNullBehavior.Absent => ""
+    }
+    s"JSON_ARRAY($valuesSQL$nullSQL$returningSQL)"
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): JsonArray =
+    copy(values = newChildren)
+}
+
+object JsonArray {
+  /**
+   * Whether `e` is a lexically-nested JSON constructor -- i.e. carries an implicit SQL/JSON
+   * `FORMAT JSON` and should be spliced raw rather than quoted. Sees through a value-preserving
+   * `Collate` (a postfix `... COLLATE c` only annotates the collation of the JSON text, e.g.
+   * `JSON_ARRAY(JSON_ARRAY(1) COLLATE UTF8_LCASE)`), but deliberately NOT through a `Cast`:
+   * `AstBuilder`/`JsonArray.sql` use a `CAST(... AS STRING)` wrapper specifically to detach a value
+   * from implicit `FORMAT JSON`, so unwrapping it would defeat that neutralization.
+   */
+  @scala.annotation.tailrec
+  def isImplicitlyJson(e: Expression): Boolean = e match {
+    case c: Collate => isImplicitlyJson(c.child)
+    case _: ImplicitlyFormattedAsJson => true
+    case _ => false
+  }
+
+  /**
+   * `JSON_ARRAY` returns JSON text, so RETURNING is restricted to a plain STRING (VARIANT is
+   * deferred). `CharType` / `VarcharType` extend `StringType` but carry a length that `JSON_ARRAY`
+   * does not enforce -- it serializes the fragment itself without a length-checking cast -- so they
+   * are rejected: the parser normalizes a SQL `CHAR`/`VARCHAR` RETURNING to STRING before
+   * construction, and this guards a raw `CharType`/`VarcharType` supplied by direct Catalyst
+   * construction.
+   */
+  def isValidReturningType(dt: DataType): Boolean = dt match {
+    case _: CharType | _: VarcharType => false
+    case _: StringType => true
+    case _ => false
+  }
+
+  /**
+   * Whether `dt` contains a spatial atomic (`GEOMETRY` / `GEOGRAPHY`) in a position that
+   * `JacksonGenerator` would have to serialize. These are `AtomicType`s that
+   * `JacksonUtils.verifyType` accepts but the JSON writer has no serializer for, so they must be
+   * rejected at analysis. The traversal mirrors `verifyType`: it descends into struct fields, array
+   * elements, and map *values* (map keys are written via `toString`, so a spatial key is fine) and
+   * unwraps UDTs.
+   */
+  def containsUnsupportedJsonType(dt: DataType): Boolean = dt match {
+    case _: GeometryType | _: GeographyType => true
+    case st: StructType => st.exists(f => containsUnsupportedJsonType(f.dataType))
+    case at: ArrayType => containsUnsupportedJsonType(at.elementType)
+    case mt: MapType => containsUnsupportedJsonType(mt.valueType)
+    case udt: UserDefinedType[_] => containsUnsupportedJsonType(udt.sqlType)
+    case _ => false
+  }
+}
+
+/**
+ * Converts a JSON input string to a [[StructType]], [[ArrayType]] or [[MapType]]
  * with the specified schema.
  */
 // scalastyle:off line.size.limit

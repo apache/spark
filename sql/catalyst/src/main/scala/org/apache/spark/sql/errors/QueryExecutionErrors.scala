@@ -1396,6 +1396,25 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map.empty)
   }
 
+  def invalidJsonFormatJsonValueError(
+      functionName: String, position: Int, value: String): SparkRuntimeException = {
+    // Bound the echoed value: a FORMAT JSON argument can be a large payload column, and inlining it
+    // whole would bloat task-failure messages, logs, and UI/event metadata. Show a capped preview
+    // plus the full length instead.
+    val maxPreviewLen = 100
+    val preview = if (value.length > maxPreviewLen) {
+      s"${value.take(maxPreviewLen)}... (${value.length} characters)"
+    } else {
+      value
+    }
+    new SparkRuntimeException(
+      errorClass = "INVALID_JSON_FORMAT_JSON_VALUE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "position" -> position.toString,
+        "value" -> toSQLValue(preview, StringType)))
+  }
+
   def paramExceedOneCharError(paramName: String, actualValue: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "OPTION_VALUE_EXCEEDS_ONE_CHARACTER",

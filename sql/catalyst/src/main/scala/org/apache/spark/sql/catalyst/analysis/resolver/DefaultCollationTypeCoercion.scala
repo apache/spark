@@ -45,7 +45,13 @@ object DefaultCollationTypeCoercion {
   def apply(expression: Expression, collation: String): Expression = {
     val collatedStringType = StringType(collation)
     expression match {
-      case _: DefaultStringProducingExpression if collatedStringType != StringType =>
+      // Skip an expression that already carries an explicitly written string type (e.g.
+      // `JSON_ARRAY(... RETURNING STRING COLLATE UTF8_BINARY)`): the user chose it deliberately, so
+      // the object/view default must not overwrite it -- even when the explicit collation is the
+      // default UTF8_BINARY. `isExplicitlyCollatedStringType` distinguishes such an instance from
+      // the omitted companion-object default by reference identity.
+      case e: DefaultStringProducingExpression
+          if collatedStringType != StringType && !isExplicitlyCollatedStringType(e.dataType) =>
         Cast(child = expression, dataType = collatedStringType)
       case literal: Literal if hasDefaultStringType(literal.dataType) =>
         literal.copy(dataType = replaceDefaultStringType(literal.dataType, collatedStringType))
@@ -85,6 +91,13 @@ object DefaultCollationTypeCoercion {
       case stringType: StringType => stringType.eq(StringType)
       case _ => false
     }
+
+  /**
+   * A [[StringType]] that was written explicitly -- a distinct instance, not the companion-object
+   * default -- even when its collation is the default UTF8_BINARY (see [[isDefaultStringType]]).
+   */
+  private def isExplicitlyCollatedStringType(dataType: DataType): Boolean =
+    dataType.isInstanceOf[StringType] && !isDefaultStringType(dataType)
 
   /**
    * When a default collation is specified for a View,
