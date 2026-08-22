@@ -206,7 +206,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-22226: group splitted expressions into one method per nested class") {
+  test("SPARK-22226: group split expressions into one method per nested class") {
     val length = 10000
     val expressions = Seq.fill(length) {
       ToUTCTimestamp(
