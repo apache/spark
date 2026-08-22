@@ -62,6 +62,14 @@ Project [c1#x]
 
 
 -- !query
+SELECT IDENTIFIER(concat('a', 'b')) FROM VALUES(1) AS T(ab)
+-- !query analysis
+Project [ab#x]
++- SubqueryAlias T
+   +- LocalRelation [ab#x]
+
+
+-- !query
 CREATE SCHEMA IF NOT EXISTS s
 -- !query analysis
 CreateNamespace true
@@ -164,6 +172,14 @@ Project [c1#x]
 
 
 -- !query
+SELECT * FROM IDENTIFIER(concat('t', 'ab'))
+-- !query analysis
+Project [c1#x]
++- SubqueryAlias spark_catalog.s.tab
+   +- Relation spark_catalog.s.tab[c1#x] csv
+
+
+-- !query
 USE SCHEMA default
 -- !query analysis
 SetNamespaceCommand [default]
@@ -191,6 +207,13 @@ Project [coalesce(cast(null as int), 1) AS coalesce(NULL, 1)#x]
 
 
 -- !query
+SELECT IDENTIFIER(concat('COAL', 'ESCE'))(NULL, 1)
+-- !query analysis
+Project [coalesce(cast(null as int), 1) AS coalesce(NULL, 1)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT IDENTIFIER('abs')(c1) FROM VALUES(-1) AS T(c1)
 -- !query analysis
 Project [abs(c1#x) AS abs(c1)#x]
@@ -203,6 +226,483 @@ SELECT * FROM IDENTIFIER('ra' || 'nge')(0, 1)
 -- !query analysis
 Project [id#xL]
 +- Range (0, 1, step=1)
+
+
+-- !query
+VALUES(IDENTIFIER(abs(1)))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "dataType" : "int",
+    "expr" : "abs(1)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "abs(1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(nullif('a', 'a'))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "nullif('a', 'a')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 41,
+    "fragment" : "nullif('a', 'a')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(max('c1')) FROM VALUES(1) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "max('c1')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "max('c1')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(array_join(transform(array('c', '1'), element -> element), ''))
+FROM VALUES(1) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "array_join(transform(array('c', '1'), lambdafunction(namedlambdavariable(), namedlambdavariable())), '')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 80,
+    "fragment" : "array_join(transform(array('c', '1'), element -> element), '')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(rand()) FROM VALUES(1) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "rand()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "rand()"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(row_number() OVER ()) FROM VALUES(1) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "wf_expr" : "row_number()",
+    "wf_name" : "row_number"
+  }
+}
+
+
+-- !query
+SELECT IDENTIFIER(row_number() OVER (ORDER BY 'x')) FROM VALUES(1) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "row_number() OVER (ORDER BY 'x' ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 50,
+    "fragment" : "row_number() OVER (ORDER BY 'x')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(explode(array('c1'))) FROM VALUES(1) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "explode(array('c1'))",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 38,
+    "fragment" : "explode(array('c1'))"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(max('identifier_function_table'))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "max('identifier_function_table')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 57,
+    "fragment" : "max('identifier_function_table')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(row_number() OVER (ORDER BY 'x'))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "row_number() OVER (ORDER BY 'x' ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 57,
+    "fragment" : "row_number() OVER (ORDER BY 'x')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(
+  array_join(transform(array('identifier', '_function_table'), element -> element), '')
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "array_join(transform(array('identifier', '_function_table'), lambdafunction(namedlambdavariable(), namedlambdavariable())), '')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 113,
+    "fragment" : "array_join(transform(array('identifier', '_function_table'), element -> element), '')"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_name()
+RETURNS STRING
+RETURN 'c1'
+-- !query analysis
+CreateSQLFunctionCommand identifier_name, STRING, 'c1', false, true, false, false
+
+
+-- !query
+SELECT IDENTIFIER(identifier_name()) FROM VALUES(1) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "identifier_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 35,
+    "fragment" : "identifier_name()"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_name
+-- !query analysis
+DropFunctionCommand identifier_name, false, true
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_name()
+RETURNS STRING
+RETURN 'c1'
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.persistent_identifier_name, STRING, 'c1', false, false, false, false
+
+
+-- !query
+SELECT IDENTIFIER(persistent_identifier_name()) FROM VALUES(1) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "spark_catalog.default.persistent_identifier_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 46,
+    "fragment" : "persistent_identifier_name()"
+  } ]
+}
+
+
+-- !query
+DROP FUNCTION persistent_identifier_name
+-- !query analysis
+DropFunctionCommand spark_catalog.default.persistent_identifier_name, false, false
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_function(value INT)
+RETURNS INT
+RETURN value + 1
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.persistent_identifier_function, value INT, INT, value + 1, false, false, false, false
+
+
+-- !query
+SELECT IDENTIFIER(concat('persistent_identifier_', 'function'))(1)
+-- !query analysis
+Project [spark_catalog.default.persistent_identifier_function(value#x) AS spark_catalog.default.persistent_identifier_function(1)#x]
++- Project [cast(1 as int) AS value#x]
+   +- OneRowRelation
+
+
+-- !query
+DROP FUNCTION persistent_identifier_function
+-- !query analysis
+DropFunctionCommand spark_catalog.default.persistent_identifier_function, false, false
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_base_name()
+RETURNS STRING
+RETURN 'c1'
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.persistent_identifier_base_name, STRING, 'c1', false, false, false, false
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_nested_name()
+RETURNS STRING
+RETURN persistent_identifier_base_name()
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.persistent_identifier_nested_name, STRING, persistent_identifier_base_name(), false, false, false, false
+
+
+-- !query
+SELECT IDENTIFIER(persistent_identifier_nested_name()) FROM VALUES(1) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "spark_catalog.default.persistent_identifier_nested_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 53,
+    "fragment" : "persistent_identifier_nested_name()"
+  } ]
+}
+
+
+-- !query
+DROP FUNCTION persistent_identifier_nested_name
+-- !query analysis
+DropFunctionCommand spark_catalog.default.persistent_identifier_nested_name, false, false
+
+
+-- !query
+DROP FUNCTION persistent_identifier_base_name
+-- !query analysis
+DropFunctionCommand spark_catalog.default.persistent_identifier_base_name, false, false
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_relation_name()
+RETURNS STRING
+RETURN 'identifier_function_table'
+-- !query analysis
+CreateSQLFunctionCommand identifier_relation_name, STRING, 'identifier_function_table', false, true, false, false
+
+
+-- !query
+CREATE TABLE identifier_function_table(c1 INT) USING csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`identifier_function_table`, false
+
+
+-- !query
+SELECT * FROM IDENTIFIER(identifier_relation_name())
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "identifier_relation_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 51,
+    "fragment" : "identifier_relation_name()"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_relation_count()
+RETURNS BIGINT
+RETURN SELECT count(*) FROM IDENTIFIER(concat('identifier_function_', 'table'))
+-- !query analysis
+CreateSQLFunctionCommand identifier_relation_count, BIGINT, SELECT count(*) FROM IDENTIFIER(concat('identifier_function_', 'table')), false, true, false, false
+
+
+-- !query
+SELECT identifier_relation_count()
+-- !query analysis
+Project [identifier_relation_count() AS identifier_relation_count()#xL]
+:  +- Aggregate [count(1) AS count(1)#xL]
+:     +- SubqueryAlias spark_catalog.default.identifier_function_table
+:        +- Relation spark_catalog.default.identifier_function_table[c1#x] csv
++- Project
+   +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_relation_count
+-- !query analysis
+DropFunctionCommand identifier_relation_count, false, true
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_relation_name()
+RETURNS STRING
+RETURN 'identifier_function_table'
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.persistent_identifier_relation_name, STRING, 'identifier_function_table', false, false, false, false
+
+
+-- !query
+SELECT * FROM IDENTIFIER(persistent_identifier_relation_name())
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "spark_catalog.default.persistent_identifier_relation_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 62,
+    "fragment" : "persistent_identifier_relation_name()"
+  } ]
+}
+
+
+-- !query
+DROP FUNCTION persistent_identifier_relation_name
+-- !query analysis
+DropFunctionCommand spark_catalog.default.persistent_identifier_relation_name, false, false
+
+
+-- !query
+DROP TABLE identifier_function_table
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.identifier_function_table
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_relation_name
+-- !query analysis
+DropFunctionCommand identifier_relation_name, false, true
 
 
 -- !query
@@ -744,6 +1244,12 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t`, false
 
 
 -- !query
+CREATE TABLE identifier_name_source(name STRING) USING csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`identifier_name_source`, false
+
+
+-- !query
 SELECT * FROM IDENTIFIER((SELECT 't'))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -760,6 +1266,50 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 26,
     "stopIndex" : 37,
     "fragment" : "(SELECT 't')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER((SELECT max(name) FROM identifier_name_source))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 71,
+    "fragment" : "(SELECT max(name) FROM identifier_name_source)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(
+  (SELECT 'x' FROM (SELECT 1) WHERE explode(array(1)) = 1)
+)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 84,
+    "fragment" : "(SELECT 'x' FROM (SELECT 1) WHERE explode(array(1)) = 1)"
   } ]
 }
 
@@ -846,6 +1396,13 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "SELECT 'col1'"
   } ]
 }
+
+
+-- !query
+DROP TABLE identifier_name_source
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.identifier_name_source
 
 
 -- !query
