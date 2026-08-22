@@ -78,6 +78,8 @@ case class CallMethodViaReflection(
   // This could be pretty much anything.
   override def expensive: Boolean = true
 
+  override def stateful: Boolean = true
+
   def this(children: Seq[Expression]) =
     this(children, true)
 
