@@ -71,6 +71,16 @@ private[memory] class StorageMemoryPool(
   }
 
   /**
+   * Acquire `numBytes` for a [[ManagedConsumer]]: external bytes that never enter
+   * [[memoryStore]]'s `entries`, falling back to LRU eviction for any deficit. Caller is
+   * responsible for [[MemoryManager.shrinkExternal]] BEFORE this call; self-exclusion is
+   * handled in [[MemoryManager.acquireStorageMemory(self:ManagedConsumer,*]].
+   */
+  def acquireMemoryForManagedConsumer(numBytes: Long): Boolean = lock.synchronized {
+    acquireMemoryInternal(None, numBytes, math.max(0L, numBytes - memoryFree))
+  }
+
+  /**
    * Acquire N bytes of storage memory for the given block, evicting existing ones if necessary.
    *
    * @param blockId the ID of the block we are acquiring storage memory for
@@ -82,15 +92,21 @@ private[memory] class StorageMemoryPool(
       blockId: BlockId,
       numBytesToAcquire: Long,
       numBytesToFree: Long): Boolean = lock.synchronized {
+    acquireMemoryInternal(Some(blockId), numBytesToAcquire, numBytesToFree)
+  }
+
+  private def acquireMemoryInternal(
+      blockId: Option[BlockId],
+      numBytesToAcquire: Long,
+      numBytesToFree: Long): Boolean = {
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
     if (numBytesToFree > 0) {
-      memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree, memoryMode)
+      memoryStore.evictBlocksToFreeSpace(blockId, numBytesToFree, memoryMode)
     }
-    // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
-    // back into this StorageMemoryPool in order to free memory. Therefore, these variables
-    // should have been updated.
+    // NOTE: If the memory store evicts blocks, those evictions synchronously call back
+    // into this StorageMemoryPool to free memory, so _memoryUsed is already updated.
     val enoughMemory = numBytesToAcquire <= memoryFree
     if (enoughMemory) {
       _memoryUsed += numBytesToAcquire
