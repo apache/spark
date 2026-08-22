@@ -2375,7 +2375,7 @@
   },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
-      "Distinct window functions are not supported: <windowExpr>."
+      "Unsupported DISTINCT window function: <windowExpr>. DISTINCT aggregate window functions require a lower frame bound of UNBOUNDED PRECEDING and orderable arguments, and do not support Python UDAFs."
     ],
     "sqlState" : "0A000"
   },
