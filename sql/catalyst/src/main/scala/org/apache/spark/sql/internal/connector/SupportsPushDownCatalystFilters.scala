@@ -38,11 +38,13 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
    * Returns additional filters that the data source inferred and that the query does not need in
    * order to return the right rows. These are advisory: Spark adds them to the logical Filter node
    * only so that later optimizer rules can use them, for example to make partition statistics more
-   * accurate for cost-based optimization. Spark never evaluates them, so they are dropped from
-   * FilterExec in the final physical plan.
+   * accurate for cost-based optimization. They are discarded if a join, aggregate, or variant
+   * extraction is pushed. Those operators replace the scan output, so Spark cannot rebind the
+   * advisory filters onto it. Spark never evaluates them, so they are dropped from FilterExec in
+   * the final physical plan.
    *
    * Spark asks for these after [[pushFilters]], so a source can infer them from the user filters,
-   * if necessary.
+   * if necessary. For now this is only supported when there are filters being pushed down.
    *
    * Advisory filters must be deterministic and must not contain subqueries.
    *

@@ -126,17 +126,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.pushedPredicates.mkString(", ")
       }
 
-      sHolder.advisoryFilterExpressions = sHolder.builder match {
-        case r: SupportsPushDownCatalystFilters =>
-          val advisoryFilters = r.advisoryFilters.filter { filter =>
-            filter.deterministic && !SubqueryExpression.hasSubquery(filter)
-          }
-          rebindFilters(advisoryFilters, sHolder.output)
-        case _ =>
-          Nil
-      }
-      val postScanFilters = postScanFiltersWithoutSubquery ++
-        sHolder.advisoryFilterExpressions ++ normalizedFiltersWithSubquery
+      sHolder.advisoryFilterExpressions = getAdvisoryFilters(sHolder)
+      // Keep advisory filters off the plan until the other source pushdowns have run. Their
+      // matchers require that no Spark-side filters remain, but advisory filters do not need to be
+      // evaluated and therefore must not block an otherwise independent pushdown.
+      val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
 
       // Compute the pushed filter expressions: the normalized filters that were fully pushed
       // down (i.e., not in postScanFilters). These are stored on the scan relation for potential
@@ -989,7 +983,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
-      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
+      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp ++
+        sHolder.advisoryFilterExpressions
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
         sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
@@ -1275,6 +1270,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
 
         addToScan(plan)
+    }
+  }
+
+  private def getAdvisoryFilters(sHolder: ScanBuilderHolder): Seq[Expression] = {
+    sHolder.builder match {
+      case r: SupportsPushDownCatalystFilters =>
+        val advisoryFilters = r.advisoryFilters.filter { filter =>
+          filter.deterministic && !SubqueryExpression.hasSubquery(filter)
+        }
+        rebindFilters(advisoryFilters, sHolder.output).flatMap(splitConjunctivePredicates)
+      case _ =>
+        Nil
     }
   }
 
