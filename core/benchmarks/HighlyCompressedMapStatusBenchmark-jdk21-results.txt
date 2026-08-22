@@ -1,0 +1,79 @@
+================================================================================================
+Build HighlyCompressedMapStatus, skewed block sizes
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+2048 shuffle partitions:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.1        7166.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.1       18042.0       0.4X
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+10000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.1       14792.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0       55917.0       0.3X
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+50000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.0       53250.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0      375959.0       0.1X
+
+
+================================================================================================
+Build HighlyCompressedMapStatus, organ pipe block sizes
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+2048 shuffle partitions:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.1        7375.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0       25209.0       0.3X
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+10000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.0       20166.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0      105375.0       0.2X
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+50000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.0       85708.0       1.0X
+skewed block sizes recorded accurately                1              1           0          0.0      579709.0       0.1X
+
+
+================================================================================================
+Read block sizes out of HighlyCompressedMapStatus
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+2048 shuffle partitions:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+sum every block size over the map statuses              1              1           0        210.7           4.7       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+50000 shuffle partitions:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+sum every block size over the map statuses             19             20           0        256.5           3.9       1.0X
+
+
+================================================================================================
+Driver heap retained by MapOutputTracker
+================================================================================================
+
+2001 partitions, 10000 map tasks             retained MiB   bytes per task serialized KiB
+------------------------------------------------------------------------------------------
+skewed block sizes not recorded                         1              164             13
+skewed block sizes recorded accurately                  6              668             27
+
+
