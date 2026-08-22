@@ -79,7 +79,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             else:
                 raise PySparkTypeError(
                     errorClass="UNSUPPORTED_PIPELINES_DATASET_TYPE",
-                    messageParameters={"output_type": type(output).__name__},
+                    messageParameters={"dataset_type": type(output).__name__},
                 )
         elif isinstance(output, TemporaryView):
             output_type = pb2.OutputType.TEMPORARY_VIEW
@@ -93,7 +93,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         else:
             raise PySparkTypeError(
                 errorClass="UNSUPPORTED_PIPELINES_DATASET_TYPE",
-                messageParameters={"output_type": type(output).__name__},
+                messageParameters={"dataset_type": type(output).__name__},
             )
 
         inner_command = pb2.PipelineCommand.DefineOutput(
