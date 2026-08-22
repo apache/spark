@@ -45,7 +45,8 @@ public class TableInfo {
 
   /**
    * The write distribution mode implied by a global {@code ORDERED BY}: range-partition each write
-   * so the ordering holds across files, not only within one. See {@link #DISTRIBUTION_MODE_HASH}.
+   * so the ordering holds across write tasks, not only within one. See
+   * {@link #DISTRIBUTION_MODE_HASH}.
    */
   public static final String DISTRIBUTION_MODE_RANGE = "range";
 

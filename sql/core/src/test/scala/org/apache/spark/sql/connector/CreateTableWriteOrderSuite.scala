@@ -233,8 +233,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         analyze("CREATE TABLE testcat.t (ID INT) USING foo ORDERED BY truncate(4, id)")
       }
-      assert(e.getCondition ===
-        "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_NESTED_COLUMN_IS_UNSUPPORTED")
+      assert(e.getCondition === "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_UNKNOWN_COLUMN")
       assert(e.getMessageParameters.get("cols") === "`id`")
 
       // and normalization is per reference, not per transform: one unresolvable reference must not
@@ -269,8 +268,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         analyze("CREATE TABLE testcat.t (ID INT) USING foo ORDERED BY id")
       }
-      assert(e.getCondition ===
-        "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_NESTED_COLUMN_IS_UNSUPPORTED")
+      assert(e.getCondition === "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_UNKNOWN_COLUMN")
       assert(e.getMessageParameters.get("cols") === "`id`")
     }
   }
@@ -307,13 +305,12 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         "CREATE TABLE testcat.t USING foo ORDERED BY nope AS SELECT 1 AS id"
       ).foreach { stmt =>
         val e = intercept[AnalysisException](analyze(stmt))
-        assert(e.getCondition ===
-          "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_NESTED_COLUMN_IS_UNSUPPORTED", stmt)
+        assert(e.getCondition === "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_UNKNOWN_COLUMN", stmt)
         assert(e.getMessageParameters.get("cols") === "`nope`", stmt)
       }
 
-      // a nested struct field is fine, though -- only a missing column, or one inside a map or
-      // array, is rejected
+      // a nested struct field is fine, though -- a reference through a map or array key fails
+      // its own way, with INVALID_FIELD_NAME, rather than reaching this condition
       analyze("CREATE TABLE testcat.t (p STRUCT<x: INT>) USING foo ORDERED BY p.x")
     }
   }

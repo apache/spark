@@ -130,7 +130,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     The distribution decides how far the order reaches, and this clause picks one when
     `DISTRIBUTED BY PARTITION` is absent: a bare `ORDERED BY` range-partitions each write, so the
     order holds across the whole table, while `LOCALLY ORDERED BY` asks for it to hold within each
-    written file only, without a shuffle. `UNORDERED` on its own asks for no distribution either.
+    write task only, without a shuffle. `UNORDERED` on its own asks for no distribution either.
 
     When `DISTRIBUTED BY PARTITION` is given it decides the distribution instead, and the order then
     holds within each write task. `LOCALLY` therefore adds nothing beside it, and `UNORDERED` beside
@@ -150,15 +150,16 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
         DISTRIBUTED BY PARTITION UNORDERED;
     ```
 
-    Both clauses are passed to the data source, which has to support them: a data source that does
-    not advertise support for a write distribution and ordering rejects the statement rather than
-    creating a table that silently lacks the requested layout. The built-in data sources do not
+    Both clauses are passed to the catalog, which has to support them: a catalog that does not
+    advertise support for a write distribution and ordering rejects the statement rather than
+    creating a table that silently lacks the requested layout. The built-in catalogs do not
     support them.
 
-    What the data source records is a *default* for later writes, not a statement about the data
+    What the catalog records is a *default* for later writes, not a statement about the data
     already in the table: an individual write may override it, and rewriting existing data to match
-    a newly requested layout is a separate operation. `SHOW CREATE TABLE` reproduces the clauses and
-    `DESCRIBE TABLE EXTENDED` reports them, for a data source that records them.
+    a newly requested layout is a separate operation. `SHOW CREATE TABLE` reproduces the clauses
+    when the recorded pair has a clause form, and `DESCRIBE TABLE EXTENDED` reports both values in
+    every case.
 
 * **AS select_statement**
 
