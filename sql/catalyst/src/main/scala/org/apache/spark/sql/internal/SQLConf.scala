@@ -1413,6 +1413,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val APPLY_DEFAULT_COLLATION_TO_IMPLICIT_CASTS =
+    buildConf("spark.sql.collation.applyDefaultCollationToImplicitCasts.enabled")
+      .internal()
+      .doc("When true, applies default collation to implicit casts to string.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val COLLATION_AWARE_HASHING_ENABLED =
     buildConf("spark.sql.legacy.collationAwareHashFunctions")
       .internal()

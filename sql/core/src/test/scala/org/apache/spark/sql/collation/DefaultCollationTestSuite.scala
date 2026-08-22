@@ -768,6 +768,8 @@ abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
   // types. E.g., UDFs don't support char/varchar as input parameters/return types.
   protected def stringTestNamesV1: Seq[String] = Seq(
     "Check AttributeReference dataType from View with default collation",
+    "implicit casts in view definitions use the view default collation",
+    "legacy implicit cast default collation behavior in view definitions",
     "CTAS with DEFAULT COLLATION and VIEW",
     "default string producing expressions in view definition",
     "Test UDTF with default collation",
@@ -805,6 +807,57 @@ abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
           assert(dataType == StringType("UTF8_LCASE"))
         case _ =>
           assert(false)
+      }
+    }
+  }
+
+  testString("implicit casts in view definitions use the view default collation") { _ =>
+    val prefix = "SYSTEM.BUILTIN"
+    withTable(testTable1) {
+      sql(s"CREATE TABLE $testTable1 (c1 STRING, d DATE)")
+      sql(
+        s"""INSERT INTO $testTable1 VALUES
+           |('ignored', DATE'2026-08-10'),
+           |('matched', DATE'2026-08-11')""".stripMargin)
+
+      withView(testView) {
+        sql(
+          s"""CREATE VIEW $testView
+             |DEFAULT COLLATION UTF8_LCASE AS
+             |SELECT c1, lower(d) AS d_text
+             |FROM $testTable1
+             |WHERE lower(d) = '2026-08-11'""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT COLLATION(c1), COLLATION(d_text) FROM $testView"),
+          Row(s"$prefix.UTF8_BINARY", s"$prefix.UTF8_LCASE"))
+        checkAnswer(
+          sql(s"SELECT c1, d_text FROM $testView"),
+          Row("matched", "2026-08-11"))
+      }
+    }
+  }
+
+  testString("legacy implicit cast default collation behavior in view definitions") { _ =>
+    val prefix = "SYSTEM.BUILTIN"
+    withSQLConf(SQLConf.APPLY_DEFAULT_COLLATION_TO_IMPLICIT_CASTS.key -> "false") {
+      withTable(testTable1) {
+        sql(s"CREATE TABLE $testTable1 (d DATE)")
+        sql(s"INSERT INTO $testTable1 VALUES (DATE'2026-08-11')")
+
+        withView(testView) {
+          sql(
+            s"""CREATE VIEW $testView
+               |DEFAULT COLLATION UTF8_LCASE AS
+               |SELECT
+               |  lower(d) AS implicit_d_text,
+               |  lower(CAST(d AS STRING)) AS explicit_d_text
+               |FROM $testTable1""".stripMargin)
+
+          checkAnswer(
+            sql(s"SELECT COLLATION(implicit_d_text), COLLATION(explicit_d_text) FROM $testView"),
+            Row(s"$prefix.UTF8_BINARY", s"$prefix.UTF8_LCASE"))
+        }
       }
     }
   }

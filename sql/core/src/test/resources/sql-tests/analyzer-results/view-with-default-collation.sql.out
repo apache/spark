@@ -377,7 +377,7 @@ Distinct
 +- Project [collation(c1#x) AS collation(c1)#x]
    +- SubqueryAlias spark_catalog.default.v
       +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -390,7 +390,7 @@ Distinct
 +- Project [collation(c2#x) AS collation(c2)#x]
    +- SubqueryAlias spark_catalog.default.v
       +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -403,7 +403,7 @@ Distinct
 +- Project [collation(c3#x) AS collation(c3)#x]
    +- SubqueryAlias spark_catalog.default.v
       +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -416,7 +416,7 @@ Aggregate [count(1) AS count(1)#xL]
 +- Filter (c1#x = A)
    +- SubqueryAlias spark_catalog.default.v
       +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -429,7 +429,7 @@ Aggregate [count(1) AS count(1)#xL]
 +- Filter (c2#x = a)
    +- SubqueryAlias spark_catalog.default.v
       +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -442,7 +442,7 @@ Aggregate [count(1) AS count(1)#xL]
 +- Filter (c3#x = Č)
    +- SubqueryAlias spark_catalog.default.v
       +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -573,7 +573,7 @@ SELECT COLLATION(c4) FROM v
 Project [collation(c4#x) AS collation(c4)#x]
 +- SubqueryAlias spark_catalog.default.v
    +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, c3#x, c4#x, c5#x])
-      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
+      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_BINARY) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
          +- Project [c1#x, c2#x, c3#x, c AS c4#x, scalar-subquery#x [] AS c5#x]
             :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
             :     :  +- Project [CASE WHEN ((š = S) = true) THEN d ELSE b END AS CASE WHEN (('š' collate sr_CI_AI = 'S' collate sr_CI_AI) = true) THEN 'd' collate sr_CI_AI ELSE 'b' collate sr_CI_AI END#x]
@@ -590,7 +590,7 @@ SELECT COLLATION(c5) FROM v
 Project [collation(c5#x) AS collation(c5)#x]
 +- SubqueryAlias spark_catalog.default.v
    +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, c3#x, c4#x, c5#x])
-      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
+      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_BINARY) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
          +- Project [c1#x, c2#x, c3#x, c AS c4#x, scalar-subquery#x [] AS c5#x]
             :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
             :     :  +- Project [CASE WHEN ((š = S) = true) THEN d ELSE b END AS CASE WHEN (('š' collate sr_CI_AI = 'S' collate sr_CI_AI) = true) THEN 'd' collate sr_CI_AI ELSE 'b' collate sr_CI_AI END#x]
@@ -607,7 +607,7 @@ SELECT c5 FROM v
 Project [c5#x]
 +- SubqueryAlias spark_catalog.default.v
    +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, c3#x, c4#x, c5#x])
-      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
+      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_BINARY) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
          +- Project [c1#x, c2#x, c3#x, c AS c4#x, scalar-subquery#x [] AS c5#x]
             :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
             :     :  +- Project [CASE WHEN ((š = S) = true) THEN d ELSE b END AS CASE WHEN (('š' collate sr_CI_AI = 'S' collate sr_CI_AI) = true) THEN 'd' collate sr_CI_AI ELSE 'b' collate sr_CI_AI END#x]
@@ -996,7 +996,7 @@ Distinct
 +- Project [collation(c1#x) AS collation(c1)#x]
    +- SubqueryAlias v
       +- View (`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -1009,7 +1009,7 @@ Distinct
 +- Project [collation(c2#x) AS collation(c2)#x]
    +- SubqueryAlias v
       +- View (`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -1022,7 +1022,7 @@ Distinct
 +- Project [collation(c3#x) AS collation(c3)#x]
    +- SubqueryAlias v
       +- View (`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -1035,7 +1035,7 @@ Aggregate [count(1) AS count(1)#xL]
 +- Filter (c1#x = A)
    +- SubqueryAlias v
       +- View (`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -1048,7 +1048,7 @@ Aggregate [count(1) AS count(1)#xL]
 +- Filter (c2#x = a)
    +- SubqueryAlias v
       +- View (`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -1061,7 +1061,7 @@ Aggregate [count(1) AS count(1)#xL]
 +- Filter (c3#x = Č)
    +- SubqueryAlias v
       +- View (`v`, [c1#x, c2#x, c3#x])
-         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+         +- Project [cast(c1#x as string collate UTF8_BINARY) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
             +- Project [c1#x, c2#x, ć AS c3#x]
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
@@ -1192,7 +1192,7 @@ SELECT COLLATION(c4) FROM v
 Project [collation(c4#x) AS collation(c4)#x]
 +- SubqueryAlias v
    +- View (`v`, [c1#x, c2#x, c3#x, c4#x, c5#x])
-      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
+      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_BINARY) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
          +- Project [c1#x, c2#x, c3#x, c AS c4#x, scalar-subquery#x [] AS c5#x]
             :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
             :     :  +- Project [CASE WHEN ((š = S) = true) THEN d ELSE b END AS CASE WHEN (('š' collate sr_CI_AI = 'S' collate sr_CI_AI) = true) THEN 'd' collate sr_CI_AI ELSE 'b' collate sr_CI_AI END#x]
@@ -1209,7 +1209,7 @@ SELECT COLLATION(c5) FROM v
 Project [collation(c5#x) AS collation(c5)#x]
 +- SubqueryAlias v
    +- View (`v`, [c1#x, c2#x, c3#x, c4#x, c5#x])
-      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
+      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_BINARY) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
          +- Project [c1#x, c2#x, c3#x, c AS c4#x, scalar-subquery#x [] AS c5#x]
             :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
             :     :  +- Project [CASE WHEN ((š = S) = true) THEN d ELSE b END AS CASE WHEN (('š' collate sr_CI_AI = 'S' collate sr_CI_AI) = true) THEN 'd' collate sr_CI_AI ELSE 'b' collate sr_CI_AI END#x]
@@ -1226,7 +1226,7 @@ SELECT c5 FROM v
 Project [c5#x]
 +- SubqueryAlias v
    +- View (`v`, [c1#x, c2#x, c3#x, c4#x, c5#x])
-      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
+      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_BINARY) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as string collate sr_CI_AI) AS c4#x, cast(c5#x as string collate sr_CI_AI) AS c5#x]
          +- Project [c1#x, c2#x, c3#x, c AS c4#x, scalar-subquery#x [] AS c5#x]
             :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
             :     :  +- Project [CASE WHEN ((š = S) = true) THEN d ELSE b END AS CASE WHEN (('š' collate sr_CI_AI = 'S' collate sr_CI_AI) = true) THEN 'd' collate sr_CI_AI ELSE 'b' collate sr_CI_AI END#x]
