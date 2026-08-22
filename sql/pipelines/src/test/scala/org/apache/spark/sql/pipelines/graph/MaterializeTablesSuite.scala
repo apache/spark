@@ -22,14 +22,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
-import org.apache.spark.sql.connector.catalog.{
-  CatalogV2Util,
-  Identifier,
-  InMemoryTableCatalog,
-  Table => V2Table,
-  TableCatalog,
-  TableChange
-}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryTableCatalog, Table => V2Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, FieldReference}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
@@ -57,14 +50,11 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = false, "comment1")
-              .add("x2", IntegerType, nullable = true, "comment2")
-          ),
+              .add("x2", IntegerType, nullable = true, "comment2")),
           comment = Option("p-comment"),
-          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
-        )
+          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "a")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
@@ -74,9 +64,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       catalogTable.columns() sameElements CatalogV2Util.structTypeToV2Columns(
         new StructType()
           .add("x", IntegerType, nullable = false, "comment1")
-          .add("x2", IntegerType, nullable = true, "comment2")
-      )
-    )
+          .add("x2", IntegerType, nullable = true, "comment2")))
     assert(catalogTable.properties().get(TableCatalog.PROP_COMMENT) == "p-comment")
 
     materializeGraph(
@@ -86,22 +74,17 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = false, "comment3")
-              .add("x2", IntegerType, nullable = true, "comment4")
-          ),
+              .add("x2", IntegerType, nullable = true, "comment4")),
           comment = Option("p-comment"),
-          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
-        )
+          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
     val catalogTable2 = catalog.loadTable(identifier)
     assert(
       catalogTable2.columns() sameElements CatalogV2Util.structTypeToV2Columns(
         new StructType()
           .add("x", IntegerType, nullable = false, "comment3")
-          .add("x2", IntegerType, nullable = true, "comment4")
-      )
-    )
+          .add("x2", IntegerType, nullable = true, "comment4")))
     assert(catalogTable2.properties().get(TableCatalog.PROP_COMMENT) == "p-comment")
 
     materializeGraph(
@@ -111,23 +94,18 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = false)
-              .add("x2", IntegerType, nullable = true)
-          ),
+              .add("x2", IntegerType, nullable = true)),
           comment = Option("p-comment"),
-          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
-        )
+          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val catalogTable3 = catalog.loadTable(identifier)
     assert(
       catalogTable3.columns() sameElements CatalogV2Util.structTypeToV2Columns(
         new StructType()
           .add("x", IntegerType, nullable = false, comment = null)
-          .add("x2", IntegerType, nullable = true, comment = null)
-      )
-    )
+          .add("x2", IntegerType, nullable = true, comment = null)))
     assert(catalogTable3.properties().get(TableCatalog.PROP_COMMENT) == "p-comment")
   }
 
@@ -135,21 +113,12 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow(
-          "t1",
-          "t1",
-          query = dfFlowFunc(Seq(1, 2, 3).toDF("x"))
-        )
-        registerFlow(
-          "t2",
-          "t2",
-          query = dfFlowFunc(Seq("a", "b").toDF("y"))
-        )
+        registerFlow("t1", "t1", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
+        registerFlow("t2", "t2", query = dfFlowFunc(Seq("a", "b").toDF("y")))
         registerTable("t1")
         registerTable("t2")
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val identifier1 = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t1")
     val identifier2 = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t2")
@@ -159,41 +128,29 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     assert(
       catalogTable1.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("x", IntegerType))
-    )
+        .structTypeToV2Columns(new StructType().add("x", IntegerType)))
     assert(
       catalogTable2.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("y", StringType))
-    )
+        .structTypeToV2Columns(new StructType().add("y", StringType)))
   }
 
   test("temporary views don't get materialized") {
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow(
-          "t2",
-          "t2",
-          query = dfFlowFunc(Seq("a", "b").toDF("y"))
-        )
+        registerFlow("t2", "t2", query = dfFlowFunc(Seq("a", "b").toDF("y")))
         registerTable("t2")
-        registerView(
-          "t1",
-          dfFlowFunc(Seq(1, 2, 3).toDF("x"))
-        )
+        registerView("t1", dfFlowFunc(Seq(1, 2, 3).toDF("x")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     assert(
       !catalog.tableExists(
-        Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t1")
-      )
-    )
+        Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t1")))
     assert(
-      catalog.tableExists(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t2"))
-    )
+      catalog.tableExists(
+        Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t2")))
   }
 
   // TableManager performs different validations for batch tables vs streaming tables when
@@ -202,15 +159,11 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   // it is possible to do that.
   test("batch flow reading from streaming table") {
     class P1 extends TestGraphRegistrationContext(spark) {
-      registerTable(
-        "a",
-        query = Option(dfFlowFunc(spark.readStream.format("rate").load()))
-      )
+      registerTable("a", query = Option(dfFlowFunc(spark.readStream.format("rate").load())))
       // Defines a column called timestamp as `int`.
       registerMaterializedView(
         "b",
-        query = sqlFlowFunc(spark, "SELECT value AS timestamp FROM a")
-      )
+        query = sqlFlowFunc(spark, "SELECT value AS timestamp FROM a"))
     }
     materializeGraph(new P1().resolveToDataflowGraph(), storageRoot = storageRoot)
 
@@ -219,27 +172,19 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       catalog.loadTable(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "b"))
     assert(
       b.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("timestamp", LongType))
-    )
+        .structTypeToV2Columns(new StructType().add("timestamp", LongType)))
 
     class P2 extends TestGraphRegistrationContext(spark) {
-      registerTable(
-        "a",
-        query = Option(dfFlowFunc(spark.readStream.format("rate").load()))
-      )
+      registerTable("a", query = Option(dfFlowFunc(spark.readStream.format("rate").load())))
       // Defines a column called timestamp as `timestamp`.
-      registerMaterializedView(
-        "b",
-        query = sqlFlowFunc(spark, "SELECT timestamp FROM a")
-      )
+      registerMaterializedView("b", query = sqlFlowFunc(spark, "SELECT timestamp FROM a"))
     }
     materializeGraph(new P2().resolveToDataflowGraph(), storageRoot = storageRoot)
     val b2 =
       catalog.loadTable(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "b"))
     assert(
       b2.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("timestamp", TimestampType))
-    )
+        .structTypeToV2Columns(new StructType().add("timestamp", TimestampType)))
   }
 
   test("schema matches existing table schema") {
@@ -250,23 +195,19 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val table = catalog.loadTable(identifier)
     assert(
       table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
-        new StructType().add("x", IntegerType)
-      )
-    )
+        new StructType().add("x", IntegerType)))
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
         registerFlow("t2", "t2", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
         registerTable("t2")
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val table2 = catalog.loadTable(identifier)
     assert(
       table2.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("x", IntegerType))
-    )
+        .structTypeToV2Columns(new StructType().add("x", IntegerType)))
   }
 
   test("invalid schema merge") {
@@ -280,8 +221,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         registerView("a", query = dfFlowFunc(streamInts.toDF()))
         registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT value AS x FROM STREAM a")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val streamStrings = MemoryStream[String]
     streamStrings.addData("a", "b")
@@ -306,9 +246,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val table = catalog.loadTable(identifier)
     assert(
       table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
-        new StructType().add("x", IntegerType)
-      )
-    )
+        new StructType().add("x", IntegerType)))
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -317,22 +255,17 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = true, "this is column x")
-              .add("z", LongType, nullable = true, "this is column z")
-          ),
-          query = dfFlowFunc(Seq[Short](1, 2).toDF("x"))
-        )
+              .add("z", LongType, nullable = true, "this is column z")),
+          query = dfFlowFunc(Seq[Short](1, 2).toDF("x")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val table2 = catalog.loadTable(identifier)
     assert(
       table2.columns() sameElements CatalogV2Util.structTypeToV2Columns(
         new StructType()
           .add("x", IntegerType, nullable = true, "this is column x")
-          .add("z", LongType, nullable = true, "this is column z")
-      )
-    )
+          .add("z", LongType, nullable = true, "this is column z")))
   }
 
   test("specified schema incompatible with existing table") {
@@ -344,40 +277,98 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val table = catalog.loadTable(identifier)
     assert(
       table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
-        new StructType().add("x", BooleanType)
-      )
-    )
+        new StructType().add("x", BooleanType)))
 
     val ex = intercept[TableMaterializationException] {
-      materializeGraph(new TestGraphRegistrationContext(spark) {
-        val source: MemoryStream[Int] = MemoryStream[Int]
-        source.addData(1, 2)
-        registerTable(
-          "t6",
-          specifiedSchema = Option(new StructType().add("x", IntegerType)),
-          query = Option(dfFlowFunc(source.toDF().select($"value" as "x")))
-        )
+      materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          val source: MemoryStream[Int] = MemoryStream[Int]
+          source.addData(1, 2)
+          registerTable(
+            "t6",
+            specifiedSchema = Option(new StructType().add("x", IntegerType)),
+            query = Option(dfFlowFunc(source.toDF().select($"value" as "x"))))
 
-      }.resolveToDataflowGraph(), storageRoot = storageRoot)
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot)
     }
     val cause = ex.cause
     val exStr = exceptionString(cause)
     assert(exStr.contains("Failed to merge incompatible data types"))
 
     // Works fine for a complete table
-    materializeGraph(new TestGraphRegistrationContext(spark) {
-      registerMaterializedView(
-        "t6",
-        specifiedSchema = Option(new StructType().add("x", IntegerType)),
-        query = dfFlowFunc(Seq(1, 2).toDF("x"))
-      )
-    }.resolveToDataflowGraph(),
-    storageRoot = storageRoot)
+    materializeGraph(
+      new TestGraphRegistrationContext(spark) {
+        registerMaterializedView(
+          "t6",
+          specifiedSchema = Option(new StructType().add("x", IntegerType)),
+          query = dfFlowFunc(Seq(1, 2).toDF("x")))
+      }.resolveToDataflowGraph(),
+      storageRoot = storageRoot)
     val table2 = catalog.loadTable(identifier)
     assert(
       table2.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("x", IntegerType))
-    )
+        .structTypeToV2Columns(new StructType().add("x", IntegerType)))
+  }
+
+  test("partition columns support transforms") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          registerTable(
+            "testcat.default.xdd",
+            query = Option(
+              dfFlowFunc(
+                Seq(
+                  (java.sql.Timestamp.valueOf("2025-01-01 00:00:00"), 1),
+                  (java.sql.Timestamp.valueOf("2025-02-01 00:00:00"), 2))
+                  .toDF("event_time", "value"))),
+            specifiedSchema = Option(
+              new StructType()
+                .add("event_time", TimestampType)
+                .add("value", IntegerType)),
+            partitionCols = Option(Seq("months(event_time)")))
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot)
+
+      val catalog =
+        spark.sessionState.catalogManager.catalog("testcat").asInstanceOf[TableCatalog]
+      val identifier = Identifier.of(Array("default"), "xdd")
+      val table = catalog.loadTable(identifier)
+      assert(table.partitioning().toSeq == Seq(Expressions.months("event_time")))
+    }
+  }
+
+  test("partition columns support identity AND transforms") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          registerTable(
+            "testcat.default.xd",
+            query = Option(
+              dfFlowFunc(
+                Seq(
+                  ("kebab", java.sql.Timestamp.valueOf("2025-01-01 00:00:00"), 1),
+                  ("pizza", java.sql.Timestamp.valueOf("2025-02-01 00:00:00"), 2))
+                  .toDF("food", "event_time", "value"))),
+            specifiedSchema = Option(
+              new StructType()
+                .add("food", TimestampType)
+                .add("event_time", TimestampType)
+                .add("value", IntegerType)),
+            partitionCols = Option(Seq("food", "months(event_time)")))
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot)
+
+      val catalog =
+        spark.sessionState.catalogManager.catalog("testcat").asInstanceOf[TableCatalog]
+      val identifier = Identifier.of(Array("default"), "xd")
+      val table = catalog.loadTable(identifier)
+      assert(
+        table.partitioning().toSeq == Seq(
+          Expressions.identity("food"),
+          Expressions.months("event_time")))
+    }
   }
 
   test("partition columns with user schema") {
@@ -390,21 +381,16 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           specifiedSchema = Option(
             new StructType()
               .add("x1", IntegerType)
-              .add("x2", IntegerType)
-          ),
-          partitionCols = Option(Seq("x2"))
-        )
+              .add("x2", IntegerType)),
+          partitionCols = Option(Seq("x2")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "a")
     val table = catalog.loadTable(identifier)
     assert(
       table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
-        new StructType().add("x1", IntegerType).add("x2", IntegerType)
-      )
-    )
+        new StructType().add("x1", IntegerType).add("x2", IntegerType)))
     assert(table.partitioning().toSeq == Seq(Expressions.identity("x2")))
   }
 
@@ -412,8 +398,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     sql(
       s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t7(x BOOLEAN, y INT) " +
-      s"PARTITIONED BY (x)"
-    )
+        s"PARTITIONED BY (x)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t7")
     val table = catalog.loadTable(identifier)
@@ -422,54 +407,39 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         .add("x", BooleanType)
         .add("y", IntegerType)
         .fieldNames
-        .toSet
-    )
+        .toSet)
     assert(table.partitioning().toSeq == Seq(Expressions.identity("x")))
 
     // Specify the same partition column.
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow(
-          "t7",
-          "t7",
-          query = dfFlowFunc(Seq((true, 1), (false, 3)).toDF("x", "y"))
-        )
-        registerTable(
-          "t7",
-          partitionCols = Option(Seq("x"))
-        )
+        registerFlow("t7", "t7", query = dfFlowFunc(Seq((true, 1), (false, 3)).toDF("x", "y")))
+        registerTable("t7", partitionCols = Option(Seq("x")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val table2 = catalog.loadTable(identifier)
     assert(
       table2.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("y", IntegerType).add("x", BooleanType))
-    )
+        .structTypeToV2Columns(new StructType().add("y", IntegerType).add("x", BooleanType)))
     assert(table2.partitioning().toSeq == Seq(Expressions.identity("x")))
 
     // Don't specify any partition column; should throw.
     val ex = intercept[TableMaterializationException] {
       materializeGraph(
         new TestGraphRegistrationContext(spark) {
-          registerFlow(
-            "t7",
-            "t7",
-            query = dfFlowFunc(Seq((true, 1), (false, 3)).toDF("x", "y"))
-          )
+          registerFlow("t7", "t7", query = dfFlowFunc(Seq((true, 1), (false, 3)).toDF("x", "y")))
           registerTable("t7")
         }.resolveToDataflowGraph(),
-        storageRoot = storageRoot
-      )
+        storageRoot = storageRoot)
     }
-    assert(ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
+    assert(
+      ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
 
     val table3 = catalog.loadTable(identifier)
     assert(
       table3.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("y", IntegerType).add("x", BooleanType))
-    )
+        .structTypeToV2Columns(new StructType().add("y", IntegerType).add("x", BooleanType)))
     assert(table3.partitioning().toSeq == Seq(Expressions.identity("x")))
   }
 
@@ -477,26 +447,22 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     sql(
       s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t8(x BOOLEAN, y INT) " +
-      s"PARTITIONED BY (x)"
-    )
+        s"PARTITIONED BY (x)")
 
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t8")
 
     // Specify a different partition column. Should throw.
     val graph = new TestGraphRegistrationContext(spark) {
-      registerFlow(
-        "t8",
-        "t8",
-        query = dfFlowFunc(Seq((true, 1), (false, 3)).toDF("x", "y"))
-      )
+      registerFlow("t8", "t8", query = dfFlowFunc(Seq((true, 1), (false, 3)).toDF("x", "y")))
       registerTable("t8", partitionCols = Option(Seq("y")))
     }.resolveToDataflowGraph()
 
     val ex = intercept[TableMaterializationException] {
       materializeGraph(graph, storageRoot = storageRoot)
     }
-    assert(ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
+    assert(
+      ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
     val table = catalog.loadTable(identifier)
     assert(table.partitioning().toSeq == Seq(Expressions.identity("x")))
   }
@@ -507,19 +473,13 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         registerTable(
           "a",
           query = Option(dfFlowFunc(spark.readStream.format("rate").load())),
-          properties = Map(
-            "pipelines.reset.allowed" -> "true",
-            "some.prop" -> "foo"
-          )
-        )
+          properties = Map("pipelines.reset.allowed" -> "true", "some.prop" -> "foo"))
         registerTable(
           "b",
           query = Option(sqlFlowFunc(spark, "SELECT * FROM STREAM a")),
-          properties = Map("pipelines.reset.alloweD" -> "true", "some.prop" -> "foo")
-        )
+          properties = Map("pipelines.reset.alloweD" -> "true", "some.prop" -> "foo"))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifierA = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "a")
@@ -527,10 +487,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val tableA = catalog.loadTable(identifierA)
     val tableB = catalog.loadTable(identifierB)
 
-    val expectedProps = Map(
-      "pipelines.reset.allowed" -> "true",
-      "some.prop" -> "foo"
-    )
+    val expectedProps = Map("pipelines.reset.allowed" -> "true", "some.prop" -> "foo")
 
     assert(expectedProps.forall { case (k, v) => tableA.properties().asScala.get(k).contains(v) })
     assert(expectedProps.forall { case (k, v) => tableB.properties().asScala.get(k).contains(v) })
@@ -544,8 +501,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         registerTable(
           "a",
           query = Option(dfFlowFunc(Seq(1).toDF())),
-          properties = Map("pipelines.reset.allowed" -> "123")
-        )
+          properties = Map("pipelines.reset.allowed" -> "123"))
       }.resolveToDataflowGraph()
     val ex1 =
       intercept[TableMaterializationException] {
@@ -561,8 +517,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   ) {
     sql(
       s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t9(x INT) " +
-      s"TBLPROPERTIES ('pipelines.someProperty' = 'foo')"
-    )
+        s"TBLPROPERTIES ('pipelines.someProperty' = 'foo')")
 
     val graph1 = new TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(spark.readStream.format("rate").load())))
@@ -572,9 +527,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   for (isFullRefresh <- Seq(true, false)) {
-    test(
-      s"Complete tables should not evolve schema - isFullRefresh = $isFullRefresh"
-    ) {
+    test(s"Complete tables should not evolve schema - isFullRefresh = $isFullRefresh") {
       val rawGraph =
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y")))
@@ -596,11 +549,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
             unresolvedGraph = graph,
             refreshTables = refreshSelection,
             fullRefreshTables = fullRefreshSelection,
-            storageRoot = storageRoot
-          )
-        ),
-        storageRoot = storageRoot
-      )
+            storageRoot = storageRoot)),
+        storageRoot = storageRoot)
 
       val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
       val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "b")
@@ -608,28 +558,23 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val table = catalog.loadTable(identifier)
       assert(
         table.columns() sameElements CatalogV2Util
-          .structTypeToV2Columns(new StructType().add("x", IntegerType))
-      )
+          .structTypeToV2Columns(new StructType().add("x", IntegerType)))
 
       materializeGraph(
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y")))
           registerMaterializedView("b", query = sqlFlowFunc(spark, "SELECT y FROM a"))
         }.resolveToDataflowGraph(),
-        storageRoot = storageRoot
-      )
+        storageRoot = storageRoot)
       val table2 = catalog.loadTable(identifier)
       assert(
         table2.columns() sameElements CatalogV2Util
-          .structTypeToV2Columns(new StructType().add("y", IntegerType))
-      )
+          .structTypeToV2Columns(new StructType().add("y", IntegerType)))
     }
   }
 
   for (isFullRefresh <- Seq(true, false)) {
-    test(
-      s"Streaming tables should evolve schema only if not full refresh = $isFullRefresh"
-    ) {
+    test(s"Streaming tables should evolve schema only if not full refresh = $isFullRefresh") {
       implicit val sqlCtx: SQLContext = spark.sqlContext
 
       val streamInts = MemoryStream[Int]
@@ -638,7 +583,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val graph =
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(streamInts.toDF()))
-          registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT value AS x FROM STREAM a")))
+          registerTable(
+            "b",
+            query = Option(sqlFlowFunc(spark, "SELECT value AS x FROM STREAM a")))
         }.resolveToDataflowGraph().validate(spark.sessionState.conf.caseSensitiveAnalysis)
 
       val (refreshSelection, fullRefreshSelection) = if (isFullRefresh) {
@@ -652,9 +599,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           unresolvedGraph = graph,
           refreshTables = refreshSelection,
           fullRefreshTables = fullRefreshSelection,
-          storageRoot = storageRoot
-        )
-      )
+          storageRoot = storageRoot))
       materializeGraph(graph, contextOpt = updateContextOpt, storageRoot = storageRoot)
 
       val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
@@ -662,41 +607,35 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val table = catalog.loadTable(identifier)
       assert(
         table.columns() sameElements CatalogV2Util
-          .structTypeToV2Columns(new StructType().add("x", IntegerType))
-      )
+          .structTypeToV2Columns(new StructType().add("x", IntegerType)))
 
       materializeGraph(
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(streamInts.toDF()))
-          registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT value AS y FROM STREAM a")))
+          registerTable(
+            "b",
+            query = Option(sqlFlowFunc(spark, "SELECT value AS y FROM STREAM a")))
         }.resolveToDataflowGraph().validate(spark.sessionState.conf.caseSensitiveAnalysis),
         contextOpt = updateContextOpt,
-        storageRoot = storageRoot
-      )
+        storageRoot = storageRoot)
 
       val table2 = catalog.loadTable(identifier)
 
       if (isFullRefresh) {
         assert(
           table2.columns() sameElements CatalogV2Util.structTypeToV2Columns(
-            new StructType().add("y", IntegerType)
-          )
-        )
+            new StructType().add("y", IntegerType)))
       } else {
         assert(
           table2.columns() sameElements CatalogV2Util.structTypeToV2Columns(
             new StructType()
               .add("x", IntegerType)
-              .add("y", IntegerType)
-          )
-        )
+              .add("y", IntegerType)))
       }
     }
   }
 
-  test(
-    "materialize only selected tables"
-  ) {
+  test("materialize only selected tables") {
 
     val graph = new TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y"))))
@@ -711,19 +650,16 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           unresolvedGraph = graph,
           refreshTables = SomeTables(Set(fullyQualifiedIdentifier("a"))),
           fullRefreshTables = SomeTables(Set(fullyQualifiedIdentifier("c"))),
-          storageRoot = storageRoot
-        )
-      ),
-      storageRoot = storageRoot
-    )
+          storageRoot = storageRoot)),
+      storageRoot = storageRoot)
 
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
 
     val tableA =
       catalog.loadTable(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "a"))
     assert(
-      !catalog.tableExists(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "b"))
-    )
+      !catalog.tableExists(
+        Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "b")))
     val tableC =
       catalog.loadTable(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "c"))
 
@@ -731,31 +667,27 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       tableA.columns() sameElements CatalogV2Util.structTypeToV2Columns(
         new StructType()
           .add("x", IntegerType)
-          .add("y", IntegerType)
-      )
-    )
+          .add("y", IntegerType)))
 
     assert(
       tableC.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(new StructType().add("y", IntegerType))
-    )
+        .structTypeToV2Columns(new StructType().add("y", IntegerType)))
   }
 
   test("tables with arrays and maps") {
 
     val rawGraph =
       new TestGraphRegistrationContext(spark) {
-        registerTable("a", query = Option(sqlFlowFunc(spark, "select map(1, struct('a', 'b')) m")))
+        registerTable(
+          "a",
+          query = Option(sqlFlowFunc(spark, "select map(1, struct('a', 'b')) m")))
         registerTable(
           "b",
-          query = Option(dfFlowFunc(Seq(Array(1, 3, 5), Array(2, 4, 6)).toDF("arr")))
-        )
+          query = Option(dfFlowFunc(Seq(Array(1, 3, 5), Array(2, 4, 6)).toDF("arr"))))
         registerTable(
           "c",
           query = Option(
-            sqlFlowFunc(spark, "select * from a join b where map_entries(m)[0].key = arr[0]")
-          )
-        )
+            sqlFlowFunc(spark, "select * from a join b where map_entries(m)[0].key = arr[0]")))
       }.resolveToDataflowGraph()
     materializeGraph(rawGraph, storageRoot = storageRoot)
     // Materialize twice because some logic compares the incoming schema with the previous one.
@@ -771,19 +703,13 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     assert(
       tableA.columns() sameElements CatalogV2Util.structTypeToV2Columns(
-        StructType.fromDDL("m MAP<int, struct<col1: string, col2: string>>")
-      )
-    )
+        StructType.fromDDL("m MAP<int, struct<col1: string, col2: string>>")))
     assert(
       tableB.columns() sameElements CatalogV2Util.structTypeToV2Columns(
-        StructType.fromDDL("arr ARRAY<int>")
-      )
-    )
+        StructType.fromDDL("arr ARRAY<int>")))
     assert(
       tableC.columns() sameElements CatalogV2Util.structTypeToV2Columns(
-        StructType.fromDDL("m MAP<int, struct<col1: string, col2: string>>, arr ARRAY<int>")
-      )
-    )
+        StructType.fromDDL("m MAP<int, struct<col1: string, col2: string>>, arr ARRAY<int>")))
   }
 
   test("tables with nested arrays and maps") {
@@ -791,19 +717,15 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       new TestGraphRegistrationContext(spark) {
         registerTable(
           "a",
-          query = Option(sqlFlowFunc(spark, "select map(0, map(0, struct('a', 'b'))) m"))
-        )
+          query = Option(sqlFlowFunc(spark, "select map(0, map(0, struct('a', 'b'))) m")))
         registerTable(
           "b",
           query = Option(
-            sqlFlowFunc(spark, "select array(array('a', 'b', 'c'), array('d', 'e', 'f')) arr")
-          )
-        )
+            sqlFlowFunc(spark, "select array(array('a', 'b', 'c'), array('d', 'e', 'f')) arr")))
         registerTable(
           "c",
           query =
-            Option(sqlFlowFunc(spark, "select * from a join b where m[0][0].col1 = arr[0][0]"))
-        )
+            Option(sqlFlowFunc(spark, "select * from a join b where m[0][0].col1 = arr[0][0]")))
 
       }.resolveToDataflowGraph()
     materializeGraph(rawGraph, storageRoot = storageRoot)
@@ -819,32 +741,25 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     assert(
       tableA.columns() sameElements CatalogV2Util.structTypeToV2Columns(
-        StructType.fromDDL("m MAP<int, MAP<int, struct<col1: string, col2: string>>>")
-      )
-    )
+        StructType.fromDDL("m MAP<int, MAP<int, struct<col1: string, col2: string>>>")))
     assert(
       tableB.columns() sameElements CatalogV2Util
-        .structTypeToV2Columns(StructType.fromDDL("arr ARRAY<ARRAY<string>>"))
-    )
+        .structTypeToV2Columns(StructType.fromDDL("arr ARRAY<ARRAY<string>>")))
     assert(
-      tableC.columns() sameElements CatalogV2Util.structTypeToV2Columns(
-        StructType.fromDDL(
-          "m MAP<int, MAP<int, struct<col1: string, col2: string>>>, arr ARRAY<ARRAY<string>>"
-        )
-      )
-    )
+      tableC.columns() sameElements CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(
+        "m MAP<int, MAP<int, struct<col1: string, col2: string>>>, arr ARRAY<ARRAY<string>>")))
   }
 
   test("materializing no tables doesn't throw") {
 
     val graph1 =
-      new DataflowGraph(flows = Seq.empty, tables = Seq.empty, views = Seq.empty, sinks = Seq.empty)
+      new DataflowGraph(
+        flows = Seq.empty,
+        tables = Seq.empty,
+        views = Seq.empty,
+        sinks = Seq.empty)
     val graph2 = new TestGraphRegistrationContext(spark) {
-      registerFlow(
-        "a",
-        "a",
-        query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
-      )
+      registerFlow("a", "a", query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2")))
       registerTable("a")
     }.resolveToDataflowGraph()
 
@@ -857,11 +772,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           unresolvedGraph = graph2,
           refreshTables = NoTables,
           fullRefreshTables = NoTables,
-          storageRoot = storageRoot
-        )
-      ),
-      storageRoot = storageRoot
-    )
+          storageRoot = storageRoot)),
+      storageRoot = storageRoot)
   }
 
   test("cluster columns with user schema") {
@@ -875,13 +787,10 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
             new StructType()
               .add("x1", IntegerType)
               .add("x2", IntegerType)
-              .add("x3", StringType)
-          ),
-          clusterCols = Option(Seq("x1", "x3"))
-        )
+              .add("x3", StringType)),
+          clusterCols = Option(Seq("x1", "x3")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "a")
     val table = catalog.loadTable(identifier)
@@ -890,12 +799,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         new StructType()
           .add("x1", IntegerType)
           .add("x2", IntegerType)
-          .add("x3", StringType)
-      )
-    )
-    val expectedClusterTransform = ClusterByTransform(
-      Seq(FieldReference("x1"), FieldReference("x3")).toSeq
-    )
+          .add("x3", StringType)))
+    val expectedClusterTransform =
+      ClusterByTransform(Seq(FieldReference("x1"), FieldReference("x3")).toSeq)
     assert(table.partitioning().contains(expectedClusterTransform))
   }
 
@@ -906,18 +812,15 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         registerTable(
           "t10",
           query = Option(dfFlowFunc(Seq((1, true, "a"), (2, false, "b")).toDF("x", "y", "z"))),
-          clusterCols = Option(Seq("x", "z"))
-        )
+          clusterCols = Option(Seq("x", "z")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t10")
     val table = catalog.loadTable(identifier)
-    val expectedClusterTransform = ClusterByTransform(
-      Seq(FieldReference("x"), FieldReference("z")).toSeq
-    )
+    val expectedClusterTransform =
+      ClusterByTransform(Seq(FieldReference("x"), FieldReference("z")).toSeq)
     assert(table.partitioning().contains(expectedClusterTransform))
 
     // Specify the same cluster columns - should work
@@ -926,12 +829,10 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         registerFlow(
           "t10",
           "t10",
-          query = dfFlowFunc(Seq((3, true, "c"), (4, false, "d")).toDF("x", "y", "z"))
-        )
+          query = dfFlowFunc(Seq((3, true, "c"), (4, false, "d")).toDF("x", "y", "z")))
         registerTable("t10", clusterCols = Option(Seq("x", "z")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val table2 = catalog.loadTable(identifier)
     assert(table2.partitioning().contains(expectedClusterTransform))
@@ -943,14 +844,13 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           registerFlow(
             "t10",
             "t10",
-            query = dfFlowFunc(Seq((5, true, "e"), (6, false, "f")).toDF("x", "y", "z"))
-          )
+            query = dfFlowFunc(Seq((5, true, "e"), (6, false, "f")).toDF("x", "y", "z")))
           registerTable("t10")
         }.resolveToDataflowGraph(),
-        storageRoot = storageRoot
-      )
+        storageRoot = storageRoot)
     }
-    assert(ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
+    assert(
+      ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
   }
 
   test("specifying cluster column different from existing clustered table") {
@@ -960,11 +860,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         registerTable(
           "t11",
           query = Option(dfFlowFunc(Seq((1, true, "a"), (2, false, "b")).toDF("x", "y", "z"))),
-          clusterCols = Option(Seq("x"))
-        )
+          clusterCols = Option(Seq("x")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
 
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t11")
@@ -976,14 +874,13 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           registerFlow(
             "t11",
             "t11",
-            query = dfFlowFunc(Seq((3, true, "c"), (4, false, "d")).toDF("x", "y", "z"))
-          )
+            query = dfFlowFunc(Seq((3, true, "c"), (4, false, "d")).toDF("x", "y", "z")))
           registerTable("t11", clusterCols = Option(Seq("y")))
         }.resolveToDataflowGraph(),
-        storageRoot = storageRoot
-      )
+        storageRoot = storageRoot)
     }
-    assert(ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
+    assert(
+      ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
 
     val table = catalog.loadTable(identifier)
     val expectedClusterTransform = ClusterByTransform(Seq(FieldReference("x")).toSeq)
@@ -1001,13 +898,10 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
             new StructType()
               .add("x1", IntegerType)
               .add("x2", IntegerType)
-              .add("x3", StringType)
-          ),
-          clusterCols = Option(Seq("x1", "x3"))
-        )
+              .add("x3", StringType)),
+          clusterCols = Option(Seq("x1", "x3")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t12")
     val table = catalog.loadTable(identifier)
@@ -1016,14 +910,11 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         new StructType()
           .add("x1", IntegerType)
           .add("x2", IntegerType)
-          .add("x3", StringType)
-      )
-    )
+          .add("x3", StringType)))
 
     val transforms = table.partitioning()
-    val expectedClusterTransform = ClusterByTransform(
-      Seq(FieldReference("x1"), FieldReference("x3")).toSeq
-    )
+    val expectedClusterTransform =
+      ClusterByTransform(Seq(FieldReference("x1"), FieldReference("x3")).toSeq)
     assert(transforms.contains(expectedClusterTransform))
   }
 
@@ -1034,11 +925,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         registerMaterializedView(
           "mv1",
           query = dfFlowFunc(Seq((1, 1, "x"), (2, 3, "y")).toDF("x1", "x2", "x3")),
-          clusterCols = Option(Seq("x1", "x2"))
-        )
+          clusterCols = Option(Seq("x1", "x2")))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "mv1")
     val table = catalog.loadTable(identifier)
@@ -1047,12 +936,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         new StructType()
           .add("x1", IntegerType)
           .add("x2", IntegerType)
-          .add("x3", StringType)
-      )
-    )
-    val expectedClusterTransform = ClusterByTransform(
-      Seq(FieldReference("x1"), FieldReference("x2")).toSeq
-    )
+          .add("x3", StringType)))
+    val expectedClusterTransform =
+      ClusterByTransform(Seq(FieldReference("x1"), FieldReference("x2")).toSeq)
     assert(table.partitioning().contains(expectedClusterTransform))
   }
 
@@ -1065,11 +951,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
             "invalid_table",
             query = Option(dfFlowFunc(Seq((1, 1, "x"), (2, 3, "y")).toDF("x1", "x2", "x3"))),
             partitionCols = Option(Seq("x2")),
-            clusterCols = Option(Seq("x1", "x3"))
-          )
+            clusterCols = Option(Seq("x1", "x3")))
         }.resolveToDataflowGraph(),
-        storageRoot = storageRoot
-      )
+        storageRoot = storageRoot)
     }
     assert(ex.cause.isInstanceOf[AnalysisException])
     val analysisEx = ex.cause.asInstanceOf[AnalysisException]
@@ -1084,11 +968,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           registerTable(
             "invalid_cluster_table",
             query = Option(dfFlowFunc(Seq((1, 1, "x"), (2, 3, "y")).toDF("x1", "x2", "x3"))),
-            clusterCols = Option(Seq("nonexistent_column"))
-          )
+            clusterCols = Option(Seq("nonexistent_column")))
         }.resolveToDataflowGraph(),
-        storageRoot = storageRoot
-      )
+        storageRoot = storageRoot)
     }
     assert(ex.cause.isInstanceOf[AnalysisException])
   }
@@ -1105,8 +987,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   private def withRecordingCatalog(body: => Unit): Unit = {
     spark.conf.set(
       s"spark.sql.catalog.$recordingCatalogName",
-      classOf[RecordingInMemoryTableCatalog].getName
-    )
+      classOf[RecordingInMemoryTableCatalog].getName)
     try {
       spark.sql(s"CREATE NAMESPACE IF NOT EXISTS $recordingCatalogName.$recordingNamespace")
       body
@@ -1135,11 +1016,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           specifiedSchema = Option(schema),
           properties = properties,
           catalog = Option(recordingCatalogName),
-          database = Option(recordingNamespace)
-        )
+          database = Option(recordingNamespace))
       }.resolveToDataflowGraph(),
-      storageRoot = storageRoot
-    )
+      storageRoot = storageRoot)
   }
 
   private def recordingCatalog: RecordingInMemoryTableCatalog =
@@ -1179,8 +1058,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
       val changes = recordingCatalog.recordedAlters.flatten
       assert(changes.forall(_.isInstanceOf[TableChange.SetProperty]))
-      val set = changes.collect {
-        case s: TableChange.SetProperty => s.property() -> s.value()
+      val set = changes.collect { case s: TableChange.SetProperty =>
+        s.property() -> s.value()
       }.toMap
       assert(set == Map("p.a" -> "2", "p.new" -> "n"))
 
@@ -1199,8 +1078,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       materializeStreamingTable(
         "t",
         new StructType().add("id", IntegerType).add("value", StringType),
-        Map("p.a" -> "1")
-      )
+        Map("p.a" -> "1"))
       assert(recordingCatalog.recordedAlters.size == 1)
 
       val changes = recordingCatalog.recordedAlters.flatten
@@ -1209,14 +1087,13 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       assert(
         loadTableFromRecordingCatalog("t").columns() sameElements
           CatalogV2Util.structTypeToV2Columns(
-            new StructType().add("id", IntegerType).add("value", StringType)
-          )
-      )
+            new StructType().add("id", IntegerType).add("value", StringType)))
     }
   }
 
-  test("SPARK-58517: re-materializing with a case-only column difference is a no-op under " +
-    "case-insensitive resolution") {
+  test(
+    "SPARK-58517: re-materializing with a case-only column difference is a no-op under " +
+      "case-insensitive resolution") {
     withRecordingCatalog {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         // Create the table with `value`, then re-materialize with the same column cased as `Value`.
@@ -1225,27 +1102,31 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         // original name/case. Before SPARK-58517 the case-sensitive merge instead added a second
         // `Value` column, corrupting the table.
         materializeStreamingTable(
-          "t", new StructType().add("id", IntegerType).add("value", StringType), Map.empty)
+          "t",
+          new StructType().add("id", IntegerType).add("value", StringType),
+          Map.empty)
         assert(recordingCatalog.recordedAlters.isEmpty)
 
         materializeStreamingTable(
-          "t", new StructType().add("id", IntegerType).add("Value", StringType), Map.empty)
-        assert(recordingCatalog.recordedAlters.isEmpty,
+          "t",
+          new StructType().add("id", IntegerType).add("Value", StringType),
+          Map.empty)
+        assert(
+          recordingCatalog.recordedAlters.isEmpty,
           s"expected no alter, got: ${recordingCatalog.recordedAlters}")
 
         assert(
           loadTableFromRecordingCatalog("t").columns() sameElements
             CatalogV2Util.structTypeToV2Columns(
-              new StructType().add("id", IntegerType).add("value", StringType)
-            ),
-          "the persisted schema should keep the original `value` column, not gain a `Value` column"
-        )
+              new StructType().add("id", IntegerType).add("value", StringType)),
+          "the persisted schema should keep the original `value` column, not gain a `Value` column")
       }
     }
   }
 
-  test("SPARK-58517: multi-flow schema inference folds case-only column differences under " +
-    "case-insensitive resolution") {
+  test(
+    "SPARK-58517: multi-flow schema inference folds case-only column differences under " +
+      "case-insensitive resolution") {
     withRecordingCatalog {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         // Two append flows write to the same streaming table, one emitting `value` and the other
@@ -1266,18 +1147,25 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
             catalog = Option(recordingCatalogName),
             database = Option(recordingNamespace))
           registerFlow(
-            "t", "f1", dfFlowFunc(df1),
-            catalog = Option(recordingCatalogName), database = Option(recordingNamespace))
+            "t",
+            "f1",
+            dfFlowFunc(df1),
+            catalog = Option(recordingCatalogName),
+            database = Option(recordingNamespace))
           registerFlow(
-            "t", "f2", dfFlowFunc(df2),
-            catalog = Option(recordingCatalogName), database = Option(recordingNamespace))
+            "t",
+            "f2",
+            dfFlowFunc(df2),
+            catalog = Option(recordingCatalogName),
+            database = Option(recordingNamespace))
         }
 
         val graph = ctx.resolveToDataflowGraph()
         val inferredSchemas = graph.inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)
         val (targetIdentifier, inferred) = inferredSchemas.head
         val lowestIdentifierFlowValueField =
-          graph.resolvedFlowsTo(targetIdentifier)
+          graph
+            .resolvedFlowsTo(targetIdentifier)
             .sortBy(_.identifier.unquotedString)
             .head
             .schema
@@ -1289,8 +1177,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
-  test("SPARK-58517: a case-only fold picks the same spelling for the materialized table and for " +
-    "downstream resolution, in either flow declaration order") {
+  test(
+    "SPARK-58517: a case-only fold picks the same spelling for the materialized table and for " +
+      "downstream resolution, in either flow declaration order") {
     // The table's schema is derived twice from the same flows, by two different callers: the graph
     // materializes the table from `inferSchemas`, while downstream flows resolve against the
     // `VirtualTableInput` schema, whose `availableFlows` is in declaration order, not sorted. Both
@@ -1348,8 +1237,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
-  test("multi-flow schema inference keeps case-only column differences distinct under " +
-    "case-sensitive resolution") {
+  test(
+    "multi-flow schema inference keeps case-only column differences distinct under " +
+      "case-sensitive resolution") {
     withRecordingCatalog {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         // The case-sensitive control: `value` and `Value` are distinct columns, so inference
@@ -1367,24 +1257,31 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
             catalog = Option(recordingCatalogName),
             database = Option(recordingNamespace))
           registerFlow(
-            "t", "f1", dfFlowFunc(df1),
-            catalog = Option(recordingCatalogName), database = Option(recordingNamespace))
+            "t",
+            "f1",
+            dfFlowFunc(df1),
+            catalog = Option(recordingCatalogName),
+            database = Option(recordingNamespace))
           registerFlow(
-            "t", "f2", dfFlowFunc(df2),
-            catalog = Option(recordingCatalogName), database = Option(recordingNamespace))
+            "t",
+            "f2",
+            dfFlowFunc(df2),
+            catalog = Option(recordingCatalogName),
+            database = Option(recordingNamespace))
         }
 
         val graph = ctx.resolveToDataflowGraph()
-        val inferred = graph.inferSchemas(
-          spark.sessionState.conf.caseSensitiveAnalysis).values.head
+        val inferred =
+          graph.inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis).values.head
         // Both spellings survive as distinct columns in sorted flow identifier order.
         assert(inferred.fieldNames.toSeq === Seq("id", "value", "Value"))
       }
     }
   }
 
-  test("SPARK-58517: a materialized view's case-only column rename is applied under " +
-    "case-insensitive resolution") {
+  test(
+    "SPARK-58517: a materialized view's case-only column rename is applied under " +
+      "case-insensitive resolution") {
     // The non-merging path: for a materialized view `targetSchema` is the run's declared schema
     // as-is (no merge with the persisted schema), so a case-only rename must remain visible to
     // `diffSchemas` as a drop-then-add. Case-insensitive matching here would emit no change at all
@@ -1397,35 +1294,33 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           registerView("src", query = dfFlowFunc(Seq((1, 2L)).toDF("id", "total")))
           registerMaterializedView("mv", query = sqlFlowFunc(spark, "SELECT id, total FROM src"))
         }.resolveToDataflowGraph(),
-        storageRoot = storageRoot
-      )
+        storageRoot = storageRoot)
 
       val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
       val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "mv")
       assert(
         catalog.loadTable(identifier).columns() sameElements CatalogV2Util.structTypeToV2Columns(
-          new StructType().add("id", IntegerType).add("total", LongType))
-      )
+          new StructType().add("id", IntegerType).add("total", LongType)))
 
       // Re-materialize with the column cased as `Total`. The table must follow the definition.
       materializeGraph(
         new TestGraphRegistrationContext(spark) {
           registerView("src", query = dfFlowFunc(Seq((1, 2L)).toDF("id", "total")))
           registerMaterializedView(
-            "mv", query = sqlFlowFunc(spark, "SELECT id, total AS Total FROM src"))
+            "mv",
+            query = sqlFlowFunc(spark, "SELECT id, total AS Total FROM src"))
         }.resolveToDataflowGraph(),
-        storageRoot = storageRoot
-      )
+        storageRoot = storageRoot)
       assert(
         catalog.loadTable(identifier).columns() sameElements CatalogV2Util.structTypeToV2Columns(
           new StructType().add("id", IntegerType).add("Total", LongType)),
-        "the materialized view should adopt the declared `Total` casing, not keep `total`"
-      )
+        "the materialized view should adopt the declared `Total` casing, not keep `total`")
     }
   }
 
-  test("SPARK-58517: a full-refreshed streaming table's case-only column rename is applied " +
-    "under case-insensitive resolution") {
+  test(
+    "SPARK-58517: a full-refreshed streaming table's case-only column rename is applied " +
+      "under case-insensitive resolution") {
     // The streaming-table analog of the materialized-view case above: a full refresh also takes
     // `targetSchema` as the declared schema without merging, so the same case-only rename must be
     // applied rather than silently ignored.
@@ -1435,21 +1330,20 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           registerView("src", query = dfFlowFunc(Seq((1, 2L)).toDF("id", "total")))
           registerTable("st", query = Option(sqlFlowFunc(spark, "SELECT id, total FROM src")))
         }.resolveToDataflowGraph(),
-        storageRoot = storageRoot
-      )
+        storageRoot = storageRoot)
 
       val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
       val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "st")
       assert(
         catalog.loadTable(identifier).columns() sameElements CatalogV2Util.structTypeToV2Columns(
-          new StructType().add("id", IntegerType).add("total", LongType))
-      )
+          new StructType().add("id", IntegerType).add("total", LongType)))
 
       val renamedGraph =
         new TestGraphRegistrationContext(spark) {
           registerView("src", query = dfFlowFunc(Seq((1, 2L)).toDF("id", "total")))
           registerTable(
-            "st", query = Option(sqlFlowFunc(spark, "SELECT id, total AS Total FROM src")))
+            "st",
+            query = Option(sqlFlowFunc(spark, "SELECT id, total AS Total FROM src")))
         }.resolveToDataflowGraph()
 
       materializeGraph(
@@ -1460,34 +1354,36 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
             unresolvedGraph = graph,
             refreshTables = NoTables,
             fullRefreshTables = AllTables,
-            storageRoot = storageRoot
-          )
-        ),
-        storageRoot = storageRoot
-      )
+            storageRoot = storageRoot)),
+        storageRoot = storageRoot)
       assert(
         catalog.loadTable(identifier).columns() sameElements CatalogV2Util.structTypeToV2Columns(
           new StructType().add("id", IntegerType).add("Total", LongType)),
-        "a full-refreshed streaming table should adopt the declared `Total` casing"
-      )
+        "a full-refreshed streaming table should adopt the declared `Total` casing")
     }
   }
 
-  test("re-materializing with a case-only column difference adds a column under case-sensitive " +
-    "resolution") {
+  test(
+    "re-materializing with a case-only column difference adds a column under case-sensitive " +
+      "resolution") {
     withRecordingCatalog {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         // The case-sensitive counterpart: `value` and `Value` are distinct, so `Value` is added.
         materializeStreamingTable(
-          "t", new StructType().add("id", IntegerType).add("value", StringType), Map.empty)
+          "t",
+          new StructType().add("id", IntegerType).add("value", StringType),
+          Map.empty)
         assert(recordingCatalog.recordedAlters.isEmpty)
 
         materializeStreamingTable(
-          "t", new StructType().add("id", IntegerType).add("Value", StringType), Map.empty)
+          "t",
+          new StructType().add("id", IntegerType).add("Value", StringType),
+          Map.empty)
         assert(recordingCatalog.recordedAlters.size == 1)
         val changes = recordingCatalog.recordedAlters.flatten
-        assert(changes.collect { case ac: TableChange.AddColumn => ac.fieldNames()(0) } ==
-          Seq("Value"))
+        assert(
+          changes.collect { case ac: TableChange.AddColumn => ac.fieldNames()(0) } ==
+            Seq("Value"))
       }
     }
   }
@@ -1500,8 +1396,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     withRecordingCatalog {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         materializeGraph(
-          new TestGraphRegistrationContext(
-            spark, Map(SQLConf.CASE_SENSITIVE.key -> "true")) {
+          new TestGraphRegistrationContext(spark, Map(SQLConf.CASE_SENSITIVE.key -> "true")) {
             registerView("src", query = dfFlowFunc(Seq((1, "a")).toDF("id", "value")))
             registerTable(
               "t",
@@ -1509,16 +1404,14 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
               catalog = Option(recordingCatalogName),
               database = Option(recordingNamespace))
           }.resolveToDataflowGraph(),
-          storageRoot = storageRoot
-        )
+          storageRoot = storageRoot)
         assert(
           loadTableFromRecordingCatalog("t").columns() sameElements
             CatalogV2Util.structTypeToV2Columns(
               new StructType().add("id", IntegerType).add("value", StringType)))
 
         materializeGraph(
-          new TestGraphRegistrationContext(
-            spark, Map(SQLConf.CASE_SENSITIVE.key -> "true")) {
+          new TestGraphRegistrationContext(spark, Map(SQLConf.CASE_SENSITIVE.key -> "true")) {
             registerView("src", query = dfFlowFunc(Seq((1, "a")).toDF("id", "value")))
             registerTable(
               "t",
@@ -1526,8 +1419,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
               catalog = Option(recordingCatalogName),
               database = Option(recordingNamespace))
           }.resolveToDataflowGraph(),
-          storageRoot = storageRoot
-        )
+          storageRoot = storageRoot)
         assert(
           loadTableFromRecordingCatalog("t").columns() sameElements
             CatalogV2Util.structTypeToV2Columns(
@@ -1548,16 +1440,19 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       registerView("src", query = dfFlowFunc(Seq((1, "a")).toDF("id", "value")))
       registerTable("t")
       registerFlow(
-        "t", "f1", sqlFlowFunc(spark, "SELECT id, value FROM src"),
+        "t",
+        "f1",
+        sqlFlowFunc(spark, "SELECT id, value FROM src"),
         sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"))
       registerFlow(
-        "t", "f2", sqlFlowFunc(spark, "SELECT id, value AS Value FROM src"),
+        "t",
+        "f2",
+        sqlFlowFunc(spark, "SELECT id, value AS Value FROM src"),
         sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "false"))
     }
 
     val ex = intercept[AnalysisException] {
-      ctx.resolveToDataflowGraph().inferSchemas(
-        spark.sessionState.conf.caseSensitiveAnalysis)
+      ctx.resolveToDataflowGraph().inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)
     }
     checkError(
       exception = ex,
@@ -1566,9 +1461,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         "tableName" -> "spark_catalog.test_db.t",
         "configKey" -> SQLConf.CASE_SENSITIVE.key,
         "flowConfigurations" ->
-          ("false (spark_catalog.test_db.f2); true (spark_catalog.test_db.f1)")
-      )
-    )
+          ("false (spark_catalog.test_db.f2); true (spark_catalog.test_db.f1)")))
   }
 
   test("SPARK-58517: a flow inheriting the session value conflicts with one that overrides it") {
@@ -1580,14 +1473,15 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         registerView("src", query = dfFlowFunc(Seq((1, "a")).toDF("id", "value")))
         registerTable("t")
         registerFlow(
-          "t", "f1", sqlFlowFunc(spark, "SELECT id, value FROM src"),
+          "t",
+          "f1",
+          sqlFlowFunc(spark, "SELECT id, value FROM src"),
           sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"))
         registerFlow("t", "f2", sqlFlowFunc(spark, "SELECT id, value FROM src"))
       }
 
       val ex = intercept[AnalysisException] {
-        ctx.resolveToDataflowGraph().inferSchemas(
-          spark.sessionState.conf.caseSensitiveAnalysis)
+        ctx.resolveToDataflowGraph().inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)
       }
       assert(ex.getCondition === "CONFLICTING_PIPELINE_FLOW_CASE_SENSITIVITY")
       assert(ex.getMessage.contains("session default"))
@@ -1602,13 +1496,18 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         registerView("src", query = dfFlowFunc(Seq((1, "a")).toDF("id", "value")))
         registerTable("t")
         registerFlow(
-          "t", "f1", sqlFlowFunc(spark, "SELECT id, value FROM src"),
+          "t",
+          "f1",
+          sqlFlowFunc(spark, "SELECT id, value FROM src"),
           sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"))
         registerFlow(
-          "t", "f2", sqlFlowFunc(spark, "SELECT id, value AS Value FROM src"),
+          "t",
+          "f2",
+          sqlFlowFunc(spark, "SELECT id, value AS Value FROM src"),
           sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "TRUE"))
       }
-      val inferred = ctx.resolveToDataflowGraph()
+      val inferred = ctx
+        .resolveToDataflowGraph()
         .inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)(
           fullyQualifiedIdentifier("t"))
       // Case-sensitive, so both spellings survive.
