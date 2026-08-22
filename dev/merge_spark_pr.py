@@ -83,6 +83,16 @@ JIRA_CONNECT_TIMEOUT = float(os.environ.get("JIRA_CONNECT_TIMEOUT", "3.05"))
 # exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
 # https://github.com/settings/tokens. This script only requires the "public_repo" scope.
 GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
+# When set to any non-empty value (via this env var, or the --dry-run/-n flag parsed in main),
+# run every read-only step for real -- fetch the PR, look up JIRA, compute fix versions, and
+# perform the local squash-merge and cherry-picks on the throwaway PR_TOOL_* branches so conflicts
+# still surface and a real merge hash is computed -- but suppress every effect that leaves this
+# machine: the git push to PUSH_REMOTE_NAME, the GitHub PR close/comment, and all JIRA writes
+# (component and fixVersion updates, assignment, and the resolve transition). Each suppressed
+# effect is logged as a "DRY-RUN: would ..." line instead of running. Any non-empty string is
+# truthy, matching the SKIP_VERSION_CHECK convention above. This is a module-level default; main()
+# also turns it on for the --dry-run/-n flag.
+DRY_RUN = bool(os.environ.get("DRY_RUN"))
 
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
@@ -487,6 +497,9 @@ def find_merge_commit(pr_num, pr_events):
 
 
 def close_pr(pr_num):
+    if DRY_RUN:
+        print("DRY-RUN: would close PR #%s via the GitHub API." % pr_num)
+        return None
     url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
     data = json.dumps({"state": "closed"}).encode("utf-8")
     request = Request(url, data=data, method="PATCH")
@@ -502,6 +515,9 @@ def close_pr(pr_num):
 
 
 def comment_pr(pr_num, body):
+    if DRY_RUN:
+        print("DRY-RUN: would post a comment on PR #%s via the GitHub API." % pr_num)
+        return None
     url = "%s/issues/%s/comments" % (GITHUB_API_BASE, pr_num)
     data = json.dumps({"body": body}).encode("utf-8")
     request = Request(url, data=data, method="POST")
@@ -536,6 +552,9 @@ def post_merge_comment(pr_num, merged_commits):
         "\n%s\n\n%s\n%s"
         % (bold("Posting merge comment on PR #%s:" % pr_num), bold(summary), attribution)
     )
+    if DRY_RUN:
+        print("DRY-RUN: would post the above merge comment on PR #%s." % pr_num)
+        return
     if not GITHUB_OAUTH_KEY:
         print_error("GITHUB_OAUTH_KEY is not set; skipping the merge comment.")
         return
@@ -548,7 +567,40 @@ def fail(msg):
     sys.exit(-1)
 
 
+def is_remote_mutating_git_cmd(cmd):
+    """True only for a git command that mutates a remote: today just ``git push``.
+
+    ``cmd`` is either a string ("git push apache X:branch-4.x") or an argv list. In dry-run
+    mode only these are suppressed; every other git command -- fetch, checkout, merge, commit,
+    cherry-pick, rev-parse, config, branch -D -- still runs, so the local squash-merge and
+    cherry-picks happen on the throwaway PR_TOOL_* branches that clean_up always removes. That
+    keeps conflict detection and the computed merge hash realistic, while the push to
+    PUSH_REMOTE_NAME (the only command that reaches the shared apache repo) is the single git
+    effect held back.
+
+    >>> is_remote_mutating_git_cmd("git push apache X:branch-4.x")
+    True
+    >>> is_remote_mutating_git_cmd(["git", "push", "apache", "X:branch-4.x"])
+    True
+    >>> is_remote_mutating_git_cmd("git fetch apache master:PR_TOOL_tmp")
+    False
+    >>> is_remote_mutating_git_cmd(["git", "commit", '--author="a <b>"', "-m", "msg"])
+    False
+    >>> is_remote_mutating_git_cmd("git checkout PR_TOOL_MERGE_PR_1")
+    False
+    >>> is_remote_mutating_git_cmd("git rev-parse HEAD")
+    False
+    """
+    tokens = cmd.split(" ") if isinstance(cmd, str) else list(cmd)
+    tokens = [t for t in tokens if t]
+    return len(tokens) >= 2 and tokens[0] == "git" and tokens[1] == "push"
+
+
 def run_cmd(cmd):
+    if DRY_RUN and is_remote_mutating_git_cmd(cmd):
+        rendered = cmd if isinstance(cmd, str) else " ".join(cmd)
+        print("DRY-RUN: would run: %s" % rendered)
+        return ""
     print(cmd)
     if isinstance(cmd, list):
         return subprocess.check_output(cmd).decode("utf-8")
@@ -1103,6 +1155,9 @@ def reconcile_jira_components(issue, title_components):
         # Append the PR title's components, keeping the existing ones first.
         new_names = list(dict.fromkeys(current + title_jira_components))
 
+    if DRY_RUN:
+        print("DRY-RUN: would set JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
+        return
     try:
         issue.update(fields={"components": [{"name": n} for n in new_names]})
         print("Updated JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
@@ -1224,6 +1279,12 @@ def resolve_jira_issue(
         if not jira_fix_versions:
             print("No new fix versions selected for JIRA issue %s; no update needed." % issue.key)
             return
+        if DRY_RUN:
+            print(
+                "DRY-RUN: would add fixVersions=%s to JIRA %s."
+                % ([v["name"] for v in jira_fix_versions], issue.key)
+            )
+            return
         issue.update(
             fields={"fixVersions": [v.raw for v in existing_fix_versions] + jira_fix_versions}
         )
@@ -1241,6 +1302,12 @@ def resolve_jira_issue(
         0
     ]
     resolution = list(filter(lambda r: r.raw["name"] == "Fixed", asf_jira.resolutions()))[0]
+    if DRY_RUN:
+        print(
+            "DRY-RUN: would resolve JIRA %s as Fixed with fixVersions=%s and add comment:\n%s"
+            % (issue.key, fix_versions, comment)
+        )
+        return
     asf_jira.transition_issue(
         issue.key,
         resolve["id"],
@@ -1313,6 +1380,9 @@ def choose_jira_assignee(issue):
 
 
 def grant_contributor_role(user: str):
+    if DRY_RUN:
+        print("DRY-RUN: would add user '%s' to the SPARK contributors role." % user)
+        return
     role = asf_jira.project_role("SPARK", 10010)
     role.add_user(user)
     print("Successfully added user '%s' to contributors role" % user)
@@ -1325,6 +1395,9 @@ def assign_issue(issue: int, assignee: str) -> bool:
     from 20 candidates. If it's unmatched, it picks the head blindly. In our case, the assignee
     is already resolved.
     """
+    if DRY_RUN:
+        print("DRY-RUN: would assign JIRA %s to '%s'." % (issue, assignee))
+        return True
     url = getattr(asf_jira, "_get_latest_url")(f"issue/{issue}/assignee")
     payload = {"name": assignee}
     getattr(asf_jira, "_session").put(url, data=json.dumps(payload))
@@ -1747,10 +1820,53 @@ def check_script_up_to_date():
     )
 
 
+def parse_args(argv):
+    """Parse the merge-script CLI args into ``(pr_num, dry_run)``.
+
+    ``argv`` is the arg list after the program name (i.e. ``sys.argv[1:]``). A lone
+    ``--dry-run`` (or ``-n``) flag turns on dry-run mode and may appear before or after the
+    optional PR number; the first non-flag argument is the PR number. ``pr_num`` is None when
+    not supplied, in which case the caller prompts for it interactively. The DRY_RUN env var is
+    combined with this flag by the caller, so it is not consulted here.
+
+    >>> parse_args([])
+    (None, False)
+    >>> parse_args(["123"])
+    ('123', False)
+    >>> parse_args(["--dry-run", "123"])
+    ('123', True)
+    >>> parse_args(["123", "--dry-run"])
+    ('123', True)
+    >>> parse_args(["-n"])
+    (None, True)
+    >>> parse_args(["123", "456"])
+    ('123', False)
+    """
+    dry_run = False
+    pr_num = None
+    for arg in argv:
+        if arg in ("--dry-run", "-n"):
+            dry_run = True
+        elif pr_num is None:
+            pr_num = arg
+    return pr_num, dry_run
+
+
 def main():
+    global DRY_RUN, original_head
+    arg_pr_num, dry_run_flag = parse_args(sys.argv[1:])
+    DRY_RUN = DRY_RUN or dry_run_flag
+    if DRY_RUN:
+        print(
+            bold(
+                "=== DRY-RUN: read-only steps run for real, but the git push to %s, the GitHub "
+                "PR close/comment, and all JIRA writes are suppressed and only logged. ==="
+                % PUSH_REMOTE_NAME
+            )
+        )
+
     check_script_up_to_date()
     initialize_jira()
-    global original_head
 
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
@@ -1759,10 +1875,10 @@ def main():
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
 
-    if len(sys.argv) == 1:
+    if arg_pr_num is None:
         pr_num = get_input("Which pull request would you like to merge? (e.g. 34): ", r"^\d+$")
     else:
-        pr_num = sys.argv[1]
+        pr_num = arg_pr_num
         print("Start to merge pull request #%s" % (pr_num))
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
     pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
