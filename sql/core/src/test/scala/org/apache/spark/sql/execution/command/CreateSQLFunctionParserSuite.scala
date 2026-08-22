@@ -18,9 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.catalog.LanguageSQL
 import org.apache.spark.sql.catalyst.plans.logical.CreateUserDefinedFunction
 import org.apache.spark.sql.execution.SparkSqlParser
 
@@ -61,7 +59,7 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       collation = None,
       isDeterministic = isDeterministic,
       containsSQL = containsSQL,
-      language = LanguageSQL,
+      language = org.apache.spark.sql.catalyst.catalog.LanguageSQL,
       isTableFunc = isTableFunc,
       ignoreIfExists = ignoreIfExists,
       replace = replace)
@@ -79,10 +77,10 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       containsSQL: Option[Boolean] = None,
       isTableFunc: Boolean = false,
       ignoreIfExists: Boolean = false,
-      replace: Boolean = false): CreateSQLFunctionCommand = {
+      replace: Boolean = false): CreateUserDefinedFunction = {
     // scalastyle:on argcount
-    CreateSQLFunctionCommand(
-      FunctionIdentifier(name),
+    CreateUserDefinedFunction(
+      UnresolvedIdentifier(Seq(name)),
       inputParamText = inputParamText,
       returnTypeText = returnTypeText,
       exprText = exprText,
@@ -91,8 +89,8 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       collation = None,
       isDeterministic = isDeterministic,
       containsSQL = containsSQL,
+      language = org.apache.spark.sql.catalyst.catalog.LanguageSQL,
       isTableFunc = isTableFunc,
-      isTemp = true,
       ignoreIfExists = ignoreIfExists,
       replace = replace)
   }

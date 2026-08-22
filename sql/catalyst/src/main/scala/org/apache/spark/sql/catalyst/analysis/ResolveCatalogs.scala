@@ -91,11 +91,13 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
         "CREATE", nameParts.last)
 
-    case CreateUserDefinedFunction(UnresolvedIdentifier(nameParts, _),
-        _, _, _, _, _, _, _, _, _, _, _, _)
-        if isSystemBuiltinName(nameParts) =>
-      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
-        "CREATE", nameParts.last)
+    case c @ CreateUserDefinedFunction(
+        u @ UnresolvedIdentifier(nameParts, _), _, _, _, _, _, _, _, _, _, _, _, _) =>
+      if (isSystemBuiltinName(nameParts)) {
+        throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+          "CREATE", nameParts.last)
+      }
+      c.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
 
     case DropFunction(UnresolvedIdentifier(nameParts, _), _)
         if isSystemBuiltinName(nameParts) =>

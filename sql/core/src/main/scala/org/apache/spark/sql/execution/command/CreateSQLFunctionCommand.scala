@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{withPosition, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, Analyzer, ResolvedIdentifier, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedIdentifier, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
@@ -34,24 +34,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StructField, StructType}
 
-/**
- * The DDL command that creates a SQL function.
- * For example:
- * {{{
- *    CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
- *    ([param_name param_type [COMMENT param_comment], ...])
- *    RETURNS {ret_type | TABLE (ret_name ret_type [COMMENT ret_comment], ...])}
- *    [function_properties] function_body;
- *
- *    function_properties:
- *      [NOT] DETERMINISTIC | COMMENT function_comment | [ CONTAINS SQL | READS SQL DATA ]
- *
- *    function_body:
- *      RETURN {expression | TABLE ( query )}
- * }}}
- */
 case class CreateSQLFunctionCommand(
-    name: FunctionIdentifier,
+    child: LogicalPlan,
     inputParamText: Option[String],
     returnTypeText: String,
     exprText: Option[String],
@@ -68,7 +52,21 @@ case class CreateSQLFunctionCommand(
 
   import SQLFunction._
 
+  lazy val name: FunctionIdentifier = child match {
+    case ResolvedIdentifier(c, ident) =>
+      FunctionIdentifier(ident.name(), ident.namespace().headOption)
+    case u: UnresolvedIdentifier =>
+      FunctionIdentifier(u.nameParts.last, u.nameParts.dropRight(1).lastOption)
+    case _ =>
+      throw SparkException.internalError(
+        s"Unexpected child plan in CreateSQLFunctionCommand: $child")
+  }
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): CreateSQLFunctionCommand = copy(child = newChild)
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
+
     val parser = sparkSession.sessionState.sqlParser
     val analyzer = sparkSession.sessionState.analyzer
     val catalog = sparkSession.sessionState.catalog

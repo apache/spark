@@ -206,9 +206,9 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           newCreateView.copyTagsFrom(createView)
           newCreateView
 
-        case createUserDefinedFunction@CreateUserDefinedFunction(
-        ResolvedIdentifier(catalog: SupportsNamespaces, identifier),
-        _, _, _, _, _, collation, _, _, _, _, _, _) if collation.isEmpty =>
+        case createUserDefinedFunction@CreateUserDefinedFunction(ResolvedIdentifier(
+        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _, _, _, _)
+          if createUserDefinedFunction.collation.isEmpty =>
           val newCreateUserDefinedFunction =
             CurrentOrigin.withOrigin(createUserDefinedFunction.origin) {
               createUserDefinedFunction.copy(
