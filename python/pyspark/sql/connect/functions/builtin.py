@@ -2721,8 +2721,23 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
 concat_ws.__doc__ = pysparkfuncs.concat_ws.__doc__
 
 
-def decode(col: "ColumnOrName", charset: str) -> Column:
-    return _invoke_function("decode", _to_col(col), lit(charset))
+def decode(col: "ColumnOrName", *args: Union["ColumnOrName", Any]) -> Column:
+    if len(args) == 0:
+        raise PySparkTypeError(
+            errorClass="NOT_ENOUGH_ARGS",
+            messageParameters={"func_name": "decode", "min_num_args": "1"},
+        )
+    if len(args) == 1:
+        # 2-arg form: binary decode with charset
+        charset = args[0]
+        return _invoke_function("decode", _to_col(col), lit(charset))
+    else:
+        # 3+ arg form: Oracle-style CASE WHEN decode
+        return _invoke_function(
+            "decode",
+            _to_col(col),
+            *[_to_col(a) for a in args],
+        )
 
 
 decode.__doc__ = pysparkfuncs.decode.__doc__
