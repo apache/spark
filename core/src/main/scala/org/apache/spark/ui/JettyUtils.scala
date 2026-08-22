@@ -256,7 +256,10 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /** Create a handler for proxying request to Workers and Application Drivers */
-  def createProxyHandler(idToUiAddress: String => Option[String]): ServletContextHandler = {
+  def createProxyHandler(
+      idToUiAddress: String => Option[String],
+      reverseProxyUrl: String = ""): ServletContextHandler = {
+    val normalizedReverseProxyUrl = reverseProxyUrl.stripSuffix("/")
     val servlet = new ProxyServlet {
       override def rewriteTarget(request: HttpServletRequest): String = {
         val path = request.getPathInfo
@@ -294,7 +297,14 @@ private[spark] object JettyUtils extends Logging {
           }
           val existingContext = Option(clientRequest.getHeader("X-Forwarded-Context")).getOrElse("")
           val contextPath = Option(clientRequest.getContextPath).getOrElse("")
-          val proxyContext = existingContext + contextPath + prefix
+          val proxyPrefix = if (normalizedReverseProxyUrl.startsWith("http://") ||
+              normalizedReverseProxyUrl.startsWith("https://")) {
+            val uri = new java.net.URI(normalizedReverseProxyUrl)
+            Option(uri.getPath).getOrElse("")
+          } else {
+            normalizedReverseProxyUrl
+          }
+          val proxyContext = existingContext + proxyPrefix + contextPath + prefix
           proxyRequest.headers(headers => headers.put("X-Forwarded-Context", proxyContext))
         }
       }
@@ -315,6 +325,15 @@ private[spark] object JettyUtils extends Logging {
           val newHeader = createProxyLocationHeader(headerValue, clientRequest,
             serverResponse.getRequest().getURI())
           if (newHeader != null) {
+            if (normalizedReverseProxyUrl.nonEmpty) {
+              val scheme = clientRequest.getScheme
+              val host = Option(clientRequest.getHeader("host")).getOrElse("")
+              val rootProxyPrefix = s"$scheme://$host/proxy/"
+              if (newHeader.startsWith(rootProxyPrefix)) {
+                val rest = newHeader.substring(rootProxyPrefix.length)
+                return s"$normalizedReverseProxyUrl/proxy/$rest"
+              }
+            }
             return newHeader
           }
         }
