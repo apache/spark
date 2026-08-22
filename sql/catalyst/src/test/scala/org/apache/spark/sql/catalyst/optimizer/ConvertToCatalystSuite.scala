@@ -293,6 +293,25 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
+  test("leaves an argument inside a lambda at each use site") {
+    transpileOn {
+      // A lambda body runs per element where a Project below the operator runs per row, so sharing
+      // in there would move a nondeterministic draw to the wrong granularity -- and make the
+      // argument eager, raising under ANSI on a row whose array is empty and whose body never ran.
+      // The argument reads no lambda variable, so RewriteWithExpression would happily place it.
+      val arg = Divide(attrA, attrA)
+      val option = Add(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
+      val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
+      val call = makeTPUDF(makePyUDF(arg), option)
+      val body = ArrayTransform(
+        $"arr".array(LongType), LambdaFunction(Add(call, lambdaVar), Seq(lambdaVar)))
+      val result = ConvertToCatalyst.applyExpr(body, parentIsUdf = false)
+      assert(!result.exists(_.isInstanceOf[With]), s"Expected no With inside a lambda: $result")
+      assert(result.collect { case e if e == arg => e }.length == 2,
+        s"Expected the argument left at both use sites: $result")
+    }
+  }
+
   test("leaves a Command's arguments at each use site") {
     transpileOn {
       // No `With` under a Command: it has no output of its own, so RewriteWithExpression cannot
@@ -306,6 +325,26 @@ class ConvertToCatalystSuite extends PlanTest {
       val converted = ConvertToCatalyst(DeleteFromTable(relation, GreaterThan(tpudf, Literal(0L))))
       assert(converted == DeleteFromTable(relation, GreaterThan(Multiply(arg, arg), Literal(0L))),
         s"Expected the argument left at both use sites: $converted")
+    }
+  }
+
+  test("apply keeps a transpilable UDF Python when wrapped by a non-transpiled Python UDF") {
+    // `apply` threads parentIsUdf down from the top of each expression, so the mid UDF stays Python
+    // rather than splitting the batch pipeline into Python -> Catalyst -> Python. The applyExpr
+    // tests above pass parentIsUdf in directly and so bypass that threading.
+    transpileOn {
+      val plain = makePyUDF(attrA)
+      val midPy = makePyUDF(plain)
+      val midTPUDF = makeTPUDF(midPy, Add(plain, Literal(4L)))
+      assert(midTPUDF.hasOnlyPythonUDFInputs)
+      val outerPy = makePyUDF(midTPUDF)
+      val optimized = ConvertToCatalyst(Project(Seq(Alias(outerPy, "v")()), LocalRelation(attrA)))
+      val exprs = optimized.flatMap(_.expressions)
+      assert(!exprs.exists(_.exists(_.isInstanceOf[TranspiledPythonUDF])),
+        s"TranspiledPythonUDF survived: $optimized")
+      // Three Python UDFs remain (outer, mid, plain); the mid was not converted to its Add option.
+      assert(exprs.map(_.collect { case u: PythonUDF => u }.size).sum == 3,
+        s"Expected the mid UDF to stay Python (3 PythonUDFs), got: $optimized")
     }
   }
 

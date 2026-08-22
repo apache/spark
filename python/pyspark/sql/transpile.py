@@ -38,10 +38,26 @@ all-numeric and all-string variants.
 How many times a lowered UDF computes its arguments is best effort
 (SPARK-58626). An argument the body uses more than once normally gets its own
 column below the operator and is computed once per row, as eagerly as the
-Python eval operator would, but the optimizer puts one back at each use site
-where a column is not worth it -- a cheap argument, or one that cannot go in
-a projection -- so a nondeterministic argument can still get drawn more than
-once per row. An argument the body never uses is not computed at all.
+Python eval operator would. But the optimizer puts one back at each use site
+whenever a column is not worth it -- a cheap argument, or one that cannot go
+in a projection -- and, more surprisingly, whenever the *position* of the call
+rules a column out:
+
+* inside a branch that may not be evaluated (``when(...)``, ``coalesce``'s
+  later arguments), because a column below the operator would always be
+  evaluated where the branch may not be;
+* inside a higher-order function's lambda (``transform`` and friends), because
+  a column is computed per row where the body runs per element.
+
+In those positions a repeated argument is computed once per use, so a
+nondeterministic one is drawn more than once and a body can see two different
+values for one parameter::
+
+    clamp = udf(lambda x: x if x > 0.5 else 0.0, "double")
+    df.select(clamp(rand()))                      # one draw per row
+    df.select(when(col("a") > 0, clamp(rand())))  # two -- can return <= 0.5
+
+An argument the body never uses is not computed at all.
 """
 
 import ast

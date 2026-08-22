@@ -326,10 +326,24 @@ object TranspiledUDFParameter {
    * [[org.apache.spark.sql.catalyst.plans.logical.Project]] below the operator -- and also what
    * decides which ones are not worth one and get put back inline at each use site. So how many
    * times an argument really gets evaluated is best effort: a cheap argument, one the option reads
-   * only once, and one that cannot go in a Project are all put back inline. Note that
+   * only once, and one that cannot go in a Project are all put back inline. An argument the option
+   * never uses is not evaluated at all, since substitution dropped it before we got here.
+   *
+   * The gap most worth knowing about is positional. `RewriteWithExpression` inlines a `With` that
+   * sits in a [[ConditionalExpression]]'s lazily-evaluated input, since a Project below the
+   * operator would be evaluated on rows the branch is not taken on. So a call inside `when(...)`,
+   * or in a later `coalesce` argument, is back to once per use -- and a nondeterministic argument
+   * there is drawn once per use, which lets the body see two values for one parameter. A call
+   * inside a lambda has the matching problem for the opposite reason and `ConvertToCatalyst`
+   * handles that one itself, by not sharing at all.
+   *
    * `CollapseProject.isCheap` counts a [[PythonUDF]] as cheap, so an argument that is itself an
-   * un-transpilable Python call still costs a round trip per use. An argument the option never
-   * uses is not evaluated at all, since substitution dropped it before we got here.
+   * un-transpilable Python call is always put back inline. Its *value* is still shared either way:
+   * `ExtractPythonUDFs` maps every occurrence of one call to a single result attribute. But it
+   * only folds the duplicate copies into one round trip when the call is deterministic, because
+   * that dedup goes through an `ExpressionSet`, which holds a nondeterministic expression as often
+   * as it is added. So a nondeterministic Python argument used twice costs a second round trip
+   * whose column is then read by nobody.
    *
    * A custom transpiler plugging in its own ConvertToX wants to call this too, or its options
    * evaluate a repeated argument once per use. Pass `share = false` where the operator cannot take
@@ -348,6 +362,12 @@ object TranspiledUDFParameter {
     // it could hold belong to a nested transpiled call, and `ConvertToCatalyst` converts those
     // first, which turns them into refs of their own `With`. So there is nothing to recurse into
     // below a marker, and `p.child` goes into the definition as it stands.
+    //
+    // The first copy of an index defines the common expression and the rest read it, which is only
+    // sound because every copy of one index holds the same subtree -- substitution dropped one
+    // argument expression at each of that parameter's placeholders, and analysis resolved that one
+    // subtree once. Coercion wraps a marker rather than rewriting its child, so it cannot drive two
+    // copies apart either.
     //
     // `inline` means leave this argument at its use site and just take the marker off, and it is
     // why this is a hand-written walk rather than a `transformUp`: the flag is context from above.

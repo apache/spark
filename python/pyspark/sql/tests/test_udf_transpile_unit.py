@@ -1448,6 +1448,87 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertFalse(self._shares_an_argument(col_df))
             self.assertEqual([0, 1, 4], [r[0] for r in col_df.collect()])
 
+    def test_udf_transpile_shares_a_python_udf_argument(self):
+        # SPARK-58626: an argument that is itself a Python UDF. CollapseProject.isCheap counts a
+        # PythonUDF as cheap, so it goes back inline at both use sites rather than reading a shared
+        # column -- but ExtractPythonUDFs points every occurrence of one call at a single result
+        # attribute, so both sites still read one value. With a nondeterministic call that is the
+        # whole ballgame: two independent draws would make `a - a` nonzero.
+        #
+        # What inlining does cost is a second Python round trip, because the dedup that would fold
+        # the copies goes through an ExpressionSet and that holds a nondeterministic expression
+        # once per add. Wasted work, not a wrong answer, so it is not asserted here.
+        import random
+
+        draw = lambda x: random.random()  # noqa: E731
+        subtract_self = lambda a: a - a  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            rand_udf = UserDefinedFunction(draw, DoubleType()).asNondeterministic()
+            diff = UserDefinedFunction(subtract_self, DoubleType())
+            self.assertTrue(diff.transpiled)
+            vals = [r[0] for r in self.spark.range(20).select(diff(rand_udf("id"))).collect()]
+            self.assertEqual([0.0] * 20, vals, "Both uses must read the same draw")
+
+    def test_udf_transpile_position_can_rule_out_sharing(self):
+        # SPARK-58626: pins the two positions where an argument is NOT shared, both because
+        # RewriteWithExpression's Project would be evaluated on rows the use site is not.
+        #
+        # A conditional branch is the one that shows: the body sees two draws for one parameter, so
+        # `x if x > 0.5 else 0.0` can return a value its own condition rejected. Documented in
+        # transpile.py. If this starts passing one evaluation, that note should go.
+        #
+        # A lambda is the one ConvertToCatalyst handles itself, by declining to share: an argument
+        # shared per row would be drawn once for every element, and would be eager -- so the empty
+        # array below must NOT raise even though the argument divides by zero.
+        from pyspark.sql.functions import array, col, lit, rand, transform, when
+
+        clamp = lambda x: x if x > 0.5 else 0.0  # noqa: E731
+        used_twice = lambda a, b: (a + a) + b  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            c = UserDefinedFunction(clamp, DoubleType())
+            self.assertTrue(c.transpiled)
+            rows = self.spark.range(200).select((col("id") + 1).cast("double").alias("x"))
+
+            bare = [r[0] for r in rows.select(c(rand()).alias("v")).collect()]
+            self.assertTrue(all(v == 0.0 or v > 0.5 for v in bare), "bare call must share one draw")
+
+            nested = rows.select(when(col("x") > 0, c(rand())).otherwise(lit(-1.0)).alias("v"))
+            vals = [r[0] for r in nested.collect()]
+            self.assertTrue(
+                any(0.0 < v <= 0.5 for v in vals),
+                "expected the KNOWN two-draw gap inside a conditional branch",
+            )
+
+            s = UserDefinedFunction(used_twice, DoubleType())
+            self.assertTrue(s.transpiled)
+            df = self.spark.createDataFrame([(1.0, 0.0)], "a double, b double").select(
+                col("a"), col("b"), array().cast("array<double>").alias("arr")
+            )
+            lazy = df.select(transform(col("arr"), lambda e: s(col("a") / col("b"), e)).alias("v"))
+            self.assertEqual([[]], [r[0] for r in lazy.collect()])
+
+    def test_udf_transpile_udf_as_a_predicate(self):
+        # A predicate is transpiled like anything else: no Python worker in a `where` or a join
+        # condition, and the same answers. The fallback to the Python path is one `headOption` away
+        # in ConvertToCatalyst.applyExpr, so this is the net under it.
+        from pyspark.sql.functions import col
+
+        used_twice = lambda a, b: (a + a) if b > 0 else 0.0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(used_twice, DoubleType())
+            self.assertTrue(u.transpiled)
+            df = self.spark.createDataFrame([(1.0, 2.0), (4.0, 2.0)], "a double, b double")
+            other = self.spark.createDataFrame([(2.0,)], "c double")
+            predicate = u(col("a") / col("b"), col("b")) > 2.0
+
+            filtered = df.where(predicate)
+            self.assertEqual(0, self._eval_python_count(filtered))
+            self.assertEqual([(4.0, 2.0)], [(r[0], r[1]) for r in filtered.collect()])
+
+            joined = df.join(other, predicate)
+            self.assertEqual(0, self._eval_python_count(joined))
+            self.assertEqual([(4.0, 2.0, 2.0)], [tuple(r) for r in joined.collect()])
+
     def test_udf_transpile_evaluates_inputs_once_in_a_group_by(self):
         # SPARK-58626: an Aggregate is the awkward one -- a use no aggregate function wraps has to
         # *be* a grouping expression, so it cannot read a shared column. RewriteWithExpression
@@ -1550,6 +1631,14 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     return str(e)
 
         for conf, label in ((_TRANSPILE_ON, "transpiled"), (_TRANSPILE_OFF_ANSI_ON, "interpreted")):
+            # Without this the transpiled arm passes vacuously: the interpreted path raises too, so
+            # a transpiler bail-out on this lambda would keep the test green.
+            with self.sql_conf(conf):
+                self.assertEqual(
+                    conf is _TRANSPILE_ON,
+                    bool(UserDefinedFunction(used_twice, DoubleType()).transpiled),
+                    label,
+                )
             error = divide_by_zero_error(used_twice, conf)
             self.assertIsNotNone(error, label)
             self.assertIn("DIVIDE_BY_ZERO", error, label)
