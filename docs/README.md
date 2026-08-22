@@ -119,12 +119,15 @@ The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-d
 using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs
 using [MkDocs](https://www.mkdocs.org/).
 
-To control what API docs get built, you can set any combination of the following shell variables before you run `bundle exec jekyll build`:
-* `SKIP_API=1`: Skip building all the API docs.
-* `SKIP_SCALADOC=1`: Skip the Scala and Java API docs.
-* `SKIP_PYTHONDOC=1`: Skip the Python API docs.
-* `SKIP_RDOC=1`: Skip the R API docs.
-* `SKIP_SQLDOC=1`: Skip the SQL API docs.
+To control what docs get built, you can set any combination of the following shell variables before you run `bundle exec jekyll build`:
+* `SKIP_ERRORDOC=1`: Skip building the unified error documentation.
+* `SKIP_SPARK_BUILD=1`: Skip building Spark. A working Spark build is required for the API docs to build correctly, so set this only if you know you've already built Spark.
+* `SKIP_API=1`: Skip building all the API docs. This is basically the same as setting all of the following skip flags:
+  * `SKIP_SCALADOC=1`: Skip the Scala and Java API docs. This includes skipping the Unidoc build as well as the copy of files to the site output.
+  * `SKIP_UNIDOC=1`: Skip building the Unidoc. Any existing Scala and Java docs will still be copied to the output directory; if they don't exist, the copy will fail.
+  * `SKIP_PYTHONDOC=1`: Skip the Python API docs.
+  * `SKIP_RDOC=1`: Skip the R API docs.
+  * `SKIP_SQLDOC=1`: Skip the SQL API docs.
 
 ## Build docs with docker image (Optional)
 
