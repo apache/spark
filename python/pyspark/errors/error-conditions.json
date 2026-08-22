@@ -460,6 +460,13 @@
       "Invalid streaming source name '<source_name>'. Source names must contain only ASCII letters, digits, and underscores."
     ]
   },
+  "INVALID_TIMEOUT_DURATION_STRING": {
+    "message": [
+      "Provided timeout duration string '<duration>' is invalid.",
+      " Use a Spark interval string such as '5 minutes' or '1 hour 30 minutes'.",
+      " Only seconds may have a fractional quantity, e.g. '1.5 seconds'."
+    ]
+  },
   "INVALID_TIMEOUT_TIMESTAMP": {
     "message": [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
