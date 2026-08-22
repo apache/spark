@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.connector.catalog.{
   InMemoryTableWithJoinAndSampleCatalog,
   InMemoryTableWithLegacyJoinAndSampleCatalog,
   InMemoryTableWithLegacyTableSampleCatalog,
+  InMemoryTableWithTableSampleAndAdvisoryCatalog,
+  InMemoryTableWithTableSampleAndAdvisoryFilters,
   InMemoryTableWithTableSampleCatalog}
+import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 
 class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
@@ -325,5 +332,50 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     } finally {
       sql(s"DROP TABLE IF EXISTS $tableName")
     }
+  }
+
+  test("advisory filters do not block TABLESAMPLE pushdown") {
+    registerCatalog("testsampleadvisory", classOf[InMemoryTableWithTableSampleAndAdvisoryCatalog])
+    val table = "testsampleadvisory.ns.sample_tbl"
+    val advisory = "id = 1L"
+    val prop = InMemoryTableWithTableSampleAndAdvisoryFilters.ADVISORY_FILTER_PROP
+    sql(s"CREATE TABLE $table (id bigint, data string) USING _ " +
+      s"TBLPROPERTIES ('$prop' = '$advisory')")
+    try {
+      sql(s"INSERT INTO $table VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e')")
+      val df = sql(s"SELECT * FROM $table TABLESAMPLE SYSTEM (100 PERCENT) WHERE id >= 1")
+      checkSamplePushed(df, pushed = true)
+      checkAnswer(df, Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"), Row(4L, "d"), Row(5L, "e")))
+      assertAdvisoryOnLogicalPlan(df, advisory)
+      assertAdvisoryNotInFilterExec(df, advisory)
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $table")
+    }
+  }
+
+  private def assertAdvisoryOnLogicalPlan(df: DataFrame, advisory: String): Unit = {
+    val plan = df.queryExecution.optimizedPlan
+    val scan = plan.collectFirst { case s: DataSourceV2ScanRelation => s }.getOrElse {
+      fail(s"expected DataSourceV2ScanRelation in:\n${plan.treeString}")
+    }
+    assert(scan.advisoryFilters.exists(containsFilter(_, advisory)),
+      s"advisory $advisory missing on scan ${scan.advisoryFilters}; plan:\n${plan.treeString}")
+    val filters = plan.collect { case filter: Filter => filter.condition }
+    assert(filters.exists(containsFilter(_, advisory)),
+      s"advisory filter $advisory should remain in the logical Filter:\n${plan.treeString}")
+  }
+
+  private def assertAdvisoryNotInFilterExec(df: DataFrame, advisory: String): Unit = {
+    val execFilters = df.queryExecution.executedPlan.collect {
+      case filter: FilterExec => filter.condition
+    }
+    assert(!execFilters.exists(containsFilter(_, advisory)),
+      s"advisory filter $advisory should be dropped from FilterExec:\n" +
+        df.queryExecution.executedPlan)
+  }
+
+  private def containsFilter(condition: Expression, filter: String): Boolean = {
+    val expected = CatalystSqlParser.parseExpression(filter).sql
+    condition.exists(_.sql == expected)
   }
 }

@@ -35,6 +35,27 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
   def pushFilters(filters: Seq[Expression]): Seq[Expression]
 
   /**
+   * Returns additional filters that the data source inferred and that the query does not need in
+   * order to return the right rows. These are advisory: Spark adds them to the logical Filter node
+   * only so that later optimizer rules can use them, for example to make partition statistics more
+   * accurate for cost-based optimization. They are discarded if a join, aggregate, or variant
+   * extraction is pushed. Those operators replace the scan output, so Spark cannot rebind the
+   * advisory filters onto it. Spark never evaluates them, so they are dropped from FilterExec in
+   * the final physical plan.
+   *
+   * Spark asks for these after [[pushFilters]], so a source can infer them from the user filters,
+   * if necessary. For now this is only supported when there are filters being pushed down.
+   *
+   * Advisory filters must be deterministic and must not contain subqueries.
+   *
+   * Column references must be represented by `AttributeReference`. A nested column is represented
+   * by a dotted name, with path parts containing dots quoted using Spark SQL identifier syntax.
+   * For example, nested column `tz` in `location` is `location.tz`, while nested column `c.d` in
+   * top-level column `a.b` is represented as `` `a.b`.`c.d` ``.
+   */
+  def advisoryFilters: Seq[Expression] = Nil
+
+  /**
    * Returns the data filters that are pushed to the data source via
    * {@link #pushFilters(Seq[Expression])}.
    */

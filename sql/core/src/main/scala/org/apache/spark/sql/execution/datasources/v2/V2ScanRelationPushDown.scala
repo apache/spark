@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribu
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LocalRelation, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.VariantExtractionImpl
+import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystFilters, VariantExtractionImpl}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils._
@@ -126,6 +126,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.pushedPredicates.mkString(", ")
       }
 
+      sHolder.advisoryFilterExpressions = getAdvisoryFilters(sHolder)
+      // Keep advisory filters off the plan until the other source pushdowns have run. Their
+      // matchers require that no Spark-side filters remain, but advisory filters do not need to be
+      // evaluated and therefore must not block an otherwise independent pushdown.
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
 
       // Compute the pushed filter expressions: the normalized filters that were fully pushed
@@ -979,7 +983,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
-      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
+      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp ++
+        sHolder.advisoryFilterExpressions
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
         sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
@@ -1010,6 +1015,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
       }.filter(_.references.subsetOf(AttributeSet(output)))
 
+      // Also remap to the pruned output the advisory filters that will be removed from the final
+      // FilterExec by DataSourceV2Strategy.
+      // Advisory filters were in normalizedFilters, so pruning retained their fields and
+      // FIELD_NOT_FOUND cannot occur here.
+      val remappedAdvisoryFilters = sHolder.advisoryFilterExpressions.map(projectionFunc)
+
       // Record the fully-pushed filter expressions on the scan relation, keeping their references
       // to the relation's (pre-pruning) output. These include filters on columns that were pruned
       // out of the scan output -- e.g. an unselected partition column the source still enforces
@@ -1019,6 +1030,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // merge unsound. See DataSourceV2ScanRelation.pushedFilters.
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
         pushedFilters = sHolder.pushedFilterExpressions,
+        advisoryFilters = remappedAdvisoryFilters,
         // The one site that grants mergeability: a plain scan carrying only reproducible pushdowns
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
         mergeableScan = !hasBlockingPushdown(sHolder))
@@ -1261,6 +1273,34 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def getAdvisoryFilters(sHolder: ScanBuilderHolder): Seq[Expression] = {
+    sHolder.builder match {
+      case r: SupportsPushDownCatalystFilters =>
+        val advisoryFilters = r.advisoryFilters.filter { filter =>
+          filter.deterministic && !SubqueryExpression.hasSubquery(filter)
+        }
+        rebindFilters(advisoryFilters, sHolder.output).flatMap(splitConjunctivePredicates)
+      case _ =>
+        Nil
+    }
+  }
+
+  private def rebindFilters(
+      filters: Seq[Expression],
+      output: Seq[AttributeReference]): Seq[Expression] = {
+    val outputPlan = LocalRelation(output)
+    filters.map(_.transformUp {
+      case attr: AttributeReference =>
+        outputPlan.resolveQuoted(attr.name, conf.resolver) match {
+          case Some(Alias(child, _)) => child
+          case Some(resolved) => resolved.toAttribute
+          case None =>
+            throw SparkException.internalError(
+              s"Cannot resolve Catalyst filter attribute '${attr.name}'")
+        }
+    })
+  }
+
 }
 
 case class ScanBuilderHolder(
@@ -1292,6 +1332,8 @@ case class ScanBuilderHolder(
   var pushedVariants: Option[VariantInRelation] = None
 
   var pushedFilterExpressions: Seq[Expression] = Seq.empty
+
+  var advisoryFilterExpressions: Seq[Expression] = Seq.empty
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with
