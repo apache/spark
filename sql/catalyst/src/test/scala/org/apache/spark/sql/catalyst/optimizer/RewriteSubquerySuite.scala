@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EqualNullSafe, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -97,6 +97,44 @@ class RewriteSubquerySuite extends PlanTest {
     assert(join.condition.get.references.intersect(join.right.outputSet).nonEmpty,
       s"join condition ${join.condition.get} must reference the right child output " +
         s"${join.right.outputSet}")
+  }
+
+  test("SPARK-58442: IN subquery under a null-observing operator is not rewritten") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int, $"d".int)
+
+    // An ExistenceJoin's `exists` flag is non-nullable, so rewriting here would turn the
+    // three-valued IN result NULL into FALSE, which IS NULL and <=> can observe.
+    Seq(
+      IsNull($"a".in(ListQuery(relation2.select($"c")))),
+      Not(IsNull($"a".in(ListQuery(relation2.select($"c"))))),
+      EqualNullSafe($"a".in(ListQuery(relation2.select($"c"))), Literal.TrueLiteral)
+    ).foreach { condition =>
+      val query = relation1.where(condition).select($"a").analyze
+      val optimized = Optimize.execute(query)
+      assert(optimized.collectFirst { case j: Join => j }.isEmpty,
+        s"IN subquery under $condition must not be rewritten to a join")
+      assert(optimized.exists(_.expressions.exists(_.exists(_.isInstanceOf[InSubquery]))),
+        s"IN subquery under $condition must be left in place for InSubqueryExec")
+    }
+  }
+
+  test("SPARK-58442: IN subquery is still rewritten where NULL and FALSE are indistinguishable") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int, $"d".int)
+    val exists = $"exists".boolean.notNull
+
+    // Under AND/OR the row is rejected for both NULL and FALSE, so the lean rewrite still applies.
+    val query = relation1
+      .where($"b" === 1 || $"a".in(ListQuery(relation2.select($"c"))))
+      .select($"a")
+    val correctAnswer = relation1
+      .join(relation2.select($"c"), ExistenceJoin(exists), Some($"a" === $"c"))
+      .where($"b" === 1 || exists)
+      .select($"a")
+      .analyze
+
+    comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
 
   test("SPARK-34598: Filters without subquery must not be modified by RewritePredicateSubquery") {
