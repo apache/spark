@@ -438,6 +438,28 @@ class ArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
                 with open(dest_path, "r") as f:
                     self.assertEqual(f.read(), file_content)
 
+    def test_copy_directory_from_local_to_fs(self):
+        with tempfile.TemporaryDirectory(prefix="test_copy_dir_from_local_to_fs1") as d:
+            with tempfile.TemporaryDirectory(prefix="test_copy_dir_from_local_to_fs2") as d2:
+                src_dir = os.path.join(d, "src")
+                nested_dir = os.path.join(src_dir, "nested")
+                os.makedirs(nested_dir)
+
+                top_level_file = os.path.join(src_dir, "file1.txt")
+                nested_file = os.path.join(nested_dir, "file2.txt")
+                with open(top_level_file, "w") as f:
+                    f.write("top-level")
+                with open(nested_file, "w") as f:
+                    f.write("nested")
+
+                dest_dir = os.path.join(d2, "dest")
+                self.spark.copyFromLocalToFs(src_dir, dest_dir)
+
+                with open(os.path.join(dest_dir, "file1.txt"), "r") as f:
+                    self.assertEqual(f.read(), "top-level")
+                with open(os.path.join(dest_dir, "nested", "file2.txt"), "r") as f:
+                    self.assertEqual(f.read(), "nested")
+
     def test_cache_artifact(self):
         s = "Hello, World!"
         blob = bytearray(s, "utf-8")
