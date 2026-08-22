@@ -22,6 +22,7 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * Catalog API for connectors that expose both tables and views in a single shared identifier
@@ -105,10 +106,14 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  * questions in two round trips each. {@code RelationCatalog} adds dedicated methods so a
  * catalog can answer both in one round trip:
  * <ul>
- *   <li>{@link #loadRelation(Identifier)} -- the resolver's per-identifier read path. Returns a
- *       {@link Table} for a table or a {@link View} for a view; callers discriminate via
- *       {@code instanceof}. Saves the {@code loadTable} -> {@code loadView} fallback on a cold
- *       cache.</li>
+ *   <li>{@link #loadRelation(Identifier)} -- returns a {@link Table} for a table or a
+ *       {@link View} for a view; callers discriminate via {@code instanceof}. Saves the
+ *       {@code loadTable} -> {@code loadView} fallback on a cold cache. Used for lookups that
+ *       carry no read options (DDL and miscellaneous commands), and as the base that the
+ *       {@code loadTable(Identifier)} / {@code loadView} defaults derive from.</li>
+ *   <li>{@link #loadRelation(Identifier, CaseInsensitiveStringMap)} -- the resolver's
+ *       per-identifier read path: same contract, plus the options declared by
+ *       {@link #tableStateOptionKeys()}.</li>
  *   <li>{@link #listRelationSummaries(String[])} -- a unified listing of tables and views
  *       with the kind preserved on each {@link TableSummary}. Default impl performs both
  *       {@link TableCatalog#listTableSummaries} and {@link ViewCatalog#listViews}; override to
@@ -133,6 +138,34 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * @throws NoSuchTableException if neither a table nor a view exists at {@code ident}
    */
   Relation loadRelation(Identifier ident) throws NoSuchTableException;
+
+  /**
+   * Load the relation for an identifier that may resolve to either a table or a view, forwarding
+   * the user-specified options that may affect table state.
+   * <p>
+   * Behaves like {@link #loadRelation(Identifier)} but also receives table-state options. The
+   * default implementation ignores {@code stateOptions} and delegates to
+   * {@link #loadRelation(Identifier)}; catalogs that want to receive table-state options while
+   * reading a relation must override {@link #tableStateOptionKeys()} and this method.
+   * <p>
+   * Spark calls this for a plain read only -- no time travel and no write privileges, both of
+   * which apply to tables only and route through
+   * {@link TableCatalog#loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} instead.
+   *
+   * @param ident the identifier
+   * @param stateOptions options declared to affect table state by
+   *                     {@link #tableStateOptionKeys()}. Spark applies the same table-state
+   *                     projection when the identifier turns out to be a {@link View}: the kind
+   *                     is only known once this call returns, so there is no separate
+   *                     view-state declaration.
+   * @return a {@link Table} for tables, or a {@link View} for views
+   * @throws NoSuchTableException if neither a table nor a view exists at {@code ident}
+   * @since 4.3.0
+   */
+  default Relation loadRelation(Identifier ident, CaseInsensitiveStringMap stateOptions)
+      throws NoSuchTableException {
+    return loadRelation(ident);
+  }
 
   /**
    * List the tables and views in a namespace, returned as {@link TableSummary} entries with
@@ -168,11 +201,37 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * <p>
    * The default implementation derives from {@link #loadRelation}: a {@link View} is rejected as
    * not-a-table; a {@link Table} is returned. Override only if a tables-only path is materially
-   * cheaper than the unified one.
+   * cheaper than the unified one -- note that reads do not reach this method: they go to
+   * {@link #loadRelation(Identifier, CaseInsensitiveStringMap)}, directly from the resolver or
+   * via {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)}. What remains
+   * here is write-privilege loads, DDL and miscellaneous lookups, and the non-cacheable
+   * {@code V2TableReference} write-target reload.
    */
   @Override
   default Table loadTable(Identifier ident) throws NoSuchTableException {
     if (loadRelation(ident) instanceof Table t) {
+      return t;
+    }
+    throw new NoSuchTableException(ident);
+  }
+
+  /**
+   * {@inheritDoc}
+   * <p>
+   * The default implementation derives from {@link #loadRelation(Identifier,
+   * CaseInsensitiveStringMap)} for a plain read, so the already-projected table-state options
+   * reach the relation-level entry point. Time-travel and write-privilege loads keep
+   * {@link TableCatalog}'s dispatch -- both apply to tables only.
+   */
+  @Override
+  default Table loadTable(
+      Identifier ident,
+      TableContext context,
+      CaseInsensitiveStringMap stateOptions) throws NoSuchTableException {
+    if (context.timeTravel().isPresent() || !context.writePrivileges().isEmpty()) {
+      return TableCatalog.super.loadTable(ident, context, stateOptions);
+    }
+    if (loadRelation(ident, stateOptions) instanceof Table t) {
       return t;
     }
     throw new NoSuchTableException(ident);
