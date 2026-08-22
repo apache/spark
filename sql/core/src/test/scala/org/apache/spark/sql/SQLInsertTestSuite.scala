@@ -591,6 +591,68 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
       }
     }
   }
+
+  test("SPARK-58816: insert with column list resolves structs inside arrays positionally") {
+    withTable("t") {
+      createTable("t", Seq("arr"), Seq("ARRAY<STRUCT<x: INT, y: INT>>"))
+      sql("INSERT INTO t (arr) SELECT array(named_struct('y', 20, 'x', 10))")
+      checkAnswer(spark.table("t"), Row(Seq(Row(20, 10))))
+    }
+  }
+
+  test("SPARK-58816: insert with column list resolves structs inside maps positionally") {
+    withTable("t") {
+      createTable("t", Seq("m"), Seq("MAP<STRING, STRUCT<x: INT, y: INT>>"))
+      sql("INSERT INTO t (m) SELECT map('k', named_struct('y', 20, 'x', 10))")
+      checkAnswer(spark.table("t"), Row(Map("k" -> Row(20, 10))))
+    }
+  }
+
+  test("SPARK-58816: insert with column list resolves structs in map keys positionally") {
+    // Hive Metastore only supports primitive types for Map keys.
+    if (!format.startsWith("hive")) {
+      withTable("t") {
+        createTable("t", Seq("m"), Seq("MAP<STRUCT<x: INT, y: INT>, STRING>"))
+        sql("INSERT INTO t (m) SELECT map(named_struct('y', 20, 'x', 10), 'val')")
+        checkAnswer(spark.table("t"), Row(Map(Row(20, 10) -> "val")))
+      }
+    }
+  }
+
+  test("SPARK-58816: insert with column list resolves structs positionally " +
+    "at all nesting levels") {
+    withTable("t") {
+      createTable(
+        "t",
+        Seq("s", "arr", "m"),
+        Seq(
+          "STRUCT<x: INT, y: INT>",
+          "ARRAY<STRUCT<x: INT, y: INT>>",
+          "MAP<STRING, STRUCT<x: INT, y: INT>>"))
+      sql(
+        """INSERT INTO t (s, arr, m)
+          |SELECT
+          |  named_struct('y', 20, 'x', 10),
+          |  array(named_struct('y', 20, 'x', 10)),
+          |  map('k', named_struct('y', 20, 'x', 10))
+          |""".stripMargin)
+      checkAnswer(
+        spark.table("t"),
+        Row(Row(20, 10), Seq(Row(20, 10)), Map("k" -> Row(20, 10))))
+    }
+  }
+
+  test("SPARK-58816: insert with column list resolves deeply nested mixed " +
+    "collections positionally") {
+    withTable("t") {
+      createTable("t", Seq("arr_map"), Seq("ARRAY<MAP<STRING, STRUCT<x: INT, y: INT>>>"))
+      sql(
+        """INSERT INTO t (arr_map)
+          |SELECT array(map('k', named_struct('y', 20, 'x', 10)))
+          |""".stripMargin)
+      checkAnswer(spark.table("t"), Row(Seq(Map("k" -> Row(20, 10)))))
+    }
+  }
 }
 
 @SQLUserDefinedType(udt = classOf[MyIntUDT])
@@ -653,5 +715,6 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
         parameters = Map("staticName" -> "c"))
     }
   }
-
 }
+
+
