@@ -2629,6 +2629,21 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-58429: uncorrelated IN subquery with global aggregate over empty input") {
+    checkAnswer(
+      sql("SELECT count(*), 1 IN (SELECT id FROM range(1, 2)) FROM range(0)"),
+      Row(0L, true))
+    checkAnswer(
+      sql("SELECT count(*), 2 IN (SELECT id FROM range(1, 2)) FROM range(0)"),
+      Row(0L, false))
+    checkAnswer(
+      sql("SELECT count(*), 1 IN (SELECT id FROM range(0)) FROM range(0)"),
+      Row(0L, false))
+    checkAnswer(
+      sql("SELECT count(*), 1 IN (SELECT id FROM range(1, 2)) FROM range(2)"),
+      Row(2L, true))
+  }
+
   test("SPARK-51738: IN subquery with struct type") {
     checkAnswer(
       sql("SELECT foo IN (SELECT struct(1 a)) FROM (SELECT struct(1 b) foo)"),
