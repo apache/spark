@@ -1362,17 +1362,42 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     # contains "UDF" (so the "UDF" substring is unreliable).
     # ------------------------------------------------------------------
 
-    def _vals(self, func, return_type, schema, rows):
-        with self.sql_conf(_TRANSPILE_ON):
+    def _transpiled_udf(self, func, return_type):
+        """A UDF built with transpilation on, asserting it produced options.
+
+        ``udf.py`` reports WHY a UDF fell back only as a warning, so capture those
+        and name them in the failure message. Without this an empty ``transpiled``
+        asserts as bare "[] is not true", which says nothing about the cause -- and
+        from CI the warning text is only in a log artifact that needs credentials
+        to read, so the reason is effectively unavailable where it is needed most.
+        """
+        import warnings
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
             u = UserDefinedFunction(func, return_type)
-            self.assertTrue(u.transpiled, str(func))
+        self.assertTrue(
+            u.transpiled,
+            f"{func} produced no transpiled options; warnings: {[str(w.message) for w in caught]}",
+        )
+        return u
+
+    def _vals(self, func, return_type, schema, rows, require_lowered=True):
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(func, return_type)
             df = self.spark.createDataFrame(rows, schema)
-            return [r[0] for r in df.select(u(*df.columns)).collect()]
+            projected = df.select(u(*df.columns))
+            # ``u.transpiled`` only says options were PRODUCED; the JVM may still
+            # discard them and run interpreted Python, returning the right value
+            # and hiding a wrong lowering. Pass ``require_lowered=False`` only
+            # where the JVM is EXPECTED to discard them.
+            if require_lowered:
+                self.assertEqual(0, self._eval_python_count(projected), str(func))
+            return [r[0] for r in projected.collect()]
 
     def _raises(self, func, schema, rows, needle="numeric"):
         with self.sql_conf(_TRANSPILE_ON):
-            u = UserDefinedFunction(func, LongType())
-            self.assertTrue(u.transpiled, str(func))
+            u = self._transpiled_udf(func, LongType())
             df = self.spark.createDataFrame(rows, schema)
             with self.assertRaises(Exception) as ctx:
                 df.select(u(*df.columns)).collect()
@@ -1509,13 +1534,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_falls_back(self):
         # Shapes that must NOT transpile (and still compute via Python):
-        # inline/wrapped/partial lambdas, default/variadic/keyword-only args, and
-        # `%` string formatting. (String `+`/`*` now lower to concat/repeat -- see
-        # test_udf_transpile_string_operands -- but `%` as a format is not handled.)
+        # functools.partial, default/variadic/keyword-only args, and `%` string
+        # formatting. (String `+`/`*` now lower to concat/repeat -- see
+        # test_udf_transpile_string_operands -- but `%` as a format is not
+        # handled.)
         import functools
-
-        def wrapper(fn):
-            return fn
 
         def with_default(a, b=0):
             return a + 10 * b
@@ -1529,11 +1552,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         base = lambda v, w: v + w  # noqa: E731
         percent_fmt = lambda x: "n=%d" % x  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
-            # inline / wrapped / partial lambdas -> source can't be extracted
-            self.assertEqual([], UserDefinedFunction(lambda v: v + 1, LongType()).transpiled)
-            self.assertEqual(
-                [], UserDefinedFunction(wrapper(lambda v: v + 1), LongType()).transpiled
-            )
+            # functools.partial has no reachable source, so it still falls back.
             self.assertEqual(
                 [], UserDefinedFunction(functools.partial(base, 1), LongType()).transpiled
             )
@@ -1553,6 +1572,253 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 [num.select(wd("a")).first()[0], num.select(wd("a", "a")).first()[0]], [5, 55]
             )
 
+    def test_udf_transpile_multiple_lambdas_sharing_a_line(self):
+        # ``inspect.getsource`` is line based, so every lambda written on one line
+        # hands back the same source. Each is now identified by its source position
+        # among the lambdas in the file instead.
+        L, S = LongType(), StringType()
+        num, txt = "a long", "a string"
+        # Differ only in the operator.
+        plus_one, minus_one = lambda x: x + 1, lambda x: x - 1
+        # Differ in arity only.
+        double, double_first = lambda x: x * 2, lambda x, y: x * 2
+        # Differ in a string literal only.
+        suffix_a, suffix_b = lambda s: s + "a", lambda s: s + "b"
+        # Byte-identical twins: same source text, different positions.
+        twin_a, twin_b = lambda x: x * 7, lambda x: x * 7
+        # Differ in the parameter NAME only.
+        by_x, by_y = lambda x: x + 3, lambda y: y + 3
+        # More than two on one line. ``fmt: off`` is only a hint, so the
+        # one-line precondition is asserted below rather than trusted.
+        # fmt: off
+        t1, t2, t3, t4 = lambda x: x + 41, lambda x: x + 42, lambda x: x + 43, lambda x: x + 44
+        # fmt: on
+        self.assertEqual(
+            1,
+            len({f.__code__.co_firstlineno for f in (t1, t2, t3, t4)}),
+            "fixture must keep all four lambdas on ONE line to exercise multi-candidate resolution",
+        )
+        # Inside a collection literal.
+        table = {"inc": lambda x: x + 100, "dec": lambda x: x - 100}
+        # Wrapped in a call, which parses as ``Assign(value=Call(...))``.
+        same = lambda f: f  # noqa: E731
+        wrapped_a, wrapped_b = same(lambda x: x + 51), same(lambda x: x + 52)
+
+        # A callable class INSTANCE dispatches through ``type(obj).__call__``;
+        # resolution keys on that code object, or the sibling ``helper`` on this
+        # line wins and the UDF silently computes ``x * 100``.
+        class Doubler:
+            helper, __call__ = lambda self, x: x * 100, lambda self, x: x * 2
+
+        # Same, with ``__call__`` written FIRST: resolution must not depend on
+        # the target's position among the candidates.
+        class Tripler:
+            __call__, helper = lambda self, x: x * 3, lambda self, x: x * 100
+
+        for func, rt, schema, rows, expected in [
+            (plus_one, L, num, [(5,)], [6]),
+            (minus_one, L, num, [(5,)], [4]),
+            (double, L, num, [(5,)], [10]),
+            (double_first, L, "a long, b long", [(5, 9)], [10]),
+            (suffix_a, S, txt, [("z",)], ["za"]),
+            (suffix_b, S, txt, [("z",)], ["zb"]),
+            (twin_a, L, num, [(5,)], [35]),
+            (twin_b, L, num, [(5,)], [35]),
+            (by_x, L, num, [(5,)], [8]),
+            (by_y, L, num, [(5,)], [8]),
+            (t1, L, num, [(5,)], [46]),
+            (t2, L, num, [(5,)], [47]),
+            (t3, L, num, [(5,)], [48]),
+            (t4, L, num, [(5,)], [49]),
+            (table["inc"], L, num, [(5,)], [105]),
+            (table["dec"], L, num, [(5,)], [-95]),
+            (wrapped_a, L, num, [(5,)], [56]),
+            (wrapped_b, L, num, [(5,)], [57]),
+            (Doubler(), L, num, [(5,)], [10]),
+            (Tripler(), L, num, [(5,)], [15]),
+        ]:
+            with self.subTest(func=func):
+                self.assertEqual(self._vals(func, rt, schema, rows), expected)
+
+    def test_udf_transpile_inline_and_wrapped_lambdas(self):
+        # Writing the lambda inline at the call site is the most common way to build
+        # a UDF, and it parses as a bare ``Call`` that the structural path cannot
+        # unwrap. Locating it by position reaches it. (``_vals`` asserts the lowered
+        # plan is what ran, not interpreted Python returning the same number.)
+        def wrapper(fn):
+            return fn
+
+        self.assertEqual(self._vals(lambda v: v + 1, LongType(), "a long", [(5,)]), [6])
+        self.assertEqual(self._vals(wrapper(lambda v: v * 3), LongType(), "a long", [(5,)]), [15])
+
+    def test_udf_transpile_lambda_in_a_decorator_above_a_def(self):
+        # ``inspect.getsource`` on a lambda inside a decorator returns the decorator
+        # line PLUS the whole decorated ``def``, which parses as that
+        # ``FunctionDef`` -- so the structural path would lower ``a * 12345``. The
+        # lambda must resolve to its own body even though it is the only candidate.
+        captured = []
+
+        def capture(g):
+            captured.append(g)
+            return lambda fn: fn
+
+        @capture(lambda x: x + 1)
+        def unrelated(a):
+            return a * 12345
+
+        (lam,) = captured
+        self.assertEqual(6, lam(5))
+        self.assertEqual(self._vals(lam, LongType(), "a long", [(5,)]), [6])
+
+    def test_udf_transpile_locates_a_lambda_with_no_column_positions(self):
+        # A lambda whose body is a bare constant (``lambda x: 42``) compiles to only
+        # a synthetic ``RESUME`` plus a ``RETURN_CONST``, and some CPython builds
+        # report ``(0, 0)`` columns for both. That is not hypothetical: it is why
+        # ``lambda x: 42`` silently stopped lowering on Spark's CI while lowering
+        # fine locally, where ``RETURN_CONST`` does carry columns.
+        #
+        # Line-only bounds are enough, because ``_verifies`` recompiles and compares
+        # a code signature -- so refusing here bought no safety and cost every
+        # constant-bodied lambda its lowering. ``co_positions`` cannot be forged on a
+        # real code object, so drive the two helpers directly with a stub; the
+        # end-to-end constant case is ``test_udf_transpile_lowers_operators``.
+        import ast
+
+        from pyspark.sql.transpile import _instruction_extent, _node_encloses
+
+        class Positions:
+            def __init__(self, positions):
+                self._positions = positions
+
+            def co_positions(self):
+                return iter(self._positions)
+
+        # Columns present: bounds stay column-precise, and the synthetic (0, 0)
+        # entry is still ignored rather than dragging the start back to column 0.
+        self.assertEqual(
+            ((7, 21), (7, 23)),
+            _instruction_extent(Positions([(7, 7, 0, 0), (7, 7, 21, 23)])),
+        )
+        # Columns unavailable everywhere: degrade to lines instead of giving up.
+        line_only = _instruction_extent(Positions([(7, 7, 0, 0), (7, 7, 0, 0)]))
+        self.assertEqual(((7, None), (7, None)), line_only)
+        # ``None`` is now reserved for a code object with no positions at all, which
+        # is the real ``-X no_debug_ranges`` case the caller reports as such.
+        self.assertIsNone(_instruction_extent(Positions([(None, None, None, None)])))
+
+        # A lambda starting mid-line must still enclose line-only bounds; comparing
+        # columns would reject it, since it does not begin at column 0.
+        (node,) = [
+            n for n in ast.walk(ast.parse("value = lambda x: 42\n")) if isinstance(n, ast.Lambda)
+        ]
+        self.assertEqual(1, node.lineno)
+        self.assertGreater(node.col_offset, 0)
+        self.assertTrue(_node_encloses(node, ((1, None), (1, None))))
+        # A different line must not match, so the fallback still narrows by line.
+        self.assertFalse(_node_encloses(node, ((2, None), (2, None))))
+
+    def test_udf_transpile_transient_read_failure_is_not_cached(self):
+        # ``_parse_file_lambdas`` is keyed on (path, mtime_ns, size). A read failure
+        # must NOT be cached under that key: nothing that causes a transient one -- a
+        # momentary ACL change, an NFS stall, EMFILE under a wide thread pool --
+        # touches mtime or size, so the key never invalidates and lowering would stay
+        # off for that file for the life of the process. A PARSE failure may be
+        # cached, because fixing the source changes the key.
+        import importlib.util
+        import os
+        import tempfile
+
+        from pyspark.sql.transpile import _get_function_from_ast, _parse_file_lambdas
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "transient_mod.py")
+            with open(path, "w") as handle:
+                handle.write("f = lambda x: x + 1\n")
+            spec = importlib.util.spec_from_file_location("transient_mod", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            before = os.stat(path)
+
+            _parse_file_lambdas.cache_clear()
+            self.assertIsNotNone(_get_function_from_ast(module.f))
+
+            # Clear first, or the successful parse above is simply served from the
+            # cache and the read that matters never happens.
+            _parse_file_lambdas.cache_clear()
+            os.chmod(path, 0o000)
+            try:
+                unreadable = _get_function_from_ast(module.f)
+            finally:
+                os.chmod(path, 0o644)
+            if unreadable is not None:
+                # Running as a user that ignores the mode bits (e.g. root); the
+                # scenario cannot be provoked, so assert nothing about it.
+                self.skipTest("file mode does not restrict reads for this user")
+
+            after = os.stat(path)
+            self.assertEqual(
+                (before.st_mtime_ns, before.st_size),
+                (after.st_mtime_ns, after.st_size),
+                "chmod must not change the freshness key, or this proves nothing",
+            )
+            self.assertIsNotNone(
+                _get_function_from_ast(module.f),
+                "a transient read failure was cached, so lowering stayed off for the "
+                "file even after it became readable again under an unchanged key",
+            )
+
+    def test_udf_transpile_imported_module_call_does_not_verify_yet(self):
+        # Pins a KNOWN LIMITATION so the future ``ast.Call`` work trips over it
+        # instead of silently losing lowering. Verification compares raw
+        # ``co_code``, which is not purely a function of the lambda's own source:
+        # for a lambda that CALLS an attribute of a module-level import, the
+        # defining module's bytecode differs from an isolated recompile, so a
+        # GENUINE match is rejected. Harmless today (``ast.Call`` does not lower
+        # anyway), but call support must fix it first or lowering silently stops
+        # for every module using the ``import pyspark.sql.functions as F`` idiom.
+        # SPARK-58786; this test failing is how that gets noticed.
+        import importlib.util
+        import os
+        import tempfile
+
+        from pyspark.sql.transpile import _get_function_from_ast, _parse_file_lambdas
+
+        source = (
+            "import math\n"
+            "calls_import = lambda x: math.floor(x)\n"
+            "reads_import = lambda x: math.pi + x\n"
+            "no_import = lambda x: x + 1\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "spark_58650_import.py")
+            with open(path, "w") as f:
+                f.write(source)
+            spec = importlib.util.spec_from_file_location("spark_58650_import", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            _parse_file_lambdas.cache_clear()
+            # Attribute CALL on an imported module: does not verify (the gap).
+            reasons = []
+            self.assertIsNone(
+                _get_function_from_ast(module.calls_import, reasons),
+                "if this now resolves, SPARK-58786 is fixed -- delete this test, "
+                "drop the caveat in _code_signature's docstring, and drop the "
+                "'module-level attribute' case from the verification-failure message",
+            )
+            # The diagnostic must offer a stale file AND this gap, and cite the
+            # ticket, or a user hitting the gap only goes looking for a stale file.
+            # It names the class-private case too; this asserts only what this test
+            # provokes, so adding a cause does not need an edit here.
+            self.assertEqual(1, len(reasons))
+            self.assertIn("does not match the compiled code", reasons[0])
+            self.assertIn("changed since it was imported", reasons[0])
+            self.assertIn("module-level attribute", reasons[0])
+            self.assertIn("SPARK-58786", reasons[0])
+            # Attribute READ, and no import at all, both verify normally --
+            # showing the gap is specific to the call form, not to imports.
+            self.assertIsNotNone(_get_function_from_ast(module.reads_import))
+            self.assertIsNotNone(_get_function_from_ast(module.no_import))
+
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
         # a future fix is noticed): unguarded arithmetic on NULL yields NULL
@@ -1569,9 +1835,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # `x == "5"` used to be pinned as a coercion divergence (int == "5" ->
         # True). The eq category gate now drops the numeric variant, so on a
         # long column the string option is pruned and the UDF falls back to
-        # interpreted Python -- matching Python's cross-type == (always False).
+        # interpreted Python -- matching Python's cross-type == (always False), and
+        # the one ``_vals`` site where the JVM is expected to discard the options.
         self.assertEqual(
-            self._vals(eq_strlit, BooleanType(), "a long", [(5,), (3,)]), [False, False]
+            self._vals(eq_strlit, BooleanType(), "a long", [(5,), (3,)], require_lowered=False),
+            [False, False],
         )
 
     def test_udf_transpile_overflow_and_modulo_zero_raise(self):

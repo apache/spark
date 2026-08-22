@@ -37,7 +37,15 @@ all-numeric and all-string variants.
 """
 
 import ast
-from typing import Any, Callable, List, Optional, Tuple, TYPE_CHECKING
+import contextlib
+import functools
+import os
+import sys
+import threading
+import tokenize
+import warnings
+from types import CodeType
+from typing import Any, Callable, Iterator, List, Optional, Sequence, Tuple, TYPE_CHECKING
 import inspect
 import itertools
 import textwrap
@@ -83,8 +91,6 @@ class AbstractTranspiler(object):
 
     def _transpile_from_ast(
         self,
-        src: Optional[str],
-        ast_info: ast.AST,
         function_ast: ast.FunctionDef,
         params: List[str],
         returnType: "DataTypeOrString",
@@ -719,16 +725,11 @@ class CatalystTranspiler(AbstractTranspiler):
 
     def _transpile_from_ast(
         self,
-        src: Optional[str],
-        ast_info: ast.AST,
         function_ast: ast.FunctionDef,
         params: List[str],
         returnType: "DataTypeOrString",
         param_categories: Optional[dict] = None,
     ) -> Optional[Column]:
-        # Short circuit on nothing to transpile.
-        if src == "" or ast_info is None:
-            return None
         # Per-variant input-type assumption ({public_param_index -> category}),
         # read by ``_category`` to choose str vs numeric operators.
         self._param_categories = param_categories or {}
@@ -863,29 +864,20 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     return [{i: choice[i] for i in range(n)} for choice in itertools.product(*candidates)] or [{}]
 
 
-def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.AST]]:
-    """Try and get the AST from a given callable"""
-    # Note: consider maybe dill? (see the JYTHON PR)
-    # inspect getsource does not work for functions defined in vanilla
-    # repl, but does for those in files or in ipython.
-    # It also fails when we give it an instance of a callable class.
-    try:
-        src = inspect.getsource(func)
-        src = textwrap.dedent(src).strip()
-        ast_info = ast.parse(src)
-    except Exception:
+def _get_ast_from_func(func: Callable) -> Optional[ast.AST]:
+    """Parse the ``inspect.getsource`` fragment for ``func``, or ``None``.
+
+    Used only by the structural (``def`` / callable-class) path; a lambda is
+    located by position and does not go through here.
+    """
+    for candidate in (func, _call_dunder(func)):
         try:
-            # getattr keeps mypy happy: `__call__` on a bare Callable is
-            # not attribute-accessible in the type system.
-            src = inspect.getsource(getattr(func, "__call__"))
-            src = textwrap.dedent(src).strip()
-            ast_info = ast.parse(src)
+            return ast.parse(textwrap.dedent(inspect.getsource(candidate)).strip())
         except Exception:
-            # No usable source (REPL/stdin definition, builtin, ...) --
-            # return cleanly so the caller reports "cannot transpile"
-            # instead of surfacing an UnboundLocalError as the reason.
-            return None, None
-    return src, ast_info
+            continue
+    # No usable source (REPL/stdin definition, builtin, ...) -- return cleanly so
+    # the caller reports "cannot transpile" instead of surfacing the exception.
+    return None
 
 
 def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
@@ -893,58 +885,404 @@ def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
     return [arg.arg for arg in node.args.args]
 
 
-def _get_function_from_ast(body: ast.AST) -> ast.FunctionDef | None:
+# Source bounds as ``((start_line, start_col), (end_line, end_col))``. A ``None``
+# column means only LINE information was recoverable -- see ``_instruction_extent``.
+_Extent = Tuple[Tuple[int, Optional[int]], Tuple[int, Optional[int]]]
+
+
+def _instruction_extent(code: CodeType) -> Optional[_Extent]:
+    """The (start, end) source bounds enclosing every instruction of ``code``.
+
+    Column-precise when instruction carries usable columns, and LINE-ONLY
+    (``None`` columns) when none does.  Lambdas sharing a line still resolve
+    to their own body whenever their compiled rep differs including an outer and
+    an inner one on the same line, which both enclose line-only bounds.
     """
-    Extract a :class:`ast.FunctionDef` node from an AST produced by
-    ``ast.parse(inspect.getsource(udf_func))``.
+    starts = []
+    ends = []
+    lines = []
+    for lineno, end_lineno, start_col, end_col in code.co_positions():
+        if lineno is None or end_lineno is None:
+            continue
+        lines.append((lineno, end_lineno))
+        if start_col is None or end_col is None:
+            continue
+        if start_col == 0 and end_col == 0:
+            continue
+        starts.append((lineno, start_col))
+        ends.append((end_lineno, end_col))
+    if starts:
+        return (min(starts), max(ends))
+    if lines:
+        return ((min(line for line, _ in lines), None), (max(end for _, end in lines), None))
+    return None
 
-    Handles the following source patterns (in order):
 
-    * ``f = lambda x: x + 1`` -- lambda bound directly to a name
-    * ``lambda x: x + 1`` -- bare expression (getsource on a raw lambda)
-    * ``def f(x): ... return x + 1``
-    * a class with a ``__call__`` method
+def _node_encloses(node: ast.expr, extent: _Extent) -> bool:
+    """Whether ``node``'s source span encloses ``extent`` (lexicographic order)."""
+    if node.end_lineno is None or node.end_col_offset is None:
+        return False
+    (start_line, start_col), (end_line, end_col) = extent
+    if start_col is None or end_col is None:
+        # Line-only bounds (see ``_instruction_extent``): comparing columns would
+        # reject every candidate, since the lambda does not begin at column 0.
+        return node.lineno <= start_line and end_line <= node.end_lineno
+    return (node.lineno, node.col_offset) <= (start_line, start_col) and (
+        end_line,
+        end_col,
+    ) <= (node.end_lineno, node.end_col_offset)
 
-    Returns ``None`` when no single unambiguous function can be identified --
-    notably, a lambda wrapped in a call such as
-    ``f = some_wrapper(lambda x: x + 1)`` parses as ``Assign(value=Call(...))``,
-    which is not unwrapped here and so falls back to interpreted Python. Local
-    class variables are likewise unsupported.
+
+# ``ast.FunctionDef``'s overloads in mypy's typeshed require keyword-only
+# ``type_params`` on 3.12+, which does not exist at in previous versions.
+_FunctionDefCtor: Any = ast.FunctionDef
+
+
+def _defaults_stripped(node: ast.Lambda) -> ast.Lambda:
+    """``node`` with its parameter defaults removed.
+
+    A default is evaluated in the defining scope and stored on the function object.
     """
-    if not hasattr(body, "body") or not body.body:
+    args = node.args
+    bare_args = ast.arguments(
+        posonlyargs=list(args.posonlyargs),
+        args=list(args.args),
+        vararg=args.vararg,
+        kwonlyargs=list(args.kwonlyargs),
+        kw_defaults=[None] * len(args.kw_defaults),
+        kwarg=args.kwarg,
+        defaults=[],
+    )
+    return ast.copy_location(ast.Lambda(args=bare_args, body=node.body), node)
+
+
+def _nested_code(code: CodeType) -> List[CodeType]:
+    """The code objects among ``code``'s constants."""
+    return [const for const in code.co_consts if isinstance(const, CodeType)]
+
+
+def _recompiled_lambda_code(node: ast.Lambda, freevars: Tuple[str, ...]) -> Optional[CodeType]:
+    """Compile ``node`` in isolation and return its code object, or ``None``.
+
+    Used to verify code signature correctness after we extract the lambda.
+    """
+    try:
+        lam = _defaults_stripped(node)
+        with _syntax_warnings_suppressed():
+            if freevars:
+                wrapper_args = ast.arguments(
+                    posonlyargs=[],
+                    args=[ast.copy_location(ast.arg(arg=name), node) for name in freevars],
+                    vararg=None,
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                    kwarg=None,
+                    defaults=[],
+                )
+                wrapper = ast.copy_location(
+                    _FunctionDefCtor(
+                        name="__transpiler_scope",
+                        args=wrapper_args,
+                        body=[ast.copy_location(ast.Return(value=lam), node)],
+                        decorator_list=[],
+                    ),
+                    node,
+                )
+                module = compile(
+                    ast.Module(body=[wrapper], type_ignores=[]), "<transpiler>", "exec"
+                )
+                enclosing = _nested_code(module)
+                if len(enclosing) != 1:
+                    return None
+                nested = _nested_code(enclosing[0])
+            else:
+                nested = _nested_code(compile(ast.Expression(body=lam), "<transpiler>", "eval"))
+    except Exception:
         return None
+    return nested[0] if len(nested) == 1 else None
 
+
+# ``warnings.catch_warnings`` swaps process-global state and is documented as NOT
+# thread-safe: two threads entering it concurrently can leave one's filter
+# installed for the life of the process (verified reproducible). UDF construction
+# runs on whatever thread the user calls from, so serialize our own entries. This
+# cannot defend against a third party entering ``catch_warnings`` concurrently;
+# that hazard is inherent to the stdlib API.
+_WARNINGS_LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def _syntax_warnings_suppressed() -> Iterator[None]:
+    """Parse/compile without emitting or tripping over the source's own warnings."""
+    with _WARNINGS_LOCK:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=SyntaxWarning)
+            if sys.version_info < (3, 12):
+                warnings.filterwarnings("ignore", category=DeprecationWarning)
+            yield
+
+
+# ``co_flags`` bits describing what the code DOES, as opposed to where it was
+# compiled. ``lambda *a: 1`` and ``lambda **a: 1`` share argument counts,
+# ``co_varnames`` AND ``co_code``, so without these they are indistinguishable.
+_BEHAVIORAL_CO_FLAGS = (
+    inspect.CO_VARARGS
+    | inspect.CO_VARKEYWORDS
+    | inspect.CO_GENERATOR
+    | inspect.CO_COROUTINE
+    | inspect.CO_ASYNC_GENERATOR
+)
+
+
+def _code_signature(code: CodeType) -> tuple:
+    """A fingerprint used to confirm a recompile reproduced ``code``."""
+    return (
+        code.co_argcount,
+        code.co_posonlyargcount,
+        code.co_kwonlyargcount,
+        code.co_flags & _BEHAVIORAL_CO_FLAGS,
+        code.co_varnames,
+        code.co_names,
+        code.co_freevars,
+        code.co_cellvars,
+        code.co_code,
+        tuple(
+            _code_signature(const)
+            if isinstance(const, CodeType)
+            else (type(const).__name__, repr(const))
+            for const in code.co_consts
+        ),
+    )
+
+
+def _verifies(node: ast.Lambda, freevars: Tuple[str, ...], target_signature: tuple) -> bool:
+    """Whether ``node`` recompiles to the code ``target_signature`` came from.
+
+    Takes the target's ``co_freevars`` and signature rather than the code object, so
+    a caller cannot pass a signature that disagrees with the object it came from.
+    """
+    recompiled = _recompiled_lambda_code(node, freevars)
+    return recompiled is not None and _code_signature(recompiled) == target_signature
+
+
+# Cap on distinct source files whose parsed lambdas are cached at once. Applied PER
+# CACHE, so ``_parse_file_lambdas`` and ``_parse_text_lambdas`` hold this many EACH.
+_LAMBDA_CANDIDATES_MAX_FILES = 64
+
+
+def _lambdas_in_text(source: str) -> Tuple[ast.Lambda, ...]:
+    """Parse ``source`` and return every ``ast.Lambda`` in it, or ``()``."""
+    try:
+        with _syntax_warnings_suppressed():
+            tree = ast.parse(source)
+    except Exception:
+        return ()
+    return tuple(node for node in ast.walk(tree) if isinstance(node, ast.Lambda))
+
+
+@functools.lru_cache(maxsize=_LAMBDA_CANDIDATES_MAX_FILES)
+def _parse_text_lambdas(source: str) -> Tuple[ast.Lambda, ...]:
+    """Every ``ast.Lambda`` in ``source``, LRU-cached by the source TEXT.
+
+    For sources ``os.stat`` cannot reach, where there is no mtime to key on.
+    Hashing the text is far cheaper than re-parsing it, and self-invalidates.
+    """
+    return _lambdas_in_text(source)
+
+
+@functools.lru_cache(maxsize=_LAMBDA_CANDIDATES_MAX_FILES)
+def _parse_file_lambdas(path: str, _mtime_ns: int, _size: int) -> Tuple[ast.Lambda, ...]:
+    """Parse ``path`` and return every ``ast.Lambda`` in it, LRU-cached per file.
+
+    ``_mtime_ns`` and ``_size`` are part of the key so an ordinary edit misses.
+    They are a freshness hint, NOT a guarantee -- mtime granularity is coarse, so a
+    same-size edit within one tick keeps the key. ``_verifies`` is what makes
+    staleness safe, so this key is an optimization, not the correctness boundary.
+
+    The read is fresh from disk and stays OUTSIDE the warning-suppression lock;
+    ``tokenize.open`` respects the source's encoding cookie.
+
+    A read failure PROPAGATES to the caller rather than returning ``()`` here.
+    ``lru_cache`` does not cache exceptions, so a TRANSIENT failure is retried on
+    the next ``udf()``; caching ``()`` would strand it, because none of the things
+    that cause one -- a momentary ACL change, an NFS or FUSE stall, EMFILE under a
+    wide thread pool -- touch mtime or size, so the freshness key never invalidates
+    and lowering stays off for that file for the life of the process. A PARSE
+    failure is still cached as ``()``, which is safe because it self-heals: fixing
+    the source changes size or mtime, and so the key.
+    """
+    with tokenize.open(path) as handle:
+        source = handle.read()
+    return _lambdas_in_text(source)
+
+
+def _file_lambda_candidates(target: CodeType) -> Sequence[ast.Lambda]:
+    """Every ``ast.Lambda`` in the file that defines ``target``, with real coordinates.
+
+    The whole file is parsed, not the ``inspect.getsource`` fragment.
+
+    Returns the cached tuple itself (empty when there is no readable source at all);
+    callers only iterate it, so there is no reason to copy it per ``udf()`` call.
+    """
+    try:
+        stat = os.stat(target.co_filename)
+    except Exception:
+        try:
+            lines, _ = inspect.findsource(target)
+        except Exception:
+            return ()
+        return _parse_text_lambdas("".join(lines))
+    try:
+        return _parse_file_lambdas(target.co_filename, stat.st_mtime_ns, stat.st_size)
+    except Exception:
+        # A read that failed after ``os.stat`` succeeded. Deliberately not cached --
+        # see ``_parse_file_lambdas``.
+        return ()
+
+
+def _resolve_lambda(
+    target: CodeType, candidates: Sequence[ast.Lambda], errors: Optional[List[str]] = None
+) -> Optional[ast.Lambda]:
+    """Pick the lambda node that ``target`` (a ``func.__code__``) was compiled from."""
+    extent = _instruction_extent(target)
+    if extent is None:
+        if errors is not None:
+            errors.append(
+                "the lambda's code object carries no source positions, so it cannot be "
+                "located -- this interpreter or its .pyc files were built with "
+                "-X no_debug_ranges / PYTHONNODEBUGRANGES=1, which disables lambda "
+                "transpilation entirely (clear __pycache__ after unsetting it)"
+            )
+        return None
+    if not candidates:
+        if errors is not None:
+            errors.append(
+                f"no lambda could be read from {target.co_filename!r}: it has no "
+                "retrievable source (a REPL definition, or a name that is not a real "
+                "file, or a relative path no longer resolvable from this working "
+                "directory), or its source does not parse (caught mid-write, or "
+                "generated), or it no longer contains any lambda"
+            )
+        return None
+    located = [
+        node
+        for node in candidates
+        if node.lineno == target.co_firstlineno and _node_encloses(node, extent)
+    ]
+    if not located:
+        if errors is not None:
+            errors.append(
+                f"no lambda found at {target.co_filename}:{target.co_firstlineno}, where "
+                "this one reports being defined -- the source has changed since it was "
+                "imported, or that file is not the one this code was compiled from"
+            )
+        return None
+    target_signature = _code_signature(target)
+    verified = [node for node in located if _verifies(node, target.co_freevars, target_signature)]
+    if len(verified) == 1:
+        return verified[0]
+    if errors is not None:
+        if not verified:
+            errors.append(
+                f"the source at {target.co_filename}:{target.co_firstlineno} does not "
+                "match the compiled code, so it is not safe to lower. Either the source "
+                "has changed since it was imported, or the recompile cannot reproduce "
+                "this lambda's bytecode out of context -- the known cases are a call to "
+                "a module-level attribute (`F.year(c)` after `import pyspark.sql."
+                "functions as F`, SPARK-58786) and a name-mangled class private "
+                "(`self.__x` inside a class body)"
+            )
+        else:
+            errors.append(
+                f"more than one lambda at {target.co_filename}:"
+                f"{target.co_firstlineno} matches the compiled code, so which one is "
+                "meant is ambiguous"
+            )
+    return None
+
+
+def _call_dunder(func: Callable) -> Any:
+    """``func``'s ``__call__`` as Python's call protocol resolves it: on the TYPE.
+
+    ``getattr(func, "__call__")`` is wrong in two ways that both end in the
+    transpiler lowering a body that never runs: on a CLASS object it finds the
+    ``__call__`` its instances use, while calling the class runs ``__init__``; and
+    an INSTANCE attribute ``obj.__call__ = ...`` shadows the type's for ``getattr``
+    but is ignored by the call protocol.
+
+    Returns ``None`` when the type has no ``__call__`` at all.
+    """
+    return getattr(type(func), "__call__", None)
+
+
+def _target_code(func: Callable) -> Optional[CodeType]:
+    """The code object that actually runs when ``func`` is called.
+
+    Keyed on WHAT DISPATCHES, not on which attribute happens to exist: a function
+    or method runs its own ``__code__``, anything else callable runs
+    ``type(func).__call__``. An instance's own ``__code__`` attribute, if any, is a
+    red herring -- the call protocol ignores it.
+
+    Returns ``None`` when no Python code object is reachable (builtins, C
+    callables, ``functools.partial``, a class object -- whose ``type.__call__`` is a
+    C slot), which keeps the caller on its structural path.
+    """
+    if inspect.isfunction(func) or inspect.ismethod(func):
+        code = getattr(func, "__code__", None)
+    else:
+        code = getattr(_call_dunder(func), "__code__", None)
+    return code if isinstance(code, CodeType) else None
+
+
+def _lambda_to_function_def(node: ast.Lambda) -> ast.FunctionDef:
+    """Wrap a lambda in a synthetic one-statement ``FunctionDef``.
+
+    Lets the rest of the transpiler treat lambdas and ``def`` uniformly.
+    """
+    returned = ast.Return(value=node.body)
+    ast.copy_location(returned, node.body)
+    fn = _FunctionDefCtor(
+        name="<lambda>",
+        args=node.args,
+        body=[returned],
+        decorator_list=[],
+    )
+    # Positions on the synthesized nodes so ``ast.unparse`` / ``compile`` of the
+    # result does not raise on a missing ``lineno``.
+    ast.copy_location(fn, node)
+    return fn
+
+
+def _get_function_from_ast(
+    func: Callable, errors: Optional[List[str]] = None
+) -> ast.FunctionDef | None:
+    """
+    Extract a :class:`ast.FunctionDef` node for the callable ``func``.
+
+    defs and lambdas are handled in seperate code paths.
+    """
+    target = _target_code(func)
+    if target is not None and target.co_name == "<lambda>":
+        resolved = _resolve_lambda(target, _file_lambda_candidates(target), errors)
+        return _lambda_to_function_def(resolved) if resolved is not None else None
+
+    # Structural path: a ``def``, or a callable instance's ``def __call__``.
+    body = _get_ast_from_func(func)
+    if body is None or not hasattr(body, "body") or not body.body:
+        if errors is not None:
+            errors.append(
+                "no parseable source for the callable, so its body cannot be extracted "
+                "(a REPL definition, a builtin, or functools.partial)"
+            )
+        return None
     stmt = body.body[0]
-
-    # Grab the value side of a top level assign (e.g. x = lambda ...)
-    if isinstance(stmt, ast.Assign):
-        stmt = stmt.value
-
-    # Bare ``lambda x: ...`` (when ``inspect.getsource`` returns a raw
-    # lambda expression at module top level) parses as ``Expr(Lambda)``.
-    if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Lambda):
-        stmt = stmt.value
-
-    if isinstance(stmt, ast.Lambda):
-        # Synthesize a one-statement FunctionDef wrapping the lambda body so
-        # the rest of the transpiler can treat lambdas and ``def`` uniformly.
-        # ``ast.FunctionDef``'s overloads in mypy's typeshed require
-        # keyword-only ``type_params`` on 3.12+, which doesn't exist at
-        # runtime on every Python we support (the field was added in
-        # 3.12 -- before that, passing it raises). Drop to ``Any`` so we
-        # avoid the overload resolution entirely; constructing the node
-        # via keyword args is well-defined at runtime even when the typed
-        # overloads disagree.
-        fn_ctor: Any = ast.FunctionDef
-        return fn_ctor(
-            name="<lambda>",
-            args=stmt.args,
-            body=[ast.Return(value=stmt.body)],
-            decorator_list=[],
-        )
-
     if isinstance(stmt, ast.FunctionDef):
         return stmt
+    if errors is not None:
+        errors.append(
+            "the visible source's first statement is not a function definition, so the "
+            f"body cannot be extracted (got {type(stmt).__name__})"
+        )
     return None
 
 
@@ -1001,7 +1339,7 @@ def _transpile_func(
         # silently reproduce the wrong behavior, so refuse and fall back.
         if (
             getattr(func, "__wrapped__", None) is not None
-            or getattr(getattr(func, "__call__", None), "__wrapped__", None) is not None
+            or getattr(_call_dunder(func), "__wrapped__", None) is not None
         ):
             return (
                 [],
@@ -1013,13 +1351,18 @@ def _transpile_func(
                 [],
                 [],
             )
-        src, ast = _get_src_ast_from_func(func)
-        if ast is None:
-            return ([], ["Error getting ast for function, cannot transpile"], [], [])
-        # Get the lambda body and parameters
-        function_ast = _get_function_from_ast(ast)
+        extraction_errors: List[str] = []
+        function_ast = _get_function_from_ast(func, extraction_errors)
         if function_ast is None:
-            return ([], ["Error extracting function body from ast, cannot transpile"], [], [])
+            # ``_get_function_from_ast`` appends exactly one reason on every path
+            # that returns ``None``, so this list is never empty and needs no
+            # catch-all filler.
+            return (
+                [],
+                extraction_errors,
+                [],
+                [],
+            )
         # Default, variadic (``*args`` / ``**kwargs``), keyword-only, and
         # positional-only parameters can't be represented by the positional
         # ``_udf_param_N`` placeholder scheme: a call site may omit a
@@ -1034,7 +1377,7 @@ def _transpile_func(
             or fn_args.kwonlyargs
             or fn_args.vararg is not None
             or fn_args.kwarg is not None
-            or getattr(fn_args, "posonlyargs", [])
+            or fn_args.posonlyargs
         ):
             return (
                 [],
@@ -1081,7 +1424,7 @@ def _transpile_func(
             for combo in combos:
                 try:
                     transpiled_column = transpiler._transpile_from_ast(
-                        src, ast, function_ast, params, returnType, combo
+                        function_ast, params, returnType, combo
                     )
                     if transpiled_column is not None:
                         transpiled.append(transpiled_column)
