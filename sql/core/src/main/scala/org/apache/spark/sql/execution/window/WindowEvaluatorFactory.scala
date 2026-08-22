@@ -34,7 +34,7 @@ class WindowEvaluatorFactory(
     segmentTreeFrames: SQLMetric,
     segmentTreeFallbackFrames: SQLMetric,
     monotonicDequeFrames: SQLMetric)
-    extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
+  extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
 
   override def numSegmentTreeFrames: Option[SQLMetric] = Some(segmentTreeFrames)
   override def numSegmentTreeFallbackFrames: Option[SQLMetric] =
