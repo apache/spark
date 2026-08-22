@@ -173,7 +173,8 @@ case class DataSourceV2Relation(
  * @param advisoryFilters Catalyst expressions for filters the data source inferred and reported
  *                        via `SupportsPushDownCatalystFilters.advisoryFilters`. They stay in the
  *                        logical Filter so the optimizer can use them, and are dropped when the
- *                        physical Filter is built, so Spark never evaluates them. Unlike
+ *                        physical Filter is built, so Spark never evaluates them. They are not
+ *                        kept when a join, aggregate, or variant extraction is pushed. Unlike
  *                        `pushedFilters` they say nothing about what the source enforces.
  * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
  *                      merge (see `TableCapability.SCAN_MERGING`).

@@ -29,20 +29,24 @@ import test.org.apache.spark.sql.connector._
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{
-  AttributeReference, BindReferences, Expression => CatalystExpression,
-  GreaterThan => CatalystGreaterThan, LessThan => CatalystLessThan,
-  Literal => CatalystLiteral, Predicate => CatalystPredicate, ScalarSubquery}
+  And => CatalystAnd, AttributeReference, BindReferences, EqualTo => CatalystEqualTo,
+  Expression => CatalystExpression, GreaterThan => CatalystGreaterThan,
+  GreaterThanOrEqual => CatalystGreaterThanOrEqual, LessThan => CatalystLessThan,
+  LessThanOrEqual => CatalystLessThanOrEqual, Literal => CatalystLiteral,
+  Predicate => CatalystPredicate, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter => LogicalFilter, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Aggregate, Filter => LogicalFilter, GlobalLimit, Join, LocalLimit, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.SupportsPushDownJoin.ColumnWithAlias
 import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
@@ -1666,14 +1670,16 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
   }
 
   test("advisory filters stay in the logical Filter but are not evaluated by FilterExec") {
-    val advisoryFilter = "i > 2"
-    val df = spark.read
+    // Rows satisfy j = -i, so i > 2 implies the advisory predicate j < -2.
+    val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
-      .option("advisoryFilter", advisoryFilter)
+      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+        CatalystFilterScanBuilder.NEGATE_I_TO_J)
       .load()
-    val query = df.filter($"i" > -1)
+      .filter($"i" > 2)
 
     checkAnswer(query, (3 until 10).map(i => Row(i, -i)))
+    val advisoryFilter = "j < -2"
     val filters = query.queryExecution.optimizedPlan.collect {
       case filter: LogicalFilter => filter.condition
     }
@@ -1688,6 +1694,82 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     assert(!execFilters.exists(containsFilter(_, advisoryFilter)),
       s"advisory filter $advisoryFilter should be dropped from FilterExec:\n" +
         query.queryExecution.executedPlan)
+  }
+
+  test("compound advisory filters are not evaluated by FilterExec") {
+    // i > 2 AND i < 8 implies j < -2 AND j > -8.
+    val query = spark.read
+      .format(classOf[CatalystFilterDataSourceV2].getName)
+      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+        CatalystFilterScanBuilder.NEGATE_I_TO_J)
+      .load()
+      .filter($"i" > 2 && $"i" < 8)
+
+    checkAnswer(query, (3 until 8).map(i => Row(i, -i)))
+    val advisoryFilters = getScanRelation(query).advisoryFilters
+    assert(advisoryFilters.length == 2,
+      s"compound advisory filter should be stored as conjuncts: $advisoryFilters")
+    val execFilters = query.queryExecution.executedPlan.collect {
+      case filter: FilterExec => filter.condition
+    }
+    assert(!execFilters.exists(containsFilter(_, "j < -2")))
+    assert(!execFilters.exists(containsFilter(_, "j > -8")))
+  }
+
+  test("advisory filters do not block join pushdown") {
+    val format = classOf[CatalystFilterJoinDataSourceV2].getName
+    def load(): DataFrame =
+      spark.read.format(format)
+        .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        .load()
+        .filter($"i" >= 0)
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = load().join(load(), Seq("i"))
+      val joins = df.queryExecution.optimizedPlan.collect { case j: Join => j }
+      assert(joins.isEmpty,
+        s"join should be pushed:\n${df.queryExecution.optimizedPlan}")
+      assert(getScanRelation(df).advisoryFilters.isEmpty,
+        s"advisory filters must not survive join pushdown:\n" +
+          df.queryExecution.optimizedPlan)
+      val filters = df.queryExecution.optimizedPlan.collect {
+        case filter: LogicalFilter => filter.condition
+      }
+      assert(!filters.exists(containsFilter(_, "j <= 0")),
+        s"advisory filter j <= 0 should not remain after join pushdown:\n" +
+          df.queryExecution.optimizedPlan)
+    }
+  }
+
+  test("advisory filters do not block limit pushdown") {
+    val df = spark.read
+      .format(classOf[CatalystFilterLimitDataSourceV2].getName)
+      .option(CatalystFilterScanBuilder.ADVISORY_DERIVATION,
+        CatalystFilterScanBuilder.NEGATE_I_TO_J)
+      .load()
+      .filter($"i" > 2)
+      .limit(5)
+    val limits = df.queryExecution.optimizedPlan.collect {
+      case l: LocalLimit => l
+      case g: GlobalLimit => g
+    }
+    assert(limits.isEmpty, s"limit should be pushed:\n${df.queryExecution.optimizedPlan}")
+    checkAnswer(df, (3 until 8).map(i => Row(i, -i)))
+    val advisoryFilter = "j < -2"
+    val filters = df.queryExecution.optimizedPlan.collect {
+      case filter: LogicalFilter => filter.condition
+    }
+    assert(filters.exists(containsFilter(_, advisoryFilter)),
+      s"advisory filter $advisoryFilter should remain in the logical Filter:\n" +
+        df.queryExecution.optimizedPlan)
+    assert(getScanRelation(df).advisoryFilters.exists(containsFilter(_, advisoryFilter)),
+      "advisory filter should be recorded on the scan relation")
+    val execFilters = df.queryExecution.executedPlan.collect {
+      case filter: FilterExec => filter.condition
+    }
+    assert(!execFilters.exists(containsFilter(_, advisoryFilter)),
+      s"advisory filter $advisoryFilter should be dropped from FilterExec:\n" +
+        df.queryExecution.executedPlan)
   }
 
   test("SPARK-58207: V2 filter pushdown skips non-deterministic filters") {
@@ -1939,34 +2021,105 @@ class CatalystFilterDataSourceV2 extends TestingV2Source {
   }
 }
 
+class CatalystFilterJoinDataSourceV2 extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new CatalystFilterJoinScanBuilder(options)
+    }
+  }
+}
+
+class CatalystFilterJoinScanBuilder(options: CaseInsensitiveStringMap)
+  extends CatalystFilterScanBuilder(options) with SupportsPushDownJoin {
+
+  private var joinedSchema: Option[StructType] = None
+
+  override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean =
+    other.isInstanceOf[CatalystFilterJoinScanBuilder]
+
+  override def pushDownJoin(
+      other: SupportsPushDownJoin,
+      joinType: V2JoinType,
+      leftColumns: Array[ColumnWithAlias],
+      rightColumns: Array[ColumnWithAlias],
+      condition: Predicate): Boolean = {
+    def fields(columns: Array[ColumnWithAlias]): Array[StructField] = columns.map { col =>
+      val name = if (col.alias() != null) col.alias() else col.colName()
+      TestingV2Source.schema(col.colName()).copy(name = name)
+    }
+    joinedSchema = Some(StructType(fields(leftColumns) ++ fields(rightColumns)))
+    true
+  }
+
+  override def readSchema(): StructType = joinedSchema.getOrElse(super.readSchema())
+}
+
+class CatalystFilterLimitDataSourceV2 extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new CatalystFilterLimitScanBuilder(options)
+    }
+  }
+}
+
+class CatalystFilterLimitScanBuilder(options: CaseInsensitiveStringMap)
+  extends CatalystFilterScanBuilder(options) with SupportsPushDownLimit {
+
+  private var pushedLimit: Option[Int] = None
+
+  override def pushLimit(limit: Int): Boolean = {
+    pushedLimit = Some(limit)
+    true
+  }
+
+  override def isPartiallyPushed: Boolean = false
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val partitions = super.planInputPartitions()
+    pushedLimit match {
+      case Some(n) =>
+        val values = partitions.flatMap {
+          case ValuesInputPartition(vs) => vs
+          case RangeInputPartition(start, end) => start until end
+          case other =>
+            throw new IllegalArgumentException(s"Unexpected partition: $other")
+        }.take(n)
+        Array(ValuesInputPartition(values.toSeq))
+      case None =>
+        partitions
+    }
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = {
+    if (pushedLimit.isDefined) ValuesReaderFactory else super.createReaderFactory()
+  }
+}
+
 class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends SimpleScanBuilder
   with SupportsPushDownCatalystFilters {
 
-  // The advisory filter is supplied by the test as SQL. Column references must be
-  // AttributeReference, so resolve the parsed names against the source schema.
-  private val advisoryFilter = Option(options.get("advisoryFilter")).map { sql =>
-    CatalystSqlParser.parseExpression(sql).transformUp {
-      case u: UnresolvedAttribute =>
-        val field = TestingV2Source.schema(u.name)
-        AttributeReference(field.name, field.dataType)()
-    }
-  }
+  private var pushedCatalystFilters = Seq.empty[CatalystExpression]
+  private val deriveAdvisory = CatalystFilterScanBuilder.derivation(options)
 
   override def pushFilters(filters: Seq[CatalystExpression]): Seq[CatalystExpression] = {
     if (filters.exists(!_.deterministic)) {
       throw new IllegalArgumentException(
         s"Non-deterministic filters should not be pushed: ${filters.mkString(", ")}")
     }
+    pushedCatalystFilters = filters
     Nil
   }
 
-  override def advisoryFilters: Seq[CatalystExpression] = advisoryFilter.toSeq
+  override def advisoryFilters: Seq[CatalystExpression] = deriveAdvisory(pushedCatalystFilters)
 
   override def pushedFilters: Array[Predicate] = Array.empty
 
   override def planInputPartitions(): Array[InputPartition] = {
     // Spark never evaluates an advisory filter, so the source has to apply it itself.
-    advisoryFilter match {
+    val enforcedFilters = pushedCatalystFilters ++ advisoryFilters
+    enforcedFilters.reduceLeftOption(CatalystAnd) match {
       case Some(filter) =>
         val attrs = DataTypeUtils.toAttributes(readSchema())
         val bound = filter.transformUp {
@@ -1985,7 +2138,46 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    if (advisoryFilter.isDefined) ValuesReaderFactory else SimpleReaderFactory
+    if (pushedCatalystFilters.nonEmpty) ValuesReaderFactory else SimpleReaderFactory
+  }
+}
+
+object CatalystFilterScanBuilder {
+  val ADVISORY_DERIVATION: String = "advisoryDerivation"
+  val NEGATE_I_TO_J: String = "negate-i-to-j"
+
+  // Common derivation used by advisory-filter tests. Rows are (i, j) with j = -i, so a
+  // pushed predicate on i implies the negated predicate on j.
+  val negateIToJ: Seq[CatalystExpression] => Seq[CatalystExpression] = { filters =>
+    val jAttr = AttributeReference("j", IntegerType)()
+    filters.flatMap {
+      case CatalystGreaterThan(a: AttributeReference, CatalystLiteral(n: Int, _))
+          if a.name == "i" =>
+        Some(CatalystLessThan(jAttr, CatalystLiteral(-n)))
+      case CatalystGreaterThanOrEqual(a: AttributeReference, CatalystLiteral(n: Int, _))
+          if a.name == "i" =>
+        Some(CatalystLessThanOrEqual(jAttr, CatalystLiteral(-n)))
+      case CatalystLessThan(a: AttributeReference, CatalystLiteral(n: Int, _))
+          if a.name == "i" =>
+        Some(CatalystGreaterThan(jAttr, CatalystLiteral(-n)))
+      case CatalystLessThanOrEqual(a: AttributeReference, CatalystLiteral(n: Int, _))
+          if a.name == "i" =>
+        Some(CatalystGreaterThanOrEqual(jAttr, CatalystLiteral(-n)))
+      case CatalystEqualTo(a: AttributeReference, CatalystLiteral(n: Int, _))
+          if a.name == "i" =>
+        Some(CatalystEqualTo(jAttr, CatalystLiteral(-n)))
+      case _ =>
+        None
+    }
+  }
+
+  private val derivations
+      : Map[String, Seq[CatalystExpression] => Seq[CatalystExpression]] =
+    Map(NEGATE_I_TO_J -> negateIToJ)
+
+  private[connector] def derivation(
+      options: CaseInsensitiveStringMap): Seq[CatalystExpression] => Seq[CatalystExpression] = {
+    Option(options.get(ADVISORY_DERIVATION)).flatMap(derivations.get).getOrElse(_ => Nil)
   }
 }
 

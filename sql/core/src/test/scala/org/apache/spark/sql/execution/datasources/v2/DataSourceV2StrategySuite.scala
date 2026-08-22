@@ -20,16 +20,21 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.EnumSet
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
-import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, Project, Sort}
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, VariantGet => V2VariantGet}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
+import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownTopN, SupportsPushDownVariantExtractions, VariantExtraction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1059,8 +1064,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
     assert(pushedPlan.exists {
-      case Filter(condition, _: DataSourceV2ScanRelation) => condition.exists(_.semanticEquals(
-        expected))
+      case Filter(condition, _) => condition.exists(_.semanticEquals(expected))
       case _ => false
     }, s"expected rebound nested advisory filter in:\n$pushedPlan")
   }
@@ -1083,10 +1087,166 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
     assert(pushedPlan.exists {
-      case Filter(condition, _: DataSourceV2ScanRelation) => condition.exists(_.semanticEquals(
-        expected))
+      case Filter(condition, _) => condition.exists(_.semanticEquals(expected))
       case _ => false
     }, s"expected rebound quoted advisory filter in:\n$pushedPlan")
+  }
+
+  test("advisory filters do not block limit pushdown") {
+    val (table, relation) = newPushdownRelation()
+    val id = relation.output.find(_.name == "id").get
+    val plan = Limit(Literal(5), Filter(EqualTo(id, Literal(1L)), relation))
+
+    val pushedPlan = V2ScanRelationPushDown(plan)
+    assert(table.builder.pushedLimit.contains(5))
+    assertAdvisoryFilter(pushedPlan)
+  }
+
+  test("advisory filters do not block offset pushdown") {
+    val (table, relation) = newPushdownRelation()
+    val id = relation.output.find(_.name == "id").get
+    val plan = Offset(Literal(3), Filter(EqualTo(id, Literal(1L)), relation))
+
+    val pushedPlan = V2ScanRelationPushDown(plan)
+    assert(table.builder.pushedOffset.contains(3))
+    assertAdvisoryFilter(pushedPlan)
+  }
+
+  test("advisory filters do not block top-N pushdown") {
+    val (table, relation) = newPushdownRelation()
+    val id = relation.output.find(_.name == "id").get
+    val filtered = Filter(EqualTo(id, Literal(1L)), relation)
+    val plan = Limit(Literal(5), Sort(Seq(id.asc), global = true, filtered))
+
+    val pushedPlan = V2ScanRelationPushDown(plan)
+    assert(table.builder.pushedTopN.exists(_._2 == 5))
+    assertAdvisoryFilter(pushedPlan)
+  }
+
+  test("advisory filters do not block aggregate pushdown") {
+    val (table, relation) = newPushdownRelation()
+    val id = relation.output.find(_.name == "id").get
+    val filtered = Filter(EqualTo(id, Literal(1L)), relation)
+    val count = Alias(Count(id).toAggregateExpression(), "count")()
+    val plan = Aggregate(Nil, Seq(count), filtered)
+
+    V2ScanRelationPushDown(plan)
+    assert(table.builder.pushedAggregation.nonEmpty)
+  }
+
+  test("advisory filters do not block join pushdown") {
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val (leftTable, left) = newPushdownRelation()
+      val (rightTable, right) = newPushdownRelation()
+      val leftId = left.output.find(_.name == "id").get
+      val rightId = right.output.find(_.name == "id").get
+      val leftFiltered = Filter(EqualTo(leftId, Literal(1L)), left)
+      val rightFiltered = Filter(EqualTo(rightId, Literal(1L)), right)
+      val plan = Join(
+        leftFiltered,
+        rightFiltered,
+        Inner,
+        Some(EqualTo(leftId, rightId)),
+        JoinHint.NONE)
+
+      val pushedPlan = V2ScanRelationPushDown(plan)
+      assert(leftTable.builder.joinPushed)
+      assert(!rightTable.builder.joinPushed)
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+      assert(scan.advisoryFilters.isEmpty)
+      assert(!pushedPlan.exists {
+        case filter: Filter => filter.condition.exists(_.isInstanceOf[GreaterThanOrEqual])
+        case _ => false
+      }, s"advisory filters must not survive join pushdown:\n$pushedPlan")
+    }
+  }
+
+  test("advisory filters do not block variant pushdown") {
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("v", VariantType, nullable = true)))
+    val advisoryFilter = GreaterThan(
+      VariantGet(
+        AttributeReference("v", VariantType)(),
+        Literal("$.b"),
+        IntegerType,
+        failOnError = true,
+        timeZoneId = Some("UTC")),
+      Literal(0))
+    val table = new VariantPushdownTable(schema, advisoryFilter)
+    val relation = DataSourceV2Relation.create(
+      table,
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val variant = relation.output.find(_.name == "v").get
+    val extracted = VariantGet(
+      variant,
+      Literal("$.a"),
+      IntegerType,
+      failOnError = true,
+      timeZoneId = Some("UTC"))
+    val plan = Project(
+      Seq(Alias(extracted, "a")()),
+      Filter(EqualTo(id, Literal(1L)), relation))
+
+    val pushedPlan = V2ScanRelationPushDown(plan)
+    assert(table.builder.variantPushed)
+    val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(scan.advisoryFilters.isEmpty)
+    assert(!pushedPlan.exists {
+      case filter: Filter => filter.condition.exists(_.semanticEquals(advisoryFilter))
+      case _ => false
+    }, s"advisory filters must not survive variant pushdown:\n$pushedPlan")
+  }
+
+  private def newPushdownRelation(
+      advisoryColumn: String = "id"): (PushdownTable, DataSourceV2Relation) = {
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("value", LongType, nullable = false)))
+    val advisoryFilter =
+      GreaterThanOrEqual(AttributeReference(advisoryColumn, LongType)(), Literal(0L))
+    val table = new PushdownTable(schema, advisoryFilter)
+    val relation = DataSourceV2Relation.create(
+      table,
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    (table, relation)
+  }
+
+  private def assertAdvisoryFilter(plan: LogicalPlan): Unit = {
+    val scan = plan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(scan.advisoryFilters.nonEmpty)
+    assert(plan.exists {
+      case filter: Filter =>
+        scan.advisoryFilters.forall(advisory => filter.condition.exists(_.semanticEquals(advisory)))
+      case _ => false
+    }, s"expected advisory filter above the scan:\n$plan")
+    assertAdvisoryNotEvaluated(plan)
+  }
+
+  private def assertAdvisoryNotEvaluated(plan: LogicalPlan): Unit = {
+    val scan = plan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    val physicalPlans = new DataSourceV2Strategy(spark).apply(plan)
+    assert(physicalPlans.nonEmpty, s"expected DataSourceV2Strategy to plan:\n$plan")
+    val physicalFilters = physicalPlans.flatMap(_.collect {
+      case filter: org.apache.spark.sql.execution.FilterExec => filter.condition
+    })
+    assert(scan.advisoryFilters.forall { advisory =>
+      !physicalFilters.exists(_.exists(_.semanticEquals(advisory)))
+    }, s"advisory filters must not be evaluated:\n${physicalPlans.mkString("\n")}")
+  }
+
+  private def emptyBatch: Batch = new Batch {
+    override def planInputPartitions() = Array.empty
+
+    override def createReaderFactory(): PartitionReaderFactory = new PartitionReaderFactory {
+      override def createReader(partition: InputPartition): PartitionReader[InternalRow] =
+        throw new UnsupportedOperationException("reader is not needed")
+    }
   }
 
   private class InMemoryCatalystFilterTable(
@@ -1118,6 +1278,163 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     override def pushedFilters: Array[Predicate] = Array.empty
 
     override def advisoryFilters: Seq[Expression] = Seq(advisoryFilter)
+  }
+
+  private class PushdownTable(
+      tableSchema: StructType,
+      advisoryFilter: Expression) extends Table with SupportsRead {
+
+    var builder: PushdownScanBuilder = _
+
+    override def name(): String = "pushdown-catalyst-filter-table"
+
+    override def schema(): StructType = tableSchema
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      EnumSet.of(TableCapability.BATCH_READ)
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      builder = new PushdownScanBuilder(tableSchema, advisoryFilter)
+      builder
+    }
+  }
+
+  private class PushdownScanBuilder(
+      tableSchema: StructType,
+      advisoryFilter: Expression)
+    extends ScanBuilder
+    with SupportsPushDownCatalystFilters
+    with SupportsPushDownAggregates
+    with SupportsPushDownJoin
+    with SupportsPushDownLimit
+    with SupportsPushDownOffset
+    with SupportsPushDownTopN {
+
+    var pushedAggregation: Option[Aggregation] = None
+    var pushedLimit: Option[Int] = None
+    var pushedOffset: Option[Int] = None
+    var pushedTopN: Option[(Array[V2SortOrder], Int)] = None
+    var joinPushed: Boolean = false
+    private var scanSchema: StructType = tableSchema
+
+    override def build(): Scan = new Scan {
+      override def readSchema(): StructType = scanSchema
+
+      override def toBatch: Batch = emptyBatch
+    }
+
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = Nil
+
+    override def pushedFilters: Array[Predicate] = Array.empty
+
+    override def advisoryFilters: Seq[Expression] = Seq(advisoryFilter)
+
+    override def supportCompletePushDown(aggregation: Aggregation): Boolean = true
+
+    override def pushAggregation(aggregation: Aggregation): Boolean = {
+      pushedAggregation = Some(aggregation)
+      val fields =
+        aggregation.groupByExpressions().indices.map(i => StructField(s"group_$i", LongType)) ++
+          aggregation.aggregateExpressions().indices.map(i => StructField(s"agg_$i", LongType))
+      scanSchema = StructType(fields)
+      true
+    }
+
+    override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean =
+      other.isInstanceOf[PushdownScanBuilder]
+
+    override def pushDownJoin(
+        other: SupportsPushDownJoin,
+        joinType: V2JoinType,
+        leftColumns: Array[SupportsPushDownJoin.ColumnWithAlias],
+        rightColumns: Array[SupportsPushDownJoin.ColumnWithAlias],
+        condition: Predicate): Boolean = {
+      joinPushed = true
+      scanSchema = StructType((leftColumns ++ rightColumns).map { column =>
+        StructField(Option(column.alias()).getOrElse(column.colName()), LongType)
+      })
+      true
+    }
+
+    override def pushLimit(limit: Int): Boolean = {
+      pushedLimit = Some(limit)
+      true
+    }
+
+    override def pushOffset(offset: Int): Boolean = {
+      pushedOffset = Some(offset)
+      true
+    }
+
+    override def pushTopN(orders: Array[V2SortOrder], limit: Int): Boolean = {
+      pushedTopN = Some((orders, limit))
+      true
+    }
+
+    override def isPartiallyPushed(): Boolean = false
+  }
+
+  private class VariantPushdownTable(
+      tableSchema: StructType,
+      advisoryFilter: Expression) extends Table with SupportsRead {
+
+    var builder: VariantPushdownScanBuilder = _
+
+    override def name(): String = "variant-pushdown-catalyst-filter-table"
+
+    override def schema(): StructType = tableSchema
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      EnumSet.of(TableCapability.BATCH_READ)
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      builder = new VariantPushdownScanBuilder(tableSchema, advisoryFilter)
+      builder
+    }
+  }
+
+  private class VariantPushdownScanBuilder(
+      tableSchema: StructType,
+      advisoryFilter: Expression)
+    extends ScanBuilder
+    with SupportsPushDownCatalystFilters
+    with SupportsPushDownVariantExtractions {
+
+    var variantPushed: Boolean = false
+    private var scanSchema: StructType = tableSchema
+
+    override def build(): Scan = new Scan {
+      override def readSchema(): StructType = scanSchema
+
+      override def toBatch: Batch = emptyBatch
+    }
+
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = Nil
+
+    override def pushedFilters: Array[Predicate] = Array.empty
+
+    override def advisoryFilters: Seq[Expression] = Seq(advisoryFilter)
+
+    override def pushVariantExtractions(extractions: Array[VariantExtraction]): Array[Boolean] = {
+      variantPushed = true
+      val extractionsByColumn = extractions.groupBy(_.columnName().head)
+      scanSchema = StructType(tableSchema.fields.map { field =>
+        extractionsByColumn.get(field.name) match {
+          case Some(columnExtractions) =>
+            val extractedFields = columnExtractions.zipWithIndex.map { case (extraction, index) =>
+              StructField(
+                index.toString,
+                extraction.expectedDataType(),
+                nullable = true,
+                extraction.metadata())
+            }
+            field.copy(dataType = StructType(extractedFields))
+          case None =>
+            field
+        }
+      })
+      Array.fill(extractions.length)(true)
+    }
   }
 
   /**
