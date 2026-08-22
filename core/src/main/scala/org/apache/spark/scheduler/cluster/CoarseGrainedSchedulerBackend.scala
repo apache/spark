@@ -427,7 +427,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorData.freeCores,
         Some(executorData.executorAddress.hostPort),
         resources,
-        executorData.resourceProfileId)
+        executorData.resourceProfileId,
+        executorData.totalCores)
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
