@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.master
 
+import java.net.{HttpURLConnection, URI}
+
 import scala.concurrent.duration._
 import scala.io.Source
 
@@ -121,7 +123,17 @@ class MasterWorkerUISuite extends MasterSuiteBase {
           // the webuiaddress intentionally points to the local web ui.
           // explicitly construct reverse proxy url targeting the master
           val JString(workerId) = workerSummaryJson \ "id"
-          val url = s"$masterUrl/proxy/${workerId}/json"
+          val redirectConn = new URI(s"$masterUrl/proxy/$workerId/json").toURL
+            .openConnection().asInstanceOf[HttpURLConnection]
+          redirectConn.setInstanceFollowRedirects(false)
+          try {
+            redirectConn.getResponseCode should be (301)
+            redirectConn.getHeaderField("Location") should be (
+              s"$reverseProxyUrl/proxy/$workerId/json/")
+          } finally {
+            redirectConn.disconnect()
+          }
+          val url = s"$masterUrl/proxy/${workerId}/json/"
           val workerResponse = parse(Utils
             .tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)

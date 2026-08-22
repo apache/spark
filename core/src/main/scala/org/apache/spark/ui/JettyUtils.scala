@@ -256,7 +256,17 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /** Create a handler for proxying request to Workers and Application Drivers */
-  def createProxyHandler(idToUiAddress: String => Option[String]): ServletContextHandler = {
+  def createProxyHandler(
+      idToUiAddress: String => Option[String],
+      reverseProxyUrl: String = "",
+      proxyRedirectUri: Option[String] = None): ServletContextHandler = {
+    val normalizedReverseProxyUrl = reverseProxyUrl.stripSuffix("/")
+    val reverseProxyPath = if (normalizedReverseProxyUrl.startsWith("http://") ||
+        normalizedReverseProxyUrl.startsWith("https://")) {
+      Option(new URI(normalizedReverseProxyUrl).getRawPath).getOrElse("").stripSuffix("/")
+    } else {
+      normalizedReverseProxyUrl
+    }
     val servlet = new ProxyServlet {
       override def rewriteTarget(request: HttpServletRequest): String = {
         val path = request.getPathInfo
@@ -292,9 +302,11 @@ private[spark] object JettyUtils extends Logging {
           } else {
             path.substring(0, prefixTrailingSlashIndex)
           }
-          val existingContext = Option(clientRequest.getHeader("X-Forwarded-Context")).getOrElse("")
+          val existingContext = Option(clientRequest.getHeader("X-Forwarded-Context"))
+            .filter(_.nonEmpty)
+          val externalPrefix = existingContext.getOrElse(reverseProxyPath)
           val contextPath = Option(clientRequest.getContextPath).getOrElse("")
-          val proxyContext = existingContext + contextPath + prefix
+          val proxyContext = externalPrefix + contextPath + prefix
           proxyRequest.headers(headers => headers.put("X-Forwarded-Context", proxyContext))
         }
       }
@@ -315,6 +327,15 @@ private[spark] object JettyUtils extends Logging {
           val newHeader = createProxyLocationHeader(headerValue, clientRequest,
             serverResponse.getRequest().getURI())
           if (newHeader != null) {
+            if (normalizedReverseProxyUrl.nonEmpty && proxyRedirectUri.isEmpty) {
+              val scheme = clientRequest.getScheme
+              val host = Option(clientRequest.getHeader("host")).getOrElse("")
+              val rootProxyPrefix = s"$scheme://$host/proxy/"
+              if (newHeader.startsWith(rootProxyPrefix)) {
+                val rest = newHeader.substring(rootProxyPrefix.length)
+                return s"$normalizedReverseProxyUrl/proxy/$rest"
+              }
+            }
             return newHeader
           }
         }
