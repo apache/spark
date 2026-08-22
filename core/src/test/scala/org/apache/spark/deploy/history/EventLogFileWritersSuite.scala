@@ -100,6 +100,25 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
     }
   }
 
+  test("create missing spark.eventLog.dir automatically") {
+    val appId = getUniqueApplicationId
+    val attemptId = None
+    val missingDir = new File(testDir, "missing-event-log-dir")
+    val missingDirPath = new Path(missingDir.getAbsolutePath)
+    assert(!missingDir.exists())
+
+    val conf = getLoggingConf(missingDirPath, None)
+    val writer = createWriter(appId, attemptId, missingDirPath.toUri, conf,
+      SparkHadoopUtil.get.newConfiguration(conf))
+
+    writer.start()
+    writer.writeEvent("dummy", flushLogger = true)
+    writer.stop()
+    
+    assert(missingDir.isDirectory)
+  }
+
+
   test("Use the default value of spark.eventLog.compression.codec") {
     val conf = new SparkConf
     conf.set(EVENT_LOG_COMPRESS, true)
