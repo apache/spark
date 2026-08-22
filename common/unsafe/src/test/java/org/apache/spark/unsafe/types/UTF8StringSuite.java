@@ -527,6 +527,41 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void splitSQL() {
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b"), fromString(""), fromString("c"),
+        fromString("")},
+      fromString("a.b..c.").splitSQL(fromString("."), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b"), fromString("c")},
+      fromString("a|b|c").splitSQL(fromString("|"), 0));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b.c")},
+      fromString("a.b.c").splitSQL(fromString("."), 2));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a.b.c")},
+      fromString("a.b.c").splitSQL(fromString("."), 1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b"), fromString(""), fromString("c")},
+      fromString("a数b数数c").splitSQL(fromString("数"), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString(""), fromString("")},
+      fromString("abc").splitSQL(fromString("abc"), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("abc")},
+      fromString("abc").splitSQL(fromString(""), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("abc")},
+      fromString("abc").splitSQL(fromString("x"), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("")},
+      fromString("").splitSQL(fromString("."), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b"), fromString("c")},
+      fromString("aXYbXYc").splitSQL(fromString("XY"), -1));
+  }
+
+  @Test
   public void replace() {
     assertEquals(
       fromString("re123ace"),
