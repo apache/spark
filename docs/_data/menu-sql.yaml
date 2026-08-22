@@ -110,6 +110,9 @@
       url: sql-ref-ansi-compliance.html
     - text: Data Types
       url: sql-ref-datatypes.html
+      subitems:
+        - text: Character String Types
+          url: sql-ref-character-string-types.html
     - text: Datetime Pattern
       url: sql-ref-datetime-pattern.html
     - text: Number Pattern

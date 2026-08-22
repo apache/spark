@@ -109,6 +109,9 @@ Besides, the ANSI SQL mode disallows the following type conversions which are al
 
  The valid combinations of source and target data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
+The String row represents the character string type family. For the length and padding behavior
+of casts among CHAR, VARCHAR, and STRING, see
+[Character String Types](sql-ref-character-string-types.html#casts).
 
 | Source\Target | Numeric                              | String                               | Date                                 | Time | Timestamp                            | Timestamp_NTZ                        | Interval                             | Boolean                              | Binary | Array                                | Map                                  | Struct                               |
 |---------------|--------------------------------------|--------------------------------------|--------------------------------------|------|--------------------------------------|--------------------------------------|--------------------------------------|--------------------------------------|--------|--------------------------------------|--------------------------------------|--------------------------------------|
@@ -198,6 +201,8 @@ While casting of a decimal with a fraction to an interval type with SECOND as th
 
 ### Store assignment
 As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
+For CHAR and VARCHAR length checks, trailing-space handling, and CHAR padding, see
+[Character String Types](sql-ref-character-string-types.html#assignment-and-reading).
 
 | Source\Target | Numeric | String | Date | Time | Timestamp | Timestamp_NTZ | Interval | Boolean | Binary | Array | Map | Struct |
 |:-------------:|:-------:|:------:|:----:|:----:|:---------:|---------------|:--------:|:-------:|:------:|:-----:|:---:|:------:|
@@ -243,6 +248,8 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 | Date      | Date -> Timestamp_NTZ -> Timestamp                                              |
 | Time      | Time                                                                            |
 | Timestamp | Timestamp                                                                       |
+| Char      | Char -> Varchar -> String****                                                   |
+| Varchar   | Varchar -> String****                                                            |
 | String    | String, Long -> Double, Date -> Timestamp_NTZ -> Timestamp , Boolean, Binary ** |
 | Binary    | Binary                                                                          |
 | Boolean   | Boolean                                                                         |
@@ -256,6 +263,10 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 \*\* String can be promoted to multiple kinds of data types. Note that Byte/Short/Int/Decimal/Float is not on this precedent list. The least common type between Byte/Short/Int and String is Long, while the least common type between Decimal/Float is Double.
 
 \*\*\* For a complex type, the precedence rule applies recursively to its component elements.
+
+\*\*\*\* CHAR, VARCHAR, and STRING form the character string type family. After CHAR or VARCHAR
+reaches STRING, the STRING precedence branches also apply. See
+[Character String Types](sql-ref-character-string-types.html).
 
 The `TIME` type does not promote to any other type. Note that Spark's `TIME` type deviates from the SQL standard in two ways: the default fractional-seconds precision is `6` (the ANSI default is `0`), and `TIME WITH TIME ZONE` is not supported.
 
@@ -280,6 +291,11 @@ A least common type between decimal types should have enough digits in both inte
 More precisely, a least common type between `decimal(p1, s1)` and `decimal(p2, s2)` has the scale of `max(s1, s2)` and precision of `max(s1, s2) + max(p1 - s1, p2 - s2)`.
 However, decimal types in Spark have a maximum precision: 38. If the final decimal type need more precision, we must do truncation.
 Since the digits in the integral part are more significant, Spark truncates the digits in the fractional part first. For example, `decimal(48, 20)` will be reduced to `decimal(38, 10)`.
+
+CHAR and VARCHAR also have a type parameter: length. When
+`spark.sql.charVarchar.standardSemantics.enabled` is `true`, least common type resolution uses the
+widest input length. The least common type of two CHAR types is `CHAR(max(n, m))`; a VARCHAR input
+makes the result `VARCHAR(max(n, m))`; and a STRING input makes the result STRING.
 
 Note, arithmetic operations have special rules to calculate the least common type for decimal inputs:
 
