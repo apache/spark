@@ -1269,6 +1269,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PIPELINED_SHUFFLE_ENABLED = buildConf("spark.sql.pipelinedShuffle.enabled")
+    .doc("When true and the application runs on a single executor (local mode), eligible " +
+      "shuffle exchanges are marked pipelined: the concurrent-stage scheduler runs their map " +
+      "and reduce stages together, and the shuffle is served by the pipelined shuffle manager " +
+      "(spark.shuffle.manager.incremental) instead of being materialized. A plan whose " +
+      "pipelined stage group cannot fit the local task-concurrency limit fails with an " +
+      "explicit CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT error. Experimental.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
   val ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING =
     buildConf("spark.sql.adaptive.streaming.stateless.enabled")
       .internal()
@@ -8849,6 +8861,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def schemaLevelCollationsEnabled: Boolean = getConf(SCHEMA_LEVEL_COLLATIONS_ENABLED)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def pipelinedShuffleEnabled: Boolean = getConf(PIPELINED_SHUFFLE_ENABLED)
 
   def adaptiveExecutionEnabledInStatelessStreaming: Boolean =
     getConf(ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING)
