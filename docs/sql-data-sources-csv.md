@@ -225,7 +225,13 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>singleVariantColumn</code></td>
     <td>(none)</td>
-    <td>If specified, the entire CSV record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields.</td>
+    <td>If specified, the entire CSV record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields. By default, scalar values are type-inferred inside the variant (for example, <code>"0001"</code> becomes the integer <code>1</code>). To keep every scalar as a string instead, set <code>variantRespectInferSchema</code> to <code>true</code> and <code>inferSchema</code> to <code>false</code>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>variantRespectInferSchema</code></td>
+    <td>false</td>
+    <td>When reading into a <code>VARIANT</code> (see <code>singleVariantColumn</code> or a <code>VariantType</code> column in the schema), controls whether the <code>inferSchema</code> option is honored. When <code>true</code> and <code>inferSchema</code> is <code>false</code>, scalar values are preserved as strings inside the variant instead of being inferred as boolean, long, decimal, date, or timestamp. When <code>false</code> (the default), scalar types are always inferred regardless of <code>inferSchema</code>.</td>
     <td>read</td>
   </tr>
   <tr>
