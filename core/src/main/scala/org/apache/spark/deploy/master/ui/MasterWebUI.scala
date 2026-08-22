@@ -27,9 +27,8 @@ import org.apache.spark.deploy.master.Master
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HOSTS, NUM_REMOVED_WORKERS}
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
-import org.apache.spark.internal.config.UI.MASTER_UI_DECOMMISSION_ALLOW_MODE
-import org.apache.spark.internal.config.UI.UI_HOLD_ENABLED
-import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
+import org.apache.spark.internal.config.UI.{MASTER_UI_DECOMMISSION_ALLOW_MODE,
+  PROXY_REDIRECT_URI, UI_HOLD_ENABLED, UI_KILL_ENABLED, UI_REVERSE_PROXY_URL}
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.ArrayImplicits._
@@ -72,11 +71,11 @@ class MasterWebUI(
     // spark.master.ui.decommission.allow.mode.
     if (killEnabled) {
       attachHandler(createRedirectHandler(
-        "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST"),
-        csrfToken = Some(csrfToken)))
+        "/app/kill", "/", masterPage.handleAppKillRequest,
+        httpMethods = Set("POST"), csrfToken = Some(csrfToken)))
       attachHandler(createRedirectHandler(
-        "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST"),
-        csrfToken = Some(csrfToken)))
+        "/driver/kill", "/", masterPage.handleDriverKillRequest,
+        httpMethods = Set("POST"), csrfToken = Some(csrfToken)))
     }
     if (holdEnabled) {
       attachHandler(createRedirectHandler(
@@ -114,7 +113,9 @@ class MasterWebUI(
   }
 
   def addProxy(): Unit = {
-    val handler = createProxyHandler(idToUiAddress)
+    val reverseProxyUrl = master.conf.get(UI_REVERSE_PROXY_URL).getOrElse("")
+    val proxyRedirectUri = master.conf.get(PROXY_REDIRECT_URI)
+    val handler = createProxyHandler(idToUiAddress, reverseProxyUrl, proxyRedirectUri)
     attachHandler(handler)
   }
 
