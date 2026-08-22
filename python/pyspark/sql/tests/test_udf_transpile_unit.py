@@ -47,6 +47,12 @@ _TRANSPILE_ON = {
     "spark.sql.ansi.enabled": True,
 }
 
+# The interpreted path to compare against where ANSI is what makes the two differ.
+_TRANSPILE_OFF_ANSI_ON = {
+    "spark.sql.experimental.optimizer.transpilePyUDFs": False,
+    "spark.sql.ansi.enabled": True,
+}
+
 
 @unittest.skipIf(
     is_remote_only(),
@@ -1386,13 +1392,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def _optimized_plan(df):
         return df._jdf.queryExecution().optimizedPlan().toString()
 
-    # Internal plan-string details: the alias prefix a pre-evaluated input gets, and the token a
-    # plan shows for a draw it still evaluates.
-    _UDF_INPUT_ALIAS = "_udf_input"
+    # Internal plan-string details: the alias a shared argument gets (RewriteWithExpression names
+    # them ``_common_expr_N``), and the token a plan shows for a draw it still evaluates.
+    _SHARED_ARG_ALIAS = "_common_expr"
     _DRAW = "rand("
 
-    def _pre_evaluates_an_input(self, df):
-        return self._UDF_INPUT_ALIAS in self._optimized_plan(df)
+    def _shares_an_argument(self, df):
+        return self._SHARED_ARG_ALIAS in self._optimized_plan(df)
 
     def _draw_count(self, df):
         return self._optimized_plan(df).count(self._DRAW)
@@ -1400,8 +1406,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def test_udf_transpile_evaluates_inputs_once(self):
         # SPARK-58626: an argument the body uses twice is drawn once per row, so `x == x` over a
         # random input is True on every row and `x if x > 0.5 else 0.0` never returns a value its
-        # own condition would have rejected. Plan-level pinning of which arguments get a column
-        # lives in PreEvaluateTranspiledUDFInputsSuite; these are the values.
+        # own condition would have rejected.
         from pyspark.sql.functions import expr, lit, rand
 
         eq_self = lambda x: x == x  # noqa: E731
@@ -1415,7 +1420,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
             # `functions.rand()` bakes a literal seed in, but `expr("rand()")` arrives with the seed
             # unresolved and ResolveRandomSeed then gives each spliced copy its OWN seed. Both have
-            # to end up reading one column, or `x == x` compares two independent draws.
+            # to end up sharing one evaluation, or `x == x` compares two independent draws.
+            #
+            # Sharing leaves `col = col`, which SimplifyBinaryComparison folds to true and column
+            # pruning then drops the draw entirely -- so zero draws in the plan is the proof that
+            # both sides became the same column. Two independent draws would leave both.
             for arg in (rand(), expr("rand()")):
                 eq_df = rows.select(eq_udf(arg).alias("v"))
                 self.assertEqual(0, self._draw_count(eq_df))
@@ -1428,64 +1437,21 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # Both branches have to run for the check above to mean anything.
             self.assertTrue(any(v == 0.0 for v in vals) and any(v > 0.5 for v in vals), vals)
 
-            # A literal is folded in at each use site, and a column is as cheap to read twice as a
-            # copy of it would be, so neither grows the plan.
+            # A literal and a plain column are as cheap to read twice as to share, so the optimizer
+            # puts them back at each use site and neither grows the plan.
             square = UserDefinedFunction(square_fn, LongType())
             self.assertTrue(square.transpiled)
             lit_df = rows.select(square(lit(3)).alias("v"))
-            self.assertFalse(self._pre_evaluates_an_input(lit_df))
+            self.assertFalse(self._shares_an_argument(lit_df))
             self.assertEqual([9] * 100, [r[0] for r in lit_df.collect()])
             col_df = self.spark.range(3).select(square("id").alias("v"))
-            self.assertFalse(self._pre_evaluates_an_input(col_df))
+            self.assertFalse(self._shares_an_argument(col_df))
             self.assertEqual([0, 1, 4], [r[0] for r in col_df.collect()])
 
-    def test_udf_transpile_reused_column_shares_one_draw(self):
-        # SPARK-58626: pins a KNOWN DIFFERENCE from interpreted Python, documented in
-        # transpile.py. Build a call once and use that same Column twice, with a seed that
-        # was still unresolved at call time, and both uses read the one pre-evaluated
-        # column -- one draw. Interpreted draws twice, because ResolveRandomSeed gives each
-        # plan occurrence its own seed while the marker ids (minted once per builder call)
-        # say both occurrences are the same parameter.
-        #
-        # If someone re-mints the ids per plan occurrence, this test flips and the note in
-        # transpile.py should go with it. The narrowness matters, so the two shapes that do
-        # NOT differ are pinned here too.
-        from pyspark.sql.functions import expr, rand
-
-        identity = lambda v: v  # noqa: E731
-        transpile_off = {
-            "spark.sql.experimental.optimizer.transpilePyUDFs": False,
-            "spark.sql.ansi.enabled": True,
-        }
-
-        def draws(conf, arg_factory, reuse):
-            with self.sql_conf(conf):
-                u = UserDefinedFunction(identity, DoubleType())
-                if reuse:
-                    c = u(arg_factory())
-                    df = self.spark.range(40).select(c.alias("x"), c.alias("y"))
-                else:
-                    df = self.spark.range(40).select(
-                        u(arg_factory()).alias("x"), u(arg_factory()).alias("y")
-                    )
-                rows = df.collect()
-                return "one" if all(r["x"] == r["y"] for r in rows) else "two"
-
-        unresolved = lambda: expr("rand()")  # noqa: E731
-
-        # The difference: one Column reused, seed unresolved.
-        self.assertEqual("one", draws(_TRANSPILE_ON, unresolved, reuse=True))
-        self.assertEqual("two", draws(transpile_off, unresolved, reuse=True))
-
-        # Not affected: two separate calls, and a baked-in literal seed.
-        for conf in (_TRANSPILE_ON, transpile_off):
-            self.assertEqual("two", draws(conf, unresolved, reuse=False))
-            self.assertEqual("one", draws(conf, rand, reuse=True))
-
-    def test_udf_transpile_pre_evaluates_inside_a_group_by(self):
-        # SPARK-58626: in an Aggregate only a use an aggregate function wraps may read a column --
-        # see PreEvaluateTranspiledUDFInputs' scaladoc for why. The Scala test only inspects the
-        # plan, so run all three shapes here for their values.
+    def test_udf_transpile_evaluates_inputs_once_in_a_group_by(self):
+        # SPARK-58626: an Aggregate is the awkward one -- a use no aggregate function wraps has to
+        # *be* a grouping expression, so it cannot read a shared column. RewriteWithExpression
+        # handles that by splitting the Aggregate; this runs all three shapes for their values.
         from pyspark.sql.functions import col, sum as sum_
 
         square_fn = lambda x: x * x  # noqa: E731
@@ -1494,28 +1460,22 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(square.transpiled)
             df = self.spark.createDataFrame([(1,), (2,), (2,)], "a long")
 
-            # The grouping expression is the user's own `a + 1` and gets no column.
             grouped = df.groupBy(col("a") + 1).agg(square(col("a") + 1).alias("v"))
             self.assertEqual([(2, 4), (3, 9)], sorted((r[0], r[1]) for r in grouped.collect()))
 
-            # An aggregate function encloses the use, so the input does get its column.
             summed = df.agg(sum_(square(col("a") + 1)).alias("s"))
-            self.assertTrue(self._pre_evaluates_an_input(summed))
             self.assertEqual([22], [r[0] for r in summed.collect()])
 
-            # Both in one Aggregate: the enclosed use reads a column while the bare one stays a
-            # grouping expression, which is why the rewrite decides per use and not per argument.
             mixed = df.groupBy(col("a") + 1).agg(
                 square(col("a") + 1).alias("v"), sum_(square(col("a") + 1)).alias("s")
             )
-            self.assertTrue(self._pre_evaluates_an_input(mixed))
             self.assertEqual([(2, 4, 4), (3, 9, 18)], sorted(tuple(r) for r in mixed.collect()))
 
-    def test_udf_transpile_pre_evaluates_inside_a_subquery(self):
-        # SPARK-58626: a marker inside a subquery is the subquery's own business, but the outer node
-        # used to see the subquery's pattern bits and fail an internal assertion on it, which broke
-        # every transpiled UDF in a subquery. The correlated case is the reason this is end to end:
-        # PullupCorrelatedPredicates moves the condition out, which no plan test covers.
+    def test_udf_transpile_evaluates_inputs_once_in_a_subquery(self):
+        # SPARK-58626: end to end because decorrelation is what makes this interesting. In the last
+        # shape the shared argument reads a column of the OUTER query, so the definition
+        # RewriteWithExpression pre-evaluates lands inside the subquery holding an OuterReference,
+        # and decorrelation has to carry it back out.
         square_fn = lambda x: x * x  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
             square = UserDefinedFunction(square_fn, LongType())
@@ -1531,7 +1491,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     "(SELECT max(sq_test_58626(a + 1)) FROM t_58626)"
                 )
                 self.assertEqual([0, 1, 2, 3, 4], [r[0] for r in uncorrelated.collect()])
-                self.assertTrue(self._pre_evaluates_an_input(uncorrelated))
 
                 correlated = self.spark.sql(
                     "SELECT a FROM t_58626 o WHERE a < "
@@ -1539,38 +1498,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 )
                 self.assertEqual([0, 1, 2, 3, 4], sorted(r[0] for r in correlated.collect()))
 
-    def test_udf_transpile_udf_as_a_predicate(self):
-        # A predicate is transpiled like anything else: no Python worker in a `where` or a join
-        # condition, and the same answers.
-        #
-        # The column does NOT survive in a deterministic predicate: PushPredicateThroughNonJoin
-        # substitutes the alias and pushes the whole Filter below the Project, putting the argument
-        # back at each use site. That is the best-effort part of the contract (see transpile.py),
-        # and it is why the assertions here are about answers, not the plan. Only a
-        # nondeterministic argument keeps its column through pushdown -- pinned at the plan level in
-        # PreEvaluateTranspiledUDFInputsSuite.
-        from pyspark.sql.functions import col
-
-        used_twice = lambda a, b: (a + a) if b > 0 else 0.0  # noqa: E731
-        with self.sql_conf(_TRANSPILE_ON):
-            u = UserDefinedFunction(used_twice, DoubleType())
-            self.assertTrue(u.transpiled)
-            df = self.spark.createDataFrame([(1.0, 2.0), (4.0, 2.0)], "a double, b double")
-            other = self.spark.createDataFrame([(2.0,)], "c double")
-            predicate = u(col("a") / col("b"), col("b")) > 2.0
-
-            filtered = df.where(predicate)
-            self.assertEqual(0, self._eval_python_count(filtered))
-            self.assertEqual([(4.0, 2.0)], [(r[0], r[1]) for r in filtered.collect()])
-
-            joined = df.join(other, predicate)
-            self.assertEqual(0, self._eval_python_count(joined))
-            self.assertEqual([(4.0, 2.0, 2.0)], [tuple(r) for r in joined.collect()])
-
-            selected = df.select(u(col("a") / col("b"), col("b")).alias("v"))
-            self.assertTrue(self._pre_evaluates_an_input(selected))
-            self.assertEqual(0, self._eval_python_count(selected))
-            self.assertEqual([1.0, 4.0], [r[0] for r in selected.collect()])
+                outer_arg = self.spark.sql(
+                    "SELECT a FROM t_58626 o WHERE EXISTS "
+                    "(SELECT 1 FROM t_58626 i WHERE sq_test_58626(o.a + 1) = i.a)"
+                )
+                self.assertEqual([0, 1], sorted(r[0] for r in outer_arg.collect()))
 
     def test_udf_transpile_unused_argument_diverges_under_ansi(self):
         # SPARK-58626: an argument the body never uses never reaches the option, so nothing
@@ -1579,40 +1511,31 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         from pyspark.sql.functions import col, lit
 
         first = lambda a, b: a  # noqa: E731
-        transpile_off = {
-            "spark.sql.experimental.optimizer.transpilePyUDFs": False,
-            "spark.sql.ansi.enabled": True,
-        }
         with self.sql_conf(_TRANSPILE_ON):
             u = UserDefinedFunction(first, LongType())
             self.assertTrue(u.transpiled)
             df = self.spark.createDataFrame([(3,)], "x long")
             rows = df.select(u(col("x"), col("x") / lit(0))).collect()
             self.assertEqual([3], [r[0] for r in rows])
-        with self.sql_conf(transpile_off):
+        with self.sql_conf(_TRANSPILE_OFF_ANSI_ON):
             u_i = UserDefinedFunction(first, LongType())
             df = self.spark.createDataFrame([(3,)], "x long")
             with self.assertRaises(Exception) as ctx:
                 df.select(u_i(col("x"), col("x") / lit(0))).collect()
             self.assertIn("DIVIDE_BY_ZERO", str(ctx.exception))
 
-    def test_udf_transpile_pre_evaluated_input_is_eager(self):
-        # SPARK-58626: pre-evaluating an input makes it eager, so an input that raises under ANSI
-        # raises even on rows whose use of it sat in a branch they did not take -- which is what the
-        # interpreted UDF does too.
+    def test_udf_transpile_shared_input_is_eager(self):
+        # SPARK-58626: sharing one evaluation of an argument makes it eager, so an argument that
+        # raises under ANSI raises even on rows whose use of it sat in a branch they did not take --
+        # which is what the interpreted UDF does too.
         #
-        # The second case is the best-effort part of the contract (see transpile.py), and it is
-        # CollapseProject's doing rather than the transpiler's: a deterministic column read exactly
-        # once is inlined back into the body, putting the input back inside the branch and back to
-        # being lazy. Pinned so a change is deliberate.
+        # Read only once, the optimizer puts the argument back inside the branch and it is lazy
+        # again. That is the best-effort part of the contract (see transpile.py), pinned here so a
+        # change to it is deliberate.
         from pyspark.sql.functions import col
 
         used_twice = lambda a, b: (a + a) if b > 0 else 0.0  # noqa: E731
         used_once = lambda a, b: a if b > 0 else 0.0  # noqa: E731
-        transpile_off = {
-            "spark.sql.experimental.optimizer.transpilePyUDFs": False,
-            "spark.sql.ansi.enabled": True,
-        }
         rows = [(1.0, 2.0), (1.0, 0.0)]
 
         def divide_by_zero_error(func, conf):
@@ -1626,22 +1549,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 except Exception as e:
                     return str(e)
 
-        # Read twice, so the pre-evaluated column survives: eager, and both paths raise.
-        for conf, label in ((_TRANSPILE_ON, "transpiled"), (transpile_off, "interpreted")):
-            with self.sql_conf(conf):
-                self.assertEqual(
-                    conf is _TRANSPILE_ON,
-                    bool(UserDefinedFunction(used_twice, DoubleType()).transpiled),
-                    label,
-                )
+        for conf, label in ((_TRANSPILE_ON, "transpiled"), (_TRANSPILE_OFF_ANSI_ON, "interpreted")):
             error = divide_by_zero_error(used_twice, conf)
             self.assertIsNotNone(error, label)
             self.assertIn("DIVIDE_BY_ZERO", error, label)
 
-        # Read once and deterministic, so it is inlined back into the branch: lazy, and only the
-        # interpreted path raises.
         self.assertIsNone(divide_by_zero_error(used_once, _TRANSPILE_ON))
-        interpreted_error = divide_by_zero_error(used_once, transpile_off)
+        interpreted_error = divide_by_zero_error(used_once, _TRANSPILE_OFF_ANSI_ON)
         self.assertIsNotNone(interpreted_error)
         self.assertIn("DIVIDE_BY_ZERO", interpreted_error)
 

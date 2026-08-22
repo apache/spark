@@ -1038,16 +1038,24 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     plan.transformDownWithSubqueriesAndPruning(
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
       case p =>
-        val substituted = p.mapExpressions {
-          case e if e.containsPattern(TRANSPILED_PYTHON_UDF) => applyExpr(e, parentIsUdf = false)
-          case e => e
+        // A Command has no output of its own, so RewriteWithExpression cannot project away the
+        // extra column a shared argument needs -- and the Project it slips between the command and
+        // its relation hides the relation DataSourceV2Strategy matches on, turning
+        // `DELETE FROM t WHERE udf(a + 1) > 0` into an internal error. So a command's arguments
+        // stay at each use site.
+        val shareArguments = !p.isInstanceOf[Command]
+        p.transformExpressionsWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
+          case s: TranspiledPythonUDF => applyExpr(s, parentIsUdf = false, shareArguments)
         }
-        // Give each argument the substituted options use a single evaluation per row.
-        PreEvaluateTranspiledUDFInputs(substituted)
     }
   }
 
-  def applyExpr(expression: Expression, parentIsUdf: Boolean = false): Expression = {
+  def applyExpr(
+      expression: Expression,
+      parentIsUdf: Boolean = false,
+      shareArguments: Boolean = true): Expression = {
+    def recurse(e: Expression, parentIsUdf: Boolean): Expression =
+      applyExpr(e, parentIsUdf, shareArguments)
     expression match {
       case s: TranspiledPythonUDF =>
         // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
@@ -1057,36 +1065,49 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             log"${MDC(LogKeys.CONFIG, SQLConf.ANSI_ENABLED.key)} is disabled. The transpiler " +
             log"targets ANSI semantics and refuses to rewrite plans under non-ANSI mode. " +
             log"Enable ANSI or disable transpilation to silence this warning.")
-          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+          s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
         } else if (!conf.getConf(SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS)) {
           logWarning(log"Skipping Python UDF transpilation: " +
             log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
-          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+          s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
         } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
-          // Take the first option, or fall back to the Python UDF. Options whose declared input
-          // types don't match the bound columns were already pruned by
-          // ResolveTranspiledPythonUDFOptions, so anything reaching here is safe to use -- as-is,
-          // with no cast back to the UDF's return type. A custom transpiler plugging in its own
-          // ConvertToX MUST match that type itself (or insert a Cast), or it silently changes the
-          // output schema, and MUST call PreEvaluateTranspiledUDFInputs as this rule does, or its
-          // options evaluate a repeated argument once per use.
-          s.transpiledOptions.headOption match {
+          // Walk the full list of transpiled options and pick the first one,
+          // falling back to the original Python UDF if none are available.
+          // Options whose declared input-type categories don't match the bound
+          // column types are already pruned during analysis by
+          // ResolveTranspiledPythonUDFOptions, so any option that reaches here is
+          // safe to use. If you're plugging in your own transpilation, please add
+          // a separate ConvertToX so you can choose your desired transpiled nodes.
+          // NOTE: the substituted option is used as-is, with no cast back to the
+          // UDF's declared return type. The built-in transpiler guarantees each
+          // option's dataType already matches; a custom transpiler MUST do the
+          // same (or insert its own Cast), or it will silently change the output
+          // schema.
+          val firstEvaluable = s.transpiledOptions.headOption
+          firstEvaluable match {
             case None =>
-              s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+              s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
             case Some(catalystExpr) =>
-              // Recurse into the chosen transpilation's children.
-              catalystExpr.mapChildren(applyExpr(_, parentIsUdf = false))
+              // Recursively apply to the children first because we may use them as inputs in parent
+              // The option's arguments are then shared so each is evaluated once per row rather
+              // than once per use (SPARK-58626); RewriteWithExpression, in the next batch, is
+              // what pre-evaluates them below the operator.
+              TranspiledUDFParameter.shareParameters(
+                catalystExpr.mapChildren(recurse(_, parentIsUdf = false)), shareArguments)
           }
         } else {
           // We should avoid converting a UDF node where that could break pipelining.
           // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
-          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+          s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
         }
       case _ =>
-        // Not a TranspiledPythonUDF: recurse, telling each child whether a Python UDF encloses it.
-        // That is what keeps a transpilable UDF between two Python UDFs on the Python path.
-        expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression)))
+        // Not a TranspiledPythonUDF: recurse down, telling the children whether
+        // this node is itself a scalar Python UDF so a transpiled child can
+        // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
+        // transpiled wrapping one that could).
+        expression.mapChildren(
+          recurse(_, parentIsUdf = isScalarPythonUDF(expression)))
     }
   }
 }

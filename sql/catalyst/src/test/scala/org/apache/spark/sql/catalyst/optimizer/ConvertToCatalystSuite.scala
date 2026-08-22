@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, LocalRelation, Project}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType}
 
@@ -188,26 +188,25 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("transpiles a predicate, pre-evaluating its input below the Filter") {
+  test("gives each parameter one common expression, shared by every copy") {
     transpileOn {
+      // `lambda a, b: a * a + b` over `f(a + 1, a + 1)`: two parameters bound to equal arguments,
+      // so shape alone cannot tell the three copies apart -- only the marker indexes can. Two
+      // parameters means two common expressions, and `a`'s two copies share one of them.
       val arg = Add(attrA, Literal(1L))
-      val id = NamedExpression.newExprId
-      val option = GreaterThan(
-        Multiply(TranspiledUDFParameter(arg, 0, id), TranspiledUDFParameter(arg, 0, id)),
-        Literal(0L))
-      val tpudf = TranspiledPythonUDF("udf",
-        PythonUDF("udf", null, BooleanType, Seq(arg),
-          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
-        List(option))
-      val rewritten = ConvertToCatalyst(Filter(tpudf, LocalRelation(attrA)))
-      // Project(a, Filter(_udf_input_0 * _udf_input_0 > 0, Project(a, _udf_input_0, rel))).
-      val filter = rewritten.collectFirst { case f: Filter => f }.get
-      val input = filter.child.asInstanceOf[Project].projectList.last.asInstanceOf[Alias]
-      assert(input.child == arg, s"Expected a + 1 pre-evaluated below the Filter: $rewritten")
-      assert(filter.condition == GreaterThan(
-        Multiply(input.toAttribute, input.toAttribute), Literal(0L)),
-        s"Expected a Catalyst predicate reading the column: $rewritten")
-      assert(rewritten.output == Seq(attrA), s"Extra columns leaked out: $rewritten")
+      val option = Add(
+        Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0)),
+        TranspiledUDFParameter(arg, 1))
+      val tpudf = makeTPUDF(makePyUDF(arg), option)
+      ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false) match {
+        case With(child, defs) =>
+          assert(defs.map(_.child) == Seq(arg, arg), s"Expected one def per parameter: $defs")
+          // Two refs to a's common expression and one to b's, in the option body's order.
+          val refIds = child.collect { case r: CommonExpressionRef => r.id }
+          assert(refIds == Seq(defs.head.id, defs.head.id, defs(1).id),
+            s"Expected a's copies to share one common expr and b to get its own: $child")
+        case other => fail(s"Expected the option wrapped in a With, got: $other")
+      }
     }
   }
 
@@ -275,40 +274,62 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("apply keeps a transpilable UDF Python when wrapped by a non-transpiled Python UDF") {
-    // `apply` threads parentIsUdf down from the top expression, so the mid UDF stays Python rather
-    // than splitting the batch pipeline into Python -> Catalyst -> Python. The applyExpr tests
-    // above pass parentIsUdf in directly and so bypass that threading.
+  test("leaves an argument an aggregate function wraps at each use site") {
     transpileOn {
-      val plain = makePyUDF(attrA)
-      val midPy = makePyUDF(plain)
-      val midTPUDF = makeTPUDF(midPy, Add(plain, Literal(4L)))
-      assert(midTPUDF.hasOnlyPythonUDFInputs)
-      val outerPy = makePyUDF(midTPUDF)
-      val optimized = ConvertToCatalyst(Project(Seq(Alias(outerPy, "v")()), LocalRelation(attrA)))
-      val exprs = optimized.flatMap(_.expressions)
-      assert(!exprs.exists(_.exists(_.isInstanceOf[TranspiledPythonUDF])),
-        s"TranspiledPythonUDF survived: $optimized")
-      // Three Python UDFs remain (outer, mid, plain); the mid was not converted to its Add option.
-      assert(exprs.map(_.collect { case u: PythonUDF => u }.size).sum == 3,
-        s"Expected the mid UDF to stay Python (3 PythonUDFs), got: $optimized")
+      // A `With` may not have an aggregate function wrapping a ref to one of its own common
+      // expressions -- RewriteWithExpression pulls the aggregate out and the ref is left dangling,
+      // and `With` asserts against it. Only a custom transpiler can emit this shape (the built-in
+      // one emits scalar bodies), so this pins that we notice rather than trip the assert.
+      val arg = Add(attrA, Literal(1L))
+      val option = Count(Seq(Multiply(
+        TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0)))).toAggregateExpression()
+      val tpudf = makeTPUDF(makePyUDF(arg), option)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      // Compare the aggregate function, not the AggregateExpression: `toAggregateExpression` mints
+      // a fresh resultId per call, so the wrappers never compare equal.
+      assert(result.asInstanceOf[AggregateExpression].aggregateFunction ==
+        Count(Seq(Multiply(arg, arg))),
+        s"Expected the argument left at both use sites, no With: $result")
     }
   }
 
-  test("converts a nested transpiled UDF sitting at the root of the option") {
+  test("leaves a Command's arguments at each use site") {
     transpileOn {
-      // An option that is nothing but `_udf_param_0`, bound to a transpiled call. Only a custom
-      // transpiler can produce this shape -- the built-in one casts every option to the return
-      // type, so its roots are always Casts. The root is the marker, never the call itself, since
-      // substitution wraps every non-foldable argument; a marker is unary, so recursing into the
-      // children reaches the call. This pins that the call gets converted, not which traversal
-      // does it.
-      val innerTPUDF = makeTPUDF(makePyUDF(attrA), Add(attrA, Literal(1L)))
-      val outerTPUDF = makeTPUDF(makePyUDF(innerTPUDF),
-        TranspiledUDFParameter(innerTPUDF, 0, NamedExpression.newExprId))
+      // No `With` under a Command: it has no output of its own, so RewriteWithExpression cannot
+      // project away the extra column, and the Project it would add between DeleteFromTable and
+      // its relation hides the relation DataSourceV2Strategy matches on -- an internal error
+      // rather than a DELETE. The markers still have to come off.
+      val arg = Add(attrA, Literal(1L))
+      val relation = LocalRelation(attrA)
+      val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
+      val tpudf = makeTPUDF(makePyUDF(arg), option)
+      val converted = ConvertToCatalyst(DeleteFromTable(relation, GreaterThan(tpudf, Literal(0L))))
+      assert(converted == DeleteFromTable(relation, GreaterThan(Multiply(arg, arg), Literal(0L))),
+        s"Expected the argument left at both use sites: $converted")
+    }
+  }
+
+  test("converts a nested transpiled UDF inside a marked argument") {
+    transpileOn {
+      // An outer option that is nothing but `_udf_param_0`, bound to a transpiled call that repeats
+      // a parameter of its own. Conversion is depth-first, so the inner option's markers are
+      // already common expression refs when the outer option's are collected -- which is why
+      // `shareParameters` never has to look for a marker inside a marked argument.
+      val arg = Add(attrA, Literal(1L))
+      val innerOption = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
+      val innerTPUDF = makeTPUDF(makePyUDF(arg), innerOption)
+      val outerTPUDF = makeTPUDF(makePyUDF(innerTPUDF), TranspiledUDFParameter(innerTPUDF, 0))
       val result = ConvertToCatalyst.applyExpr(outerTPUDF, parentIsUdf = false)
       assert(!result.exists(_.isInstanceOf[TranspiledPythonUDF]),
         s"TranspiledPythonUDF survived at the option root: $result")
+      assert(!result.exists(_.isInstanceOf[TranspiledUDFParameter]),
+        s"A marker survived: $result")
+      // The outer With's definition is the inner call's own With, and every ref resolves inside the
+      // With that defines it -- no ref left over from the inner one.
+      val withs = result.collect { case w: With => w }
+      assert(withs.length == 2, s"Expected a With per call, got: $result")
+      assert(withs.forall(w => w.child.collect { case r: CommonExpressionRef => r.id }
+        .forall(w.defs.map(_.id).contains)), s"A ref outlived its definition: $result")
     }
   }
 }
