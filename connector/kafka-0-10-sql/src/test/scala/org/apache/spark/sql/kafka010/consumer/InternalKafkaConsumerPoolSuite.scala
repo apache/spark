@@ -194,6 +194,61 @@ class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
     pool.close()
   }
 
+  test("borrowing with different kafkaParams after invalidateKey") {
+    val pool = new InternalKafkaConsumerPool(new SparkConf())
+
+    try {
+      val topicPartition = new TopicPartition("topic", 0)
+      val kafkaParams = getTestKafkaParams
+      // Differs only in a non-key field, so both map to the same CacheKey.
+      val newKafkaParams = getTestKafkaParamsWithDifferentOffsetReset
+      assert(kafkaParams != newKafkaParams)
+
+      val key = new CacheKey(topicPartition, kafkaParams)
+      assert(key === new CacheKey(topicPartition, newKafkaParams))
+
+      val pooledObject = pool.borrowObject(key, kafkaParams)
+      assertPooledObject(pooledObject, topicPartition, kafkaParams)
+      pool.returnObject(pooledObject)
+
+      pool.invalidateKey(key)
+      assertPoolStateForKey(pool, key, numIdle = 0, numActive = 0, numTotal = 0)
+
+      // Invalidation must also drop the remembered kafkaParams for the key, otherwise this borrow
+      // fails the equality check against the params of the consumer we just destroyed.
+      val newPooledObject = pool.borrowObject(key, newKafkaParams)
+      assertPooledObject(newPooledObject, topicPartition, newKafkaParams)
+      assertPoolStateForKey(pool, key, numIdle = 0, numActive = 1, numTotal = 1)
+    } finally {
+      pool.close()
+    }
+  }
+
+  test("borrowing with different kafkaParams after reset") {
+    val pool = new InternalKafkaConsumerPool(new SparkConf())
+
+    try {
+      val topicPartition = new TopicPartition("topic", 0)
+      val kafkaParams = getTestKafkaParams
+      val newKafkaParams = getTestKafkaParamsWithDifferentOffsetReset
+
+      val key = new CacheKey(topicPartition, kafkaParams)
+
+      val pooledObject = pool.borrowObject(key, kafkaParams)
+      assertPooledObject(pooledObject, topicPartition, kafkaParams)
+      pool.returnObject(pooledObject)
+
+      pool.reset()
+      assertPoolState(pool, numIdle = 0, numActive = 0, numTotal = 0)
+
+      val newPooledObject = pool.borrowObject(key, newKafkaParams)
+      assertPooledObject(newPooledObject, topicPartition, newKafkaParams)
+      assertPoolStateForKey(pool, key, numIdle = 0, numActive = 1, numTotal = 1)
+    } finally {
+      pool.close()
+    }
+  }
+
   private def createTopicPartitions(
       topicNames: Seq[String],
       countPartition: Int): List[TopicPartition] = {
@@ -247,6 +302,16 @@ class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
     AUTO_OFFSET_RESET_CONFIG -> "earliest",
     ENABLE_AUTO_COMMIT_CONFIG -> "false"
   ).asJava
+
+  /**
+   * Params that differ from [[getTestKafkaParams]] but keep the same groupId, so both still map to
+   * the same [[CacheKey]] for a given topic partition.
+   */
+  private def getTestKafkaParamsWithDifferentOffsetReset: ju.Map[String, Object] = {
+    val params = new ju.HashMap[String, Object](getTestKafkaParams)
+    params.put(AUTO_OFFSET_RESET_CONFIG, "latest")
+    params
+  }
 
   private def borrowObjectsPerKey(
       pool: InternalKafkaConsumerPool,
