@@ -3487,6 +3487,9 @@ private[spark] class DAGScheduler(
             }
         }
 
+      case _: MetadataFetchFailed =>
+        logInfo(log"Metadata fetch failure from ${MDC(TASK_ID, task)} causes another task attempt")
+
       case FetchFailed(bmAddress, shuffleId, _, mapIndex, reduceId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
