@@ -335,6 +335,20 @@ class LimitPushdownSuite extends PlanTest {
       GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
   }
 
+  test("SPARK-57125: Push down limit through Offset folds literal sum without ConstantFolding") {
+    // Verify LimitPushDown produces a planable logical plan on its own, without depending on
+    // a subsequent ConstantFolding run to fold the merged `limit + offset` expression. This
+    // matters when ConstantFolding is excluded via OPTIMIZER_EXCLUDED_RULES: physical planning
+    // (BasicOperators in SparkStrategies) only matches LocalLimit(IntegerLiteral, _) and would
+    // otherwise fail with `AssertionError: No plan for LocalLimit (a + b)`.
+    object OptimizeOnlyLimitPushDown extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("Limit pushdown", Once, LimitPushDown) :: Nil
+    }
+    comparePlans(
+      OptimizeOnlyLimitPushDown.execute(testRelation.offset(2).limit(1).analyze),
+      GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
+  }
+
   test("SPARK-39511: Push limit 1 to right side if join type is LeftSemiOrAnti") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       comparePlans(
