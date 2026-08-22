@@ -21,6 +21,8 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class SQLTestsMixin:
+    """Shared SQL API assertions for the classic and Spark Connect test suites."""
+
     def test_simple(self):
         res = self.spark.sql("SELECT 1 + 1").collect()
         self.assertEqual(len(res), 1)
