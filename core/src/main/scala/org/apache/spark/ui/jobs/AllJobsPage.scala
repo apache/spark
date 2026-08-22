@@ -123,7 +123,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
   }
 
-  private def makeExecutorEvent(executors: Seq[v1.ExecutorSummary]):
+  def makeExecutorEvent(executors: Seq[v1.ExecutorSummary]):
       Seq[String] = {
     val events = ListBuffer[String]()
     executors.sortBy { e =>
@@ -158,7 +158,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |    '${
                       e.removeReason.map { reason =>
                         s"""<br>Reason: ${StringEscapeUtils.escapeEcmaScript(
-                          reason.replace("\n", " "))}"""
+                          Utility.escape(Utility.escape(reason.replace("\n", " "))))}"""
                       }.getOrElse("")
                    }"' +
              |    'data-bs-html="true">Executor ${e.id} removed</div>'
@@ -354,6 +354,31 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
             <strong>Scheduling Mode: </strong>
             {schedulingMode}
           </li>
+          {
+            if (parent.holdEnabled && parent.sc.exists(_.executorHoldSupported)) {
+              val basePathUri = UIUtils.prependBaseUri(request, parent.basePath)
+              val (status, action, confirm) = if (parent.sc.get.executorsHeld) {
+                val numDraining = parent.sc.get.getExecutorIds().size
+                val status = if (numDraining > 0) {
+                  s"Held (draining $numDraining executor${if (numDraining > 1) "s" else ""})"
+                } else {
+                  "Held"
+                }
+                (status, "resume", "Are you sure you want to resume this application?")
+              } else {
+                ("Running", "hold", "Are you sure you want to hold this application? All " +
+                  "executors will be decommissioned after finishing their running tasks.")
+              }
+              <li>
+                <strong>Application:</strong>
+                {status}
+                <a href={s"$basePathUri/jobs/$action/"}
+                   data-confirm-message={confirm}
+                   class="confirm-link">{s"($action)"}</a>
+                {parent.lastHoldRequestStatus.getOrElse("")}
+              </li>
+            }
+          }
           {
             if (shouldShowActiveJobs) {
               <li>

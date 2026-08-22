@@ -17,7 +17,7 @@
 
 export {
   ConvertDurationString, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
-  errorMessageCell, errorSummary,
+  errorMessageCell, errorSummary, escapeHtml,
   formatBytes, formatDate, formatDuration, formatLogsCells, formatTimeMillis,
   getBaseURI, getStandAloneAppId, getTimeZone,
   setDataTableDefaults, stringAbbreviate
@@ -235,6 +235,18 @@ function getBaseURI() {
   return document.baseURI || document.URL;
 }
 
+/* Escape a value for safe inclusion in HTML text content. Non-string values are
+ * coerced to a string first; null/undefined are returned unchanged. */
+function escapeHtml(text) {
+  if (text === null || text === undefined) return text;
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function detailsUINode(isMultiline, message) {
   if (isMultiline) {
     const span = '<span data-toggle-details=".stacktrace-details" class="expand-details">+details</span>';
@@ -269,8 +281,8 @@ function errorSummary(errorMessage) {
 
 function errorMessageCell(errorMessage) {
   const [summary, isMultiline] = errorSummary(errorMessage);
-  const details = detailsUINode(isMultiline, errorMessage);
-  return summary + details;
+  const details = detailsUINode(isMultiline, escapeHtml(errorMessage));
+  return escapeHtml(summary) + details;
 }
 
 function stringAbbreviate(content, limit) {

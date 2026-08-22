@@ -74,6 +74,14 @@ case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
     _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch compact binary representation.
       `lgNomEntries` (optional) is the log-base-2 of nominal entries, with nominal entries deciding
       the number buckets or slots for the ThetaSketch. """,
+  arguments = """
+    Arguments:
+      * expr - The expression whose distinct values are aggregated into the sketch.
+        An expression that evaluates to an array, binary, double, float, integer, long, or string.
+      * lgNomEntries - The log-base-2 of nominal entries, which sets the number of buckets for the
+      ThetaSketch.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(col, 12)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
@@ -315,6 +323,13 @@ case class ThetaSketchAgg(
     _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's Compact binary representation.
       `lgNomEntries` (optional) the log-base-2 of Nominal Entries, with Nominal Entries deciding
       the number buckets or slots for the ThetaSketch.""",
+  arguments = """
+    Arguments:
+      * expr - A binary expression of Compact ThetaSketch representations to union.
+      * lgNomEntries - An optional integer expression, the log-base-2 of nominal entries which
+          sets the number of buckets for the resulting ThetaSketch. When omitted, it defaults to
+          the default log nominal entries.
+  """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(sketch)) FROM (SELECT theta_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT theta_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));
@@ -499,6 +514,10 @@ case class ThetaUnionAgg(
   usage = """
     _FUNC_(expr) - Returns the ThetaSketch's Compact binary representation
       by intersecting all the Theta sketches in the input column.""",
+  arguments = """
+    Arguments:
+      * expr - A binary expression of Compact ThetaSketch representations to intersect.
+  """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(sketch)) FROM (SELECT theta_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT theta_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));

@@ -1,0 +1,91 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Test configuration entries
+
+configs {
+  key: "spark.test.bool.config"
+  value_type: VALUE_TYPE_BOOL
+  default_value: "true"
+  scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_SESSION
+  doc: "A test boolean config"
+  version: "4.0.0"
+}
+
+configs {
+  key: "spark.test.int.config"
+  value_type: VALUE_TYPE_INT
+  default_value: "42"
+  scope: SCOPE_CLUSTER
+  mutability: MUTABILITY_STATIC
+  visibility: VISIBILITY_INTERNAL
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
+  doc: "A test integer config"
+  version: "4.0.0"
+}
+
+configs {
+  key: "spark.test.long.doc.config"
+  value_type: VALUE_TYPE_STRING
+  default_value: "test"
+  scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_PERSISTED
+  doc: "This is a very long documentation string that spans multiple lines. "
+       "It demonstrates the prototext multi-line string concatenation feature. "
+       "Each quoted segment will be concatenated together into a single string, "
+       "which is useful for configs with lengthy descriptions."
+  version: "4.0.0"
+}
+
+configs {
+  key: "spark.test.optional.config"
+  value_type: VALUE_TYPE_STRING
+  scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
+  doc: "A test config without a default value"
+  version: "4.0.0"
+}
+
+configs {
+  key: "spark.test.string.config"
+  value_type: VALUE_TYPE_STRING
+  default_value: "default_value"
+  scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
+  doc: "A test string config"
+  version: "4.0.0"
+}
+
+configs {
+  key: "spark.test.testdefault.config"
+  value_type: VALUE_TYPE_INT
+  default_value: "10"
+  test_default: "20"
+  scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
+  doc: "A test config with a distinct test default"
+  version: "4.0.0"
+}

@@ -800,8 +800,15 @@ class ParquetFilters(
         createFilterHelper(pred, canPartialPushDownConjuncts = false)
           .map(FilterApi.not)
 
+      // Every value must be pushable, not just the head: both branches below convert *all* the
+      // values (per-element `makeEq` when under the threshold, `makeInPredicate` otherwise), so a
+      // head-only check lets a non-pushable tail element reach the converter. For a value-range-
+      // sensitive type (e.g. nanosecond timestamps, whose encoder throws outside the int64
+      // epoch-nanos range) that would crash filter creation instead of falling back to a full
+      // scan. `forall` short-circuits and, for type-only `valueCanMakeFilterOn` checks, is
+      // equivalent to the previous head check (all `In` values share the coerced column type).
       case sources.In(name, values) if pushDownInFilterThreshold > 0 && values.nonEmpty &&
-          canMakeFilterOn(name, values.head) =>
+          values.forall(canMakeFilterOn(name, _)) =>
         val fieldType = nameToParquetField(name).fieldType
         val fieldNames = nameToParquetField(name).fieldNames
         if (values.length <= pushDownInFilterThreshold) {

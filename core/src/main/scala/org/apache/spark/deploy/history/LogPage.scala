@@ -56,9 +56,9 @@ private[history] class LogPage(conf: SparkConf) extends WebUIPage("logPage") wit
         End of Log
       </div>
 
-    val logParams = "?self&logType=%s".format(logType)
-    val jsOnload = "window.onload = " +
-      s"initLogPage('$logParams', $curLogLength, $startByte, $endByte, $logLength, $byteLength);"
+    val logParams = "?self&logType=%s".format(UIUtils.encodeLogParam(logType))
+    val jsOnload = UIUtils.logPageOnloadScript(
+      logParams, curLogLength, startByte, endByte, logLength, byteLength)
 
     val content =
       <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++

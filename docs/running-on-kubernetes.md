@@ -80,6 +80,20 @@ driver and executor pods on a subset of available nodes through a [node selector
 using the configuration property for it. It will be possible to use more advanced
 scheduling hints like [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) in a future release.
 
+# Spark Kubernetes Operator
+
+In addition to the `spark-submit` based submission described in this document, users can deploy and
+manage Spark workloads declaratively via [operator patterns](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
+by using [Apache Spark Kubernetes Operator](https://github.com/apache/spark-kubernetes-operator),
+a separate Apache Spark project. The operator provides two custom resources:
+
+* [SparkApp](https://github.com/apache/spark-kubernetes-operator/blob/main/examples/pi-python.yaml): deploy Spark apps on top of Kubernetes
+* [SparkCluster](https://github.com/apache/spark-kubernetes-operator/blob/main/examples/cluster.yaml): deploy Spark clusters on top of Kubernetes
+
+The two approaches are complementary because the operator runs Spark applications on top of the same
+native Kubernetes scheduler backend described in this document. Please refer to the operator
+repository for its detailed documentation and usage.
+
 # Submitting Applications to Kubernetes
 
 ## Docker Images
@@ -717,6 +731,11 @@ See the [configuration page](configuration.html) for information on Spark config
     In other words, the recovery-mode executors replace the OOM-terminated executors to
     survive from the resource-hungry tasks for the remaining tasks and stages.
     If set to <code>false</code>, Spark will not use the recovery-mode executors.
+    Recovery-mode executors always derive their announced cores from the global
+    <code>spark.task.cpus</code>, not from stage-level resource profiles. Note that when
+    <code>spark.task.cpus</code> is 0.5 or less, a recovery-mode executor announces a single
+    CPU core and therefore accepts <code>floor(1 / spark.task.cpus)</code> concurrent tasks
+    instead of only one.
   </td>
   <td>4.2.0</td>
 </tr>
@@ -886,8 +905,13 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>default</code></td>
   <td>
     Service account that is used when running the driver pod. The driver pod uses this service account when requesting
-    executor pods from the API server. Note that this cannot be specified alongside a CA cert file, client key file,
-    client cert file, and/or OAuth token. In client mode, use <code>spark.kubernetes.authenticate.serviceAccountName</code> instead.
+    executor pods from the API server. Note that this cannot be specified alongside a submitted CA cert file, client key
+    file, client cert file, and/or OAuth token: Spark mounts those as a secret and they take precedence, so the driver
+    pod is left with the service account its spec already names, or the namespace's default. Spark logs a warning when
+    the account is dropped. To have Spark apply this configuration anyway, put the
+    credentials inside the driver pod and point the
+    <code>spark.kubernetes.authenticate.driver.mounted.*</code> configurations at them instead, which does not mount a
+    secret. In client mode, use <code>spark.kubernetes.authenticate.serviceAccountName</code> instead.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -1584,6 +1608,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.service.publishNotReadyAddresses</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, the driver service publishes DNS records for the driver pod even while the pod
+    is not ready, so executors can resolve the driver service during startup when a readiness
+    probe is configured on the driver pod. When enabled, the driver pod readiness wait before
+    executor allocation is skipped as well.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.securityContext.allowPrivilegeEscalation</code></td>
   <td><code>false</code></td>
   <td>
@@ -1943,7 +1978,8 @@ See the below table for the full list of pod specifications that will be overwri
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
     Spark will override <code>serviceAccount</code> with the value of the spark configuration for only
-    driver pods, and only if the spark configuration is specified. Executor pods will remain unaffected.
+    driver pods, and only if the spark configuration is specified and no driver credentials are
+    submitted for Spark to mount as a secret. Executor pods will remain unaffected.
   </td>
 </tr>
 <tr>
@@ -1951,7 +1987,8 @@ See the below table for the full list of pod specifications that will be overwri
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
     Spark will override <code>serviceAccountName</code> with the value of the spark configuration for only
-    driver pods, and only if the spark configuration is specified. Executor pods will remain unaffected.
+    driver pods, and only if the spark configuration is specified and no driver credentials are
+    submitted for Spark to mount as a secret. Executor pods will remain unaffected.
   </td>
 </tr>
 <tr>
@@ -2158,10 +2195,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.8.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.9.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.8.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.9.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from abc import ABC, abstractmethod
 from typing import Dict
-from typing import Optional, Union, List, overload, Tuple, cast, Callable
+from typing import Any, Optional, Union, List, overload, Tuple, cast, Callable
 from typing import TYPE_CHECKING
 
 from pyspark.sql.connect.plan import (
@@ -55,7 +56,10 @@ PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
-class OptionUtils:
+class OptionUtils(ABC):
+    @abstractmethod
+    def option(self, key: str, value: "OptionalPrimitiveType") -> Any: ...
+
     def _set_opts(
         self,
         schema: Optional[Union[StructType, str]] = None,
@@ -68,7 +72,7 @@ class OptionUtils:
             self.schema(schema)  # type: ignore[attr-defined]
         for k, v in options.items():
             if v is not None:
-                self.option(k, v)  # type: ignore[attr-defined]
+                self.option(k, v)
 
 
 class DataFrameReader(OptionUtils):
@@ -130,15 +134,17 @@ class DataFrameReader(OptionUtils):
             self.schema(schema)
         self.options(**options)
 
-        paths = path
+        paths: Optional[List[str]]
         if isinstance(path, str):
             paths = [path]
+        else:
+            paths = path
 
         plan = DataSource(
             format=self._format,
             schema=self._schema,
             options=self._options,
-            paths=paths,  # type: ignore[arg-type]
+            paths=paths,
         )
         return self._df(plan)
 

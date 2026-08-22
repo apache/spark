@@ -16,3 +16,8 @@
 #
 
 org.apache.spark.deploy.security.ExceptionThrowingDelegationTokenProvider
+org.apache.spark.deploy.security.TestNonKerberosTokenProvider
+org.apache.spark.deploy.security.TestDisabledProvider
+org.apache.spark.deploy.security.TestFailingProvider
+org.apache.spark.deploy.security.TestRequirementFailingProvider
+org.apache.spark.deploy.security.TestNoExpiryProvider

@@ -25,7 +25,7 @@
 import sys
 from setuptools import setup
 import os
-from shutil import copyfile, move
+from shutil import copyfile
 import glob
 from pathlib import Path
 
@@ -118,13 +118,10 @@ if "SPARK_TESTING" in os.environ:
 
 try:
     if in_spark:
-        # !!HACK ALTERT!!
-        # 1. `setup.py` has to be located with the same directory with the package.
-        #    Therefore, we copy the current file, and place it at `spark/python` directory.
-        #    After that, we remove it in the end.
-        # 2. Here it renames `lib` to `lib.back` so MANIFEST.in does not pick `py4j` up.
-        #    We rename it back in the end.
-        move("lib", "lib.back")
+        # !!HACK ALERT!!
+        # `setup.py` has to be located with the same directory with the package.
+        # Therefore, we copy the current file, and place it at `spark/python` directory.
+        # After that, we remove it in the end.
         copyfile("packaging/client/setup.py", "setup.py")
         copyfile("packaging/client/setup.cfg", "setup.cfg")
 
@@ -206,7 +203,11 @@ try:
         url="https://github.com/apache/spark/tree/master/python",
         packages=connect_packages + test_packages,
         include_package_data=True,
+        package_data={
+            "pyspark": ["**/*.pyi", "**/py.typed", "**/*.json"],
+        },
         license="Apache-2.0",
+        license_files=["LICENSE", "NOTICE"],
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=[
@@ -232,6 +233,5 @@ try:
     )
 finally:
     if in_spark:
-        move("lib.back", "lib")
         os.remove("setup.py")
         os.remove("setup.cfg")

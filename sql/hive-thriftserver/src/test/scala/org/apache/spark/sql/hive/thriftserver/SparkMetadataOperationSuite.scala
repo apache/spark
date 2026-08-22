@@ -38,7 +38,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val expected = dbNames.iterator
       while (rs.next() || expected.hasNext) {
         assert(rs.getString("TABLE_SCHEM") === expected.next())
-        assert(rs.getString("TABLE_CATALOG").isEmpty)
+        assert(rs.getString("TABLE_CATALOG") === "spark_catalog")
       }
       // Make sure there are no more elements
       assert(!rs.next())
@@ -250,6 +250,20 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
       val rs = metaData.getCatalogs
+      // With catalog metadata enabled (default), getCatalogs returns loaded catalogs
+      assert(rs.next())
+      assert(rs.getString("TABLE_CAT") === "spark_catalog")
+      assert(!rs.next())
+    }
+  }
+
+  test("GetCatalogsOperation with catalog metadata disabled") {
+    withJdbcStatement() { statement =>
+      statement.execute(
+        "SET spark.sql.thriftServer.catalogMetadata.enabled=false")
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getCatalogs
+      // Legacy behavior: empty result set
       assert(!rs.next())
     }
   }
@@ -302,6 +316,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
          |using parquet""".stripMargin
 
     withJdbcStatement(tableName) { statement =>
+      statement.execute(s"SET ${SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key}=true")
       statement.execute(ddl)
 
       val databaseMetaData = statement.getConnection.getMetaData
@@ -315,7 +330,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       var pos = 0
 
       while (rowSet.next()) {
-        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_CAT") === "spark_catalog")
         assert(rowSet.getString("TABLE_SCHEM") === schemaName)
         assert(rowSet.getString("TABLE_NAME") === tableName)
         assert(rowSet.getString("COLUMN_NAME") === schema(pos).name)
@@ -324,9 +339,20 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
         val colSize = rowSet.getInt("COLUMN_SIZE")
         schema(pos).dataType match {
-          case StringType | BinaryType | _: ArrayType | _: MapType | _: VarcharType =>
+          case StringType | BinaryType | _: ArrayType | _: MapType =>
             assert(colSize === 0)
+          case c: CharType => assert(colSize === c.length)
+          case v: VarcharType => assert(colSize === v.length)
           case o => assert(colSize === o.defaultSize)
+        }
+        if (schema(pos).name == "c17") assert(colSize === 255)
+        if (schema(pos).name == "c18") assert(colSize === 1024)
+
+        val octetLength = rowSet.getInt("CHAR_OCTET_LENGTH")
+        schema(pos).dataType match {
+          case c: CharType => assert(octetLength === c.length * 4)
+          case v: VarcharType => assert(octetLength === v.length * 4)
+          case _ => assert(octetLength === 0) // JDBC getInt on SQL NULL
         }
 
         assert(rowSet.getInt("BUFFER_LENGTH") === 0) // not used
@@ -358,6 +384,23 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     }
   }
 
+  test("SPARK-58794: result metadata preserves CHAR and VARCHAR") {
+    withJdbcStatement() { statement =>
+      statement.execute(s"SET ${SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key}=true")
+      val resultSet = statement.executeQuery(
+        "SELECT CAST('ab' AS CHAR(4)) AS c, CAST('cd' AS VARCHAR(6)) AS v")
+      assert(resultSet.next())
+
+      val metadata = resultSet.getMetaData
+      assert(metadata.getColumnType(1) === java.sql.Types.CHAR)
+      assert(metadata.getColumnTypeName(1) === "char")
+      assert(metadata.getPrecision(1) === 4)
+      assert(metadata.getColumnType(2) === java.sql.Types.VARCHAR)
+      assert(metadata.getColumnTypeName(2) === "varchar")
+      assert(metadata.getPrecision(2) === 6)
+    }
+  }
+
   test("get columns operation should handle interval column properly") {
     val viewName = "view_interval"
     val ddl = s"CREATE GLOBAL TEMP VIEW $viewName as select interval 1 day as i"
@@ -368,7 +411,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val data = statement.getConnection.getMetaData
       val rowSet = data.getColumns("", "global_temp", viewName, null)
       while (rowSet.next()) {
-        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_CAT") === "spark_catalog")
         assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
         assert(rowSet.getString("TABLE_NAME") === viewName)
         assert(rowSet.getString("COLUMN_NAME") === "i")
@@ -396,7 +439,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val data = statement.getConnection.getMetaData
       val rowSet = data.getColumns("", "global_temp", viewName1, null)
       while (rowSet.next()) {
-        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_CAT") === "spark_catalog")
         assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
         assert(rowSet.getString("TABLE_NAME") === viewName1)
         assert(rowSet.getString("COLUMN_NAME") === "i")
@@ -422,7 +465,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val data = statement.getConnection.getMetaData
       val rowSet = data.getColumns("", "global_temp", viewName2, null)
       while (rowSet.next()) {
-        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_CAT") === "spark_catalog")
         assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
         assert(rowSet.getString("TABLE_NAME") === viewName2)
         assert(rowSet.getString("COLUMN_NAME") === "i")
@@ -449,7 +492,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val data = statement.getConnection.getMetaData
       val rowSet = data.getColumns("", "global_temp", viewName, "n")
       while (rowSet.next()) {
-        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_CAT") === "spark_catalog")
         assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
         assert(rowSet.getString("TABLE_NAME") === viewName)
         assert(rowSet.getString("COLUMN_NAME") === "n")
@@ -717,6 +760,186 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("ORDINAL_POSITION") === (if (zeroBasedOrdinal) 1 else 2))
         assert(!rowSet.next())
       }
+    }
+  }
+
+  test("SPARK-57518: getCatalogs with DSv2 catalog returns all loaded catalogs sorted") {
+    withJdbcStatement() { statement =>
+      // Configure and load a DSv2 catalog
+      statement.execute(
+        "SET spark.sql.catalog.testcat=" +
+          "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
+      // Trigger catalog loading by accessing it
+      statement.execute("USE testcat")
+      // Switch back to spark_catalog for subsequent operations
+      statement.execute("USE spark_catalog")
+
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getCatalogs
+      // Should return both catalogs sorted alphabetically
+      assert(rs.next())
+      assert(rs.getString("TABLE_CAT") === "spark_catalog")
+      assert(rs.next())
+      assert(rs.getString("TABLE_CAT") === "testcat")
+      assert(!rs.next())
+    }
+  }
+
+  test("SPARK-57518: getSchemas with null catalog returns current catalog schemas only") {
+    withJdbcStatement() { statement =>
+      // Configure and load a DSv2 catalog
+      statement.execute(
+        "SET spark.sql.catalog.testcat=" +
+          "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
+      statement.execute("USE testcat")
+      statement.execute("CREATE NAMESPACE testcat.testns")
+      // Switch to spark_catalog
+      statement.execute("USE spark_catalog")
+
+      val metaData = statement.getConnection.getMetaData
+      // null catalog -> current catalog only (spark_catalog)
+      val rs = metaData.getSchemas(null, "%")
+      val schemas = scala.collection.mutable.ArrayBuffer.empty[String]
+      while (rs.next()) {
+        schemas += rs.getString("TABLE_SCHEM")
+        assert(rs.getString("TABLE_CATALOG") === "spark_catalog")
+      }
+      // Should contain default and global_temp at minimum; should NOT contain testns
+      assert(schemas.contains("default"))
+      assert(schemas.contains("global_temp"))
+      assert(!schemas.contains("testns"))
+    }
+  }
+
+  test("SPARK-57518: getSchemas returns schemas from current catalog when set to DSv2 catalog") {
+    withJdbcStatement() { statement =>
+      statement.execute(
+        "SET spark.sql.catalog.testcat=" +
+          "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
+      statement.execute("USE testcat")
+      statement.execute("CREATE NAMESPACE testcat.ns1")
+      statement.execute("CREATE NAMESPACE testcat.ns2")
+
+      val metaData = statement.getConnection.getMetaData
+      // null catalog, current catalog is testcat
+      val rs = metaData.getSchemas(null, "%")
+      val schemas = scala.collection.mutable.ArrayBuffer.empty[String]
+      while (rs.next()) {
+        schemas += rs.getString("TABLE_SCHEM")
+        assert(rs.getString("TABLE_CATALOG") === "testcat")
+      }
+      assert(schemas.contains("ns1"))
+      assert(schemas.contains("ns2"))
+    }
+  }
+
+  test("SPARK-57518: getTables returns TABLE_CAT with current catalog name") {
+    withJdbcStatement("dsv2_table") { statement =>
+      statement.execute("CREATE TABLE dsv2_table(id INT, name STRING)")
+
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getTables(null, "default", "dsv2_table", null)
+      assert(rs.next())
+      assert(rs.getString("TABLE_CAT") === "spark_catalog")
+      assert(rs.getString("TABLE_SCHEM") === "default")
+      assert(rs.getString("TABLE_NAME") === "dsv2_table")
+      assert(!rs.next())
+    }
+  }
+
+  test("SPARK-57518: getColumns returns TABLE_CAT with current catalog name") {
+    withJdbcStatement("dsv2_col_table") { statement =>
+      statement.execute("CREATE TABLE dsv2_col_table(id INT, name STRING)")
+
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getColumns(null, "default", "dsv2_col_table", null)
+      assert(rs.next())
+      assert(rs.getString("TABLE_CAT") === "spark_catalog")
+      assert(rs.getString("TABLE_SCHEM") === "default")
+      assert(rs.getString("TABLE_NAME") === "dsv2_col_table")
+      assert(rs.getString("COLUMN_NAME") === "id")
+      assert(rs.next())
+      assert(rs.getString("TABLE_CAT") === "spark_catalog")
+      assert(rs.getString("COLUMN_NAME") === "name")
+      assert(!rs.next())
+    }
+  }
+
+  test("SPARK-57518: getSchemas with catalog metadata disabled returns empty TABLE_CATALOG") {
+    withJdbcStatement() { statement =>
+      statement.execute("SET spark.sql.thriftServer.catalogMetadata.enabled=false")
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getSchemas(null, "default")
+      assert(rs.next())
+      assert(rs.getString("TABLE_SCHEM") === "default")
+      assert(rs.getString("TABLE_CATALOG").isEmpty)
+    }
+  }
+
+  test("SPARK-57518: getTables/getColumns with catalog metadata disabled return legacy " +
+      "empty/null TABLE_CAT") {
+    withJdbcStatement("legacy_t") { statement =>
+      statement.execute("SET spark.sql.thriftServer.catalogMetadata.enabled=false")
+      statement.execute("CREATE TABLE legacy_t(id INT, name STRING)")
+
+      val metaData = statement.getConnection.getMetaData
+
+      // getTables should return empty string or null for TABLE_CAT
+      val tablesRs = metaData.getTables(null, "default", "legacy_t", null)
+      assert(tablesRs.next())
+      val tableCat = tablesRs.getString("TABLE_CAT")
+      assert(tableCat == null || tableCat.isEmpty,
+        s"Expected empty/null TABLE_CAT but got: $tableCat")
+      assert(tablesRs.getString("TABLE_NAME") === "legacy_t")
+      assert(!tablesRs.next())
+
+      // getColumns should return empty string or null for TABLE_CAT
+      val colsRs = metaData.getColumns(null, "default", "legacy_t", null)
+      assert(colsRs.next())
+      val colCat = colsRs.getString("TABLE_CAT")
+      assert(colCat == null || colCat.isEmpty,
+        s"Expected empty/null TABLE_CAT but got: $colCat")
+      assert(colsRs.getString("COLUMN_NAME") === "id")
+      assert(colsRs.next())
+      assert(colsRs.getString("COLUMN_NAME") === "name")
+      assert(!colsRs.next())
+    }
+  }
+
+  test("SPARK-57518: getTables/getColumns do not label V1 rows with a DSv2 current catalog") {
+    // getTables/getColumns list from the V1 SessionCatalog (spark_catalog). When the current
+    // catalog is a DSv2 catalog, TABLE_CAT must NOT be stamped with that catalog's name -- the
+    // listed rows belong to spark_catalog, not the DSv2 catalog. They stay legacy empty/null
+    // here; DSv2 routing for getTables/getColumns is a follow-up.
+    withJdbcStatement("v1_table") { statement =>
+      statement.execute("CREATE TABLE v1_table(id INT, name STRING)")
+      statement.execute(
+        "SET spark.sql.catalog.testcat=" +
+          "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
+      // Make the DSv2 catalog the current catalog.
+      statement.execute("USE testcat")
+
+      val metaData = statement.getConnection.getMetaData
+
+      // getTables still lists the V1 spark_catalog table; TABLE_CAT must be legacy empty/null,
+      // never "testcat".
+      val tablesRs = metaData.getTables(null, "default", "v1_table", null)
+      assert(tablesRs.next())
+      val tableCat = tablesRs.getString("TABLE_CAT")
+      assert(tableCat == null || tableCat.isEmpty,
+        s"V1-listed table must not be labeled with the DSv2 current catalog, got: $tableCat")
+      assert(tablesRs.getString("TABLE_NAME") === "v1_table")
+
+      // Same for getColumns.
+      val colsRs = metaData.getColumns(null, "default", "v1_table", null)
+      assert(colsRs.next())
+      val colCat = colsRs.getString("TABLE_CAT")
+      assert(colCat == null || colCat.isEmpty,
+        s"V1-listed column must not be labeled with the DSv2 current catalog, got: $colCat")
+      assert(colsRs.getString("COLUMN_NAME") === "id")
+
+      // Switch back so withJdbcStatement's DROP TABLE cleanup targets spark_catalog.
+      statement.execute("USE spark_catalog")
     }
   }
 }

@@ -459,6 +459,14 @@ Security options for the Spark History Server are covered more detail in the
     <td>4.1.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.eventLog.onDemandLoadEnabled</td>
+    <td>true</td>
+    <td>
+      Whether to look up single event log locations on demand manner before listing files.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+  <tr>
     <td>spark.history.store.hybridStore.enabled</td>
     <td>false</td>
     <td>
@@ -713,6 +721,30 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <br>
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
     </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/sessions</code></td>
+    <td>A list of all Spark Connect sessions for a given application.
+    <br>
+    <code>?offset=[offset]&length=[len]</code> lists sessions in the given range.
+    </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/sessions/[session-id]?userId=[user-id]</code></td>
+    <td>Details for the given Spark Connect session. A session is identified by the composite
+    <code>(userId, sessionId)</code>, so <code>userId</code> is required and must be passed as an
+    unpadded base64url-encoded string.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/operations</code></td>
+    <td>A list of all Spark Connect operations for a given application.
+    <br>
+    <code>?offset=[offset]&length=[len]</code> lists operations in the given range.
+    </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/operations/detail?jobTag=[job-tag]</code></td>
+    <td>Details for the Spark Connect operation with the given job tag.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/environment</code></td>

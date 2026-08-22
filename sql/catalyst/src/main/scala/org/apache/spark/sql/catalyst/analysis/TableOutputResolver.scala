@@ -43,9 +43,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
   /**
    * Modes for filling in default or null values for missing columns.
    * If FILL, fill missing top-level columns with their default values (by-name reorder path).
-   * If RECURSE, fill missing top-level columns (including trailing columns on the by-position
-   * path for INSERT with schema evolution when enabled) and recurse into nested structs,
-   * arrays, and maps to fill missing struct fields with null or defaults.
+   * If RECURSE, fill missing top-level columns (including trailing non-generated columns on the
+   * by-position path for INSERT with schema evolution when enabled) and recurse into nested
+   * structs, arrays, and maps to fill missing struct fields with null or defaults.
    * If NONE, do not fill any missing columns.
    */
   object DefaultValueFillMode extends Enumeration {
@@ -162,7 +162,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
-        tableName, expected.map(_.name).map(toSQLId).mkString(", "))
+        tableName, expected.map(col => toSQLId(Seq(col.name))).mkString(", "))
     }
 
     val plan = if (resolved == query.output) {
@@ -236,7 +236,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     if (canWriteValue) {
       val nullCheckedValue = checkNullability(value, attr, conf, colPath)
       val casted = cast(nullCheckedValue, attrTypeWithoutCharVarchar, conf, colPath.quoted)
-      val exprWithStrLenCheck = if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
+      val exprWithStrLenCheck = if (!attrTypeHasCharVarchar ||
+          !CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)) {
         casted
       } else {
         CharVarcharUtils.stringLengthCheck(casted, attr.dataType)
@@ -333,7 +334,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedCol: Attribute,
       conf: SQLConf): NamedExpression = {
     val rawType = CharVarcharUtils.getRawType(expectedCol.metadata).getOrElse(expectedCol.dataType)
-    val checked = if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(rawType)) {
+    val checked = if (CharVarcharUtils.hasCharVarchar(rawType) &&
+        CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)) {
       val value = defaultExpr match {
         case a: Alias => a.child
         case other => other
@@ -457,7 +459,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val output = if (reordered.length == expectedCols.length) {
       if (matchedCols.size < inputCols.length) {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
-          .map(col => s"${toSQLId(col.name)}").mkString(", ")
+          .map(col => toSQLId(Seq(col.name))).mkString(", ")
         if (colPath.isEmpty) {
           throw QueryCompilationErrors.incompatibleDataToTableExtraColumnsError(tableName,
             extraCols)
@@ -471,7 +473,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     } else if (enforceFullOutput) {
       val colName =
         if (colPath.nonEmpty) colPath.quoted
-        else expectedCols.map(_.name).map(toSQLId).mkString(", ")
+        else expectedCols.map(col => toSQLId(Seq(col.name))).mkString(", ")
       throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     } else {
       Nil
@@ -495,7 +497,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
     if (inputCols.size > actualExpectedCols.size) {
       val extraColsStr = inputCols.takeRight(inputCols.size - actualExpectedCols.size)
-        .map(col => toSQLId(col.name))
+        .map(col => toSQLId(Seq(col.name)))
         .mkString(", ")
       if (colPath.isEmpty) {
         throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName,
@@ -508,7 +510,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     } else if (inputCols.size < actualExpectedCols.size && !fillDefaultValue) {
       val missingCols = actualExpectedCols.drop(inputCols.size)
       val missingColsStr = missingCols
-        .map(col => toSQLId(col.name))
+        .map(col => toSQLId(Seq(col.name)))
         .mkString(", ")
       if (colPath.isEmpty) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
@@ -541,6 +543,12 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
 
     val trailingCols = actualExpectedCols.drop(inputCols.size)
+    if (colPath.isEmpty &&
+        trailingCols.exists(col => GeneratedColumn.isGeneratedColumn(col.metadata))) {
+      throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
+        tableName, actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
+    }
+
     val defaults = if (fillDefaultValue || trailingCols.nonEmpty) {
       trailingCols.map { expectedCol =>
         // Check for generated column expression first, before falling back to defaults.
@@ -577,7 +585,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     if (result.length != actualExpectedCols.size) {
       val colName =
         if (colPath.nonEmpty) colPath.quoted
-        else actualExpectedCols.map(_.name).map(toSQLId).mkString(", ")
+        else actualExpectedCols.map(col => toSQLId(Seq(col.name))).mkString(", ")
       throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     }
     (result, autoFilledGenCols.toSet)
@@ -848,7 +856,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         } else {
           val udtUnwrapped = unwrapUDT(queryExpr)
           val casted = cast(udtUnwrapped, attrTypeWithoutCharVarchar, conf, colPath.quoted)
-          if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
+          if (!attrTypeHasCharVarchar ||
+              !CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)) {
             casted
           } else {
             CharVarcharUtils.stringLengthCheck(casted, tableAttr.dataType)

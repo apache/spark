@@ -173,7 +173,7 @@ if [ -n "$JAVA" ]; then
 fi
 
 echo "Building $RELEASE_TAG; output will be at $WORKDIR/output"
-docker run $([ -z "$GITHUB_ACTIONS" ] && echo "-ti") \
+docker run --rm $([ -z "$GITHUB_ACTIONS" ] && echo "-ti") \
   --env-file "$ENVFILE" \
   --volume "$WORKDIR:/opt/spark-rm" \
   $JAVA_VOL \

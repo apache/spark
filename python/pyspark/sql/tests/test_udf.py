@@ -54,7 +54,7 @@ from pyspark.testing.sqlutils import (
     test_compiled,
     test_not_compiled_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual, timeout
+from pyspark.testing.utils import assertDataFrameEqual, eventually, timeout
 from pyspark.util import is_remote_only
 
 
@@ -1706,20 +1706,23 @@ class BaseUDFTestsMixin:
                 [Row(result=str(i)) for i in range(2)],
             )
 
-            logs = self.spark.tvf.python_worker_logs()
+            @eventually(timeout=10, catch_assertions=True)
+            def check_logs():
+                logs = self.spark.tvf.python_worker_logs()
+                assertDataFrameEqual(
+                    logs.select("level", "msg", "context", "logger"),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg="PySparkLogger test",
+                            context={"func_name": my_udf.__name__, "x": str(i)},
+                            logger="PySparkLogger",
+                        )
+                        for i in range(2)
+                    ],
+                )
 
-            assertDataFrameEqual(
-                logs.select("level", "msg", "context", "logger"),
-                [
-                    Row(
-                        level="WARNING",
-                        msg="PySparkLogger test",
-                        context={"func_name": my_udf.__name__, "x": str(i)},
-                        logger="PySparkLogger",
-                    )
-                    for i in range(2)
-                ],
-            )
+            check_logs()
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):

@@ -24,7 +24,6 @@ import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils.randomize
 
 private[spark] class LocalDirsFeatureStep(
@@ -47,12 +46,11 @@ private[spark] class LocalDirsFeatureStep(
       // exist in the image.
       // We could make utils.getConfiguredLocalDirs opinionated about Kubernetes, as it is already
       // a bit opinionated about YARN.
-      val resolvedLocalDirs = Option(conf.sparkConf.getenv("SPARK_LOCAL_DIRS"))
+      val resolvedLocalDirs = randomize(Option(conf.sparkConf.getenv("SPARK_LOCAL_DIRS"))
         .orElse(conf.getOption("spark.local.dir"))
         .getOrElse(defaultLocalDir)
-        .split(",")
-      randomize(resolvedLocalDirs)
-      localDirs = resolvedLocalDirs.toImmutableArraySeq
+        .split(","))
+      localDirs = resolvedLocalDirs
       localDirVolumes = resolvedLocalDirs
         .zipWithIndex
         .map { case (_, index) =>
@@ -62,7 +60,7 @@ private[spark] class LocalDirsFeatureStep(
               .withMedium(if (useLocalDirTmpFs) "Memory" else null)
             .endEmptyDir()
             .build()
-        }.toImmutableArraySeq
+        }
 
       localDirVolumeMounts = localDirVolumes
         .zip(resolvedLocalDirs)
