@@ -83,7 +83,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       relation: DataSourceV2Relation,
       projectList: Seq[NamedExpression],
       conditions: Seq[Expression]): Option[DataSourceV2ScanRelation] = {
-    val child = conditions.reduceOption(And).map(Filter(_, relation)).getOrElse(relation)
+    val child = conditions.reduceOption(And.apply).map(Filter(_, relation)).getOrElse(relation)
     apply(Project(projectList, child)).collectFirst { case s: DataSourceV2ScanRelation => s }
   }
 
@@ -1236,7 +1236,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   private def withSparkPostPushdownAdjustmentFilters(
       plan: LogicalPlan,
       pushedFilters: Seq[Expression]): LogicalPlan = {
-    pushedFilters.reduceLeftOption(And) match {
+    pushedFilters.reduceLeftOption(And.apply) match {
       case None => plan
       case Some(pushedCondition) =>
         def shouldAddPushedFilter(scanRelation: DataSourceV2ScanRelation): Boolean = {

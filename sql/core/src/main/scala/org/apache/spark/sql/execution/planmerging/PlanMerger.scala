@@ -481,7 +481,7 @@ class PlanMerger(
                         case a: Alias if newCondition.references.contains(a.toAttribute) => a.child
                       }
                       tryBuildFilterDSv2ScanChild(
-                        childProject.child, deferred, conditions.reduceOption(Or))
+                        childProject.child, deferred, conditions.reduceOption(Or.apply))
                         .map { prunedChild =>
                           val newProject = childProject.copy(
                             projectList = newProjectList, child = prunedChild)
