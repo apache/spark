@@ -19,6 +19,7 @@
 String functions on pandas-on-Spark Series
 """
 
+import re
 from functools import wraps
 from typing import (
     Any,
@@ -1116,6 +1117,12 @@ class StringMethods:
             All non-overlapping matches of pattern or regular expression in
             each string of this Series.
 
+        Notes
+        -----
+        For regular expressions with more than one capture group, pandas-on-Spark
+        returns nested lists instead of pandas' tuple matches because Spark SQL
+        does not have a tuple type.
+
         Examples
         --------
         >>> s = ps.Series(['Lion', 'Monkey', 'Rabbit'])
@@ -1174,14 +1181,23 @@ class StringMethods:
         2    [b, b]
         dtype: object
         """
+        num_groups = re.compile(pat, flags=flags).groups
         str_dtype = is_str_dtype(self._data.dtype)
+        if num_groups > 1:
+            return_type = ArrayType(ArrayType(StringType(), containsNull=True), containsNull=True)
+        else:
+            return_type = ArrayType(StringType(), containsNull=True)
 
         # type hint does not support to specify array type yet.
-        @pandas_udf(  # type: ignore[call-overload]
-            returnType=ArrayType(StringType(), containsNull=True)
-        )
+        @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
         def pudf(s: pd.Series) -> pd.Series:
             ret = s.str.findall(pat, flags)
+            if num_groups > 1:
+                ret = ret.map(
+                    lambda matches: [list(match) for match in matches]
+                    if isinstance(matches, list)
+                    else matches
+                )
             if str_dtype:
                 # ArrayType does not support NaN, so replace with None
                 ret = ret.replace(np.nan, None)
