@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Comparator
+
 /**
  * An interface for sort algorithm
  * FIFO: FIFO algorithm between TaskSetManagers
@@ -73,3 +75,18 @@ private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
   }
 }
 
+/**
+ * A [[SchedulingAlgorithm]] that orders schedulables with a user-supplied
+ * `java.util.Comparator[SchedulableInfo]`. Each schedulable is captured as an immutable
+ * [[SchedulableInfo]] snapshot before being compared, so custom orderings never observe Spark's
+ * internal, mutable `Schedulable` hierarchy. Following `sortWith` semantics, `s1` is scheduled
+ * before `s2` when the comparator ranks its snapshot as strictly smaller.
+ */
+private[spark] class ComparatorBasedSchedulingAlgorithm(
+    infoComparator: Comparator[SchedulableInfo]) extends SchedulingAlgorithm {
+  override def comparator(s1: Schedulable, s2: Schedulable): Boolean = {
+    val left = SchedulableInfo(s1)
+    val right = SchedulableInfo(s2)
+    infoComparator.compare(left, right) < 0
+  }
+}
