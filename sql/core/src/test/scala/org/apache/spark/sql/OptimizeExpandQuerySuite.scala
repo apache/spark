@@ -211,4 +211,58 @@ class OptimizeExpandQuerySuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-58888: count distinct of constants over an empty input") {
+    withTempView("t") {
+      spark.range(0)
+        .selectExpr(
+          "cast(id as int) as col1",
+          "cast(id as int) as col2")
+        .createOrReplaceTempView("t")
+
+      val sqlText =
+        """SELECT
+          |  count(distinct 1),
+          |  count(distinct 2)
+          |FROM t""".stripMargin
+
+      withSQLConf(SQLConf.OPTIMIZE_EXPAND_RATIO.key -> "2") {
+        checkAnswer(spark.sql(sqlText), Row(0L, 0L))
+      }
+    }
+  }
+
+  test("SPARK-58888: count distinct of constant-projected columns over an empty input") {
+    withTempView("events") {
+      spark.range(0)
+        .selectExpr("cast(id as int) as id")
+        .createOrReplaceTempView("events")
+
+      val sqlText =
+        """SELECT count(distinct region), count(distinct channel)
+          |FROM (SELECT 'US' AS region, 'web' AS channel, id FROM events)""".stripMargin
+
+      withSQLConf(SQLConf.OPTIMIZE_EXPAND_RATIO.key -> "2") {
+        checkAnswer(spark.sql(sqlText), Row(0L, 0L))
+      }
+    }
+  }
+
+  test("SPARK-58888: count distinct of constants over a non-empty input") {
+    withTempView("t") {
+      spark.range(10)
+        .selectExpr("cast(id as int) as col1")
+        .createOrReplaceTempView("t")
+
+      val sqlText =
+        """SELECT
+          |  count(distinct 1),
+          |  count(distinct 2)
+          |FROM t""".stripMargin
+
+      withSQLConf(SQLConf.OPTIMIZE_EXPAND_RATIO.key -> "2") {
+        checkAnswer(spark.sql(sqlText), Row(1L, 1L))
+      }
+    }
+  }
 }
