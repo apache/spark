@@ -286,8 +286,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
     labelDecommissioningExecs(executorIds)
 
-    // Tell the executors to exit themselves.
-    executorIds.foreach { id =>
+    // Tell the executors to exit themselves. Skip the ones killed with countFailures = true
+    // (a heartbeat expiry), whose loss reason is reported by the caller right after this call.
+    executorIds.filterNot(id => executorsPendingToRemove.get(id).contains(false)).foreach { id =>
       removeExecutor(id, ExecutorKilled)
     }
 
