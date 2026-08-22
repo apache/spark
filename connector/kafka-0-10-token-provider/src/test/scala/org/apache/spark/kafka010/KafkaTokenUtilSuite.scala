@@ -26,6 +26,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.{SaslConfigs, SslConfigs}
+import org.apache.kafka.common.security.auth.KafkaPrincipal
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -39,16 +40,24 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     sparkConf = new SparkConf()
   }
 
-  test("checkProxyUser with proxy current user should throw exception") {
+  test("SPARK-28173: createDelegationTokenOptions without proxy user should not set owner") {
+    UserGroupInformation.createUserForTesting("realUser", Array()).doAs(
+      new PrivilegedExceptionAction[Unit]() {
+        override def run(): Unit = {
+          assert(!KafkaTokenUtil.createDelegationTokenOptions().owner().isPresent)
+        }
+      }
+    )
+  }
+
+  test("SPARK-28173: createDelegationTokenOptions with proxy user should set owner") {
     val realUser = UserGroupInformation.createUserForTesting("realUser", Array())
     UserGroupInformation.createProxyUserForTesting("proxyUser", realUser, Array()).doAs(
       new PrivilegedExceptionAction[Unit]() {
         override def run(): Unit = {
-          val thrown = intercept[IllegalArgumentException] {
-            KafkaTokenUtil.checkProxyUser()
-          }
-          assert(thrown.getMessage contains
-            "Obtaining delegation token for proxy user is not yet supported.")
+          val owner = KafkaTokenUtil.createDelegationTokenOptions().owner()
+          assert(owner.isPresent)
+          assert(owner.get() === new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "proxyUser"))
         }
       }
     )

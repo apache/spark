@@ -21,6 +21,7 @@ import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.ml.feature.{IDFModel => NewIDFModel}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
@@ -184,7 +185,10 @@ class IDFModel private[spark](@Since("1.1.0") val idf: Vector,
   @Since("1.1.0")
   def transform(dataset: RDD[Vector]): RDD[Vector] = {
     val bcIdf = dataset.context.broadcast(idf)
-    dataset.mapPartitions(iter => iter.map(v => IDFModel.transform(bcIdf.value, v)))
+    dataset.mapPartitions { iter =>
+      val localIdf = bcIdf.value.toArray
+      iter.map(v => IDFModel.transform(localIdf, v))
+    }
   }
 
   /**
@@ -194,7 +198,7 @@ class IDFModel private[spark](@Since("1.1.0") val idf: Vector,
    * @return a TF-IDF vector
    */
   @Since("1.3.0")
-  def transform(v: Vector): Vector = IDFModel.transform(idf, v)
+  def transform(v: Vector): Vector = IDFModel.transform(idf.toArray, v)
 
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors (Java version).
@@ -210,50 +214,23 @@ class IDFModel private[spark](@Since("1.1.0") val idf: Vector,
 private[spark] object IDFModel {
 
   /**
-   * Transforms a term frequency (TF) vector to a TF-IDF vector with a IDF vector
+   * Transforms a term frequency (TF) vector to a TF-IDF vector with IDF values
    *
-   * @param idf an IDF vector
+   * @param idf IDF values
    * @param v a term frequency vector
    * @return a TF-IDF vector
    */
-  def transform(idf: Vector, v: Vector): Vector = {
+  private def transform(idf: Array[Double], v: Vector): Vector = {
     v match {
       case SparseVector(size, indices, values) =>
-        val (newIndices, newValues) = transformSparse(idf, indices, values)
+        val (newIndices, newValues) = NewIDFModel.predictSparse(idf, indices, values)
         Vectors.sparse(size, newIndices, newValues)
       case DenseVector(values) =>
-        val newValues = transformDense(idf, values)
+        val newValues = NewIDFModel.predictDense(idf, values)
         Vectors.dense(newValues)
       case other =>
         throw new UnsupportedOperationException(
           s"Only sparse and dense vectors are supported but got ${other.getClass}.")
     }
-  }
-
-  private[spark] def transformDense(
-      idf: Vector,
-      values: Array[Double]): Array[Double] = {
-    val n = values.length
-    val newValues = new Array[Double](n)
-    var j = 0
-    while (j < n) {
-      newValues(j) = values(j) * idf(j)
-      j += 1
-    }
-    newValues
-  }
-
-  private[spark] def transformSparse(
-      idf: Vector,
-      indices: Array[Int],
-      values: Array[Double]): (Array[Int], Array[Double]) = {
-    val nnz = indices.length
-    val newValues = new Array[Double](nnz)
-    var k = 0
-    while (k < nnz) {
-      newValues(k) = values(k) * idf(indices(k))
-      k += 1
-    }
-    (indices, newValues)
   }
 }

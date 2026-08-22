@@ -131,6 +131,13 @@ $(function() {
     }
   });
 
+  // generic links guarded by a confirmation prompt before navigating
+  $(document).on("click", "a.confirm-link[data-confirm-message]", function(e) {
+    if (!window.confirm($(this).data("confirm-message"))) {
+      e.preventDefault();
+    }
+  });
+
   // loadMore / loadNew buttons
   $(document).on("click", ".log-more-btn", function() { loadMore(); });
   $(document).on("click", ".log-new-btn", function() { loadNew(); });

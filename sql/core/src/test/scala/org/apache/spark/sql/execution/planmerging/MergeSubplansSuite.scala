@@ -19,18 +19,20 @@ package org.apache.spark.sql.execution.planmerging
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, ExprId, GetStructField, If, Literal, Or, ScalarSubquery, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, ExprId, GetStructField, If, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
-import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
+import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, SortDirection => V2SortDirection, SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanRelationPushDown}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning}
+import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning => V2KeyGroupedPartitioning, Partitioning => V2Partitioning, UnknownPartitioning => V2UnknownPartitioning}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class MergeSubplansSuite extends PlanTest {
@@ -1985,6 +1987,32 @@ class MergeSubplansSuite extends PlanTest {
     StructField("a", IntegerType), StructField("b", IntegerType), StructField("c", StringType))),
     supportsScanMerging = false)
 
+  /**
+   * Same shape as [[v2Table]], but its scans report `a ASC` as their output ordering, so a scan
+   * rebuilt over this table re-derives a report instead of none.
+   */
+  private val v2TableReportingA = new TestV2Table(StructType(Seq(
+    StructField("a", IntegerType), StructField("b", IntegerType), StructField("c", StringType))),
+    reportedOrderingCols = Seq("a"))
+
+  /**
+   * Same shape as [[v2Table]], but its scans report `bucket(4, a)` as their key-grouped
+   * partitioning -- a TRANSFORM report, which resolves to a `TransformExpression` rather than a
+   * plain attribute (see [[v2ScanReportingOn]]).
+   */
+  private val v2TableBucketedOnA = new TestV2Table(StructType(Seq(
+    StructField("a", IntegerType), StructField("b", IntegerType), StructField("c", StringType))),
+    reportedBucketPartition = Some((4, "a")))
+
+  /**
+   * Same shape as [[v2Table]], but its scans report `a ASC` ONLY when no filter was pushed into
+   * them, so the deferred build's two attempts (strict + best-effort, then strict-only) re-derive
+   * different reports.
+   */
+  private val v2TablePushSensitiveReport = new TestV2Table(StructType(Seq(
+    StructField("a", IntegerType), StructField("b", IntegerType), StructField("c", StringType))),
+    reportedOrderingCols = Seq("a"), reportOnlyWhenNothingPushed = true)
+
   /** A `DataSourceV2ScanRelation` over `table` projecting only the given columns. */
   private def v2ScanReadingOn(table: TestV2Table, cols: Seq[String]): DataSourceV2ScanRelation = {
     val fullOutput = toAttributes(table.schema())
@@ -1999,6 +2027,29 @@ class MergeSubplansSuite extends PlanTest {
   /** A `DataSourceV2ScanRelation` over [[v2Table]] projecting only the given columns. */
   private def v2ScanReading(cols: String*): DataSourceV2ScanRelation =
     v2ScanReadingOn(v2Table, cols)
+
+  /**
+   * A `DataSourceV2ScanRelation` over `table` whose reported partitioning/ordering is derived the
+   * way the optimizer derives it: by running `V2ScanPartitioningAndOrdering` over the table's own
+   * scan, resolving transforms through a function catalog. Every call therefore binds the transform
+   * function afresh, so the two sides of a merge hold DIFFERENT `BoundFunction` instances --
+   * exactly as in production, where each scan relation is annotated by its own derivation.
+   */
+  private def v2ScanReportingOn(
+      table: TestV2Table,
+      cols: Seq[String],
+      funCatalog: FunctionCatalog = TestFreshBindFunctionCatalog): DataSourceV2ScanRelation = {
+    val fullOutput = toAttributes(table.schema())
+    val relation = DataSourceV2Relation(
+      table, fullOutput, Some(funCatalog), None, CaseInsensitiveStringMap.empty())
+    val output = cols.map(c => fullOutput.find(_.name == c).get)
+    val builder = table.newScanBuilder(CaseInsensitiveStringMap.empty())
+    builder.asInstanceOf[SupportsPushDownRequiredColumns].pruneColumns(
+      StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
+    V2ScanPartitioningAndOrdering(
+      DataSourceV2ScanRelation(relation, builder.build(), output, mergeableScan = true))
+      .asInstanceOf[DataSourceV2ScanRelation]
+  }
 
   /** A `DataSourceV2ScanRelation` over a table without the `SCAN_MERGING` capability. */
   private def v2ScanReadingNoMerge(cols: String*): DataSourceV2ScanRelation =
@@ -2599,11 +2650,13 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
-  test("SPARK-40259: do not merge DSv2 scans that report key-grouped partitioning or ordering") {
-    // The rebuilt merged scan does not reconstruct reported partitioning/ordering, so a scan
-    // reporting either declines the merge (checked on both the np and cp side) -- the plan is left
-    // unchanged -- rather than silently dropping it. Preserving them across a merge is a deferred
-    // follow-up. (The plain-scan merge is already covered by the projected-columns test above.)
+  test("SPARK-40259: do not merge DSv2 scans when the merge would degrade a reported " +
+    "key-grouped partitioning or ordering") {
+    // An input reports key-grouped partitioning or ordering, but the merged scan -- rebuilt over a
+    // TestV2Scan that reports neither -- re-derives nothing, so merging would degrade what the
+    // input reported. With the degradation configs off (the default) the merge is declined on both
+    // the np and cp side and the plan is left unchanged, rather than forcing a shuffle/sort the
+    // original plan avoided.
     def assertDeclines(withField: DataSourceV2ScanRelation => DataSourceV2ScanRelation): Unit =
       Seq(
         (withField(v2ScanReading("a")), v2ScanReading("b")),
@@ -2616,6 +2669,234 @@ class MergeSubplansSuite extends PlanTest {
 
     assertDeclines(s => s.copy(keyGroupedPartitioning = Some(Seq(s.output.head))))
     assertDeclines(s => s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending)))))
+  }
+
+  test("SPARK-58549: do not merge DSv2 scans reporting incompatible kGP/ordering") {
+    // Both inputs report a partitioning/ordering, but on the different column each reads, so no
+    // single rebuilt scan could keep both not-worse. combineRequired* returns None (incompatible),
+    // so the merge is declined at the leaf -- before any rebuild -- with the degradation configs
+    // off (the default). This is distinct from the single-side case above (which rebuilds and then
+    // finds the re-derived report degraded): here the two inputs disagree with each other up front.
+    def assertDeclines(withField: DataSourceV2ScanRelation => DataSourceV2ScanRelation): Unit = {
+      // withField applied to the "a" scan reports on a, applied to the "b" scan reports on b.
+      val q = testRelation.select(
+        ScalarSubquery(withField(v2ScanReading("a")).groupBy()(sum($"a").as("sa"))),
+        ScalarSubquery(withField(v2ScanReading("b")).groupBy()(sum($"b").as("sb"))))
+      comparePlans(Optimize.execute(q.analyze), q.analyze)
+    }
+
+    assertDeclines(s => s.copy(keyGroupedPartitioning = Some(Seq(s.output.head))))
+    assertDeclines(s => s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending)))))
+  }
+
+  test("SPARK-58549: merge DSv2 scans reporting kGP/ordering when the degradation config allows") {
+    // With the matching degradation config on, a merge that would drop a reported partitioning or
+    // ordering proceeds anyway (trading it for a single scan). The merged scan re-derives no report
+    // from the non-reporting TestV2Scan, so the fused plan is the plain column union.
+    val mergedScan = v2ScanReadingOn(v2Table, Seq("a", "b"))
+    val mergedSubquery = mergedScan
+      .groupBy()(sum($"a").as("sum_a"), sum($"b").as("sum_b"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("sum_b"), $"sum_b")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    def assertMerges(
+        withField: DataSourceV2ScanRelation => DataSourceV2ScanRelation,
+        confKey: String,
+        bothSides: Boolean = false): Unit = {
+      val sub1 = ScalarSubquery(withField(v2ScanReading("a")).groupBy()(sum($"a").as("sum_a")))
+      val cpScan = if (bothSides) withField(v2ScanReading("b")) else v2ScanReading("b")
+      val sub2 = ScalarSubquery(cpScan.groupBy()(sum($"b").as("sum_b")))
+      val originalQuery = testRelation.select(sub1, sub2)
+      withSQLConf(confKey -> "true") {
+        comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+      }
+    }
+
+    // One side reports: the report combines fine, and the config lets through the degradation the
+    // post-rebuild check finds (the rebuilt scan re-derives nothing).
+    assertMerges(s => s.copy(keyGroupedPartitioning = Some(Seq(s.output.head))),
+      SQLConf.MERGE_SUBPLANS_DSV2_ALLOW_KEY_GROUPED_PARTITIONING_DEGRADATION.key)
+    assertMerges(s => s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending)))),
+      SQLConf.MERGE_SUBPLANS_DSV2_ALLOW_ORDERING_DEGRADATION.key)
+    // Both sides report, each on the column it reads: INCOMPATIBLE, so here the config is what
+    // skips the EARLY decline at the leaf, before any rebuild (the mirror of the incompatible
+    // default-decline test above).
+    assertMerges(s => s.copy(keyGroupedPartitioning = Some(Seq(s.output.head))),
+      SQLConf.MERGE_SUBPLANS_DSV2_ALLOW_KEY_GROUPED_PARTITIONING_DEGRADATION.key,
+      bothSides = true)
+    assertMerges(s => s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending)))),
+      SQLConf.MERGE_SUBPLANS_DSV2_ALLOW_ORDERING_DEGRADATION.key, bothSides = true)
+  }
+
+  test("SPARK-58549: merge DSv2 scans when the rebuilt scan re-derives the required ordering") {
+    // The NOT-WORSE side of the check: both inputs report `a ASC` and the table reports the same,
+    // so the rebuilt merged scan re-derives it and nothing is degraded -- the merge proceeds with
+    // the configs off. Every other test here rebuilds over a plain TestV2Scan, which reports
+    // nothing, so any non-empty requirement is degraded by construction and only the declining side
+    // gets covered.
+    val withOrdering = (s: DataSourceV2ScanRelation) =>
+      s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending))))
+    val q = testRelation.select(
+      ScalarSubquery(withOrdering(v2ScanReadingOn(v2TableReportingA, Seq("a", "b")))
+        .groupBy()(sum($"b").as("sum_b"))),
+      ScalarSubquery(withOrdering(v2ScanReadingOn(v2TableReportingA, Seq("a", "c")))
+        .groupBy()(sum($"c").as("sum_c"))))
+    val optimized = Optimize.execute(q.analyze)
+
+    val scans = v2Scans(optimized)
+    assert(scans.length == 1, s"the two scans should be fused into one:\n$optimized")
+    assert(scans.head.output.map(_.name).toSet == Set("a", "b", "c"),
+      s"the merged scan should read the union of both columns; got ${scans.head.output}")
+    assert(scans.head.ordering.exists(_.map(_.child).collect {
+      case a: Attribute => a.name
+    } == Seq("a")),
+      s"the merged scan should re-derive the reported ordering; got ${scans.head.ordering}")
+  }
+
+  test("SPARK-58549: do not merge when the rebuilt scan re-derives less than the combined " +
+    "ordering") {
+    // One input reports `a ASC`, the other `a ASC, c ASC`, so the combined requirement is the
+    // STRONGER of the two. The table reports only `a ASC`, so the rebuilt merged scan satisfies the
+    // weaker input's ordering but not the combined one -- a degradation, declined with the configs
+    // off. Guards that combineRequiredOrdering keeps the stronger side: keeping the weaker one
+    // would let this merge through and lose the second sort key.
+    val scanAB = v2ScanReadingOn(v2TableReportingA, Seq("a", "b"))
+    val scanAC = v2ScanReadingOn(v2TableReportingA, Seq("a", "c"))
+    val q = testRelation.select(
+      ScalarSubquery(scanAB.copy(ordering = Some(Seq(SortOrder(scanAB.output.head, Ascending))))
+        .groupBy()(sum($"b").as("sum_b"))),
+      ScalarSubquery(scanAC.copy(ordering = Some(Seq(
+          SortOrder(scanAC.output.head, Ascending), SortOrder(scanAC.output.last, Ascending))))
+        .groupBy()(sum($"c").as("sum_c"))))
+    comparePlans(Optimize.execute(q.analyze), q.analyze)
+  }
+
+  test("SPARK-58549: merge DSv2 scans reporting the same bucket transform partitioning") {
+    // Both inputs report `bucket(4, a)`, each derived independently, so each holds its OWN
+    // BoundFunction instance -- what production does, since V2ExpressionUtils binds the function
+    // afresh per derivation. The two reports compare equal only because `TestBucketFunction`
+    // implements `equals`/`hashCode` the way `BoundFunction` asks a connector to, so this is the
+    // end-to-end check that Spark honours that contract: the merge proceeds and the rebuilt scan
+    // re-derives the same report. It is also the only test here whose report is a transform rather
+    // than a plain attribute, which is what an identity-partitioned source would report.
+    val q = testRelation.select(
+      ScalarSubquery(v2ScanReportingOn(v2TableBucketedOnA, Seq("a", "b"))
+        .groupBy()(sum($"b").as("sum_b"))),
+      ScalarSubquery(v2ScanReportingOn(v2TableBucketedOnA, Seq("a", "c"))
+        .groupBy()(sum($"c").as("sum_c"))))
+    val optimized = Optimize.execute(q.analyze)
+
+    val scans = v2Scans(optimized)
+    assert(scans.length == 1, s"the two scans should be fused into one:\n$optimized")
+    val kgp = scans.head.keyGroupedPartitioning
+    assert(kgp.exists(_.forall(_.isInstanceOf[TransformExpression])),
+      s"the merged scan should preserve the reported bucket transform; got $kgp")
+    assert(kgp.get.flatMap(_.references).exists(_.name == "a"),
+      s"the preserved partitioning should be on a; got $kgp")
+  }
+
+  test("SPARK-58769: decline the merge when the reported transform is not comparable") {
+    // The mirror of the test above, and the cost this documents: same query, same reported
+    // `bucket(4, a)`, but the connector's function does not implement `equals`, so the two
+    // independently bound instances do not compare equal and Spark cannot tell the two reports
+    // apart from two different partitionings. It does not derive that identity itself (see
+    // `BoundFunction#equals`), so the merge is declined rather than done on a report it cannot
+    // verify, and the plan is left alone.
+    val q = testRelation.select(
+      ScalarSubquery(
+        v2ScanReportingOn(v2TableBucketedOnA, Seq("a", "b"), TestNotComparableFunctionCatalog)
+          .groupBy()(sum($"b").as("sum_b"))),
+      ScalarSubquery(
+        v2ScanReportingOn(v2TableBucketedOnA, Seq("a", "c"), TestNotComparableFunctionCatalog)
+          .groupBy()(sum($"c").as("sum_c"))))
+    comparePlans(Optimize.execute(q.analyze), q.analyze)
+  }
+
+  test("SPARK-58549: enforce the required report on the deferred under-Filter scan build") {
+    // The above tests fuse scans directly under an Aggregate (no Filter), so they exercise the
+    // scan build at the leaf. When the scans sit under an (identical) Filter the build is instead
+    // DEFERRED to the enclosing Filter, and the required report is carried there through
+    // DSv2DeferredScan. This test drives that deferred path: each scan reads {a, <col>} and reports
+    // on a, both filter on `a > 1` (so the two fuse into {a, b, c} under one Filter). The merged
+    // scan is rebuilt over a non-reporting TestV2Scan, so it re-derives no report -- a degradation.
+    def reportsOnA(withField: DataSourceV2ScanRelation => DataSourceV2ScanRelation)
+        : (ScalarSubquery, ScalarSubquery) = (
+      ScalarSubquery(
+        withField(v2ScanReading("a", "b")).where($"a" > 1).groupBy()(sum($"b").as("sum_b"))),
+      ScalarSubquery(
+        withField(v2ScanReading("a", "c")).where($"a" > 1).groupBy()(sum($"c").as("sum_c"))))
+
+    // Default configs: the deferred build declines on the degradation, leaving the plan unchanged.
+    def assertDeclines(withField: DataSourceV2ScanRelation => DataSourceV2ScanRelation): Unit = {
+      val (sub1, sub2) = reportsOnA(withField)
+      val q = testRelation.select(sub1, sub2)
+      comparePlans(Optimize.execute(q.analyze), q.analyze)
+    }
+    assertDeclines(s => s.copy(keyGroupedPartitioning = Some(Seq(s.output.head))))
+    assertDeclines(s => s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending)))))
+
+    // With the matching config on, the deferred build proceeds: the two scans fuse into {a, b, c}
+    // with the identical `a > 1` re-pushed for pruning (as in the identical-filter merge test).
+    val mergedScan = v2ScanReadingOn(v2Table, Seq("a", "b", "c"))
+    val mergedSubquery = mergedScan.where($"a" > 1)
+      .groupBy()(sum($"b").as("sum_b"), sum($"c").as("sum_c"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_b"), $"sum_b",
+        Literal("sum_c"), $"sum_c")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    def assertMerges(
+        withField: DataSourceV2ScanRelation => DataSourceV2ScanRelation, confKey: String): Unit = {
+      val (sub1, sub2) = reportsOnA(withField)
+      val q = testRelation.select(sub1, sub2)
+      withSQLConf(confKey -> "true") {
+        comparePlans(Optimize.execute(q.analyze), correctAnswer.analyze)
+      }
+    }
+    assertMerges(s => s.copy(keyGroupedPartitioning = Some(Seq(s.output.head))),
+      SQLConf.MERGE_SUBPLANS_DSV2_ALLOW_KEY_GROUPED_PARTITIONING_DEGRADATION.key)
+    assertMerges(s => s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending)))),
+      SQLConf.MERGE_SUBPLANS_DSV2_ALLOW_ORDERING_DEGRADATION.key)
+  }
+
+  test("SPARK-58549: the deferred build checks the required report per attempt") {
+    // The deferred build tries strict + best-effort first, then strict-only. The report is checked
+    // on EACH attempt, not once on whichever came back, so the deferred path stays no weaker than
+    // the leaf path: the strict-only attempt is exactly what the leaf builds when no Filter sits
+    // above the scan, so a merge it can satisfy must not be lost just because the first attempt
+    // could not. Here both inputs report `a ASC` and neither has a strict pushed filter, and the
+    // source reports only when nothing was pushed: attempt 1 (offered the Filter's condition)
+    // re-derives no ordering and is rejected, attempt 2 re-derives `a ASC` and the merge lands.
+    val withOrdering = (s: DataSourceV2ScanRelation) =>
+      s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending))))
+    val q = testRelation.select(
+      ScalarSubquery(withOrdering(v2ScanReadingOn(v2TablePushSensitiveReport, Seq("a", "b")))
+        .where($"a" > 1).groupBy()(sum($"b").as("sum_b"))),
+      ScalarSubquery(withOrdering(v2ScanReadingOn(v2TablePushSensitiveReport, Seq("a", "c")))
+        .where($"a" > 1).groupBy()(sum($"c").as("sum_c"))))
+    val optimized = Optimize.execute(q.analyze)
+
+    val scans = v2Scans(optimized)
+    assert(scans.length == 1, s"the two scans should be fused into one:\n$optimized")
+    assert(scans.head.ordering.exists(_.map(_.child).collect {
+      case a: Attribute => a.name
+    } == Seq("a")),
+      s"the strict-only attempt should have satisfied the required ordering; " +
+        s"got ${scans.head.ordering}")
+    assert(scans.head.scan.asInstanceOf[TestV2ReportingScan].inner.pushed.isEmpty,
+      "the surviving build should be the strict-only one, with nothing pushed")
   }
 
   test("SPARK-40259: merge DSv2 scans that report empty key-grouped partitioning or ordering") {
@@ -2785,7 +3066,10 @@ private class TestV2Table(
     tableSchema: StructType,
     acceptsFilters: Boolean = true,
     strictColumns: Set[String] = Set.empty,
-    supportsScanMerging: Boolean = true)
+    supportsScanMerging: Boolean = true,
+    reportedOrderingCols: Seq[String] = Nil,
+    reportedBucketPartition: Option[(Int, String)] = None,
+    reportOnlyWhenNothingPushed: Boolean = false)
   extends Table with SupportsRead {
   override def name(): String = "test_v2_table"
   override def schema(): StructType = tableSchema
@@ -2795,13 +3079,17 @@ private class TestV2Table(
     caps
   }
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-    new TestV2ScanBuilder(tableSchema, acceptsFilters, strictColumns)
+    new TestV2ScanBuilder(tableSchema, acceptsFilters, strictColumns, reportedOrderingCols,
+      reportedBucketPartition, reportOnlyWhenNothingPushed)
 }
 
 private class TestV2ScanBuilder(
     tableSchema: StructType,
     acceptsFilters: Boolean,
-    strictColumns: Set[String])
+    strictColumns: Set[String],
+    reportedOrderingCols: Seq[String] = Nil,
+    reportedBucketPartition: Option[(Int, String)] = None,
+    reportOnlyWhenNothingPushed: Boolean = false)
   extends ScanBuilder with SupportsPushDownRequiredColumns with SupportsPushDownV2Filters
     with SupportsPushDownLimit with SupportsPushDownOffset with SupportsPushDownTopN
     with SupportsPushDownTableSample {
@@ -2838,11 +3126,132 @@ private class TestV2ScanBuilder(
       p.references().forall(r => strictColumns.contains(r.fieldNames().mkString(".")))
 
   override def pushedPredicates(): Array[Predicate] = accepted
-  override def build(): Scan = TestV2Scan(prunedSchema, accepted.map(_.describe()).toSeq)
+  override def build(): Scan = {
+    val scan = TestV2Scan(prunedSchema, accepted.map(_.describe()).toSeq)
+    if (reportedOrderingCols.isEmpty && reportedBucketPartition.isEmpty) {
+      scan
+    } else {
+      TestV2ReportingScan(scan, reportedOrderingCols, reportedBucketPartition,
+        reportOnlyWhenNothingPushed)
+    }
+  }
 }
 
 /** `pushed` records the `describe()` of the predicates pushed to the scan, for test assertions. */
 private case class TestV2Scan(schema: StructType, pushed: Seq[String] = Seq.empty)
   extends Scan {
   override def readSchema(): StructType = schema
+}
+
+/**
+ * A [[TestV2Scan]] that also reports an output ordering and/or a key-grouped partitioning, so a
+ * scan rebuilt by the merge re-derives a report through `V2ScanPartitioningAndOrdering`. The plain
+ * [[TestV2Scan]] reports nothing, which only ever exercises the degrading side of the not-worse
+ * check.
+ */
+private case class TestV2ReportingScan(
+    inner: TestV2Scan,
+    orderingCols: Seq[String] = Nil,
+    bucketPartition: Option[(Int, String)] = None,
+    onlyWhenNothingPushed: Boolean = false)
+  extends Scan with SupportsReportOrdering with SupportsReportPartitioning {
+  override def readSchema(): StructType = inner.readSchema()
+
+  // A source may report per scan: `outputOrdering`/`outputPartitioning` are answered by the Scan
+  // the connector built AFTER seeing what it accepted, so an ordering that only holds over the
+  // unpruned file set can legitimately disappear once a filter is pushed. `onlyWhenNothingPushed`
+  // models that, so a build offered a best-effort filter and one without it report differently.
+  private def reports: Boolean = !onlyWhenNothingPushed || inner.pushed.isEmpty
+
+  override def outputOrdering(): Array[V2SortOrder] = if (reports) {
+    orderingCols.map(c => Expressions.sort(FieldReference(c), V2SortDirection.ASCENDING)).toArray
+  } else {
+    Array.empty
+  }
+
+  override def outputPartitioning(): V2Partitioning = bucketPartition.filter(_ => reports) match {
+    case Some((numBuckets, col)) =>
+      new V2KeyGroupedPartitioning(Array(Expressions.bucket(numBuckets, col)), 0)
+    case None => new V2UnknownPartitioning(0)
+  }
+}
+
+/**
+ * A `FunctionCatalog` that resolves `bucket`, binding it to a FRESH function instance every time --
+ * as a real connector does, since `V2ExpressionUtils.loadV2FunctionOpt` binds the function afresh
+ * for every derivation of a reported transform. Spark's own `UnboundBucketFunction` hands back a
+ * singleton, which would hide the fact that relating two independently derived reports rests on the
+ * function's own `equals` (see `BoundFunction#equals`).
+ */
+private object TestFreshBindFunctionCatalog extends FunctionCatalog {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+  override def name(): String = "test_fresh_bind"
+  override def listFunctions(namespace: Array[String]): Array[Identifier] =
+    Array(Identifier.of(Array.empty, "bucket"))
+  override def loadFunction(ident: Identifier): UnboundFunction = ident.name() match {
+    case "bucket" => TestUnboundBucketFunction
+    // loadV2FunctionOpt treats this as "function not found" and reports no partitioning.
+    case other => throw new UnsupportedOperationException(s"no such function: $other")
+  }
+}
+
+private object TestUnboundBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = new TestBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+/**
+ * A bound `bucket` that implements `equals`/`hashCode` over the state identifying it, as
+ * `BoundFunction` asks a connector to. That is what lets Spark recognize two separately bound
+ * instances as the same transform: `V2ExpressionUtils` binds afresh on every derivation, so two
+ * reported partitionings hold two different instances and nothing but this comparison relates them.
+ * `canonicalName` is stable too (its default returns a fresh random UUID), which is what a
+ * storage-partitioned join compares.
+ */
+private class TestBucketFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = "testcat.bucket"
+
+  override def equals(other: Any): Boolean = other match {
+    case that: TestBucketFunction =>
+      canonicalName() == that.canonicalName() && resultType() == that.resultType() &&
+        // `Array` equality is reference identity, so compare the elements.
+        inputTypes().sameElements(that.inputTypes())
+    case _ => false
+  }
+
+  override def hashCode(): Int = canonicalName().hashCode
+}
+
+/**
+ * The same catalog with a bound `bucket` that does NOT implement `equals`/`hashCode` -- a connector
+ * that meets only the `canonicalName` obligation. Two of its separately bound instances never
+ * compare equal, so Spark cannot relate two reports of one transform.
+ */
+private object TestNotComparableFunctionCatalog extends FunctionCatalog {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+  override def name(): String = "test_not_comparable"
+  override def listFunctions(namespace: Array[String]): Array[Identifier] =
+    Array(Identifier.of(Array.empty, "bucket"))
+  override def loadFunction(ident: Identifier): UnboundFunction = ident.name() match {
+    case "bucket" => TestUnboundNotComparableBucketFunction
+    case other => throw new UnsupportedOperationException(s"no such function: $other")
+  }
+}
+
+private object TestUnboundNotComparableBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = new TestNotComparableBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+/** A plain class, so it inherits the identity comparison from `Object`. */
+private class TestNotComparableBucketFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = "testcat.bucket"
 }

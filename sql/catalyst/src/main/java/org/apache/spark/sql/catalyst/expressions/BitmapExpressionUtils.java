@@ -57,6 +57,15 @@ public class BitmapExpressionUtils {
     }
   }
 
+  /** Performs bitwise XOR on both bitmaps and writes the result into bitmap1. */
+  public static void bitmapXorMerge(byte[] bitmap1, byte[] bitmap2) {
+    // For XOR operation, bytes beyond the shorter bitmap's length are unchanged
+    // since XOR with 0 (absent bits) is identity: X ^ 0 = X.
+    for (int i = 0; i < java.lang.Math.min(bitmap1.length, bitmap2.length); ++i) {
+      bitmap1[i] = (byte) ((bitmap1[i] & 0x0FF) ^ (bitmap2[i] & 0x0FF));
+    }
+  }
+
   /** Performs bitwise AND on both bitmaps and writes the result into bitmap1. */
   public static void bitmapAndMerge(byte[] bitmap1, byte[] bitmap2) {
     int minLen = java.lang.Math.min(bitmap1.length, bitmap2.length);
@@ -68,5 +77,48 @@ public class BitmapExpressionUtils {
     for (int i = bitmap2.length; i < bitmap1.length; ++i) {
       bitmap1[i] = 0;
     }
+  }
+
+  /** Performs bitwise AND on both bitmaps and returns a new fixed-size bitmap. */
+  public static byte[] bitmapAnd(byte[] bitmap1, byte[] bitmap2) {
+    byte[] result = new byte[NUM_BYTES];
+    int numBytes = java.lang.Math.min(
+        NUM_BYTES, java.lang.Math.min(bitmap1.length, bitmap2.length));
+    for (int i = 0; i < numBytes; ++i) {
+      result[i] = (byte) ((bitmap1[i] & 0x0FF) & (bitmap2[i] & 0x0FF));
+    }
+    return result;
+  }
+
+  /** Performs bitwise OR on both bitmaps and returns a new fixed-size bitmap. */
+  public static byte[] bitmapOr(byte[] bitmap1, byte[] bitmap2) {
+    byte[] longer = bitmap1.length >= bitmap2.length ? bitmap1 : bitmap2;
+    byte[] shorter = bitmap1.length >= bitmap2.length ? bitmap2 : bitmap1;
+    byte[] result = java.util.Arrays.copyOf(longer, NUM_BYTES);
+    bitmapMerge(result, shorter);
+    return result;
+  }
+
+  /** Performs bitwise AND NOT on both bitmaps and returns a new fixed-size bitmap. */
+  public static byte[] bitmapAndNot(byte[] bitmap1, byte[] bitmap2) {
+    byte[] result = java.util.Arrays.copyOf(bitmap1, NUM_BYTES);
+    int numBytes = java.lang.Math.min(
+        NUM_BYTES, java.lang.Math.min(bitmap1.length, bitmap2.length));
+    for (int i = 0; i < numBytes; ++i) {
+      result[i] = (byte) ((result[i] & 0x0FF) & ~(bitmap2[i] & 0x0FF));
+    }
+    return result;
+  }
+
+  /** Performs bitwise XOR on both bitmaps and returns a new fixed-size bitmap. */
+  public static byte[] bitmapXor(byte[] bitmap1, byte[] bitmap2) {
+    byte[] longer = bitmap1.length >= bitmap2.length ? bitmap1 : bitmap2;
+    byte[] shorter = bitmap1.length >= bitmap2.length ? bitmap2 : bitmap1;
+    byte[] result = java.util.Arrays.copyOf(longer, NUM_BYTES);
+    int numBytes = java.lang.Math.min(NUM_BYTES, shorter.length);
+    for (int i = 0; i < numBytes; ++i) {
+      result[i] = (byte) ((result[i] & 0x0FF) ^ (shorter[i] & 0x0FF));
+    }
+    return result;
   }
 }

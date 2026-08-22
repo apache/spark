@@ -22,8 +22,13 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.3 to 4.4
+
+- Since Spark 4.4, for storage-partitioned joins, `spark.sql.requireAllClusterKeysForCoPartition` requires every join key to be covered by some partition key instead of matching the partition keys positionally. As a result, a join-key column partitioned by more than one transform no longer prevents shuffle elimination, and `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` no longer additionally requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false` when the join keys are a subset of the partition keys. As before, when the partition keys cover only part of the join keys, eliminating the shuffle still requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false`.
+
 ## Upgrading from Spark SQL 4.2 to 4.3
 
+- Since Spark 4.3, map-typed arguments to distinct aggregates are normalized by key order. As a result, `COUNT(DISTINCT m)` treats maps with the same entries in different orders as the same value, and aggregates that return distinct input values, such as `COLLECT_LIST(DISTINCT m)`, return maps sorted by key.
 - Since Spark 4.3, [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html) is available as an opt-in SQL feature gated by `spark.sql.join.asofJoin.enabled` (default `false`). When disabled, `ASOF JOIN` fails at parse time with `UNSUPPORTED_FEATURE.ASOF_JOIN`.
 - Since Spark 4.3, zero-length files are skipped during Parquet schema inference instead of failing with a `FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER` error.
 - Since Spark 4.3, metrics produced by `Dataset.observe` include values from only the last successful task attempts instead of aggregating values from all attempts. To restore the previous behavior, set `spark.sql.legacy.observeMetricsAggregateAllAttempts` to `true`.
@@ -39,7 +44,10 @@ license: |
 - Since Spark 4.3, `unix_seconds`, `unix_millis`, and `unix_micros` accept `TIMESTAMP_NTZ` and the nanosecond-precision timestamp types directly, reading them with no time-zone shift. Previously these functions accepted only `TIMESTAMP_LTZ`; a `TIMESTAMP_NTZ` or nanosecond-timestamp argument was rejected with a `DATATYPE_MISMATCH` error. This is a new capability and does not change the result of any query that previously succeeded.
 - Since Spark 4.3, `hash()` and `xxhash64()` include the `days` field of `CalendarInterval` when computing the hash, so their output for interval values differs from earlier releases. Previously the codegen path dropped `days`, disagreeing with interpreted evaluation.
 - Since Spark 4.3, when a `SELECT` or `INSERT` statement references the same table more than once with different `WITH (...)` options (for example a self-join, or `INSERT INTO t WITH (...) SELECT * FROM t WITH (...)`), each reference now uses its own options instead of the second reference silently inheriting the first reference's options via the analyzer's relation cache.
+- Since Spark 4.3, `DataFrameWriter.save()` on a `SupportsCatalogOptions` source loads its write target with the required `TableWritePrivilege`s (`INSERT`, or `INSERT` and `DELETE` for `SaveMode.Overwrite`), matching `insertInto` and `saveAsTable`. A catalog that enforces these privileges may now reject an unauthorized `save()` that previously bypassed this authorization check.
+- Since Spark 4.3, the Spark-recognized time-travel options (`versionAsOf` and `timestampAsOf`, or the keys configured by `spark.sql.timeTravelVersionKey` and `spark.sql.timeTravelTimestampKey`) are rejected with `UNSUPPORTED_FEATURE.TIME_TRAVEL` on catalog-backed Data Source V2 writes, including table creation and replacement through `DataFrameWriterV2`, because writes must target the current table state rather than a historical version. Previously, Spark passed them to the connector as ordinary write options.
 - Since Spark 4.3, `HAVING` is evaluated before window functions when the `SELECT` list also contains generator functions such as `explode`. Previously, window functions could include groups removed by `HAVING` and produce incorrect results.
+- Since Spark 4.3, the Spark Connect session errors `INVALID_HANDLE.SESSION_CHANGED`/`SESSION_CLOSED`/`SESSION_NOT_FOUND` carry SQLSTATE `08003` instead of `HY000`; the condition names are unchanged. Code matching these errors on SQLSTATE should match `08003` or class `08`.
 
 ## Upgrading from Spark SQL 4.1 to 4.2
 

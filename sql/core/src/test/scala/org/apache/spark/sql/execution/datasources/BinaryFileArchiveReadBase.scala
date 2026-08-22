@@ -107,6 +107,37 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("wholeFile=false _metadata exposes the parent archive's values for every row") {
+    archiveExtensions.foreach { ext =>
+      withArchiveFile(ext) { archive =>
+        writeArchive(archive, Seq("a.bin" -> bytes("aaa"), "b.bin" -> bytes("bbbb")))
+        val rows = read(archive.getCanonicalPath, Map("wholeFile" -> "false"))
+          .select("_metadata.file_path", "_metadata.file_name", "_metadata.file_size",
+            "_metadata.file_block_start", "_metadata.file_block_length",
+            "_metadata.file_modification_time")
+          .collect()
+        assert(rows.length == 2)
+
+        val fileSize = archive.length()
+        rows.foreach { r =>
+          // The `path`/`length` data columns are per entry here, but _metadata stays parent-only:
+          // it is derived from the single PartitionedFile.
+          assert(r.getString(0).endsWith(archive.getName) && !r.getString(0).contains("!/"),
+            s"file_path should be the archive file, got ${r.getString(0)}")
+          assert(r.getString(1) == archive.getName, s"file_name mismatch: ${r.getString(1)}")
+          assert(r.getLong(2) == fileSize, s"file_size mismatch: ${r.getLong(2)} != $fileSize")
+          assert(r.getLong(3) == 0L, s"file_block_start should be 0, got ${r.getLong(3)}")
+          assert(r.getLong(4) == fileSize,
+            s"file_block_length should be the archive size, got ${r.getLong(4)}")
+          assert(r.getAs[java.sql.Timestamp](5).getTime == archive.lastModified(),
+            "file_modification_time should be the archive's mtime")
+        }
+        assert(rows.map(_.toSeq).distinct.length == 1,
+          "every row must carry the same parent-archive metadata")
+      }
+    }
+  }
+
   test("wholeFile=false on an empty archive yields no rows") {
     withArchiveFile() { archive =>
       writeArchive(archive, Seq.empty)
@@ -123,6 +154,19 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
       checkAnswer(
         read(archive.getCanonicalPath, Map("wholeFile" -> "false")).select("content"),
         Seq(Row(bytes("keep"))))
+    }
+  }
+
+  test("wholeFile=false honors archivePathFilter, applied on top of hidden-entry filtering") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(
+        "keep/a.bin" -> bytes("a"),
+        "keep/_hidden.bin" -> bytes("drop"), // matches the glob but hidden
+        "other/b.bin" -> bytes("drop")))
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("wholeFile" -> "false", "archivePathFilter" -> "keep/*"))
+          .select("content"),
+        Seq(Row(bytes("a"))))
     }
   }
 

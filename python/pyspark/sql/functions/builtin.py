@@ -78,6 +78,7 @@ from pyspark.sql.utils import (
 
 if TYPE_CHECKING:
     from pyspark import SparkContext
+    from pyspark.sql.aggregator import Aggregator
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql._typing import (
         ColumnOrName,
@@ -8312,6 +8313,67 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
 
 @_try_remote_functions
+def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    """
+    Truncate the given value toward zero to `scale` decimal places when `scale` >= 0,
+    or to the left of the decimal point when `scale` < 0. `scale` defaults to 0.
+
+    Unlike :func:`round`, the result is always rounded toward zero, and unlike :func:`floor`
+    negative values are not rounded toward negative infinity.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column or column name to truncate.
+        A column that evaluates to a numeric.
+    scale : :class:`~pyspark.sql.Column` or int, optional
+        An optional parameter to control the number of decimal places to keep.
+        A column that evaluates to an integer. Must be a constant. Defaults to 0.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column for the truncated value, of the same type as the input, except that a decimal
+        input may return a decimal of different precision and scale.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.round`
+    :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.floor`
+    :meth:`pyspark.sql.functions.ceil`
+
+    Examples
+    --------
+    Example 1: Truncate toward zero to a given number of decimal places
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(15.79), sf.lit(1)).alias("r")).collect()
+    [Row(r=15.7)]
+
+    Example 2: Truncation rounds toward zero for negative values
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(-2.99), sf.lit(0)).alias("r")).collect()
+    [Row(r=-2.0)]
+
+    Example 3: The scale argument defaults to 0 when omitted
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(1234.5678)).alias("r")).collect()
+    [Row(r=1234.0)]
+    """
+    if scale is None:
+        return _invoke_function_over_columns("truncate", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("truncate", col, scale)
+
+
+@_try_remote_functions
 def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
@@ -14766,6 +14828,71 @@ def md5(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def xxh3_64(col: "ColumnOrName") -> Column:
+    """Returns a 64-bit hash value of the argument using the XXH3 algorithm.
+
+    Unlike :func:`xxhash64`, which hashes one or more columns structurally, this hashes the raw
+    bytes of a single value with seed 0, so its result is byte compatible with the reference XXH3.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to hash, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_128`
+    :meth:`pyspark.sql.functions.xxhash64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.xxh3_64('a').alias('h')).collect()
+    [Row(h=80997306238743657)]
+    """
+    return _invoke_function_over_columns("xxh3_64", col)
+
+
+@_try_remote_functions
+def xxh3_128(col: "ColumnOrName") -> Column:
+    """Returns a 128-bit XXH3 hash of the argument as a 32-character hex string.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to hash, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_64`
+    :meth:`pyspark.sql.functions.md5`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.xxh3_128('a').alias('h')).collect()
+    [Row(h='7d57dd84c60c86ca1f4e82ab91a12b5e')]
+    """
+    return _invoke_function_over_columns("xxh3_128", col)
+
+
+@_try_remote_functions
 def sha1(col: "ColumnOrName") -> Column:
     """Returns the hex string result of SHA-1.
 
@@ -14940,6 +15067,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.hash`
+    :meth:`pyspark.sql.functions.xxh3_64`
 
     Examples
     --------
@@ -15895,6 +16023,46 @@ def try_validate_utf8(str: "ColumnOrName") -> Column:
     +---------------------------+
     """
     return _invoke_function_over_columns("try_validate_utf8", str)
+
+
+@_try_remote_functions
+def normalize(str: "ColumnOrName", form: Optional["ColumnOrName"] = None) -> Column:
+    """
+    Returns the Unicode normalization of ``str`` using the given normalization ``form``, as
+    defined by Unicode Standard Annex #15. Normalization is backed by Spark's bundled ICU4J
+    library rather than the JVM's own Unicode data, so results are stable across JVM vendors
+    and versions.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or column name
+        the input string to normalize.
+    form : :class:`~pyspark.sql.Column` or column name, optional
+        the normalization form, one of 'NFC', 'NFD', 'NFKC', 'NFKD' (case-insensitive).
+        If omitted, 'NFC' is used.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the normalized string.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("\ufb01",)], ["s"])
+    >>> df.select(sf.normalize(df.s, sf.lit("NFKC"))).show()
+    +------------------+
+    |normalize(s, NFKC)|
+    +------------------+
+    |                fi|
+    +------------------+
+    """
+    if form is None:
+        return _invoke_function_over_columns("normalize", str)
+    else:
+        return _invoke_function_over_columns("normalize", str, form)
 
 
 @_try_remote_functions
@@ -20287,6 +20455,62 @@ def slice(
 
 
 @_try_remote_functions
+def trim_array(x: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
+    """
+    Array function: Returns the given array column with the last ``n`` elements removed.
+    Raises an error if ``n`` is negative or greater than the number of elements in the array.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    x : :class:`~pyspark.sql.Column` or str
+        Input array column or column name to be trimmed.
+        A column that evaluates to an array.
+    n : :class:`~pyspark.sql.Column`, str, or int
+        The number of elements to remove from the end of the array. Must be between 0 and
+        the number of elements in the array (inclusive).
+        A column that evaluates to an integer.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new Column object of Array type, where each value is the corresponding input array
+        with its last ``n`` elements removed.
+        Returns a column that evaluates to an array.
+
+    Examples
+    --------
+    Example 1: Basic usage of the trim_array function.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 4, 5],), ([4, 5],)], ['x'])
+    >>> df.select(sf.trim_array(df.x, 2)).show()
+    +----------------+
+    |trim_array(x, 2)|
+    +----------------+
+    |       [1, 2, 3]|
+    |              []|
+    +----------------+
+
+    Example 2: trim_array function with a column input for n.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 4, 5], 1), ([4, 5], 0)], ['x', 'n'])
+    >>> df.select(sf.trim_array(df.x, df.n)).show()
+    +----------------+
+    |trim_array(x, n)|
+    +----------------+
+    |    [1, 2, 3, 4]|
+    |          [4, 5]|
+    +----------------+
+    """
+    n = _enum_to_value(n)
+    n = lit(n) if isinstance(n, int) else n
+    return _invoke_function_over_columns("trim_array", x, n)
+
+
+@_try_remote_functions
 def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
@@ -22651,6 +22875,75 @@ def to_variant_object(
 
 
 @_try_remote_functions
+def variant_from_arrays(keys: "ColumnOrName", values: "ColumnOrName") -> Column:
+    """
+    Creates a variant object from the given arrays of keys and values. The keys must be non-null
+    strings and the two arrays must have the same length.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    keys : :class:`~pyspark.sql.Column` or column name
+        an array of string keys.
+    values : :class:`~pyspark.sql.Column` or column name
+        an array of values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_from_entries`
+    :meth:`pyspark.sql.functions.to_variant_object`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT array('a', 'b') AS keys, array(1, 2) AS values")
+    >>> df.select(sf.variant_from_arrays("keys", "values").cast("string").alias("r")).collect()
+    [Row(r='{"a":1,"b":2}')]
+    """
+    return _invoke_function_over_columns("variant_from_arrays", keys, values)
+
+
+@_try_remote_functions
+def variant_from_entries(entries: "ColumnOrName") -> Column:
+    """
+    Creates a variant object from an array of key/value struct entries. The keys must be non-null
+    strings.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    entries : :class:`~pyspark.sql.Column` or column name
+        an array of key/value structs, where the first field is a string key and the second field
+        is the value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_from_arrays`
+    :meth:`pyspark.sql.functions.to_variant_object`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT array(struct('a', 1), struct('b', 2)) AS entries")
+    >>> df.select(sf.variant_from_entries("entries").cast("string").alias("r")).collect()
+    [Row(r='{"a":1,"b":2}')]
+    """
+    return _invoke_function_over_columns("variant_from_entries", entries)
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:
@@ -23188,6 +23481,52 @@ def try_variant_array_append(
 
 
 @_try_remote_functions
+def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
+    """
+    Recursively removes object fields and array elements whose value is a variant null, unless
+    `include_arrays` is False, in which case null array elements are kept. Returns NULL if any
+    argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    include_arrays : bool, optional
+        whether null elements are also removed from arrays (default True).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with variant null fields/elements removed
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_strip_nulls
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a" : 1, "b" : null, "c" : [1, null], "d" : { "e" : null, "f" : 4 } }'''
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_strip_nulls(v)).alias("r")).collect()
+    [Row(r='{"a":1,"c":[1],"d":{"f":4}}')]
+    >>> df.select(to_json(variant_strip_nulls(v, False)).alias("r")).collect()
+    [Row(r='{"a":1,"c":[1,null],"d":{"f":4}}')]
+    >>> df.select(variant_strip_nulls(lit(None)).alias("r")).collect()
+    [Row(r=None)]
+    >>> df2 = spark.createDataFrame([{'json': '{"a": null}'}, {'json': 'null'}])
+    >>> v2 = parse_json(df2.json)
+    >>> df2.select(to_json(variant_strip_nulls(v2)).alias("r")).collect()
+    [Row(r='{}'), Row(r='null')]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "variant_strip_nulls", _to_java_column(v), _enum_to_value(include_arrays)
+    )
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
@@ -23589,6 +23928,42 @@ def json_object_keys(col: "ColumnOrName") -> Column:
     [Row(r=None), Row(r=[]), Row(r=['key1', 'key2'])]
     """
     return _invoke_function_over_columns("json_object_keys", col)
+
+
+@_try_remote_functions
+def json_typeof(col: "ColumnOrName") -> Column:
+    """
+    Returns the type of the outermost JSON value as a string: one of 'object', 'array',
+    'string', 'number', 'boolean', or 'null'. Returns null if the input is not a valid JSON
+    string or is an empty string.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the type of the outermost JSON value.
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.json_object_keys`
+    :meth:`pyspark.sql.functions.get_json_object`
+    :meth:`pyspark.sql.functions.json_array_length`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('{"a": 1}',), ('[1, 2, 3]',), ('123',), ('',)], ['data'])
+    >>> df.select(json_typeof(df.data).alias('r')).collect()
+    [Row(r='object'), Row(r='array'), Row(r='number'), Row(r=None)]
+    """
+    return _invoke_function_over_columns("json_typeof", col)
 
 
 # TODO: Fix and add an example for StructType with Spark Connect
@@ -32669,6 +33044,194 @@ def bitmap_count(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def bitmap_and(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_or`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_and(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[70 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_and", left, right)
+
+
+@_try_remote_functions
+def bitmap_or(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise OR of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("10", "20")], ["left", "right"])
+    >>> df.select(sf.bitmap_or(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[30 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_or", left, right)
+
+
+@_try_remote_functions
+def bitmap_andnot(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND NOT of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_or`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_andnot(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[80 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_andnot", left, right)
+
+
+@_try_remote_functions
+def bitmap_xor(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise XOR of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_or`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_xor(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[80 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_xor", left, right)
+
+
+@_try_remote_functions
 def bitmap_or_agg(col: "ColumnOrName") -> Column:
     """
     Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column.
@@ -32738,7 +33301,167 @@ def bitmap_and_agg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_and_agg", col)
 
 
+@_try_remote_functions
+def bitmap_xor_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise XOR of all of the bitmaps from the input column.
+    The input column should be bitmaps created from bitmap_construct_agg().
+
+    .. versionadded:: 4.4.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
+    :meth:`pyspark.sql.functions.bitmap_and_agg`
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The input column should be bitmaps created from bitmap_construct_agg().
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("10",), ("30",), ("40",)], ["a"])
+    >>> df.select(sf.bitmap_xor_agg(sf.to_binary(df.a, sf.lit("hex")))).show()
+    +---------------------------------+
+    |bitmap_xor_agg(to_binary(a, hex))|
+    +---------------------------------+
+    |             [60 00 00 00 00 0...|
+    +---------------------------------+
+    """
+    return _invoke_function_over_columns("bitmap_xor_agg", col)
+
+
 # ---------------------------- User Defined Function ----------------------------------
+
+
+def udaf(agg: "Aggregator") -> "UserDefinedFunctionLike":
+    """Turn an :class:`~pyspark.sql.aggregator.Aggregator` instance into a callable usable in
+    ``groupBy().agg(...)`` (and as a window function), the Python counterpart of Scala's
+    ``functions.udaf``.
+
+    The aggregator is executed with true incremental (partial) aggregation and transfers its
+    intermediate buffer as Arrow; PyArrow is therefore required.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    agg : :class:`~pyspark.sql.aggregator.Aggregator`
+        The aggregator instance.
+
+    Returns
+    -------
+    function
+        A callable that, applied to input columns, produces an aggregate
+        :class:`~pyspark.sql.Column`.
+
+    Raises
+    ------
+    :class:`PySparkImportError`
+        If a supported version of PyArrow is not installed.
+    :class:`PySparkTypeError`
+        If ``agg`` is not an :class:`~pyspark.sql.aggregator.Aggregator`, or its ``bufferSchema`` is
+        not a :class:`StructType`.
+
+    Examples
+    --------
+    >>> from pyspark.sql.aggregator import Aggregator
+    >>> from pyspark.sql.functions import udaf
+    >>> from pyspark.sql.types import StructType, StructField, DoubleType, LongType
+    >>> class Mean(Aggregator):
+    ...     @property
+    ...     def bufferSchema(self):
+    ...         return StructType(
+    ...             [StructField("sum", DoubleType()), StructField("count", LongType())]
+    ...         )
+    ...
+    ...     @property
+    ...     def outputType(self):
+    ...         return DoubleType()
+    ...
+    ...     def zero(self):
+    ...         return (0.0, 0)
+    ...
+    ...     def reduce(self, buffer, value):
+    ...         (v,) = value
+    ...         return buffer if v is None else (buffer[0] + v, buffer[1] + 1)
+    ...
+    ...     def merge(self, b1, b2):
+    ...         return (b1[0] + b2[0], b1[1] + b2[1])
+    ...
+    ...     def finish(self, buffer):
+    ...         return buffer[0] / buffer[1] if buffer[1] else None
+    >>> df = spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0)], ("k", "v"))
+    >>> df.groupBy("k").agg(udaf(Mean())(df.v).alias("m")).orderBy("k").show()
+    +---+---+
+    |  k|  m|
+    +---+---+
+    |  1|1.5|
+    |  2|3.0|
+    +---+---+
+    """
+    from pyspark.sql.aggregator import Aggregator
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+    from pyspark.sql.utils import is_remote
+    from pyspark.util import PythonEvalType
+
+    require_minimum_pyarrow_version()
+
+    if is_remote():
+        from pyspark.sql.connect.udf import UserDefinedFunction
+    else:
+        # The classic UserDefinedFunction is a distinct class from the Connect one above;
+        # both provide the same interface used below, so silence mypy's reassignment check.
+        from pyspark.sql.udf import UserDefinedFunction  # type: ignore[assignment]
+
+    if not isinstance(agg, Aggregator):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "agg",
+                "expected_type": "Aggregator",
+                "arg_type": type(agg).__name__,
+            },
+        )
+    if not isinstance(agg.bufferSchema, StructType):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "bufferSchema",
+                "expected_type": "StructType",
+                "arg_type": type(agg.bufferSchema).__name__,
+            },
+        )
+    # The buffer crosses the shuffle as an Arrow struct whose children are matched by name, and the
+    # worker keys the buffer tuple back by field name. Duplicate names would silently collapse
+    # fields on the map side and then fail with an opaque Arrow error post-shuffle, so reject them
+    # up front where the aggregator is created.
+    field_names = [field.name for field in agg.bufferSchema.fields]
+    if len(field_names) != len(set(field_names)):
+        duplicates = sorted({name for name in field_names if field_names.count(name) > 1})
+        raise PySparkValueError(
+            errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+            messageParameters={"field_names": ", ".join(duplicates)},
+        )
+
+    # ``bufferSchema`` is a first-class ``UserDefinedFunction`` field (threaded to the JVM in
+    # ``_create_judf`` so ``PythonAggregate`` can plan the two-stage aggregation), so it survives
+    # ``_wrapped()`` and ``spark.udf.register`` without being re-attached.
+    udf_obj = UserDefinedFunction(
+        agg,
+        returnType=agg.outputType,
+        name=agg.__class__.__name__,
+        evalType=PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+        deterministic=True,
+        bufferSchema=agg.bufferSchema,
+    )
+    return udf_obj._wrapped()
 
 
 @overload
@@ -33425,6 +34148,7 @@ def _test() -> None:
     if not have_pandas or not have_pyarrow:
         del pyspark.sql.functions.builtin.udf.__doc__
         del pyspark.sql.functions.builtin.arrow_udtf.__doc__
+        del pyspark.sql.functions.builtin.udaf.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.functions.builtin tests").getOrCreate()

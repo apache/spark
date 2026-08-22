@@ -469,6 +469,10 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
     @volatile var executionError: Option[ExecutionError] = None
     @volatile var streamError: Option[Throwable] = None
     private val requestCompleted = new AtomicBoolean(false)
+    // gRPC forbids concurrent calls to the request StreamObserver too: the response
+    // observer half-closes it (completeRequestStream) on a callback thread while the
+    // test thread may still be sending a trailing Cancel. Serialize both through this.
+    private val requestLock = new Object
     // Counted down on InitResponse (success or failure) or on terminal error.
     // The engine MUST wait for this before sending any DataRequest or Finish.
     private val initResponseLatch = new CountDownLatch(1)
@@ -637,22 +641,23 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
       }
     }
 
-    def sendCancel(reason: String = ""): Unit = {
-      // If a terminator already arrived (FinishResponse / CancelResponse),
-      // the request stream has been half-closed and Cancel arrives too
-      // late -- silently ignore, matching the proto's Cancel-after-Finish
-      // contract.
-      if (requestCompleted.get()) return
-      requestObserver.onNext(UdfRequest.newBuilder()
-        .setControl(UdfControlRequest.newBuilder()
-          .setCancel(Cancel.newBuilder().setReason(reason).build())
+    def sendCancel(reason: String = ""): Unit = requestLock.synchronized {
+      // If a terminator already arrived (FinishResponse / CancelResponse), the request
+      // stream has been half-closed and Cancel arrives too late -- silently ignore,
+      // matching the proto's Cancel-after-Finish contract. requestLock makes this check
+      // and the send atomic against completeRequestStream's half-close.
+      if (!requestCompleted.get()) {
+        requestObserver.onNext(UdfRequest.newBuilder()
+          .setControl(UdfControlRequest.newBuilder()
+            .setCancel(Cancel.newBuilder().setReason(reason).build())
+            .build())
           .build())
-        .build())
+      }
       // Request stream stays open until the response terminator arrives;
       // completeRequestStream() is called by the response observer.
     }
 
-    def completeRequestStream(): Unit = {
+    def completeRequestStream(): Unit = requestLock.synchronized {
       if (requestCompleted.compareAndSet(false, true)) {
         requestObserver.onCompleted()
       }

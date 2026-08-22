@@ -18,6 +18,7 @@
 package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -52,6 +53,28 @@ class AutoCdcConfigDriftSuite
   // ===========================================================================================
   // Sequencing type drift
   // ===========================================================================================
+
+  test("AutoCDC source validation uses pipeline case sensitivity, not session default") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val stream = MemoryStream[(Int, Long, Long)]
+      stream.addData((1, 1L, 1L))
+
+      val ctx = new TestGraphRegistrationContext(
+        spark,
+        Map(SQLConf.CASE_SENSITIVE.key -> "true")) {
+        registerTable("target", catalog = Some(catalog), database = Some(namespace))
+        registerFlow(autoCdcFlow(
+          name = "flow",
+          target = "target",
+          query = dfFlowFunc(stream.toDF().toDF("id", "version", "__start_at")),
+          keys = Seq("id"),
+          sequencing = $"version",
+          scdType = ScdType.Type2))
+      }
+
+      ctx.resolveToDataflowGraph()
+    }
+  }
 
   test("an SCD1 flow whose sequencing type differs from the recorded type triggers " +
     "SEQUENCING_TYPE_DRIFT") {

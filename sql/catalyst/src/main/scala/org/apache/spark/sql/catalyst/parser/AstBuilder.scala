@@ -4170,6 +4170,105 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Resolve a `jsonValueBehavior` clause (`NULL` / `ERROR` / `DEFAULT <expr>`) into a
+   * [[JsonValueBehavior]] and, for the `DEFAULT` case, its expression.
+   */
+  private def buildJsonValueBehavior(
+      ctx: JsonValueBehaviorContext): (JsonValueBehavior, Option[Expression]) = ctx match {
+    case _: JsonValueBehaviorNullContext => (JsonValueBehavior.Null, None)
+    case _: JsonValueBehaviorErrorContext => (JsonValueBehavior.Error, None)
+    case d: JsonValueBehaviorDefaultContext =>
+      (JsonValueBehavior.Default, Some(expression(d.defaultExpr)))
+  }
+
+  /**
+   * Create a [[JsonValue]] expression for the SQL:2016 `JSON_VALUE` scalar function. The `ON EMPTY`
+   * / `ON ERROR` clauses default to `NULL` when absent, per the standard.
+   */
+  override def visitJsonValue(ctx: JsonValueContext): Expression = withOrigin(ctx) {
+    val jsonExpr = expression(ctx.jsonExpr)
+    val path = string(visitStringLit(ctx.path))
+    // Default RETURNING type is STRING. Normalize CHAR/VARCHAR to STRING for the cast, as the value
+    // is produced by a `Cast` to the declared type (a raw CHAR/VARCHAR target has no encoder).
+    val returning = Option(ctx.returning)
+      .map(dt => CharVarcharUtils.replaceCharVarcharWithStringForCast(typedVisit[DataType](dt)))
+      .getOrElse(StringType)
+    val (onEmpty, emptyDefault) = Option(ctx.emptyBehavior)
+      .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
+    val (onError, errorDefault) = Option(ctx.errorBehavior)
+      .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
+    JsonValue(jsonExpr, path, returning, onEmpty, onError, emptyDefault, errorDefault)
+  }
+
+  /**
+   * Create a [[JsonExists]] expression for the SQL:2016 `JSON_EXISTS` predicate. The `ON ERROR`
+   * clause defaults to `FALSE` when absent, per the standard.
+   */
+  override def visitJsonExists(ctx: JsonExistsContext): Expression = withOrigin(ctx) {
+    val jsonExpr = expression(ctx.jsonExpr)
+    val path = string(visitStringLit(ctx.path))
+    val onError = Option(ctx.errorBehavior).map { b =>
+      if (b.TRUE != null) JsonExistsBehavior.True
+      else if (b.FALSE != null) JsonExistsBehavior.False
+      else if (b.UNKNOWN != null) JsonExistsBehavior.Unknown
+      else JsonExistsBehavior.Error
+    }.getOrElse(JsonExistsBehavior.False)
+    JsonExists(jsonExpr, path, onError)
+  }
+
+  /**
+   * Resolve a `jsonQueryBehavior` clause (`NULL` / `ERROR` / `EMPTY ARRAY` / `EMPTY OBJECT`) into a
+   * [[JsonQueryBehavior]].
+   */
+  private def buildJsonQueryBehavior(ctx: JsonQueryBehaviorContext): JsonQueryBehavior = ctx match {
+    case _: JsonQueryBehaviorNullContext => JsonQueryBehavior.Null
+    case _: JsonQueryBehaviorErrorContext => JsonQueryBehavior.Error
+    case _: JsonQueryBehaviorEmptyArrayContext => JsonQueryBehavior.EmptyArray
+    case _: JsonQueryBehaviorEmptyObjectContext => JsonQueryBehavior.EmptyObject
+  }
+
+  /**
+   * Create a [[JsonQuery]] expression for the SQL:2016 `JSON_QUERY` function. The array wrapper
+   * defaults to `WITHOUT ARRAY WRAPPER`, quotes to `KEEP QUOTES`, and both `ON EMPTY` / `ON ERROR`
+   * to `NULL`, per the standard. `OMIT QUOTES` cannot be combined with an array wrapper.
+   */
+  override def visitJsonQuery(ctx: JsonQueryContext): Expression = withOrigin(ctx) {
+    val jsonExpr = expression(ctx.jsonExpr)
+    val path = string(visitStringLit(ctx.path))
+    // Default RETURNING type is STRING; the result is JSON text. A CHAR/VARCHAR RETURNING is
+    // normalized to STRING truly unconditionally: JSON_QUERY returns the fragment verbatim without
+    // a length-enforcing cast, so the result type must never advertise a CHAR/VARCHAR length it
+    // cannot enforce. The CharVarcharUtils helpers cannot be used here: they honor
+    // spark.sql.preserveCharVarcharTypeInfo and would leave a VARCHAR(n) length in the output type
+    // when that flag is set. A non-string RETURNING is left intact for checkInputDataTypes to fail.
+    val returning = Option(ctx.returning).map(typedVisit[DataType]).map {
+      case c: CharType => c.toStringType
+      case v: VarcharType => v.toStringType
+      case other => other
+    }.getOrElse(StringType)
+    val wrapper = Option(ctx.wrapper).map {
+      case _: JsonQueryWrapperWithoutContext => JsonQueryWrapper.Without
+      case w: JsonQueryWrapperWithContext =>
+        if (w.wrapperType != null && w.wrapperType.getType == SqlBaseParser.CONDITIONAL) {
+          JsonQueryWrapper.Conditional
+        } else {
+          JsonQueryWrapper.Unconditional
+        }
+    }.getOrElse(JsonQueryWrapper.Without)
+    val quotes = Option(ctx.quotes).map {
+      case _: JsonQueryQuotesKeepContext => JsonQueryQuotes.Keep
+      case _: JsonQueryQuotesOmitContext => JsonQueryQuotes.Omit
+    }.getOrElse(JsonQueryQuotes.Keep)
+    // The OMIT QUOTES + array-wrapper invariant is enforced in JsonQuery.checkInputDataTypes so it
+    // holds for directly-constructed expressions too, not only this parser path.
+    val onEmpty =
+      Option(ctx.emptyBehavior).map(buildJsonQueryBehavior).getOrElse(JsonQueryBehavior.Null)
+    val onError =
+      Option(ctx.errorBehavior).map(buildJsonQueryBehavior).getOrElse(JsonQueryBehavior.Null)
+    JsonQuery(jsonExpr, path, returning, wrapper, quotes, onEmpty, onError)
+  }
+
+  /**
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {

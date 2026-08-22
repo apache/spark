@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
@@ -35,7 +36,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
-import org.apache.spark.sql.internal.connector.V2StatisticsUtils
+import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -145,6 +146,8 @@ case class DataSourceV2Relation(
     table.capabilities.contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
 
   def isVersioned: Boolean = table.version != null
+
+  override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_RELATION)
 }
 
 /**
@@ -196,15 +199,36 @@ case class DataSourceV2ScanRelation(
 
   /**
    * Resolved attributes that the scan declares for runtime filtering via
-   * [[SupportsRuntimeV2Filtering.filterAttributes]]. Empty when the scan
-   * does not implement [[SupportsRuntimeV2Filtering]] or exposes no attributes.
+   * [[SupportsRuntimeV2Filtering.filterAttributes]] or
+   * [[SupportsRuntimeCatalystFiltering.filterAttributes]]. Empty when the scan
+   * implements neither interface or exposes no attributes.
    */
-  lazy val runtimeFilterAttrs: AttributeSet = scan match {
-    case s: SupportsRuntimeV2Filtering =>
-      AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
-        s.filterAttributes.toImmutableArraySeq, this))
-    case _ => AttributeSet.empty
+  lazy val runtimeFilterAttrs: AttributeSet = {
+    checkRuntimeFilteringInterfaces()
+    val filterAttrs = scan match {
+      case s: SupportsRuntimeV2Filtering => s.filterAttributes
+      case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
+      case _ => Array.empty[NamedReference]
+    }
+    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
+      filterAttrs.toImmutableArraySeq, this))
   }
+
+  /**
+   * Resolved attributes for which a Catalyst runtime-filtering scan fully evaluates predicates.
+   * Empty for a [[SupportsRuntimeV2Filtering]] scan, which keeps its post-scan filters.
+   */
+  lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
+    checkRuntimeFilteringInterfaces()
+    val filterAttrs = scan match {
+      case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
+      case _ => Array.empty[NamedReference]
+    }
+    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
+      filterAttrs.toImmutableArraySeq, this))
+  }
+
+  override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)
 
   override def name: String = relation.name
 
@@ -250,6 +274,14 @@ case class DataSourceV2ScanRelation(
 
   private def defaultSizeOnlyStats: Statistics = {
     Statistics(sizeInBytes = conf.defaultSizeInBytes)
+  }
+
+  private def checkRuntimeFilteringInterfaces(): Unit = scan match {
+    case _: SupportsRuntimeV2Filtering with SupportsRuntimeCatalystFiltering =>
+      throw SparkException.internalError(
+        "A scan must not implement both SupportsRuntimeV2Filtering and " +
+        s"SupportsRuntimeCatalystFiltering, but ${scan.getClass.getName} implements both.")
+    case _ =>
   }
 
   override def doCanonicalize(): DataSourceV2ScanRelation = {

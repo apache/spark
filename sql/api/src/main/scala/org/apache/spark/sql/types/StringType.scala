@@ -159,23 +159,74 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
 
   def isPlainString(s: StringType): Boolean = s.constraint == NoConstraint
 
+  /**
+   * Strip CHAR/VARCHAR length constraints, preserving collation.
+   *
+   * Used by transforming string expressions (upper, substr, concat, ...) so their result type is
+   * plain STRING even when inputs are CharType/VarcharType (SQL standard CHAR/VARCHAR R1), when
+   * standard semantics are on.
+   */
+  def plainStringType(dt: DataType): DataType = dt match {
+    case c: CharType => c.toStringType
+    case v: VarcharType => v.toStringType
+    case other => other
+  }
+
+  def plainStringType(s: StringType): StringType = s match {
+    case c: CharType => c.toStringType
+    case v: VarcharType => v.toStringType
+    case other => other
+  }
+
+  /**
+   * Result type for transforming string expressions. Under
+   * spark.sql.charVarchar.standardSemantics.enabled, always plain STRING (R1). Under
+   * preserveCharVarcharTypeInfo alone, keep child type (legacy leaky path).
+   */
+  def transformingStringResultType(dt: DataType): DataType = {
+    if (SqlApiConf.get.charVarcharStandardSemantics) {
+      plainStringType(dt)
+    } else {
+      dt
+    }
+  }
+
   def isMoreConstrained(a: StringType, b: StringType): Boolean =
     gteq(a.constraint, b.constraint)
 
+  /**
+   * Least common string type: CHAR -> VARCHAR -> STRING, with length max(n, m) when the result
+   * remains CHAR or VARCHAR.
+   *
+   * When first-class CHAR/VARCHAR are off, always widens to unbounded STRING (legacy
+   * annotated-STRING path where Char/Varchar do not appear in plans).
+   */
   def tightestCommonString(s1: StringType, s2: StringType): Option[StringType] = {
     if (s1.collationId != s2.collationId) {
       return None
     }
-    if (!SqlApiConf.get.preserveCharVarcharTypeInfo) {
+    if (!SqlApiConf.get.charVarcharFirstClassTypes) {
       return Some(StringType(s1.collationId))
     }
+    // Carry the declared collation onto CHAR/VARCHAR results. This propagates the Option rather
+    // than the id: None means "not explicitly declared" and renders as char(n) instead of
+    // char(n) collate UTF8_BINARY, so an all-default LCT keeps printing (and comparing) as before.
+    // The two collation ids are already known to be equal here.
+    val collation = declaredCollation(s1).orElse(declaredCollation(s2))
     Some((s1.constraint, s2.constraint) match {
-      case (FixedLength(l1), FixedLength(l2)) => CharType(l1.max(l2))
-      case (MaxLength(l1), FixedLength(l2)) => VarcharType(l1.max(l2))
-      case (FixedLength(l1), MaxLength(l2)) => VarcharType(l1.max(l2))
-      case (MaxLength(l1), MaxLength(l2)) => VarcharType(l1.max(l2))
+      case (FixedLength(l1), FixedLength(l2)) => new CharType(l1.max(l2), collation)
+      case (MaxLength(l1), FixedLength(l2)) => new VarcharType(l1.max(l2), collation)
+      case (FixedLength(l1), MaxLength(l2)) => new VarcharType(l1.max(l2), collation)
+      case (MaxLength(l1), MaxLength(l2)) => new VarcharType(l1.max(l2), collation)
       case _ => StringType(s1.collationId)
     })
+  }
+
+  /** The explicitly declared collation of a CHAR/VARCHAR type, if any. */
+  private def declaredCollation(s: StringType): Option[Int] = s match {
+    case c: CharType => c.collation
+    case v: VarcharType => v.collation
+    case _ => None
   }
 
   def removeCollation(s: StringType): StringType = s match {

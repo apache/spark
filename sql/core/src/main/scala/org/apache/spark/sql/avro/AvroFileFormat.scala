@@ -199,7 +199,9 @@ private[sql] class AvroFileFormat extends FileFormat
     } else {
       new NoopFilters
     }
-    SupportsArchiveFormat.readArchiveEntries(file.toPath, conf) { (_, in) =>
+    val entryGlob = parsedOptions.archivePathFilterPattern
+    SupportsArchiveFormat.readArchiveEntries(
+        file.toPath, conf, archivePathFilter = entryGlob) { (_, in) =>
       val datumReader = userProvidedSchema match {
         case Some(schema) => new GenericDatumReader[GenericRecord](schema)
         case None => new GenericDatumReader[GenericRecord]()

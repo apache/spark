@@ -22,7 +22,7 @@ import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.ml.linalg.{DenseVector, SQLDataTypes, Vector}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -241,12 +241,12 @@ abstract class ProbabilisticClassificationModel[
   (ProbabilisticClassificationModel[FeaturesType, M], String, String) = {
     val model = if ($(probabilityCol).isEmpty && $(predictionCol).isEmpty) {
       copy(ParamMap.empty)
-        .setProbabilityCol("probability_" + java.util.UUID.randomUUID.toString)
-        .setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+        .setProbabilityCol(Identifiable.randomUID("probability"))
+        .setPredictionCol(Identifiable.randomUID("prediction"))
     } else if ($(probabilityCol).isEmpty) {
-      copy(ParamMap.empty).setProbabilityCol("probability_" + java.util.UUID.randomUUID.toString)
+      copy(ParamMap.empty).setProbabilityCol(Identifiable.randomUID("probability"))
     } else if ($(predictionCol).isEmpty) {
-      copy(ParamMap.empty).setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+      copy(ParamMap.empty).setPredictionCol(Identifiable.randomUID("prediction"))
     } else {
       this
     }

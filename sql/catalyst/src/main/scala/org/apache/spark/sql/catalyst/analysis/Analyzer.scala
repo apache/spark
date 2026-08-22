@@ -135,6 +135,9 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  * @param relationCache A mapping from (qualified table name, time travel spec, options) to
  *                      resolved relations. This can ensure that the table is resolved only once if
  *                      a table is used multiple times in a query with the same options.
+ * @param tableCache A mapping from (catalog, identifier, time travel spec, table-state options) to
+ *                   concrete tables. This pins one table state while allowing references to keep
+ *                   different read-specific options.
  * @param referredTempViewNames All the temp view names referred by the current view we are
  *                              resolving. It's used to make sure the relation resolution is
  *                              consistent between view creation and view resolution. For example,
@@ -155,6 +158,7 @@ case class AnalysisContext(
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[RelationCacheKey, LogicalPlan] = mutable.Map.empty,
+    tableCache: mutable.Map[TableCacheKey, Table] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
@@ -249,6 +253,7 @@ object AnalysisContext {
       nestedViewDepth = originContext.nestedViewDepth + 1,
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
+      tableCache = originContext.tableCache,
       referredTempViewNames = viewDesc.viewReferredTempViewNames,
       referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       referredTempVariableNames = viewDesc.viewReferredTempVariableNames,
@@ -958,7 +963,8 @@ class Analyzer(
     // TODO: Support Pandas UDF.
     private def checkValidAggregateExpression(expr: Expression): Unit = expr match {
       case a: AggregateExpression =>
-        if (a.aggregateFunction.isInstanceOf[PythonUDAF]) {
+        if (a.aggregateFunction.isInstanceOf[PythonUDAF] ||
+            a.aggregateFunction.isInstanceOf[PythonAggregate]) {
           throw QueryCompilationErrors.pandasUDFAggregateNotSupportedInPivotError()
         } else {
           // OK and leave the argument check to CheckAnalysis.

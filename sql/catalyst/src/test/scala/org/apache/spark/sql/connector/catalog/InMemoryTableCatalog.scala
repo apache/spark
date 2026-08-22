@@ -48,11 +48,12 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   private var _name: Option[String] = None
   private var copyOnLoad: Boolean = false
+  private var stateOptionKeys: util.Set[String] = util.Set.of()
 
-  // Records every (TableContext, options) pair passed to the options-aware loadTable(), in call
-  // order, so tests can verify that the analyzer / DataFrame API correctly constructed and
-  // forwarded them -- including how many times loadTable was called when the same table is
-  // referenced more than once in a statement with different options.
+  // Records every (TableContext, table-state options) pair passed to the options-aware
+  // loadTable(), in call order, so tests can verify that the analyzer / DataFrame API correctly
+  // constructed and forwarded them -- including how many times loadTable was called when the same
+  // table is referenced more than once in a statement with different options.
   // "loadTable" is in the name because the subclass InMemoryChangelogCatalog has an analogous
   // `lastOptions` recording the options passed to loadChangelog(); the two must not collide.
   private val _loadTableCalls = mutable.ArrayBuffer.empty[(TableContext, CaseInsensitiveStringMap)]
@@ -65,7 +66,12 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = Some(name)
     copyOnLoad = options.getBoolean("copyOnLoad", false)
+    stateOptionKeys = Option(options.get("tableStateOptionKeys"))
+      .map(_.split(",").iterator.map(_.trim).filter(_.nonEmpty).toSet.asJava)
+      .getOrElse(util.Set.of())
   }
+
+  override def tableStateOptionKeys(): util.Set[String] = stateOptionKeys
 
   override def name: String = _name.get
 
@@ -138,14 +144,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
   }
 
-  // Records the forwarded context/options so tests can verify they reached the catalog, then
+  // Records the forwarded context/state options so tests can verify they reached the catalog, then
   // defers to the default dispatch in TableCatalog (rather than reimplementing it here).
   override def loadTable(
       ident: Identifier,
       context: TableContext,
-      options: CaseInsensitiveStringMap): Table = {
-    _loadTableCalls += ((context, options))
-    super.loadTable(ident, context, options)
+      stateOptions: CaseInsensitiveStringMap): Table = {
+    _loadTableCalls += ((context, stateOptions))
+    super.loadTable(ident, context, stateOptions)
   }
 
   override def invalidateTable(ident: Identifier): Unit = {

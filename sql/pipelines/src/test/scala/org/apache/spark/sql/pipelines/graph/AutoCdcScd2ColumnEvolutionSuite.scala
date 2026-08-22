@@ -57,6 +57,8 @@ class AutoCdcScd2ColumnEvolutionSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  import testImplicits._
+
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
   private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
 
@@ -66,9 +68,6 @@ class AutoCdcScd2ColumnEvolutionSuite
 
   test("a source column dropped between runs is preserved on existing records and null on new " +
     "ones") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -114,9 +113,6 @@ class AutoCdcScd2ColumnEvolutionSuite
 
   test("narrowing the COLUMNS selection to drop a non-tracked column preserves it on existing " +
     "records and leaves it null on new ones") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -165,9 +161,6 @@ class AutoCdcScd2ColumnEvolutionSuite
   }
 
   test("a late narrower event weaves into history without rewriting existing records") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
@@ -215,9 +208,6 @@ class AutoCdcScd2ColumnEvolutionSuite
 
   test("a nested struct field dropped between runs is preserved on existing records and null on " +
     "new ones (SCD2 is more permissive than SCD1 here)") {
-    val session = spark
-    import session.implicits._
-
     // Contrast with SCD1: AutoCdcScd1SchemaEvolutionSuite rejects this exact shape with
     // INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA, because its MERGE source is missing `value.b.c`
     // and the v2 writer's resolver cannot find data for the target's nested field. SCD2's
@@ -278,9 +268,6 @@ class AutoCdcScd2ColumnEvolutionSuite
 
   test("a field dropped inside an array<struct> element between runs is preserved on existing " +
     "records and null on new ones (SCD2 is more permissive than SCD1 here)") {
-    val session = spark
-    import session.implicits._
-
     // The array<struct> analog of the nested-struct-drop test above, and the counterpart to
     // AutoCdcScd1SchemaEvolutionSuite's array<struct> case, which fails with
     // INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA on `vals.element.b.d`. SCD2's
