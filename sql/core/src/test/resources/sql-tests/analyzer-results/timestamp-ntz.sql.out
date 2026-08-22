@@ -238,6 +238,25 @@ select timestampdiff(MILLISECOND, timestamp_ntz'2022-02-14 23:59:59.123', date'2
 
 
 -- !query
+select months_between(timestamp_ntz'1997-02-28 10:30:00', timestamp_ntz'1996-10-30 00:00:00')
+-- !query analysis
+Project [months_between(1997-02-28 10:30:00, 1996-10-30 00:00:00, true, Some(America/Los_Angeles)) AS months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00', TIMESTAMP_NTZ '1996-10-30 00:00:00', true)#x]
++- OneRowRelation
+
+
+-- !query
+select months_between(timestamp_ntz'1997-02-28 10:30:00', timestamp_ltz'1996-10-30 00:00:00')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select months_between(timestamp_ltz'1997-02-28 10:30:00', timestamp_ntz'1996-10-30 00:00:00')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 select timestamp_ntz'2022-01-01 00:00:00' = date'2022-01-01'
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
