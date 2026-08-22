@@ -224,6 +224,7 @@ object ParseSqlResult {
         visitPlan(m.targetTable, scope, TableRefRole.Target)(f)
         visitPlan(m.sourceTable, scope, TableRefRole.Source)(f)
       case i: InsertIntoStatement =>
+        visitPlan(i.table, scope, TableRefRole.Target)(f)
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case c: CreateTableAsSelect =>
         visitPlan(c.name, scope, TableRefRole.Target)(f)
@@ -268,8 +269,6 @@ object ParseSqlResult {
           visitPlan(ctePlan, bodyScope, TableRefRole.Source)(f)
           definitionScope += normalized
         }
-      case i: InsertIntoStatement =>
-        visitPlan(i.table, scope, TableRefRole.Target)(f)
       case c: CacheTable if c.multipartIdentifier.isEmpty =>
         visitPlan(c.table, scope, TableRefRole.Target)(f)
       case c: CompoundBody =>

@@ -1151,17 +1151,11 @@ class Analyzer(
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
       case i @ InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
-        val relation = table match {
-          case u: UnresolvedRelation if !u.isStreaming =>
-            resolveRelation(u).getOrElse(u)
-          case other => other
-        }
-
         // Inserting into a file-based temporary view is allowed.
         // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
-        // Thus, we need to look at the raw plan if `relation` is a temporary view.
+        // Thus, we need to look at the raw plan if `table` is a temporary view.
         // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
-        unwrapRelationPlan(relation) match {
+        unwrapRelationPlan(table) match {
           case v: View if i.replaceCriteriaOpt.exists(_.isReplaceWhere) =>
             throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, i)
           case v: View =>
@@ -1626,37 +1620,6 @@ class Analyzer(
     }
 
     def doApply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      // `InsertIntoStatement.table` and `V2WriteCommand.table` are non-child `LogicalPlan`
-      // slots (`child = query`), so the default `resolveOperatorsUp` + `mapExpressions`
-      // traversal never resolves expressions placed inside them. For a
-      // `PlanWithUnresolvedIdentifier`, `identifierExpr` (e.g. an `UnresolvedAttribute`
-      // referring to a SQL variable in `INSERT INTO IDENTIFIER(target_table) ...`) must
-      // be resolved here before `ResolveIdentifierClause` can materialize the relation.
-      // Mirror the structural recursion into the non-child `.table` slot that
-      // `BindParameters` and `ResolveIdentifierClause` already do for the same shape
-      // (SPARK-46625); unlike those rules, this one performs attribute resolution rather
-      // than parameter binding or placeholder materialization. Resolve against `p` (whose
-      // `children` are `Nil` on the INSERT / `OverwriteByExpression` path built by
-      // `buildWriteTableSlot`) so the IDENTIFIER expression cannot see query output
-      // columns -- only the last-resort variable resolution path fires. The
-      // `!identifierExpr.resolved` guard makes the case idempotent under bottom-up
-      // traversal.
-      case i: InsertIntoStatement
-          if i.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
-             !i.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
-        val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
-        val resolvedExpr = resolveExpressionByPlanChildren(
-          p.identifierExpr, p, includeLastResort = true)
-        i.copy(table = p.copy(identifierExpr = resolvedExpr))
-
-      case w: V2WriteCommand
-          if w.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
-             !w.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
-        val p = w.table.asInstanceOf[PlanWithUnresolvedIdentifier]
-        val resolvedExpr = resolveExpressionByPlanChildren(
-          p.identifierExpr, p, includeLastResort = true)
-        w.withNewTable(p.copy(identifierExpr = resolvedExpr))
-
       // Don't wait other rules to resolve the child plans of `InsertIntoStatement` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
       case i: InsertIntoStatement => resolveColumnDefaultInCommandInputQuery(i)

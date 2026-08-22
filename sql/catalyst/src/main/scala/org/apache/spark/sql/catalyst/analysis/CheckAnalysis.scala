@@ -328,15 +328,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   def checkAnalysis0(plan: LogicalPlan): Unit = {
-    // The target table is not a child plan of the insert command. We should report errors for table
-    // not found first, instead of errors in the input query of the insert command, by doing a
-    // top-down traversal.
+    // V2WriteCommand.table is not a child plan, so check a missing target explicitly.
     plan.foreach {
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _, _) =>
-        u.tableNotFound(
-          u.multipartIdentifier,
-          searchPathForUnresolvedRelation(u.multipartIdentifier))
-
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val ur = write.table.asInstanceOf[UnresolvedRelation]
