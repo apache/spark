@@ -732,6 +732,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_udf_transpile_unit",
         "pyspark.sql.tests.test_unified_udf",
         "pyspark.sql.tests.test_udtf",
+        "pyspark.sql.tests.mcp.test_mcp_tools",
         "pyspark.sql.tests.test_tvf",
         "pyspark.sql.tests.test_utils",
         "pyspark.sql.tests.test_resources",
@@ -1352,6 +1353,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_window",
+        "pyspark.sql.tests.mcp.test_mcp_integration",
     ],
 )
 
