@@ -751,6 +751,90 @@ false
 
 
 -- !query
+SELECT typeof(coalesce(cast('123' AS CHAR(3)), 1)),
+       typeof(coalesce(cast('123' AS VARCHAR(3)), 1)),
+       typeof(coalesce(cast('123' AS STRING), 1))
+-- !query schema
+struct<typeof(coalesce(CAST(123 AS CHAR(3)), 1)):string,typeof(coalesce(CAST(123 AS VARCHAR(3)), 1)):string,typeof(coalesce(CAST(123 AS STRING), 1)):string>
+-- !query output
+bigint	bigint	bigint
+
+
+-- !query
+SELECT coalesce(cast('123' AS CHAR(3)), 1),
+       coalesce(cast('123' AS VARCHAR(3)), 1),
+       coalesce(cast('123' AS STRING), 1)
+-- !query schema
+struct<coalesce(CAST(123 AS CHAR(3)), 1):bigint,coalesce(CAST(123 AS VARCHAR(3)), 1):bigint,coalesce(CAST(123 AS STRING), 1):bigint>
+-- !query output
+123	123	123
+
+
+-- !query
+SELECT cast('123' AS CHAR(3)) = 123,
+       cast('123' AS VARCHAR(3)) = 123,
+       cast('123' AS STRING) = 123
+-- !query schema
+struct<(CAST(123 AS CHAR(3)) = 123):boolean,(CAST(123 AS VARCHAR(3)) = 123):boolean,(CAST(123 AS STRING) = 123):boolean>
+-- !query output
+true	true	true
+
+
+-- !query
+SELECT typeof(coalesce(cast('1.5' AS CHAR(3)), 1.5)),
+       typeof(coalesce(cast('1.5' AS VARCHAR(3)), 1.5)),
+       typeof(coalesce(cast('1.5' AS STRING), 1.5))
+-- !query schema
+struct<typeof(coalesce(CAST(1.5 AS CHAR(3)), 1.5)):string,typeof(coalesce(CAST(1.5 AS VARCHAR(3)), 1.5)):string,typeof(coalesce(CAST(1.5 AS STRING), 1.5)):string>
+-- !query output
+double	double	double
+
+
+-- !query
+SELECT cast('2020-01-02' AS CHAR(10)) = date'2020-01-02',
+       cast('2020-01-02' AS VARCHAR(10)) = date'2020-01-02',
+       cast('2020-01-02' AS STRING) = date'2020-01-02'
+-- !query schema
+struct<(CAST(2020-01-02 AS CHAR(10)) = DATE '2020-01-02'):boolean,(CAST(2020-01-02 AS VARCHAR(10)) = DATE '2020-01-02'):boolean,(CAST(2020-01-02 AS STRING) = DATE '2020-01-02'):boolean>
+-- !query output
+true	true	true
+
+
+-- !query
+SELECT cast('true' AS CHAR(4)) = true,
+       cast('true' AS VARCHAR(4)) = true,
+       cast('true' AS STRING) = true
+-- !query schema
+struct<(CAST(true AS CHAR(4)) = true):boolean,(CAST(true AS VARCHAR(4)) = true):boolean,(CAST(true AS STRING) = true):boolean>
+-- !query output
+true	true	true
+
+
+-- !query
+SELECT typeof(coalesce(cast('true' AS CHAR(4)), true))
+-- !query schema
+struct<typeof(coalesce(CAST(true AS CHAR(4)), true)):string>
+-- !query output
+boolean
+
+
+-- !query
+SELECT typeof(coalesce(cast('true' AS VARCHAR(4)), true))
+-- !query schema
+struct<typeof(coalesce(CAST(true AS VARCHAR(4)), true)):string>
+-- !query output
+boolean
+
+
+-- !query
+SELECT typeof(coalesce(cast('true' AS STRING), true))
+-- !query schema
+struct<typeof(coalesce(CAST(true AS STRING), true)):string>
+-- !query output
+boolean
+
+
+-- !query
 SELECT typeof(array(cast('a' AS CHAR(2)), cast('bb' AS CHAR(3))))
 -- !query schema
 struct<typeof(array(CAST(a AS CHAR(2)), CAST(bb AS CHAR(3)))):string>
@@ -812,6 +896,126 @@ SELECT length(c), length(v) FROM char_varchar_std
 struct<length(c):int,length(v):int>
 -- !query output
 5	2
+
+
+-- !query
+CREATE TABLE char_varchar_std_ctas USING parquet AS SELECT c, v FROM char_varchar_std
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT typeof(c), typeof(v) FROM char_varchar_std_ctas
+-- !query schema
+struct<typeof(c):string,typeof(v):string>
+-- !query output
+char(5)	varchar(5)
+
+
+-- !query
+CREATE VIEW char_varchar_std_view AS SELECT c FROM char_varchar_std
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT typeof(c) FROM char_varchar_std_view
+-- !query schema
+struct<typeof(c):string>
+-- !query output
+char(5)
+
+
+-- !query
+CREATE VIEW char_varchar_std_view_v AS SELECT v FROM char_varchar_std
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT typeof(v) FROM char_varchar_std_view_v
+-- !query schema
+struct<typeof(v):string>
+-- !query output
+varchar(5)
+
+
+-- !query
+WITH t AS (SELECT c, v FROM char_varchar_std) SELECT typeof(c), typeof(v) FROM t
+-- !query schema
+struct<typeof(c):string,typeof(v):string>
+-- !query output
+char(5)	varchar(5)
+
+
+-- !query
+CREATE TABLE char_varchar_std_orc (c CHAR(5), v VARCHAR(5)) USING orc
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO char_varchar_std_orc VALUES ('ab', 'cd')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT typeof(c), typeof(v) FROM char_varchar_std_orc
+-- !query schema
+struct<typeof(c):string,typeof(v):string>
+-- !query output
+char(5)	varchar(5)
+
+
+-- !query
+SELECT concat('[', c, ']'), concat('[', v, ']') FROM char_varchar_std_orc
+-- !query schema
+struct<concat([, c, ]):string,concat([, v, ]):string>
+-- !query output
+[ab   ]	[cd]
+
+
+-- !query
+DROP VIEW char_varchar_std_view_v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW char_varchar_std_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE char_varchar_std_ctas
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE char_varchar_std_orc
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
