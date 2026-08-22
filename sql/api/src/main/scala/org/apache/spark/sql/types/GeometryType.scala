@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+import com.fasterxml.jackson.core.JsonGenerator
 import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
@@ -81,6 +82,10 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
    * and only fixed SRID types can be stored. This is also in accordance to storage formats.
    */
   override def jsonValue: JValue = JString(s"geometry($crs)")
+
+  override private[sql] def writeJsonTo(generator: JsonGenerator): Unit = {
+    generator.writeString(s"geometry($crs)")
+  }
 
   private[spark] override def asNullable: GeometryType = this
 
