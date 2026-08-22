@@ -1236,11 +1236,13 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val keySchema = new StructType().add("id", IntegerType)
     val userSchema = keySchema.add("value", StringType)
 
-    val aux = auxTableOf(userSchema)(Row(1, "aux", 40L, null, Row(40L), null))
+    // A standalone delete at 40 found nothing live to close, so it survives in the auxiliary
+    // table as a tombstone. The upsert at 42 then opened a run in the gap after it.
+    val aux = auxTableOf(userSchema)(Row(1, null, 40L, 40L, Row(40L), null))
     val target = targetTableOf(userSchema)(Row(1, "target", 42L, null, Row(42L)))
     val minSeq = minSeqOf(keySchema)(Row(1, 50L))
 
-    // The target's row at 42 is the cutoff, so the auxiliary row at 40 falls below it.
+    // The target's row at 42 is the cutoff, so the auxiliary tombstone at 40 falls below it.
     checkAnswer(
       df = findAffectedTargetRows(processor, target = target, aux = aux, minSeq = minSeq),
       expectedAnswer = Seq(Row(1, "target", 42L, null, Row(42L)))
@@ -1256,14 +1258,18 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val keySchema = new StructType().add("id", IntegerType)
     val userSchema = keySchema.add("value", StringType)
 
-    val aux = auxTableOf(userSchema)(Row(1, "aux", 42L, null, Row(42L), null))
-    val target = targetTableOf(userSchema)(Row(1, "target", 40L, null, Row(40L)))
+    // A delete at 41 closed the target's run, leaving no tombstone of its own since the closed
+    // row already carries that boundary. A later standalone delete at 42 landed in the gap after
+    // it with nothing to close, and so survives in the auxiliary table.
+    val aux = auxTableOf(userSchema)(Row(1, null, 42L, 42L, Row(42L), null))
+    val target = targetTableOf(userSchema)(Row(1, "target", 40L, 41L, Row(40L)))
     val minSeq = minSeqOf(keySchema)(Row(1, 50L))
 
-    // The auxiliary row at 42 is the cutoff, so the target's row at 40 falls below it.
+    // The tombstone at 42 is the cutoff, so the target's row at 40 falls below it - correctly,
+    // since that interval already closed at 41, before anything in the microbatch.
     checkAnswer(
       df = findAffectedAuxRows(processor, aux = aux, target = target, minSeq = minSeq),
-      expectedAnswer = Seq(Row(1, "aux", 42L, null, Row(42L)))
+      expectedAnswer = Seq(Row(1, null, 42L, 42L, Row(42L)))
     )
     checkAnswer(
       df = findAffectedTargetRows(processor, target = target, aux = aux, minSeq = minSeq),

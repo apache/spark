@@ -301,14 +301,14 @@ case class Uniform(
   override def third: Expression = seedExpression
 
   override def withNewSeed(newSeed: Long): Expression =
-    Uniform(min, max, Literal(newSeed, LongType), hideSeed)
+    Uniform(min, max, Literal(newSeed, LongType), hideSeed, timeZoneId)
 
   override def withShiftedSeed(shift: Long): Expression =
-    Uniform(min, max, Literal(seed + shift, LongType), hideSeed)
+    Uniform(min, max, Literal(seed + shift, LongType), hideSeed, timeZoneId)
 
   override def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
-    Uniform(newFirst, newSecond, newThird, hideSeed)
+    copy(min = newFirst, max = newSecond, seedExpression = newThird)
 
   override def replacement: Expression = {
     if (Seq(min, max, seedExpression).exists(_.dataType == NullType)) {
