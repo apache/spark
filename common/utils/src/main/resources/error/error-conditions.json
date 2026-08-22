@@ -8889,6 +8889,16 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "EXTERNAL_UDF" : {
+        "message" : [
+          "External UDF expressions. Set <config> to true to enable them."
+        ]
+      },
+      "EXTERNAL_UDF_IN_ON_CLAUSE" : {
+        "message" : [
+          "External UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
       "GEOSPATIAL_DISABLED" : {
         "message" : [
           "Geospatial feature is disabled."
@@ -9043,6 +9053,11 @@
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
+      "PYTHON_UDF_TO_EXTERNAL_UDF" : {
+        "message" : [
+          "Legacy scalar PythonUDF expressions in the unified execution path. Set <config> to true to convert them to external UDF expressions."
         ]
       },
       "QUERY_ONLY_CORRUPT_RECORD_COLUMN" : {

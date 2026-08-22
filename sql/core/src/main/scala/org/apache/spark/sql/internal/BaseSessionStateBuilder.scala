@@ -328,7 +328,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on `catalog` and `experimentalMethods` fields.
    */
   protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
+    new SparkOptimizer(catalogManager, catalog, experimentalMethods, session.sparkContext.conf) {
       override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
         super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 

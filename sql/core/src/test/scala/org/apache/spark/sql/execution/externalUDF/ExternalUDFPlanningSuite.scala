@@ -20,13 +20,13 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan,
+import org.apache.spark.sql.catalyst.plans.logical.{EvalExternalUDF, LogicalPlan,
   MapInPandas, MapPartitionsExternalUDF}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.python.{MapInPandasExec,
+import org.apache.spark.sql.execution.python.{BatchEvalPythonExec, MapInPandasExec,
   UserDefinedPythonFunction}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -62,9 +62,22 @@ trait ExternalUDFPlanningTestBase extends SharedSparkSession {
       pythonEvalType = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
       udfDeterministic = true)
 
+  protected val scalarPythonUDF: UserDefinedPythonFunction =
+    UserDefinedPythonFunction(
+      name = "dummyScalarPythonUDF",
+      func = dummyPythonFunction,
+      dataType = IntegerType,
+      pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+
   protected def applyMapInPandas(): DataFrame = {
     val inputDF = Seq(("hello", 1)).toDF("a", "b")
     inputDF.mapInPandas(mapInPandasUDF(col("a"), col("b")))
+  }
+
+  protected def applyScalarPythonUDF(): DataFrame = {
+    val inputDF = Seq(("hello", 1)).toDF("a", "b")
+    inputDF.select(scalarPythonUDF(col("b")))
   }
 
   protected def assertLogicalNode[T <: LogicalPlan: ClassTag](
@@ -76,6 +89,17 @@ trait ExternalUDFPlanningTestBase extends SharedSparkSession {
     assert(node.isDefined,
       s"Expected ${tag.runtimeClass.getSimpleName}" +
         " in logical plan")
+  }
+
+  protected def assertOptimizedLogicalNode[T <: LogicalPlan: ClassTag](
+      df: DataFrame): Unit = {
+    val tag = implicitly[ClassTag[T]]
+    val node = df.queryExecution.optimizedPlan.collectFirst {
+      case n if tag.runtimeClass.isInstance(n) => n
+    }
+    assert(node.isDefined,
+      s"Expected ${tag.runtimeClass.getSimpleName}" +
+        " in optimized logical plan")
   }
 
   protected def assertPhysicalNode[T <: SparkPlan: ClassTag](
@@ -107,6 +131,11 @@ class ClassicUDFPlanningSuite
     val result = applyMapInPandas()
     assertPhysicalNode[MapInPandasExec](result)
   }
+
+  test("scalar Python UDF uses BatchEvalPythonExec physical node") {
+    val result = applyScalarPythonUDF()
+    assertPhysicalNode[BatchEvalPythonExec](result)
+  }
 }
 
 /**
@@ -117,8 +146,9 @@ class UnifiedUDFPlanningSuite
     extends ExternalUDFPlanningTestBase {
 
   override def sparkConf: SparkConf =
-    super.sparkConf.set(
-      SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key, "true")
+    super.sparkConf
+      .set(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key, "true")
+      .set(SQLConf.UNIFIED_UDF_EXECUTION_CONVERT_PYTHON_UDF_ENABLED.key, "true")
 
   test("mapInPandas uses MapPartitionsExternalUDF logical node") {
     val result = applyMapInPandas()
@@ -129,5 +159,33 @@ class UnifiedUDFPlanningSuite
       " physical node") {
     val result = applyMapInPandas()
     assertPhysicalNode[MapPartitionsExternalUDFExec](result)
+  }
+
+  test("scalar Python UDF uses EvalExternalUDF logical node") {
+    val result = applyScalarPythonUDF()
+    assertOptimizedLogicalNode[EvalExternalUDF](result)
+  }
+}
+
+/**
+ * Tests that the unified execution path rejects legacy scalar Python UDF
+ * expressions when their conversion config is disabled.
+ */
+class UnsupportedLegacyPythonUDFPlanningSuite
+    extends ExternalUDFPlanningTestBase {
+
+  override def sparkConf: SparkConf =
+    super.sparkConf.set(
+      SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key, "true")
+
+  test("legacy scalar Python UDF is rejected") {
+    val exception = intercept[SparkUnsupportedOperationException] {
+      applyScalarPythonUDF().queryExecution.optimizedPlan
+    }
+    checkError(
+      exception = exception,
+      condition = "UNSUPPORTED_FEATURE.PYTHON_UDF_TO_EXTERNAL_UDF",
+      parameters = Map(
+        "config" -> SQLConf.UNIFIED_UDF_EXECUTION_CONVERT_PYTHON_UDF_ENABLED.key))
   }
 }

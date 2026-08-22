@@ -51,6 +51,9 @@ case class MapPartitionsExternalUDFExec(
     child: SparkPlan)
   extends ExternalUDFExec {
 
+  assert(function.workerSpec == workerSpec,
+    "The map partitions UDF must use the node's worker specification")
+
   // Map partitions always operate on StructTypes
   override def output: Seq[Attribute] = toAttributes(
     function.dataType.asInstanceOf[StructType]

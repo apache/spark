@@ -161,7 +161,15 @@ message WorkerCapabilities {
     // (Optional)
     optional bool supports_reuse = 4;
 
-    // To be extended with UDF chaining, ...
+    // Whether one UDF session can evaluate multiple UDF calls. This includes
+    // nested chains, where one UDF consumes another UDF's output, and fused
+    // independent calls over the same input.
+    //
+    // When this is not supported, the engine creates a separate session for
+    // every UDF call.
+    //
+    // (Optional)
+    optional bool supports_udf_chaining = 5;
 }
 
 // The worker that will be created to process UDFs
