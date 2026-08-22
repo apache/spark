@@ -1059,6 +1059,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       Seq((true, true, 5), (false, true, 3), (true, false, 7), (false, false, 5)).foreach {
         case (partial, filter, expected) =>
           withSQLConf(
+            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> true.toString,
             SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString,
@@ -1109,6 +1110,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       Seq(("true", 5), ("false", 5)).foreach {
         case (enable, expected) =>
           withSQLConf(
+            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> true.toString,
             SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
@@ -1155,6 +1157,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       Seq(("true", 5), ("false", 5)).foreach {
         case (enable, expected) =>
           withSQLConf(
+            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> true.toString,
             SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
