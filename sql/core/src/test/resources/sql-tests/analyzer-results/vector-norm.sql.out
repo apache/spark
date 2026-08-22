@@ -635,3 +635,76 @@ SELECT vector_normalize(array(float('inf'), 1.0F), 2.0F)
 -- !query analysis
 Project [vector_normalize(array(cast(inf as float), 1.0), 2.0) AS vector_normalize(array(inf, 1.0), 2.0)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(float('nan')), float('inf'))
+-- !query analysis
+Project [vector_norm(array(cast(nan as float)), cast(inf as float)) AS vector_norm(array(nan), inf)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(float('nan'), 5.0F), float('inf'))
+-- !query analysis
+Project [vector_norm(array(cast(nan as float), 5.0), cast(inf as float)) AS vector_norm(array(nan, 5.0), inf)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(5.0F, float('nan')), float('inf'))
+-- !query analysis
+Project [vector_norm(array(5.0, cast(nan as float)), cast(inf as float)) AS vector_norm(array(5.0, nan), inf)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(float('nan'), float('inf')), float('inf'))
+-- !query analysis
+Project [vector_norm(array(cast(nan as float), cast(inf as float)), cast(inf as float)) AS vector_norm(array(nan, inf), inf)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(float('nan'), 5.0F), 1.0F)
+-- !query analysis
+Project [vector_norm(array(cast(nan as float), 5.0), 1.0) AS vector_norm(array(nan, 5.0), 1.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(float('nan'), 5.0F), 2.0F)
+-- !query analysis
+Project [vector_norm(array(cast(nan as float), 5.0), 2.0) AS vector_norm(array(nan, 5.0), 2.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(
+  array(1.0F, 2.0F, 3.0F, 4.0F, 5.0F, float('nan'), 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F),
+  float('inf')
+)
+-- !query analysis
+Project [vector_norm(array(1.0, 2.0, 3.0, 4.0, 5.0, cast(nan as float), 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0), cast(inf as float)) AS vector_norm(array(1.0, 2.0, 3.0, 4.0, 5.0, nan, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0), inf)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(float('nan'), CAST(NULL AS FLOAT)), float('inf'))
+-- !query analysis
+Project [vector_norm(array(cast(nan as float), cast(null as float)), cast(inf as float)) AS vector_norm(array(nan, CAST(NULL AS FLOAT)), inf)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_normalize(array(float('nan')), float('inf'))
+-- !query analysis
+Project [vector_normalize(array(cast(nan as float)), cast(inf as float)) AS vector_normalize(array(nan), inf)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_normalize(array(float('nan'), 5.0F), float('inf'))
+-- !query analysis
+Project [vector_normalize(array(cast(nan as float), 5.0), cast(inf as float)) AS vector_normalize(array(nan, 5.0), inf)#x]
++- OneRowRelation
