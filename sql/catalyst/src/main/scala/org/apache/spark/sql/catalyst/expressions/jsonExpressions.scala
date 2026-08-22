@@ -265,7 +265,7 @@ case class MultiGetJsonObject(
 // scalastyle:on line.size.limit line.contains.tab
 case class JsonTuple(children: Seq[Expression])
   extends Generator
-  with ImplicitCastInputTypes
+  with ExpectsInputTypes
   with QueryErrorsBase {
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -291,8 +291,8 @@ case class JsonTuple(children: Seq[Expression])
   }
 
   // The extracted fields are values from inside the JSON document, so they do not carry the
-  // CHAR(n)/VARCHAR(n) length of the document itself. ImplicitTypeCasts promotes the JSON
-  // argument to STRING first.
+  // CHAR(n)/VARCHAR(n) length of the document itself. ExpectsInputTypes CHAR/VARCHAR promotion
+  // turns the JSON argument into STRING first without opening general implicit casts.
   private lazy val fieldType: DataType =
     children.head.dataType
 

@@ -357,9 +357,18 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
 
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val charLit = Literal.create("ab", CharType(2))
-      ruleTest(rule,
-        Concat(Seq(charLit, charLit)),
-        Concat(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+      val collatedChar = Literal.create("ab", CharType(2, "UTF8_LCASE"))
+      val collatedString = StringType("UTF8_LCASE")
+      Seq(TypeCoercion.ConcatCoercion, AnsiTypeCoercion.ConcatCoercion).foreach { r =>
+        ruleTest(r,
+          Concat(Seq(charLit, charLit)),
+          Concat(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+        ruleTest(r,
+          Concat(Seq(collatedChar, collatedChar)),
+          Concat(Seq(
+            Cast(collatedChar, collatedString),
+            Cast(collatedChar, collatedString))))
+      }
     }
   }
 
@@ -414,6 +423,23 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
       ruleTest(rule,
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
+    }
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(5))
+      val collatedChar = Literal.create("ab", CharType(5, "UTF8_LCASE"))
+      val collatedString = StringType("UTF8_LCASE")
+      Seq(TypeCoercion.EltCoercion, AnsiTypeCoercion.EltCoercion).foreach { r =>
+        ruleTest(r,
+          Elt(Seq(Literal(1), charLit, charLit)),
+          Elt(Seq(Literal(1), Cast(charLit, StringType), Cast(charLit, StringType))))
+        ruleTest(r,
+          Elt(Seq(Literal(1), collatedChar, collatedChar)),
+          Elt(Seq(
+            Literal(1),
+            Cast(collatedChar, collatedString),
+            Cast(collatedChar, collatedString))))
+      }
     }
   }
 

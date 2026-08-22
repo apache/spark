@@ -985,6 +985,29 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT cast('he' AS CHAR(4)) || cast('llo' AS CHAR(3)) AS c"),
         Row("he  llo"))
+      // Collated CHAR must promote to the same collation, not UTF8_BINARY STRING.
+      assert(sql(
+        """SELECT concat(
+          |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === StringType("UTF8_LCASE"))
+      checkAnswer(
+        sql("""SELECT concat(
+          |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("a  b  "))
+      assert(sql(
+        """SELECT elt(
+          |  1,
+          |  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+          |  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === StringType("UTF8_LCASE"))
+      checkAnswer(
+        sql("""SELECT elt(
+          |  1,
+          |  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+          |  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("ab   "))
       assert(sql("SELECT substr(cast('hello' AS VARCHAR(5)), 1, 2) AS c")
         .schema.head.dataType === StringType)
       assert(sql(

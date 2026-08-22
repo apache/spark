@@ -223,6 +223,44 @@ Project [typeof(concat(cast(cast(a as char(2)) as string), cast(cast(b as char(3
 
 
 -- !query
+SELECT typeof(concat(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)))
+-- !query analysis
+Project [typeof(concat(cast(cast(cast(a as char(2) collate UTF8_LCASE) as char(3) collate UTF8_LCASE) as string collate UTF8_LCASE), cast(cast(b as char(3) collate UTF8_LCASE) as string collate UTF8_LCASE))) AS typeof(concat(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(b AS CHAR(3) COLLATE UTF8_LCASE)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT concat('<', concat(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)), '>')
+-- !query analysis
+Project [concat(<, concat(cast(cast(cast(a as char(2) collate UTF8_LCASE) as char(3) collate UTF8_LCASE) as string collate UTF8_LCASE), cast(cast(b as char(3) collate UTF8_LCASE) as string collate UTF8_LCASE)), >) AS concat('<' collate UTF8_LCASE, concat(CAST(a AS CHAR(2) COLLATE UTF8_LCASE), CAST(b AS CHAR(3) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(elt(
+  1,
+  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)))
+-- !query analysis
+Project [typeof(elt(1, cast(cast(ab as char(5) collate UTF8_LCASE) as string collate UTF8_LCASE), cast(cast(cast(x as char(1) collate UTF8_LCASE) as char(5) collate UTF8_LCASE) as string collate UTF8_LCASE), true)) AS typeof(elt(1, CAST(ab AS CHAR(5) COLLATE UTF8_LCASE), CAST(x AS CHAR(1) COLLATE UTF8_LCASE)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT concat('<', elt(
+  1,
+  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)), '>')
+-- !query analysis
+Project [concat(<, elt(1, cast(cast(ab as char(5) collate UTF8_LCASE) as string collate UTF8_LCASE), cast(cast(cast(x as char(1) collate UTF8_LCASE) as char(5) collate UTF8_LCASE) as string collate UTF8_LCASE), true), >) AS concat('<' collate UTF8_LCASE, elt(1, CAST(ab AS CHAR(5) COLLATE UTF8_LCASE), CAST(x AS CHAR(1) COLLATE UTF8_LCASE)), '>' collate UTF8_LCASE)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT typeof(trim(cast('ab  ' AS CHAR(4))))
 -- !query analysis
 Project [typeof(trim(cast(cast(ab   as char(4)) as string), None)) AS typeof(trim(CAST(ab   AS CHAR(4))))#x]

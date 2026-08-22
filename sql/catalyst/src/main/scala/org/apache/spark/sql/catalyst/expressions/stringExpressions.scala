@@ -4122,7 +4122,7 @@ case class Sentences(
  */
 case class StringSplitSQL(
     str: Expression,
-    delimiter: Expression) extends BinaryExpression with ImplicitCastInputTypes {
+    delimiter: Expression) extends BinaryExpression with ExpectsInputTypes {
   override def dataType: DataType =
     ArrayType(str.dataType, containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =

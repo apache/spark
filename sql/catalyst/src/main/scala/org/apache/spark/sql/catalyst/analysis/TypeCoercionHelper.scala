@@ -192,16 +192,14 @@ abstract class TypeCoercionHelper {
     }
 
   /**
-   * Concat/Elt stringify non-binary inputs. Promote CHAR/VARCHAR to unbounded STRING with the
-   * same collation instead of targeting the default UTF8_BINARY StringType, which would not
-   * accept a collated constrained type.
+   * Concat/Elt stringify non-binary inputs. CHAR/VARCHAR go through
+   * [[charVarcharToPlainString]] so a collated constrained type promotes to unbounded STRING
+   * with the same collation. Non-strings still target the default UTF8_BINARY StringType.
    */
-  protected def implicitCastToString(e: Expression): Expression = e.dataType match {
-    case st: StringType
-        if conf.charVarcharStandardSemantics && !StringHelper.isPlainString(st) =>
-      implicitCast(e, StringHelper.plainStringType(st)).getOrElse(e)
-    case _ =>
-      implicitCast(e, StringType).getOrElse(e)
+  protected def implicitCastToString(e: Expression): Expression = {
+    charVarcharToPlainString(e.dataType, StringTypeWithCollation(supportsTrimCollation = true))
+      .map(dt => if (dt == e.dataType) e else Cast(e, dt))
+      .getOrElse(implicitCast(e, StringType).getOrElse(e))
   }
 
   /**
