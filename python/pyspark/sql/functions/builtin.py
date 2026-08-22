@@ -33011,6 +33011,57 @@ def bitmap_construct_agg(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def bitmap_contains(bitmap: "ColumnOrName", bit_position: "ColumnOrName") -> Column:
+    """
+    Returns true if the bit at the given bucket-local position is set in the bitmap.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    bitmap : :class:`~pyspark.sql.Column` or column name
+        The input bitmap. The column must evaluate to binary.
+    bit_position : :class:`~pyspark.sql.Column` or column name
+        The numeric bit position to check. The value is cast to a long using Spark cast
+        semantics.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A boolean column. A NULL bitmap or position produces a NULL result.
+
+    Notes
+    -----
+    ``bit_position`` is local to one bitmap bucket. To query an original value, use
+    :func:`bitmap_bit_position` and separately match :func:`bitmap_bucket_number` to the bitmap
+    bucket. A negative position, a position at or above 32768, or a position beyond the actual
+    bitmap length produces false.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("01", "00")], ["a", "b"])
+    >>> df.select(
+    ...     sf.bitmap_contains(sf.to_binary(df.a, sf.lit("hex")), sf.lit(0)),
+    ...     sf.bitmap_contains(sf.to_binary(df.b, sf.lit("hex")), sf.lit(0)),
+    ... ).show()
+    +-------------------------------------+-------------------------------------+
+    |bitmap_contains(to_binary(a, hex), 0)|bitmap_contains(to_binary(b, hex), 0)|
+    +-------------------------------------+-------------------------------------+
+    |                                 true|                                false|
+    +-------------------------------------+-------------------------------------+
+    """
+    return _invoke_function_over_columns("bitmap_contains", bitmap, bit_position)
+
+
+@_try_remote_functions
 def bitmap_count(col: "ColumnOrName") -> Column:
     """
     Returns the number of set bits in the input bitmap.

@@ -5656,6 +5656,13 @@ def bitmap_construct_agg(col: "ColumnOrName") -> Column:
 bitmap_construct_agg.__doc__ = pysparkfuncs.bitmap_construct_agg.__doc__
 
 
+def bitmap_contains(bitmap: "ColumnOrName", bit_position: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_contains", bitmap, bit_position)
+
+
+bitmap_contains.__doc__ = pysparkfuncs.bitmap_contains.__doc__
+
+
 def bitmap_count(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_count", col)
 

@@ -93,6 +93,45 @@ class BitmapExpressionUtilsSuite extends SparkFunSuite {
     assert(BitmapExpressionUtils.bitmapCount(bitmap) == 15L)
   }
 
+  test("bitmap_contains with set and unset bits") {
+    val bitmap = createBitmap()
+    setBitmapBits(bitmap, 0, 0x81)
+    setBitmapBits(bitmap, 1, 0x01)
+    val original = bitmap.clone()
+
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, 0))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, 1))
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, 7))
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, 8))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, 9))
+    assert(bitmap.sameElements(original))
+  }
+
+  test("bitmap_contains with empty and short bitmaps") {
+    val emptyBitmap = Array.empty[Byte]
+    assert(!BitmapExpressionUtils.bitmapContains(emptyBitmap, 0))
+
+    val shortBitmap = Array[Byte](0x01, 0x80.toByte)
+    assert(BitmapExpressionUtils.bitmapContains(shortBitmap, 0))
+    assert(BitmapExpressionUtils.bitmapContains(shortBitmap, 15))
+    assert(!BitmapExpressionUtils.bitmapContains(shortBitmap, 16))
+    assert(!BitmapExpressionUtils.bitmapContains(shortBitmap, BitmapExpressionUtils.NUM_BITS - 1))
+  }
+
+  test("bitmap_contains at fixed-range and long boundaries") {
+    val bitmap = createBitmap()
+    bitmap(bitmap.length - 1) = 0x80.toByte
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, BitmapExpressionUtils.NUM_BITS - 1))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, BitmapExpressionUtils.NUM_BITS))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, -1))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, Long.MinValue))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, Long.MaxValue))
+
+    val allOnesBitmap = Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0xFF.toByte)
+    assert(BitmapExpressionUtils.bitmapContains(allOnesBitmap, 0))
+    assert(BitmapExpressionUtils.bitmapContains(allOnesBitmap, 32767))
+  }
+
   test("scalar bitmap binary operations") {
     val bitmap1 = Array(0xf0.toByte, 0x0f.toByte)
     val bitmap2 = Array(0x70.toByte)
