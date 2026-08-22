@@ -8240,6 +8240,12 @@
     ],
     "sqlState" : "42K0G"
   },
+  "UNABLE_TO_CREATE_DATABASE" : {
+    "message" : [
+      "Unable to create database <name> as failed to create its directory <locationUri>."
+    ],
+    "sqlState" : "58030"
+  },
   "UNABLE_TO_FETCH_HIVE_TABLES" : {
     "message" : [
       "Unable to fetch tables of Hive database: <dbName>."
@@ -10806,11 +10812,6 @@
   "_LEGACY_ERROR_TEMP_2032" : {
     "message" : [
       "<fieldCannotBeNullMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2033" : {
-    "message" : [
-      "Unable to create database <name> as failed to create its directory <locationUri>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2034" : {
