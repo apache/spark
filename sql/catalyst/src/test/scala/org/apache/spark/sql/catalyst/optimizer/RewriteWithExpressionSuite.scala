@@ -59,6 +59,45 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(Optimizer.execute(plan), testRelation.select((a + a).as("col")))
   }
 
+  test("applyForExpression inlines With common expressions") {
+    val a = testRelation.output.head
+    val expr = With(a) { case Seq(ref) =>
+      ref + ref
+    }
+    val rewritten = RewriteWithExpression.applyForExpression(expr)
+    assert(!rewritten.isInstanceOf[With])
+    assert(rewritten == a + a)
+  }
+
+  test("applyForExpression always inlines non-cheap common expressions") {
+    val a = testRelation.output.head
+    val expr = With(a + a) { case Seq(ref) =>
+      ref * ref
+    }
+    val rewritten = RewriteWithExpression.applyForExpression(expr)
+    assert(!rewritten.exists(_.isInstanceOf[With]))
+    assert(rewritten == (a + a) * (a + a))
+  }
+
+  test("applyForExpression handles nested With") {
+    val a = testRelation.output.head
+    val b = testRelation.output.last
+    val inner = With(a + a) { case Seq(ref) =>
+      ref * ref
+    }
+    val outer = With(inner + b) { case Seq(ref) =>
+      ref + ref
+    }
+    val rewritten = RewriteWithExpression.applyForExpression(outer)
+    assert(!rewritten.exists(_.isInstanceOf[With]))
+    assert(!rewritten.exists(_.isInstanceOf[CommonExpressionRef]))
+  }
+
+  test("applyForExpression leaves expressions without With unchanged") {
+    val a = testRelation.output.head
+    assert(RewriteWithExpression.applyForExpression(a + a) == a + a)
+  }
+
   test("non-cheap common expression") {
     val a = testRelation.output.head
     val expr = With(a + a) { case Seq(ref) =>

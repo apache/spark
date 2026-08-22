@@ -66,6 +66,23 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * Rewrites the `With` expressions in a single expression tree by inlining their common
+   * expressions. Uses `transformUp` to handle nested `With`.
+   *
+   * Does not descend into subquery plans (e.g. `ScalarSubquery`). A caller whose expression
+   * may contain a subquery must rewrite those plans separately.
+   */
+  def applyForExpression(expression: Expression): Expression = {
+    expression.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case With(child, defs) =>
+        val refToExpr = defs.map(commonExprDef => commonExprDef.id -> commonExprDef.child).toMap
+        child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+          case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)
+        }
+    }
+  }
+
   private def applyInternal(p: LogicalPlan): LogicalPlan = {
     val inputPlans = p.children
     val commonExprIdSet = p.expressions
@@ -181,16 +198,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           rewriteWithExprAndInputPlans(
             _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith))
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
+        // For With in the conditional branches, they may not be evaluated at all and we can't
+        // pull the common expressions into a project which will always be evaluated. Inline it.
         // Use transformUp to handle nested With.
-        newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          case With(child, defs) =>
-            // For With in the conditional branches, they may not be evaluated at all and we can't
-            // pull the common expressions into a project which will always be evaluated. Inline it.
-            val refToExpr = defs.map(d => d.id -> d.child).toMap
-            child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-              case ref: CommonExpressionRef => refToExpr(ref.id)
-            }
-        }
+        applyForExpression(newExpr)
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(
