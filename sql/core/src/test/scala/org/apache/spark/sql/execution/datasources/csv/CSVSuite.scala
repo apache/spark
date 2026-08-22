@@ -4073,6 +4073,17 @@ abstract class CSVSuite
       }
     }
   }
+
+  test("SPARK-58484: count with a pushed filter that has no column references") {
+    withTempDir { dir =>
+      val path = new File(dir, "csv").getCanonicalPath
+      Seq(1).toDF("c0").write.csv(path)
+      withTempView("m") {
+        spark.read.schema("c0 INT").csv(path).createOrReplaceTempView("m")
+        checkAnswer(sql("SELECT COUNT(*) FROM m WHERE (SELECT BOOL_OR(true) FROM m)"), Row(1))
+      }
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
