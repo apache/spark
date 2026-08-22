@@ -34,6 +34,7 @@ import org.apache.spark.ui.jobs.ApiHelper
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
   private val pandasOnSparkConfPrefix = "pandas_on_Spark."
+  private val planNodeIdPattern = """^(.*)\((\d+)\)(.*)$""".r
 
   private val sqlStore = parent.sqlStore
   private val groupSubExecutionEnabled = parent.conf.get(UI_SQL_GROUP_SUB_EXECUTION_ENABLED)
@@ -120,7 +121,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
       summary ++
         planVisualization(request, metrics, graph) ++
-        physicalPlanDescription(executionUIData.physicalPlanDescription) ++
+        physicalPlanDescription(executionUIData.physicalPlanDescription, graph) ++
         jobsTable(request, executionUIData) ++
         modifiedConfigs(configs.filter { case (k, _) => !k.startsWith(pandasOnSparkConfPrefix) }) ++
         modifiedPandasOnSparkConfigs(
@@ -229,6 +230,16 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         <div class="node-details">
           {graph.makeNodeDetailsJson(metrics)}
         </div>
+        <div class="plan-node-links">
+          {graph.allNodes.map {
+            case cluster: SparkPlanGraphCluster =>
+              <div data-graph-node-id={cluster.id.toString}
+                   data-plan-node-ids={cluster.subPlanNodeIds.mkString(",")}></div>
+            case node =>
+              <div data-graph-node-id={node.id.toString}
+                   data-plan-node-id={node.planNodeId.map(_.toString).getOrElse("")}></div>
+          }}
+        </div>
       </div>
       {planVisualizationResources(request)}
     </div>
@@ -312,9 +323,14 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     // scalastyle:on line.size.limit
   }
 
-  private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
+  private def physicalPlanDescription(
+      physicalPlanDescription: String,
+      graph: SparkPlanGraph): Seq[Node] = {
     val (initialPlan, finalPlan) = extractInitialAndFinalPlans(physicalPlanDescription)
     val hasDiff = initialPlan.nonEmpty && finalPlan.nonEmpty
+    val graphNodeIdByPlanNodeId = graph.allNodes.flatMap { node =>
+      node.planNodeId.map(_ -> node.id)
+    }.toMap
 
     // scalastyle:off line.size.limit
     <div>
@@ -342,7 +358,9 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             </ul>
             <div class="tab-content">
               <div class="tab-pane fade show active" id="plan-unified-tab" role="tabpanel">
-                <pre>{physicalPlanDescription}</pre>
+                <div class="physical-plan-text">
+                  {renderPhysicalPlanLines(physicalPlanDescription, graphNodeIdByPlanNodeId)}
+                </div>
               </div>
               <div class="tab-pane fade" id="plan-split-tab" role="tabpanel">
                 <div class="row">
@@ -359,11 +377,29 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             </div>
           </div>
         } else {
-          <pre>{physicalPlanDescription}</pre>
+          <div class="physical-plan-text">
+            {renderPhysicalPlanLines(physicalPlanDescription, graphNodeIdByPlanNodeId)}
+          </div>
         }}
       </div>
     </div>
     // scalastyle:on line.size.limit
+  }
+
+  private def renderPhysicalPlanLines(
+      physicalPlanDescription: String,
+      graphNodeIdByPlanNodeId: Map[Long, Long]): Seq[Node] = {
+    physicalPlanDescription.split("\n", -1).toIndexedSeq.map { line =>
+      line match {
+        case planNodeIdPattern(_, planNodeId, _) =>
+          graphNodeIdByPlanNodeId.get(planNodeId.toLong).map { graphNodeId =>
+            <div id={s"plan-node-$planNodeId"}
+                 class="plan-description-line plan-description-operator"
+                 data-graph-node-id={graphNodeId.toString}>{line}</div>
+          }.getOrElse(<div class="plan-description-line">{line}</div>)
+        case _ => <div class="plan-description-line">{line}</div>
+      }
+    }
   }
 
   /**

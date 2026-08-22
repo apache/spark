@@ -396,7 +396,8 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
     val executionJson = mapper.writeValueAsString(executionData).replaceAll("\\s", "")
     assert(executionJson.contains("\"modifiedConfigs\":{}"))
     assert(executionJson.contains(
-      "\"nodes\":[{\"nodeId\":0,\"nodeName\":\"Scantext\",\"metrics\":[]}]"))
+      "\"nodes\":[{\"nodeId\":0,\"nodeName\":\"Scantext\",\"metrics\":[]," +
+        "\"subPlanNodeIds\":[]}]"))
     // totalTaskTime defaults to -1 (unknown) when not provided.
     assert(executionData.totalTaskTime == -1L)
   }
