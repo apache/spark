@@ -287,9 +287,10 @@ case class JsonTuple(children: Seq[Expression])
   }
 
   // The extracted fields are values from inside the JSON document, so they do not carry the
-  // CHAR(n)/VARCHAR(n) length of the document itself (R1).
+  // CHAR(n)/VARCHAR(n) length of the document itself. ImplicitTypeCoercion promotes CHAR/VARCHAR
+  // children to STRING without applying general implicit casts or rewriting untyped NULL.
   private lazy val fieldType: DataType =
-    StringHelper.transformingStringResultType(children.head.dataType)
+    children.head.dataType
 
   override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
     case (_, idx) => StructField(s"c$idx", fieldType, nullable = true)
