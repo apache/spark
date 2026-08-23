@@ -44,53 +44,22 @@ private[aggregate] object ModeKeyNormalizer {
   }
 }
 
-case class Mode(
-    child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0,
-    reverseOpt: Option[Boolean] = None)
-  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
-    with SupportsOrderingWithinGroup with UnaryLike[Expression] {
+/**
+ * Shared collation-aware buffer folding for the `mode` family of aggregates.
+ *
+ * The aggregation buffer keeps the original (float-normalized) values as keys, so under a
+ * non-binary collation two collation-equal strings (e.g. 'b' and 'B' under UTF8_LCASE) land
+ * in separate buffer entries. At eval time [[getCollationAwareBuffer]] folds those entries
+ * into one group keyed on the collation key, summing their counts and keeping the first-seen
+ * original value as the group's representative. Binary-stable types skip the fold entirely
+ * (zero overhead) and complex types (struct/array/map) are handled recursively.
+ *
+ * Mixed into both [[Mode]] and [[PandasMode]] so the two share one implementation.
+ */
+private[aggregate] trait ModeCollationAware { self: Expression =>
+  protected def child: Expression
 
-  def this(child: Expression) = this(child, 0, 0)
-
-  def this(child: Expression, reverse: Boolean) = {
-    this(child, 0, 0, Some(reverse))
-  }
-
-  // Returns null for empty inputs
-  override def nullable: Boolean = true
-
-  override def dataType: DataType = child.dataType
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
-
-  override def prettyName: String = "mode"
-
-  @transient private lazy val keyNormalizer: Any => Any =
-    ModeKeyNormalizer.forType(child.dataType)
-
-  override def update(
-      buffer: OpenHashMap[AnyRef, Long],
-      input: InternalRow): OpenHashMap[AnyRef, Long] = {
-    val key = child.eval(input)
-
-    if (key != null) {
-      buffer.changeValue(keyNormalizer(key).asInstanceOf[AnyRef], 1L, _ + 1L)
-    }
-    buffer
-  }
-
-  override def merge(
-      buffer: OpenHashMap[AnyRef, Long],
-      other: OpenHashMap[AnyRef, Long]): OpenHashMap[AnyRef, Long] = {
-    other.foreach { case (key, count) =>
-      buffer.changeValue(key, count, _ + count)
-    }
-    buffer
-  }
-
-  private def getCollationAwareBuffer(
+  protected def getCollationAwareBuffer(
       childDataType: DataType,
       buffer: OpenHashMap[AnyRef, Long]): Iterable[(AnyRef, Long)] = {
     def groupAndReduceBuffer(groupingFunction: AnyRef => _): Iterable[(AnyRef, Long)] = {
@@ -101,7 +70,11 @@ case class Mode(
         childDataType: DataType): Option[AnyRef => _] = {
       childDataType match {
         case _ if UnsafeRowUtils.isBinaryStable(child.dataType) => None
-        case _ => Some(collationAwareTransform(_, childDataType))
+        // A null key is kept as its own group: PandasMode may store one when `ignoreNA`
+        // is false, and passing null to collationAwareTransform would throw. Mode never
+        // stores a null key, so its behavior is unchanged.
+        case _ => Some((key: AnyRef) =>
+          if (key == null) null else collationAwareTransform(key, childDataType))
       }
     }
     determineBufferingFunction(childDataType).map(groupAndReduceBuffer).getOrElse(buffer)
@@ -147,6 +120,53 @@ case class Mode(
       collationAwareTransform(data.valueArray().get(i, mt.valueType), mt.valueType)
     }
     transformedKeys.zip(transformedValues).toMap
+  }
+}
+
+case class Mode(
+    child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0,
+    reverseOpt: Option[Boolean] = None)
+  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
+    with SupportsOrderingWithinGroup with UnaryLike[Expression] with ModeCollationAware {
+
+  def this(child: Expression) = this(child, 0, 0)
+
+  def this(child: Expression, reverse: Boolean) = {
+    this(child, 0, 0, Some(reverse))
+  }
+
+  // Returns null for empty inputs
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  override def prettyName: String = "mode"
+
+  @transient private lazy val keyNormalizer: Any => Any =
+    ModeKeyNormalizer.forType(child.dataType)
+
+  override def update(
+      buffer: OpenHashMap[AnyRef, Long],
+      input: InternalRow): OpenHashMap[AnyRef, Long] = {
+    val key = child.eval(input)
+
+    if (key != null) {
+      buffer.changeValue(keyNormalizer(key).asInstanceOf[AnyRef], 1L, _ + 1L)
+    }
+    buffer
+  }
+
+  override def merge(
+      buffer: OpenHashMap[AnyRef, Long],
+      other: OpenHashMap[AnyRef, Long]): OpenHashMap[AnyRef, Long] = {
+    other.foreach { case (key, count) =>
+      buffer.changeValue(key, count, _ + count)
+    }
+    buffer
   }
 
   override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
@@ -224,7 +244,6 @@ case class Mode(
     copy(child = newChild)
 }
 
-// TODO: SPARK-48701: PandasMode (all collations)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
@@ -307,7 +326,7 @@ case class PandasMode(
     ignoreNA: Boolean = true,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends TypedAggregateWithHashMapAsBuffer
-  with ImplicitCastInputTypes with UnaryLike[Expression] {
+  with ImplicitCastInputTypes with UnaryLike[Expression] with ModeCollationAware {
 
   def this(child: Expression) = this(child, true, 0, 0)
 
@@ -353,11 +372,14 @@ case class PandasMode(
       return new GenericArrayData(Array.empty)
     }
 
+    // Fold collation-equal keys into one group before selecting the mode(s), so that under a
+    // non-binary collation values such as 'b' and 'B' (equal under UTF8_LCASE) are counted
+    // together. Binary-stable types return the buffer unchanged (no overhead). Mirrors Mode.eval.
+    val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
+
     val modes = collection.mutable.ArrayBuffer.empty[AnyRef]
     var maxCount = -1L
-    val iter = buffer.iterator
-    while (iter.hasNext) {
-      val (key, count) = iter.next()
+    collationAwareBuffer.foreach { case (key, count) =>
       if (maxCount < count) {
         modes.clear()
         modes.append(key)
