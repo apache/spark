@@ -331,17 +331,20 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("leaves an argument carrying an outer reference at each use site") {
+  test("shares an argument carrying an outer reference") {
     transpileOn {
-      // An OuterReference is Unevaluable and its `references` are empty, so RewriteWithExpression
-      // sees nothing stopping it from putting the argument in a Project inside a correlated
-      // subquery -- where nothing later resolves it and it reaches execution un-evaluable.
+      // An OuterReference is Unevaluable with empty `references`, so RewriteWithExpression sees
+      // nothing stopping it from pre-evaluating the argument inside a correlated subquery. That
+      // looked like a hole worth guarding, but decorrelation carries the definition back out --
+      // checked against six correlated shapes end to end, all of which use the transpiled path.
+      // So no guard here, and this pins that we keep sharing rather than growing one back.
       val arg = Add(OuterReference(attrA), Literal(1L))
       val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
       val tpudf = makeTPUDF(makePyUDF(arg), option)
-      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
-      assert(result == Multiply(arg, arg),
-        s"Expected the argument left at both use sites, no With: $result")
+      ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false) match {
+        case With(_, defs) => assert(defs.map(_.child) == Seq(arg), s"Expected one def: $defs")
+        case other => fail(s"Expected the argument shared through a With, got: $other")
+      }
     }
   }
 

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, LAMBDA_FUNCTION,
-  OUTER_REFERENCE, PYTHON_UDF, TRANSPILED_PYTHON_UDF, TRANSPILED_UDF_PARAMETER, TreePattern}
+  PYTHON_UDF, TRANSPILED_PYTHON_UDF, TRANSPILED_UDF_PARAMETER, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
@@ -345,18 +345,14 @@ object TranspiledUDFParameter {
     if (!option.containsPattern(TRANSPILED_UDF_PARAMETER)) {
       return option
     }
-    // Three shapes we decline rather than reason about. An aggregate function, because `With`
-    // asserts no ref to its own common expression sits inside one. A lambda, because a def hoisted
-    // out of a per-element body would be evaluated per row. An outer reference, because it is
-    // `Unevaluable` and its `references` are empty, so nothing stops `RewriteWithExpression` from
-    // putting the argument in a Project inside a correlated subquery, where nothing resolves it.
-    //
-    // Only a custom transpiler emits an aggregate or a lambda above a marker. The check spans the
-    // whole option, arguments included, so `udf(sum(a))` and `udf(transform(arr, x -> x + 1))` give
-    // up sharing too -- the aggregate would have been inlined anyway (a Project cannot hold one),
-    // but the lambda would have hoisted fine, so that one is a real if narrow cost.
-    val shareable = share &&
-      !option.containsAnyPattern(AGGREGATE_EXPRESSION, LAMBDA_FUNCTION, OUTER_REFERENCE)
+    // Two shapes we decline rather than reason about: an aggregate function, because `With` asserts
+    // no ref to its own common expression sits inside one, and a lambda, because a def hoisted out
+    // of a per-element body would be evaluated per row. Only a custom transpiler emits either above
+    // a marker. The check spans the whole option, arguments included, so `udf(sum(a))` and
+    // `udf(transform(arr, x -> x + 1))` give up sharing too -- the aggregate would have been
+    // inlined anyway (a Project cannot hold one), but the lambda would have hoisted fine, so that
+    // one is a real if narrow cost.
+    val shareable = share && !option.containsAnyPattern(AGGREGATE_EXPRESSION, LAMBDA_FUNCTION)
     // Keyed on the parameter index, not the argument: two copies of one nondeterministic parameter
     // owe the body a single value even where `ResolveRandomSeed` gave them different seeds, while
     // `f(rand(), rand())` owes it two. Every copy of an index holds the same subtree, so whichever

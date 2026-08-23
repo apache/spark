@@ -1038,15 +1038,15 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     plan.transformDownWithSubqueriesAndPruning(
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
       case p =>
-        // Enter each expression at its root rather than at the first TranspiledPythonUDF in it, so
-        // that `applyExpr` sees every node on the way down and can thread `parentIsUdf`. Starting
-        // at the node itself would report no enclosing UDF even when a PythonUDF wraps it, and the
-        // batch pipeline the flag exists to protect would be split anyway.
         // A Command cannot take the Project that RewriteWithExpression would add to pre-evaluate a
         // shared argument: it lands between the command and its relation and hides the relation
         // DataSourceV2Strategy matches on, so `DELETE FROM t WHERE udf(a + 1) > 0` becomes an
         // internal error. A command's arguments stay at their use sites.
         val shareArguments = !p.isInstanceOf[Command]
+        // Enter each expression at its root rather than at the first TranspiledPythonUDF in it, so
+        // that `applyExpr` sees every node on the way down and can thread `parentIsUdf`. Starting
+        // at the node itself would report no enclosing UDF even when a PythonUDF wraps it, and the
+        // batch pipeline the flag exists to protect would be split anyway.
         p.mapExpressions {
           case e if e.containsPattern(TRANSPILED_PYTHON_UDF) =>
             applyExpr(e, parentIsUdf = false, shareArguments)
@@ -1063,6 +1063,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
       applyExpr(e, parentIsUdf, shareArguments)
     expression match {
       case s: TranspiledPythonUDF =>
+        // Every branch that declines to transpile leaves the Python UDF in place and keeps walking
+        // its arguments, which may hold transpilable calls of their own.
+        def keepPython: Expression = s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
         // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
         // but if someone changed it while running we'll want to strip the nodes out.
         if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
@@ -1070,12 +1073,12 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             log"${MDC(LogKeys.CONFIG, SQLConf.ANSI_ENABLED.key)} is disabled. The transpiler " +
             log"targets ANSI semantics and refuses to rewrite plans under non-ANSI mode. " +
             log"Enable ANSI or disable transpilation to silence this warning.")
-          s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
+          keepPython
         } else if (!conf.getConf(SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS)) {
           logWarning(log"Skipping Python UDF transpilation: " +
             log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
-          s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
+          keepPython
         } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
           // Walk the full list of transpiled options and pick the first one,
           // falling back to the original Python UDF if none are available.
@@ -1112,13 +1115,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
         // transpiled wrapping one that could).
         //
-        // Turning sharing off on the way into a lambda, rather than for any expression holding one,
-        // keeps it for the calls outside the lambda -- and keeps `applyExpr` safe on its own, since
-        // it is public and a custom transpiler's ConvertToX may call it with `shareArguments` left
-        // at its default. RewriteWithExpression would happily place an argument reading no lambda
-        // variable, and then it runs per row where the body runs per element: a nondeterministic
-        // argument is redrawn at the wrong granularity, and it turns eager, so under ANSI
-        // `transform(arr, x -> udf(a / b, x))` raises on a row whose array is empty.
+        // Sharing stops at a lambda: the Project holding the argument runs per row where the body
+        // runs per element, so a nondeterministic argument is redrawn at the wrong granularity and
+        // turns eager -- under ANSI `transform(arr, x -> udf(a / b, x))` would raise on a row whose
+        // array is empty. Checked here on the way in rather than once per expression, so a call
+        // outside the lambda keeps sharing and a direct `applyExpr` caller is covered too.
         val share = shareArguments && !expression.isInstanceOf[LambdaFunction]
         expression.mapChildren(
           applyExpr(_, parentIsUdf = isScalarPythonUDF(expression), share))

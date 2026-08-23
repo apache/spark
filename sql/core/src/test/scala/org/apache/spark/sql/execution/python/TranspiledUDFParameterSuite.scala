@@ -34,6 +34,13 @@ import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
  * (SPARK-58626). The builder owns this because it is the last place that still sees the
  * placeholders: filling them in is what erases which copy came from which parameter, and the
  * indexes it stamps on are what tell `ConvertToCatalyst` which copies share one evaluation.
+ *
+ * Plus the two operator shapes whose plans the Python suites do not reach: a call used as an
+ * [[org.apache.spark.sql.catalyst.plans.logical.Aggregate]]'s grouping key, and one under a
+ * [[org.apache.spark.sql.catalyst.plans.logical.Filter]], which is the case where
+ * `RewriteWithExpression` has to add a Project on each side of the operator. Everything else
+ * end-to-end lives in `pyspark.sql.tests.test_udf_transpile_unit`, which asserts on the optimized
+ * plan directly and would only be duplicated here.
  */
 class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
@@ -88,17 +95,6 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
     // `lambda a, b: a + a`: b never reaches the option, so nothing evaluates it.
     val option = Add(param(0), param(0))
     assert(markerIndexes(option, argA, argB) == Seq(0, 0))
-  }
-
-  test("draws a nondeterministic argument once for all of a parameter's uses") {
-    transpileOn {
-      // The point of SPARK-58626, end to end: `lambda a: a - a` over `rand()` is 0 on every row
-      // only if both uses of `a` read one draw. Once per use it is the difference of two draws,
-      // which is 0 with probability 0.
-      val diff = udfWith(Subtract(param(0), param(0)), arity = 1, returnType = DoubleType)
-      val df = spark.range(0, 50).select(diff(rand(seed = 1L)).as("d"))
-      checkAnswer(df, Seq.fill(50)(Row(0.0d)))
-    }
   }
 
   test("shares an argument that appears in both a grouping and a result expression") {
