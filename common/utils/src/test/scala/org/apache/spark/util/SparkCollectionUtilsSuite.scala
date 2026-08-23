@@ -46,20 +46,19 @@ class SparkCollectionUtilsSuite extends AnyFunSuite { // scalastyle:ignore funsu
   }
 
   test("createArray fills primitive-typed arrays with the default value") {
-    assert(SparkCollectionUtils.createArray(3, 7).sameElements(Array(7, 7, 7)))
-    assert(SparkCollectionUtils.createArray(2, true).sameElements(Array(true, true)))
-    assert(SparkCollectionUtils.createArray(2, 1L).sameElements(Array(1L, 1L)))
-    assert(SparkCollectionUtils.createArray(2, 2.5d).sameElements(Array(2.5d, 2.5d)))
-    assert(SparkCollectionUtils.createArray(2, 1.5f).sameElements(Array(1.5f, 1.5f)))
-    assert(SparkCollectionUtils.createArray(2, 3.toByte).sameElements(Array(3.toByte, 3.toByte)))
-    assert(
-      SparkCollectionUtils.createArray(2, 4.toShort).sameElements(Array(4.toShort, 4.toShort)))
-    assert(SparkCollectionUtils.createArray(2, 'a').sameElements(Array('a', 'a')))
+    assert(SparkCollectionUtils.createArray(3, 7) === Array(7, 7, 7))
+    assert(SparkCollectionUtils.createArray(2, true) === Array(true, true))
+    assert(SparkCollectionUtils.createArray(2, 1L) === Array(1L, 1L))
+    assert(SparkCollectionUtils.createArray(2, 2.5d) === Array(2.5d, 2.5d))
+    assert(SparkCollectionUtils.createArray(2, 1.5f) === Array(1.5f, 1.5f))
+    assert(SparkCollectionUtils.createArray(2, 3.toByte) === Array(3.toByte, 3.toByte))
+    assert(SparkCollectionUtils.createArray(2, 4.toShort) === Array(4.toShort, 4.toShort))
+    assert(SparkCollectionUtils.createArray(2, 'a') === Array('a', 'a'))
+    assert(SparkCollectionUtils.createArray(0, 7).isEmpty)
   }
 
   test("createArray fills reference-typed arrays and returns empty for size 0") {
-    assert(SparkCollectionUtils.createArray(2, "x").sameElements(Array("x", "x")))
+    assert(SparkCollectionUtils.createArray(2, "x") === Array("x", "x"))
     assert(SparkCollectionUtils.createArray(0, "x").isEmpty)
-    assert(SparkCollectionUtils.createArray(0, 7).isEmpty)
   }
 }
