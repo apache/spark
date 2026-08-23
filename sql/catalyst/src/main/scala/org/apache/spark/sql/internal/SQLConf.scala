@@ -7101,6 +7101,33 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.variant.shreddedPredicatePushdown.enabled")
+      .internal()
+      .doc("When true, comparison predicates on shredded Variant fields produced by " +
+        "PushVariantIntoScan (e.g. variant_get(v, '$.a', 'bigint') > 999) are pushed to Parquet " +
+        "as a predicate on the physical shredded typed_value leaf column, guarded so that a row " +
+        "group is skipped only when the leaf min/max cannot match AND every value for the path " +
+        "is provably in the typed leaf (either every untyped residual value column along the " +
+        "path is entirely null, or the leaf column itself has no nulls). This enables row-group " +
+        "skipping for shredded Variant columns while never dropping rows that fall back to an " +
+        "untyped residual. The benefit depends on the data layout, like any Parquet min/max " +
+        "skipping: it helps most when the data is sorted on the filtered field (so each row " +
+        "group covers a narrow value range) and a file holds many row groups; unsorted data or " +
+        "a single row group per file gains little. Has no effect unless the Parquet column is " +
+        "shredded and spark.sql.variant.pushVariantIntoScan is also true. It also does not fire " +
+        "for a strict cast to a non-string type when " +
+        "spark.sql.variant.pushVariantIntoScan.deferCastError is true (the extraction is wrapped " +
+        "in UnwrapVariantCastError and is not translated to a pushable filter); try_variant_get " +
+        "and string targets are unaffected. Results are unaffected either way; this only " +
+        "controls whether row groups can be skipped.")
+      .version("4.4.0")
+      // Physical scan optimization only: it changes which Parquet row groups are read, not the
+      // resolved plan of a view/UDF/procedure body, so it does not participate in binding.
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()
