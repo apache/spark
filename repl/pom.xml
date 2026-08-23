@@ -61,12 +61,10 @@
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-compiler</artifactId>
-      <version>${scala.version}</version>
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-reflect</artifactId>
-      <version>${scala.version}</version>
     </dependency>
      <dependency>
       <groupId>org.slf4j</groupId>
@@ -134,7 +132,7 @@
 
     <dependency>
       <groupId>org.scala-lang</groupId>
-      <artifactId>scala-library</artifactId>
+      <artifactId>${scala.library.artifact}</artifactId>
     </dependency>
   </dependencies>
   <build>

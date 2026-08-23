@@ -19,7 +19,7 @@
 
 set -e
 
-VALID_VERSIONS=( 2.13 )
+VALID_VERSIONS=( 2.13 3 )
 
 usage() {
   echo "Usage: $(basename $0) [-h|--help] <version>
@@ -45,7 +45,7 @@ check_scala_version() {
 check_scala_version "$TO_VERSION"
 
 if [ $TO_VERSION = "2.13" ]; then
-  FROM_VERSION="2.12"
+  FROM_VERSION="3"
 else
   FROM_VERSION="2.13"
 fi
@@ -57,7 +57,9 @@ sed_i() {
 BASEDIR=$(dirname $0)/..
 for f in $(find "$BASEDIR" -name 'pom.xml' -not -path '*target*'); do
   echo $f
-  sed_i 's/\(artifactId.*\)_'$FROM_VERSION'/\1_'$TO_VERSION'/g' $f
+  # Anchor to the <artifactId> element: a looser match also corrupts property names
+  # ending in "artifactId".
+  sed_i 's|\(<artifactId>[^<]*\)_'$FROM_VERSION'<|\1_'$TO_VERSION'<|g' $f
   sed_i 's/^\([[:space:]]*<!-- #if scala-'$TO_VERSION' -->\)<!--/\1/' $f
   sed_i 's/^\([[:space:]]*\)-->\(<!-- #endif scala-'$TO_VERSION' -->\)/\1\2/' $f
   sed_i 's/^\([[:space:]]*<!-- #if scala-'$FROM_VERSION' -->\)$/\1<!--/' $f
@@ -69,20 +71,37 @@ done
 COMMONS_CLI_VERSION=`build/mvn help:evaluate -Dexpression=commons-cli.version -q -DforceStdout`
 build/mvn dependency:get -Dartifact=commons-cli:commons-cli:${COMMONS_CLI_VERSION} -q
 
-# Update <scala.version> in parent POM
-# First find the right full version from the profile's build
-SCALA_VERSION=`build/mvn help:evaluate -Pscala-${TO_VERSION} -Dexpression=scala.version -q -DforceStdout`
-sed_i '1,/<scala\.version>[0-9]*\.[0-9]*\.[0-9]*</s/<scala\.version>[0-9]*\.[0-9]*\.[0-9]*</<scala.version>'$SCALA_VERSION'</' \
+# Swap scala.version to the canonical property reference (not a literal), so each full
+# version is defined once and the switch does not depend on a profile being evaluable.
+if [ $TO_VERSION = "3" ]; then
+  SCALA_VERSION_REF='${scala3.version}'
+else
+  SCALA_VERSION_REF='${scala213.version}'
+fi
+sed_i '1,/<scala\.version>/s|<scala\.version>[^<]*</scala\.version>|<scala.version>'"$SCALA_VERSION_REF"'</scala.version>|' \
   "$BASEDIR/pom.xml"
 
-# Also update <scala.binary.version> in parent POM
-# Match any scala binary version to ensure idempotency
-sed_i '1,/<scala\.binary\.version>[0-9]*\.[0-9]*</s/<scala\.binary\.version>[0-9]*\.[0-9]*</<scala.binary.version>'$TO_VERSION'</' \
+# Also update <scala.binary.version>. The pattern must match a dotless version too:
+# Scala 3 artifacts are suffixed _3, not _3.3.
+sed_i '1,/<scala\.binary\.version>[0-9][0-9.]*</s/<scala\.binary\.version>[0-9][0-9.]*</<scala.binary.version>'$TO_VERSION'</' \
   "$BASEDIR/pom.xml"
 
-# Update source of scaladocs
+# The stdlib is published under a different coordinate per version, so flip it alongside
+# the two properties above. Leaving it behind would rewrite the POM into a state that only
+# resolves once -Pscala-3 is also passed, since the profile is what supplies the Scala 3
+# value; keeping all three together means the rewritten POM is consistent on its own.
+if [ $TO_VERSION = "3" ]; then
+  SCALA_LIBRARY_ARTIFACT="scala3-library_3"
+else
+  SCALA_LIBRARY_ARTIFACT="scala-library"
+fi
+sed_i '1,/<scala\.library\.artifact>/s|>[^<]*</scala\.library\.artifact>|>'"$SCALA_LIBRARY_ARTIFACT"'</scala.library.artifact>|' \
+  "$BASEDIR/pom.xml"
+
+# Update source of scaladocs. 2.13 is the default and needs no flag; only Scala 3 is
+# selected with -Pscala-3, so this tracks the non-default version rather than the target.
 echo "$BASEDIR/docs/_plugins/build_api_docs.rb"
-if [ $TO_VERSION = "2.13" ]; then
+if [ $TO_VERSION = "3" ]; then
   sed_i '/\-Pscala-'$TO_VERSION'/!s:build/sbt:build/sbt \-Pscala\-'$TO_VERSION':' "$BASEDIR/docs/_plugins/build_api_docs.rb"
 else
   sed_i 's:build/sbt \-Pscala\-'$FROM_VERSION':build/sbt:' "$BASEDIR/docs/_plugins/build_api_docs.rb"
@@ -90,7 +109,7 @@ fi
 sed_i 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' "$BASEDIR/docs/_plugins/build_api_docs.rb"
 
 echo "$BASEDIR/dev/mima"
-if [ $TO_VERSION = "2.13" ]; then
+if [ $TO_VERSION = "3" ]; then
   sed_i '/\-Pscala-'$TO_VERSION'/!s:build/sbt:build/sbt \-Pscala\-'$TO_VERSION':' "$BASEDIR/dev/mima"
   sed_i '/\-Pscala-'$TO_VERSION'/!s;SPARK_PROFILES=\${1:\-";SPARK_PROFILES=\${1:\-"\-Pscala\-'$TO_VERSION' ;' \
     "$BASEDIR/dev/mima"
