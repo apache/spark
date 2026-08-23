@@ -23,10 +23,10 @@ import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, LAMBDA_FUNCTION,
-  PYTHON_UDF, TRANSPILED_PYTHON_UDF, TRANSPILED_UDF_PARAMETER, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PYTHON_UDF,
+  TRANSPILED_PYTHON_UDF, TRANSPILED_UDF_PARAMETER, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
@@ -290,27 +290,17 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
 /**
  * Marks a subtree of a transpiled option as the argument dropped in for the UDF's `index`th
  * parameter (SPARK-58626). `ConvertToCatalyst` turns the copies sharing an `index` into one
- * [[With]] common expression, so an argument used several times is evaluated once per row -- the
- * way the Python eval operator it replaces would.
+ * [[With]] common expression, so a repeated argument is evaluated once per row.
  *
- * Why a marker at all, when substituting the argument once into a shared column would need no
- * bookkeeping: `UserDefinedPythonFunction`'s builder fills the `_udf_param_N` placeholders in at
- * call-construction time, and after that the copies are indistinguishable. Matching them by shape
- * instead does not work -- a nondeterministic argument gets a fresh seed per copy from
- * `ResolveRandomSeed`, because the builder runs before analysis -- so something has to carry the
- * index across analysis, and this is it.
+ * The marker exists because `UserDefinedPythonFunction`'s builder substitutes at call-construction
+ * time, after which the copies are indistinguishable -- and shape cannot tell them apart, since
+ * `ResolveRandomSeed` gives a nondeterministic argument a fresh seed per copy. It substitutes that
+ * early because an option body is a child of [[TranspiledPythonUDF]] and so must be coerced during
+ * analysis, which a typeless placeholder cannot be. Deleting this class means solving that first.
  *
- * The builder cannot simply wait, either. An option body is a child of [[TranspiledPythonUDF]], so
- * it has to be resolved and coerced by the end of analysis, and a placeholder has no type until its
- * argument does. Substituting late enough to skip the marker would mean building the shared column
- * inside the analyzer, putting a [[With]] in the plan during a phase where nothing else does --
- * `ReplaceExpressions` and `RewriteWithExpression` both run after analysis. That trade was
- * considered and declined; if you are here to delete this class, that is the thing to solve first.
- *
- * A [[TaggingExpression]] so it evaluates as its child, and see-through under `canonicalized` and
- * `foldable` too: the markers sit in the plan all through analysis, where a marked argument still
- * has to match the same argument written bare -- in an [[Aggregate]]'s grouping expressions, for
- * one -- and must not hide a constant from a check that wants a foldable one.
+ * See-through under `canonicalized` and `foldable`: the markers sit in the plan all through
+ * analysis, where a marked argument still has to match the same argument written bare (an
+ * [[Aggregate]]'s grouping expressions) and must not hide a constant from a check wanting one.
  */
 case class TranspiledUDFParameter(child: Expression, index: Int) extends TaggingExpression {
 
@@ -318,8 +308,6 @@ case class TranspiledUDFParameter(child: Expression, index: Int) extends Tagging
 
   override lazy val canonicalized: Expression = child.canonicalized
 
-  // Also see-through for foldability, or wrapping a constant argument would hide it from an
-  // analysis-time check that requires one (a `round` scale, a window frame boundary).
   override def foldable: Boolean = child.foldable
 
   override protected def withNewChildInternal(newChild: Expression): TranspiledUDFParameter =
@@ -330,36 +318,46 @@ case class TranspiledUDFParameter(child: Expression, index: Int) extends Tagging
 object TranspiledUDFParameter {
 
   /**
+   * Whether something in `option` rules out sharing.
+   *
+   * An aggregate or lambda matters only when it *encloses* a marker: `With` may not put a ref
+   * inside an aggregate, and a def must not be hoisted out of a per-element body. One sitting in
+   * an argument (`udf(sum(a))`) is below the marker and shares fine.
+   *
+   * An `OuterReference` anywhere, argument included: `RewriteWithExpression` pre-evaluates it in a
+   * Project inside the subquery, and with `decorrelateInnerQuery.enabled=false` the fallback
+   * rewrites Filters only, stranding it there un-evaluable.
+   */
+  private def rulesOutSharing(option: Expression): Boolean =
+    option.containsPattern(OUTER_REFERENCE) || option.exists {
+      case e @ (_: AggregateExpression | _: LambdaFunction) =>
+        e.containsPattern(TRANSPILED_UDF_PARAMETER)
+      case _ => false
+    }
+
+  /**
    * Takes the markers off a substituted option, giving each parameter one [[With]] common
-   * expression that every copy reads, so an argument used several times is evaluated once per row.
+   * expression that every copy reads. `RewriteWithExpression` does the real work two batches later
+   * and decides which are not worth a column, so the count is best effort -- `transpile.py` spells
+   * out what that means for a UDF author.
    *
-   * `RewriteWithExpression` does the real work two batches later, and also decides which common
-   * expressions are not worth a column and go back inline -- so the count is best effort.
-   * `python/pyspark/sql/transpile.py` spells out what that means for a UDF author.
-   *
-   * `share = false` says a Project below this operator would be wrong; see
-   * `ConvertToCatalyst.canShare`. A custom transpiler with its own ConvertToX wants to call this
-   * too, or its options evaluate a repeated argument once per use. Either way the markers come off.
+   * `share = false` leaves every argument at its use site; `ConvertToCatalyst` passes it for a
+   * Command and inside a lambda. A custom transpiler with its own ConvertToX wants to call this
+   * too. Either way the markers come off.
    */
   def shareParameters(option: Expression, share: Boolean = true): Expression = {
     if (!option.containsPattern(TRANSPILED_UDF_PARAMETER)) {
       return option
     }
-    // Two shapes we decline rather than reason about: an aggregate function, because `With` asserts
-    // no ref to its own common expression sits inside one, and a lambda, because a def hoisted out
-    // of a per-element body would be evaluated per row. Only a custom transpiler emits either above
-    // a marker. The check spans the whole option, arguments included, so `udf(sum(a))` and
-    // `udf(transform(arr, x -> x + 1))` give up sharing too -- the aggregate would have been
-    // inlined anyway (a Project cannot hold one), but the lambda would have hoisted fine, so that
-    // one is a real if narrow cost.
-    val shareable = share && !option.containsAnyPattern(AGGREGATE_EXPRESSION, LAMBDA_FUNCTION)
-    // Keyed on the parameter index, not the argument: two copies of one nondeterministic parameter
-    // owe the body a single value even where `ResolveRandomSeed` gave them different seeds, while
-    // `f(rand(), rand())` owes it two. Every copy of an index holds the same subtree, so whichever
-    // lands first can define it. Insertion-ordered so a query plans the same way every run.
+    val shareable = share && !rulesOutSharing(option)
+    // Keyed on the index, not the argument: two copies of one nondeterministic parameter owe the
+    // body a single value even where `ResolveRandomSeed` gave them different seeds, while
+    // `f(rand(), rand())` owes it two. So the first copy defines and later ones are discarded, not
+    // merged -- in that seed case they are not even equal, and keeping one draw is the point.
+    // Insertion-ordered so a query plans the same way every run.
     val defs = mutable.LinkedHashMap.empty[Int, CommonExpressionDef]
     // Bottom-up is safe: an argument holds no marker of its own, since a nested transpiled call's
-    // markers are already refs of its own `With` by the time we get here.
+    // markers are already refs of its own `With` by now.
     val body = option.transformUpWithPruning(_.containsPattern(TRANSPILED_UDF_PARAMETER)) {
       case p: TranspiledUDFParameter if !shareable => p.child
       case p: TranspiledUDFParameter =>

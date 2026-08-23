@@ -22,12 +22,12 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{Column, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Expression, Multiply, Subtract, TranspiledPythonUDF, TranspiledUDFParameter}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Expression, Multiply, TranspiledPythonUDF, TranspiledUDFParameter}
 import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.functions.{col, rand}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
+import org.apache.spark.sql.types.LongType
 
 /**
  * Tests how `UserDefinedPythonFunction.builder` marks the `_udf_param_N` placeholders it fills in
@@ -35,12 +35,9 @@ import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
  * placeholders: filling them in is what erases which copy came from which parameter, and the
  * indexes it stamps on are what tell `ConvertToCatalyst` which copies share one evaluation.
  *
- * Plus the two operator shapes whose plans the Python suites do not reach: a call used as an
- * [[org.apache.spark.sql.catalyst.plans.logical.Aggregate]]'s grouping key, and one under a
- * [[org.apache.spark.sql.catalyst.plans.logical.Filter]], which is the case where
- * `RewriteWithExpression` has to add a Project on each side of the operator. Everything else
- * end-to-end lives in `pyspark.sql.tests.test_udf_transpile_unit`, which asserts on the optimized
- * plan directly and would only be duplicated here.
+ * Plus two operator shapes the Python suite does not assert plans for: a call as a grouping key,
+ * which does share, and one in a predicate, which does not. Both assert on the `_common_expr`
+ * column, since a deterministic argument gives the same answer either way.
  */
 class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
@@ -54,14 +51,11 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
    * because a call that transpiles never reaches Python -- so a fallback shows up as an NPE rather
    * than as a quietly passing test.
    */
-  private def udfWith(
-      option: Expression,
-      arity: Int = 2,
-      returnType: DataType = LongType): UserDefinedPythonFunction =
+  private def udfWith(option: Expression, arity: Int = 2): UserDefinedPythonFunction =
     UserDefinedPythonFunction(
       "udf",
       null,
-      returnType,
+      LongType,
       PythonEvalType.SQL_BATCHED_UDF,
       udfDeterministic = true,
       List(Column(option)).asJava,
@@ -106,18 +100,23 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
       // `id % 3` rather than a bare column so the argument is not cheap enough to be inlined.
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
       val df = spark.range(0, 6).groupBy(square(col("id") % 3).as("sq")).count()
+      val plan = df.queryExecution.optimizedPlan.toString
+      assert(plan.contains("_common_expr"), s"Expected a shared argument column:\n$plan")
       checkAnswer(df, Seq(Row(0L, 2L), Row(1L, 2L), Row(4L, 2L)))
     }
   }
 
-  test("shares an argument under a Filter") {
+  test("does not share an argument in a predicate") {
     transpileOn {
-      // `lambda a: a - a` over `rand()` again, because a deterministic argument would give the same
-      // answer shared or not and the test would pass with sharing switched off entirely. Every row
-      // survives the filter only if the two uses read one draw.
-      val diff = udfWith(Subtract(param(0), param(0)), arity = 1, returnType = DoubleType)
-      val df = spark.range(0, 30).filter(diff(rand(seed = 2L)) === 0.0d)
-      assert(df.count() === 30)
+      // RewriteWithExpression does give the argument a column here, but predicate pushdown then
+      // substitutes the alias back into the condition and the Projects collapse, leaving `id % 3`
+      // at both use sites. So a call in a `where` is once-per-use, like one in a conditional branch
+      // -- recorded in transpile.py. If this starts sharing, update that note.
+      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
+      val df = spark.range(0, 6).filter(square(col("id") % 3) > 1)
+      val plan = df.queryExecution.optimizedPlan.toString
+      assert(!plan.contains("_common_expr"), s"Predicate sharing is now retained:\n$plan")
+      checkAnswer(df.select("id"), Seq(Row(2L), Row(5L)))
     }
   }
 }

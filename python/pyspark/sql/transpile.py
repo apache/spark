@@ -47,7 +47,9 @@ rules a column out:
   later arguments), because a column below the operator would always be
   evaluated where the branch may not be;
 * inside a higher-order function's lambda (``transform`` and friends), because
-  a column is computed per row where the body runs per element.
+  a column is computed per row where the body runs per element;
+* in a predicate (``where``, a join condition), because predicate pushdown
+  substitutes the pre-evaluated column back into the condition.
 
 In those positions a repeated argument is computed once per use, so a
 nondeterministic one is drawn more than once and a body can see two different

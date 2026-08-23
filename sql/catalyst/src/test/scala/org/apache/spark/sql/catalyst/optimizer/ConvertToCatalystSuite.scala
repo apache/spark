@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, LocalRelation, Project}
 import org.apache.spark.sql.internal.SQLConf
@@ -331,19 +331,31 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("shares an argument carrying an outer reference") {
+  test("leaves an argument carrying an outer reference at each use site") {
     transpileOn {
-      // An OuterReference is Unevaluable with empty `references`, so RewriteWithExpression sees
-      // nothing stopping it from pre-evaluating the argument inside a correlated subquery. That
-      // looked like a hole worth guarding, but decorrelation carries the definition back out --
-      // checked against six correlated shapes end to end, all of which use the transpiled path.
-      // So no guard here, and this pins that we keep sharing rather than growing one back.
+      // Decorrelation carries a pre-evaluated OuterReference out of the subquery, but only while it
+      // is enabled: with `decorrelateInnerQuery.enabled=false` the fallback rewrites Filters only
+      // and it is stranded in the Project. `EXISTS` over an outer argument fails that way with
+      // sharing on and passes with it off, so we decline.
       val arg = Add(OuterReference(attrA), Literal(1L))
       val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
       val tpudf = makeTPUDF(makePyUDF(arg), option)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result == Multiply(arg, arg), s"Expected no With: $result")
+    }
+  }
+
+  test("shares an argument whose own subtree holds an aggregate") {
+    transpileOn {
+      // `udf(sum(a))`: the aggregate is below the marker, not above it, so it does not hit the
+      // `With` assert. RewriteWithExpression inlines it anyway since a Project cannot hold an
+      // aggregate, but that is its call, not ours.
+      val arg = Sum(attrA).toAggregateExpression()
+      val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
+      val tpudf = makeTPUDF(makePyUDF(arg), option)
       ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false) match {
-        case With(_, defs) => assert(defs.map(_.child) == Seq(arg), s"Expected one def: $defs")
-        case other => fail(s"Expected the argument shared through a With, got: $other")
+        case With(_, defs) => assert(defs.length == 1, s"Expected one def: $defs")
+        case other => fail(s"Expected a With, got: $other")
       }
     }
   }

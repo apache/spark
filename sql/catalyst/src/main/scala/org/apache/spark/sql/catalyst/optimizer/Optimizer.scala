@@ -1095,7 +1095,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           val firstEvaluable = s.transpiledOptions.headOption
           firstEvaluable match {
             case None =>
-              s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
+              keepPython
             case Some(catalystExpr) =>
               // Recursively apply to the children first because we may use them as inputs in parent
               // The option's arguments are then shared so each is evaluated once per row rather
@@ -1107,7 +1107,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         } else {
           // We should avoid converting a UDF node where that could break pipelining.
           // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
-          s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
+          keepPython
         }
       case _ =>
         // Not a TranspiledPythonUDF: recurse down, telling the children whether
