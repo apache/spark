@@ -11723,7 +11723,7 @@
   },
   "_LEGACY_ERROR_TEMP_3070" : {
     "message" : [
-      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+      "Unrecognized file metadata field: <field>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3071" : {
