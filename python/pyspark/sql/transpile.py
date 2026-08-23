@@ -37,10 +37,13 @@ all-numeric and all-string variants.
 """
 
 import ast
-from typing import Any, Callable, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Callable, Iterator, List, Optional, Tuple, TYPE_CHECKING
+import contextlib
 import inspect
 import itertools
 import textwrap
+import threading
+import warnings
 from pyspark.errors import UnsupportedOperationException
 from pyspark.sql.column import Column
 from pyspark.sql.types import (
@@ -685,11 +688,10 @@ class CatalystTranspiler(AbstractTranspiler):
             case ast.Name(id=name, ctx=ast.Load()):
                 # Insert columns referencing the param indexes for children
                 if name in params:
-                    # ``params`` excludes any bound receiver (see
-                    # ``_transpile_func``), so its indexes are the placeholder
-                    # indexes directly. A body referencing the receiver itself
-                    # (``return self``) has no column equivalent and is not in
-                    # this list, so it takes the branch below and refuses.
+                    # ``params`` excludes any bound receiver (see ``_transpile_func``),
+                    # so its indexes ARE the placeholder indexes. A body referencing
+                    # the receiver (``return self``) is not in this list and so takes
+                    # the branch below, which refuses -- there is no column for it.
                     return col(f"_udf_param_{params.index(name)}")
                 else:
                     # TODO (SPARK-55207): Handle assignments, class vars, and closures
@@ -851,28 +853,22 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
 
 
 def _call_dunder(func: Callable) -> Any:
-    """The ``__call__`` entry from ``func``'s own type, or ``None``.
+    """The ``__call__`` entry from ``func``'s type MRO, or ``None``.
 
-    ``getattr(func, "__call__")`` is wrong in two ways that both end with the
-    transpiler lowering a body that never runs. An instance attribute
-    ``obj.__call__ = f`` shadows the type's for ``getattr`` but is ignored when
-    ``obj`` is called, so ``obj.__call__ = lambda x: x * 99`` over a
-    ``def __call__(self, x): return x * 4`` used to lower the 99. And on a CLASS
-    object it finds the ``__call__`` its instances use, while calling the class
-    runs ``__init__``.
+    Not ``getattr(func, "__call__")``, which is wrong in two ways that both end with
+    lowering a body that never runs: an instance attribute ``obj.__call__ = f``
+    shadows the type's for ``getattr`` but is ignored when ``obj`` is called, and on
+    a CLASS object it finds the ``__call__`` its instances use while calling the
+    class runs ``__init__``.
 
-    Reading the type's ``__dict__`` directly rather than via ``getattr`` on the
-    type matters twice over. It does not invoke the descriptor protocol, so
-    deciding what to transpile never executes user code (a ``property`` used as
-    ``__call__`` would otherwise run its getter here), and it does not fall
-    through to the metatype, so a class with no ``__call__`` of its own yields
-    ``None`` instead of ``type.__call__`` -- the constructor slot, which is not
-    what calling an instance runs.
+    Reads ``klass.__dict__`` rather than ``getattr(klass, ...)`` so the descriptor
+    protocol never fires -- deciding what to transpile must not run user code, and a
+    ``property`` used as ``__call__`` would otherwise run its getter here.
 
-    Anything other than a plain function (a ``property``, a ``partialmethod``, a
-    descriptor that answers class and instance access differently) comes back as
-    the raw object, has no retrievable source, and so is refused by the caller
-    rather than resolved to a body that may not be the one that runs.
+    Anything but a plain function comes back raw -- a ``property``, a
+    ``staticmethod``, or the slot wrapper that a class object or a plain function
+    yields from its metatype/type -- has no retrievable source, and is refused by
+    the caller.
     """
     for klass in type(func).__mro__:
         if "__call__" in klass.__dict__:
@@ -883,30 +879,43 @@ def _call_dunder(func: Callable) -> Any:
 def _held_code(func: Callable) -> Any:
     """The code object that runs when ``func`` is called, or ``None``.
 
-    Keyed on what dispatches: a function or method runs its own ``__code__``,
-    anything else callable runs its type's ``__call__``. Used only to ask whether
-    we are holding a lambda, which decides whether the shared-line ambiguity
-    check below applies.
+    A function or method runs its own ``__code__``; anything else runs its type's
+    ``__call__``. Used only to ask whether we are holding a lambda.
     """
     target = func if (inspect.isfunction(func) or inspect.ismethod(func)) else _call_dunder(func)
     return getattr(target, "__code__", None)
 
 
+_WARNINGS_LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def _syntax_warnings_suppressed() -> Iterator[None]:
+    """Parse without re-emitting, or tripping over, the source's own SyntaxWarnings.
+
+    The import already reported them. Without this, ``udf()`` repeats the warning,
+    and under warnings-as-errors the parse raises and lowering silently turns off.
+    ``warnings`` state is process-global, so the lock serializes our own use of it.
+    """
+    with _WARNINGS_LOCK:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=SyntaxWarning)
+            yield
+
+
 def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.AST]]:
     """Try and get the AST from a given callable
 
-    KNOWN LIMITATION (SPARK-58650): what comes back is the source on disk NOW, not
-    the source ``func`` was compiled from, and nothing here checks that the two
-    agree. ``inspect.getsource`` reads through ``linecache``, which re-reads a file
-    whose size or mtime changed, while the code object stays as it was at import.
-    So editing a module in a long-lived driver (a notebook, say) and then building
-    a UDF from a function imported earlier lowers the NEW body while Python runs
-    the old one -- a silent wrong answer. Verified: rewriting ``lambda x: x + 1``
-    to ``lambda x: x * 9`` after import gives Python 6 and Spark 45.
-
-    Closing this needs the parsed node checked against the held code object; see
-    the follow-up on SPARK-54783. Until then, transpilation assumes source files
-    are not edited underneath a running session.
+    KNOWN LIMITATION: this is the source on disk NOW, not necessarily the source
+    ``func`` was compiled from. ``inspect.getsource`` reads through ``linecache``,
+    which re-reads an edited file while the code object stays as it was at import,
+    so editing a module in a long-lived driver and then building a UDF from a
+    function imported earlier lowers the NEW body while Python runs the old one --
+    verified: rewriting ``lambda x: x + 1`` to ``x * 9`` gives Python 6, Spark 45.
+    Closing it needs the parsed node checked against the held code object; it is
+    not tracked separately, being part of the experimental transpiler
+    (SPARK-54783). Until then, transpilation assumes source files are not edited
+    underneath a running session.
     """
     # Note: consider maybe dill? (see the JYTHON PR)
     # inspect getsource does not work for functions defined in vanilla
@@ -915,12 +924,14 @@ def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.
     try:
         src = inspect.getsource(func)
         src = textwrap.dedent(src).strip()
-        ast_info = ast.parse(src)
+        with _syntax_warnings_suppressed():
+            ast_info = ast.parse(src)
     except Exception:
         try:
             src = inspect.getsource(_call_dunder(func))
             src = textwrap.dedent(src).strip()
-            ast_info = ast.parse(src)
+            with _syntax_warnings_suppressed():
+                ast_info = ast.parse(src)
         except Exception:
             # No usable source (REPL/stdin definition, builtin, ...) --
             # return cleanly so the caller reports "cannot transpile"
@@ -935,7 +946,7 @@ def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
 
 
 def _get_function_from_ast(
-    body: ast.AST, holding_lambda: bool = False, errors: Optional[List[str]] = None
+    body: ast.AST, holding_lambda: bool, errors: Optional[List[str]] = None
 ) -> ast.FunctionDef | None:
     """
     Extract a :class:`ast.FunctionDef` node from an AST produced by
@@ -945,22 +956,26 @@ def _get_function_from_ast(
 
     * ``f = lambda x: x + 1`` -- lambda bound directly to a name
     * ``lambda x: x + 1`` -- bare expression (getsource on a raw lambda)
-    * ``def f(x): ... return x + 1``
-    * a class with a ``__call__`` method
+    * ``def f(x): ... return x + 1`` -- including a ``__call__``, which the caller
+      hands us on its own (a ``ClassDef``, i.e. a class object rather than an
+      instance, is refused)
 
-    ``holding_lambda`` says whether the callable we were handed is itself a
-    lambda, which is what makes the shared-line ambiguity check below apply. A
-    class object reaches here as a ``ClassDef`` and is refused.
+    ``holding_lambda`` says whether the callable we were handed is itself a lambda,
+    which is what makes the ambiguity check below apply.
 
-    Returns ``None`` when no single unambiguous function can be identified --
-    notably, a lambda wrapped in a call such as
-    ``f = some_wrapper(lambda x: x + 1)`` parses as ``Assign(value=Call(...))``,
-    which is not unwrapped here and so falls back to interpreted Python. Local
-    class variables are likewise unsupported. A reason is appended to ``errors``
-    for the ambiguity case, whose fix (one lambda per line) is not otherwise
-    guessable from the generic message the caller would report.
+    Returns ``None``, and appends the reason to ``errors``, when no single
+    unambiguous function can be identified. Notably a lambda wrapped in a call,
+    ``f = some_wrapper(lambda x: x + 1)``, parses as ``Assign(value=Call(...))``,
+    which is not unwrapped here; an annotated assignment (``f: Callable = lambda
+    ...``) and a tuple target are likewise not unwrapped.
     """
+
+    def refuse(reason: str) -> None:
+        if errors is not None:
+            errors.append(reason)
+
     if not hasattr(body, "body") or not body.body:
+        refuse("no statement was found in the source read for this callable")
         return None
 
     stmt = body.body[0]
@@ -975,31 +990,38 @@ def _get_function_from_ast(
         stmt = stmt.value
 
     # ``inspect.getsource`` works in whole lines, so a lambda hands back every
-    # callable sharing its line, and a lambda inside a decorator hands back the
-    # whole decorated ``def``. Nothing in that text says which one we hold, so
-    # taking the first match was right by position rather than by identity: in
+    # callable sharing its line, and one inside a decorator hands back the whole
+    # decorated ``def``. Nothing in that text says which one we hold, so taking the
+    # first match was right by position, not by identity: in
     # ``f = lambda x: x + 1; g = lambda x: x - 1``, ``g`` lowered ``x + 1``, and a
     # lambda in a decorator lowered the decorated ``def``'s body (SPARK-58650).
+    # Refuse unless ``stmt`` IS the sole lambda in view -- looking only for siblings
+    # fails open when the source holds no lambda at all, letting an unrelated ``def``
+    # lower as the body.
     #
-    # Only a lambda is exposed to this. When we hold the ``def`` (or a
-    # ``__call__``), the lambdas in view are in its decorators, annotations,
-    # defaults, or body -- none of which can be the body we are about to lower,
-    # so refusing then would cost lowering for nothing.
+    # Only a lambda is exposed to this: when we hold the ``def`` or the ``__call__``,
+    # any lambda in view is in its decorators, annotations, defaults, or body, none
+    # of which can be the body we lower.
     #
-    # The held code object's ``co_positions`` columns could say WHICH lambda we
-    # hold, but pinning one down by position is more machinery than the payoff
-    # earns, so this deliberately also refuses the pick that would have landed
-    # right: the first lambda on a shared line.
-    if holding_lambda and any(
-        node is not stmt for node in ast.walk(body) if isinstance(node, ast.Lambda)
-    ):
-        if errors is not None:
-            errors.append(
+    # ``co_positions`` could say WHICH lambda we hold, but pinning one down by
+    # position earns less than it costs, so this also refuses the pick that would
+    # have landed right: the first lambda on a shared line.
+    if holding_lambda:
+        if not isinstance(stmt, ast.Lambda):
+            refuse(
+                "the source read for this lambda does not define it as a statement "
+                "of its own -- it is wrapped in a call, an annotated or tuple "
+                "assignment, or a surrounding definition -- so which lambda to "
+                "lower cannot be determined"
+            )
+            return None
+        if any(node is not stmt for node in ast.walk(body) if isinstance(node, ast.Lambda)):
+            refuse(
                 "more than one lambda is visible in the source line(s) this one was "
                 "read from, and nothing there says which is the UDF, so it is not "
                 "safe to lower; put each lambda on its own line to transpile it"
             )
-        return None
+            return None
 
     if isinstance(stmt, ast.Lambda):
         # Synthesize a one-statement FunctionDef wrapping the lambda body so
@@ -1018,15 +1040,20 @@ def _get_function_from_ast(
             body=[ast.Return(value=stmt.body)],
             decorator_list=[],
         )
-        # The synthesized ``FunctionDef`` and ``Return`` carry no positions, and a
-        # node without ``lineno`` cannot be unparsed or compiled. ``_transpile_from_ast``
-        # is the documented extension point for ``pyTranspilers``, so without this a
-        # third-party transpiler that unparses what it is handed would work for every
-        # ``def`` and raise for every lambda.
-        return ast.fix_missing_locations(synthesized)
+        # The synthesized nodes carry no positions, and a node without ``lineno``
+        # cannot be unparsed or compiled. ``_transpile_from_ast`` is the documented
+        # extension point for ``pyTranspilers``, so without this a third-party
+        # transpiler that unparses what it is handed would work for every ``def``
+        # and raise for every lambda. Seed from the lambda so reported positions
+        # point at real source rather than line 1.
+        return ast.fix_missing_locations(ast.copy_location(synthesized, stmt))
 
     if isinstance(stmt, ast.FunctionDef):
         return stmt
+    refuse(
+        f"the source read for this callable is a {type(stmt).__name__}, which the "
+        "transpiler cannot reduce to a single function definition"
+    )
     return None
 
 
@@ -1042,8 +1069,8 @@ def _transpile_func(
     -------
     list of transpiled options (one per backend x input-type variant)
     list of errors as strings
-    list of positional parameter names (excluding an already-bound receiver, so
-    a callable instance's or method's) -- needed so the caller can resolve named-argument
+    list of positional parameter names (excluding a receiver already bound, as on a
+    method or callable instance) -- needed so the caller can resolve named-argument
     invocations to positional order at call time, since the ``_udf_param_N``
     substitution in :class:`UserDefinedPythonFunction` is positional.
     list of per-option input-type categories (``"numeric"`` / ``"string"`` per
@@ -1095,13 +1122,14 @@ def _transpile_func(
                 [],
                 [],
             )
-        src, ast = _get_src_ast_from_func(func)
-        if ast is None:
+        # Not ``ast``: that name would shadow the module for this whole function.
+        src, ast_info = _get_src_ast_from_func(func)
+        if ast_info is None:
             return ([], ["Error getting ast for function, cannot transpile"], [], [])
         # Get the lambda body and parameters
         extraction_errors: List[str] = []
         function_ast = _get_function_from_ast(
-            ast, getattr(_held_code(func), "co_name", None) == "<lambda>", extraction_errors
+            ast_info, getattr(_held_code(func), "co_name", None) == "<lambda>", extraction_errors
         )
         if function_ast is None:
             return (
@@ -1124,7 +1152,7 @@ def _transpile_func(
             or fn_args.kwonlyargs
             or fn_args.vararg is not None
             or fn_args.kwarg is not None
-            or getattr(fn_args, "posonlyargs", [])
+            or fn_args.posonlyargs
         ):
             return (
                 [],
@@ -1136,31 +1164,22 @@ def _transpile_func(
                 [],
             )
         params = _get_parameter_list(function_ast)
-        # Drop any receiver that is already bound, so what is left is what the
-        # call site supplies. ``inspect.signature`` answers this by BINDING
-        # rather than by name, which is the only way to get it right in both
-        # directions: a bound ``__call__(this, x)`` or ``@classmethod f(cls, x)``
-        # has a receiver not named ``self``, while a plain ``def f(self, x)`` and
-        # a ``__call__`` wrapped in ``staticmethod`` have a leading ``self`` that
-        # IS supplied at the call site. Getting this from the name instead left
-        # the public list one too long or one too short, which misnumbers every
-        # ``_udf_param_N``: a two-column call on ``__call__(this, x)`` read
-        # column 2 for ``x`` and returned a value where Python raises TypeError.
-        try:
-            bound_receivers = len(params) - len(inspect.signature(func).parameters)
-        except Exception:
-            bound_receivers = -1
-        if bound_receivers not in (0, 1):
-            return (
-                [],
-                [
-                    "cannot tell which of the callable's parameters the call site "
-                    "supplies, so the placeholder positions cannot be assigned; "
-                    "falling back to interpreted Python"
-                ],
-                [],
-                [],
-            )
+        # Drop a receiver that is already bound, so what is left is what the call
+        # site supplies. Decided by HOW ``func`` dispatches, not by the parameter's
+        # name: a bound ``__call__(this, x)`` or ``@classmethod f(cls, x)`` has a
+        # receiver not named ``self``, while a plain ``def f(self, x)`` supplies its
+        # ``self`` at the call site. Going by the name misnumbered every
+        # ``_udf_param_N`` -- a two-column call on ``__call__(this, x)`` read column b
+        # for ``x`` and returned a value where Python raises TypeError. Asking
+        # ``inspect.signature`` is both weaker (a ``__signature__`` off by exactly one
+        # is undetectable) and worse behaved (it runs user code).
+        bound_receivers = int(
+            inspect.ismethod(func)
+            or (not inspect.isfunction(func) and inspect.isfunction(_call_dunder(func)))
+        )
+        if bound_receivers and not params:
+            # Nothing for the receiver to bind to, so calling this raises TypeError.
+            return ([], ["callable takes no parameter for its bound receiver"], [], [])
         # Caller-facing params: callers match user-supplied kwargs against this,
         # and the receiver is not named at the call site. Everything downstream
         # indexes off THIS list, so the placeholder numbering needs no offset.
@@ -1178,7 +1197,7 @@ def _transpile_func(
             for combo in combos:
                 try:
                     transpiled_column = transpiler._transpile_from_ast(
-                        src, ast, function_ast, public_params, returnType, combo
+                        src, ast_info, function_ast, public_params, returnType, combo
                     )
                     if transpiled_column is not None:
                         transpiled.append(transpiled_column)
