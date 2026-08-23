@@ -3315,6 +3315,35 @@ class CollectionExpressionsSuite
       Seq(1d))
   }
 
+  test("Array set operations normalize nested floating-point values") {
+    val structType = StructType(Seq(StructField("value", DoubleType)))
+    val arrayType = ArrayType(structType, containsNull = false)
+    val nonCanonicalNaN = java.lang.Double.longBitsToDouble(0x7ff0000000000001L)
+    val anotherNonCanonicalNaN = java.lang.Double.longBitsToDouble(0x7ff0000000000002L)
+
+    def row(value: Double): InternalRow = create_row(value)
+    def array(values: Double*): Literal = Literal.create(values.map(row), arrayType)
+
+    checkEvaluation(
+      ArrayDistinct(array(-0.0, 0.0, nonCanonicalNaN, anotherNonCanonicalNaN, 1.0)),
+      Seq(row(-0.0), row(Double.NaN), row(1.0)))
+    checkEvaluation(
+      ArrayUnion(
+        array(-0.0, nonCanonicalNaN),
+        array(0.0, anotherNonCanonicalNaN, 1.0)),
+      Seq(row(-0.0), row(Double.NaN), row(1.0)))
+    checkEvaluation(
+      ArrayIntersect(
+        array(-0.0, nonCanonicalNaN, 1.0),
+        array(0.0, anotherNonCanonicalNaN, 2.0)),
+      Seq(row(-0.0), row(Double.NaN)))
+    checkEvaluation(
+      ArrayExcept(
+        array(-0.0, nonCanonicalNaN, 1.0),
+        array(0.0, anotherNonCanonicalNaN)),
+      Seq(row(1.0)))
+  }
+
   test("SPARK-31980: Start and end equal in month range") {
     checkEvaluation(new Sequence(
       Literal(Date.valueOf("2018-01-01")),
