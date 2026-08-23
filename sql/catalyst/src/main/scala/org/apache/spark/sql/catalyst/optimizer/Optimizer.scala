@@ -1104,8 +1104,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               // The option's arguments are then shared so each is evaluated once per row rather
               // than once per use (SPARK-58626); RewriteWithExpression, two batches later, is
               // what pre-evaluates them below the operator.
+              // `recurse` on the option itself, not just its children: a custom transpiler can
+              // lower a call to another transpiled call, and that node at the option's root would
+              // otherwise be left in the plan and throw as Unevaluable at execution.
               TranspiledUDFParameter.shareParameters(
-                catalystExpr.mapChildren(recurse(_, parentIsUdf = false)), shareArguments)
+                recurse(catalystExpr, parentIsUdf = false), shareArguments)
           }
         } else {
           // We should avoid converting a UDF node where that could break pipelining.

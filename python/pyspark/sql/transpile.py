@@ -57,6 +57,15 @@ values for one parameter::
     df.select(clamp(rand()))                      # one draw per row
     df.select(when(col("a") > 0, clamp(rand())))  # two -- can return <= 0.5
 
+Two more cases cost an extra evaluation regardless of position:
+
+* an argument that is itself a Python UDF is always put back at each use site,
+  because the optimizer counts a Python call as cheap to repeat. Every use still
+  reads one result for a *deterministic* call; a nondeterministic one costs a
+  second worker round trip and can be drawn twice;
+* two parameters bound to equal arguments each get their own evaluation, so
+  ``f(a + 1, a + 1)`` computes ``a + 1`` twice per row.
+
 An argument the body never uses is not computed at all.
 """
 

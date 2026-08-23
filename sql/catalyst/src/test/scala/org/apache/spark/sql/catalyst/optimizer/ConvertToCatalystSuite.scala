@@ -334,7 +334,7 @@ class ConvertToCatalystSuite extends PlanTest {
   test("outer reference: shares with decorrelation on, declines with it off") {
     // With decorrelation on (the default) a pre-evaluated OuterReference is carried out of the
     // subquery fine. With it off, the fallback rewrites Filters only and the reference is stranded
-    // in the Project -- `EXISTS` over an outer argument fails Unevaluable that way -- so we decline.
+    // in the Project -- `EXISTS` over an outer argument fails Unevaluable that way -- so we bail.
     val arg = Add(OuterReference(attrA), Literal(1L))
     val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
     val tpudf = makeTPUDF(makePyUDF(arg), option)

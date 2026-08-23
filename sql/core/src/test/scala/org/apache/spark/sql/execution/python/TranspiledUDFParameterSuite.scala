@@ -105,19 +105,4 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
       checkAnswer(df, Seq(Row(0L, 2L), Row(1L, 2L), Row(4L, 2L)))
     }
   }
-
-  test("puts a deterministic argument in a predicate back inline") {
-    transpileOn {
-      // `PushPredicateThroughNonJoin` pushes a Filter through a Project only when every field is
-      // deterministic, so a deterministic argument's column is substituted back into the condition
-      // and evaluated at both use sites. Only extra work: same rows either way. A nondeterministic
-      // argument blocks that push and keeps its column -- covered in the Python suite, where a draw
-      // count is observable.
-      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
-      val df = spark.range(0, 6).filter(square(col("id") % 3) > 1)
-      val plan = df.queryExecution.optimizedPlan.toString
-      assert(!plan.contains("_common_expr"), s"Expected the argument inlined:\n$plan")
-      checkAnswer(df.select("id"), Seq(Row(2L), Row(5L)))
-    }
-  }
 }

@@ -297,28 +297,21 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
  * time, after which the copies are indistinguishable -- and shape cannot tell them apart, since
  * `ResolveRandomSeed` gives a nondeterministic argument a fresh seed per copy.
  *
- * The obvious alternative is to substitute a *reference* to the argument instead of a copy, leaving
- * the argument in `pythonUDFExpr`'s children and pre-evaluating it in a Project on the operator's
- * child -- no copies, so none of this bookkeeping. That was built and measured: about 50 more lines
- * of production code, because `RewriteWithExpression` already picks the child, projects the added
- * column away, refuses operators that cannot host one, and splits an [[Aggregate]] through
- * `PhysicalAggregation`. Building the Project by hand means redoing the first three and declining
- * the fourth, so an Aggregate gets no pre-evaluated column at all. Leaning on `With` is the smaller
- * change. The branch `SPARK-58626-project-approach` holds the other one if the Aggregate split is
- * ever worth writing: it does close two gaps this approach has, a conditional branch and equal
- * arguments bound to different parameters.
+ * A leaf reference to the argument would need no bookkeeping at all, but then `ConvertToCatalyst`
+ * has to build the pre-evaluating Project itself -- picking the child, projecting the added column
+ * away, refusing operators that cannot host one, and splitting an [[Aggregate]] through
+ * `PhysicalAggregation`. `RewriteWithExpression` already does all four. Measured, that trade is
+ * about 50 more lines and an Aggregate that shares nothing, so it stays as it is.
  *
- * See-through under `canonicalized` and `foldable`: the markers sit in the plan all through
- * analysis, where a marked argument still has to match the same argument written bare (an
- * [[Aggregate]]'s grouping expressions) and must not hide a constant from a check wanting one.
+ * See-through under `canonicalized`: the markers sit in the plan all through analysis, where a
+ * marked argument still has to match the same argument written bare -- an [[Aggregate]]'s grouping
+ * expressions, for one.
  */
 case class TranspiledUDFParameter(child: Expression, index: Int) extends TaggingExpression {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_UDF_PARAMETER)
 
   override lazy val canonicalized: Expression = child.canonicalized
-
-  override def foldable: Boolean = child.foldable
 
   override protected def withNewChildInternal(newChild: Expression): TranspiledUDFParameter =
     copy(child = newChild)
@@ -340,7 +333,7 @@ object TranspiledUDFParameter {
    * un-evaluable. Decorrelation is on by default and carries it out fine.
    */
   private def rulesOutSharing(option: Expression): Boolean =
-    (!SQLConf.get.getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED) &&
+    (!SQLConf.get.decorrelateInnerQueryEnabled &&
       option.containsPattern(OUTER_REFERENCE)) || option.exists {
       case e @ (_: AggregateExpression | _: LambdaFunction) =>
         e.containsPattern(TRANSPILED_UDF_PARAMETER)
