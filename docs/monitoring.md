@@ -1336,6 +1336,11 @@ This is the component with the largest amount of instrumented metrics
   - queue.eventLog.numDroppedEvents.count
   - queue.eventLog.size
   - queue.executorManagement.listenerProcessingTime (timer)
+  - queue.executorManagement.numDroppedEvents.count
+  - queue.executorManagement.size
+  - queue.shared.listenerProcessingTime (timer)
+  - queue.shared.numDroppedEvents.count
+  - queue.shared.size
 
 - namespace=appStatus (all metrics of type=counter)
   - **note:** Introduced in Spark 3.0. Conditional to a configuration parameter:

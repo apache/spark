@@ -291,15 +291,6 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * The number of events dropped from the executor management queue since this manager's
-   * listener bus was started. See `LiveListenerBus.numDroppedExecutorManagementEvents` for why
-   * a positive value here is a signal that this manager's view of pending/running tasks may be
-   * stale, independent of whether the Spark UI (or other listener queues) look healthy.
-   */
-  private[spark] def numDroppedExecutorManagementEvents: Long =
-    listenerBus.numDroppedExecutorManagementEvents
-
-  /**
    * The maximum number of executors, for the ResourceProfile id passed in, that we would need
    * under the current load to satisfy all running and pending tasks, rounded up.
    */
@@ -1028,12 +1019,6 @@ private[spark] class ExecutorAllocationManagerSource(
       .map(executorAllocationManager.maxNumExecutorsNeededPerResourceProfile(_)).sum, 0)
   registerGauge("numberDecommissioningExecutors",
     executorAllocationManager.executorMonitor.decommissioningCount, 0)
-  // A positive value here means events have been dropped from the executor management
-  // queue, which can cause this manager's "executors needed" calculation to silently miss
-  // stages/tasks -- independent of whether the Spark UI or application otherwise looks
-  // healthy. See LiveListenerBus.numDroppedExecutorManagementEvents for details.
-  registerGauge("numDroppedExecutorManagementEvents",
-    executorAllocationManager.numDroppedExecutorManagementEvents, 0L)
 }
 
 private object ExecutorAllocationManager {

@@ -260,60 +260,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.stop()
   }
 
-  test("SPARK-58935: numDroppedExecutorManagementEvents tracks only the " +
-      "executorManagement queue") {
-    // Scenario 1: only the shared queue overflows -- the management-queue counter must
-    // stay at 0, proving it doesn't just alias some other queue's counter.
-    val busA = new LiveListenerBus(
-      new SparkConf().set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 1))
-    val sharedStarted = new Semaphore(0)
-    val sharedWait = new Semaphore(0)
-    busA.addToSharedQueue(new SparkListener {
-      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        sharedStarted.release()
-        sharedWait.acquire()
-      }
-    })
-    busA.addToManagementQueue(new SparkListener {})
-    busA.start(mockSparkContext, mockMetricsSystem)
-
-    busA.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    sharedStarted.acquire()
-    busA.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    busA.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) // dropped, shared queue
-    sharedWait.release(2)
-    busA.waitUntilEmpty()
-
-    assert(numDroppedEvents(busA) === 1, "shared queue should have exactly one dropped event")
-    assert(busA.numDroppedExecutorManagementEvents === 0,
-      "the management queue counter must not be affected by drops on the shared queue")
-    busA.stop()
-
-    // Scenario 2: only the management queue overflows -- the counter must reflect it.
-    val busB = new LiveListenerBus(
-      new SparkConf().set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 1))
-    val mgmtStarted = new Semaphore(0)
-    val mgmtWait = new Semaphore(0)
-    busB.addToManagementQueue(new SparkListener {
-      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        mgmtStarted.release()
-        mgmtWait.acquire()
-      }
-    })
-    busB.start(mockSparkContext, mockMetricsSystem)
-
-    assert(busB.numDroppedExecutorManagementEvents === 0)
-    busB.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    mgmtStarted.acquire()
-    busB.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    busB.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) // dropped, mgmt queue
-    mgmtWait.release(2)
-    busB.waitUntilEmpty()
-
-    assert(busB.numDroppedExecutorManagementEvents === 1)
-    busB.stop()
-  }
-
   test("basic creation of StageInfo") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
