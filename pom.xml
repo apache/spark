@@ -173,7 +173,7 @@
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
     <commons.math3.version>3.6.1</commons.math3.version>
-    <commons.collections4.version>4.5.0</commons.collections4.version>
+    <commons.collections4.version>4.6.0</commons.collections4.version>
     <scala.version>2.13.18</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
