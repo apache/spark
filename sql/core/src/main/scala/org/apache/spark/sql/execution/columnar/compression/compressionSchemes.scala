@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 import scala.collection.mutable
 
