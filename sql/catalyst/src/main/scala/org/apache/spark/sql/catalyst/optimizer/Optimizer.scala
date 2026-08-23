@@ -320,8 +320,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // TranspiledPythonUDF node; excluding it would leak that node into
       // execution, so it must never be excludable.
       ConvertToCatalyst.ruleName,
-      // Same reasoning one step later: ConvertToCatalyst shares a repeated UDF argument through an
-      // (also Unevaluable) `With`, and this is the only rule that rewrites one away.
+      // Same reasoning for `With`, which is also Unevaluable and which this is the only rule that
+      // rewrites away. Not specific to transpiled UDFs -- `ReplaceExpressions` produces one for
+      // `Between`, `NullIf` and other RuntimeReplaceables -- so excluding this rule could already
+      // strand one before ConvertToCatalyst had a reason to emit any.
       RewriteWithExpression.ruleName,
       FinishAnalysis.ruleName,
       RewriteDistinctAggregates.ruleName,
@@ -1058,13 +1060,24 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * `shareArguments` defaults to false so that a caller outside this rule -- a custom transpiler
+   * with its own ConvertToX, which the scaladoc below invites -- gets the safe behavior. Only the
+   * caller knows whether a Project can go below its operator: `apply` passes true for everything
+   * except a [[Command]].
+   */
   def applyExpr(
       expression: Expression,
       parentIsUdf: Boolean = false,
-      shareArguments: Boolean = true): Expression = {
+      shareArguments: Boolean = false): Expression = {
+    // Keeps the enclosing sharing policy. The `case _` branch deliberately does NOT use this -- it
+    // narrows the policy on the way into a lambda -- so do not "simplify" that call to `recurse`.
     def recurse(e: Expression, parentIsUdf: Boolean): Expression =
       applyExpr(e, parentIsUdf, shareArguments)
     expression match {
+      // Nothing to convert below here, so skip the subtree rather than walking it node by node.
+      case other if !other.containsPattern(TRANSPILED_PYTHON_UDF) => other
+
       case s: TranspiledPythonUDF =>
         // Every branch that declines to transpile leaves the Python UDF in place and keeps walking
         // its arguments, which may hold transpilable calls of their own.

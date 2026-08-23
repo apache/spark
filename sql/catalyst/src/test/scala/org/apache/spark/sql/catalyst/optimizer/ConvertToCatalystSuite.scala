@@ -198,7 +198,7 @@ class ConvertToCatalystSuite extends PlanTest {
         Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0)),
         TranspiledUDFParameter(arg, 1))
       val tpudf = makeTPUDF(makePyUDF(arg), option)
-      ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false) match {
+      ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false, shareArguments = true) match {
         case With(child, defs) =>
           assert(defs.map(_.child) == Seq(arg, arg), s"Expected one def per parameter: $defs")
           // Two refs to a's common expression and one to b's, in the option body's order.
@@ -325,7 +325,8 @@ class ConvertToCatalystSuite extends PlanTest {
       val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
       val arr = AttributeReference("arr", ArrayType(LongType))()
       val unrelated = ArrayTransform(arr, LambdaFunction(lambdaVar, Seq(lambdaVar)))
-      val result = ConvertToCatalyst.applyExpr(Add(call, Size(unrelated)), parentIsUdf = false)
+      val result = ConvertToCatalyst.applyExpr(
+        Add(call, Size(unrelated)), parentIsUdf = false, shareArguments = true)
       assert(result.exists(_.isInstanceOf[With]),
         s"Expected the call outside the lambda to keep sharing: $result")
     }
@@ -339,7 +340,7 @@ class ConvertToCatalystSuite extends PlanTest {
     val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
     val tpudf = makeTPUDF(makePyUDF(arg), option)
     transpileOn {
-      ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false) match {
+      ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false, shareArguments = true) match {
         case With(_, defs) => assert(defs.length == 1, s"Expected one def: $defs")
         case other => fail(s"Expected sharing when decorrelation is on, got: $other")
       }
@@ -348,7 +349,7 @@ class ConvertToCatalystSuite extends PlanTest {
         SQLConf.ANSI_ENABLED.key -> "true",
         SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
         SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
-      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false, shareArguments = true)
       assert(result == Multiply(arg, arg), s"Expected no With with decorrelation off: $result")
     }
   }
@@ -361,7 +362,7 @@ class ConvertToCatalystSuite extends PlanTest {
       val arg = Sum(attrA).toAggregateExpression()
       val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
       val tpudf = makeTPUDF(makePyUDF(arg), option)
-      ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false) match {
+      ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false, shareArguments = true) match {
         case With(_, defs) => assert(defs.length == 1, s"Expected one def: $defs")
         case other => fail(s"Expected a With, got: $other")
       }
@@ -414,7 +415,8 @@ class ConvertToCatalystSuite extends PlanTest {
       val innerOption = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
       val innerTPUDF = makeTPUDF(makePyUDF(arg), innerOption)
       val outerTPUDF = makeTPUDF(makePyUDF(innerTPUDF), TranspiledUDFParameter(innerTPUDF, 0))
-      val result = ConvertToCatalyst.applyExpr(outerTPUDF, parentIsUdf = false)
+      val result = ConvertToCatalyst.applyExpr(
+        outerTPUDF, parentIsUdf = false, shareArguments = true)
       assert(!result.exists(_.isInstanceOf[TranspiledPythonUDF]),
         s"TranspiledPythonUDF survived at the option root: $result")
       assert(!result.exists(_.isInstanceOf[TranspiledUDFParameter]),

@@ -23,8 +23,13 @@ Transpilation is only attempted when both
 ``spark.sql.ansi.enabled``. When disabled, or if transpilation fails,
 we fall back to the regular non-transpiled code path.
 
-Testing here is focused on making sure that the results do not differ
-in a way that is semantically incorrect (e.g. rounding differences are acceptable).
+These classes re-run the shared UDF mixins under that configuration to confirm
+turning the feature on does not change UDF results. Two divergences are known
+and deliberate, both pinned by ``test_udf_transpile_unit.py`` rather than here:
+an argument the transpiled body never uses is not evaluated at all, so under
+ANSI an erroring one yields rows where interpreted Python raises; and a
+repeated argument is evaluated once per row rather than once per use, which
+makes it eager (see ``transpile.py`` for the evaluation-count contract).
 
 Transpilation is currently only supported in regular (non-Connect) Spark, so
 these classes are guarded with ``is_remote_only()`` and are intentionally not

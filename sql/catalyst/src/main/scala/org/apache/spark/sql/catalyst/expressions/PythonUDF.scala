@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PYTHON_UDF,
-  TRANSPILED_PYTHON_UDF, TRANSPILED_UDF_PARAMETER, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, LAMBDA_FUNCTION,
+  OUTER_REFERENCE, PYTHON_UDF, TRANSPILED_PYTHON_UDF, TRANSPILED_UDF_PARAMETER, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -334,11 +334,14 @@ object TranspiledUDFParameter {
    */
   private def rulesOutSharing(option: Expression): Boolean =
     (!SQLConf.get.decorrelateInnerQueryEnabled &&
-      option.containsPattern(OUTER_REFERENCE)) || option.exists {
-      case e @ (_: AggregateExpression | _: LambdaFunction) =>
-        e.containsPattern(TRANSPILED_UDF_PARAMETER)
-      case _ => false
-    }
+      option.containsPattern(OUTER_REFERENCE)) ||
+      // The bitset check first: the walk below can only find something if one of the two node types
+      // is in the tree at all, and both tag their pattern.
+      (option.containsAnyPattern(AGGREGATE_EXPRESSION, LAMBDA_FUNCTION) && option.exists {
+        case e @ (_: AggregateExpression | _: LambdaFunction) =>
+          e.containsPattern(TRANSPILED_UDF_PARAMETER)
+        case _ => false
+      })
 
   /**
    * Takes the markers off a substituted option, giving each parameter one [[With]] common
@@ -350,7 +353,7 @@ object TranspiledUDFParameter {
    * Command and inside a lambda. A custom transpiler with its own ConvertToX wants to call this
    * too. Either way the markers come off.
    */
-  def shareParameters(option: Expression, share: Boolean = true): Expression = {
+  def shareParameters(option: Expression, share: Boolean = false): Expression = {
     if (!option.containsPattern(TRANSPILED_UDF_PARAMETER)) {
       return option
     }

@@ -35,9 +35,10 @@ import org.apache.spark.sql.types.LongType
  * placeholders: filling them in is what erases which copy came from which parameter, and the
  * indexes it stamps on are what tell `ConvertToCatalyst` which copies share one evaluation.
  *
- * Plus two operator shapes the Python suite does not assert plans for: a call as a grouping key,
- * which does share, and one in a predicate, which does not. Both assert on the `_common_expr`
- * column, since a deterministic argument gives the same answer either way.
+ * Plus the one shape the Python suite checks only the values of: a call used as an [[Aggregate]]'s
+ * grouping key, where the same call also appears in the result expressions and the two have to end
+ * up reading one column. Asserted on the plan, since a deterministic argument gives the same answer
+ * either way.
  */
 class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
@@ -101,7 +102,11 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
       val df = spark.range(0, 6).groupBy(square(col("id") % 3).as("sq")).count()
       val plan = df.queryExecution.optimizedPlan.toString
-      assert(plan.contains("_common_expr"), s"Expected a shared argument column:\n$plan")
+      // Count the column *definitions*, not the reads: two `AS _common_expr` would mean the
+      // grouping key and the result expression each pre-evaluated the argument separately, which is
+      // the regression this guards. One definition read twice is the shape we want.
+      assert("AS _common_expr".r.findAllIn(plan).length == 1,
+        s"Expected exactly one shared argument column:\n$plan")
       checkAnswer(df, Seq(Row(0L, 2L), Row(1L, 2L), Row(4L, 2L)))
     }
   }
