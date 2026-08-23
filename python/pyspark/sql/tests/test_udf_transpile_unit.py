@@ -1357,22 +1357,37 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     # contains "UDF" (so the "UDF" substring is unreliable).
     # ------------------------------------------------------------------
 
-    def _transpiled_udf(self, func, return_type):
-        """A UDF built with transpilation on, asserting it produced options.
+    @staticmethod
+    def _udf_and_warnings(func, return_type):
+        """Build a UDF, returning it with the text of any warnings it emitted.
 
-        ``udf.py`` reports WHY a UDF fell back only as a warning, so capture those
-        and name them: without it an empty ``transpiled`` asserts as bare "[] is not
-        true", and from CI the warning text is only in a credentialed log artifact.
+        ``udf.py`` reports WHY a UDF fell back only as a warning, so every test that
+        cares about a fallback needs them captured. The caller must already be inside
+        ``sql_conf(_TRANSPILE_ON)`` -- this does not set the conf.
         """
         import warnings
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             u = UserDefinedFunction(func, return_type)
-        self.assertTrue(
-            u.transpiled,
-            f"{func} produced no transpiled options; warnings: {[str(w.message) for w in caught]}",
-        )
+        return u, " ".join(str(w.message) for w in caught)
+
+    def _fallback_reason(self, func, return_type=LongType()):
+        """Assert ``func`` produced no options, and hand back the reason it reported."""
+        u, reasons = self._udf_and_warnings(func, return_type)
+        self.assertEqual([], u.transpiled, f"{func} must fall back")
+        self.assertTrue(reasons, f"{func} fell back without saying why")
+        return u, reasons
+
+    def _transpiled_udf(self, func, return_type):
+        """A UDF asserted to have produced options; naming the fallback reason if not.
+
+        Without the captured warning an empty ``transpiled`` asserts as bare "[] is
+        not true", and from CI the text is only in a credentialed log artifact. The
+        caller must already be inside ``sql_conf(_TRANSPILE_ON)``.
+        """
+        u, reasons = self._udf_and_warnings(func, return_type)
+        self.assertTrue(u.transpiled, f"{func} produced no transpiled options: {reasons}")
         return u
 
     def _vals(self, func, return_type, schema, rows, require_lowered=True):
@@ -1585,8 +1600,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         #
         # ``fmt: off`` keeps the two on one line; asserted below, since the formatter
         # would otherwise split them and quietly make this test vacuous.
-        import warnings as _warnings
-
         # fmt: off
         plus_one = lambda x: x + 1; minus_one = lambda x: x - 1  # noqa: E702,E731
         # fmt: on
@@ -1628,13 +1641,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 ("first lambda on the line", plus_one, 6, sibling),
             ]:
                 with self.subTest(case=label):
-                    with _warnings.catch_warnings(record=True) as caught:
-                        _warnings.simplefilter("always")
-                        u = UserDefinedFunction(func, LongType())
-                    self.assertEqual([], u.transpiled)
+                    u, reasons = self._fallback_reason(func)
                     # Assert the REASON, so relaxing the guard fails here loudly
                     # rather than passing for a new and unrelated cause.
-                    self.assertIn(needle, " ".join(str(w.message) for w in caught))
+                    self.assertIn(needle, reasons)
                     self.assertEqual(expected, num.select(u("a")).first()[0])
 
         # The ``def`` itself is NOT collateral: we know we are holding it, so a
@@ -1649,7 +1659,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         import importlib.util
         import os
         import tempfile
-        import warnings as _warnings
 
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "drifted_lambda.py")
@@ -1662,15 +1671,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 handle.write("def unrelated(a):\n    return a * 12345\n")
 
             with self.sql_conf(_TRANSPILE_ON):
-                with _warnings.catch_warnings(record=True) as caught:
-                    _warnings.simplefilter("always")
-                    u = UserDefinedFunction(module.f, LongType())
-                self.assertEqual([], u.transpiled)
+                u, reasons = self._fallback_reason(module.f)
                 # Pin the REASON, or a source read that merely failed would pass too.
-                self.assertIn(
-                    "which lambda to lower cannot be determined",
-                    " ".join(str(w.message) for w in caught),
-                )
+                self.assertIn("which lambda to lower cannot be determined", reasons)
                 num = self.spark.createDataFrame([(5,)], "a long")
                 self.assertEqual(6, num.select(u("a")).first()[0])
 
@@ -1683,25 +1686,44 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # back with the sibling message, advice that could not be acted on.
         nested = lambda x: (lambda y: y + 1)(x)  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
-            import warnings as _warnings
+            _, reasons = self._fallback_reason(nested)
+            self.assertIn("Call", reasons, "must fall back for the body, not for ambiguity")
+            self.assertNotIn("put each lambda on its own line", reasons)
 
-            with _warnings.catch_warnings(record=True) as caught:
-                _warnings.simplefilter("always")
-                u = UserDefinedFunction(nested, LongType())
-            messages = " ".join(str(w.message) for w in caught)
-            self.assertEqual([], u.transpiled, "a Call body is unsupported either way")
-            self.assertIn("Call", messages, "must fall back for the body, not for ambiguity")
-            self.assertNotIn("put each lambda on its own line", messages)
+        # The mirror: a lambda RETURNED by a one-line lambda. Here the outer one is
+        # what the source read locates and the inner one is what we hold, so treating
+        # nested lambdas as never-rivals let this through -- and it proceeded with the
+        # outer signature, reporting `n` as the UDF's parameter for a UDF whose only
+        # parameter is `x`. Matching the located lambda's parameters against the held
+        # code object's is what separates this from the case above.
+        # fmt: off
+        make_adder = lambda n: lambda x: x + n  # noqa: E731
+        # fmt: on
+        add_three = make_adder(3)
+        self.assertEqual(8, add_three(5))
+        with self.sql_conf(_TRANSPILE_ON):
+            u, reasons = self._fallback_reason(add_three)
+            self.assertIn("takes different parameters", reasons)
+            self.assertEqual([], u._transpiled_param_names or [])
+            self.assertEqual(
+                8, self.spark.createDataFrame([(5,)], "a long").select(u("a")).first()[0]
+            )
 
         # ``staticmethod``/``classmethod`` hide ``__code__`` behind the descriptor, so
-        # reading it off them left ``holding_lambda`` False -- skipping the check for
-        # a shape it exists to catch. Now that these lower at all, the skip would be
-        # a wrong answer: ``helper`` shares the line and would be lowered instead.
+        # reading it off them left the guard inactive -- skipping the check for a shape
+        # it exists to catch. Now that these lower at all, the skip would be a wrong
+        # answer: ``helper`` shares the line and takes the same parameter, so it is a
+        # true rival and would be lowered instead (5 * 9, not 5 * 2).
         class Wrapped:
             # fmt: off
-            help = lambda s, x: x * 100; __call__ = staticmethod(lambda x: x * 2)  # noqa: E702,E731
+            helper = lambda x: x * 9; __call__ = staticmethod(lambda x: x * 2)  # noqa: E702,E731
             # fmt: on
 
+        self.assertEqual(
+            Wrapped.helper.__code__.co_firstlineno,
+            Wrapped.__call__.__code__.co_firstlineno,
+            "fixture must keep both lambdas on ONE line or it proves nothing",
+        )
         self.assertEqual(
             "<lambda>",
             getattr(_held_code(Wrapped()), "co_name", None),
@@ -1709,10 +1731,20 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         )
         self.assertEqual(10, Wrapped()(5))
         with self.sql_conf(_TRANSPILE_ON):
-            u = UserDefinedFunction(Wrapped(), LongType())
-            self.assertEqual([], u.transpiled, "two lambdas in view -- must refuse")
+            u, reasons = self._fallback_reason(Wrapped())
+            self.assertIn("put each lambda on its own line", reasons)
             num = self.spark.createDataFrame([(5,)], "a long")
             self.assertEqual(10, num.select(u("a")).first()[0])
+
+    def test_udf_transpile_lowers_an_annotated_lambda_binding(self):
+        # An annotated binding is the same shape as a plain one, and the form a typed
+        # codebase writes. Only ``ast.Assign`` was unwrapped, so this was refused as
+        # "not a statement of its own" -- while the module docstring told users to
+        # bind the lambda to a name and give it a line, which is exactly this.
+        from typing import Callable
+
+        annotated: Callable[[int], int] = lambda x: x + 1  # noqa: E731
+        self.assertEqual(self._vals(annotated, LongType(), "a long", [(5,)]), [6])
 
     def test_udf_transpile_recovers_shapes_with_an_unheld_lambda_in_view(self):
         # The ambiguity check applies only when the callable we hold IS a lambda. The
@@ -1752,10 +1784,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertEqual(self._vals(shadowed, LongType(), "a long", [(5,)]), [20])
 
     def test_udf_transpile_refuses_a_class_object(self):
-        # Calling a CLASS runs ``__init__`` and yields an instance, so its
-        # ``__call__`` is never the body -- but that is the body the old
-        # ``getattr(func, "__call__")`` found. Pinned for the dynamically-created
-        # case too, where ``getsource`` cannot fall back to a ``ClassDef``.
+        # Calling a CLASS whose metaclass is ``type`` runs ``__init__`` and yields an
+        # instance, so its own ``__call__`` is never the body -- but that is the body
+        # the old ``getattr(func, "__call__")`` found. Pinned for the
+        # dynamically-created case too, where ``getsource`` cannot fall back to a
+        # ``ClassDef``. (A class with a custom metaclass IS callable through
+        # ``Meta.__call__``, and is resolved through it rather than refused.)
         class Lexical:
             def __init__(self, x):
                 self.v = x * 7
@@ -1808,22 +1842,42 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         class BoundCall:
             __call__ = Helper().impl
 
+        # And the two compose: a ``staticmethod`` prepends nothing, but the method it
+        # wraps is already bound, so one parameter is still spoken for. Counting only
+        # what the descriptor prepends declared a parameter too many here.
+        class StaticBound:
+            __call__ = staticmethod(Helper().impl)
+
         for label, func, expected in [
             ("__call__ receiver not named self", Recv(), 6),
             ("bound method receiver not named self", Meth().act, 7),
             ("classmethod receiver not named self", Cls.act, 8),
             ("classmethod as __call__", ClsCall(), 9),
             ("already-bound method as __call__", BoundCall(), 10),
+            ("staticmethod over a bound method", StaticBound(), 10),
         ]:
             with self.subTest(case=label):
                 self.assertEqual(func(5), expected, "fixture must match Python's own answer")
                 self.assertEqual(self._vals(func, LongType(), "a long", [(5,)]), [expected])
 
+        # Both at once is a callable Python itself rejects: the classmethod prepends
+        # the class ON TOP of the method's own receiver, leaving no parameter for the
+        # call site. Counting one receiver returned a value where Python raises.
+        class ClassBound:
+            __call__ = classmethod(Helper().impl)
+
+        with self.assertRaises(TypeError):
+            ClassBound()(5)
+        with self.sql_conf(_TRANSPILE_ON):
+            _, reasons = self._fallback_reason(ClassBound())
+            self.assertIn("leaves no parameter for the call site", reasons)
+
         # The mirror: a ``staticmethod`` ``__call__`` prepends nothing, so its leading
-        # ``self`` IS supplied at the call site and both parameters are public. This
-        # used to be refused for a functools.wraps decorator that is not there --
-        # ``staticmethod`` carries a ``__wrapped__`` of its own, and the check was
-        # reading the descriptor instead of the function inside it.
+        # ``self`` IS supplied at the call site and both parameters are public.
+        # Resolving ``__call__`` on the type (rather than via getattr on the instance,
+        # which fires the descriptor) hands back the raw ``staticmethod``, which
+        # carries a ``__wrapped__`` of its own -- so for a while on this branch the
+        # wraps guard refused every one of them for a decorator that is not there.
         class Static:
             @staticmethod
             def __call__(self, x):
