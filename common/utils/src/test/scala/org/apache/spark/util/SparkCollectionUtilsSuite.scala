@@ -54,6 +54,7 @@ class SparkCollectionUtilsSuite extends AnyFunSuite { // scalastyle:ignore funsu
     assert(SparkCollectionUtils.createArray(2, 3.toByte).sameElements(Array(3.toByte, 3.toByte)))
     assert(
       SparkCollectionUtils.createArray(2, 4.toShort).sameElements(Array(4.toShort, 4.toShort)))
+    assert(SparkCollectionUtils.createArray(2, 'a').sameElements(Array('a', 'a')))
   }
 
   test("createArray fills reference-typed arrays and returns empty for size 0") {
