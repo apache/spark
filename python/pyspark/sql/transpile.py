@@ -34,6 +34,10 @@ UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category and
 keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
+
+A lambda is read from source by line, so give each one a line of its own.
+Where two share a line nothing in the text says which is the UDF, and both
+fall back to interpreted Python rather than risk lowering the wrong body.
 """
 
 import ast
@@ -41,6 +45,7 @@ from typing import Any, Callable, Iterator, List, Optional, Tuple, TYPE_CHECKING
 import contextlib
 import inspect
 import itertools
+import sys
 import textwrap
 import threading
 import warnings
@@ -853,7 +858,7 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
 
 
 def _call_dunder(func: Callable) -> Any:
-    """The ``__call__`` entry from ``func``'s type MRO, or ``None``.
+    """The ``__call__`` entry from ``func``'s type, or ``None``.
 
     Not ``getattr(func, "__call__")``, which is wrong in two ways that both end with
     lowering a body that never runs: an instance attribute ``obj.__call__ = f``
@@ -861,29 +866,31 @@ def _call_dunder(func: Callable) -> Any:
     a CLASS object it finds the ``__call__`` its instances use while calling the
     class runs ``__init__``.
 
-    Reads ``klass.__dict__`` rather than ``getattr(klass, ...)`` so the descriptor
-    protocol never fires -- deciding what to transpile must not run user code, and a
-    ``property`` used as ``__call__`` would otherwise run its getter here.
+    ``getattr_static`` looks the name up without firing the descriptor protocol, so
+    deciding what to transpile never runs user code -- a custom descriptor used as
+    ``__call__`` would otherwise have its ``__get__`` called here.
 
     Anything but a plain function comes back raw -- a ``property``, a
     ``staticmethod``, or the slot wrapper that a class object or a plain function
     yields from its metatype/type -- has no retrievable source, and is refused by
     the caller.
     """
-    for klass in type(func).__mro__:
-        if "__call__" in klass.__dict__:
-            return klass.__dict__["__call__"]
-    return None
+    try:
+        return inspect.getattr_static(type(func), "__call__")
+    except AttributeError:
+        return None
 
 
 def _held_code(func: Callable) -> Any:
     """The code object that runs when ``func`` is called, or ``None``.
 
     A function or method runs its own ``__code__``; anything else runs its type's
-    ``__call__``. Used only to ask whether we are holding a lambda.
+    ``__call__``. ``__func__`` unwraps the ``staticmethod`` / ``classmethod`` that
+    ``getattr_static`` hands back undisturbed, neither of which forwards
+    ``__code__``. Used only to ask whether we are holding a lambda.
     """
     target = func if (inspect.isfunction(func) or inspect.ismethod(func)) else _call_dunder(func)
-    return getattr(target, "__code__", None)
+    return getattr(getattr(target, "__func__", target), "__code__", None)
 
 
 _WARNINGS_LOCK = threading.Lock()
@@ -895,11 +902,20 @@ def _syntax_warnings_suppressed() -> Iterator[None]:
 
     The import already reported them. Without this, ``udf()`` repeats the warning,
     and under warnings-as-errors the parse raises and lowering silently turns off.
-    ``warnings`` state is process-global, so the lock serializes our own use of it.
+    Before 3.12 an invalid escape sequence was a DeprecationWarning, so ignore that
+    too rather than lose lowering on the oldest Python we support.
+
+    The lock serializes our own use of ``warnings``, whose state is process-global.
+    It cannot serialize anyone else's: a thread entering ``catch_warnings`` while
+    this is open has its filters restored from our older snapshot on exit. That
+    hazard is inherent to the stdlib API and is why the parse is the only thing
+    inside here.
     """
     with _WARNINGS_LOCK:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=SyntaxWarning)
+            if sys.version_info < (3, 12):
+                warnings.filterwarnings("ignore", category=DeprecationWarning)
             yield
 
 
@@ -946,7 +962,7 @@ def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
 
 
 def _get_function_from_ast(
-    body: ast.AST, holding_lambda: bool, errors: Optional[List[str]] = None
+    body: ast.AST, holding_lambda: bool, errors: List[str]
 ) -> ast.FunctionDef | None:
     """
     Extract a :class:`ast.FunctionDef` node from an AST produced by
@@ -965,13 +981,8 @@ def _get_function_from_ast(
     Returns ``None``, and appends the reason to ``errors``, when no single
     unambiguous function can be identified.
     """
-
-    def refuse(reason: str) -> None:
-        if errors is not None:
-            errors.append(reason)
-
     if not hasattr(body, "body") or not body.body:
-        refuse("no statement was found in the source read for this callable")
+        errors.append("no statement was found in the source read for this callable")
         return None
 
     stmt = body.body[0]
@@ -988,15 +999,18 @@ def _get_function_from_ast(
     # ``inspect.getsource`` works in whole lines, so refuse multiple defs on one line for safety.
     if holding_lambda:
         if not isinstance(stmt, ast.Lambda):
-            refuse(
-                "the source read for this lambda does not define it as a statement "
-                "of its own -- it is wrapped in a call, an annotated or tuple "
-                "assignment, or a surrounding definition -- so which lambda to "
-                "lower cannot be determined"
+            errors.append(
+                "the source read for this lambda does not define it as a statement of "
+                "its own -- it is wrapped in a call, an annotated or tuple assignment, "
+                "or a surrounding definition, or the file has changed since import and "
+                "no longer holds it -- so which lambda to lower cannot be determined"
             )
             return None
-        if any(node is not stmt for node in ast.walk(body) if isinstance(node, ast.Lambda)):
-            refuse(
+        # Only lambdas OUTSIDE ``stmt`` are rival candidates. One nested in its body
+        # can never be the UDF, and the user could not split it onto another line.
+        held = set(map(id, ast.walk(stmt)))
+        if any(id(node) not in held for node in ast.walk(body) if isinstance(node, ast.Lambda)):
+            errors.append(
                 "more than one lambda is visible in the source line(s) this one was "
                 "read from, and nothing there says which is the UDF, so it is not "
                 "safe to lower; put each lambda on its own line to transpile it"
@@ -1017,7 +1031,7 @@ def _get_function_from_ast(
 
     if isinstance(stmt, ast.FunctionDef):
         return stmt
-    refuse(
+    errors.append(
         f"the source read for this callable is a {type(stmt).__name__}, which the "
         "transpiler cannot reduce to a single function definition"
     )
@@ -1099,12 +1113,8 @@ def _transpile_func(
             ast_info, getattr(_held_code(func), "co_name", None) == "<lambda>", extraction_errors
         )
         if function_ast is None:
-            return (
-                [],
-                extraction_errors or ["Error extracting function body from ast, cannot transpile"],
-                [],
-                [],
-            )
+            # Never empty: every ``return None`` in there appends its own reason.
+            return ([], extraction_errors, [], [])
         # Default, variadic (``*args`` / ``**kwargs``), keyword-only, and
         # positional-only parameters can't be represented by the positional
         # ``_udf_param_N`` placeholder scheme: a call site may omit a

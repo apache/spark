@@ -1459,9 +1459,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             with self.subTest(case=i):
                 self.assertEqual(self._vals(func, rt, schema, rows), expected, f"case {i}: {rows}")
 
-    def test_udf_transpile_callable_object_self_offset(self):
-        # A callable instance carries `self`; the extractor offsets it so a/b
-        # map to _udf_param_0/_udf_param_1 (non-commutative body proves order).
+    def test_udf_transpile_callable_object_drops_its_receiver(self):
+        # A callable instance's `self` is dropped before anything indexes the param
+        # list, so a/b are _udf_param_0/_udf_param_1 with no offsetting anywhere
+        # downstream (the non-commutative body proves the order).
         class SubAB:
             def __call__(self, a, b):
                 return a - b
@@ -1648,6 +1649,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         import importlib.util
         import os
         import tempfile
+        import warnings as _warnings
 
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "drifted_lambda.py")
@@ -1660,10 +1662,47 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 handle.write("def unrelated(a):\n    return a * 12345\n")
 
             with self.sql_conf(_TRANSPILE_ON):
-                u = UserDefinedFunction(module.f, LongType())
+                with _warnings.catch_warnings(record=True) as caught:
+                    _warnings.simplefilter("always")
+                    u = UserDefinedFunction(module.f, LongType())
                 self.assertEqual([], u.transpiled)
+                # Pin the REASON, or a source read that merely failed would pass too.
+                self.assertIn(
+                    "which lambda to lower cannot be determined",
+                    " ".join(str(w.message) for w in caught),
+                )
                 num = self.spark.createDataFrame([(5,)], "a long")
                 self.assertEqual(6, num.select(u("a")).first()[0])
+
+    def test_udf_transpile_ambiguity_check_sees_only_rival_lambdas(self):
+        # Two ways the check used to misfire or not fire at all.
+        from pyspark.sql.transpile import _held_code
+
+        # A lambda nested in the held lambda's own body is not a rival -- it can
+        # never be the UDF, and the user cannot split it onto another line. It fell
+        # back with the sibling message, advice that could not be acted on.
+        nested = lambda x: (lambda y: y + 1)(x)  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            import warnings as _warnings
+
+            with _warnings.catch_warnings(record=True) as caught:
+                _warnings.simplefilter("always")
+                u = UserDefinedFunction(nested, LongType())
+            self.assertEqual([], u.transpiled, "a Call body is unsupported either way")
+            self.assertNotIn("put each lambda on its own line", str([w.message for w in caught]))
+
+        # ``staticmethod``/``classmethod`` do not forward ``__code__``, so reading it
+        # off them left ``holding_lambda`` False -- skipping the check for a shape it
+        # exists to catch. Only the unrelated ``__wrapped__`` refusal hid this.
+        class Wrapped:
+            helper = lambda self, x: x * 100  # noqa: E731
+            __call__ = staticmethod(lambda self, x: x * 2)
+
+        self.assertEqual(
+            "<lambda>",
+            getattr(_held_code(Wrapped()), "co_name", None),
+            "the held code must be found through __func__",
+        )
 
     def test_udf_transpile_recovers_shapes_with_an_unheld_lambda_in_view(self):
         # The ambiguity check applies only when the callable we hold IS a lambda. The
