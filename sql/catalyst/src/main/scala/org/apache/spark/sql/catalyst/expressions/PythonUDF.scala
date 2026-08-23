@@ -293,14 +293,24 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
  * [[With]] common expression, so an argument used several times is evaluated once per row -- the
  * way the Python eval operator it replaces would.
  *
- * `UserDefinedPythonFunction`'s builder fills the `_udf_param_N` placeholders in, and this marker
- * is all that survives to say which copy came from which parameter. Grouping on `index` rather than
- * on shape is what handles a nondeterministic argument: `expr("rand()")` gets a fresh seed per copy
- * from `ResolveRandomSeed`, since the builder runs before analysis.
+ * Why a marker at all, when substituting the argument once into a shared column would need no
+ * bookkeeping: `UserDefinedPythonFunction`'s builder fills the `_udf_param_N` placeholders in at
+ * call-construction time, and after that the copies are indistinguishable. Matching them by shape
+ * instead does not work -- a nondeterministic argument gets a fresh seed per copy from
+ * `ResolveRandomSeed`, because the builder runs before analysis -- so something has to carry the
+ * index across analysis, and this is it.
  *
- * A [[TaggingExpression]] so it evaluates as its child, and see-through under `canonicalized` too:
- * the markers sit in the plan all through analysis, where a marked argument still has to match the
- * same argument written bare -- in an [[Aggregate]]'s grouping expressions, for one.
+ * The builder cannot simply wait, either. An option body is a child of [[TranspiledPythonUDF]], so
+ * it has to be resolved and coerced by the end of analysis, and a placeholder has no type until its
+ * argument does. Substituting late enough to skip the marker would mean building the shared column
+ * inside the analyzer, putting a [[With]] in the plan during a phase where nothing else does --
+ * `ReplaceExpressions` and `RewriteWithExpression` both run after analysis. That trade was
+ * considered and declined; if you are here to delete this class, that is the thing to solve first.
+ *
+ * A [[TaggingExpression]] so it evaluates as its child, and see-through under `canonicalized` and
+ * `foldable` too: the markers sit in the plan all through analysis, where a marked argument still
+ * has to match the same argument written bare -- in an [[Aggregate]]'s grouping expressions, for
+ * one -- and must not hide a constant from a check that wants a foldable one.
  */
 case class TranspiledUDFParameter(child: Expression, index: Int) extends TaggingExpression {
 

@@ -152,9 +152,15 @@ case class UserDefinedPythonFunction(
       // `udfExpr` itself, whose children are the user's argument expressions. A user
       // column literally named `_udf_param_N` passed as an argument must not be
       // rewritten, so we leave `udfExpr` untouched.
-      // Each copy is marked with the parameter it came from: filling the placeholder in is what
-      // erases that, and ConvertToCatalyst needs it to give each parameter one evaluation per row
-      // rather than one per use (SPARK-58626). See TranspiledUDFParameter.
+      // Each copy is marked with the parameter it came from, because filling the placeholder in is
+      // what erases that and ConvertToCatalyst needs to know which copies are one parameter to give
+      // it a single evaluation per row (SPARK-58626).
+      //
+      // Substituting here, early, is what forces the marker: it would take no bookkeeping to drop
+      // each argument into one shared column instead, but that cannot happen until the arguments
+      // are resolved, and an option body has to be resolved and coerced by the end of analysis
+      // because it is a child of TranspiledPythonUDF. Coercion is the reason this runs at
+      // call-construction time and pays for it with a marker. See TranspiledUDFParameter.
       def resolveUDFParams(expression: Expression, children: Array[Expression]): Expression = {
         expression match {
           case UnresolvedAttribute(nameParts)
