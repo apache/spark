@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PYTHON_
   TRANSPILED_PYTHON_UDF, TRANSPILED_UDF_PARAMETER, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -324,12 +325,14 @@ object TranspiledUDFParameter {
    * inside an aggregate, and a def must not be hoisted out of a per-element body. One sitting in
    * an argument (`udf(sum(a))`) is below the marker and shares fine.
    *
-   * An `OuterReference` anywhere, argument included: `RewriteWithExpression` pre-evaluates it in a
-   * Project inside the subquery, and with `decorrelateInnerQuery.enabled=false` the fallback
-   * rewrites Filters only, stranding it there un-evaluable.
+   * An `OuterReference` anywhere, argument included, but only when decorrelation is off:
+   * `RewriteWithExpression` pre-evaluates it in a Project inside the subquery, and the
+   * `decorrelateInnerQuery.enabled=false` fallback rewrites Filters only, stranding it there
+   * un-evaluable. Decorrelation is on by default and carries it out fine.
    */
   private def rulesOutSharing(option: Expression): Boolean =
-    option.containsPattern(OUTER_REFERENCE) || option.exists {
+    (!SQLConf.get.getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED) &&
+      option.containsPattern(OUTER_REFERENCE)) || option.exists {
       case e @ (_: AggregateExpression | _: LambdaFunction) =>
         e.containsPattern(TRANSPILED_UDF_PARAMETER)
       case _ => false

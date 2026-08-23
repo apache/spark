@@ -331,17 +331,25 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("leaves an argument carrying an outer reference at each use site") {
+  test("outer reference: shares with decorrelation on, declines with it off") {
+    // With decorrelation on (the default) a pre-evaluated OuterReference is carried out of the
+    // subquery fine. With it off, the fallback rewrites Filters only and the reference is stranded
+    // in the Project -- `EXISTS` over an outer argument fails Unevaluable that way -- so we decline.
+    val arg = Add(OuterReference(attrA), Literal(1L))
+    val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
+    val tpudf = makeTPUDF(makePyUDF(arg), option)
     transpileOn {
-      // Decorrelation carries a pre-evaluated OuterReference out of the subquery, but only while it
-      // is enabled: with `decorrelateInnerQuery.enabled=false` the fallback rewrites Filters only
-      // and it is stranded in the Project. `EXISTS` over an outer argument fails that way with
-      // sharing on and passes with it off, so we decline.
-      val arg = Add(OuterReference(attrA), Literal(1L))
-      val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
-      val tpudf = makeTPUDF(makePyUDF(arg), option)
+      ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false) match {
+        case With(_, defs) => assert(defs.length == 1, s"Expected one def: $defs")
+        case other => fail(s"Expected sharing when decorrelation is on, got: $other")
+      }
+    }
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
+        SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
       val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
-      assert(result == Multiply(arg, arg), s"Expected no With: $result")
+      assert(result == Multiply(arg, arg), s"Expected no With with decorrelation off: $result")
     }
   }
 

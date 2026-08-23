@@ -320,6 +320,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // TranspiledPythonUDF node; excluding it would leak that node into
       // execution, so it must never be excludable.
       ConvertToCatalyst.ruleName,
+      // Same reasoning one step later: ConvertToCatalyst shares a repeated UDF argument through an
+      // (also Unevaluable) `With`, and this is the only rule that rewrites one away.
+      RewriteWithExpression.ruleName,
       FinishAnalysis.ruleName,
       RewriteDistinctAggregates.ruleName,
       ReplaceDeduplicateWithAggregate.ruleName,

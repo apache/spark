@@ -1507,6 +1507,25 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             lazy = df.select(transform(col("arr"), lambda e: s(col("a") / col("b"), e)).alias("v"))
             self.assertEqual([[]], [r[0] for r in lazy.collect()])
 
+    def test_udf_transpile_shares_a_nondeterministic_argument_in_a_predicate(self):
+        # SPARK-58626: a `where` keeps the shared column when the argument is nondeterministic.
+        # PushPredicateThroughNonJoin only pushes a Filter through a Project whose fields are all
+        # deterministic, so the draw is not substituted back and the body sees one value. A
+        # deterministic argument IS pushed back and evaluated per use -- same rows, just extra work.
+        from pyspark.sql.functions import col, rand
+
+        add_self = lambda x: x + x  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(add_self, DoubleType())
+            self.assertTrue(u.transpiled)
+
+            nd = self.spark.range(0, 10).where(u(rand()) > 0.5)
+            self.assertTrue(self._shares_an_argument(nd), self._optimized_plan(nd))
+            self.assertEqual(1, self._draw_count(nd))
+
+            det = self.spark.range(0, 10).where(u((col("id") % 3).cast("double")) > 1.0)
+            self.assertFalse(self._shares_an_argument(det), self._optimized_plan(det))
+
     def test_udf_transpile_udf_as_a_predicate(self):
         # A predicate is transpiled like anything else: no Python worker in a `where` or a join
         # condition, and the same answers. The fallback to the Python path is one `headOption` away
