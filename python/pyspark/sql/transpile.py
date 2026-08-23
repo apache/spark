@@ -956,18 +956,14 @@ def _get_function_from_ast(
 
     * ``f = lambda x: x + 1`` -- lambda bound directly to a name
     * ``lambda x: x + 1`` -- bare expression (getsource on a raw lambda)
-    * ``def f(x): ... return x + 1`` -- including a ``__call__``, which the caller
-      hands us on its own (a ``ClassDef``, i.e. a class object rather than an
-      instance, is refused)
+    * ``def f(x): ... return x + 1``
+    * a class with a ``__call__`` method
 
     ``holding_lambda`` says whether the callable we were handed is itself a lambda,
     which is what makes the ambiguity check below apply.
 
     Returns ``None``, and appends the reason to ``errors``, when no single
-    unambiguous function can be identified. Notably a lambda wrapped in a call,
-    ``f = some_wrapper(lambda x: x + 1)``, parses as ``Assign(value=Call(...))``,
-    which is not unwrapped here; an annotated assignment (``f: Callable = lambda
-    ...``) and a tuple target are likewise not unwrapped.
+    unambiguous function can be identified.
     """
 
     def refuse(reason: str) -> None:
@@ -989,23 +985,7 @@ def _get_function_from_ast(
     if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Lambda):
         stmt = stmt.value
 
-    # ``inspect.getsource`` works in whole lines, so a lambda hands back every
-    # callable sharing its line, and one inside a decorator hands back the whole
-    # decorated ``def``. Nothing in that text says which one we hold, so taking the
-    # first match was right by position, not by identity: in
-    # ``f = lambda x: x + 1; g = lambda x: x - 1``, ``g`` lowered ``x + 1``, and a
-    # lambda in a decorator lowered the decorated ``def``'s body (SPARK-58650).
-    # Refuse unless ``stmt`` IS the sole lambda in view -- looking only for siblings
-    # fails open when the source holds no lambda at all, letting an unrelated ``def``
-    # lower as the body.
-    #
-    # Only a lambda is exposed to this: when we hold the ``def`` or the ``__call__``,
-    # any lambda in view is in its decorators, annotations, defaults, or body, none
-    # of which can be the body we lower.
-    #
-    # ``co_positions`` could say WHICH lambda we hold, but pinning one down by
-    # position earns less than it costs, so this also refuses the pick that would
-    # have landed right: the first lambda on a shared line.
+    # ``inspect.getsource`` works in whole lines, so refuse multiple defs on one line for safety.
     if holding_lambda:
         if not isinstance(stmt, ast.Lambda):
             refuse(
@@ -1026,13 +1006,6 @@ def _get_function_from_ast(
     if isinstance(stmt, ast.Lambda):
         # Synthesize a one-statement FunctionDef wrapping the lambda body so
         # the rest of the transpiler can treat lambdas and ``def`` uniformly.
-        # ``ast.FunctionDef``'s overloads in mypy's typeshed require
-        # keyword-only ``type_params`` on 3.12+, which doesn't exist at
-        # runtime on every Python we support (the field was added in
-        # 3.12 -- before that, passing it raises). Drop to ``Any`` so we
-        # avoid the overload resolution entirely; constructing the node
-        # via keyword args is well-defined at runtime even when the typed
-        # overloads disagree.
         fn_ctor: Any = ast.FunctionDef
         synthesized = fn_ctor(
             name="<lambda>",
@@ -1040,12 +1013,6 @@ def _get_function_from_ast(
             body=[ast.Return(value=stmt.body)],
             decorator_list=[],
         )
-        # The synthesized nodes carry no positions, and a node without ``lineno``
-        # cannot be unparsed or compiled. ``_transpile_from_ast`` is the documented
-        # extension point for ``pyTranspilers``, so without this a third-party
-        # transpiler that unparses what it is handed would work for every ``def``
-        # and raise for every lambda. Seed from the lambda so reported positions
-        # point at real source rather than line 1.
         return ast.fix_missing_locations(ast.copy_location(synthesized, stmt))
 
     if isinstance(stmt, ast.FunctionDef):
