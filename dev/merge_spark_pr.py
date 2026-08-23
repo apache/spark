@@ -677,24 +677,31 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     run_cmd("git checkout %s" % pick_branch_name)
 
     try:
-        run_cmd("git cherry-pick -sx %s" % merge_hash)
+        run_cmd(
+            [
+                "git",
+                "-c",
+                "commit.cleanup=scissors",
+                "cherry-pick",
+                "-sx",
+                merge_hash,
+            ]
+        )
     except Exception as e:
         msg = "Error cherry-picking: %s\nWould you like to manually fix-up this merge?" % e
         continue_maybe(msg, True)
         msg = "Okay, please fix any conflicts and 'git add' conflicting files... Finished?"
         continue_maybe(msg, True)
-        # Finish the pick here so the committer never runs `cherry-pick --continue`
-        # (that opens an editor and defaults to --cleanup=strip, which drops lines
-        # that begin with '#'). Match the no-editor path used for clean picks and
-        # for conflicted squash-merges above.
+        # Important to use `scissors` and `--edit` otherwise git will strip lines starting with `#`
+        # when calling `--continue`. See: https://github.com/apache/spark/pull/58214
         run_cmd(
             [
                 "git",
                 "-c",
-                "commit.cleanup=whitespace",
+                "commit.cleanup=scissors",
                 "cherry-pick",
                 "--continue",
-                "--no-edit",
+                "--edit",
             ]
         )
 
