@@ -17,26 +17,24 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkFunSuite, SparkThrowable}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
 import org.apache.spark.sql.execution.streaming.state.StateStoreColumnFamilyMismatch
 
 class ErrorMessageParametersSuite extends SparkFunSuite {
 
-  private def asSparkThrowable(e: Throwable): SparkThrowable = {
-    e.asInstanceOf[SparkThrowable]
-  }
-
   test("SPARK-58945: invalid writer commit message reports detail") {
     checkError(
-      exception = asSparkThrowable(QueryExecutionErrors.invalidWriterCommitMessageError("zero")),
+      exception = QueryExecutionErrors.invalidWriterCommitMessageError("zero")
+        .asInstanceOf[SparkRuntimeException],
       condition = "INVALID_WRITER_COMMIT_MESSAGE",
       parameters = Map("detail" -> "zero"))
   }
 
   test("SPARK-58945: invalid UDF class error reports clazz") {
     checkError(
-      exception = asSparkThrowable(
-        QueryCompilationErrors.invalidUDFClassError("example.InvalidFunction")),
+      exception = QueryCompilationErrors.invalidUDFClassError("example.InvalidFunction")
+        .asInstanceOf[InvalidUDFClassException],
       condition = "_LEGACY_ERROR_TEMP_2450",
       parameters = Map("clazz" -> "example.InvalidFunction"))
   }
