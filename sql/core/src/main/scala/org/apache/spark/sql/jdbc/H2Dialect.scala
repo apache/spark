@@ -228,7 +228,12 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
             val relationName = messageParameters.getOrElse("tableName", "")
             throw new NoSuchTableException(
               errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-              messageParameters = Map("relationName" -> relationName),
+              messageParameters = Map(
+                "relationName" -> relationName,
+                // classifyException receives only pre-rendered strings, so no Spark-side
+                // search path exists here; "not available" matches the rendering used for
+                // an empty search path.
+                "searchPath" -> "not available"),
               cause = Some(e))
           // SCHEMA_NOT_FOUND_1
           case 90079 =>

@@ -229,6 +229,16 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58945: H2 loadTable reports unavailable search path") {
+    val e = intercept[AnalysisException] {
+      tableCatalog.loadTable(Identifier.of(Array("test"), "not_existing_table"))
+    }
+    checkErrorTableNotFoundWithSearchPath(
+      e,
+      "`test`.`not_existing_table`",
+      searchPath = "not available")
+  }
+
   test("create a table") {
     withTable("h2.test.new_table") {
       sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
