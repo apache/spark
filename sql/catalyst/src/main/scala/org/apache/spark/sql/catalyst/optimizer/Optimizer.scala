@@ -349,6 +349,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateResolvedHint,
       EliminateSubqueryAliases,
       EliminatePipeOperators,
+      ConvertViewToMaterializedCTE,
       EliminateView,
       EliminateSQLFunctionNode,
       ReplaceExpressions,

@@ -983,6 +983,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val CONVERT_VIEW_TO_MATERIALIZED_CTE =
+    buildConf("spark.sql.optimizer.convertViewToMaterializedCTE")
+      .doc("When true, the optimizer rewrites multiple references to the same view " +
+        "into a single materialized CTE definition with multiple references, so the " +
+        "view's underlying plan is computed once (through exchange reuse) instead of " +
+        "once per reference. Views that contain non-deterministic expressions or " +
+        "streaming sources are never converted, as the conversion would change their " +
+        "semantics. Note that each reference site gains a shuffle boundary, so this " +
+        "helps only when the view subtree is expensive relative to a shuffle of its " +
+        "output.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val COMBINE_APPROXIMATE_PERCENTILES_ENABLED =
     buildConf("spark.sql.optimizer.combineApproximatePercentiles.enabled")
       .doc("When true, combines compatible scalar approximate percentile aggregates into a " +
