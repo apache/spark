@@ -88,6 +88,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq("a"), Seq("a"), true, "UTF8_BINARY"),
       (Seq("a"), Seq("b"), false, "UTF8_BINARY"),
       (Seq("a"), Seq("A"), false, "UTF8_BINARY"),
+      (Seq("a"), Seq("a "), true, "UTF8_BINARY_RTRIM"),
       (Seq("a"), Seq("A"), true, "UTF8_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), true, "UTF8_LCASE"),
       (Seq("a"), Seq("A"), false, "UNICODE"),
@@ -106,6 +107,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val distinct = Seq(
       (Seq("a", "b", "c"), Seq("a", "b", "c"), "UTF8_BINARY"),
       (Seq("a", "a", "a"), Seq("a"), "UTF8_BINARY"),
+      (Seq("a", "a "), Seq("a"), "UTF8_BINARY_RTRIM"),
       (Seq("aaa", "AAA", "Aaa", "aAa"), Seq("aaa", "AAA", "Aaa", "aAa"), "UTF8_BINARY"),
       (Seq("aaa", "AAA", "Aaa", "aAa"), Seq("aaa"), "UTF8_LCASE"),
       (Seq("aaa", "AAA", "Aaa", "aAa", "b"), Seq("aaa", "b"), "UTF8_LCASE"),
@@ -119,6 +121,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq("a"), Seq("a"), Seq("a"), "UTF8_BINARY"),
       (Seq("a"), Seq("b"), Seq("a", "b"), "UTF8_BINARY"),
       (Seq("a"), Seq("A"), Seq("a", "A"), "UTF8_BINARY"),
+      (Seq("a"), Seq("a "), Seq("a"), "UTF8_BINARY_RTRIM"),
       (Seq("a"), Seq("A"), Seq("a"), "UTF8_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UTF8_LCASE"),
       (Seq("a"), Seq("A"), Seq("a", "A"), "UNICODE"),
@@ -135,6 +138,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq("a"), Seq("a"), Seq("a"), "UTF8_BINARY"),
       (Seq("a"), Seq("b"), Seq.empty, "UTF8_BINARY"),
       (Seq("a"), Seq("A"), Seq.empty, "UTF8_BINARY"),
+      (Seq("a"), Seq("a "), Seq("a"), "UTF8_BINARY_RTRIM"),
       (Seq("a"), Seq("A"), Seq("a"), "UTF8_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UTF8_LCASE"),
       (Seq("a"), Seq("A"), Seq.empty, "UNICODE"),
@@ -151,6 +155,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq("a"), Seq("a"), Seq.empty, "UTF8_BINARY"),
       (Seq("a"), Seq("b"), Seq("a"), "UTF8_BINARY"),
       (Seq("a"), Seq("A"), Seq("a"), "UTF8_BINARY"),
+      (Seq("a"), Seq("a "), Seq.empty, "UTF8_BINARY_RTRIM"),
       (Seq("a"), Seq("A"), Seq.empty, "UTF8_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), Seq.empty, "UTF8_LCASE"),
       (Seq("a"), Seq("A"), Seq("a"), "UNICODE"),
@@ -161,6 +166,34 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val right = arrayLiteral(inRight, collName)
       checkEvaluation(ArrayExcept(left, right), out)
     }
+  }
+
+  test("Array operations on nested collated strings") {
+    val collatedStringType = StringType(
+      CollationFactory.collationNameToId("UTF8_BINARY_RTRIM"))
+    val structType = StructType(Seq(StructField("value", collatedStringType)))
+    val structArrayType = ArrayType(structType)
+    val structLeft = Literal.create(Seq(create_row("a")), structArrayType)
+    val structRight = Literal.create(Seq(create_row("a ")), structArrayType)
+
+    checkEvaluation(
+      ArrayDistinct(Literal.create(
+        Seq(create_row("a"), create_row("a ")), structArrayType)),
+      Seq(create_row("a")))
+    checkEvaluation(ArrayUnion(structLeft, structRight), Seq(create_row("a")))
+    checkEvaluation(ArrayIntersect(structLeft, structRight), Seq(create_row("a")))
+    checkEvaluation(ArrayExcept(structLeft, structRight), Seq.empty)
+
+    val nestedArrayType = ArrayType(ArrayType(collatedStringType))
+    val nestedLeft = Literal.create(Seq(Seq("a")), nestedArrayType)
+    val nestedRight = Literal.create(Seq(Seq("a ")), nestedArrayType)
+
+    checkEvaluation(
+      ArrayDistinct(Literal.create(Seq(Seq("a"), Seq("a ")), nestedArrayType)),
+      Seq(Seq("a")))
+    checkEvaluation(ArrayUnion(nestedLeft, nestedRight), Seq(Seq("a")))
+    checkEvaluation(ArrayIntersect(nestedLeft, nestedRight), Seq(Seq("a")))
+    checkEvaluation(ArrayExcept(nestedLeft, nestedRight), Seq.empty)
   }
 
   test("CollationKey generates correct collation key for collated string") {
