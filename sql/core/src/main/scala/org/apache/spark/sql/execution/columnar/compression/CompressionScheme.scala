@@ -45,6 +45,13 @@ private[columnar] trait Decoder[T <: PhysicalDataType] {
   def hasNext: Boolean
 
   def decompress(columnVector: WritableColumnVector, capacity: Int): Unit
+
+  /** Duplicates `buffer` in native byte order and rewinds it, for reading null state. */
+  protected def createNullsBuffer(buffer: ByteBuffer): ByteBuffer = {
+    val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+    nullsBuffer.rewind()
+    nullsBuffer
+  }
 }
 
 private[columnar] trait CompressionScheme {
