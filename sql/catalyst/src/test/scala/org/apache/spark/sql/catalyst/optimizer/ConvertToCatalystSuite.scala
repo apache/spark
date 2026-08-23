@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, LocalRelation, Project}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType}
 
 /**
  * Unit tests for the ConvertToCatalyst optimizer rule, which rewrites
@@ -299,16 +299,49 @@ class ConvertToCatalystSuite extends PlanTest {
       // in there would move a nondeterministic draw to the wrong granularity -- and make the
       // argument eager, raising under ANSI on a row whose array is empty and whose body never ran.
       // The argument reads no lambda variable, so RewriteWithExpression would happily place it.
+      // Checked through `applyExpr`, not just `apply`: `applyExpr` is public and a custom
+      // transpiler's ConvertToX may call it with `shareArguments` left at its default, so the guard
+      // has to live in the recursion rather than at the operator.
       val arg = Divide(attrA, attrA)
       val option = Add(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
       val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
       val call = makeTPUDF(makePyUDF(arg), option)
-      val body = ArrayTransform(
-        $"arr".array(LongType), LambdaFunction(Add(call, lambdaVar), Seq(lambdaVar)))
+      val arr = AttributeReference("arr", ArrayType(LongType))()
+      val body = ArrayTransform(arr, LambdaFunction(Add(call, lambdaVar), Seq(lambdaVar)))
       val result = ConvertToCatalyst.applyExpr(body, parentIsUdf = false)
       assert(!result.exists(_.isInstanceOf[With]), s"Expected no With inside a lambda: $result")
       assert(result.collect { case e if e == arg => e }.length == 2,
         s"Expected the argument left at both use sites: $result")
+    }
+  }
+
+  test("still shares for a call sitting beside an unrelated lambda") {
+    transpileOn {
+      // The lambda guard turns off on the way into a lambda, not for any expression that holds one
+      // somewhere. A call outside the lambda is unaffected, so it keeps its common expression.
+      val arg = Add(attrA, Literal(1L))
+      val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
+      val call = makeTPUDF(makePyUDF(arg), option)
+      val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
+      val arr = AttributeReference("arr", ArrayType(LongType))()
+      val unrelated = ArrayTransform(arr, LambdaFunction(lambdaVar, Seq(lambdaVar)))
+      val result = ConvertToCatalyst.applyExpr(Add(call, Size(unrelated)), parentIsUdf = false)
+      assert(result.exists(_.isInstanceOf[With]),
+        s"Expected the call outside the lambda to keep sharing: $result")
+    }
+  }
+
+  test("leaves an argument carrying an outer reference at each use site") {
+    transpileOn {
+      // An OuterReference is Unevaluable and its `references` are empty, so RewriteWithExpression
+      // sees nothing stopping it from putting the argument in a Project inside a correlated
+      // subquery -- where nothing later resolves it and it reaches execution un-evaluable.
+      val arg = Add(OuterReference(attrA), Literal(1L))
+      val option = Multiply(TranspiledUDFParameter(arg, 0), TranspiledUDFParameter(arg, 0))
+      val tpudf = makeTPUDF(makePyUDF(arg), option)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result == Multiply(arg, arg),
+        s"Expected the argument left at both use sites, no With: $result")
     }
   }
 

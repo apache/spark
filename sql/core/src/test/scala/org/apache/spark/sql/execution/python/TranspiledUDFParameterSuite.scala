@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution.python
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{Column, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Expression, Multiply, TranspiledPythonUDF, TranspiledUDFParameter}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Expression, Multiply, Subtract, TranspiledPythonUDF, TranspiledUDFParameter}
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.functions.{col, rand}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
 
 /**
  * Tests how `UserDefinedPythonFunction.builder` marks the `_udf_param_N` placeholders it fills in
@@ -41,16 +42,23 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
   private def param(index: Int): Expression = UnresolvedAttribute(s"_udf_param_$index")
 
-  /** A two-parameter transpiled UDF carrying the given option body. */
-  private def udfWith(option: Expression): UserDefinedPythonFunction =
+  /**
+   * A transpiled UDF of `arity` numeric parameters carrying the given option body. `func` is null
+   * because a call that transpiles never reaches Python -- so a fallback shows up as an NPE rather
+   * than as a quietly passing test.
+   */
+  private def udfWith(
+      option: Expression,
+      arity: Int = 2,
+      returnType: DataType = LongType): UserDefinedPythonFunction =
     UserDefinedPythonFunction(
       "udf",
       null,
-      LongType,
+      returnType,
       PythonEvalType.SQL_BATCHED_UDF,
       udfDeterministic = true,
       List(Column(option)).asJava,
-      List(List("numeric", "numeric").asJava).asJava)
+      List(List.fill(arity)("numeric").asJava).asJava)
 
   /** The indexes of the markers in the single option the builder produced, in tree order. */
   private def markerIndexes(option: Expression, args: Expression*): Seq[Int] =
@@ -59,6 +67,10 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
         t.transpiledOptions.head.collect { case p: TranspiledUDFParameter => p.index }
       case other => fail(s"Expected a TranspiledPythonUDF, got: $other")
     }
+
+  private def transpileOn(f: => Unit): Unit = withSQLConf(
+    SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
+    SQLConf.ANSI_ENABLED.key -> "true")(f)
 
   test("marks every copy of every parameter with the parameter it came from") {
     // `lambda a, b: a * a + b`: `a` twice and `b` once, all marked -- the Python eval operator this
@@ -76,5 +88,40 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
     // `lambda a, b: a + a`: b never reaches the option, so nothing evaluates it.
     val option = Add(param(0), param(0))
     assert(markerIndexes(option, argA, argB) == Seq(0, 0))
+  }
+
+  test("draws a nondeterministic argument once for all of a parameter's uses") {
+    transpileOn {
+      // The point of SPARK-58626, end to end: `lambda a: a - a` over `rand()` is 0 on every row
+      // only if both uses of `a` read one draw. Once per use it is the difference of two draws,
+      // which is 0 with probability 0.
+      val diff = udfWith(Subtract(param(0), param(0)), arity = 1, returnType = DoubleType)
+      val df = spark.range(0, 50).select(diff(rand(seed = 1L)).as("d"))
+      checkAnswer(df, Seq.fill(50)(Row(0.0d)))
+    }
+  }
+
+  test("shares an argument that appears in both a grouping and a result expression") {
+    transpileOn {
+      // `groupBy(f(x)).count()` puts one call in both the grouping and the result expressions, and
+      // ConvertToCatalyst rewrites one top-level expression at a time, so each gets its own `With`
+      // with its own ids. PhysicalAggregation pairs them by semanticEquals, which only lines up
+      // because `With.canonicalized` renumbers ids -- otherwise the Aggregate fails to bind.
+      // `id % 3` rather than a bare column so the argument is not cheap enough to be inlined.
+      val square = udfWith(Multiply(param(0), param(0)), arity = 1)
+      val df = spark.range(0, 6).groupBy(square(col("id") % 3).as("sq")).count()
+      checkAnswer(df, Seq(Row(0L, 2L), Row(1L, 2L), Row(4L, 2L)))
+    }
+  }
+
+  test("shares an argument under a Filter") {
+    transpileOn {
+      // `lambda a: a - a` over `rand()` again, because a deterministic argument would give the same
+      // answer shared or not and the test would pass with sharing switched off entirely. Every row
+      // survives the filter only if the two uses read one draw.
+      val diff = udfWith(Subtract(param(0), param(0)), arity = 1, returnType = DoubleType)
+      val df = spark.range(0, 30).filter(diff(rand(seed = 2L)) === 0.0d)
+      assert(df.count() === 30)
+    }
   }
 }

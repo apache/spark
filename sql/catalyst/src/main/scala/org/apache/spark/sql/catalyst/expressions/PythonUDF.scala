@@ -23,10 +23,10 @@ import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TRANSPILED_PYTHON_UDF,
-  TRANSPILED_UDF_PARAMETER, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, LAMBDA_FUNCTION,
+  OUTER_REFERENCE, PYTHON_UDF, TRANSPILED_PYTHON_UDF, TRANSPILED_UDF_PARAMETER, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
@@ -288,28 +288,29 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
 
 
 /**
- * Marks a subtree of a transpiled option as the argument that got dropped in for the UDF's
- * `index`th parameter (SPARK-58626). `ConvertToCatalyst` turns the copies sharing an `index` into
- * one [[With]] common expression, so an argument the option uses several times is evaluated once
- * per row rather than once per use, the way the Python eval operator it replaces would.
+ * Marks a subtree of a transpiled option as the argument dropped in for the UDF's `index`th
+ * parameter (SPARK-58626). `ConvertToCatalyst` turns the copies sharing an `index` into one
+ * [[With]] common expression, so an argument used several times is evaluated once per row -- the
+ * way the Python eval operator it replaces would.
  *
- * `UserDefinedPythonFunction`'s builder fills the `_udf_param_N` placeholders in when the call is
- * built, and the marker is the only thing that survives that -- afterwards the copies are ordinary
- * argument expressions, no different from the rest of the option's body. Grouping on `index` rather
- * than on the subtree is what handles a nondeterministic argument, where matching on shape is not
- * enough: an argument whose seed was still unresolved (`expr("rand()")`, or SQL text) gets a fresh
- * seed per copy from `ResolveRandomSeed`, because the builder runs before analysis.
+ * `UserDefinedPythonFunction`'s builder fills the `_udf_param_N` placeholders in, and this marker
+ * is all that survives to say which copy came from which parameter. Grouping on `index` rather than
+ * on shape is what handles a nondeterministic argument: `expr("rand()")` gets a fresh seed per copy
+ * from `ResolveRandomSeed`, since the builder runs before analysis.
  *
- * A [[TaggingExpression]], so it evaluates as its child, and see-through under
- * `canonicalized`/`semanticEquals` as well: the markers sit in the plan all through analysis, and a
- * marked argument has to keep matching the same argument written bare -- an [[Aggregate]]'s
- * grouping expressions, for one.
+ * A [[TaggingExpression]] so it evaluates as its child, and see-through under `canonicalized` too:
+ * the markers sit in the plan all through analysis, where a marked argument still has to match the
+ * same argument written bare -- in an [[Aggregate]]'s grouping expressions, for one.
  */
 case class TranspiledUDFParameter(child: Expression, index: Int) extends TaggingExpression {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_UDF_PARAMETER)
 
   override lazy val canonicalized: Expression = child.canonicalized
+
+  // Also see-through for foldability, or wrapping a constant argument would hide it from an
+  // analysis-time check that requires one (a `round` scale, a window frame boundary).
+  override def foldable: Boolean = child.foldable
 
   override protected def withNewChildInternal(newChild: Expression): TranspiledUDFParameter =
     copy(child = newChild)
@@ -319,72 +320,46 @@ case class TranspiledUDFParameter(child: Expression, index: Int) extends Tagging
 object TranspiledUDFParameter {
 
   /**
-   * Replaces the markers in a substituted option with one [[With]] common expression per parameter,
-   * so an argument the option uses several times is evaluated once per row instead of once per use.
+   * Takes the markers off a substituted option, giving each parameter one [[With]] common
+   * expression that every copy reads, so an argument used several times is evaluated once per row.
    *
-   * `RewriteWithExpression`, the batch right after `ConvertToCatalyst`, is what turns those into a
-   * [[org.apache.spark.sql.catalyst.plans.logical.Project]] below the operator -- and also what
-   * decides which ones are not worth one and get put back inline at each use site. So how many
-   * times an argument really gets evaluated is best effort: a cheap argument, one the option reads
-   * only once, and one that cannot go in a Project are all put back inline. An argument the option
-   * never uses is not evaluated at all, since substitution dropped it before we got here.
+   * `RewriteWithExpression` does the real work two batches later, and also decides which common
+   * expressions are not worth a column and go back inline -- so the count is best effort.
+   * `python/pyspark/sql/transpile.py` spells out what that means for a UDF author.
    *
-   * The gap most worth knowing about is positional. `RewriteWithExpression` inlines a `With` that
-   * sits in a [[ConditionalExpression]]'s lazily-evaluated input, since a Project below the
-   * operator would be evaluated on rows the branch is not taken on. So a call inside `when(...)`,
-   * or in a later `coalesce` argument, is back to once per use -- and a nondeterministic argument
-   * there is drawn once per use, which lets the body see two values for one parameter. A call
-   * inside a lambda has the matching problem for the opposite reason and `ConvertToCatalyst`
-   * handles that one itself, by not sharing at all.
-   *
-   * `CollapseProject.isCheap` counts a [[PythonUDF]] as cheap, so an argument that is itself an
-   * un-transpilable Python call is always put back inline. Its *value* is still shared either way:
-   * `ExtractPythonUDFs` maps every occurrence of one call to a single result attribute. But it
-   * only folds the duplicate copies into one round trip when the call is deterministic, because
-   * that dedup goes through an `ExpressionSet`, which holds a nondeterministic expression as often
-   * as it is added. So a nondeterministic Python argument used twice costs a second round trip
-   * whose column is then read by nobody.
-   *
-   * A custom transpiler plugging in its own ConvertToX wants to call this too, or its options
-   * evaluate a repeated argument once per use. Pass `share = false` where the operator cannot take
-   * the extra column `RewriteWithExpression` would add to its child; the markers still come off.
+   * `share = false` says a Project below this operator would be wrong; see
+   * `ConvertToCatalyst.canShare`. A custom transpiler with its own ConvertToX wants to call this
+   * too, or its options evaluate a repeated argument once per use. Either way the markers come off.
    */
   def shareParameters(option: Expression, share: Boolean = true): Expression = {
     if (!option.containsPattern(TRANSPILED_UDF_PARAMETER)) {
       return option
     }
-    // Insertion-ordered so the same query prints the same plan every run. Keyed on the parameter's
-    // index, not on the argument, because two copies of one nondeterministic parameter owe the body
-    // a single value even where `ResolveRandomSeed` gave them different seeds -- while
-    // `f(rand(), rand())` owes it two, and those are two indexes.
+    // Three shapes we decline rather than reason about. An aggregate function, because `With`
+    // asserts no ref to its own common expression sits inside one. A lambda, because a def hoisted
+    // out of a per-element body would be evaluated per row. An outer reference, because it is
+    // `Unevaluable` and its `references` are empty, so nothing stops `RewriteWithExpression` from
+    // putting the argument in a Project inside a correlated subquery, where nothing resolves it.
+    //
+    // Only a custom transpiler emits an aggregate or a lambda above a marker. The check spans the
+    // whole option, arguments included, so `udf(sum(a))` and `udf(transform(arr, x -> x + 1))` give
+    // up sharing too -- the aggregate would have been inlined anyway (a Project cannot hold one),
+    // but the lambda would have hoisted fine, so that one is a real if narrow cost.
+    val shareable = share &&
+      !option.containsAnyPattern(AGGREGATE_EXPRESSION, LAMBDA_FUNCTION, OUTER_REFERENCE)
+    // Keyed on the parameter index, not the argument: two copies of one nondeterministic parameter
+    // owe the body a single value even where `ResolveRandomSeed` gave them different seeds, while
+    // `f(rand(), rand())` owes it two. Every copy of an index holds the same subtree, so whichever
+    // lands first can define it. Insertion-ordered so a query plans the same way every run.
     val defs = mutable.LinkedHashMap.empty[Int, CommonExpressionDef]
-    // A marker's argument is a user expression, so it holds no marker of its own: the only markers
-    // it could hold belong to a nested transpiled call, and `ConvertToCatalyst` converts those
-    // first, which turns them into refs of their own `With`. So there is nothing to recurse into
-    // below a marker, and `p.child` goes into the definition as it stands.
-    //
-    // The first copy of an index defines the common expression and the rest read it, which is only
-    // sound because every copy of one index holds the same subtree -- substitution dropped one
-    // argument expression at each of that parameter's placeholders, and analysis resolved that one
-    // subtree once. Coercion wraps a marker rather than rewriting its child, so it cannot drive two
-    // copies apart either.
-    //
-    // `inline` means leave this argument at its use site and just take the marker off, and it is
-    // why this is a hand-written walk rather than a `transformUp`: the flag is context from above.
-    // Entering an aggregate function turns it on, because a ref to a common expression of its own
-    // `With`, wrapped in an aggregate function, would be left dangling once
-    // `RewriteWithExpression` pulled the aggregate out -- `With` asserts against that shape. The
-    // built-in transpiler emits scalar option bodies, so only a custom transpiler reaches it.
-    def rewrite(e: Expression, inline: Boolean): Expression = e match {
-      case p: TranspiledUDFParameter if inline => p.child
+    // Bottom-up is safe: an argument holds no marker of its own, since a nested transpiled call's
+    // markers are already refs of its own `With` by the time we get here.
+    val body = option.transformUpWithPruning(_.containsPattern(TRANSPILED_UDF_PARAMETER)) {
+      case p: TranspiledUDFParameter if !shareable => p.child
       case p: TranspiledUDFParameter =>
         new CommonExpressionRef(defs.getOrElseUpdate(p.index, CommonExpressionDef(p.child)))
-      case other if other.containsPattern(TRANSPILED_UDF_PARAMETER) =>
-        other.mapChildren(rewrite(_, inline || other.isInstanceOf[AggregateExpression]))
-      case other => other
     }
-    val rewritten = rewrite(option, inline = !share)
-    if (defs.isEmpty) rewritten else With(rewritten, defs.values.toSeq)
+    if (defs.isEmpty) body else With(body, defs.values.toSeq)
   }
 }
 

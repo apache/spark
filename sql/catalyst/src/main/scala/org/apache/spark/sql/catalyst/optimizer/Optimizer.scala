@@ -1038,16 +1038,15 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     plan.transformDownWithSubqueriesAndPruning(
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
       case p =>
-        // A Command has no output of its own, so RewriteWithExpression cannot project away the
-        // extra column a shared argument needs -- and the Project it slips between the command and
-        // its relation hides the relation DataSourceV2Strategy matches on, turning
-        // `DELETE FROM t WHERE udf(a + 1) > 0` into an internal error. So a command's arguments
-        // stay at each use site.
-        val shareArguments = !p.isInstanceOf[Command]
         // Enter each expression at its root rather than at the first TranspiledPythonUDF in it, so
         // that `applyExpr` sees every node on the way down and can thread `parentIsUdf`. Starting
         // at the node itself would report no enclosing UDF even when a PythonUDF wraps it, and the
         // batch pipeline the flag exists to protect would be split anyway.
+        // A Command cannot take the Project that RewriteWithExpression would add to pre-evaluate a
+        // shared argument: it lands between the command and its relation and hides the relation
+        // DataSourceV2Strategy matches on, so `DELETE FROM t WHERE udf(a + 1) > 0` becomes an
+        // internal error. A command's arguments stay at their use sites.
+        val shareArguments = !p.isInstanceOf[Command]
         p.mapExpressions {
           case e if e.containsPattern(TRANSPILED_PYTHON_UDF) =>
             applyExpr(e, parentIsUdf = false, shareArguments)
@@ -1097,7 +1096,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             case Some(catalystExpr) =>
               // Recursively apply to the children first because we may use them as inputs in parent
               // The option's arguments are then shared so each is evaluated once per row rather
-              // than once per use (SPARK-58626); RewriteWithExpression, in the next batch, is
+              // than once per use (SPARK-58626); RewriteWithExpression, two batches later, is
               // what pre-evaluates them below the operator.
               TranspiledUDFParameter.shareParameters(
                 catalystExpr.mapChildren(recurse(_, parentIsUdf = false)), shareArguments)
@@ -1113,11 +1112,13 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
         // transpiled wrapping one that could).
         //
-        // A lambda body runs once per element, where the Project RewriteWithExpression would add
-        // runs once per row. Sharing an argument inside one therefore both gives a nondeterministic
-        // argument one draw per row instead of one per element, and makes it eager -- under ANSI
-        // `transform(arr, x -> udf(a / b, x))` would raise on a row whose array is empty and whose
-        // body never ran. So a lambda's arguments stay at their use sites.
+        // Turning sharing off on the way into a lambda, rather than for any expression holding one,
+        // keeps it for the calls outside the lambda -- and keeps `applyExpr` safe on its own, since
+        // it is public and a custom transpiler's ConvertToX may call it with `shareArguments` left
+        // at its default. RewriteWithExpression would happily place an argument reading no lambda
+        // variable, and then it runs per row where the body runs per element: a nondeterministic
+        // argument is redrawn at the wrong granularity, and it turns eager, so under ANSI
+        // `transform(arr, x -> udf(a / b, x))` raises on a row whose array is empty.
         val share = shareArguments && !expression.isInstanceOf[LambdaFunction]
         expression.mapChildren(
           applyExpr(_, parentIsUdf = isScalarPythonUDF(expression), share))
