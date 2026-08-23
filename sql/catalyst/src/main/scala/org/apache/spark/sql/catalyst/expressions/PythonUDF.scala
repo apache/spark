@@ -295,9 +295,18 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
  *
  * The marker exists because `UserDefinedPythonFunction`'s builder substitutes at call-construction
  * time, after which the copies are indistinguishable -- and shape cannot tell them apart, since
- * `ResolveRandomSeed` gives a nondeterministic argument a fresh seed per copy. It substitutes that
- * early because an option body is a child of [[TranspiledPythonUDF]] and so must be coerced during
- * analysis, which a typeless placeholder cannot be. Deleting this class means solving that first.
+ * `ResolveRandomSeed` gives a nondeterministic argument a fresh seed per copy.
+ *
+ * The obvious alternative is to substitute a *reference* to the argument instead of a copy, leaving
+ * the argument in `pythonUDFExpr`'s children and pre-evaluating it in a Project on the operator's
+ * child -- no copies, so none of this bookkeeping. That was built and measured: about 50 more lines
+ * of production code, because `RewriteWithExpression` already picks the child, projects the added
+ * column away, refuses operators that cannot host one, and splits an [[Aggregate]] through
+ * `PhysicalAggregation`. Building the Project by hand means redoing the first three and declining
+ * the fourth, so an Aggregate gets no pre-evaluated column at all. Leaning on `With` is the smaller
+ * change. The branch `SPARK-58626-project-approach` holds the other one if the Aggregate split is
+ * ever worth writing: it does close two gaps this approach has, a conditional branch and equal
+ * arguments bound to different parameters.
  *
  * See-through under `canonicalized` and `foldable`: the markers sit in the plan all through
  * analysis, where a marked argument still has to match the same argument written bare (an
