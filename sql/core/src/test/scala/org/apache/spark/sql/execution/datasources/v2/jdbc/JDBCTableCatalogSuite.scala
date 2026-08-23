@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.sql.{Connection, DriverManager}
+import java.sql.{Connection, DriverManager, SQLException}
 import java.util.Properties
 
 import scala.jdk.CollectionConverters._
@@ -25,13 +25,17 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{
+  NoSuchNamespaceException,
+  NoSuchTableException,
+  TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableSummary}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLStmt}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.H2Dialect
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -229,9 +233,14 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58945: H2 loadTable reports unavailable search path") {
-    val e = intercept[AnalysisException] {
-      tableCatalog.loadTable(Identifier.of(Array("test"), "not_existing_table"))
+  test("SPARK-58945: H2 dialect supplies searchPath for TABLE_OR_VIEW_NOT_FOUND") {
+    val e = intercept[NoSuchTableException] {
+      H2Dialect().classifyException(
+        new SQLException("""Table "NOT_EXISTING_TABLE" not found""", "42S02", 42102),
+        condition = "FAILED_JDBC.LOAD_TABLE",
+        messageParameters = Map("tableName" -> "`test`.`not_existing_table`"),
+        description = "Failed to load table: [test, not_existing_table]",
+        isRuntime = false)
     }
     checkErrorTableNotFoundWithSearchPath(
       e,
