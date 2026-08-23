@@ -3215,8 +3215,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "parameter" -> toSQLId("extension"),
-        "fileExtension" -> toSQLId(extension),
-        "acceptable" -> "Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"))
+        "invalidValue" -> toSQLId(extension)))
   }
 
   def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
@@ -3240,7 +3239,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def invalidWriterCommitMessageError(details: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "INVALID_WRITER_COMMIT_MESSAGE",
-      messageParameters = Map("details" -> details))
+      messageParameters = Map("detail" -> details))
   }
 
   def codecNotAvailableError(codecName: String, availableCodecs: String): Throwable = {

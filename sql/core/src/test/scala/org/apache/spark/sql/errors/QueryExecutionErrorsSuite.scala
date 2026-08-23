@@ -141,6 +141,21 @@ class QueryExecutionErrorsSuite
     (df1, df2)
   }
 
+  test("SPARK-58945: invalid file extension reports invalidValue") {
+    withTempDir { dir =>
+      val path = new File(dir, "data").getCanonicalPath
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.range(1).write.option("extension", "12").csv(path)
+        },
+        condition = "INVALID_PARAMETER_VALUE.EXTENSION",
+        parameters = Map(
+          "functionName" -> "`extension`",
+          "parameter" -> "`extension`",
+          "invalidValue" -> "`12`"))
+    }
+  }
+
   test("INVALID_PARAMETER_VALUE.AES_KEY_LENGTH: invalid key lengths in AES functions") {
     val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame, inputBytes: Int): Unit = {
