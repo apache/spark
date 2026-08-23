@@ -1688,21 +1688,31 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             with _warnings.catch_warnings(record=True) as caught:
                 _warnings.simplefilter("always")
                 u = UserDefinedFunction(nested, LongType())
+            messages = " ".join(str(w.message) for w in caught)
             self.assertEqual([], u.transpiled, "a Call body is unsupported either way")
-            self.assertNotIn("put each lambda on its own line", str([w.message for w in caught]))
+            self.assertIn("Call", messages, "must fall back for the body, not for ambiguity")
+            self.assertNotIn("put each lambda on its own line", messages)
 
-        # ``staticmethod``/``classmethod`` do not forward ``__code__``, so reading it
-        # off them left ``holding_lambda`` False -- skipping the check for a shape it
-        # exists to catch. Only the unrelated ``__wrapped__`` refusal hid this.
+        # ``staticmethod``/``classmethod`` hide ``__code__`` behind the descriptor, so
+        # reading it off them left ``holding_lambda`` False -- skipping the check for
+        # a shape it exists to catch. Now that these lower at all, the skip would be
+        # a wrong answer: ``helper`` shares the line and would be lowered instead.
         class Wrapped:
-            helper = lambda self, x: x * 100  # noqa: E731
-            __call__ = staticmethod(lambda self, x: x * 2)
+            # fmt: off
+            help = lambda s, x: x * 100; __call__ = staticmethod(lambda x: x * 2)  # noqa: E702,E731
+            # fmt: on
 
         self.assertEqual(
             "<lambda>",
             getattr(_held_code(Wrapped()), "co_name", None),
-            "the held code must be found through __func__",
+            "the held code must be found inside the descriptor",
         )
+        self.assertEqual(10, Wrapped()(5))
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(Wrapped(), LongType())
+            self.assertEqual([], u.transpiled, "two lambdas in view -- must refuse")
+            num = self.spark.createDataFrame([(5,)], "a long")
+            self.assertEqual(10, num.select(u("a")).first()[0])
 
     def test_udf_transpile_recovers_shapes_with_an_unheld_lambda_in_view(self):
         # The ambiguity check applies only when the callable we hold IS a lambda. The
@@ -1782,29 +1792,49 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             def act(kls, x):
                 return x + 3
 
+        # A ``__call__`` that is a classmethod, or one that is ALREADY a bound method,
+        # also has its receiver spoken for -- the class and the method's own
+        # ``__self__`` respectively. Both used to keep it in the public list, which
+        # shifts every placeholder. Each expectation below is what Python returns.
+        class ClsCall:
+            @classmethod
+            def __call__(kls, x):
+                return x + 4
+
+        class Helper:
+            def impl(self, x):
+                return x + 5
+
+        class BoundCall:
+            __call__ = Helper().impl
+
         for label, func, expected in [
             ("__call__ receiver not named self", Recv(), 6),
             ("bound method receiver not named self", Meth().act, 7),
             ("classmethod receiver not named self", Cls.act, 8),
+            ("classmethod as __call__", ClsCall(), 9),
+            ("already-bound method as __call__", BoundCall(), 10),
         ]:
             with self.subTest(case=label):
+                self.assertEqual(func(5), expected, "fixture must match Python's own answer")
                 self.assertEqual(self._vals(func, LongType(), "a long", [(5,)]), [expected])
 
-        # The mirror -- a leading ``self`` that is NOT bound -- lowers correctly in
-        # ``test_udf_transpile_plain_self_param_is_an_ordinary_param``. A
-        # ``staticmethod`` ``__call__`` is the same shape, but ``staticmethod``
-        # exposes ``__wrapped__``, so the functools.wraps refusal fires first; assert
-        # that rather than the lowering it does not get.
+        # The mirror: a ``staticmethod`` ``__call__`` prepends nothing, so its leading
+        # ``self`` IS supplied at the call site and both parameters are public. This
+        # used to be refused for a functools.wraps decorator that is not there --
+        # ``staticmethod`` carries a ``__wrapped__`` of its own, and the check was
+        # reading the descriptor instead of the function inside it.
         class Static:
             @staticmethod
             def __call__(self, x):
                 return self + x
 
-        with self.sql_conf(_TRANSPILE_ON):
-            u = UserDefinedFunction(Static(), LongType())
-            self.assertEqual([], u.transpiled)
-            two = self.spark.createDataFrame([(5, 9)], "a long, b long")
-            self.assertEqual(14, two.select(u("a", "b")).first()[0])
+        self.assertEqual(14, Static()(5, 9), "staticmethod __call__ binds no receiver")
+        self.assertEqual(
+            self._vals(Static(), LongType(), "a long, b long", [(5, 9)]),
+            [14],
+            "both parameters come from the call site",
+        )
 
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so

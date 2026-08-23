@@ -35,9 +35,11 @@ keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
-A lambda is read from source by line, so give each one a line of its own.
-Where two share a line nothing in the text says which is the UDF, and both
-fall back to interpreted Python rather than risk lowering the wrong body.
+A lambda is lowered only when its source names it directly and alone: bind it
+to a name (``f = lambda x: x + 1``) and give it a line of its own. Passed
+straight to ``udf(...)``, wrapped in another call, or sharing a line with a
+second lambda, nothing in the source read back says which lambda is the UDF,
+so it falls back to interpreted Python rather than risk the wrong body.
 """
 
 import ast
@@ -870,10 +872,11 @@ def _call_dunder(func: Callable) -> Any:
     deciding what to transpile never runs user code -- a custom descriptor used as
     ``__call__`` would otherwise have its ``__get__`` called here.
 
-    Anything but a plain function comes back raw -- a ``property``, a
-    ``staticmethod``, or the slot wrapper that a class object or a plain function
-    yields from its metatype/type -- has no retrievable source, and is refused by
-    the caller.
+    Everything comes back undisturbed, so a ``staticmethod`` or ``classmethod``
+    arrives as the descriptor rather than the function inside it -- see
+    ``_call_impl``. A non-callable yields ``type.__call__`` rather than ``None``,
+    since ``getattr_static`` on a type falls through to the metatype; the caller
+    only ever asks about callables, which ``udf()`` has already checked.
     """
     try:
         return inspect.getattr_static(type(func), "__call__")
@@ -881,16 +884,25 @@ def _call_dunder(func: Callable) -> Any:
         return None
 
 
+def _call_impl(entry: Any) -> Any:
+    """The function inside a ``staticmethod`` / ``classmethod``, else ``entry`` itself.
+
+    Both hide the wrapped function's ``__code__`` and ``__wrapped__`` behind the
+    descriptor, so asking them directly reads neither. Narrow on purpose: unwrapping
+    any ``__func__`` would follow the attribute on unrelated callables that expose
+    one, and read the wrong code object.
+    """
+    return entry.__func__ if isinstance(entry, (staticmethod, classmethod)) else entry
+
+
 def _held_code(func: Callable) -> Any:
     """The code object that runs when ``func`` is called, or ``None``.
 
     A function or method runs its own ``__code__``; anything else runs its type's
-    ``__call__``. ``__func__`` unwraps the ``staticmethod`` / ``classmethod`` that
-    ``getattr_static`` hands back undisturbed, neither of which forwards
-    ``__code__``. Used only to ask whether we are holding a lambda.
+    ``__call__``. Used only to ask whether we are holding a lambda.
     """
     target = func if (inspect.isfunction(func) or inspect.ismethod(func)) else _call_dunder(func)
-    return getattr(getattr(target, "__func__", target), "__code__", None)
+    return getattr(_call_impl(target), "__code__", None)
 
 
 _WARNINGS_LOCK = threading.Lock()
@@ -907,15 +919,18 @@ def _syntax_warnings_suppressed() -> Iterator[None]:
 
     The lock serializes our own use of ``warnings``, whose state is process-global.
     It cannot serialize anyone else's: a thread entering ``catch_warnings`` while
-    this is open has its filters restored from our older snapshot on exit. That
-    hazard is inherent to the stdlib API and is why the parse is the only thing
-    inside here.
+    this is open has its filters restored from our older snapshot on exit, and
+    entering at all bumps the filter version, so a "once"-filtered warning
+    elsewhere in the process can fire again. Both are inherent to the stdlib API,
+    and are why the parse is the only thing inside here.
     """
     with _WARNINGS_LOCK:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=SyntaxWarning)
             if sys.version_info < (3, 12):
-                warnings.filterwarnings("ignore", category=DeprecationWarning)
+                warnings.filterwarnings(
+                    "ignore", message="invalid escape sequence", category=DeprecationWarning
+                )
             yield
 
 
@@ -1089,9 +1104,12 @@ def _transpile_func(
         # the WRAPPED function's source (getsource follows ``__wrapped__``),
         # while the UDF actually executes the wrapper. Transpiling would
         # silently reproduce the wrong behavior, so refuse and fall back.
+        # ``_call_impl`` first: a ``staticmethod`` / ``classmethod`` exposes a
+        # ``__wrapped__`` of its own, so asking the descriptor refuses every one of
+        # them for a wraps decorator that is not there.
         if (
             getattr(func, "__wrapped__", None) is not None
-            or getattr(_call_dunder(func), "__wrapped__", None) is not None
+            or getattr(_call_impl(_call_dunder(func)), "__wrapped__", None) is not None
         ):
             return (
                 [],
@@ -1150,17 +1168,41 @@ def _transpile_func(
         # for ``x`` and returned a value where Python raises TypeError. Asking
         # ``inspect.signature`` is both weaker (a ``__signature__`` off by exactly one
         # is undetectable) and worse behaved (it runs user code).
-        bound_receivers = int(
-            inspect.ismethod(func)
-            or (not inspect.isfunction(func) and inspect.isfunction(_call_dunder(func)))
-        )
-        if bound_receivers and not params:
+        #
+        # For a callable instance the answer is per-descriptor, and only
+        # ``staticmethod`` prepends nothing: a plain-function or ``classmethod``
+        # ``__call__`` receives the instance or its class, and one that is ALREADY a
+        # bound method receives its own ``__self__`` instead -- either way one
+        # parameter is spoken for. Verified against what Python returns for each.
+        if inspect.isfunction(func):
+            has_bound_receiver = False
+        elif inspect.ismethod(func):
+            has_bound_receiver = True
+        else:
+            call_entry = _call_dunder(func)
+            if not isinstance(call_entry, (staticmethod, classmethod)) and not (
+                inspect.isfunction(call_entry) or inspect.ismethod(call_entry)
+            ):
+                # A slot wrapper, property, partial, or other descriptor: what it
+                # prepends is not knowable from here.
+                return (
+                    [],
+                    [
+                        f"a {type(call_entry).__name__} as __call__ does not say which "
+                        "parameters the call site supplies, so the placeholder "
+                        "positions cannot be assigned"
+                    ],
+                    [],
+                    [],
+                )
+            has_bound_receiver = not isinstance(call_entry, staticmethod)
+        if has_bound_receiver and not params:
             # Nothing for the receiver to bind to, so calling this raises TypeError.
             return ([], ["callable takes no parameter for its bound receiver"], [], [])
         # Caller-facing params: callers match user-supplied kwargs against this,
         # and the receiver is not named at the call site. Everything downstream
         # indexes off THIS list, so the placeholder numbering needs no offset.
-        public_params = params[bound_receivers:]
+        public_params = params[1:] if has_bound_receiver else list(params)
         transpiled: list[Column] = []
         input_categories: list[list[str]] = []
         errors = []
