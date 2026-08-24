@@ -64,7 +64,7 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
-import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
+import org.apache.spark.sql.connect.service.{ExecuteHolder, PythonWorkerEnvironment, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.{MetricGenerator, PipelineAnalysisContextUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
@@ -2228,11 +2228,16 @@ class SparkConnectPlanner(
       bufferType = if (udf.hasBufferType) transformDataType(udf.getBufferType) else null)
   }
 
+  // The environment installed in the Python workers that run this session's Python functions,
+  // read once per request: a planner handles a single request, so this cannot pin values that a
+  // later request replaces.
+  private lazy val pythonWorkerEnv: Map[String, String] =
+    PythonWorkerEnvironment.readValidated(session.sessionState.conf)
+
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
-      // Empty environment variables
-      envVars = new HashMap[String, String](),
+      envVars = PythonWorkerEnvironment.toMutableJavaMap(pythonWorkerEnv),
       pythonExec = pythonExec,
       // Merge the user specified includes with the includes managed by the artifact manager.
       pythonIncludes = (fun.getAdditionalIncludesList.asScala.toSeq ++

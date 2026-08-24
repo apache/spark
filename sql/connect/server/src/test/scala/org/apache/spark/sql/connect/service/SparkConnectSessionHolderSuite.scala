@@ -470,7 +470,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       optionExpectedCachedRelations: Option[Set[proto.Relation]]) = {
     optionExpectedCachedRelations match {
       case Some(expectedCachedRelations) =>
-        val cachedRelations = sessionHolder.getPlanCache.get.asMap().keySet().asScala
+        val cachedRelations =
+          sessionHolder.getPlanCache.get.asMap().keySet().asScala.map(_.relation)
         assert(cachedRelations.size == expectedCachedRelations.size)
         expectedCachedRelations.foreach(relation => assert(cachedRelations.contains(relation)))
       case None => assert(sessionHolder.getPlanCache.isEmpty)

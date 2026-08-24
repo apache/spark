@@ -61,7 +61,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Analyzing a large plan may be expensive, and it is not uncommon to build the plan step-by-step
   // with several analysis during the process. This cache aids the recursive analysis process by
   // memorizing `LogicalPlan`s which may be a sub-tree in a subsequent plan.
-  private lazy val planCache: Option[Cache[proto.Relation, LogicalPlan]] = {
+  private lazy val planCache: Option[Cache[PlanCacheKey, LogicalPlan]] = {
     if (SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE) <= 0) {
       logWarning(
         log"Session plan cache is disabled due to non-positive cache size." +
@@ -75,7 +75,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         CacheBuilder
           .newBuilder()
           .maximumSize(SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE))
-          .build[proto.Relation, LogicalPlan]())
+          .build[PlanCacheKey, LogicalPlan]())
     }
   }
 
@@ -620,10 +620,21 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       .forall(_.conf.get(Connect.CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED, true))
     lazy val isDataSourceRead = rel.hasRead && rel.getRead.hasDataSource
 
+    // A cached plan holds the Python worker environment of the request that built it, baked into
+    // every Python function it contains, so an entry may only be reused by a request whose
+    // environment matches. Read without validation: an invalid environment has to fail the queries
+    // that would install it, not every query that consults the cache.
+    def cacheKey(rel: proto.Relation): PlanCacheKey =
+      PlanCacheKey(
+        rel,
+        Option(session)
+          .map(s => PythonWorkerEnvironment.read(s.sessionState.conf))
+          .getOrElse(Map.empty))
+
     def getPlanCache(rel: proto.Relation): Option[LogicalPlan] =
       planCache match {
         case Some(cache) if planCacheEnabled && hasPlanId =>
-          Option(cache.getIfPresent(rel)) match {
+          Option(cache.getIfPresent(cacheKey(rel))) match {
             case Some(plan) =>
               logDebug(s"Using cached plan for relation '$rel': $plan")
               Some(plan)
@@ -634,7 +645,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     def putPlanCache(rel: proto.Relation, plan: LogicalPlan): Unit =
       planCache match {
         case Some(cache) if planCacheEnabled && hasPlanId =>
-          cache.put(rel, plan)
+          cache.put(cacheKey(rel), plan)
         case _ =>
       }
 
@@ -649,8 +660,22 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   // For testing. Expose the plan cache for testing purposes.
-  private[service] def getPlanCache: Option[Cache[proto.Relation, LogicalPlan]] = planCache
+  private[service] def getPlanCache: Option[Cache[PlanCacheKey, LogicalPlan]] = planCache
 }
+
+/**
+ * Key of an entry in a session's plan cache.
+ *
+ * @param relation
+ *   the relation the cached plan was built from.
+ * @param pythonWorkerEnv
+ *   the Python worker environment the plan was built with. Part of the key because it is baked into
+ *   every Python function the plan contains, so a plan built with one environment must not be
+ *   reused by a request carrying another.
+ */
+private[service] case class PlanCacheKey(
+    relation: proto.Relation,
+    pythonWorkerEnv: Map[String, String])
 
 object SessionHolder {
 
