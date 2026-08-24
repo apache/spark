@@ -669,7 +669,7 @@ case class InMemoryRelation(
   override def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
-    withOutput(output.map(QueryPlan.normalizeExpressions(_, output)))
+    withOutput(QueryPlan.normalizeExpressions(output, output))
 
   @transient val partitionStatistics = new PartitionStatistics(output)
 

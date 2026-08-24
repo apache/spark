@@ -101,13 +101,14 @@ case class BatchScanExec(
   }
 
   override def doCanonicalize(): BatchScanExec = {
+    val outputAttrs: AttributeSeq = output
     this.copy(
-      output = output.map(QueryPlan.normalizeExpressions(_, output)),
+      output = QueryPlan.normalizeExpressions(output, outputAttrs),
       runtimeFilters = QueryPlan.normalizePredicates(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),
-        output),
-      keyGroupedPartitioning = keyGroupedPartitioning.map(_.map(
-        QueryPlan.normalizeExpressions(_, output))))
+        outputAttrs),
+      keyGroupedPartitioning = keyGroupedPartitioning.map(
+        QueryPlan.normalizeExpressions(_, outputAttrs)))
   }
 
   override def simpleString(maxFields: Int): String = {

@@ -70,7 +70,7 @@ case class SubqueryBroadcastExec(
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
 
   override def doCanonicalize(): SparkPlan = {
-    val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
+    val keys = QueryPlan.normalizeExpressions(buildKeys, child.output)
     SubqueryBroadcastExec("dpp", indices, keys, child.canonicalized)
   }
 

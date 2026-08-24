@@ -863,6 +863,19 @@ object QueryPlan extends PredicateHelper {
   }
 
   /**
+   * Normalizes each expression in `exprs` against `input`. Unlike
+   * `exprs.map(normalizeExpressions(_, input))`, this binds the `AttributeSeq` a single time so its
+   * `exprId`-to-ordinal lookup map is built once for the whole sequence. Passing a bare
+   * `Seq[Attribute]` to the per-expression overload inside a `map` re-applies the implicit
+   * `Seq[Attribute]` => `AttributeSeq` conversion on every element, rebuilding that map each time,
+   * which is `O(exprs.size * input.size)` -- quadratic when canonicalizing a relation's own wide
+   * output. The result is identical to the per-element form.
+   */
+  def normalizeExpressions[T <: Expression](exprs: Seq[T], input: AttributeSeq): Seq[T] = {
+    exprs.map(normalizeExpressions(_, input))
+  }
+
+  /**
    * Composes the given predicates into a conjunctive predicate, which is normalized and reordered.
    * Then returns a new sequence of predicates by splitting the conjunctive predicate.
    */
