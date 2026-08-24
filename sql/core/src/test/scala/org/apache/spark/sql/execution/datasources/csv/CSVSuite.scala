@@ -3342,10 +3342,11 @@ abstract class CSVSuite
   }
 
   test("validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 42)
+    assert(CSVOptions.getAllOptions.size == 43)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
+    assert(CSVOptions.isValidOption("variantRespectInferSchema"))
     assert(CSVOptions.isValidOption("ignoreLeadingWhiteSpace"))
     assert(CSVOptions.isValidOption("ignoreTrailingWhiteSpace"))
     assert(CSVOptions.isValidOption("preferDate"))
@@ -3915,6 +3916,92 @@ abstract class CSVSuite
       condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
       parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
     )
+  }
+
+  test("variantRespectInferSchema option") {
+    withTempPath { path =>
+      val data =
+        """0001,100,1.1,true
+          |0002,2000-01-01,2000-01-01 01:02:03,false
+          |0003,1e9,hello,extra
+          |""".stripMargin
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+
+      // Default behavior: inferSchema is always applied for variant ingestion
+      checkAnswer(
+        spark.read.option("singleVariantColumn", "v")
+          .csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+        Seq(
+          Row("""{"_c0":1,"_c1":100,"_c2":1.1,"_c3":true}"""),
+          Row("""{"_c0":2,"_c1":"2000-01-01","_c2":"2000-01-01 01:02:03-08:00","_c3":false}"""),
+          Row("""{"_c0":3,"_c1":"1e9","_c2":"hello","_c3":"extra"}""")
+        )
+      )
+
+      // With variantRespectInferSchema=true and inferSchema=false: preserve as strings
+      checkAnswer(
+        spark.read
+          .option("singleVariantColumn", "v")
+          .option("variantRespectInferSchema", "true")
+          .option("inferSchema", "false")
+          .csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+        Seq(
+          Row("""{"_c0":"0001","_c1":"100","_c2":"1.1","_c3":"true"}"""),
+          Row("""{"_c0":"0002","_c1":"2000-01-01","_c2":"2000-01-01 01:02:03","_c3":"false"}"""),
+          Row("""{"_c0":"0003","_c1":"1e9","_c2":"hello","_c3":"extra"}""")
+        )
+      )
+
+      // With variantRespectInferSchema=true and inferSchema=true: still infer types
+      checkAnswer(
+        spark.read
+          .option("singleVariantColumn", "v")
+          .option("variantRespectInferSchema", "true")
+          .option("inferSchema", "true")
+          .csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+        Seq(
+          Row("""{"_c0":1,"_c1":100,"_c2":1.1,"_c3":true}"""),
+          Row("""{"_c0":2,"_c1":"2000-01-01","_c2":"2000-01-01 01:02:03-08:00","_c3":false}"""),
+          Row("""{"_c0":3,"_c1":"1e9","_c2":"hello","_c3":"extra"}""")
+        )
+      )
+
+      // Test with explicit variant schema columns
+      checkAnswer(
+        spark.read
+          .option("variantRespectInferSchema", "true")
+          .option("inferSchema", "false")
+          .schema("c0 variant, c1 variant, c2 variant, c3 variant")
+          .csv(path.getCanonicalPath)
+          .selectExpr("cast(c0 as string)", "cast(c1 as string)", "cast(c2 as string)", "cast(c3 as string)"),
+        Seq(
+          Row("0001", "100", "1.1", "true"),
+          Row("0002", "2000-01-01", "2000-01-01 01:02:03", "false"),
+          Row("0003", "1e9", "hello", "extra")
+        )
+      )
+
+      // Test with header
+      val dataWithHeader =
+        """id,num,dec,bool
+          |0001,100,1.1,true
+          |0002,200,2.2,false
+          |""".stripMargin
+      Files.write(path.toPath, dataWithHeader.getBytes(StandardCharsets.UTF_8))
+
+      checkAnswer(
+        spark.read
+          .option("singleVariantColumn", "v")
+          .option("variantRespectInferSchema", "true")
+          .option("inferSchema", "false")
+          .option("header", "true")
+          .csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+        Seq(
+          Row("""{"bool":"true","dec":"1.1","id":"0001","num":"100"}"""),
+          Row("""{"bool":"false","dec":"2.2","id":"0002","num":"200"}""")
+        )
+      )
+    }
   }
 
   private def createTestFiles(dir: File, fileFormatWriter: Boolean,

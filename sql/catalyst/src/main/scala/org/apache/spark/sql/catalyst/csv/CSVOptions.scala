@@ -340,6 +340,15 @@ class CSVOptions(
   def needHeaderForSingleVariantColumn: Boolean =
     singleVariantColumn.isDefined && headerFlag
 
+  /**
+   * When true and inferSchema is false, the CSV to Variant parser preserves scalar CSV values
+   * as strings inside the Variant instead of inferring their types. This only affects variant
+   * ingestion (singleVariantColumn mode or explicit VariantType columns).
+   *
+   * Defaults to false to preserve existing behavior where scalar types are always inferred.
+   */
+  val variantRespectInferSchema: Boolean = getBool(VARIANT_RESPECT_INFER_SCHEMA, default = false)
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -443,6 +452,7 @@ object CSVOptions extends DataSourceOptions {
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
+  val VARIANT_RESPECT_INFER_SCHEMA = newOption("variantRespectInferSchema")
 
   // Max error content length in CSV parser/writer exception messages, and the bound on the bad
   // record embedded in MALFORMED_CSV_RECORD errors.

@@ -869,6 +869,59 @@ class CsvFunctionsSuite extends SharedSparkSession {
       Seq(Row(s"""{null, $largeInput}""")))
   }
 
+  test("from_csv with variant: variantRespectInferSchema option") {
+    val df = Seq("0001,100,1.1,true", "0002,200,2.2,false").toDF("value")
+    
+    // Default behavior: types are inferred (0001 becomes 1, 0002 becomes 2)
+    checkAnswer(
+      df.select(
+        from_csv(
+          $"value",
+          StructType.fromDDL("a variant, b variant, c variant, d variant"),
+          Map.empty[String, String]
+        ).cast("string")),
+      Seq(
+        Row("""{1, 100, 1.1, true}"""),
+        Row("""{2, 200, 2.2, false}""")))
+
+    // With variantRespectInferSchema=true and inferSchema=false: preserve as strings
+    checkAnswer(
+      df.select(
+        from_csv(
+          $"value",
+          StructType.fromDDL("a variant, b variant, c variant, d variant"),
+          Map("variantRespectInferSchema" -> "true", "inferSchema" -> "false")
+        ).cast("string")),
+      Seq(
+        Row("""{"0001", "100", "1.1", "true"}"""),
+        Row("""{"0002", "200", "2.2", "false"}""")))
+
+    // With variantRespectInferSchema=true and inferSchema=true: still infer types
+    checkAnswer(
+      df.select(
+        from_csv(
+          $"value",
+          StructType.fromDDL("a variant, b variant, c variant, d variant"),
+          Map("variantRespectInferSchema" -> "true", "inferSchema" -> "true")
+        ).cast("string")),
+      Seq(
+        Row("""{1, 100, 1.1, true}"""),
+        Row("""{2, 200, 2.2, false}""")))
+
+    // Test with singleVariantColumn mode
+    checkAnswer(
+      df.select(
+        from_csv(
+          $"value",
+          StructType.fromDDL("v variant"),
+          Map("singleVariantColumn" -> "v", "variantRespectInferSchema" -> "true", 
+              "inferSchema" -> "false")
+        ).cast("string")),
+      Seq(
+        Row("""{{"_c0":"0001","_c1":"100","_c2":"1.1","_c3":"true"}}"""),
+        Row("""{{"_c0":"0002","_c1":"200","_c2":"2.2","_c3":"false"}}""")))
+  }
+
   test("from_csv with variant: extreme negative scale decimal does not hang") {
     // A value like "1E99999" parses to a BigDecimal with scale=-99999.
     // Calling setScale(0) on it would hang, so it should fall through to string.

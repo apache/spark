@@ -460,6 +460,9 @@ class UnivocityParser(
    * input as a specific scalar type, or fails after trying all the types and defaults to the string
    * type. The state is reset for every input file.
    *
+   * When variantRespectInferSchema is true and inferSchema is false, scalar type inference is
+   * skipped and all non-null values are stored as strings.
+   *
    * Floating point types (double, float) are not considered to avoid precision loss.
    */
   private final class VariantValueConverter extends ValueConverter {
@@ -467,6 +470,8 @@ class UnivocityParser(
     // Keep consistent with `CSVInferSchema`: only produce TimestampNTZ when the default timestamp
     // type is TimestampNTZ.
     private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
+    // When variantRespectInferSchema is true and inferSchema is false, skip type inference
+    private val shouldInferTypes = !options.variantRespectInferSchema || options.inferSchemaFlag
 
     override def apply(s: String): Any = {
       val builder = new VariantBuilder(false)
@@ -478,6 +483,12 @@ class UnivocityParser(
     def convertInput(builder: VariantBuilder, s: String): Unit = {
       if (s == null || s == options.nullValue) {
         builder.appendNull()
+        return
+      }
+
+      // If variantRespectInferSchema is true and inferSchema is false, store as string
+      if (!shouldInferTypes) {
+        builder.appendString(s)
         return
       }
 

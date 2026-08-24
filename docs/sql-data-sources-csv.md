@@ -229,6 +229,12 @@ Data source options of CSV can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>variantRespectInferSchema</code></td>
+    <td>false</td>
+    <td>When true and <code>inferSchema</code> is false, the CSV to Variant parser preserves scalar CSV values as strings inside the Variant instead of inferring their types. This only affects variant ingestion (<code>singleVariantColumn</code> mode or explicit <code>VariantType</code> columns). When false (the default), scalar types (long, decimal, date, timestamp, boolean) are always inferred regardless of the <code>inferSchema</code> setting, preserving existing behavior.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>multiLine</code></td>
     <td>false</td>
     <td>Allows a row to span multiple lines, by parsing line breaks within quoted values as part of the value itself. CSV built-in functions ignore this option.<br>
