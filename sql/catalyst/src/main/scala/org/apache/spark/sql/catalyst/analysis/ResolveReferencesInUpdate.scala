@@ -67,7 +67,8 @@ class ResolveReferencesInUpdate(val catalogManager: CatalogManager)
 
     val newUpdate = u.copy(
       assignments = newAssignments,
-      condition = u.condition.map(resolveExpressionByPlanChildren(_, u)))
+      condition = u.condition.map(
+        resolveExpressionByPlanChildren(_, u, includeLastResort = true)))
     newUpdate.copyTagsFrom(u)
     newUpdate
   }

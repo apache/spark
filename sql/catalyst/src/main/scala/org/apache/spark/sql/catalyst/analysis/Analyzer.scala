@@ -1811,11 +1811,11 @@ class Analyzer(
             val newMatchedActions = m.matchedActions.map {
               case DeleteAction(deleteCondition) =>
                 val resolvedDeleteCondition = deleteCondition.map(
-                  resolveExpressionByPlanChildren(_, m))
+                  resolveExpressionByPlanChildren(_, m, includeLastResort = true))
                 DeleteAction(resolvedDeleteCondition)
               case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
-                  resolveExpressionByPlanChildren(_, m))
+                  resolveExpressionByPlanChildren(_, m, includeLastResort = true))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
@@ -1838,7 +1838,8 @@ class Analyzer(
                   }
                 }
                 UpdateAction(
-                  updateCondition.map(resolveExpressionByPlanChildren(_, m)),
+                  updateCondition.map(
+                    resolveExpressionByPlanChildren(_, m, includeLastResort = true)),
                   // For UPDATE *, the value must be from source table.
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws),
                   fromStar = true)
@@ -1881,11 +1882,11 @@ class Analyzer(
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
               case DeleteAction(deleteCondition) =>
                 val resolvedDeleteCondition = deleteCondition.map(
-                  resolveExpressionByPlanOutput(_, targetTable))
+                  resolveExpressionByPlanOutput(_, targetTable, includeLastResort = true))
                 DeleteAction(resolvedDeleteCondition)
               case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
-                  resolveExpressionByPlanOutput(_, targetTable))
+                  resolveExpressionByPlanOutput(_, targetTable, includeLastResort = true))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
@@ -1894,7 +1895,8 @@ class Analyzer(
               case o => o
             }
 
-            val resolvedMergeCondition = resolveExpressionByPlanChildren(m.mergeCondition, m)
+            val resolvedMergeCondition =
+              resolveExpressionByPlanChildren(m.mergeCondition, m, includeLastResort = true)
             m.copy(mergeCondition = resolvedMergeCondition,
               matchedActions = newMatchedActions,
               notMatchedActions = newNotMatchedActions,
