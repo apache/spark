@@ -321,8 +321,8 @@ object MLUtils extends Logging {
    * Converts vector columns in an input Dataset from the [[org.apache.spark.mllib.linalg.Vector]]
    * type to the new [[org.apache.spark.ml.linalg.Vector]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of vector columns to be converted. New vector columns will be ignored. If
-   *             unspecified, all old vector columns will be converted except nested ones.
+   * @param cols a list of vector columns to be converted. If unspecified, all vector columns will
+   *             be converted except nested ones.
    * @return the input `DataFrame` with old vector columns converted to the new vector type
    */
   @Since("2.0.0")
@@ -330,20 +330,11 @@ object MLUtils extends Logging {
   def convertVectorColumnsToML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colSet = if (cols.nonEmpty) {
-      cols.flatMap { c =>
-        val dataType = schema(c).dataType
-        if (dataType.getClass == classOf[VectorUDT]) {
-          Some(c)
-        } else {
-          // ignore new vector columns and raise an exception on other column types
-          require(dataType.getClass == classOf[MLVectorUDT],
-            s"Column $c must be old Vector type to be converted to new type but got $dataType.")
-          None
-        }
-      }.toSet
+      cols.foreach(schema(_))
+      cols.toSet
     } else {
       schema.fields
-        .filter(_.dataType.getClass == classOf[VectorUDT])
+        .filter(field => isVectorUDT(field.dataType))
         .map(_.name)
         .toSet
     }
@@ -368,8 +359,8 @@ object MLUtils extends Logging {
    * Converts vector columns in an input Dataset to the [[org.apache.spark.mllib.linalg.Vector]]
    * type from the new [[org.apache.spark.ml.linalg.Vector]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of vector columns to be converted. Old vector columns will be ignored. If
-   *             unspecified, all new vector columns will be converted except nested ones.
+   * @param cols a list of vector columns to be converted. If unspecified, all vector columns will
+   *             be converted except nested ones.
    * @return the input `DataFrame` with new vector columns converted to the old vector type
    */
   @Since("2.0.0")
@@ -377,20 +368,11 @@ object MLUtils extends Logging {
   def convertVectorColumnsFromML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colSet = if (cols.nonEmpty) {
-      cols.flatMap { c =>
-        val dataType = schema(c).dataType
-        if (dataType.getClass == classOf[MLVectorUDT]) {
-          Some(c)
-        } else {
-          // ignore old vector columns and raise an exception on other column types
-          require(dataType.getClass == classOf[VectorUDT],
-            s"Column $c must be new Vector type to be converted to old type but got $dataType.")
-          None
-        }
-      }.toSet
+      cols.foreach(schema(_))
+      cols.toSet
     } else {
       schema.fields
-        .filter(_.dataType.getClass == classOf[MLVectorUDT])
+        .filter(field => isVectorUDT(field.dataType))
         .map(_.name)
         .toSet
     }
@@ -409,6 +391,10 @@ object MLUtils extends Logging {
     }
     import org.apache.spark.util.ArrayImplicits._
     dataset.select(exprs.toImmutableArraySeq: _*)
+  }
+
+  private def isVectorUDT(dataType: DataType): Boolean = {
+    dataType.getClass == classOf[VectorUDT] || dataType.getClass == classOf[MLVectorUDT]
   }
 
   /**

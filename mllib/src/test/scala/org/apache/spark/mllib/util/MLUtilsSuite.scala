@@ -276,8 +276,8 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(new2 === new1)
     val new3 = convertVectorColumnsToML(df, "y", "w").first()
     assert(new3 === Row(0, x, y.asML, Row(5.0, z), w))
-    intercept[IllegalArgumentException] {
-      convertVectorColumnsToML(df, "p")
+    intercept[AnalysisException] {
+      convertVectorColumnsToML(df, "p").collect()
     }
     intercept[IllegalArgumentException] {
       convertVectorColumnsToML(df, "p._2")
@@ -301,8 +301,8 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(new2 === new1)
     val new3 = convertVectorColumnsFromML(df, "y", "w").first()
     assert(new3 === Row(0, x, Vectors.fromML(y), Row(5.0, z), w))
-    intercept[IllegalArgumentException] {
-      convertVectorColumnsFromML(df, "p")
+    intercept[AnalysisException] {
+      convertVectorColumnsFromML(df, "p").collect()
     }
     intercept[IllegalArgumentException] {
       convertVectorColumnsFromML(df, "p._2")
