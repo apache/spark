@@ -157,6 +157,12 @@ class EquivalentExpressions(
   //        ahead of time.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
+    // A `CommonExpressionRef` cannot be evaluated ahead of the `With` that binds it, for the same
+    // reason a `LambdaVariable` cannot be evaluated ahead of its loop. Do not descend, so that no
+    // subtree holding a reference -- nor a `CommonExpressionDef`, which is unevaluable -- becomes
+    // a candidate. The `With` itself may still be deduplicated as a whole, which is safe: it
+    // carries its own definitions and brings their slots into scope wherever it is generated.
+    case _: With => Nil
     case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
     case h: HigherOrderFunction => h.alwaysEvaluatedArguments
     case other => skipForShortcut(other).children

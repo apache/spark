@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class RewriteWithExpressionSuite extends PlanTest {
@@ -224,6 +224,42 @@ class RewriteWithExpressionSuite extends PlanTest {
           condition = Some((a + x) < 10 && (a + x) > 0)
         )
     )
+  }
+
+  test("SPARK-58902: a With left in a conditional branch of an aggregate still converges") {
+    val Seq(a, b) = testRelation.output
+    // Not cheap and referenced twice, so it stays a memoizing `With` rather than being inlined.
+    val inBranch = With(a + b) { case Seq(ref) => ref * ref }
+    val plan = testRelation.groupBy(a)(max(Coalesce(Seq(a, inBranch))).as("col"))
+    // The `PhysicalAggregation` arm restructures the aggregate into a `Project` above it, and its
+    // guard is "the expressions contain a `With`", which a surviving one keeps true on every
+    // iteration of this fixed-point batch. Without the eq check in the rule this raises
+    // `Max iterations (5) reached for batch Rewrite With expression`, one `Project` per iteration.
+    val rewritten = Optimizer.execute(plan)
+    // Idempotent: running the batch again changes nothing.
+    comparePlans(Optimizer.execute(rewritten), rewritten)
+    assert(rewritten.collect { case p: Project => p }.size <= 1,
+      s"the rule stacked a Project per iteration:\n$rewritten")
+  }
+
+  test("SPARK-58902: a cheap or single-reference definition in a branch is still inlined") {
+    val Seq(a, b) = testRelation.output
+    // A bare attribute is cheap, so inlining it costs nothing and keeps the branch foldable.
+    val cheap = With(a) { case Seq(ref) => ref * ref }
+    comparePlans(
+      Optimizer.execute(testRelation.select(Coalesce(Seq(b, cheap)).as("col"))),
+      testRelation.select(Coalesce(Seq(b, a * a)).as("col")))
+
+    // Referenced once, so memoizing it would save nothing.
+    val singleRef = With(a + b) { case Seq(ref) => ref * Literal(2) }
+    comparePlans(
+      Optimizer.execute(testRelation.select(Coalesce(Seq(b, singleRef)).as("col"))),
+      testRelation.select(Coalesce(Seq(b, (a + b) * Literal(2))).as("col")))
+
+    // Expensive and referenced twice: this is the one worth a `With`.
+    val kept = With(a + b) { case Seq(ref) => ref * ref }
+    val keptPlan = testRelation.select(Coalesce(Seq(b, kept)).as("col"))
+    comparePlans(Optimizer.execute(keptPlan), keptPlan)
   }
 
   test("WITH expression inside conditional expression") {

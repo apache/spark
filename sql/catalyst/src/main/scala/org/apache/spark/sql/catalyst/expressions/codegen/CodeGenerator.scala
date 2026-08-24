@@ -210,8 +210,22 @@ class CodegenContext extends Logging {
   /**
    * The slots a `CommonExpressionRef` reads: the value and its nullness, plus the flag saying
    * whether this row has computed them yet, and the definition to compute them from.
+   * `definitionCode` caches the definition's generated code so that every reference emits the same
+   * text -- and so shares the definition's own mutable state, such as an RNG -- rather than
+   * generating it afresh.
    */
-  case class CommonExprSlots(value: ExprCode, computed: String, definition: Expression)
+  case class CommonExprSlots(
+      value: ExprCode,
+      computed: String,
+      definition: Expression,
+      private var definitionCode: Option[ExprCode] = None) {
+    def definitionGen(ctx: CodegenContext): ExprCode = {
+      if (definitionCode.isEmpty) {
+        definitionCode = Some(definition.genCode(ctx))
+      }
+      definitionCode.get
+    }
+  }
 
   /**
    * Holding a map of the common expressions of the `With` expressions currently being generated,
@@ -221,9 +235,9 @@ class CodegenContext extends Logging {
 
   /**
    * Allocates a value slot and a `computed` flag per definition, generates `f` with them in scope,
-   * then takes them out of scope again. A reference is generated inside `f`, reads the slots back by
-   * id, and is responsible for filling them the first time it is reached on a row -- the enclosing
-   * `With` only clears the flags.
+   * then takes them out of scope again. A reference generated inside `f` reads the slots back by
+   * id and fills them the first time it is reached on a row -- the enclosing `With` only clears the
+   * flags.
    */
   def withCommonExprs(defs: Seq[CommonExpressionDef])(f: Seq[CommonExprSlots] => ExprCode)
     : ExprCode = {
@@ -245,9 +259,11 @@ class CodegenContext extends Logging {
       currentCommonExprs.put(id, slot)
       slot
     }
-    val result = f(slots)
-    defs.map(_.id.id).foreach(currentCommonExprs.remove)
-    result
+    try {
+      f(slots)
+    } finally {
+      defs.map(_.id.id).foreach(currentCommonExprs.remove)
+    }
   }
 
   def getCommonExpr(id: Long): CommonExprSlots = {

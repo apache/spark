@@ -1,0 +1,137 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.expressions
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.types.IntegerType
+
+/**
+ * Evaluation of [[With]] and the memoization it gives a [[CommonExpressionRef]]. The rewrite that
+ * decides which `With`s reach evaluation at all is covered by `RewriteWithExpressionSuite`.
+ */
+class WithExpressionEvalSuite extends SparkFunSuite {
+
+  /**
+   * A stand-in for a stateful generator: every evaluation returns the next integer, so a second
+   * evaluation within one row is directly observable. Only used on the interpreted path.
+   */
+  private case class Counter() extends LeafExpression with Nondeterministic {
+    @transient private var n = 0
+    override def stateful: Boolean = true
+    override def dataType = IntegerType
+    override def nullable: Boolean = false
+    override protected def initializeInternal(partitionIndex: Int): Unit = {}
+    override protected def evalInternal(input: InternalRow): Any = { n += 1; n }
+    override protected def doGenCode(ctx: CodegenContext, ev: ExprCode) =
+      throw new UnsupportedOperationException
+  }
+
+  private def counter(): Counter = {
+    val c = Counter()
+    c.initialize(0)
+    c
+  }
+
+  test("a definition is evaluated once per row however many references read it") {
+    // `ref + ref` is the shape `BETWEEN` produces. Memoized, both references read one value, so the
+    // sum is 2n on the nth row; inlined it would be n + (n + 1).
+    val w = With(counter()) { case Seq(ref) => Add(ref, ref) }
+    assert((1 to 4).map(_ => w.eval(InternalRow.empty)) == Seq(2, 4, 6, 8))
+  }
+
+  test("a definition is not evaluated on a row that reaches no reference") {
+    val c = counter()
+    val notTaken = If(Literal.TrueLiteral, Literal(-1), With(c) { case Seq(ref) => Add(ref, ref) })
+    assert((1 to 3).map(_ => notTaken.eval(InternalRow.empty)) == Seq(-1, -1, -1))
+    // The counter is still at 0, so the first row that does reach a reference sees 1.
+    assert(With(c) { case Seq(ref) => Add(ref, ref) }.eval(InternalRow.empty) == 2)
+  }
+
+  test("a reference behind a short-circuiting operator is not read when the left side is false") {
+    // Neither pre-evaluating the definition into a project nor guarding that column by the branch
+    // can express this: both evaluate on every row the branch is reached on, and `And` short
+    // circuits before the reference.
+    val c = counter()
+    val w = With(c) { case Seq(ref) =>
+      And(GreaterThanOrEqual(ref, Literal(1)), LessThanOrEqual(ref, Literal(100)))
+    }
+    val shortCircuited = And(Literal.FalseLiteral, w)
+    (1 to 3).foreach(_ => shortCircuited.eval(InternalRow.empty))
+    assert(With(c) { case Seq(ref) => Add(ref, ref) }.eval(InternalRow.empty) == 2)
+  }
+
+  test("a nested With memoizes each scope separately") {
+    val outer = counter()
+    val inner = counter()
+    // The outer reference is read twice, and one of its uses wraps an inner `With` whose own
+    // reference is also read twice, so each row is `o + (2i + o)` with `o` and `i` both n.
+    val w = With(outer) { case Seq(o) =>
+      Add(o, With(inner) { case Seq(i) => Add(Add(i, i), o) })
+    }
+    assert((1 to 3).map(_ => w.eval(InternalRow.empty)) == Seq(4, 8, 12))
+  }
+
+  test("a With rebuilt by a rule still memoizes") {
+    val w = With(counter()) { case Seq(ref) => Add(ref, ref) }
+    val rewritten = w.transformUp { case a: Add => a }.asInstanceOf[With]
+    assert((1 to 3).map(_ => rewritten.eval(InternalRow.empty)) == Seq(2, 4, 6))
+  }
+
+  test("SPARK-58902: a copy of a With does not share its references") {
+    // `Rand` is stateful and not a leaf, so `freshCopyIfContainsStatefulExpression` copies it, and
+    // that copies the `CommonExpressionDef` above it and gives the copy its own cell. The
+    // references are stateful leaves, and `LeafLike.withNewChildrenInternal` returns `this`, so
+    // without the override on `CommonExpressionRef` the two `With`s would share one set of
+    // reference objects while owning two cells.
+    val w1 = With(Rand(Literal(1L))) { case Seq(ref) => Add(ref, ref) }
+    val w2 = w1.freshCopyIfContainsStatefulExpression().asInstanceOf[With]
+    def refOf(e: Expression): CommonExpressionRef =
+      e.collect { case r: CommonExpressionRef => r }.head
+    assert(w1 ne w2, "a stateful With has to be copied")
+    assert(refOf(w1.child) ne refOf(w2.child))
+  }
+
+  test("SPARK-58902: two Withs over one set of references each read their own definition") {
+    // The shape a rule produces when it rewrites only the definition: `mapChildren` hands back the
+    // same `child` object with a new definition, so `withNewChildrenInternal` builds a `With` over
+    // the original's references -- and a rebuilt reference compares equal to the one it replaces,
+    // so `transform` cannot hand the new `With` references of its own. Giving the two `With`s
+    // visibly different definitions shows which cell the references actually read.
+    val w1 = With(counter()) { case Seq(ref) => Add(ref, ref) }
+    val w2 = w1.withNewChildren(
+      IndexedSeq(w1.child, CommonExpressionDef(Literal(100), w1.defs.head.id))).asInstanceOf[With]
+
+    assert(w1.eval(InternalRow.empty) == 2, "w1 reads its own counter")
+    assert(w2.eval(InternalRow.empty) == 200, "w2 reads its own literal")
+    assert(w1.eval(InternalRow.empty) == 4, "w1 read the value w2 memoized")
+  }
+
+  test("SPARK-58902: a definition's code is generated once however many references read it") {
+    // Every reference emits the definition's code inside its own `if (!computed)` guard, so the
+    // text appears once per reference -- but it has to be the same text, generated once, or each
+    // copy calls `addMutableState` again and the definition ends up owning one counter per
+    // reference. Two references in mutually exclusive positions would then draw from two counters
+    // sitting at the same position in their sequences, and hand out one value on two rows.
+    val ctx = new CodegenContext
+    With(MonotonicallyIncreasingID()) { case Seq(ref) => Add(ref, ref) }.genCode(ctx)
+    val counters = ctx.inlinedMutableStates.count { case (_, name) => name.startsWith("count") }
+    assert(counters == 1, s"the definition was generated $counters times")
+  }
+}

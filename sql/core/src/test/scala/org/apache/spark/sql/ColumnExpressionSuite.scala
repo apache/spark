@@ -430,6 +430,99 @@ class ColumnExpressionSuite extends SharedSparkSession {
     checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
   }
 
+  // Runs `f` on each of the three evaluation paths, since a `With` left in a conditional branch is
+  // evaluated by all three and the memoization is implemented separately for interpretation and for
+  // codegen.
+  private def onEachEvalPath(f: => Unit): Unit = {
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN")(f)
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY")(f)
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY")(f)
+  }
+
+  test("SPARK-58902: BETWEEN on a nondeterministic input inside a conditional branch") {
+    onEachEvalPath {
+      // `BETWEEN` reads its input twice. Inlining the common expression into a branch gave each
+      // read its own value, so the two comparisons saw two different ids and 6 of the 10 rows came
+      // back true where 3 is correct. A single partition makes the id sequence 0, 1, 2, ...
+      val df = spark.range(0, 10, 1, 1)
+      checkAnswer(
+        df.selectExpr(
+          "CASE WHEN id < 0 THEN false ELSE monotonically_increasing_id() BETWEEN 3 AND 5 END"),
+        (0 until 10).map(i => Row(i >= 3 && i <= 5)))
+    }
+  }
+
+  test("SPARK-58902: a definition in a branch is evaluated only on the rows that reach it") {
+    onEachEvalPath {
+      // Rows 0 to 4 take the first branch, so the five rows that reach the ELSE see ids 0 to 4 --
+      // the same values they would see if the branch were the whole expression.
+      val df = spark.range(0, 10, 1, 1)
+      checkAnswer(
+        df.selectExpr(
+          "CASE WHEN id < 5 THEN NULL ELSE monotonically_increasing_id() BETWEEN 1 AND 2 END"),
+        (0 until 10).map { i =>
+          if (i < 5) Row(null) else Row(i - 5 >= 1 && i - 5 <= 2)
+        })
+    }
+  }
+
+  test("SPARK-58902: a branch condition that can raise is not evaluated on other rows") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // Nothing is relocated, so a condition is evaluated only where it always was. `a` runs
+        // -2, -1, 0, 1, 2, 3: the first two take the third branch, 0 the first, 1 and 2 the second,
+        // and 3 falls through. `rand` is in [0, 1), so a row reaching a BETWEEN is true whatever it
+        // draws.
+        val df = spark.range(0, 6, 1, 1).selectExpr("cast(id as int) - 2 as a")
+        checkAnswer(
+          df.selectExpr(
+            "CASE WHEN a = 0 THEN false " +
+              "WHEN 6 / a > 2 THEN rand(1) BETWEEN 0 AND 1 " +
+              "WHEN 6 / a < -2 THEN rand(2) BETWEEN 0 AND 1 " +
+              "ELSE false END"),
+          Seq(Row(true), Row(true), Row(false), Row(true), Row(true), Row(false)))
+      }
+    }
+  }
+
+  test("SPARK-58902: a nondeterministic input a branch cannot pre-evaluate is still read once") {
+    onEachEvalPath {
+      val df = spark.range(0, 6, 1, 1)
+      // `randstr(3, 0)` cannot be pre-evaluated into a project, because it raises on a negative
+      // length and so would raise on the rows whose branch is not taken. Memoizing it in place
+      // gives both comparisons of the BETWEEN one string, so the answer inside a branch is the same
+      // as outside one.
+      val inBranch = df.selectExpr(
+        "CASE WHEN id < 0 THEN false ELSE randstr(3, 0) BETWEEN 'a' AND 'zzzz' END")
+      checkAnswer(inBranch, df.selectExpr("randstr(3, 0) BETWEEN 'a' AND 'zzzz'").collect().toSeq)
+
+      // The same for a nondeterministic input wrapped in arithmetic: both reads see one draw, so
+      // dividing it by one and comparing against [0, 1) is true on every row.
+      checkAnswer(
+        df.selectExpr(
+          "CASE WHEN id < 0 THEN false ELSE (rand(7) / 1.0) BETWEEN 0 AND 1 END"),
+        (0 until 6).map(_ => Row(true)))
+    }
+  }
+
+  test("SPARK-58902: a nested With agrees across the evaluation paths") {
+    // `nullif(nullif(a, b), c)` nests one `With` inside another's definition, which is where each
+    // reference's copy of the definition code matters: the code is generated once per definition
+    // and the text reused, so a nested `With` does not grow its code by a factor per level.
+    val query = "SELECT nullif(nullif(a, b), c) AS r " +
+      "FROM VALUES (1, 1, 3), (2, 5, 2), (4, 5, 6) AS t(a, b, c)"
+    onEachEvalPath {
+      // a = 1 equals b, and a = 2 equals c, so both are null; a = 4 differs from both.
+      checkAnswer(spark.sql(query), Seq(Row(null), Row(null), Row(4)))
+    }
+  }
+
   test("in") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
     checkAnswer(df.filter($"a".isin(1, 2)),

@@ -60,7 +60,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val agg = Aggregate(groupingExpressions, groupingExpressions ++ aggExprs, child)
         val rewrittenAgg = applyInternal(agg)
         val proj = Project(resExprs, rewrittenAgg)
-        applyInternal(proj)
+        val rewrittenProj = applyInternal(proj)
+        // A `With` in a conditional branch is left in the plan, so the guard above stays true for
+        // it on every iteration of this fixed-point batch, and restructuring unconditionally would
+        // add one `Project` per iteration. Hand back the original operator when neither rewrite
+        // changed anything: `mapExpressions` and `withNewChildren` preserve reference equality when
+        // they rewrite nothing, which is what makes this detectable.
+        if ((rewrittenAgg eq agg) && (rewrittenProj eq proj)) p else rewrittenProj
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
     }
@@ -95,6 +101,38 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       Project(p.output, newPlan)
     } else {
       newPlan
+    }
+  }
+
+  /**
+   * `w` with every definition that gains nothing from being memoized inlined into its references:
+   * one cheap enough to evaluate twice, and one that is referenced once anyway. This is the test
+   * the main rewrite already applies before it hoists a definition into a project.
+   *
+   * Inlining matters beyond the per-row bookkeeping it saves. A `With` is not foldable, so it hides
+   * whatever it wraps from `ConstantFolding`, `PushFoldableIntoBranches`, `SimplifyConditionals`
+   * and `ReplaceNullWithFalseInPredicate`, all of which run in later batches. Dropping the `With`
+   * once nothing is left to memoize keeps `CASE WHEN c THEN nullif(1, 1) END` folding as it did
+   * before this rule learned to leave one behind.
+   */
+  private def inlineDefsThatGainNothing(
+      w: With,
+      commonExprIdSet: Set[CommonExpressionId]): Expression = {
+    val (toInline, toKeep) = w.defs.partition { d =>
+      CollapseProject.isCheap(d.child) || !commonExprIdSet.contains(d.id)
+    }
+    if (toInline.isEmpty) {
+      w
+    } else {
+      val refToExpr = toInline.map(d => d.id -> d.child).toMap
+      val newChild = w.child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+        // A ref of a definition kept here, or of an enclosing `With`, is left for its owner.
+        case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)
+      }
+      // `copy` rather than `withNewChildren`, which requires the child count to be unchanged. The
+      // references of the kept definitions are carried over unbound; the new `With` binds them, and
+      // `w` is discarded here, so no two `With`s hold the same reference.
+      if (toKeep.isEmpty) newChild else w.copy(child = newChild, defs = toKeep)
     }
   }
 
@@ -180,11 +218,14 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val newAlwaysEvaluatedInputs = c.alwaysEvaluatedInputs.map(
           rewriteWithExprAndInputPlans(
             _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith))
-        // A `With` in a conditional branch is left alone: the branch may not be evaluated at all,
-        // so its definitions cannot go into a project, which always is. The `With` memoizes each
-        // definition per row instead, so a definition is evaluated where the branch would have
-        // evaluated it -- once -- rather than once per reference.
-        c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
+        val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
+        // A `With` in a conditional branch cannot go into a project, which is always evaluated
+        // while the branch may not be. It stays where it is and memoizes its definition per row
+        // instead, but only the definitions that gain something from it. Use transformUp to handle
+        // nested With.
+        newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+          case w: With => inlineDefsThatGainNothing(w, commonExprIdSet)
+        }
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(
