@@ -340,7 +340,7 @@ private[spark] object TreeEnsembleParams {
  *
  * Note: Marked as private since this may be made public in the future.
  */
-private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
+private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasIntermediateStorageLevel {
 
   /**
    * Fraction of the training data used for learning each decision tree, in range (0, 1].

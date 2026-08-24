@@ -21,6 +21,7 @@ from pyspark.ml.linalg import Vector
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import (
     HasCheckpointInterval,
+    HasIntermediateStorageLevel,
     HasSeed,
     HasWeightCol,
     Param,
@@ -256,7 +257,7 @@ class _TreeEnsembleModel(JavaPredictionModel[T]):
         return self._call_java("predictLeaf", value)
 
 
-class _TreeEnsembleParams(_DecisionTreeParams):
+class _TreeEnsembleParams(_DecisionTreeParams, HasIntermediateStorageLevel):
     """
     Mixin for Decision Tree-based ensemble algorithms parameters.
     """
