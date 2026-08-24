@@ -2047,11 +2047,10 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
             )
           }
         } else {
-          if (defaults == "false") {
-            checkAnswer(parsedExplicitZero, expectedEmpty)
-          } else {
-            checkAnswer(parsedExplicitZero, Seq((0)).toDF("int32_val"))
-          }
+          // When unwrapping, a present wrapper carries a value even if it is the inner scalar's
+          // default, so an explicit zero unwraps to 0 regardless of emit.default.values (which
+          // only governs bare proto3 scalars, not a wrapper message's presence).
+          checkAnswer(parsedExplicitZero, Seq((0)).toDF("int32_val"))
         }
 
         // For nonzero, we should get back the number or wrapped version regardless
@@ -2077,6 +2076,35 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
           )
         }
       }
+    }
+  }
+
+  test("well known wrappers with empty container elements unwrap to defaults") {
+    // A repeated/map field of unwrapped wrappers uses a non-null container
+    // (containsNull = false / valueContainsNull = false). A present-but-empty wrapper element
+    // must unwrap to the inner scalar's default, not null -- a null in a non-null container
+    // crashes downstream. Other container-wrapper tests only use non-empty elements, so this
+    // covers the empty-element case for both a repeated and a map field.
+    val message = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder()
+          .addInt32List(Int32Value.getDefaultInstance) // empty element -> 0
+          .addInt32List(Int32Value.of(7))
+          .putWktMap(1, StringValue.getDefaultInstance) // empty value -> ""
+          .build().toByteArray
+      ).as("raw_proto"))
+
+    val opt = Map("unwrap.primitive.wrapper.types" -> "true")
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      val parsed = message.select(
+        from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opt).as("proto"))
+
+      checkAnswer(
+        parsed.select("proto.int32_list"),
+        spark.range(1).select(typedLit(List(0, 7)).as("int32_list")))
+      checkAnswer(
+        parsed.select("proto.wkt_map"),
+        spark.range(1).select(typedLit(Map(1 -> "")).as("wkt_map")))
     }
   }
 
