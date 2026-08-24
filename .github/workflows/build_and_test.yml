@@ -381,7 +381,7 @@ jobs:
           ./dev/free_disk_space
         fi
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -574,7 +574,7 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -698,7 +698,7 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -854,7 +854,7 @@ jobs:
       continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -980,7 +980,7 @@ jobs:
       continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1053,7 +1053,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - uses: actions/checkout@v6
-    - uses: actions/setup-java@v5
+    - uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: 25
@@ -1116,7 +1116,7 @@ jobs:
       continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1200,7 +1200,7 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1323,7 +1323,7 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1401,7 +1401,7 @@ jobs:
             ./dev/free_disk_space
           fi
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}

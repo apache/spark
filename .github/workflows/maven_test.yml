@@ -99,7 +99,7 @@ jobs:
           restore-keys: |
             maven-${{ runner.os }}-java${{ inputs.java }}-
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
@@ -243,7 +243,7 @@ jobs:
           restore-keys: |
             maven-${{ runner.os }}-java${{ matrix.java }}-
       - name: Install Java ${{ matrix.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}

@@ -103,7 +103,7 @@ jobs:
           restore-keys: |
             coursier-${{ runner.os }}-
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
@@ -206,7 +206,7 @@ jobs:
           restore-keys: |
             coursier-${{ runner.os }}-
       - name: Install Java ${{ matrix.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}
