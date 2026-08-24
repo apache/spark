@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
 import org.apache.spark.sql.types.DataType
@@ -103,19 +103,44 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
   override def stateful: Boolean = true
 
   /**
+   * Whether one of this `With`'s references sits under a [[CodegenFallback]] in `child`. That
+   * subtree is evaluated by calling `eval` on it from the generated code, so the reference under it
+   * takes the interpreted path while the rest of the child takes the generated one -- and the two
+   * do not share their bookkeeping: the generated code clears the codegen flags, not the cells.
+   *
+   * This is the same shape `EquivalentExpressions.childrenToRecurse` already refuses to look past,
+   * for the same reason.
+   */
+  @transient private lazy val refUnderCodegenFallback: Boolean = {
+    val ids = defs.map(_.id).toSet
+    child.exists {
+      case f: CodegenFallback =>
+        f.exists {
+          case r: CommonExpressionRef => ids.contains(r.id)
+          case _ => false
+        }
+      case _ => false
+    }
+  }
+
+  /**
    * Clears each definition's flag for this row, then generates the child. The flags are cleared
    * in the same block the child is generated into, so a reference cannot run against a flag an
    * earlier row left set: on a row that does not reach the branch holding this `With`, neither the
    * clearing nor any reference runs.
    *
-   * This deliberately does not bind the references the way [[eval]] does. The generated code clears
-   * the codegen flags, not the cells, so a reference bound here but evaluated interpretively --
-   * which needs a `CodegenFallback` node between this `With` and the reference -- would compute
-   * once and then read a cell nobody clears on every later row. Leaving it unbound makes that case
-   * fail loudly in `CommonExpressionRef.eval` instead, and no `RuntimeReplaceable` that builds a
-   * `With` today produces that shape.
+   * When a reference sits under a [[CodegenFallback]] the whole `With` is evaluated interpretively
+   * instead. Generating the child would leave that reference reading a cell nobody bound and
+   * nobody clears, and generating part of it is worse still: a definition reached from both sides
+   * would be computed once through the flags and once through the cell, holding two values for one
+   * row. [[eval]] binds and clears both, so handing it the whole subtree keeps one mechanism in
+   * play. `CollapseCodegenStages.supportCodegen` rejects any plan whose expressions hold a
+   * `CodegenFallback`, so this path is only ever reached where `ctx.INPUT_ROW` is available.
    */
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (refUnderCodegenFallback) {
+      return CodegenFallback.generate(this, ctx, ev)
+    }
     ctx.withCommonExprs(defs) { slots =>
       val clearFlags = slots.map(s => s"${s.computed} = false;").mkString("\n")
       val childGen = child.genCode(ctx)

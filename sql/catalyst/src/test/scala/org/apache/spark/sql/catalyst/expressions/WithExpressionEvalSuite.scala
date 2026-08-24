@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode, GenerateMutableProjection}
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * Evaluation of [[With]] and the memoization it gives a [[CommonExpressionRef]]. The rewrite that
@@ -35,11 +35,11 @@ class WithExpressionEvalSuite extends SparkFunSuite {
   private case class Counter() extends LeafExpression with Nondeterministic {
     @transient private var n = 0
     override def stateful: Boolean = true
-    override def dataType = IntegerType
+    override def dataType: DataType = IntegerType
     override def nullable: Boolean = false
     override protected def initializeInternal(partitionIndex: Int): Unit = {}
     override protected def evalInternal(input: InternalRow): Any = { n += 1; n }
-    override protected def doGenCode(ctx: CodegenContext, ev: ExprCode) =
+    override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
       throw new UnsupportedOperationException
   }
 
@@ -47,6 +47,17 @@ class WithExpressionEvalSuite extends SparkFunSuite {
     val c = Counter()
     c.initialize(0)
     c
+  }
+
+  /**
+   * A node that has to be evaluated interpretively even when its parent is generated, so that a
+   * reference below it takes the interpreted path out of generated code.
+   */
+  private case class Fallback(child: Expression) extends UnaryExpression with CodegenFallback {
+    override def dataType: DataType = child.dataType
+    override def eval(input: InternalRow): Any = child.eval(input)
+    override protected def withNewChildInternal(newChild: Expression): Fallback =
+      copy(child = newChild)
   }
 
   test("a definition is evaluated once per row however many references read it") {
@@ -133,5 +144,17 @@ class WithExpressionEvalSuite extends SparkFunSuite {
     With(MonotonicallyIncreasingID()) { case Seq(ref) => Add(ref, ref) }.genCode(ctx)
     val counters = ctx.inlinedMutableStates.count { case (_, name) => name.startsWith("count") }
     assert(counters == 1, s"the definition was generated $counters times")
+  }
+
+  test("SPARK-58902: a reference under a CodegenFallback still memoizes") {
+    // The generated code clears the codegen flags, not the cells, so a reference reached through a
+    // `CodegenFallback`'s `eval` cannot use them: the whole `With` falls back to `eval`, which
+    // binds and clears the cells itself. Generating part of it would be worse than either -- a
+    // definition reached from both sides would hold one value in the slots and another in the cell.
+    val w = With(counter()) { case Seq(ref) => Add(Fallback(ref), Fallback(ref)) }
+    val proj = GenerateMutableProjection.generate(Seq(w))
+    proj.initialize(0)
+    // Both references read one value per row, so the sum is 2n rather than n + (n + 1).
+    assert((1 to 4).map(_ => proj(InternalRow.empty).getInt(0)) == Seq(2, 4, 6, 8))
   }
 }

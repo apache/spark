@@ -105,6 +105,23 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   }
 
   /**
+   * Whether substituting this definition into its references is as good as evaluating it once.
+   * True when it is referenced once, since substituting then evaluates it once either way, or when
+   * it is cheap enough to evaluate repeatedly and deterministic, so the repeated evaluations agree.
+   *
+   * `CollapseProject.isCheap` answers what one evaluation costs, not whether a second one is
+   * allowed: it admits a `PythonUDF`, which may be nondeterministic. Determinism is checked here
+   * rather than read into the cost test, so that a reader of either call site can see which of the
+   * two questions is being asked.
+   */
+  private def canSubstitute(
+      child: Expression,
+      id: CommonExpressionId,
+      commonExprIdSet: Set[CommonExpressionId]): Boolean = {
+    !commonExprIdSet.contains(id) || (CollapseProject.isCheap(child) && child.deterministic)
+  }
+
+  /**
    * `w` with every definition that gains nothing from being memoized inlined into its references:
    * one cheap enough to evaluate twice, and one that is referenced once anyway. This is the test
    * the main rewrite already applies before it hoists a definition into a project.
@@ -119,7 +136,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       w: With,
       commonExprIdSet: Set[CommonExpressionId]): Expression = {
     val (toInline, toKeep) = w.defs.partition { d =>
-      CollapseProject.isCheap(d.child) || !commonExprIdSet.contains(d.id)
+      canSubstitute(d.child, d.id, commonExprIdSet)
     }
     if (toInline.isEmpty) {
       w
@@ -159,7 +176,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               "Cannot rewrite canonicalized Common expression definitions")
           }
 
-          if (CollapseProject.isCheap(child) || !commonExprIdSet.contains(id)) {
+          if (canSubstitute(child, id, commonExprIdSet)) {
             refToExpr(id) = child
           } else {
             val childPlanIndex = inputPlans.indexWhere(

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -24,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.IntegerType
 
 class RewriteWithExpressionSuite extends PlanTest {
 
@@ -260,6 +262,26 @@ class RewriteWithExpressionSuite extends PlanTest {
     val kept = With(a + b) { case Seq(ref) => ref * ref }
     val keptPlan = testRelation.select(Coalesce(Seq(b, kept)).as("col"))
     comparePlans(Optimizer.execute(keptPlan), keptPlan)
+  }
+
+  test("SPARK-58902: a cheap definition is only inlined if it is also deterministic") {
+    val Seq(a, b) = testRelation.output
+    def udf(e: Expression, deterministic: Boolean): PythonUDF =
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, deterministic)
+
+    // `CollapseProject.isCheap` admits a `PythonUDF` whose arguments are cheap, but it answers what
+    // one evaluation costs, not whether a second one would agree with the first. A nondeterministic
+    // one referenced twice has to stay memoized.
+    val nondet = With(udf(a, deterministic = false)) { case Seq(ref) => ref * ref }
+    val nondetPlan = testRelation.select(Coalesce(Seq(b, nondet)).as("col"))
+    comparePlans(Optimizer.execute(nondetPlan), nondetPlan)
+
+    // The deterministic one is inlined, as cheapness alone would have it.
+    val det = With(udf(a, deterministic = true)) { case Seq(ref) => ref * ref }
+    comparePlans(
+      Optimizer.execute(testRelation.select(Coalesce(Seq(b, det)).as("col"))),
+      testRelation.select(
+        Coalesce(Seq(b, udf(a, deterministic = true) * udf(a, deterministic = true))).as("col")))
   }
 
   test("WITH expression inside conditional expression") {
