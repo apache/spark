@@ -204,7 +204,7 @@
   },
   "DATA_SOURCE_PUSHDOWN_DISABLED": {
     "message": [
-      "<type> implements pushFilters() but filter pushdown is disabled because configuration '<conf>' is false. Set it to true to enable filter pushdown."
+      "<type> implements <method>() but the corresponding pushdown is disabled because configuration '<conf>' is false. Set it to true to enable it."
     ]
   },
   "DATA_SOURCE_RETURN_SCHEMA_MISMATCH": {
