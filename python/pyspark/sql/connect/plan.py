@@ -785,7 +785,15 @@ class CachedRemoteRelation(LogicalPlan):
                             response_deserializer=response_deserializer,
                         )
                         metadata = session.client._execute_plan_metadata(req.operation_id)
-                        channel(req, metadata=metadata)  # type: ignore[arg-type]
+                        # Bound this blocking call with a client-side deadline. It is issued from a
+                        # finalizer with no other timeout at any layer; without a deadline it can
+                        # block forever if the response is never delivered, which stalls the
+                        # foreachBatch Connect handshake (the Python worker never sends its
+                        # completion signal and the driver JVM blocks on the per-batch read). A
+                        # timeout here is non-fatal: the eviction is best effort and the server
+                        # performs it independently, so on timeout we log and move on.
+                        timeout = session.client._rpc_deadlines.release_relation
+                        channel(req, metadata=metadata, timeout=timeout)  # type: ignore[arg-type]
             except Exception as e:
                 logger.warning(f"RemoveRemoteCachedRelation failed with exception: {e}.")
 

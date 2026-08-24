@@ -304,6 +304,62 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     }
   }
 
+  test("column projection prunes deeply nested columns on load") {
+    // The buffer-span arithmetic must skip (and, when selected, copy) a column's ENTIRE buffer
+    // subtree, at arbitrary nesting depth. Exercise array<struct>, struct<struct<struct>>, and
+    // map<int, array<int>>, each selected while pruning neighbours whose own subtrees have varying
+    // buffer counts, under both read paths, so an off-by-one in the recursive span would surface
+    // as wrong values in a following column.
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val schema = new StructType()
+          .add("id", IntegerType)
+          .add("arrOfStruct", ArrayType(new StructType().add("x", LongType).add("y", StringType)))
+          .add("s", StringType)
+          .add("deepStruct", new StructType()
+            .add("l1", new StructType()
+              .add("l2", new StructType().add("v", LongType).add("t", StringType))))
+          .add("mapOfArray", MapType(IntegerType, ArrayType(IntegerType)))
+        val rows = (1 to 30).map { i =>
+          Row(i, Seq(Row(i.toLong, s"a$i"), Row((i + 1).toLong, s"b$i")), s"s$i",
+            Row(Row(Row(i.toLong * 10, s"deep$i"))), Map(i -> Seq(i, i + 1, i + 2)))
+        }
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(rows, 1), schema).cache()
+        try {
+          def expected(cols: Seq[String]): Seq[Row] = (1 to 30).map { i =>
+            Row.fromSeq(cols.map {
+              case "id" => i
+              case "arrOfStruct" => Seq(Row(i.toLong, s"a$i"), Row((i + 1).toLong, s"b$i"))
+              case "s" => s"s$i"
+              case "deepStruct" => Row(Row(Row(i.toLong * 10, s"deep$i")))
+              case "mapOfArray" => Map(i -> Seq(i, i + 1, i + 2))
+            })
+          }
+          // Each nested column selected alone: its whole subtree must be copied, nothing else.
+          checkAnswer(df.select("arrOfStruct"), expected(Seq("arrOfStruct")))
+          checkAnswer(df.select("deepStruct"), expected(Seq("deepStruct")))
+          checkAnswer(df.select("mapOfArray"), expected(Seq("mapOfArray")))
+          // A primitive after a pruned deep column: the skip must span the whole deep subtree.
+          checkAnswer(df.select("id", "s"), expected(Seq("id", "s")))
+          // Reordered mix of nested and primitive columns, pruning others in between.
+          checkAnswer(
+            df.select("mapOfArray", "id", "deepStruct"),
+            expected(Seq("mapOfArray", "id", "deepStruct")))
+          checkAnswer(
+            df.select("deepStruct", "arrOfStruct"),
+            expected(Seq("deepStruct", "arrOfStruct")))
+          // Full projection round-trips.
+          checkAnswer(
+            df.select("id", "arrOfStruct", "s", "deepStruct", "mapOfArray"),
+            expected(Seq("id", "arrOfStruct", "s", "deepStruct", "mapOfArray")))
+        } finally {
+          df.unpersist()
+        }
+      }
+    }
+  }
+
   test("caching with multiple batches") {
     withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "10") {
       val df = (1 to 50).map(i => (i, s"str$i")).toDF("a", "b")

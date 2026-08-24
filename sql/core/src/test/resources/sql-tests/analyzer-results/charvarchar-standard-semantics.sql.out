@@ -719,6 +719,80 @@ Project [cast(cast(a as char(2) collate UTF8_LCASE) as varchar(2) collate UTF8_L
 
 
 -- !query
+SELECT typeof(coalesce(cast('123' AS CHAR(3)), 1)),
+       typeof(coalesce(cast('123' AS VARCHAR(3)), 1)),
+       typeof(coalesce(cast('123' AS STRING), 1))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(123 as char(3)) as bigint), cast(1 as bigint))) AS typeof(coalesce(CAST(123 AS CHAR(3)), 1))#x, typeof(coalesce(cast(cast(123 as varchar(3)) as bigint), cast(1 as bigint))) AS typeof(coalesce(CAST(123 AS VARCHAR(3)), 1))#x, typeof(coalesce(cast(cast(123 as string) as bigint), cast(1 as bigint))) AS typeof(coalesce(CAST(123 AS STRING), 1))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT coalesce(cast('123' AS CHAR(3)), 1),
+       coalesce(cast('123' AS VARCHAR(3)), 1),
+       coalesce(cast('123' AS STRING), 1)
+-- !query analysis
+Project [coalesce(cast(cast(123 as char(3)) as bigint), cast(1 as bigint)) AS coalesce(CAST(123 AS CHAR(3)), 1)#xL, coalesce(cast(cast(123 as varchar(3)) as bigint), cast(1 as bigint)) AS coalesce(CAST(123 AS VARCHAR(3)), 1)#xL, coalesce(cast(cast(123 as string) as bigint), cast(1 as bigint)) AS coalesce(CAST(123 AS STRING), 1)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT cast('123' AS CHAR(3)) = 123,
+       cast('123' AS VARCHAR(3)) = 123,
+       cast('123' AS STRING) = 123
+-- !query analysis
+Project [(cast(cast(123 as char(3)) as bigint) = cast(123 as bigint)) AS (CAST(123 AS CHAR(3)) = 123)#x, (cast(cast(123 as varchar(3)) as bigint) = cast(123 as bigint)) AS (CAST(123 AS VARCHAR(3)) = 123)#x, (cast(cast(123 as string) as bigint) = cast(123 as bigint)) AS (CAST(123 AS STRING) = 123)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce(cast('1.5' AS CHAR(3)), 1.5)),
+       typeof(coalesce(cast('1.5' AS VARCHAR(3)), 1.5)),
+       typeof(coalesce(cast('1.5' AS STRING), 1.5))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(1.5 as char(3)) as double), cast(1.5 as double))) AS typeof(coalesce(CAST(1.5 AS CHAR(3)), 1.5))#x, typeof(coalesce(cast(cast(1.5 as varchar(3)) as double), cast(1.5 as double))) AS typeof(coalesce(CAST(1.5 AS VARCHAR(3)), 1.5))#x, typeof(coalesce(cast(cast(1.5 as string) as double), cast(1.5 as double))) AS typeof(coalesce(CAST(1.5 AS STRING), 1.5))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT cast('2020-01-02' AS CHAR(10)) = date'2020-01-02',
+       cast('2020-01-02' AS VARCHAR(10)) = date'2020-01-02',
+       cast('2020-01-02' AS STRING) = date'2020-01-02'
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT cast('true' AS CHAR(4)) = true,
+       cast('true' AS VARCHAR(4)) = true,
+       cast('true' AS STRING) = true
+-- !query analysis
+Project [(cast(cast(true as char(4)) as boolean) = true) AS (CAST(true AS CHAR(4)) = true)#x, (cast(cast(true as varchar(4)) as boolean) = true) AS (CAST(true AS VARCHAR(4)) = true)#x, (cast(cast(true as string) as boolean) = true) AS (CAST(true AS STRING) = true)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce(cast('true' AS CHAR(4)), true))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(true as char(4)) as boolean), true)) AS typeof(coalesce(CAST(true AS CHAR(4)), true))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce(cast('true' AS VARCHAR(4)), true))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(true as varchar(4)) as boolean), true)) AS typeof(coalesce(CAST(true AS VARCHAR(4)), true))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce(cast('true' AS STRING), true))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(true as string) as boolean), true)) AS typeof(coalesce(CAST(true AS STRING), true))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT typeof(array(cast('a' AS CHAR(2)), cast('bb' AS CHAR(3))))
 -- !query analysis
 Project [typeof(array(cast(cast(a as char(2)) as char(3)), cast(bb as char(3)))) AS typeof(array(CAST(a AS CHAR(2)), CAST(bb AS CHAR(3))))#x]
@@ -778,6 +852,143 @@ Project [length(cast(c#x as string)) AS length(c)#x, length(cast(v#x as string))
 +- SubqueryAlias spark_catalog.default.char_varchar_std
    +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
       +- Relation spark_catalog.default.char_varchar_std[c#x,v#x] parquet
+
+
+-- !query
+CREATE TABLE char_varchar_std_ctas USING parquet AS SELECT c, v FROM char_varchar_std
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`char_varchar_std_ctas`, ErrorIfExists, [c, v]
+   +- Project [c#x, v#x]
+      +- SubqueryAlias spark_catalog.default.char_varchar_std
+         +- Relation spark_catalog.default.char_varchar_std[c#x,v#x] parquet
+
+
+-- !query
+SELECT typeof(c), typeof(v) FROM char_varchar_std_ctas
+-- !query analysis
+Project [typeof(c#x) AS typeof(c)#x, typeof(v#x) AS typeof(v)#x]
++- SubqueryAlias spark_catalog.default.char_varchar_std_ctas
+   +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+      +- Relation spark_catalog.default.char_varchar_std_ctas[c#x,v#x] parquet
+
+
+-- !query
+CREATE VIEW char_varchar_std_view AS SELECT c FROM char_varchar_std
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`char_varchar_std_view`, SELECT c FROM char_varchar_std, false, false, PersistedView, COMPENSATION, true
+   +- Project [c#x]
+      +- SubqueryAlias spark_catalog.default.char_varchar_std
+         +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+            +- Relation spark_catalog.default.char_varchar_std[c#x,v#x] parquet
+
+
+-- !query
+SELECT typeof(c) FROM char_varchar_std_view
+-- !query analysis
+Project [typeof(c#x) AS typeof(c)#x]
++- SubqueryAlias spark_catalog.default.char_varchar_std_view
+   +- View (`spark_catalog`.`default`.`char_varchar_std_view`, [c#x])
+      +- Project [cast(c#x as char(5)) AS c#x]
+         +- Project [c#x]
+            +- SubqueryAlias spark_catalog.default.char_varchar_std
+               +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+                  +- Relation spark_catalog.default.char_varchar_std[c#x,v#x] parquet
+
+
+-- !query
+CREATE VIEW char_varchar_std_view_v AS SELECT v FROM char_varchar_std
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`char_varchar_std_view_v`, SELECT v FROM char_varchar_std, false, false, PersistedView, COMPENSATION, true
+   +- Project [v#x]
+      +- SubqueryAlias spark_catalog.default.char_varchar_std
+         +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+            +- Relation spark_catalog.default.char_varchar_std[c#x,v#x] parquet
+
+
+-- !query
+SELECT typeof(v) FROM char_varchar_std_view_v
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x]
++- SubqueryAlias spark_catalog.default.char_varchar_std_view_v
+   +- View (`spark_catalog`.`default`.`char_varchar_std_view_v`, [v#x])
+      +- Project [cast(v#x as varchar(5)) AS v#x]
+         +- Project [v#x]
+            +- SubqueryAlias spark_catalog.default.char_varchar_std
+               +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+                  +- Relation spark_catalog.default.char_varchar_std[c#x,v#x] parquet
+
+
+-- !query
+WITH t AS (SELECT c, v FROM char_varchar_std) SELECT typeof(c), typeof(v) FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [c#x, v#x]
+:        +- SubqueryAlias spark_catalog.default.char_varchar_std
+:           +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+:              +- Relation spark_catalog.default.char_varchar_std[c#x,v#x] parquet
++- Project [typeof(c#x) AS typeof(c)#x, typeof(v#x) AS typeof(v)#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [c#x, v#x], false, false
+
+
+-- !query
+CREATE TABLE char_varchar_std_orc (c CHAR(5), v VARCHAR(5)) USING orc
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`char_varchar_std_orc`, false
+
+
+-- !query
+INSERT INTO char_varchar_std_orc VALUES ('ab', 'cd')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/char_varchar_std_orc, false, ORC, [path=file:[not included in comparison]/{warehouse_dir}/char_varchar_std_orc], Append, `spark_catalog`.`default`.`char_varchar_std_orc`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/char_varchar_std_orc), [c, v]
++- Project [static_invoke(CharVarcharCodegenUtils.charTypeWriteSideCheck(cast(col1#x as char(5)), 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(cast(col2#x as varchar(5)), 5)) AS v#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT typeof(c), typeof(v) FROM char_varchar_std_orc
+-- !query analysis
+Project [typeof(c#x) AS typeof(c)#x, typeof(v#x) AS typeof(v)#x]
++- SubqueryAlias spark_catalog.default.char_varchar_std_orc
+   +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+      +- Relation spark_catalog.default.char_varchar_std_orc[c#x,v#x] orc
+
+
+-- !query
+SELECT concat('[', c, ']'), concat('[', v, ']') FROM char_varchar_std_orc
+-- !query analysis
+Project [concat([, cast(c#x as string), ]) AS concat([, c, ])#x, concat([, cast(v#x as string), ]) AS concat([, v, ])#x]
++- SubqueryAlias spark_catalog.default.char_varchar_std_orc
+   +- Project [static_invoke(CharVarcharCodegenUtils.charTypeReadSideCheck(c#x, 5)) AS c#x, static_invoke(CharVarcharCodegenUtils.varcharTypeReadSideCheck(v#x, 5)) AS v#x]
+      +- Relation spark_catalog.default.char_varchar_std_orc[c#x,v#x] orc
+
+
+-- !query
+DROP VIEW char_varchar_std_view_v
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`char_varchar_std_view_v`, false, true, false
+
+
+-- !query
+DROP VIEW char_varchar_std_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`char_varchar_std_view`, false, true, false
+
+
+-- !query
+DROP TABLE char_varchar_std_ctas
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.char_varchar_std_ctas
+
+
+-- !query
+DROP TABLE char_varchar_std_orc
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.char_varchar_std_orc
 
 
 -- !query

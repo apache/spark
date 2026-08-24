@@ -5766,6 +5766,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "LOCAL_BLOCK_DATA_NOT_FOUND" : {
+    "message" : [
+      "Block <blockId> had block metadata but its data was missing from both the memory and disk stores. The block has been removed, so a later read must fetch it from another replica or recompute it."
+    ],
+    "sqlState" : "58030"
+  },
   "LOCAL_MUST_WITH_SCHEMA_FILE" : {
     "message" : [
       "LOCAL must be used together with the schema of `file`, but got: `<actualSchema>`."
@@ -7050,6 +7056,12 @@
     ],
     "sqlState" : "42K05"
   },
+  "SHUFFLE_BLOCK_MIGRATION_NOT_SUPPORTED" : {
+    "message" : [
+      "Shuffle block <blockId> cannot be migrated to the receiving executor: its shuffle block resolver <resolverClass> must implement MigratableResolver. See the cause for details."
+    ],
+    "sqlState" : "0A000"
+  },
   "SKETCH_INVALID_LG_NOM_ENTRIES" : {
     "message" : [
       "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
@@ -7906,6 +7918,14 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT" : {
+    "message" : [
+      "Streaming shuffle <shuffleId> writer <writerId> timed out after <timeoutMs> ms waiting for reader <readerId> to connect.",
+      "This can occur when the reader task is delayed because cluster resources are unavailable or when network connectivity prevents the reader from reaching the writer.",
+      "Check cluster resources and network connectivity. If the reader needs more time to start, increase 'spark.shuffle.streaming.writerConnectionTimeout', or set it to -1 to wait indefinitely."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY" : {
     "message" : [
       "Cannot restart streaming query with stateful operators because the state directory is empty or missing.",
@@ -8264,6 +8284,12 @@
       "Unable to infer schema for <format>. It must be specified manually."
     ],
     "sqlState" : "42KD9"
+  },
+  "UNABLE_TO_REGISTER_WITH_EXTERNAL_SHUFFLE_SERVICE" : {
+    "message" : [
+      "Unable to register with the external shuffle service: <message>"
+    ],
+    "sqlState" : "58030"
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
@@ -11623,26 +11649,6 @@
   "_LEGACY_ERROR_TEMP_3028" : {
     "message" : [
       "<errorMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3033" : {
-    "message" : [
-      "Unable to register with external shuffle server due to : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3035" : {
-    "message" : [
-      "Unexpected shuffle block <blockId> with unsupported shuffle resolver <shuffleBlockResolver>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3036" : {
-    "message" : [
-      "Failure while trying to store block <blockId> on <blockManagerId>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3037" : {
-    "message" : [
-      "Block <blockId> was not found even though it's read-locked"
     ]
   },
   "_LEGACY_ERROR_TEMP_3052" : {

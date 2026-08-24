@@ -25,12 +25,20 @@ import io.netty.channel.{Channel, ChannelConfig, ChannelFuture}
 import io.netty.util.concurrent.GenericFutureListener
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.when
+import org.scalatest.concurrent.Eventually.eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.SpanSugar._
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext.withSpark
-import org.apache.spark.internal.config.{SHUFFLE_MANAGER_INCREMENTAL, STREAMING_SHUFFLE_CHECKSUM_ENABLED, STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE}
+import org.apache.spark.internal.config.{
+  SHUFFLE_MANAGER_INCREMENTAL,
+  STREAMING_SHUFFLE_CHECKSUM_ENABLED,
+  STREAMING_SHUFFLE_NETWORK_BUFFER_MAX_WAIT_TIME_MS,
+  STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE,
+  STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.client.TransportClient
@@ -223,6 +231,69 @@ class StreamingShuffleWriterSuite
 
         writer.errorNotifier.getError() shouldBe defined
         writer.errorNotifier.getError().get.getMessage should include("write failed")
+      } finally {
+        context.markTaskCompleted(None)
+      }
+    }
+  }
+
+  test("writer fails when a reader does not connect before timeout") {
+    val conf = newConf()
+      .set(STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS, 100L)
+    withSpark(new SparkContext("local", "StreamingShuffleWriterSuite", conf)) { sc =>
+      val context = createTaskContext(sc.conf, 0)
+      try {
+        val writer = newWriter(sc, context)
+        val error = intercept[SparkRuntimeException] {
+          writer.write(Iterator.empty)
+        }
+        checkError(
+          exception = error,
+          condition = "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT",
+          sqlState = "XXKST",
+          parameters = Map(
+            "shuffleId" -> "0",
+            "writerId" -> "0",
+            "readerId" -> "0",
+            "timeoutMs" -> "100"))
+      } finally {
+        context.markTaskCompleted(None)
+      }
+    }
+  }
+
+  test("writer surfaces a reader connection timeout from the flush thread") {
+    val timeoutMs = 100L
+    val flushIntervalMs = 200L
+    val conf = newConf()
+      .set(STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS, timeoutMs)
+      .set(STREAMING_SHUFFLE_NETWORK_BUFFER_MAX_WAIT_TIME_MS, flushIntervalMs)
+    withSpark(new SparkContext("local", "StreamingShuffleWriterSuite", conf)) { sc =>
+      val context = createTaskContext(sc.conf, 0)
+      try {
+        val writer = newWriter(sc, context)
+        val records = Iterator((1, 1), (2, 2)).map { record =>
+          if (record._1 == 2) {
+            // Block before yielding the second record until the flush thread observes the
+            // connection timeout while sending the first record.
+            eventually(Timeout(10.seconds)) {
+              writer.errorNotifier.getError() shouldBe defined
+            }
+          }
+          record
+        }
+        val error = intercept[SparkRuntimeException] {
+          writer.write(records)
+        }
+        checkError(
+          exception = error,
+          condition = "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT",
+          sqlState = "XXKST",
+          parameters = Map(
+            "shuffleId" -> "0",
+            "writerId" -> "0",
+            "readerId" -> "0",
+            "timeoutMs" -> timeoutMs.toString))
       } finally {
         context.markTaskCompleted(None)
       }

@@ -84,6 +84,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
+      "wrap_udt",
       "timestamp_add",
       "timestamp_diff"
     )
