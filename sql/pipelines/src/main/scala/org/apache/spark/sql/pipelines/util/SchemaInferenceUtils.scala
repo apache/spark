@@ -122,7 +122,9 @@ object SchemaInferenceUtils {
    * with how the rest of the engine resolves those names.
    *
    * When flows differ only in column casing, the surviving spelling is the one from the flow with
-   * the lowest identifier: `flows` is merged in sorted identifier order, not in the order given.
+   * the lowest identifier: `flows` is merged in sorted identifier order, not in the order given. We
+   * sort on the identifier's parts (catalog, database, table) to avoid collisions for identifiers
+   * whose parts contain dots.
    * Sorting here rather than at the call sites keeps every caller agreeing on the result, since the
    * schemas they derive are compared against each other -- the graph's inferred schema materializes
    * the table, while [[org.apache.spark.sql.pipelines.graph.VirtualTableInput]] produces the schema
@@ -151,7 +153,7 @@ object SchemaInferenceUtils {
     )
 
     val inferredSchema = flows
-      .sortBy(_.identifier.unquotedString)
+      .sortBy(f => (f.identifier.catalog, f.identifier.database, f.identifier.table))
       .map(_.schema)
       .fold(new StructType()) { (schemaSoFar, schema) =>
         try {
