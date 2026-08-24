@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{toSQLExpr, toSQLId}
+import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{toSQLExpr, toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
@@ -426,7 +426,16 @@ case class RandStr(
         }
     }
     if (result == TypeCheckResult.TypeCheckSuccess) {
-      lengthInteger()
+      val lengthValue = length.eval()
+      // randstr(NULL, 0) is valid (treated as 0), so only reject a negative length.
+      if (lengthValue != null && lengthValue.asInstanceOf[Int] < 0) {
+        result = DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> toSQLId("length"),
+            "valueRange" -> s"[0, ${Int.MaxValue}]",
+            "currentValue" -> toSQLValue(lengthValue, IntegerType)))
+      }
     }
     result
   }
