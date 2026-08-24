@@ -1045,7 +1045,7 @@ For experimenting on `spark-shell`, you can also use `--packages` to add `spark-
 
     ./bin/spark-shell --packages org.apache.spark:spark-sql-kafka-0-10_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} ...
 
-See [Application Submission Guide](submitting-applications.html) for more details about submitting
+See [Application Submission Guide](../submitting-applications.html) for more details about submitting
 applications with external dependencies.
 
 ## Security
@@ -1226,7 +1226,18 @@ For possible Kafka parameters, see [Kafka adminclient config docs](http://kafka.
 
 #### Caveats
 
-- Obtaining delegation token for proxy user is not yet supported ([KAFKA-6945](https://issues.apache.org/jira/browse/KAFKA-6945)).
+- Obtaining delegation token for [proxy user](../security.html#proxy-user) requires Kafka broker 3.3.0 or higher
+  ([KAFKA-6945](https://issues.apache.org/jira/browse/KAFKA-6945)). The token is requested with the real user's
+  credentials but owned by the proxy user, therefore the real user must be granted the `CreateTokens` operation
+  on the `User:<proxy user>` resource, such as,
+
+      ./bin/kafka-acls.sh --bootstrap-server <KAFKA_SERVERS> --add \
+          --allow-principal User:<real user> --operation CreateTokens --user-principal "User:<proxy user>"
+
+  Since `--proxy-user` cannot be combined with `--principal`/`--keytab`, the real user's Kerberos credentials
+  come from the ticket cache, and the token is obtained once at startup and not renewed: the application must
+  finish before the token's max lifetime, unless direct credential providers
+  (`spark.security.directCredentialProviders.enabled`) with non-Kerberos Kafka authentication are used.
 
 ### JAAS login configuration
 

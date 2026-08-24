@@ -9,7 +9,7 @@ Before the first code edit or running test in a session, ensure a clean working 
 3. If there are uncommitted changes (check with `git status`), ask the user to stash them before proceeding.
 4. Switch to the appropriate branch:
    - **Existing PR**: resolve the PR branch name via `gh api repos/apache/spark/pulls/<number> --jq '.head.ref'`, then look for a local branch matching that name. If found, switch to it and inform the user. If not found, ask whether to fetch it or if there is a local branch under a different name.
-   - **New edits**: ask the user to choose: create a new git worktree from `<upstream>/master` and work from there (recommended), or create and switch to a new branch from `<upstream>/master`.
+   - **New edits**: ask the user to choose: create a new git worktree from `<upstream>/master` with `--no-track` and work from there (recommended), or create and switch to a new branch from `<upstream>/master` with `--no-track`.
    - **Running tests**: use `<upstream>/master`.
 
 ## Development Notes
@@ -102,6 +102,9 @@ These are combined with a base above rather than used on their own:
 ## Build and Test
 
 Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
+
+For build and test setup, including how to run tests and troubleshoot common
+local failures, see `docs/building-spark.md`.
 
 Prefer SBT over Maven for faster incremental compilation. Module names are defined in `project/SparkBuild.scala`.
 
@@ -203,6 +206,8 @@ It lists `master` and the latest major's release branches the commit reached (e.
 ## Pull Request Workflow
 
 PR title format is `[SPARK-xxxx][COMPONENT] Title`. Draft, WIP, MINOR, and TRIVIAL PRs may omit the JIRA ID. The component tag is derived from the JIRA component name: take the last word and uppercase it (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `Structured Streaming` → `[STREAMING]`, `SQL` → `[SQL]`).
+
+Use `[FOLLOWUP]` only for small PRs that directly modify or correct unreleased earlier PRs. For separately planned work, non-trivial changes, or work outside the earlier JIRA's scope, create a separate JIRA ticket for each PR and use the normal title format without `[FOLLOWUP]`.
 
 Infer the PR title from the changes. If no ticket ID is given and the PR is not draft, WIP, MINOR, or TRIVIAL, create one using `dev/create_spark_jira.py`, using the PR title (without the JIRA ID and component tag) as the ticket title.
 

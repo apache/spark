@@ -565,20 +565,20 @@ class MicroBatchExecution(
       CommitLogType,
       commitLogFormatVersion,
       latestCommittedBatch.map(_._2))
+    val stateStoreCheckpointFormatVersion =
+      sparkSessionForStream.sessionState.conf.stateStoreCheckpointFormatVersion
 
-    // Real-Time Mode requires commit log v2. Real-Time Mode writes the offset log at batch end
+    // Real-Time Mode requires state store checkpoint format v2. It writes the offset log at
+    // batch end
     // (markMicroBatchStart is a no-op for it), so a mid-batch failure can leave durable state at a
     // version that was never logged; the re-execution then rewrites that same state version. With
     // checkpoint format v1 the rewritten files reuse the same names as the orphaned ones, so a load
     // can pick up a stale file (see the checksum hazard documented on
     // StateStoreConf.skipChecksumOnFileMissingChecksum). Format v2 avoids this because each batch
-    // run generates unique state store checkpoint ids, and only a commit log at v2 or above can
-    // persist them. Resolution above keeps an existing checkpoint at the version it was created
-    // with, so a v1 checkpoint stays v1. Reject any Real-Time Mode query whose resolved commit log
-    // version is below v2, with an escape hatch. This is unconditional, matching the Databricks
-    // runtime -- a fresh checkpoint reaches v1 here only when the user explicitly pinned it, which
-    // is exactly the case worth rejecting.
-    if (trigger.isInstanceOf[RealTimeTrigger] && commitLogFormatVersion < CommitLog.VERSION_2) {
+    // run generates unique state store checkpoint ids. Commit log v2 persists those ids; a v3
+    // commit may or may not contain them, so the resolved state store format is the authoritative
+    // check. Reject v1 with an escape hatch.
+    if (trigger.isInstanceOf[RealTimeTrigger] && stateStoreCheckpointFormatVersion < 2) {
       if (!sparkSessionForStream.sessionState.conf
           .getConf(SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1)) {
         throw new SparkIllegalArgumentException(
@@ -586,8 +586,8 @@ class MicroBatchExecution(
           messageParameters = Map(
             "config" -> SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1.key))
       }
-      logWarning(log"Starting a Real-Time Mode query on a commit log at version " +
-        log"${MDC(LogKeys.FILE_VERSION, commitLogFormatVersion)} because " +
+      logWarning(log"Starting a Real-Time Mode query on state store checkpoint format version " +
+        log"${MDC(LogKeys.FILE_VERSION, stateStoreCheckpointFormatVersion)} because " +
         log"${MDC(LogKeys.CONFIG, SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1
           .key)} is set. A failed batch may lose data on rerun.")
     }
@@ -907,8 +907,13 @@ class MicroBatchExecution(
   private def verifyNewCheckpointDirectory(): Unit = {
     val fileManager = CheckpointFileManager.create(new Path(resolvedCheckpointRoot),
       sparkSession.sessionState.newHadoopConf())
-    val dirNamesThatShouldNotHaveFiles = Array[String](
-      DIR_NAME_OFFSETS, DIR_NAME_STATE, DIR_NAME_COMMITS)
+    var dirNamesThatShouldNotHaveFiles = Array[String](DIR_NAME_OFFSETS, DIR_NAME_COMMITS)
+
+    // Since real-time mode writes the offset log after the batch is committed, the state directory
+    // may contain files so we want to allow the streaming query to retry.
+    if (!trigger.isInstanceOf[RealTimeTrigger]) {
+      dirNamesThatShouldNotHaveFiles :+= DIR_NAME_STATE
+    }
 
     dirNamesThatShouldNotHaveFiles.foreach { dirName =>
       val path = new Path(resolvedCheckpointRoot, dirName)
@@ -1277,7 +1282,8 @@ class MicroBatchExecution(
         execCtx.previousContext.isEmpty,
         currentStateStoreCkptId,
         stateSchemaMetadatas,
-        isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type])
+        isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type],
+        isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger])
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
     // Set up StateStore commit tracking before execution begins
@@ -1502,6 +1508,11 @@ class MicroBatchExecution(
         log"Committed offsets for batch ${MDC(LogKeys.BATCH_ID, execCtx.batchId)}. Metadata " +
         log"${MDC(LogKeys.OFFSET_SEQUENCE_METADATA, execCtx.offsetSeqMetadata)}"
       )
+
+      // State schema validation and broadcast creation still happen during planning, but RTM
+      // defers operator metadata until its end offset is durable. This prevents a failed batch
+      // from leaving metadata that has no corresponding offset log entry.
+      execCtx.executionPlan.writeRecordedStateMetadata()
     }
 
     execCtx.reportTimeTaken("commitOffsets") {

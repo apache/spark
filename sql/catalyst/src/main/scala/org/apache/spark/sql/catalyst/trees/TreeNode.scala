@@ -472,6 +472,22 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   }
 
   /**
+   * A variant of [[transformDown]] that retains structurally equal replacement nodes.
+   */
+  private[sql] def transformDownWithReferenceEquality(
+      rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    val afterRule = CurrentOrigin.withOrigin(origin) {
+      rule.applyOrElse(this, identity[BaseType])
+    }
+    if (this eq afterRule) {
+      mapChildrenWithReferenceEquality(_.transformDownWithReferenceEquality(rule))
+    } else {
+      afterRule.copyTagsFrom(this)
+      afterRule.mapChildrenWithReferenceEquality(_.transformDownWithReferenceEquality(rule))
+    }
+  }
+
+  /**
    * Returns a copy of this node where `rule` has been recursively applied to it and all of its
    * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
    *
@@ -733,6 +749,22 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       withNewChildren(children.map(f))
     } else {
       this
+    }
+  }
+
+  private[sql] final def mapChildrenWithReferenceEquality(
+      f: BaseType => BaseType): BaseType = {
+    val newChildren = children.map(f)
+    if (children.iterator.zip(newChildren.iterator).forall { case (oldChild, newChild) =>
+        oldChild eq newChild
+      }) {
+      this
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(asIndexedSeq(newChildren))
+        res.copyTagsFrom(this)
+        res
+      }
     }
   }
 

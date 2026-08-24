@@ -70,6 +70,24 @@ The information displayed at the top of the page includes:
 The current user, application start time, and total uptime are shown in the footer at the
 bottom of every page.
 
+When the application can be held, the summary shows an **Application** line with a **(hold)**
+link; clicking it stops requesting new executors and gracefully decommissions the running ones,
+so each finishes its tasks and then exits (unless `spark.executor.decommission.forceKillTimeout`
+is set, which kills a still-busy executor after that timeout). The line then reads `Held` with a
+**(resume)** link that restores the executor requirement. Shuffle output written before the hold
+stays available, but cached blocks are recomputed after resuming, and an RDD created while held
+is sized against a default parallelism of 2 (no executors are alive) and keeps that partition
+count afterwards. Pipelined-shuffle jobs and workloads with long-running tasks (streaming
+receivers, continuous processing) are outside the hold's scope: a hold requested while a
+pipelined job is running is rejected, a pipelined job submitted while held fails immediately
+and should be resubmitted after the resume (unless the internal
+`spark.scheduler.pipelinedGroup.slotCheck.enabled` is false, in which case there is no
+admission check and it waits for the resume), and a long-running task never finishes, so the
+drain cannot complete. The control only appears when `spark.ui.holdEnabled` is true,
+`spark.decommission.enabled` is true, the shuffle data is kept outside the executors, and the
+cluster manager can hold executors (Standalone, YARN, and Kubernetes with the `direct` pods
+allocator); see [Configuration](configuration.html#spark-ui).
+
 <p style="text-align: center;">
   <img src="img/AllJobsPage.png" title="All Jobs page" alt="All Jobs page" width="100%"/>
 </p>

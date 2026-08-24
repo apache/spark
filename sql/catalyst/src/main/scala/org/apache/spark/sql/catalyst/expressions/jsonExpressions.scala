@@ -24,9 +24,9 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
-  JsonPathParser, JsonPathResult, JsonTableEvaluator, JsonTablePathTrie, JsonToStructsEvaluator,
-  JsonTupleEvaluator, JsonValueLookup, MultiGetJsonObjectEvaluator, PathInstruction,
-  SchemaOfJsonEvaluator, StructsToJsonEvaluator}
+  JsonPathParser, JsonPathResult, JsonQueryLookup, JsonTableEvaluator, JsonTablePathTrie,
+  JsonToStructsEvaluator, JsonTupleEvaluator, JsonValueLookup, MultiGetJsonObjectEvaluator,
+  PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
@@ -286,8 +286,13 @@ case class JsonTuple(children: Seq[Expression])
     }.toArray
   }
 
+  // The extracted fields are values from inside the JSON document, so they do not carry the
+  // CHAR(n)/VARCHAR(n) length of the document itself (R1).
+  private lazy val fieldType: DataType =
+    StringHelper.transformingStringResultType(children.head.dataType)
+
   override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
-    case (_, idx) => StructField(s"c$idx", children.head.dataType, nullable = true)
+    case (_, idx) => StructField(s"c$idx", fieldType, nullable = true)
   })
 
   override def prettyName: String = "json_tuple"
@@ -725,7 +730,9 @@ case class JsonValue(
     if (inputCheck.isFailure) {
       inputCheck
     } else if (!JsonPathParser.hasWildcard(path).contains(false)) {
-      // The path must parse and be wildcard-free (JSON_VALUE returns a single scalar).
+      // The path must parse and be wildcard-free (JSON_VALUE returns a single scalar). The
+      // `INVALID_JSON_PATH` message is shared with `JSON_EXISTS`, which does accept wildcards, so
+      // it must stay generic -- do not re-add wildcard-specific wording here.
       DataTypeMismatch(
         errorSubClass = "INVALID_JSON_PATH",
         messageParameters = Map(
@@ -855,6 +862,340 @@ object JsonValue {
     case _: NumericType => true
     case BooleanType => true
     case _: DatetimeType => true
+    case _ => false
+  }
+}
+
+/**
+ * Behavior of `JSON_EXISTS`'s `ON ERROR` clause: the value produced when the input is not a single
+ * well-formed JSON value (malformed / trailing garbage). `Unknown` is a BOOLEAN NULL.
+ */
+sealed trait JsonExistsBehavior
+object JsonExistsBehavior {
+  case object True extends JsonExistsBehavior
+  case object False extends JsonExistsBehavior
+  case object Unknown extends JsonExistsBehavior
+  case object Error extends JsonExistsBehavior
+}
+
+/**
+ * The SQL:2016 `JSON_EXISTS` predicate (feature T821): returns whether a SQL/JSON `path` matches at
+ * least one item in a JSON input.
+ *
+ *   - path matches (including an explicit JSON `null`) -> true
+ *   - path matches nothing                              -> false
+ *   - malformed / non-single-value input                -> ON ERROR behavior (default FALSE)
+ *   - SQL NULL input                                     -> SQL NULL (Unknown, per 9075-2 8.23)
+ *
+ * This distinguishes "present but null" from "absent" (unlike `get_json_object(...) IS NOT NULL`).
+ * The `ON ERROR` clause chooses TRUE / FALSE / UNKNOWN (a BOOLEAN NULL) / ERROR; it defaults to
+ * FALSE ON ERROR.
+ *
+ * Paths are evaluated in SQL/JSON lax mode (matching Oracle / PostgreSQL): wildcards are supported
+ * and arrays are auto-wrapped/unwrapped, while a structural mismatch is a non-match, not an error.
+ *
+ * {{{
+ *   JSON_EXISTS('{"a":{"b":1}}', '$.a.b')            -- true
+ *   JSON_EXISTS('{"a":null}', '$.a')                 -- true  (present, value is null)
+ *   JSON_EXISTS('{"a":1}', '$.b')                    -- false (absent)
+ *   JSON_EXISTS('{"a":[1,2]}', '$.a[*]')             -- true  (array has elements)
+ *   JSON_EXISTS('not json', '$.a' TRUE ON ERROR)     -- true
+ * }}}
+ */
+case class JsonExists(
+    child: Expression,
+    path: String,
+    onError: JsonExistsBehavior)
+  extends UnaryExpression
+  with CodegenFallback
+  with ExpectsInputTypes
+  with QueryErrorsBase {
+
+  // The result is NULL only when the input is SQL NULL, or when `UNKNOWN ON ERROR` turns malformed
+  // input into a BOOLEAN NULL. With a non-nullable input and any other ON ERROR behavior the result
+  // is always a concrete boolean, which lets the optimizer treat e.g. a WHERE predicate as such.
+  override def nullable: Boolean =
+    child.nullable || onError == JsonExistsBehavior.Unknown
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def dataType: DataType = BooleanType
+
+  // The path is a constant (the grammar makes it a string literal), so it is parsed once and shared
+  // by `checkInputDataTypes` and `evaluator` rather than reparsed. `None` means it did not parse.
+  @transient private lazy val parsedPath: Option[Seq[PathInstruction]] = JsonPathParser.parse(path)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputCheck = super.checkInputDataTypes()
+    if (inputCheck.isFailure) {
+      inputCheck
+    } else if (parsedPath.isDefined) {
+      // A valid SQL/JSON path. Wildcards are allowed and evaluated in lax mode at runtime.
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      // The path is not a valid SQL/JSON path. `JSON_EXISTS` reaches this branch only for a
+      // syntactically malformed path -- wildcards parse and are accepted above. The shared
+      // `INVALID_JSON_PATH` error is also raised by `JSON_VALUE` (which additionally rejects
+      // wildcards, as it returns a single scalar); its message is worded generically for both.
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_PATH",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName), "path" -> toSQLValue(path)))
+    }
+  }
+
+  // `checkInputDataTypes` guarantees the path parses before this is forced; `Nil` is an unreachable
+  // fallback that would match the document root.
+  @transient private lazy val evaluator: JsonTableEvaluator =
+    JsonTableEvaluator(parsedPath.getOrElse(Nil), explodeRoot = false)
+
+  private def onErrorResult(): Any = onError match {
+    case JsonExistsBehavior.True => true
+    case JsonExistsBehavior.False => false
+    case JsonExistsBehavior.Unknown => null
+    case JsonExistsBehavior.Error =>
+      throw QueryExecutionErrors.jsonExistsOnError(prettyName, path)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // SQL NULL input yields Unknown (BOOLEAN NULL), not the ON ERROR path, per 9075-2 8.23.
+    if (json == null) return null
+    evaluator.pathExists(json) match {
+      case Some(exists) => exists
+      case None => onErrorResult() // malformed / non-single-value input
+    }
+  }
+
+  override def prettyName: String = "json_exists"
+
+  override def sql: String = {
+    val errorSQL = onError match {
+      case JsonExistsBehavior.False => "" // the default
+      case JsonExistsBehavior.True => " TRUE ON ERROR"
+      case JsonExistsBehavior.Unknown => " UNKNOWN ON ERROR"
+      case JsonExistsBehavior.Error => " ERROR ON ERROR"
+    }
+    s"JSON_EXISTS(${child.sql}, ${toSQLValue(path)}$errorSQL)"
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): JsonExists =
+    copy(child = newChild)
+}
+
+/**
+ * Behavior of `JSON_QUERY`'s `ON EMPTY` / `ON ERROR` clause: what to produce when the path matches
+ * nothing (`ON EMPTY`) or the input is not valid JSON (`ON ERROR`).
+ */
+sealed trait JsonQueryBehavior
+object JsonQueryBehavior {
+  /** Produce SQL NULL (the SQL-standard default for both clauses). */
+  case object Null extends JsonQueryBehavior
+  /** Raise an error. */
+  case object Error extends JsonQueryBehavior
+  /** Produce an empty JSON array `[]`. */
+  case object EmptyArray extends JsonQueryBehavior
+  /** Produce an empty JSON object `{}`. */
+  case object EmptyObject extends JsonQueryBehavior
+}
+
+/**
+ * The array-wrapper behavior of `JSON_QUERY` (SQL:2016 `... ARRAY WRAPPER`). This implementation
+ * resolves a single value per path (wildcard-free paths only), so a wrapper wraps that value in a
+ * one-element array:
+ *   - `Without` (default): return the value unwrapped;
+ *   - `Unconditional` (`WITH [UNCONDITIONAL] ARRAY WRAPPER`): always wrap;
+ *   - `Conditional` (`WITH CONDITIONAL ARRAY WRAPPER`): wrap only a scalar; leave an object or
+ *     array as is.
+ */
+sealed trait JsonQueryWrapper
+object JsonQueryWrapper {
+  case object Without extends JsonQueryWrapper
+  case object Conditional extends JsonQueryWrapper
+  case object Unconditional extends JsonQueryWrapper
+}
+
+/** The quotes behavior of `JSON_QUERY`: `KEEP QUOTES` (default) or `OMIT QUOTES`. */
+sealed trait JsonQueryQuotes
+object JsonQueryQuotes {
+  case object Keep extends JsonQueryQuotes
+  case object Omit extends JsonQueryQuotes
+}
+
+// scalastyle:off line.size.limit
+/**
+ * The SQL:2016 `JSON_QUERY` function (feature T828): extracts the JSON value located by `path` from
+ * a JSON input and returns it as JSON text (STRING):
+ *
+ *   - missing path                        -> ON EMPTY behavior
+ *   - malformed / non-single-value input  -> ON ERROR behavior
+ *   - matched object / array / scalar     -> its serialized JSON text, after applying the array
+ *                                            wrapper and quotes clauses
+ *
+ * A matched scalar (including a JSON `null`) is not an error under the default `WITHOUT ARRAY
+ * WRAPPER`; it is emitted as JSON text (`JSON_QUERY('{"id":7}', '$.id')` -> `7`). `OMIT QUOTES`
+ * strips the surrounding quotes from a scalar string result (and cannot be combined with a wrapper).
+ * Both `ON EMPTY` and `ON ERROR` default to NULL per the standard, and a `null` JSON input yields
+ * SQL NULL directly. `RETURNING` is restricted to string types here (VARIANT is deferred); the
+ * result is always JSON text.
+ *
+ * {{{
+ *   JSON_QUERY('{"a":{"x":1}}', '$.a')                          -- '{"x":1}'
+ *   JSON_QUERY('{"t":["x","y"]}', '$.t')                        -- '["x","y"]'
+ *   JSON_QUERY('{"t":["x","y"]}', '$.t[0]' WITH ARRAY WRAPPER)  -- '["x"]'
+ *   JSON_QUERY('{"n":"Ada"}', '$.n' OMIT QUOTES)                -- 'Ada'
+ * }}}
+ */
+// scalastyle:on line.size.limit
+case class JsonQuery(
+    child: Expression,
+    path: String,
+    returning: DataType,
+    wrapper: JsonQueryWrapper,
+    quotes: JsonQueryQuotes,
+    onEmpty: JsonQueryBehavior,
+    onError: JsonQueryBehavior)
+  extends UnaryExpression
+  with CodegenFallback
+  with ExpectsInputTypes
+  with QueryErrorsBase {
+
+  override def nullable: Boolean = true
+
+  // The JSON input must be a STRING; the result is JSON text.
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def dataType: DataType = returning
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputCheck = super.checkInputDataTypes()
+    if (inputCheck.isFailure) {
+      inputCheck
+    } else if (!JsonPathParser.hasWildcard(path).contains(false)) {
+      // The path must parse and be wildcard-free (a single value is resolved).
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_PATH",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName), "path" -> toSQLValue(path)))
+    } else if (!JsonQuery.isValidReturningType(returning)) {
+      // RETURNING is restricted to string types (the result is JSON text; VARIANT is deferred).
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_QUERY_RETURNING_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName), "returningType" -> toSQLType(returning)))
+    } else if (quotes == JsonQueryQuotes.Omit && wrapper != JsonQueryWrapper.Without) {
+      // OMIT QUOTES applies only to an unwrapped scalar; the SQL standard forbids pairing it with
+      // an array wrapper. Enforced here (not only in the parser) so a directly-constructed
+      // expression cannot silently ignore the quotes clause.
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_QUERY_WRAPPER_AND_QUOTES",
+        messageParameters = Map("functionName" -> toSQLId(prettyName)))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  // Path parsed once (the grammar makes it a string literal). `checkInputDataTypes` guarantees it
+  // parses and is wildcard-free, so the evaluator is only built for a valid path.
+  @transient private lazy val evaluator: JsonTableEvaluator =
+    JsonTableEvaluator(JsonPathParser.parse(path).getOrElse(Nil), explodeRoot = false)
+
+  // Handle the ON EMPTY / ON ERROR case per the configured behavior.
+  private def onEmptyResult(): Any = behaviorResult(onEmpty, isEmpty = true)
+  private def onErrorResult(): Any = behaviorResult(onError, isEmpty = false)
+
+  private def behaviorResult(behavior: JsonQueryBehavior, isEmpty: Boolean): Any = behavior match {
+    case JsonQueryBehavior.Null => null
+    case JsonQueryBehavior.EmptyArray => JsonQuery.EmptyArrayText
+    case JsonQueryBehavior.EmptyObject => JsonQuery.EmptyObjectText
+    case JsonQueryBehavior.Error =>
+      if (isEmpty) throw QueryExecutionErrors.jsonQueryOnEmptyError(prettyName, path, cause = null)
+      else throw QueryExecutionErrors.jsonQueryOnErrorError(prettyName, path, cause = null)
+  }
+
+  // Apply the array-wrapper and quotes clauses to a matched value. `raw` is its serialized JSON
+  // text, `unquoted` is the OMIT QUOTES form (a string's decoded content; `raw` otherwise, so OMIT
+  // QUOTES is a no-op for objects, arrays, and non-string scalars), and `structural` is true for an
+  // object or array match (rather than a scalar, incl. JSON null).
+  private def wrapAndQuote(raw: UTF8String, unquoted: UTF8String, structural: Boolean): UTF8String =
+    wrapper match {
+      case JsonQueryWrapper.Without =>
+        // OMIT QUOTES reuses the string decoded during the lookup rather than re-parsing the
+        // serialized fragment; OMIT QUOTES combined with a wrapper is rejected at analysis time.
+        if (quotes == JsonQueryQuotes.Omit) unquoted else raw
+      case JsonQueryWrapper.Unconditional => JsonQuery.wrapInArray(raw)
+      // CONDITIONAL wraps only a scalar; an object or array is already a structural result.
+      case JsonQueryWrapper.Conditional => if (structural) raw else JsonQuery.wrapInArray(raw)
+    }
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // NULL input propagates to NULL (not ON EMPTY / ON ERROR), matching ANSI and the other engines.
+    if (json == null) return null
+    evaluator.queryLookup(json, omitQuotes = quotes == JsonQueryQuotes.Omit) match {
+      // Malformed / non-single-value input.
+      case None => onErrorResult()
+      // Path matched nothing.
+      case Some(JsonQueryLookup.Missing) => onEmptyResult()
+      // Matched a value: serialize it, applying the wrapper and quotes clauses.
+      case Some(JsonQueryLookup.Found(raw, structural, unquoted)) =>
+        wrapAndQuote(raw, unquoted, structural)
+    }
+  }
+
+  override def prettyName: String = "json_query"
+
+  override def sql: String = {
+    val returningSQL = if (returning == StringType) "" else s" RETURNING ${returning.sql}"
+    val wrapperSQL = wrapper match {
+      case JsonQueryWrapper.Without => ""
+      case JsonQueryWrapper.Unconditional => " WITH UNCONDITIONAL ARRAY WRAPPER"
+      case JsonQueryWrapper.Conditional => " WITH CONDITIONAL ARRAY WRAPPER"
+    }
+    val quotesSQL = quotes match {
+      case JsonQueryQuotes.Keep => ""
+      case JsonQueryQuotes.Omit => " OMIT QUOTES"
+    }
+    def behaviorSQL(b: JsonQueryBehavior): String = b match {
+      case JsonQueryBehavior.Null => "NULL"
+      case JsonQueryBehavior.Error => "ERROR"
+      case JsonQueryBehavior.EmptyArray => "EMPTY ARRAY"
+      case JsonQueryBehavior.EmptyObject => "EMPTY OBJECT"
+    }
+    val emptySQL =
+      if (onEmpty == JsonQueryBehavior.Null) "" else s" ${behaviorSQL(onEmpty)} ON EMPTY"
+    val errorSQL =
+      if (onError == JsonQueryBehavior.Null) "" else s" ${behaviorSQL(onError)} ON ERROR"
+    // Render the path as a properly escaped string literal so bracket-quoted paths round-trip.
+    val pathSQL = Literal(UTF8String.fromString(path), StringType).sql
+    s"JSON_QUERY(${child.sql}, $pathSQL$returningSQL$wrapperSQL$quotesSQL$emptySQL$errorSQL)"
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): JsonQuery =
+    copy(child = newChild)
+}
+
+object JsonQuery {
+  private val EmptyArrayText: UTF8String = UTF8String.fromString("[]")
+  private val EmptyObjectText: UTF8String = UTF8String.fromString("{}")
+  private val ArrayOpen: UTF8String = UTF8String.fromString("[")
+  private val ArrayClose: UTF8String = UTF8String.fromString("]")
+
+  private def wrapInArray(raw: UTF8String): UTF8String =
+    UTF8String.concat(ArrayOpen, raw, ArrayClose)
+
+  /**
+   * `JSON_QUERY` returns a JSON fragment as text, so RETURNING is restricted to a plain STRING here
+   * (VARIANT is deferred). `CharType` / `VarcharType` extend `StringType` but carry a length that
+   * `JSON_QUERY` does not enforce -- it returns the fragment verbatim without a cast -- so they are
+   * rejected: the parser normalizes a SQL `CHAR`/`VARCHAR` RETURNING to STRING before construction,
+   * and this guards a raw `CharType`/`VarcharType` supplied by direct Catalyst construction.
+   */
+  def isValidReturningType(dt: DataType): Boolean = dt match {
+    case _: CharType | _: VarcharType => false
+    case _: StringType => true
     case _ => false
   }
 }

@@ -168,6 +168,10 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   private def implicitCast(
       inType: DataType,
       expectedType: AbstractDataType): Option[DataType] = {
+    // R1 CHAR/VARCHAR promotion is checked first: the acceptsType case below would otherwise
+    // accept the constrained type unchanged, since CharType and VarcharType extend StringType.
+    charVarcharToPlainString(inType, expectedType).foreach(dt => return Some(dt))
+
     (inType, expectedType) match {
       // If the expected type equals the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => Some(inType)
