@@ -113,9 +113,11 @@ Mathematical Functions
     expm1
     factorial
     floor
+    gcd
     greatest
     hex
     hypot
+    lcm
     least
     ln
     log

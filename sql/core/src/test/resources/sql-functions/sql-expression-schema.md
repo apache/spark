@@ -162,6 +162,7 @@
 | org.apache.spark.sql.catalyst.expressions.FormatString | printf | SELECT printf("Hello World %d %s", 100, "days") | struct<printf(Hello World %d %s, 100, days):string> |
 | org.apache.spark.sql.catalyst.expressions.FromUTCTimestamp | from_utc_timestamp | SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul') | struct<from_utc_timestamp(2016-08-31, Asia/Seoul):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.FromUnixTime | from_unixtime | SELECT from_unixtime(0, 'yyyy-MM-dd HH:mm:ss') | struct<from_unixtime(0, yyyy-MM-dd HH:mm:ss):string> |
+| org.apache.spark.sql.catalyst.expressions.Gcd | gcd | SELECT gcd(24, 36) | struct<gcd(24, 36):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Get | get | SELECT get(array(1, 2, 3), 0) | struct<get(array(1, 2, 3), 0):int> |
 | org.apache.spark.sql.catalyst.expressions.GetJsonObject | get_json_object | SELECT get_json_object('{"a":"b"}', '$.a') | struct<get_json_object({"a":"b"}, $.a):string> |
 | org.apache.spark.sql.catalyst.expressions.GreaterThan | > | SELECT 2 > 1 | struct<(2 > 1):boolean> |
@@ -212,6 +213,7 @@
 | org.apache.spark.sql.catalyst.expressions.LPadExpressionBuilder | lpad | SELECT lpad('hi', 5, '??') | struct<lpad(hi, 5, ??):string> |
 | org.apache.spark.sql.catalyst.expressions.Lag | lag | SELECT a, b, lag(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,lag(b, 1, NULL) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING):int> |
 | org.apache.spark.sql.catalyst.expressions.LastDay | last_day | SELECT last_day('2009-01-12') | struct<last_day(2009-01-12):date> |
+| org.apache.spark.sql.catalyst.expressions.Lcm | lcm | SELECT lcm(4, 6) | struct<lcm(4, 6):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Lead | lead | SELECT a, b, lead(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,lead(b, 1, NULL) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING):int> |
 | org.apache.spark.sql.catalyst.expressions.Least | least | SELECT least(10, 9, 2, 4, 3) | struct<least(10, 9, 2, 4, 3):int> |
 | org.apache.spark.sql.catalyst.expressions.Left | left | SELECT left('Spark SQL', 3) | struct<left(Spark SQL, 3):string> |
