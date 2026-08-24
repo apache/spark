@@ -127,9 +127,9 @@ class _PyArrowCastTestBase(GoldenFileTestMixin, unittest.TestCase):
         """
         try:
             result = src_arr.cast(tgt_type, safe=safe)
-            return self.repr_value(result, max_len=0)
         except Exception as e:
             return f"ERR@{type(e).__name__}"
+        return self.repr_value(result, max_len=0)
 
 
 # ============================================================
