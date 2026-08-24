@@ -360,7 +360,7 @@ class SeriesStatMixin:
         )
 
         # axis=0 is accepted (no-op for Series)
-        pser = pd.Series([1, 2, 3], name="x")
+        pser = pd.Series([1, 2, 3, 1], name="x")
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.rank(axis=0), psser.rank(axis=0).sort_index())
 
