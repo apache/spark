@@ -19,9 +19,9 @@ Experimental tools for transpiling UDFS.
 
 Transpilation is only attempted when both
 ``spark.sql.experimental.optimizer.transpilePyUDFs=true`` and
-``spark.sql.ansi.enabled=true``. Numeric arithmetic is not transpiled because
-Spark's fixed-width arithmetic cannot preserve Python's arbitrary-precision
-integer semantics. If you flip
+``spark.sql.ansi.enabled=true``. The generated Catalyst expressions target
+ANSI-mode SQL semantics. In particular, fixed-width integer overflow raises
+instead of promoting to an arbitrary-precision Python integer. If you flip
 transpilation on with ANSI off the UDF will fall back to interpreted
 Python execution and a warning is logged at UDF construction time.
 
@@ -51,11 +51,13 @@ from pyspark.sql.types import (
     StringType,
 )
 from pyspark.sql.functions import (
+    abs as _abs,
     coalesce,
     col,
     concat,
     isnan,
     lit,
+    pmod,
     raise_error,
     when,
 )
@@ -286,9 +288,7 @@ class CatalystTranspiler(AbstractTranspiler):
         right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
         right_null = right_col.isNull()
-        numeric_nan = (
-            isnan(left_col) | isnan(right_col) if lc == rc == "numeric" else lit(False)
-        )
+        numeric_nan = isnan(left_col) | isnan(right_col) if lc == rc == "numeric" else lit(False)
         if equal:
             both_null_val: Column = lit(True)
             one_null_val: Column = lit(False)
@@ -362,10 +362,10 @@ class CatalystTranspiler(AbstractTranspiler):
         """Infer ``"numeric"`` or ``"string"`` for ``node`` under the current
         ``self._param_categories`` assumption (set per input-type variant).
 
-        Drives operator selection (``+`` -> add vs concat, ``*`` -> multiply vs
-        repeat) and raises ``UnsupportedOperationException`` when an operator's
-        operands are type-incompatible, so the caller drops that variant and the
-        JVM picks another option / falls back to the Python UDF.
+        Drives operator selection (``+`` -> add vs concat) and raises
+        ``UnsupportedOperationException`` when an operator's operands are
+        type-incompatible, so the caller drops that variant and the JVM picks
+        another option / falls back to the Python UDF.
         """
         match node:
             case ast.Constant(value=v):
@@ -488,18 +488,17 @@ class CatalystTranspiler(AbstractTranspiler):
                         "coerce or fail analysis); the transpiler falls back "
                         "to interpreted Python"
                     )
-                if not isinstance(operand, ast.Constant):
-                    raise UnsupportedOperationException(
-                        "numeric unary arithmetic is not transpiled because Spark's "
-                        "fixed-width arithmetic can overflow where Python promotes "
-                        "integers; falling back to interpreted Python"
-                    )
+                operand_col = self._convert_chunk(params, operand)
+                null_error = lit(
+                    "Python UDF transpiler: unary arithmetic with NULL would raise "
+                    "TypeError in Python"
+                )
                 if isinstance(op, ast.USub):
-                    # Handles both literal negative ints (USub on a Constant)
-                    # and runtime negation of a column.
-                    return self._convert_chunk(params, operand).__neg__()
+                    return when(operand_col.isNull(), raise_error(null_error)).otherwise(
+                        operand_col.__neg__()
+                    )
                 # `+x` -- identity, kept for symmetry with USub.
-                return self._convert_chunk(params, operand)
+                return when(operand_col.isNull(), raise_error(null_error)).otherwise(operand_col)
             case ast.BoolOp(op=op, values=values):
                 # Python `and` / `or` short-circuit and return one of the
                 # operands rather than a strict boolean. For the booleans
@@ -624,24 +623,22 @@ class CatalystTranspiler(AbstractTranspiler):
                             "is not supported by the transpiler"
                         )
             case ast.BinOp(left=left, op=op, right=right):
-                # Numeric arithmetic is never lowered: fixed-width Catalyst
-                # arithmetic can overflow where Python promotes integers. String
-                # concatenation is safe after guarding NULL, which raises in
-                # Python but would otherwise propagate as NULL in Catalyst.
+                # Numeric operations target ANSI semantics: fixed-width overflow
+                # raises instead of promoting to an arbitrary-precision Python
+                # integer. NULL operands are guarded because Python raises a
+                # TypeError where Catalyst would otherwise propagate NULL. String
+                # concatenation uses the same guard. String repetition falls back
+                # because its count cannot be represented safely for every Python
+                # integer.
+                # TODO(SPARK-55210): add exact integer promotion and remove the
+                # documented overflow divergence.
                 lc = self._category(params, left)
                 rc = self._category(params, right)
-                if "numeric" in (lc, rc):
-                    raise UnsupportedOperationException(
-                        "numeric arithmetic is not transpiled because Spark's "
-                        "fixed-width arithmetic can overflow where Python promotes "
-                        "integers; falling back to interpreted Python"
-                    )
                 left_col = self._convert_chunk(params, left)
                 right_col = self._convert_chunk(params, right)
                 null_guard = left_col.isNull() | right_col.isNull()
                 null_error = lit(
-                    "Python UDF transpiler: arithmetic with NULL would raise "
-                    "TypeError in Python"
+                    "Python UDF transpiler: arithmetic with NULL would raise TypeError in Python"
                 )
                 match op:
                     case ast.Add():
@@ -649,6 +646,32 @@ class CatalystTranspiler(AbstractTranspiler):
                             return when(null_guard, raise_error(null_error)).otherwise(
                                 concat(left_col, right_col)
                             )
+                        if lc == rc == "numeric":
+                            return when(null_guard, raise_error(null_error)).otherwise(
+                                left_col.__add__(right_col)
+                            )
+                    case ast.Sub():
+                        if lc == rc == "numeric":
+                            return when(null_guard, raise_error(null_error)).otherwise(
+                                left_col.__sub__(right_col)
+                            )
+                    case ast.Mult():
+                        if lc == rc == "numeric":
+                            return when(null_guard, raise_error(null_error)).otherwise(
+                                left_col.__mul__(right_col)
+                            )
+                    case ast.Mod():
+                        if lc == rc == "numeric":
+                            # Python's `%` takes the sign of the divisor; Spark's
+                            # takes the dividend's. This formula reproduces Python
+                            # except where fixed-width intermediate values overflow.
+                            sb = (
+                                when(right_col > 0, lit(1))
+                                .when(right_col < 0, lit(-1))
+                                .otherwise(lit(0))
+                            )
+                            modulo = sb * pmod(sb * left_col, _abs(right_col))
+                            return when(null_guard, raise_error(null_error)).otherwise(modulo)
                     case _:
                         raise UnsupportedOperationException(
                             f"binary operator {type(op).__name__} is not "
