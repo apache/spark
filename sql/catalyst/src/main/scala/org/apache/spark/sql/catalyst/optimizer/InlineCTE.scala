@@ -89,30 +89,48 @@ case class InlineCTE(
   }
 
   private def validateNoOuterReferencesAcrossCTEBoundary(cteDef: CTERelationDef): Unit = {
-    val outerRefs = cteDef.child.flatMap(
-      _.expressions.flatMap(_.collect { case o: OuterReference => o }))
-    if (outerRefs.nonEmpty) {
-      throw SparkException.internalError(
-        "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
-          s"found outer reference '${outerRefs.head.name}' in the CTE definition " +
-          s"(cteId=${cteDef.id}).")
-    }
+    // Only an outer reference that actually escapes the CTE definition is invalid. An outer
+    // reference that resolves to an operator inside the definition body (e.g. a correlated
+    // subquery whose correlated column lives in the body) is self-contained and safe to
+    // materialize. So collect every attribute bound anywhere in the definition (including in
+    // nested subquery plans) and reject only references that resolve to none of them.
+    val boundExprIds = cteDef.child
+      .collectWithSubqueries { case n: LogicalPlan => n }
+      .flatMap(_.output.filter(_.resolved).map(_.exprId))
+      .toSet
 
-    val outerScopeSubqueries = cteDef.child.flatMap(
-      _.expressions.flatMap(_.collect {
-        case s: SubqueryExpression if s.outerScopeAttrs.nonEmpty => s
+    // Walk the whole definition (main tree plus nested subquery plans). Locate either a direct
+    // `OuterReference` or a correlated subquery whose outer-scope attributes escape the def --
+    // i.e. resolve to none of `boundExprIds`.
+    val allNodes = cteDef.child.collectWithSubqueries { case n: LogicalPlan => n }
+    val escapingOuterRef = allNodes.iterator
+      .flatMap(_.expressions.iterator.flatMap(_.collect {
+        case o: OuterReference if !boundExprIds.contains(o.exprId) => o
       }))
-    if (outerScopeSubqueries.nonEmpty) {
-      // `outerScopeAttrs` are expressions that contain an `OuterScopeReference` and may be
-      // compound (e.g. `Add(OuterScopeReference(a), Literal(1))`), so collect the reference node
-      // rather than assuming the attribute itself is one.
-      val outerScopeRef = outerScopeSubqueries.head.outerScopeAttrs
-        .flatMap(_.collect { case r: OuterScopeReference => r }).head
-      throw SparkException.internalError(
-        "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
-          "found a subquery with outer-scope reference " +
-          s"'${outerScopeRef.name}' in the CTE definition " +
-          s"(cteId=${cteDef.id}).")
+      .toSeq
+      .headOption
+    val escapingOuterScopeRef = allNodes.iterator
+      .flatMap(_.expressions.iterator.flatMap(
+        _.collect { case s: SubqueryExpression => s.outerScopeAttrs }
+          .flatMap(_.collect {
+            case r: OuterScopeReference if !boundExprIds.contains(r.exprId) => r
+          })))
+      .toSeq
+      .headOption
+
+    (escapingOuterRef, escapingOuterScopeRef) match {
+      case (Some(o), _) =>
+        throw SparkException.internalError(
+          "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
+            s"found outer reference '${o.name}' in the CTE definition " +
+            s"(cteId=${cteDef.id}).")
+      case (None, Some(r)) =>
+        throw SparkException.internalError(
+          "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
+            "found a subquery with outer-scope reference " +
+            s"'${r.name}' in the CTE definition " +
+            s"(cteId=${cteDef.id}).")
+      case (None, None) =>
     }
   }
 
