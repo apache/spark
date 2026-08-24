@@ -45,7 +45,8 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
 
   test("SPARK-58752: configurations under the prefix become environment variables") {
     withSQLConf(key("FOO") -> "1", key("BAR") -> "2") {
-      assert(PythonWorkerEnvironment.readValidated(sessionConf) === Map("FOO" -> "1", "BAR" -> "2"))
+      assert(
+        PythonWorkerEnvironment.readValidated(sessionConf) === Map("FOO" -> "1", "BAR" -> "2"))
     }
   }
 
@@ -174,10 +175,12 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
   test("SPARK-58752: a cloned session inherits the environment") {
     withSQLConf(key("FOO") -> "1") {
       val cloned = spark.cloneSession()
-      assert(PythonWorkerEnvironment.readValidated(cloned.sessionState.conf) === Map("FOO" -> "1"))
+      assert(
+        PythonWorkerEnvironment.readValidated(cloned.sessionState.conf) === Map("FOO" -> "1"))
       // The clone is independent: a later change on the source does not reach it.
       spark.conf.set(key("FOO"), "changed")
-      assert(PythonWorkerEnvironment.readValidated(cloned.sessionState.conf) === Map("FOO" -> "1"))
+      assert(
+        PythonWorkerEnvironment.readValidated(cloned.sessionState.conf) === Map("FOO" -> "1"))
     }
   }
 
@@ -211,14 +214,12 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
       .setProject(
         proto.Project
           .newBuilder()
-          .setInput(
-            createLocalRelationProto(
-              Seq(AttributeReference("id", IntegerType)(), AttributeReference("s", StringType)()),
-              Seq.empty))
-          .addExpressions(
-            proto.Expression
-              .newBuilder()
-              .setCommonInlineUserDefinedFunction(function)))
+          .setInput(createLocalRelationProto(
+            Seq(AttributeReference("id", IntegerType)(), AttributeReference("s", StringType)()),
+            Seq.empty))
+          .addExpressions(proto.Expression
+            .newBuilder()
+            .setCommonInlineUserDefinedFunction(function)))
       .build()
   }
 

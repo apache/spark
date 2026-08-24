@@ -24,8 +24,8 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * The environment variables that Python worker processes launched for a session's Python functions
- * should inherit.
+ * The environment variables that Python worker processes launched for a session's Python
+ * functions should inherit.
  *
  * The environment is carried by session configurations under a reserved prefix, one configuration
  * per variable: `spark.pythonWorkerEnv.FOO=bar` makes `FOO` visible as `bar` in `os.environ`
@@ -74,8 +74,9 @@ private[connect] object PythonWorkerEnvironment {
    * which keeps the failure loud instead of silently running a Python function without the
    * variables it expects.
    *
-   * A message may name a variable but never carries its value, and a long name is truncated rather
-   * than echoed whole, so a rejection cannot copy a credential into a log or a stack trace.
+   * A message may name a variable but never carries its value, and a long name is truncated
+   * rather than echoed whole, so a rejection cannot copy a credential into a log or a stack
+   * trace.
    */
   def readValidated(conf: SQLConf): Map[String, String] = {
     val variables = read(conf)
