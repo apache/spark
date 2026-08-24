@@ -28,7 +28,7 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
-import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression, With}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
@@ -478,7 +478,10 @@ class ColumnExpressionSuite extends SharedSparkSession {
         // Nothing is relocated, so a condition is evaluated only where it always was. `a` runs
         // -2, -1, 0, 1, 2, 3: the first two take the third branch, 0 the first, 1 and 2 the second,
         // and 3 falls through. `rand` is in [0, 1), so a row reaching a BETWEEN is true whatever it
-        // draws.
+        // draws -- the answers here do not depend on memoization. What this rules out is the
+        // alternative that was measured and rejected: hoisting the definition into a `Project` and
+        // guarding that column with the branch condition, which puts `6 / a` outside conditional
+        // evaluation and raises on the `a = 0` row under ANSI.
         val df = spark.range(0, 6, 1, 1).selectExpr("cast(id as int) - 2 as a")
         checkAnswer(
           df.selectExpr(
@@ -493,33 +496,67 @@ class ColumnExpressionSuite extends SharedSparkSession {
 
   test("SPARK-58902: a nondeterministic input a branch cannot pre-evaluate is still read once") {
     onEachEvalPath {
-      val df = spark.range(0, 6, 1, 1)
+      // Enough rows that the two copies an inlining implementation makes have to fall out of step:
+      // each copy owns its own generator seeded the same way, so they only differ once the first
+      // comparison has skipped the second copy on some row.
+      val df = spark.range(0, 20, 1, 1)
       // `randstr(3, 0)` cannot be pre-evaluated into a project, because it raises on a negative
       // length and so would raise on the rows whose branch is not taken. Memoizing it in place
       // gives both comparisons of the BETWEEN one string, so the answer inside a branch is the same
-      // as outside one.
+      // as outside one. `id` is selected alongside so that `checkAnswer`, which compares rows as a
+      // bag, is comparing per row rather than just counting trues.
       val inBranch = df.selectExpr(
-        "CASE WHEN id < 0 THEN false ELSE randstr(3, 0) BETWEEN 'a' AND 'zzzz' END")
-      checkAnswer(inBranch, df.selectExpr("randstr(3, 0) BETWEEN 'a' AND 'zzzz'").collect().toSeq)
-
-      // The same for a nondeterministic input wrapped in arithmetic: both reads see one draw, so
-      // dividing it by one and comparing against [0, 1) is true on every row.
+        "id", "CASE WHEN id < 0 THEN false ELSE randstr(3, 0) BETWEEN 'a' AND 'zzzz' END")
       checkAnswer(
-        df.selectExpr(
-          "CASE WHEN id < 0 THEN false ELSE (rand(7) / 1.0) BETWEEN 0 AND 1 END"),
-        (0 until 6).map(_ => Row(true)))
+        inBranch, df.selectExpr("id", "randstr(3, 0) BETWEEN 'a' AND 'zzzz'").collect().toSeq)
+
+      // The same for a nondeterministic input wrapped in arithmetic. Comparing against the
+      // branch-free form under a fixed seed is what makes this bite: inlined, the second comparison
+      // draws again, so the row a given draw lands on shifts. The window also has to be one the
+      // first comparison can fail: `BETWEEN 0 AND 1` over `rand` is satisfied by every draw, which
+      // keeps the two copies in lockstep and makes the comparison hold either way. The assertion
+      // below is what keeps that true for these rows rather than merely intended.
+      val branchFree = df.selectExpr("id", "(rand(7) / 1.0) BETWEEN 0.3 AND 0.6").collect()
+      assert(branchFree.exists(!_.getBoolean(1)) && branchFree.exists(_.getBoolean(1)),
+        s"the window is not selective over these rows: ${branchFree.mkString(", ")}")
+      val inBranchRand = df.selectExpr(
+        "id", "CASE WHEN id < 0 THEN false ELSE (rand(7) / 1.0) BETWEEN 0.3 AND 0.6 END")
+      checkAnswer(inBranchRand, branchFree.toSeq)
     }
   }
 
   test("SPARK-58902: a nested With agrees across the evaluation paths") {
-    // `nullif(nullif(a, b), c)` nests one `With` inside another's definition, which is where each
+    // The outer `nullif`'s definition is the inner `nullif`, which is itself a `With`, and neither
+    // one is cheap or read once, so both survive inside the branch. That nesting is where each
     // reference's copy of the definition code matters: the code is generated once per definition
     // and the text reused, so a nested `With` does not grow its code by a factor per level.
-    val query = "SELECT nullif(nullif(a, b), c) AS r " +
-      "FROM VALUES (1, 1, 3), (2, 5, 2), (4, 5, 6) AS t(a, b, c)"
-    onEachEvalPath {
-      // a = 1 equals b, and a = 2 equals c, so both are null; a = 4 differs from both.
-      checkAnswer(spark.sql(query), Seq(Row(null), Row(null), Row(4)))
+    // `a` is selected alongside so that `checkAnswer`, which compares rows as a bag, is comparing
+    // per row rather than counting how many nulls came back.
+    val query = "SELECT a, CASE WHEN a < 0 THEN NULL ELSE nullif(nullif(a + b, b), c) END AS r " +
+      "FROM VALUES (0, 5, 3), (2, 5, 7), (4, 5, 6), (-1, 1, 1) AS t(a, b, c)"
+    // Assert the shape too, or a later change to the rewrite can leave this test with no `With` at
+    // all -- which is what it is here to exercise -- and it would still pass on the answers. The
+    // `With`s reach the optimized plan at all only because `ConvertToLocalRelation` refuses a
+    // `Project` over a `LocalRelation` whose project list holds an `Unevaluable`, which
+    // `CommonExpressionDef` is; were that to change, the whole `VALUES` projection would be folded
+    // away and this assertion would report 0 for an unrelated reason.
+    // `NullIf` builds a `With` under this conf's default, and decides at construction time, i.e.
+    // during analysis. The block pins that default rather than switching anything on: it keeps a
+    // suite-level override or a future flip from silently turning this into a test of the inlining
+    // path. It has to cover the executed queries and not just the shape assertion, or the answers
+    // could be checked against a plan holding no `With` at all.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val withs = spark.sql(query).queryExecution.optimizedPlan.collect {
+        case p => p.expressions.flatMap(_.collect { case w: With => w })
+      }.flatten
+      assert(withs.size == 2, s"expected two surviving With nodes, got ${withs.size}")
+      onEachEvalPath {
+        // a = 0 makes `a + b` equal b, a = 2 makes it equal c, so both are null; a = 4 differs from
+        // both and gives 9; a = -1 takes the first branch.
+        checkAnswer(
+          spark.sql(query),
+          Seq(Row(0, null), Row(2, null), Row(4, 9), Row(-1, null)))
+      }
     }
   }
 

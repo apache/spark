@@ -165,7 +165,13 @@ class EquivalentExpressions(
     case _: With => Nil
     case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
     case h: HigherOrderFunction => h.alwaysEvaluatedArguments
-    case other => skipForShortcut(other).children
+    case other => skipForShortcut(other) match {
+      // The peel walks past `And`/`Or`, which are not `ConditionalExpression`s, so it can land on a
+      // `With` and hand back its children -- the descent the case above exists to prevent. Ask
+      // again after peeling.
+      case _: With => Nil
+      case peeled => peeled.children
+    }
   }
 
   // For some special expressions we cannot just recurse into all of its children, but we can

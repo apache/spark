@@ -69,22 +69,25 @@ class WithExpressionEvalSuite extends SparkFunSuite {
 
   test("a definition is not evaluated on a row that reaches no reference") {
     val c = counter()
-    val notTaken = If(Literal.TrueLiteral, Literal(-1), With(c) { case Seq(ref) => Add(ref, ref) })
-    assert((1 to 3).map(_ => notTaken.eval(InternalRow.empty)) == Seq(-1, -1, -1))
+    // The branch is inside the `With`, so the `With` is entered on every row and does clear its
+    // cells. What it must not do is evaluate the definition before a reference is reached; putting
+    // the branch outside would only test that `If` does not evaluate the arm it did not take.
+    val w = With(c) { case Seq(ref) => If(Literal.TrueLiteral, Literal(-1), Add(ref, ref)) }
+    assert((1 to 3).map(_ => w.eval(InternalRow.empty)) == Seq(-1, -1, -1))
     // The counter is still at 0, so the first row that does reach a reference sees 1.
     assert(With(c) { case Seq(ref) => Add(ref, ref) }.eval(InternalRow.empty) == 2)
   }
 
   test("a reference behind a short-circuiting operator is not read when the left side is false") {
     // Neither pre-evaluating the definition into a project nor guarding that column by the branch
-    // can express this: both evaluate on every row the branch is reached on, and `And` short
-    // circuits before the reference.
+    // can express this: both evaluate on every row the branch is reached on, while `And` short
+    // circuits before the reference. The `And` is inside the `With` so that the `With` is entered
+    // and only the reference is skipped.
     val c = counter()
     val w = With(c) { case Seq(ref) =>
-      And(GreaterThanOrEqual(ref, Literal(1)), LessThanOrEqual(ref, Literal(100)))
+      And(Literal.FalseLiteral, GreaterThanOrEqual(ref, Literal(1)))
     }
-    val shortCircuited = And(Literal.FalseLiteral, w)
-    (1 to 3).foreach(_ => shortCircuited.eval(InternalRow.empty))
+    assert((1 to 3).map(_ => w.eval(InternalRow.empty)) == Seq(false, false, false))
     assert(With(c) { case Seq(ref) => Add(ref, ref) }.eval(InternalRow.empty) == 2)
   }
 
@@ -101,22 +104,37 @@ class WithExpressionEvalSuite extends SparkFunSuite {
 
   test("a With rebuilt by a rule still memoizes") {
     val w = With(counter()) { case Seq(ref) => Add(ref, ref) }
-    val rewritten = w.transformUp { case a: Add => a }.asInstanceOf[With]
+    // Evaluate the original first. A rule rebuilds the definition, and therefore its cell, while
+    // handing the new `With` the original's reference objects, so an implementation that bound the
+    // references once would leave the rebuilt `With` reading this evaluation's cell.
+    assert(w.eval(InternalRow.empty) == 2)
+    // The rule has to hand back a node that is not `==` the one it replaces, or `transformUp` keeps
+    // the original -- `Counter()` is a case class with no parameters, so a fresh one compares equal
+    // to the old one. Wrapping it changes the tree while leaving the definition's value sequence,
+    // its data type and its nullability alone, so the references are carried over rather than
+    // rebuilt, which is the shape that needs the per-evaluation rebinding.
+    val rewritten = w.transformUp { case _: Counter => Add(counter(), Literal(0)) }
+      .asInstanceOf[With]
+    assert(rewritten ne w, "the rule has to have rebuilt something")
     assert((1 to 3).map(_ => rewritten.eval(InternalRow.empty)) == Seq(2, 4, 6))
   }
 
-  test("SPARK-58902: a copy of a With does not share its references") {
-    // `Rand` is stateful and not a leaf, so `freshCopyIfContainsStatefulExpression` copies it, and
-    // that copies the `CommonExpressionDef` above it and gives the copy its own cell. The
-    // references are stateful leaves, and `LeafLike.withNewChildrenInternal` returns `this`, so
+  test("SPARK-58902: a copy of a With owns its references and its cells") {
+    // The definition is deliberately not stateful, which is what makes
+    // `CommonExpressionDef.stateful` load-bearing: `mapChildren` finds nothing changed below the
+    // definition, so without the override the copy is handed the original definition object, cell
+    // included. A `Rand` definition would hide that, since copying it changes the definition's
+    // child and forces a rebuild anyway.
+    // The references are stateful leaves, and `LeafLike.withNewChildrenInternal` returns `this`, so
     // without the override on `CommonExpressionRef` the two `With`s would share one set of
     // reference objects while owning two cells.
-    val w1 = With(Rand(Literal(1L))) { case Seq(ref) => Add(ref, ref) }
+    val w1 = With(Literal(1)) { case Seq(ref) => Add(ref, ref) }
     val w2 = w1.freshCopyIfContainsStatefulExpression().asInstanceOf[With]
     def refOf(e: Expression): CommonExpressionRef =
       e.collect { case r: CommonExpressionRef => r }.head
     assert(w1 ne w2, "a stateful With has to be copied")
-    assert(refOf(w1.child) ne refOf(w2.child))
+    assert(refOf(w1.child) ne refOf(w2.child), "the copy has to own its references")
+    assert(w1.defs.head.cell ne w2.defs.head.cell, "the copy has to own its cell")
   }
 
   test("SPARK-58902: two Withs over one set of references each read their own definition") {
@@ -156,5 +174,21 @@ class WithExpressionEvalSuite extends SparkFunSuite {
     proj.initialize(0)
     // Both references read one value per row, so the sum is 2n rather than n + (n + 1).
     assert((1 to 4).map(_ => proj(InternalRow.empty).getInt(0)) == Seq(2, 4, 6, 8))
+  }
+
+  test("SPARK-58902: a reference under a nested With that falls back still memoizes") {
+    // The inner `With` would fall back on its own, because one of its own references sits under a
+    // `Fallback`. The outer one holds no `CodegenFallback` of its own, so it can only notice by
+    // asking the inner `With` whether it fell back -- and it has to, since its reference `o` sits
+    // inside the inner subtree and would be reached interpretively with no cell bound.
+    val outer = counter()
+    val inner = counter()
+    val w = With(outer) { case Seq(o) =>
+      Add(o, With(inner) { case Seq(i) => Add(Fallback(i), o) })
+    }
+    val proj = GenerateMutableProjection.generate(Seq(w))
+    proj.initialize(0)
+    // `o` and `i` are both n on the nth row and `o` is read twice, so each row is o + (i + o).
+    assert((1 to 3).map(_ => proj(InternalRow.empty).getInt(0)) == Seq(3, 6, 9))
   }
 }

@@ -282,6 +282,20 @@ class RewriteWithExpressionSuite extends PlanTest {
       Optimizer.execute(testRelation.select(Coalesce(Seq(b, det)).as("col"))),
       testRelation.select(
         Coalesce(Seq(b, udf(a, deterministic = true) * udf(a, deterministic = true))).as("col")))
+
+    // The same conjunct governs the main rewrite path, which has no `Coalesce` above it: there the
+    // definition is hoisted into a child `Project` instead of being substituted. Nothing in this
+    // batch sends it back -- `PlanHelper.specialExpressionsInUnsupportedOperator` collects only
+    // window, aggregate and generator expressions, so the `fakeProj` check does not force the
+    // substitution. What keeps `CollapseProject` from copying the alias back into its two consumers
+    // is that it requires a deterministic producer, which this suite's batch does not exercise.
+    val nondetMainPath = With(udf(a, deterministic = false)) { case Seq(ref) => ref * ref }
+    comparePlans(
+      Optimizer.execute(testRelation.select(nondetMainPath.as("col"))),
+      testRelation
+        .select((testRelation.output :+ udf(a, deterministic = false).as("_common_expr_0")): _*)
+        .select(($"_common_expr_0" * $"_common_expr_0").as("col"))
+        .analyze)
   }
 
   test("WITH expression inside conditional expression") {

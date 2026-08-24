@@ -30,10 +30,13 @@ import org.apache.spark.sql.types.DataType
  * [[CommonExpressionRef]] reads it and reused by every later reference.
  *
  * The cell holds no expression of its own: the reference passes the definition in, so the cell is
- * a pair of mutable slots and serializes with the plan. [[With]] clears it each time it is
- * evaluated, which is once per row for the row the enclosing expression is evaluating, so a
- * reference is never read against a value left over from an earlier row -- and on a row that does
- * not reach the branch holding the `With`, nothing is cleared because nothing is read.
+ * a pair of mutable slots and serializes with the plan. [[With]] clears it on entry, every time it
+ * is entered, which is not the same as once per row: the same `With` object can sit at two
+ * positions of one tree, and a `With` that falls back to `eval` can be generated twice and entered
+ * once per copy, as `GenerateOrdering` does for the two sides of a comparison. Clearing on entry is
+ * what makes each entry self-contained, so a reference is never read against a value left over from
+ * an earlier entry -- and on a row that does not reach the branch holding the `With`, nothing is
+ * cleared because nothing is read.
  */
 class CommonExpressionCell extends Serializable {
   @transient private var computed: Boolean = false
@@ -74,6 +77,16 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
   /**
    * The references in `child` that name one of these definitions, paired with the definition each
    * names. The list is found once, since the tree does not change between evaluations.
+   *
+   * Only `child` is scanned, which relies on a reference to one of these definitions never living
+   * inside another one of them: `With.apply` cannot build that, and `RewriteWithExpression`, which
+   * does rewrite inside a `With`, only ever replaces a reference with its definition's child or
+   * with an attribute -- it never puts a reference inside a definition. Scanning `children` instead
+   * would look safer and be worse -- it would also bind a reference sitting inside the definition
+   * it names, and since `CommonExpressionCell.get` sets `computed` only after the nested evaluation
+   * returns, that turns today's loud "outside its With" error into a StackOverflowError. A nested
+   * `With` is not affected either way: `children` is `child +: defs`, so this scan already descends
+   * into an inner `With`'s own definitions.
    */
   @transient private lazy val refsToBind: Seq[(CommonExpressionRef, CommonExpressionDef)] = {
     val idToDef = defs.map(d => d.id -> d).toMap
@@ -81,10 +94,10 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
   }
 
   /**
-   * Binds this `With`'s references to its own cells, clears them for this row, and evaluates the
-   * child. A reference reached by that evaluation computes its definition once and every later
-   * reference reads the value back, so a definition is evaluated where the child would have
-   * evaluated it, once, rather than once per reference. See [[CommonExpressionCell]].
+   * Binds this `With`'s references to its own cells, clears them, and evaluates the child. A
+   * reference reached by that evaluation computes its definition once and every later reference
+   * reads the value back, so a definition is evaluated where the child would have evaluated it,
+   * once, rather than once per reference. See [[CommonExpressionCell]].
    *
    * The binding is redone on every evaluation rather than once, because a reference can be reached
    * from two `With`s. `withNewChildrenInternal` cannot hand the new `With` its own references: a
@@ -99,43 +112,56 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
     child.eval(input)
   }
 
-  // The cells are cleared per row, so this holds state for the duration of one evaluation.
+  // The cells are cleared on entry, so this holds state for the duration of one evaluation.
   override def stateful: Boolean = true
 
   /**
-   * Whether one of this `With`'s references sits under a [[CodegenFallback]] in `child`. That
-   * subtree is evaluated by calling `eval` on it from the generated code, so the reference under it
-   * takes the interpreted path while the rest of the child takes the generated one -- and the two
-   * do not share their bookkeeping: the generated code clears the codegen flags, not the cells.
+   * Whether one of this `With`'s references sits somewhere that will be evaluated interpretively
+   * even though this `With` is generated. Two shapes do that: a [[CodegenFallback]], which is
+   * evaluated by calling `eval` on it from the generated code, and a nested `With` that itself
+   * takes the fallback below -- `With` does not mix in `CodegenFallback`, so it has to be named
+   * here rather than matched as one. A reference reached that way needs its cell bound and
+   * cleared, which the generated code does not do: it clears the codegen flags.
    *
    * This is the same shape `EquivalentExpressions.childrenToRecurse` already refuses to look past,
    * for the same reason.
+   *
+   * Each level memoizes, but `holdsMyRef` runs again at every nested `With` the scan passes, so a
+   * chain of them nested in each other's `child` costs on the order of the square of the depth.
+   * `nullif(a, nullif(b, c))` does produce such a chain -- only the memoized input becomes a
+   * definition, the rest stays in `child` -- but these chains are shallow in practice. Reading a
+   * nested `With`'s own `lazy val` from here also takes its monitor while holding this one; the
+   * edges only ever run from an ancestor to a proper descendant of an immutable tree, so the order
+   * is a strict partial one and cannot deadlock. `canonicalizationIdMap` below relies on the same.
    */
   @transient private lazy val refUnderCodegenFallback: Boolean = {
     val ids = defs.map(_.id).toSet
+    def holdsMyRef(e: Expression): Boolean = e.exists {
+      case r: CommonExpressionRef => ids.contains(r.id)
+      case _ => false
+    }
     child.exists {
-      case f: CodegenFallback =>
-        f.exists {
-          case r: CommonExpressionRef => ids.contains(r.id)
-          case _ => false
-        }
+      case f: CodegenFallback => holdsMyRef(f)
+      case w: With if w.refUnderCodegenFallback => holdsMyRef(w)
       case _ => false
     }
   }
 
   /**
-   * Clears each definition's flag for this row, then generates the child. The flags are cleared
-   * in the same block the child is generated into, so a reference cannot run against a flag an
-   * earlier row left set: on a row that does not reach the branch holding this `With`, neither the
-   * clearing nor any reference runs.
+   * Clears each definition's flag, then generates the child. The flags are cleared in the same
+   * block the child is generated into, so a reference cannot run against a flag left set by an
+   * earlier row: on a row that does not reach the branch holding this `With`, neither the clearing
+   * nor any reference runs.
    *
-   * When a reference sits under a [[CodegenFallback]] the whole `With` is evaluated interpretively
-   * instead. Generating the child would leave that reference reading a cell nobody bound and
-   * nobody clears, and generating part of it is worse still: a definition reached from both sides
-   * would be computed once through the flags and once through the cell, holding two values for one
-   * row. [[eval]] binds and clears both, so handing it the whole subtree keeps one mechanism in
-   * play. `CollapseCodegenStages.supportCodegen` rejects any plan whose expressions hold a
-   * `CodegenFallback`, so this path is only ever reached where `ctx.INPUT_ROW` is available.
+   * When a reference sits under a [[CodegenFallback]], or inside a nested `With` that itself falls
+   * back, the whole `With` is evaluated interpretively instead. Generating the child would leave
+   * that reference reading a cell nobody bound and nobody clears, and generating part of it is
+   * worse still: a definition reached from both sides would be computed once through the flags and
+   * once through the cell, holding two values for one row. [[eval]] binds and clears both, so
+   * handing it the whole subtree keeps one mechanism in play. `ctx.INPUT_ROW` is available on that
+   * path because `CollapseCodegenStages.supportCodegen` turns whole-stage codegen off for a plan
+   * whose expressions hold the offending `CodegenFallback` -- it is visible there, since a `With`
+   * in a conditional branch reaches execution inside `plan.expressions` like any other expression.
    */
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (refUnderCodegenFallback) {
@@ -312,7 +338,7 @@ case class CommonExpressionRef(id: CommonExpressionId, dataType: DataType, nulla
 
   override val nodePatterns: Seq[TreePattern] = Seq(COMMON_EXPR_REF)
 
-  // The cell is cleared once per row by the enclosing `With`, so this reads mutable state.
+  // The cell is cleared by the enclosing `With` on every entry, so this reads mutable state.
   override def stateful: Boolean = true
 
   /**
