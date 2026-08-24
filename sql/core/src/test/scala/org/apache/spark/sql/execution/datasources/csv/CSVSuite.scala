@@ -3096,7 +3096,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-58946: reject file extensions that are not exactly three letters") {
-    Seq("abcd", "ab1", "a").foreach { ext =>
+      Seq("abcd", "ab1", "a").foreach { ext =>
       withTempPath { path =>
         checkError(
           exception = intercept[SparkIllegalArgumentException] {
@@ -3108,6 +3108,22 @@ abstract class CSVSuite
             "parameter" -> "`extension`",
             "invalidValue" -> s"`$ext`"))
       }
+    }
+  }
+
+  test("SPARK-58946: reject file extensions containing path separators") {
+    val ext = "a/b"
+
+    withTempPath { path =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.range(1).write.option("extension", ext).csv(path.getAbsolutePath)
+        },
+        condition = "INVALID_PARAMETER_VALUE.EXTENSION",
+        parameters = Map(
+          "functionName" -> "`extension`",
+          "parameter" -> "`extension`",
+          "invalidValue" -> s"`$ext`"))
     }
   }
 
