@@ -28,11 +28,13 @@ from unittest import mock
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
-    from pyspark.sql.connect.local_server import _pid_alive
+    from pyspark.sql.connect import local_server_pool
+    from pyspark.sql.connect.local_server import _SERVER_CLASS, _pid_alive
     from pyspark.sql.connect.local_server_pool import (
         _JVM_ENV_VARS,
         PoolDirectory,
         PoolMember,
+        RetiredState,
         ServerPool,
         pool_fingerprint,
     )
@@ -65,15 +67,47 @@ def _non_listening_socket():
 def _spawn_live_process() -> "subprocess.Popen":
     """A child blocked on its parent pipe, standing in for a live pool server."""
     return subprocess.Popen(
-        [sys.executable, "-c", "import sys; sys.stdin.buffer.read()"],
+        [sys.executable, "-c", "import sys; sys.stdin.buffer.read()", _SERVER_CLASS],
         stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
 
 
+def _spawn_stubborn_sleeper() -> "subprocess.Popen":
+    """A sleeper that ignores SIGTERM, standing in for a server hanging in shutdown. It
+    prints one line once its handler is installed so tests do not signal it too early."""
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import signal, time\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            "print('ready', flush=True)\n"
+            "time.sleep(300)",
+            _SERVER_CLASS,
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    assert proc.stdout is not None
+    proc.stdout.readline()
+    return proc
+
+
+def _wait_proc_dead(proc: "subprocess.Popen", timeout: float = 30.0) -> bool:
+    try:
+        proc.wait(timeout=timeout)
+        return True
+    except subprocess.TimeoutExpired:
+        return False
+
+
 _SAVED_ENV_KEYS = (
     "SPARK_LOCAL_CONNECT_POOL_DIR",
+    "SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT",
     "PYSPARK_DRIVER_PYTHON",
     "PYSPARK_PYTHON",
 )
@@ -99,8 +133,10 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self._directory = PoolDirectory()
         self._pool = ServerPool(self._directory)
         self._procs = []
+        local_server_pool._claimed_member = None
 
     def tearDown(self) -> None:
+        local_server_pool._claimed_member = None
         for proc in self._procs:
             try:
                 proc.kill()
@@ -116,6 +152,11 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
     def _live_process(self) -> "subprocess.Popen":
         proc = _spawn_live_process()
+        self._procs.append(proc)
+        return proc
+
+    def _stubborn_sleeper(self) -> "subprocess.Popen":
+        proc = _spawn_stubborn_sleeper()
         self._procs.append(proc)
         return proc
 
@@ -141,6 +182,15 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         with self._directory as directory:
             return directory.states(uid)
 
+    def _write_daemon_pid(self, uid: str, pid: int) -> None:
+        from pyspark.sql.connect.local_server import Discovery
+
+        member_dir = self._directory.member_dir(uid)
+        os.makedirs(member_dir, exist_ok=True)
+        discovery = Discovery(os.path.join(member_dir, "connect-local.json"))
+        with open(discovery.daemon_pid_path, "w") as pid_file:
+            pid_file.write(str(pid))
+
     def test_pool_directory_location(self) -> None:
         self.assertEqual(self._directory.path, os.path.join(self._tmpdir, "pool"))
         os.environ.pop("SPARK_LOCAL_CONNECT_POOL_DIR")
@@ -160,7 +210,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             self.assertEqual(os.stat(state_path).st_mode & 0o777, 0o600)
             self.assertEqual(directory.read_json(state_path), {"token": "secret"})
 
-            # O_CREAT does not apply its mode to an existing file, so writes must re-assert it.
+            # Replacing an existing file with wider permissions must restore the private mode.
             os.chmod(state_path, 0o644)
             directory.write_json(state_path, {"token": "new-secret"})
             self.assertEqual(os.stat(state_path).st_mode & 0o777, 0o600)
@@ -169,6 +219,20 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             state_file.write("not json")
         with self._directory as directory:
             self.assertIsNone(directory.read_json(state_path))
+
+            directory.write_json(state_path, {"token": "old-secret"})
+            with mock.patch.object(
+                local_server_pool.os, "replace", side_effect=OSError("interrupted replace")
+            ):
+                with self.assertRaisesRegex(OSError, "interrupted replace"):
+                    directory.write_json(state_path, {"token": "new-secret"})
+            self.assertEqual(directory.read_json(state_path), {"token": "old-secret"})
+
+        stale_temp = os.path.join(self._directory.path, ".pool-state-orphan")
+        with open(stale_temp, "w") as temp_file:
+            temp_file.write("partial")
+        with self._directory:
+            self.assertFalse(os.path.exists(stale_temp))
 
     def test_pool_directory_lock_blocks_another_process(self) -> None:
         child = (
@@ -474,6 +538,14 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIsNone(PoolMember.from_data(data))
 
+    def test_retired_state_fields_and_validation(self) -> None:
+        retired = RetiredState.from_data({"pid": 456, "retired": 2})
+        assert retired is not None
+        self.assertEqual(retired.pid, 456)
+        self.assertEqual(retired.retired, 2.0)
+        self.assertEqual(retired.as_data(), {"pid": 456, "retired": 2.0})
+        self.assertIsNone(RetiredState.from_data({"pid": 456, "retired": "not-a-time"}))
+
     def test_claim_matches_fingerprint_and_renames(self) -> None:
         with _listening_socket() as port:
             server_process = self._live_process()
@@ -633,6 +705,164 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         for uid in records:
             self.assertEqual(set(self._states(uid)), {"server"})
 
+    def test_reap_retired_escalates_to_sigkill(self) -> None:
+        with self.subTest("a fresh retirement is left to shut down gracefully"):
+            fresh = self._live_process()
+            self._write_state(
+                self._directory.retired_path("f2e5"),
+                {"pid": fresh.pid, "retired": time.time()},
+            )
+            with self._directory:
+                self._pool.reap("f2e5")
+            self.assertEqual(set(self._states("f2e5")), {"retired"})
+            self.assertIsNone(fresh.poll())
+        with self.subTest("a hung shutdown is hard-killed"):
+            stubborn = self._stubborn_sleeper()
+            self._write_state(
+                self._directory.retired_path("a0a0"),
+                {"pid": stubborn.pid, "retired": time.time() - 31},
+            )
+            with self._directory:
+                self._pool.reap("a0a0")
+            self.assertTrue(_wait_proc_dead(stubborn), "SIGKILL escalation did not happen")
+            with self._directory:
+                self.assertTrue(self._pool.reap("a0a0"))
+        with self.subTest("a late first reaper hard-kills before giving up"):
+            abandoned = self._stubborn_sleeper()
+            self._write_state(
+                self._directory.retired_path("ab4d"),
+                {"pid": abandoned.pid, "retired": time.time() - 601},
+            )
+            with self._directory:
+                self.assertTrue(self._pool.reap("ab4d"))
+            self.assertTrue(_wait_proc_dead(abandoned), "the abandoned server was not killed")
+
+    def test_reap_repairs_malformed_retired_state(self) -> None:
+        server = self._stubborn_sleeper()
+        path = self._write_state(
+            self._directory.retired_path("bad4"),
+            {"pid": server.pid, "retired": "not-a-time"},
+        )
+
+        with self._directory as directory:
+            self._pool.reap("bad4")
+            repaired = directory.read_json(path)
+
+        assert repaired is not None
+        self.assertEqual(repaired["pid"], server.pid)
+        self.assertIsInstance(repaired["retired"], float)
+        self.assertIsNone(server.poll())
+
+    def test_reap_keeps_retired_state_when_process_inspection_fails(self) -> None:
+        server = self._stubborn_sleeper()
+        path = self._write_state(
+            self._directory.retired_path("bad9"),
+            {"pid": server.pid, "retired": time.time() - 601},
+        )
+
+        with mock.patch.object(local_server_pool, "_is_local_connect_server", return_value=None):
+            with self._directory:
+                self.assertFalse(self._pool.reap("bad9"))
+
+        self.assertEqual(set(self._states("bad9")), {"retired"})
+        self.assertTrue(os.path.exists(path))
+        self.assertIsNone(server.poll())
+
+    def test_retire_survives_interrupted_state_rewrite(self) -> None:
+        server = self._stubborn_sleeper()
+        with _non_listening_socket() as port:
+            server_path = self._write_state(
+                self._directory.server_path("c0de"), self._server_data(port, server.pid)
+            )
+            with self._directory:
+                with mock.patch.object(
+                    local_server_pool.os,
+                    "replace",
+                    side_effect=OSError("interrupted rewrite"),
+                ):
+                    with self.assertRaisesRegex(OSError, "interrupted rewrite"):
+                        self._pool._retire(server_path, server.pid)
+
+        states = self._states("c0de")
+        self.assertEqual(set(states), {"retired"})
+        with self._directory as directory:
+            # The atomic rename preserved the old member payload. The next reaper recovers its
+            # pid, repairs the missing retirement timestamp, and keeps tracking the live JVM.
+            self._pool.reap("c0de")
+            repaired = directory.read_json(states["retired"])
+        assert repaired is not None
+        self.assertEqual(repaired["pid"], server.pid)
+        self.assertIsInstance(repaired["retired"], float)
+        self.assertIsNone(server.poll())
+
+    def test_release_retires_the_claimed_member(self) -> None:
+        server = self._live_process()
+        with _non_listening_socket() as port:
+            server_data = self._server_data(port, server.pid)
+            claim_path = self._write_state(
+                self._directory.claimed_path(os.getpid(), "a1a1"), server_data
+            )
+            member = PoolMember(server_data)
+            member.claim_path = claim_path
+            local_server_pool._claimed_member = member
+
+            # Release must use the directory that owns the claim even if the override changes
+            # between acquisition and process-exit cleanup.
+            os.environ["SPARK_LOCAL_CONNECT_POOL_DIR"] = os.path.join(self._tmpdir, "other-pool")
+            local_server_pool.release_pooled_local_connect_server()
+
+        self.assertIsNone(local_server_pool._claimed_member)
+        states = self._states("a1a1")
+        self.assertEqual(set(states), {"retired"})
+        with self._directory as directory:
+            self.assertEqual(directory.read_json(states["retired"])["pid"], server.pid)
+        self.assertTrue(_wait_proc_dead(server), "release did not stop the server")
+        # Releasing again is a no-op.
+        local_server_pool.release_pooled_local_connect_server()
+
+    def test_forked_child_does_not_release_its_parents_claim(self) -> None:
+        server = self._live_process()
+        with _non_listening_socket() as port:
+            server_data = self._server_data(port, server.pid)
+            parent_pid = os.getpid()
+            claim_path = self._write_state(
+                self._directory.claimed_path(parent_pid, "a1a3"), server_data
+            )
+            member = PoolMember(server_data)
+            member.claim_path = claim_path
+
+            with mock.patch.object(local_server_pool.os, "getpid", return_value=parent_pid + 1):
+                self._pool.release(member)
+
+        self.assertEqual(set(self._states("a1a3")), {"claimed"})
+        self.assertIsNone(server.poll())
+
+    def test_release_retries_failures_and_tolerates_prior_retirement(self) -> None:
+        server = self._stubborn_sleeper()
+        with _non_listening_socket() as port:
+            server_data = self._server_data(port, server.pid)
+            claim_path = self._write_state(
+                self._directory.claimed_path(os.getpid(), "a1a2"), server_data
+            )
+            member = PoolMember(server_data)
+            member.claim_path = claim_path
+            local_server_pool._claimed_member = member
+
+            with mock.patch.object(
+                PoolDirectory, "write_json", side_effect=OSError("interrupted retirement")
+            ):
+                with self.assertRaisesRegex(OSError, "interrupted retirement"):
+                    local_server_pool.release_pooled_local_connect_server()
+            self.assertIs(local_server_pool._claimed_member, member)
+            self.assertEqual(set(self._states("a1a2")), {"retired"})
+
+            local_server_pool.release_pooled_local_connect_server()
+
+        self.assertIsNone(local_server_pool._claimed_member)
+        self.assertEqual(set(self._states("a1a2")), {"retired"})
+        # A concurrent janitor already completed the claim -> retired transition.
+        self._pool.release(member)
+        self.assertEqual(set(self._states("a1a2")), {"retired"})
 
 if __name__ == "__main__":
     from pyspark.testing import main
