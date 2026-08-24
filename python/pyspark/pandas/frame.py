@@ -14394,7 +14394,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # NDArray Compat
     def __array_ufunc__(
         self, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-    ) -> "DataFrame":
+    ) -> Union["DataFrame", Tuple["DataFrame", "DataFrame"]]:
         # TODO: is it possible to deduplicate it with '_map_series_op'?
         if all(isinstance(inp, DataFrame) for inp in inputs) and any(
             not same_anchor(inp, inputs[0]) for inp in inputs
@@ -14423,14 +14423,25 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # DataFrame and Series
             this = inputs[0]
             assert all(inp is this for inp in inputs if isinstance(inp, DataFrame))
-            applied = [
+            column_labels = this._internal.column_labels
+            outputs = [
                 ufunc(
                     *[inp[label] if isinstance(inp, DataFrame) else inp for inp in inputs], **kwargs
-                ).rename(label)
-                for label in this._internal.column_labels
+                )
+                for label in column_labels
             ]
-            internal = this._internal.with_new_columns(applied)
-            return DataFrame(internal)
+            if outputs and isinstance(outputs[0], tuple):
+                # A multi-output ufunc (for example np.modf) yields a two-element tuple per
+                # column; regroup into one DataFrame per output, matching numpy/pandas.
+                first_cols = [out[0].rename(label) for out, label in zip(outputs, column_labels)]
+                second_cols = [out[1].rename(label) for out, label in zip(outputs, column_labels)]
+                first_df: DataFrame = DataFrame(this._internal.with_new_columns(first_cols))
+                second_df: DataFrame = DataFrame(this._internal.with_new_columns(second_cols))
+                return first_df, second_df
+            else:
+                applied = [out.rename(label) for out, label in zip(outputs, column_labels)]
+                internal = this._internal.with_new_columns(applied)
+                return DataFrame(internal)
 
     def __class_getitem__(cls, params: Any) -> object:
         # See https://github.com/python/typing/issues/193
