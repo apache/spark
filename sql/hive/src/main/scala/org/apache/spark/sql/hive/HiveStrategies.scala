@@ -23,7 +23,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.AnalysisContext
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, ResolvedWriteTargetWithRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -151,10 +151,12 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       hiveTableWithStats(relation)
 
-    // A resolved INSERT target is not a query child, so update its statistics explicitly.
-    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _, _, _, _, _)
+    // The provider relation of a resolved INSERT target is opaque to generic plan traversal.
+    case i @ InsertIntoStatement(
+        ResolvedWriteTargetWithRelation(target, relation: HiveTableRelation),
+        _, _, _, _, _, _, _, _)
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
-      i.copy(table = hiveTableWithStats(relation))
+      i.copy(table = target.withWriteRelation(hiveTableWithStats(relation)))
   }
 }
 
@@ -167,7 +169,8 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoStatement(
-          r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists, _, _, _)
+          ResolvedWriteTargetWithRelation(_, r: HiveTableRelation),
+          partSpec, _, query, overwrite, ifPartitionNotExists, _, _, _)
         if DDLUtils.isHiveTable(r.tableMeta) && query.resolved =>
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
         ifPartitionNotExists, query.output.map(_.name))
@@ -235,7 +238,7 @@ case class RelationConversions(
     plan resolveOperators {
       // Write path
       case InsertIntoStatement(
-            r: HiveTableRelation,
+            ResolvedWriteTargetWithRelation(target, r: HiveTableRelation),
             partition,
             cols,
             query,
@@ -249,7 +252,7 @@ case class RelationConversions(
               (!r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE)))
             && isConvertible(r) =>
         InsertIntoStatement(
-          metastoreCatalog.convert(r, isWrite = true),
+          target.withWriteRelation(metastoreCatalog.convert(r, isWrite = true)),
           partition,
           cols,
           query,

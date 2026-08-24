@@ -341,6 +341,7 @@ object ParseSqlResult {
       foreachExpressionDeep(p)(visitExpr)
       def add(parts: Seq[String]): Unit = addTable(parts, scope, role)
       p match {
+        case u: UnresolvedWriteTarget => add(u.multipartIdentifier)
         case u: UnresolvedRelation => add(u.multipartIdentifier)
         case u: UnresolvedTable => add(u.multipartIdentifier)
         case u: UnresolvedView => add(u.multipartIdentifier)

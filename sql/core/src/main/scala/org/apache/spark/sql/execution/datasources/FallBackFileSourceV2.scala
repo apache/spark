@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.catalyst.analysis.ResolvedWriteTargetWithRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.SparkSession
@@ -35,7 +36,8 @@ import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, FileTable}
 class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoStatement(
-        d @ ExtractV2Table(table: FileTable), _, _, _, _, _, _, _, _) =>
+        ResolvedWriteTargetWithRelation(target, d @ ExtractV2Table(table: FileTable)),
+        _, _, _, _, _, _, _, _) =>
       val v1FileFormat = table.fallbackFileFormat.getDeclaredConstructor().newInstance()
       val relation = HadoopFsRelation(
         table.fileIndex,
@@ -44,6 +46,6 @@ class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan]
         None,
         v1FileFormat,
         d.options.asScala.toMap)(sparkSession)
-      i.copy(table = LogicalRelation(relation))
+      i.copy(table = target.withWriteRelation(LogicalRelation(relation)))
   }
 }

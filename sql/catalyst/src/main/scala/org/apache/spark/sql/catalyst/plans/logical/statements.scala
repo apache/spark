@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{
   FieldName,
   FieldPosition,
-  PlanWithUnresolvedIdentifier,
   UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
@@ -212,14 +211,7 @@ case class InsertIntoStatement(
   require(replaceCriteriaOpt.isEmpty || overwrite,
     "REPLACE USING/ON/WHERE requires overwrite to be true")
 
-  // Keep a parsed IDENTIFIER placeholder in the normal analyzer traversal until its expression is
-  // resolved and the target is materialized. Other targets are not query children: they stay on
-  // the command-specific relation-resolution and write paths.
-  private def tableIsChild: Boolean = table.isInstanceOf[PlanWithUnresolvedIdentifier]
-
-  override def children: Seq[LogicalPlan] = {
-    if (tableIsChild) Seq(table, query) else Seq(query)
-  }
+  override def children: Seq[LogicalPlan] = Seq(table, query)
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
     copy(query = WithCTE(query, cteDefs))
@@ -227,11 +219,7 @@ case class InsertIntoStatement(
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): InsertIntoStatement = {
-    if (tableIsChild) {
-      copy(table = newChildren(0), query = newChildren(1))
-    } else {
-      copy(query = newChildren(0))
-    }
+    copy(table = newChildren(0), query = newChildren(1))
   }
 }
 

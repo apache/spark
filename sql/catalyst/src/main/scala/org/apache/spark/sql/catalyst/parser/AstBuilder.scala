@@ -1193,11 +1193,9 @@ class AstBuilder extends DataTypeAstBuilder
 
   /**
    * Build the `table` slot of a write command. If the identifier reference is a constant string,
-   * returns an [[UnresolvedRelation]] directly; otherwise returns a
-   * [[PlanWithUnresolvedIdentifier]] that materializes into an [[UnresolvedRelation]] once the
-   * identifier expression is resolved. Both branches produce a [[NamedRelation]], which occupies
-   * the `InsertIntoStatement.table` slot (a general `LogicalPlan` slot, since `NamedRelation`
-   * extends `LogicalPlan`).
+   * returns an [[UnresolvedWriteTarget]] directly; otherwise returns a
+   * [[PlanWithUnresolvedIdentifier]] that materializes into an [[UnresolvedWriteTarget]] once the
+   * identifier expression is resolved.
    *
    * Placing the placeholder in the identifier slot (rather than wrapping the entire write command)
    * preserves the `CTEInChildren` shape at parse time, so `CTESubstitution` places `WithCTE` on the
@@ -1207,8 +1205,10 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: IdentifierReferenceContext,
       optionsClause: Option[OptionsClauseContext],
       writePrivileges: Set[TableWritePrivilege]): NamedRelation = {
-    withIdentClause(ctx, parts =>
-      createUnresolvedRelation(ctx, parts, optionsClause, writePrivileges, isStreaming = false))
+    val options = resolveOptions(optionsClause)
+    withIdentClause(ctx, parts => withOrigin(ctx) {
+      UnresolvedWriteTarget(parts, options, writePrivileges)
+    })
       .asInstanceOf[NamedRelation]
   }
 

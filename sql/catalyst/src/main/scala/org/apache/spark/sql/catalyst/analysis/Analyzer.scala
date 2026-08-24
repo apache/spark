@@ -64,6 +64,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.internal.connector.V1Function
+import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -1148,26 +1149,91 @@ class Analyzer(
       }
     }
 
+    private def catalogAndIdentifier(metadata: CatalogTable): (CatalogPlugin, Identifier) = {
+      relationResolution.expandIdentifier(metadata.fullIdent) match {
+        case CatalogAndIdentifier(catalog, identifier) => (catalog, identifier)
+      }
+    }
+
+    private def resolveWriteTarget(target: UnresolvedWriteTarget): Option[ResolvedWriteTarget] = {
+      val unresolvedRelation = UnresolvedRelation(
+        target.multipartIdentifier,
+        target.options,
+        isStreaming = false).requireWritePrivileges(target.writePrivileges)
+      unresolvedRelation.copyTagsFrom(target)
+
+      resolveRelation(unresolvedRelation).map { relation =>
+        val resolvedTarget = EliminateSubqueryAliases(relation) match {
+          case r: DataSourceV2Relation =>
+            val catalog = r.catalog.getOrElse {
+              throw SparkException.internalError(
+                s"Resolved write target ${target.name} is missing its catalog")
+            }
+            val identifier = r.identifier.getOrElse {
+              throw SparkException.internalError(
+                s"Resolved write target ${target.name} is missing its identifier")
+            }
+            // Keep the provider relation opaque so later write-specific rules in this analyzer
+            // iteration can inspect it without exposing it to generic relation traversal.
+            ResolvedWriteTarget(
+              ResolvedTable.create(catalog.asTableCatalog, identifier, r.table),
+              target.options).withWriteRelation(r)
+
+          case u: UnresolvedCatalogRelation =>
+            val (catalog, identifier) = catalogAndIdentifier(u.tableMeta)
+            ResolvedWriteTarget(
+              ResolvedTable.create(catalog.asTableCatalog, identifier, V1Table(u.tableMeta)),
+              target.options).withWriteRelation(u)
+
+          case v: View if v.isTempView =>
+            val tempView = relationResolution.lookupTempView(target.multipartIdentifier).getOrElse {
+              throw SparkException.internalError(
+                s"Resolved temporary view ${target.name} is no longer registered")
+            }
+            ResolvedWriteTarget(
+              ResolvedTempView(target.multipartIdentifier.asIdentifier, tempView),
+              target.options).withWriteRelation(unwrapRelationPlan(relation))
+
+          case v: View =>
+            val (catalog, identifier) = catalogAndIdentifier(v.desc)
+            ResolvedWriteTarget(
+              ResolvedPersistentView(catalog, identifier, new V1View(v.desc)),
+              target.options)
+
+          case m: MetricViewPlaceholder =>
+            val (catalog, identifier) = catalogAndIdentifier(m.metadata)
+            ResolvedWriteTarget(
+              ResolvedPersistentView(catalog, identifier, new V1View(m.metadata)),
+              target.options)
+
+          case other =>
+            throw SparkException.internalError(
+              s"Expected ${target.name} to resolve to a table or view, but got " +
+                other.getClass.getName)
+        }
+        resolvedTarget.copyTagsFrom(target)
+        resolvedTarget
+      }.orElse {
+        relationResolution.expandIdentifier(target.multipartIdentifier) match {
+          case CatalogAndIdentifier(catalog: ViewCatalog, identifier) =>
+            try {
+              val resolvedTarget = ResolvedWriteTarget(
+                ResolvedPersistentView(catalog, identifier, catalog.loadView(identifier)),
+                target.options)
+              resolvedTarget.copyTagsFrom(target)
+              Some(resolvedTarget)
+            } catch {
+              case _: NoSuchViewException => None
+            }
+          case _ => None
+        }
+      }
+    }
+
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
-        val relation = table match {
-          case u: UnresolvedRelation if !u.isStreaming =>
-            resolveRelation(u).getOrElse(u)
-          case other => other
-        }
-
-        // Inserting into a file-based temporary view is allowed.
-        // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
-        // Thus, we need to look at the raw plan if `relation` is a temporary view.
-        // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
-        unwrapRelationPlan(relation) match {
-          case v: View if i.replaceCriteriaOpt.exists(_.isReplaceWhere) =>
-            throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, i)
-          case v: View =>
-            throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
-          case other => i.copy(table = other)
-        }
+      case u: UnresolvedWriteTarget =>
+        resolveWriteTarget(u).getOrElse(u)
 
       case write: V2StreamingWriteCommand =>
         write.table match {
@@ -1265,7 +1331,7 @@ class Analyzer(
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
       relationResolution.lookupTempView(identifier).map { tempView =>
-        ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
+        ResolvedTempView(identifier.asIdentifier, tempView)
       }.orElse {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
@@ -1350,20 +1416,47 @@ class Analyzer(
 
   /** Handle INSERT INTO for DSv2 */
   object ResolveInsertInto extends ResolveInsertionBase {
+    private object V2WriteRelation {
+      def unapply(plan: LogicalPlan): Option[DataSourceV2Relation] = plan match {
+        case ResolvedWriteTarget(table: ResolvedTable, options, None) =>
+          Some(DataSourceV2Relation.create(
+            table.table, Some(table.catalog), Some(table.identifier), options))
+        case ResolvedWriteTargetWithRelation(_, relation: DataSourceV2Relation) =>
+          Some(relation)
+        case _ => None
+      }
+    }
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case i: InsertIntoStatement
-          if i.table.isInstanceOf[DataSourceV2Relation] &&
-            i.query.resolved &&
-            i.replaceCriteriaOpt.exists(_.isReplaceOnOrUsing) =>
-        throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
-          i.table.asInstanceOf[DataSourceV2Relation].table.name())
+      case i @ InsertIntoStatement(
+          ResolvedWriteTarget(v: ResolvedPersistentView, _, _), _, _, _, _, _, _, _, _) =>
+        val identifier = v.identifier.asLegacyTableIdentifier(v.catalog.name)
+        if (i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
+          throw QueryCompilationErrors.writeIntoViewNotAllowedError(identifier, i)
+        } else {
+          throw QueryCompilationErrors.insertIntoViewNotAllowedError(identifier, i.table)
+        }
 
-      case i: InsertIntoStatement
-          if i.table.isInstanceOf[DataSourceV2Relation] &&
-            i.query.resolved &&
+      case i @ InsertIntoStatement(
+          ResolvedWriteTarget(v: ResolvedTempView, _, Some(OpaqueLogicalPlan(relation))),
+          _, _, _, _, _, _, _, _)
+          if EliminateSubqueryAliases(relation).isInstanceOf[View] =>
+        if (i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
+          throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.metadata.identifier, i)
+        } else {
+          throw QueryCompilationErrors.insertIntoViewNotAllowedError(
+            v.metadata.identifier, i.table)
+        }
+
+      case i @ InsertIntoStatement(V2WriteRelation(r), _, _, _, _, _, _, _, _)
+          if i.query.resolved && i.replaceCriteriaOpt.exists(_.isReplaceOnOrUsing) =>
+        throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
+          r.table.name())
+
+      case i @ InsertIntoStatement(V2WriteRelation(r), _, _, _, _, _, _, _, _)
+          if i.query.resolved &&
             (i.replaceCriteriaOpt.isEmpty || i.replaceCriteriaOpt.exists(_.isReplaceWhere)) =>
-        val r = i.table.asInstanceOf[DataSourceV2Relation]
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
           throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)

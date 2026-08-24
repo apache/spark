@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, StreamingSo
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, PushableExpression, ResolveDefaultColumns}
 import org.apache.spark.sql.classic.{SparkSession, Strategy}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
@@ -54,7 +55,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, PushedDownOperators}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushedDownOperators}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -162,7 +163,9 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
-    case InsertIntoStatement(l @ LogicalRelationWithTable(_: InsertableRelation, _),
+    case InsertIntoStatement(
+        ResolvedWriteTargetWithRelation(
+          _, l @ LogicalRelationWithTable(_: InsertableRelation, _)),
         parts, _, query, overwrite, false, _, replaceCriteriaOpt, _)
         if parts.isEmpty && replaceCriteriaOpt.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
@@ -175,7 +178,9 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
-    case i @ InsertIntoStatement(l @ LogicalRelationWithTable(t: HadoopFsRelation, table),
+    case i @ InsertIntoStatement(
+        ResolvedWriteTargetWithRelation(
+          _, l @ LogicalRelationWithTable(t: HadoopFsRelation, table)),
         parts, _, query, overwrite, _, _, replaceCriteriaOpt, _)
         if query.resolved && replaceCriteriaOpt.isEmpty =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
@@ -311,19 +316,32 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
+    case i @ InsertIntoStatement(
+        ResolvedWriteTargetWithRelation(
+          target, UnresolvedCatalogRelation(tableMeta, options, false)),
         _, _, _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
-      i.copy(table = readDataSourceTable(tableMeta, options))
+      i.copy(table = target.withWriteRelation(readDataSourceTable(tableMeta, options)))
 
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
+    case i @ InsertIntoStatement(
+        ResolvedWriteTargetWithRelation(
+          target, UnresolvedCatalogRelation(tableMeta, _, false)),
         _, _, _, _, _, _, _, _) =>
-      i.copy(table = DDLUtils.readHiveTable(tableMeta))
+      i.copy(table = target.withWriteRelation(DDLUtils.readHiveTable(tableMeta)))
 
     case append @ AppendData(
-        ExtractV2Table(V1Table(table: CatalogTable)), _, _, _, _, _, _) if !append.isByName =>
-      InsertIntoStatement(UnresolvedCatalogRelation(table),
+        relation @ DataSourceV2Relation(
+          V1Table(table: CatalogTable), _, Some(catalog), Some(identifier), options, _),
+        _, _, _, _, _, _) if !append.isByName =>
+      val target = ResolvedWriteTarget(
+        ResolvedTable.create(catalog.asTableCatalog, identifier, relation.table),
+        options).withWriteRelation(UnresolvedCatalogRelation(table))
+      InsertIntoStatement(
+        target,
         table.partitionColumnNames.map(name => name -> None).toMap,
-        Seq.empty, append.query, false, append.isByName)
+        Seq.empty,
+        append.query,
+        overwrite = false,
+        ifPartitionNotExists = append.isByName)
 
     // Skip streaming UnresolvedCatalogRelation here - they're handled by the
     // NamedStreamingRelation case below to preserve the source identifying name.

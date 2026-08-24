@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnresolvedWriteTarget}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, Limit, ReplaceTableAsSelect, WithCTE}
@@ -2571,11 +2571,12 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  test("InsertIntoStatement exposes only IDENTIFIER placeholders as target children") {
+  test("InsertIntoStatement exposes its write target as a child") {
     val regularInsert = spark.sessionState.sqlParser
       .parsePlan("INSERT INTO target_table SELECT 1")
       .asInstanceOf[InsertIntoStatement]
-    assert(regularInsert.children === Seq(regularInsert.query))
+    assert(regularInsert.table.isInstanceOf[UnresolvedWriteTarget])
+    assert(regularInsert.children === Seq(regularInsert.table, regularInsert.query))
 
     val identifierInsert = spark.sessionState.sqlParser
       .parsePlan("INSERT INTO IDENTIFIER(lower('TARGET_TABLE')) SELECT 1")

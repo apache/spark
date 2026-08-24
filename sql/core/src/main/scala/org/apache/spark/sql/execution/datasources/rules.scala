@@ -565,14 +565,16 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
     case i @ InsertIntoStatement(table, _, _, query, _, _, _, _, _)
       if table.resolved && query.resolved =>
       table match {
-        case relation: HiveTableRelation =>
+        case ResolvedWriteTargetWithRelation(_, relation: HiveTableRelation) =>
           val metadata = relation.tableMeta
           preprocess(i, metadata.identifier.quotedString, metadata.partitionSchema,
             Some(metadata))
-        case LogicalRelationWithTable(h: HadoopFsRelation, catalogTable) =>
+        case ResolvedWriteTargetWithRelation(
+            _, LogicalRelationWithTable(h: HadoopFsRelation, catalogTable)) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, h.partitionSchema, catalogTable)
-        case LogicalRelationWithTable(_: InsertableRelation, catalogTable) =>
+        case ResolvedWriteTargetWithRelation(
+            _, LogicalRelationWithTable(_: InsertableRelation, catalogTable)) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, new StructType(), catalogTable)
         case _ => i
@@ -670,8 +672,9 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoStatement(LogicalRelationWithTable(relation, _), partition,
-          _, query, _, _, _, _, _) =>
+      case InsertIntoStatement(
+          ResolvedWriteTargetWithRelation(_, LogicalRelationWithTable(relation, _)),
+          partition, _, query, _, _, _, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case l: LogicalRelation => l.relation
@@ -700,7 +703,8 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
               messageParameters = Map("relationId" -> toSQLId(relation.toString)))
         }
 
-      case InsertIntoStatement(t, _, _, _, _, _, _, _, _)
+      case InsertIntoStatement(
+          ResolvedWriteTargetWithRelation(_, t), _, _, _, _, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||

@@ -30,7 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -51,6 +51,26 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  test("resolved write target payloads are opaque") {
+    val writeTarget = ResolvedWriteTarget(
+      LocalRelation(), CaseInsensitiveStringMap.empty()).withWriteRelation(OneRowRelation())
+    assert(writeTarget.resolved)
+    assert(!writeTarget.withWriteRelation(UnresolvedRelation(Seq("t"))).resolved)
+    assert(writeTarget.children === Seq(writeTarget.target))
+    assert(!writeTarget.treeString.contains("OneRowRelation"))
+    assert(!writeTarget.toJSON.contains(classOf[OneRowRelation].getName))
+
+    val metadata = CatalogTable(
+      TableIdentifier("v"),
+      CatalogTableType.VIEW,
+      CatalogStorageFormat.empty,
+      StructType(Nil))
+    val tempView = ResolvedTempView(
+      Identifier.of(Array.empty, "v"), TemporaryViewRelation(metadata))
+    assert(!tempView.treeString.contains("TemporaryViewRelation"))
+    assert(!tempView.toJSON.contains(classOf[TemporaryViewRelation].getName))
+  }
 
   test("fail for unresolved plan") {
     intercept[AnalysisException] {

@@ -121,6 +121,24 @@ case class ExpressionWithUnresolvedIdentifier(
 }
 
 /**
+ * Holds the name and lookup context of a table targeted by a write command.
+ *
+ * Unlike [[UnresolvedRelation]], this node describes a write target and is never interpreted as a
+ * relation to read. The analyzer resolves it to a [[ResolvedWriteTarget]].
+ */
+case class UnresolvedWriteTarget(
+    multipartIdentifier: Seq[String],
+    options: CaseInsensitiveStringMap,
+    writePrivileges: Set[TableWritePrivilege])
+  extends UnresolvedLeafNode with NamedRelation {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  override def name: String = multipartIdentifier.quoted
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_RELATION)
+}
+
+/**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
  * @param multipartIdentifier table name, the location of files or Kafka topic name, etc.
@@ -137,10 +155,6 @@ case class UnresolvedRelation(
   def tableName: String = multipartIdentifier.quoted
 
   override def name: String = tableName
-
-  private[sql] def isWriteTarget: Boolean = {
-    options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
-  }
 
   def requireWritePrivileges(privileges: Set[TableWritePrivilege]): UnresolvedRelation = {
     if (privileges.nonEmpty) {

@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisTest,
+  UnresolvedIdentifier,
+  UnresolvedWriteTarget
+}
 import org.apache.spark.sql.catalyst.plans.logical.{
   CreateFlowCommand,
   InsertIntoStatement
@@ -25,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.v1.CommandSuiteBase
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * The class contains tests for the `CREATE FLOW ...` command
@@ -60,8 +65,10 @@ class CreateFlowCommandSuite extends CommandSuiteBase with AnalysisTest {
       "SELECT col1, col2 FROM b")
     val cmd = plan.asInstanceOf[CreateFlowCommand]
     assert(cmd.right == InsertIntoStatement(
-      table = UnresolvedRelation(Seq("a"))
-        .requireWritePrivileges(Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
+      table = UnresolvedWriteTarget(
+        Seq("a"),
+        CaseInsensitiveStringMap.empty(),
+        Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
       partitionSpec = Map("col1" -> None),
       userSpecifiedCols = Seq.empty,
       query = parser.parsePlan("SELECT col1, col2 FROM b"),

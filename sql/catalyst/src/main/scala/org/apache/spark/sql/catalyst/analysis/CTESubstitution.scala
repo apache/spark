@@ -444,11 +444,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
         // but we can't do it here as `PlanWithUnresolvedIdentifier` is a leaf node
         // and may produce `UnresolvedRelation` later. Instead, we delay CTE resolution
         // by moving it to the planBuilder of the corresponding `PlanWithUnresolvedIdentifier`.
-        // Write targets keep the relation produced by their builder because CTEs do not shadow
-        // persistent target tables.
         p.copy(planBuilder = (nameParts, children) => {
           p.planBuilder.apply(nameParts, children) match {
-            case u @ UnresolvedRelation(Seq(table), _, _) if !u.isWriteTarget =>
+            case u @ UnresolvedRelation(Seq(table), _, _) =>
               resolveWithCTERelations(table, alwaysInline, cteRelations,
                 recursiveCTERelation, u)
             case other => other
