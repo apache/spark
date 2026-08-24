@@ -424,12 +424,8 @@ object MLUtils extends Logging {
   def convertMatrixColumnsToML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colSet = if (cols.nonEmpty) {
-      cols.map { c =>
-        val dataType = schema(c).dataType
-        require(isMatrixUDT(dataType),
-          s"Column $c must be Matrix type to be converted to new type but got $dataType.")
-        c
-      }.toSet
+      cols.foreach(schema(_))
+      cols.toSet
     } else {
       schema.fields
         .filter(field => isMatrixUDT(field.dataType))
@@ -466,12 +462,8 @@ object MLUtils extends Logging {
   def convertMatrixColumnsFromML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colSet = if (cols.nonEmpty) {
-      cols.map { c =>
-        val dataType = schema(c).dataType
-        require(isMatrixUDT(dataType),
-          s"Column $c must be Matrix type to be converted to old type but got $dataType.")
-        c
-      }.toSet
+      cols.foreach(schema(_))
+      cols.toSet
     } else {
       schema.fields
         .filter(field => isMatrixUDT(field.dataType))
