@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.internal.{LogKeys}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -61,6 +61,10 @@ case class EnsureRequirements(
       shuffleOrigin: ShuffleOrigin): Seq[SparkPlan] = {
     assert(requiredChildDistributions.length == originalChildren.length)
     assert(requiredChildOrderings.length == originalChildren.length)
+    // A storage-partitioned join handles its co-partitioning (and the projected join-key
+    // GroupPartitionsExec) separately in checkKeyGroupCompatible, so the projected-key grouping
+    // below must not run for it. For a non-join operator, do it inline here.
+    val isJoin = parent.exists(_.isInstanceOf[ShuffledJoin])
     // Ensure that the operator's children satisfy their output distribution requirements.
     var children = originalChildren.zip(requiredChildDistributions).map {
       case (child, distribution) =>
@@ -107,8 +111,24 @@ case class EnsureRequirements(
                 }
 
               case _ if groupedSatisfies.isDefined =>
-                // Grouped KeyedPartitioning already satisfies
-                child
+                // A grouped KeyedPartitioning already satisfies. However, when the operation keys
+                // are a strict subset of the partition keys (enabled via
+                // v2BucketingAllowKeysSubsetOfPartitionKeys), the partitions are still grouped by
+                // the full partition keys rather than by the operation keys, so a
+                // GroupPartitionsExec that projects to the operation keys must be inserted to
+                // coalesce partitions sharing the same operation key. `createShuffleSpec` computes
+                // exactly those projected positions when the config is enabled.
+                val kp = groupedSatisfies.get
+                distribution match {
+                  case c: ClusteredDistribution if !isJoin =>
+                    val spec = kp.createShuffleSpec(c).asInstanceOf[KeyedShuffleSpec]
+                    spec.joinKeyPositions match {
+                      case Some(positions) if positions != kp.expressions.indices.toSeq =>
+                        GroupPartitionsExec(child, joinKeyPositions = Some(positions))
+                      case _ => child
+                    }
+                  case _ => child
+                }
 
               case _ if nonGroupedSatisfiesAsIs =>
                 // Non-grouped KeyedPartitioning satisfies without grouping

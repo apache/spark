@@ -4207,6 +4207,111 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
+  test("window top-k over PARTITION BY subset of partition keys coalesces partitions") {
+    // items is partitioned by (id, name). A top-k window that ranks by PARTITION BY id (a subset of
+    // the partition keys) must coalesce the (1,'aa') and (1,'bb') partitions before ranking so that
+    // id=1 is ranked across both rows and yields a single row; otherwise each partition is ranked
+    // independently and id=1 surfaces twice.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 20.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query =
+      s"""SELECT id, name, price FROM (
+         |  SELECT id, name, price, ROW_NUMBER() OVER (PARTITION BY id ORDER BY price DESC) rn
+         |  FROM testcat.ns.$items
+         |) t WHERE rn = 1
+         |""".stripMargin
+    val expected = Seq(Row(1L, "bb", 20.0f), Row(2L, "cc", 30.0f))
+
+    // Result correctness does not depend on AQE: EnsureRequirements also runs in AQE's
+    // queryStagePreparationRules and likewise skips the GroupPartitionsExec, ranking id=1
+    // per-partition. Verify the wrong result under the default (AQE on) configuration.
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      checkAnswer(sql(query), expected)
+    }
+
+    // The plan-shape assertion needs a static, fully-planned tree, so disable AQE here.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      assert(collectAllGroupPartitions(sql(query).queryExecution.executedPlan).nonEmpty,
+        "GroupPartitionsExec expected to coalesce partitions sharing the subset key [id]")
+    }
+  }
+
+  test("window top-k over duplicated PARTITION BY key coalesces partitions") {
+    // Like the subset test above, but the window partition spec repeats the same key
+    // (PARTITION BY id, id). The projected positions that createShuffleSpec computes are still just
+    // [id], so the duplicated spec must not be mistaken for "no projection" and must still coalesce
+    // the (1,'aa') and (1,'bb') partitions.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 20.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query =
+      s"""SELECT id, name, price FROM (
+         |  SELECT id, name, price, ROW_NUMBER() OVER (PARTITION BY id, id ORDER BY price DESC) rn
+         |  FROM testcat.ns.$items
+         |) t WHERE rn = 1
+         |""".stripMargin
+    val expected = Seq(Row(1L, "bb", 20.0f), Row(2L, "cc", 30.0f))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      checkAnswer(sql(query), expected)
+    }
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      assert(collectAllGroupPartitions(sql(query).queryExecution.executedPlan).nonEmpty,
+        "GroupPartitionsExec expected to coalesce partitions sharing the duplicated key [id]")
+    }
+  }
+
+  test("window top-k over union output partitioning coalesces partitions") {
+    // t1 and t2 are both partitioned by (id, name). With union output partitioning enabled, the
+    // union reports a KeyedPartitioning over (id, name), so a top-k window over PARTITION BY id (a
+    // strict subset) must still coalesce the (1,'aa') and (1,'bb') partitions coming from t1.
+    val partitions = Array(identity("id"), identity("name"))
+    withTable("t1", "t2") {
+      createTable("t1", itemsColumns, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES " +
+        "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 'bb', 20.0, cast('2020-01-01' as timestamp))")
+      createTable("t2", itemsColumns, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+
+      val query =
+        """SELECT id, name, price FROM (
+          |  SELECT id, name, price,
+          |    ROW_NUMBER() OVER (PARTITION BY id ORDER BY price DESC) rn
+          |  FROM (
+          |    SELECT id, name, price FROM testcat.ns.t1
+          |    UNION ALL
+          |    SELECT id, name, price FROM testcat.ns.t2
+          |  )
+          |) t WHERE rn = 1
+          |""".stripMargin
+      val expected = Seq(Row(1L, "bb", 20.0f), Row(2L, "cc", 30.0f))
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        checkAnswer(sql(query), expected)
+        assert(collectAllGroupPartitions(sql(query).queryExecution.executedPlan).nonEmpty,
+          "GroupPartitionsExec expected to coalesce union partitions sharing the key [id]")
+      }
+    }
+  }
+
   test("SPARK-57881: storage-partitioned join leverages union output KeyedPartitioning to " +
       "avoid shuffle") {
     val cols = Array(
