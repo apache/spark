@@ -146,6 +146,14 @@ class RpcDeadlines:
     fires, the server-side operation continues running; the client opens a new ReattachExecute
     stream to resume receiving results. Non-reattachable ExecutePlan has no deadline because a
     timeout there would kill the execution with no recovery path.
+
+    Note on ``release_relation``: the RemoveRemoteCachedRelation cleanup command is sent over a
+    blocking, non-reattachable ExecutePlan call issued from
+    :meth:`CachedRemoteRelation.__del__`. Unlike a query ExecutePlan, a timeout here does not kill
+    any recoverable execution -- it only abandons a best-effort cache eviction that the server also
+    performs independently -- so this call is given a bounded deadline. Without it the finalizer
+    can block forever if the release response is never delivered, which (on the foreachBatch
+    Connect path) stalls the streaming query indefinitely.
     """
 
     reattachable_execute_plan: Optional[float] = 10 * 60  # 10 min
@@ -155,6 +163,7 @@ class RpcDeadlines:
     config: Optional[float] = 10 * 60  # 10 min
     interrupt: Optional[float] = 10 * 60  # 10 min
     release_session: Optional[float] = 10 * 60  # 10 min
+    release_relation: Optional[float] = 60  # 1 min; short: per-batch finalizer
     artifact_status: Optional[float] = 10 * 60  # 10 min
     clone_session: Optional[float] = 10 * 60  # 10 min
     get_status: Optional[float] = 10 * 60  # 10 min
@@ -185,6 +194,7 @@ class RpcDeadlines:
             config=None,
             interrupt=None,
             release_session=None,
+            release_relation=None,
             artifact_status=None,
             clone_session=None,
             get_status=None,
