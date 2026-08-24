@@ -592,6 +592,7 @@ pyspark_core = Module(
         "pyspark.util",
         # unittests
         "pyspark.tests.test_appsubmit",
+        "pyspark.tests.test_arrow_broadcast",
         "pyspark.tests.test_broadcast",
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",

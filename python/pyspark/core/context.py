@@ -1781,7 +1781,7 @@ class SparkContext:
             jrdds[i] = rdds[i]._jrdd
         return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
 
-    def broadcast(self, value: T) -> "Broadcast[T]":
+    def broadcast(self, value: T, useArrow: Optional[bool] = None) -> "Broadcast[T]":
         """
         Broadcast a read-only variable to the cluster, returning a :class:`Broadcast`
         object for reading it in distributed functions. The variable will
@@ -1789,10 +1789,19 @@ class SparkContext:
 
         .. versionadded:: 0.7.0
 
+        .. versionchanged:: 4.4.0
+           Added the optional ``useArrow`` argument.
+
         Parameters
         ----------
         value : T
             value to broadcast to the Spark nodes
+        useArrow : bool, optional
+            Whether to use Arrow IPC serialization. Arrow is used only when this is ``True``,
+            PyArrow is installed, and ``value`` is a native Arrow value or follows the Arrow
+            broadcast protocol. Custom values must provide a class or static method named
+            ``__from_arrow__`` and either ``__to_arrow__`` or a built-in Arrow array or stream
+            protocol. Otherwise, pickle is used. The default uses pickle.
 
         Returns
         -------
@@ -1811,7 +1820,12 @@ class SparkContext:
 
         >>> bc.destroy()
         """
-        return Broadcast(self, value, self._pickled_broadcast_vars)
+        return Broadcast(
+            self,
+            value,
+            self._pickled_broadcast_vars,
+            use_arrow=useArrow is True,
+        )
 
     def accumulator(
         self, value: T, accum_param: Optional["AccumulatorParam[T]"] = None
