@@ -161,6 +161,9 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         return proc
 
     def _server_data(self, port: int, pid: int, fingerprint: str = "fp", **overrides) -> dict:
+        process_start_id = None
+        if isinstance(pid, int) and not isinstance(pid, bool):
+            process_start_id = local_server_pool._process_start_id(pid)
         data = {
             "host": "localhost",
             "port": port,
@@ -168,10 +171,20 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             "pid": pid,
             "spark_version": __version__,
             "fingerprint": fingerprint,
+            "process_start_id": process_start_id or f"unobserved:{pid}",
             "created": time.time(),
         }
         data.update(overrides)
         return data
+
+    def _retired_data(self, pid: int, retired: object) -> dict:
+        process_start_id = local_server_pool._process_start_id(pid)
+        assert process_start_id is not None
+        return {
+            "pid": pid,
+            "process_start_id": process_start_id,
+            "retired": retired,
+        }
 
     def _write_state(self, path: str, data: dict) -> str:
         with self._directory as directory:
@@ -221,6 +234,9 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             self.assertIsNone(directory.read_json(state_path))
 
             directory.write_json(state_path, {"token": "old-secret"})
+            with mock.patch("builtins.open", side_effect=OSError("temporary read failure")):
+                with self.assertRaisesRegex(OSError, "temporary read failure"):
+                    directory.read_json(state_path)
             with mock.patch.object(
                 local_server_pool.os, "replace", side_effect=OSError("interrupted replace")
             ):
@@ -233,6 +249,29 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             temp_file.write("partial")
         with self._directory:
             self.assertFalse(os.path.exists(stale_temp))
+
+    def test_pool_directory_does_not_hide_listing_failures(self) -> None:
+        state_path = self._write_state(
+            self._directory.retired_path("abc123"),
+            {"pid": os.getpid(), "process_start_id": "unused", "retired": time.time()},
+        )
+        with self._directory:
+            with mock.patch.object(
+                local_server_pool.os, "listdir", side_effect=OSError("temporary listing failure")
+            ):
+                with self.assertRaisesRegex(OSError, "temporary listing failure"):
+                    self._pool.reap("abc123")
+
+        self.assertTrue(os.path.exists(state_path))
+        with mock.patch.object(
+            local_server_pool.os, "listdir", side_effect=OSError("failed during enter")
+        ):
+            with self.assertRaisesRegex(OSError, "failed during enter"):
+                with self._directory:
+                    pass
+        self.assertIsNone(self._directory._lock_fd)
+        with self._directory:
+            pass
 
     def test_pool_directory_lock_blocks_another_process(self) -> None:
         child = (
@@ -506,6 +545,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertEqual(member.host, "localhost")
         self.assertEqual(member.port, 12345)
         self.assertEqual(member.pid, 123)
+        self.assertEqual(member.process_start_id, valid["process_start_id"])
         self.assertEqual(member.created, 1.0)
         self.assertEqual(member.url, "sc://localhost:12345")
 
@@ -513,6 +553,8 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             "missing fields": {"fingerprint": "fp"},
             "empty token": self._server_data(12345, 123, token=""),
             "non-string host": self._server_data(12345, 123, host=None),
+            "empty process start id": self._server_data(12345, 123, process_start_id=""),
+            "non-string process start id": self._server_data(12345, 123, process_start_id=None),
             "boolean port": self._server_data(True, 123),
             "string port": self._server_data("12345", 123),
             "fractional port": self._server_data(12345.5, 123),
@@ -539,12 +581,23 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 self.assertIsNone(PoolMember.from_data(data))
 
     def test_retired_state_fields_and_validation(self) -> None:
-        retired = RetiredState.from_data({"pid": 456, "retired": 2})
+        retired = RetiredState.from_data(
+            {"pid": 456, "process_start_id": "process-1", "retired": 2}
+        )
         assert retired is not None
         self.assertEqual(retired.pid, 456)
+        self.assertEqual(retired.process_start_id, "process-1")
         self.assertEqual(retired.retired, 2.0)
-        self.assertEqual(retired.as_data(), {"pid": 456, "retired": 2.0})
-        self.assertIsNone(RetiredState.from_data({"pid": 456, "retired": "not-a-time"}))
+        self.assertEqual(
+            retired.as_data(),
+            {"pid": 456, "process_start_id": "process-1", "retired": 2.0},
+        )
+        self.assertIsNone(
+            RetiredState.from_data(
+                {"pid": 456, "process_start_id": "process-1", "retired": "not-a-time"}
+            )
+        )
+        self.assertIsNone(RetiredState.from_data({"pid": 456, "retired": 2}))
 
     def test_claim_matches_fingerprint_and_renames(self) -> None:
         with _listening_socket() as port:
@@ -710,7 +763,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             fresh = self._live_process()
             self._write_state(
                 self._directory.retired_path("f2e5"),
-                {"pid": fresh.pid, "retired": time.time()},
+                self._retired_data(fresh.pid, time.time()),
             )
             with self._directory:
                 self._pool.reap("f2e5")
@@ -720,7 +773,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             stubborn = self._stubborn_sleeper()
             self._write_state(
                 self._directory.retired_path("a0a0"),
-                {"pid": stubborn.pid, "retired": time.time() - 31},
+                self._retired_data(stubborn.pid, time.time() - 31),
             )
             with self._directory:
                 self._pool.reap("a0a0")
@@ -731,7 +784,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             abandoned = self._stubborn_sleeper()
             self._write_state(
                 self._directory.retired_path("ab4d"),
-                {"pid": abandoned.pid, "retired": time.time() - 601},
+                self._retired_data(abandoned.pid, time.time() - 601),
             )
             with self._directory:
                 self.assertTrue(self._pool.reap("ab4d"))
@@ -741,7 +794,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         server = self._stubborn_sleeper()
         path = self._write_state(
             self._directory.retired_path("bad4"),
-            {"pid": server.pid, "retired": "not-a-time"},
+            self._retired_data(server.pid, "not-a-time"),
         )
 
         with self._directory as directory:
@@ -757,7 +810,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         server = self._stubborn_sleeper()
         path = self._write_state(
             self._directory.retired_path("bad9"),
-            {"pid": server.pid, "retired": time.time() - 601},
+            self._retired_data(server.pid, time.time() - 601),
         )
 
         with mock.patch.object(local_server_pool, "_is_local_connect_server", return_value=None):
@@ -767,6 +820,30 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertEqual(set(self._states("bad9")), {"retired"})
         self.assertTrue(os.path.exists(path))
         self.assertIsNone(server.poll())
+
+    def test_reap_keeps_retired_state_without_a_process_identity(self) -> None:
+        server = self._stubborn_sleeper()
+        path = self._write_state(
+            self._directory.retired_path("bad7"),
+            {"pid": server.pid, "retired": time.time() - 601},
+        )
+
+        with self._directory:
+            self.assertFalse(self._pool.reap("bad7"))
+
+        self.assertTrue(os.path.exists(path))
+        self.assertIsNone(server.poll())
+
+    def test_reap_does_not_signal_a_reused_server_pid(self) -> None:
+        other_server = self._stubborn_sleeper()
+        stale = self._retired_data(other_server.pid, time.time() - 31)
+        stale["process_start_id"] = "a-different-process-generation"
+        self._write_state(self._directory.retired_path("bad8"), stale)
+
+        with self._directory:
+            self.assertTrue(self._pool.reap("bad8"))
+
+        self.assertIsNone(other_server.poll())
 
     def test_retire_survives_interrupted_state_rewrite(self) -> None:
         server = self._stubborn_sleeper()
@@ -781,7 +858,9 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                     side_effect=OSError("interrupted rewrite"),
                 ):
                     with self.assertRaisesRegex(OSError, "interrupted rewrite"):
-                        self._pool._retire(server_path, server.pid)
+                        process_start_id = local_server_pool._process_start_id(server.pid)
+                        assert process_start_id is not None
+                        self._pool._retire(server_path, server.pid, process_start_id)
 
         states = self._states("c0de")
         self.assertEqual(set(states), {"retired"})
@@ -863,6 +942,7 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         # A concurrent janitor already completed the claim -> retired transition.
         self._pool.release(member)
         self.assertEqual(set(self._states("a1a2")), {"retired"})
+
 
 if __name__ == "__main__":
     from pyspark.testing import main
