@@ -1929,8 +1929,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("SPARK-48290: nthSmallest partitions the array around the returned element") {
-    // HighlyCompressedMapStatus counts the block sizes above the cutoff by scanning only the tail
-    // of the array, so it relies on this ordering and not just on the returned value.
+    // nthSmallest reorders the array in place and documents that no element before index n is
+    // larger and none after it is smaller than the returned value. Callers are allowed to rely on
+    // that much of the ordering, so pin it here rather than only the returned value.
     val inputs = Seq(
       Array.tabulate(1000)(i => i.toLong),
       Array.tabulate(1000)(i => (1000 - i).toLong),

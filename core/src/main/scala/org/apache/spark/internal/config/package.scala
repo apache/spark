@@ -1457,7 +1457,11 @@ package object config {
         "which hides skew from adaptive query execution once a shuffle has more than " +
         "SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS partitions. At most " +
         "SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER block sizes are recorded accurately per map " +
-        "task. The default matches SKEW_JOIN_SKEWED_PARTITION_FACTOR. Set to -1.0 to disable " +
+        "task, plus the blocks tied at the cutoff of that selection, whose reduce ids are held " +
+        "in a bitmap. The tied blocks are not capped, so in the worst case, where they are " +
+        "scattered across the reduce id space, that bitmap costs a bit per reduce partition per " +
+        "map task on the driver, about 8 KiB per map task at 50000 reduce partitions. " +
+        "The default matches SKEW_JOIN_SKEWED_PARTITION_FACTOR. Set to -1.0 to disable " +
         "this feature.")
       .version("3.3.0")
       .doubleConf
