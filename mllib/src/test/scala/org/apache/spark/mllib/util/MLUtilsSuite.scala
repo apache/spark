@@ -29,7 +29,7 @@ import org.apache.spark.mllib.linalg.{DenseVector, Matrices, MatrixUDT => OldMat
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -276,8 +276,8 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(new2 === new1)
     val new3 = convertVectorColumnsToML(df, "y", "w").first()
     assert(new3 === Row(0, x, y.asML, Row(5.0, z), w))
-    intercept[AnalysisException] {
-      convertVectorColumnsToML(df, "p").collect()
+    intercept[IllegalArgumentException] {
+      convertVectorColumnsToML(df, "p")
     }
     intercept[IllegalArgumentException] {
       convertVectorColumnsToML(df, "p._2")
@@ -301,8 +301,8 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(new2 === new1)
     val new3 = convertVectorColumnsFromML(df, "y", "w").first()
     assert(new3 === Row(0, x, Vectors.fromML(y), Row(5.0, z), w))
-    intercept[AnalysisException] {
-      convertVectorColumnsFromML(df, "p").collect()
+    intercept[IllegalArgumentException] {
+      convertVectorColumnsFromML(df, "p")
     }
     intercept[IllegalArgumentException] {
       convertVectorColumnsFromML(df, "p._2")
@@ -350,8 +350,8 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(new2 === new1)
     val new3 = convertMatrixColumnsToML(df, "y", "w").first()
     assert(new3 === Row(0, x, y.asML, Row(5.0, z), w))
-    intercept[AnalysisException] {
-      convertMatrixColumnsToML(df, "p").collect()
+    intercept[IllegalArgumentException] {
+      convertMatrixColumnsToML(df, "p")
     }
     intercept[IllegalArgumentException] {
       convertMatrixColumnsToML(df, "p._2")
@@ -375,8 +375,8 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(new2 === new1)
     val new3 = convertMatrixColumnsFromML(df, "y", "w").first()
     assert(new3 === Row(0, x, Matrices.fromML(y), Row(5.0, z), w))
-    intercept[AnalysisException] {
-      convertMatrixColumnsFromML(df, "p").collect()
+    intercept[IllegalArgumentException] {
+      convertMatrixColumnsFromML(df, "p")
     }
     intercept[IllegalArgumentException] {
       convertMatrixColumnsFromML(df, "p._2")

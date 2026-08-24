@@ -330,7 +330,17 @@ object MLUtils extends Logging {
   def convertVectorColumnsToML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colNames = if (cols.nonEmpty) {
-      cols
+      cols.flatMap { c =>
+        val dataType = schema(c).dataType
+        if (dataType.getClass == classOf[VectorUDT]) {
+          Some(c)
+        } else {
+          // ignore new vector columns and raise an exception on other column types
+          require(dataType.getClass == classOf[MLVectorUDT],
+            s"Column $c must be old Vector type to be converted to new type but got $dataType.")
+          None
+        }
+      }
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[VectorUDT])
@@ -362,7 +372,17 @@ object MLUtils extends Logging {
   def convertVectorColumnsFromML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colNames = if (cols.nonEmpty) {
-      cols
+      cols.flatMap { c =>
+        val dataType = schema(c).dataType
+        if (dataType.getClass == classOf[MLVectorUDT]) {
+          Some(c)
+        } else {
+          // ignore old vector columns and raise an exception on other column types
+          require(dataType.getClass == classOf[VectorUDT],
+            s"Column $c must be new Vector type to be converted to old type but got $dataType.")
+          None
+        }
+      }
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[MLVectorUDT])
@@ -394,7 +414,17 @@ object MLUtils extends Logging {
   def convertMatrixColumnsToML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colNames = if (cols.nonEmpty) {
-      cols
+      cols.flatMap { c =>
+        val dataType = schema(c).dataType
+        if (dataType.getClass == classOf[MatrixUDT]) {
+          Some(c)
+        } else {
+          // ignore new matrix columns and raise an exception on other column types
+          require(dataType.getClass == classOf[MLMatrixUDT],
+            s"Column $c must be old Matrix type to be converted to new type but got $dataType.")
+          None
+        }
+      }
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[MatrixUDT])
@@ -426,7 +456,17 @@ object MLUtils extends Logging {
   def convertMatrixColumnsFromML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colNames = if (cols.nonEmpty) {
-      cols
+      cols.flatMap { c =>
+        val dataType = schema(c).dataType
+        if (dataType.getClass == classOf[MLMatrixUDT]) {
+          Some(c)
+        } else {
+          // ignore old matrix columns and raise an exception on other column types
+          require(dataType.getClass == classOf[MatrixUDT],
+            s"Column $c must be new Matrix type to be converted to old type but got $dataType.")
+          None
+        }
+      }
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[MLMatrixUDT])
