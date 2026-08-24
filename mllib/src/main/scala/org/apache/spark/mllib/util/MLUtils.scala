@@ -329,21 +329,20 @@ object MLUtils extends Logging {
   @varargs
   def convertVectorColumnsToML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
-    val colSet = if (cols.nonEmpty) {
-      cols.foreach(schema(_))
-      cols.toSet
+    val colNames = if (cols.nonEmpty) {
+      cols
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[VectorUDT])
         .map(_.name)
-        .toSet
+        .toImmutableArraySeq
     }
 
-    if (colSet.isEmpty) {
+    if (colNames.isEmpty) {
       return dataset.toDF()
     }
 
-    val fields = schema.fields.filter(field => colSet.contains(field.name)).toImmutableArraySeq
+    val fields = colNames.map(schema(_))
     dataset.withColumns(
       fields.map(_.name),
       fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new MLVectorUDT)),
@@ -362,21 +361,20 @@ object MLUtils extends Logging {
   @varargs
   def convertVectorColumnsFromML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
-    val colSet = if (cols.nonEmpty) {
-      cols.foreach(schema(_))
-      cols.toSet
+    val colNames = if (cols.nonEmpty) {
+      cols
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[MLVectorUDT])
         .map(_.name)
-        .toSet
+        .toImmutableArraySeq
     }
 
-    if (colSet.isEmpty) {
+    if (colNames.isEmpty) {
       return dataset.toDF()
     }
 
-    val fields = schema.fields.filter(field => colSet.contains(field.name)).toImmutableArraySeq
+    val fields = colNames.map(schema(_))
     dataset.withColumns(
       fields.map(_.name),
       fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new VectorUDT)),
@@ -395,21 +393,20 @@ object MLUtils extends Logging {
   @varargs
   def convertMatrixColumnsToML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
-    val colSet = if (cols.nonEmpty) {
-      cols.foreach(schema(_))
-      cols.toSet
+    val colNames = if (cols.nonEmpty) {
+      cols
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[MatrixUDT])
         .map(_.name)
-        .toSet
+        .toImmutableArraySeq
     }
 
-    if (colSet.isEmpty) {
+    if (colNames.isEmpty) {
       return dataset.toDF()
     }
 
-    val fields = schema.fields.filter(field => colSet.contains(field.name)).toImmutableArraySeq
+    val fields = colNames.map(schema(_))
     dataset.withColumns(
       fields.map(_.name),
       fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new MLMatrixUDT)),
@@ -428,21 +425,20 @@ object MLUtils extends Logging {
   @varargs
   def convertMatrixColumnsFromML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
-    val colSet = if (cols.nonEmpty) {
-      cols.foreach(schema(_))
-      cols.toSet
+    val colNames = if (cols.nonEmpty) {
+      cols
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[MLMatrixUDT])
         .map(_.name)
-        .toSet
+        .toImmutableArraySeq
     }
 
-    if (colSet.isEmpty) {
+    if (colNames.isEmpty) {
       return dataset.toDF()
     }
 
-    val fields = schema.fields.filter(field => colSet.contains(field.name)).toImmutableArraySeq
+    val fields = colNames.map(schema(_))
     dataset.withColumns(
       fields.map(_.name),
       fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new MatrixUDT)),
