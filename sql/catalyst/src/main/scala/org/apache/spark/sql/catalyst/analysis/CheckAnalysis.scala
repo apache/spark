@@ -330,7 +330,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   def checkAnalysis0(plan: LogicalPlan): Unit = {
     // Report target-not-found errors before errors in input queries.
     plan.foreach {
-      case InsertIntoStatement(u: UnresolvedWriteTarget, _, _, _, _, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedWriteTarget, _, _, _, _, _, _, _, _, _) =>
         u.tableNotFound(
           u.multipartIdentifier,
           searchPathForUnresolvedRelation(u.multipartIdentifier))

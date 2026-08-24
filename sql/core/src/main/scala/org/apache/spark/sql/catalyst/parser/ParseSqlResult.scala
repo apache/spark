@@ -386,7 +386,7 @@ object ParseSqlResult {
 
   private def primaryQueryPlan(plan: LogicalPlan): LogicalPlan = plan match {
     case UnresolvedWith(child, _, _) => primaryQueryPlan(child)
-    case InsertIntoStatement(_, _, _, query, _, _, _, _, _) =>
+    case InsertIntoStatement(_, _, _, query, _, _, _, _, _, _) =>
       primaryQueryPlan(query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)
     case r: ReplaceTableAsSelect => primaryQueryPlan(r.query)

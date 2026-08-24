@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A logical plan node that contains exactly what was parsed from SQL.
@@ -180,6 +181,7 @@ case class QualifiedColType(
  *                             which atomically deletes existing rows that satisfy the replace
  *                             criteria and then inserts the query result rows into the table.
  * @param withSchemaEvolution  If true, enables automatic schema evolution for the operation.
+ * @param tableOptions         options used to resolve and write to the target table.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
@@ -190,7 +192,8 @@ case class InsertIntoStatement(
     ifPartitionNotExists: Boolean,
     byName: Boolean = false,
     replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
-    withSchemaEvolution: Boolean = false)
+    withSchemaEvolution: Boolean = false,
+    tableOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
   // Extends TransactionalWrite so that QueryExecution can detect a potential transaction on the
   // unresolved logical plan before analysis runs. InsertIntoStatement is shared between V1 and V2
   // inserts, but the LookupCatalog.TransactionalWrite extractor only matches when the target
@@ -212,6 +215,13 @@ case class InsertIntoStatement(
     "REPLACE USING/ON/WHERE requires overwrite to be true")
 
   override def children: Seq[LogicalPlan] = Seq(table, query)
+
+  override protected def stringArgs: Iterator[Any] = {
+    super.stringArgs.filterNot {
+      case options: CaseInsensitiveStringMap => options eq tableOptions
+      case _ => false
+    }
+  }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
     copy(query = WithCTE(query, cteDefs))

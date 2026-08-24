@@ -124,7 +124,8 @@ case class ExpressionWithUnresolvedIdentifier(
  * Holds the name and lookup context of a table targeted by a write command.
  *
  * Unlike [[UnresolvedRelation]], this node describes a write target and is never interpreted as a
- * relation to read. The analyzer resolves it to a [[ResolvedWriteTarget]].
+ * relation to read. The analyzer resolves it to [[ResolvedTable]], [[ResolvedPersistentView]],
+ * or [[ResolvedTempView]].
  */
 case class UnresolvedWriteTarget(
     multipartIdentifier: Seq[String],

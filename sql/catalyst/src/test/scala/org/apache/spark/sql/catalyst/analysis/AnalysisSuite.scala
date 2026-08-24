@@ -52,24 +52,23 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
-  test("resolved write target payloads are opaque") {
-    val writeTarget = ResolvedWriteTarget(
-      LocalRelation(), CaseInsensitiveStringMap.empty()).withWriteRelation(OneRowRelation())
-    assert(writeTarget.resolved)
-    assert(!writeTarget.withWriteRelation(UnresolvedRelation(Seq("t"))).resolved)
-    assert(writeTarget.children === Seq(writeTarget.target))
-    assert(!writeTarget.treeString.contains("OneRowRelation"))
-    assert(!writeTarget.toJSON.contains(classOf[OneRowRelation].getName))
-
+  test("resolved temporary view payload is opaque") {
     val metadata = CatalogTable(
       TableIdentifier("v"),
       CatalogTableType.VIEW,
       CatalogStorageFormat.empty,
       StructType(Nil))
-    val tempView = ResolvedTempView(
-      Identifier.of(Array.empty, "v"), TemporaryViewRelation(metadata))
+    val identifier = Identifier.of(Array.empty, "v")
+    val viewRelation = TemporaryViewRelation(metadata)
+    val tempView = ResolvedTempView(identifier, viewRelation)
+    val sameViewRelation = ResolvedTempView(identifier, viewRelation)
+    val copiedViewRelation = ResolvedTempView(identifier, viewRelation.copy())
+    assert(tempView.children.isEmpty)
     assert(!tempView.treeString.contains("TemporaryViewRelation"))
     assert(!tempView.toJSON.contains(classOf[TemporaryViewRelation].getName))
+    assert(tempView == sameViewRelation)
+    assert(tempView.hashCode() == sameViewRelation.hashCode())
+    assert(tempView != copiedViewRelation)
   }
 
   test("fail for unresolved plan") {

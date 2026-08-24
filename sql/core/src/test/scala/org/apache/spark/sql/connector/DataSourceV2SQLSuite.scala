@@ -5338,6 +5338,20 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("insert replace where into temp view on DSv2 table") {
+    val t = "testcat.default.t"
+    val v = "v"
+    withTable(t) {
+      withTempView(v) {
+        sql(s"CREATE TABLE $t (id INT, data STRING) USING foo PARTITIONED BY (id)")
+        sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+        spark.table(t).createOrReplaceTempView(v)
+        sql(s"INSERT INTO $v REPLACE WHERE id = 1 VALUES (1, 'updated')")
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "updated"), Row(2, "b")))
+      }
+    }
+  }
+
   test("SPARK-56587: Show table names for V2 write nodes in UI") {
     val t1 = s"testcat.ns1.ns2.table_name"
     withTable(t1) {

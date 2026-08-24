@@ -1155,85 +1155,79 @@ class Analyzer(
       }
     }
 
-    private def resolveWriteTarget(target: UnresolvedWriteTarget): Option[ResolvedWriteTarget] = {
+    private def resolveWriteTarget(target: UnresolvedWriteTarget): Option[LogicalPlan] = {
       val unresolvedRelation = UnresolvedRelation(
         target.multipartIdentifier,
         target.options,
         isStreaming = false).requireWritePrivileges(target.writePrivileges)
       unresolvedRelation.copyTagsFrom(target)
 
-      resolveRelation(unresolvedRelation).map { relation =>
-        val resolvedTarget = EliminateSubqueryAliases(relation) match {
-          case r: DataSourceV2Relation =>
-            val catalog = r.catalog.getOrElse {
+      def toResolvedTarget(relation: LogicalPlan, viewOnly: Boolean): Option[LogicalPlan] = {
+        val resolvedTarget = withOrigin(target.origin) {
+          EliminateSubqueryAliases(relation) match {
+            case r: DataSourceV2Relation if !viewOnly =>
+              val catalog = r.catalog.getOrElse {
+                throw SparkException.internalError(
+                  s"Resolved write target ${target.name} is missing its catalog")
+              }
+              val identifier = r.identifier.getOrElse {
+                throw SparkException.internalError(
+                  s"Resolved write target ${target.name} is missing its identifier")
+              }
+              Some(ResolvedTable.create(catalog.asTableCatalog, identifier, r.table))
+
+            case u: UnresolvedCatalogRelation if !viewOnly =>
+              val (catalog, identifier) = catalogAndIdentifier(u.tableMeta)
+              Some(ResolvedTable.create(catalog.asTableCatalog, identifier, V1Table(u.tableMeta)))
+
+            case v: View if v.isTempView =>
+              val tempView =
+                relationResolution.lookupTempView(target.multipartIdentifier).getOrElse {
+                  throw SparkException.internalError(
+                    s"Resolved temporary view ${target.name} is no longer registered")
+                }
+              val resolvedTempView = tempView.copy(
+                plan = tempView.plan.map(resolveTableReferencesInTempView))
+              Some(ResolvedTempView(target.multipartIdentifier.asIdentifier, resolvedTempView))
+
+            case v: View =>
+              val (catalog, identifier) = catalogAndIdentifier(v.desc)
+              Some(ResolvedPersistentView(catalog, identifier, new V1View(v.desc)))
+
+            case m: MetricViewPlaceholder =>
+              val (catalog, identifier) = catalogAndIdentifier(m.metadata)
+              Some(ResolvedPersistentView(catalog, identifier, new V1View(m.metadata)))
+
+            case _ if viewOnly => None
+
+            case other =>
               throw SparkException.internalError(
-                s"Resolved write target ${target.name} is missing its catalog")
-            }
-            val identifier = r.identifier.getOrElse {
-              throw SparkException.internalError(
-                s"Resolved write target ${target.name} is missing its identifier")
-            }
-            // Keep the provider relation opaque so later write-specific rules in this analyzer
-            // iteration can inspect it without exposing it to generic relation traversal.
-            ResolvedWriteTarget(
-              ResolvedTable.create(catalog.asTableCatalog, identifier, r.table),
-              target.options).withWriteRelation(r)
-
-          case u: UnresolvedCatalogRelation =>
-            val (catalog, identifier) = catalogAndIdentifier(u.tableMeta)
-            ResolvedWriteTarget(
-              ResolvedTable.create(catalog.asTableCatalog, identifier, V1Table(u.tableMeta)),
-              target.options).withWriteRelation(u)
-
-          case v: View if v.isTempView =>
-            val tempView = relationResolution.lookupTempView(target.multipartIdentifier).getOrElse {
-              throw SparkException.internalError(
-                s"Resolved temporary view ${target.name} is no longer registered")
-            }
-            ResolvedWriteTarget(
-              ResolvedTempView(target.multipartIdentifier.asIdentifier, tempView),
-              target.options).withWriteRelation(unwrapRelationPlan(relation))
-
-          case v: View =>
-            val (catalog, identifier) = catalogAndIdentifier(v.desc)
-            ResolvedWriteTarget(
-              ResolvedPersistentView(catalog, identifier, new V1View(v.desc)),
-              target.options)
-
-          case m: MetricViewPlaceholder =>
-            val (catalog, identifier) = catalogAndIdentifier(m.metadata)
-            ResolvedWriteTarget(
-              ResolvedPersistentView(catalog, identifier, new V1View(m.metadata)),
-              target.options)
-
-          case other =>
-            throw SparkException.internalError(
-              s"Expected ${target.name} to resolve to a table or view, but got " +
-                other.getClass.getName)
+                s"Expected ${target.name} to resolve to a table or view, but got " +
+                  other.getClass.getName)
+          }
         }
-        resolvedTarget.copyTagsFrom(target)
-        resolvedTarget
-      }.orElse {
-        relationResolution.expandIdentifier(target.multipartIdentifier) match {
-          case CatalogAndIdentifier(catalog: ViewCatalog, identifier) =>
-            try {
-              val resolvedTarget = ResolvedWriteTarget(
-                ResolvedPersistentView(catalog, identifier, catalog.loadView(identifier)),
-                target.options)
-              resolvedTarget.copyTagsFrom(target)
-              Some(resolvedTarget)
-            } catch {
-              case _: NoSuchViewException => None
-            }
-          case _ => None
+        resolvedTarget.map { plan =>
+          plan.copyTagsFrom(target)
+          plan
         }
+      }
+
+      resolveRelation(unresolvedRelation).flatMap(toResolvedTarget(_, viewOnly = false)).orElse {
+        // Table lookup must carry write privileges, but views do not accept them. If no table was
+        // found, repeat the same PATH-aware lookup without the privilege marker and retain only a
+        // view result. The write-specific rule below rejects the view without analyzing its body.
+        val unresolvedView = unresolvedRelation.clearWritePrivileges
+        unresolvedView.copyTagsFrom(target)
+        resolveRelation(unresolvedView).flatMap(toResolvedTarget(_, viewOnly = true))
       }
     }
 
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
-      case u: UnresolvedWriteTarget =>
-        resolveWriteTarget(u).getOrElse(u)
+      case i @ InsertIntoStatement(u: UnresolvedWriteTarget, _, _, _, _, _, _, _, _, _) =>
+        resolveWriteTarget(u).map { target =>
+          i.copy(table = target, tableOptions = u.options)
+        }.getOrElse(i)
 
       case write: V2StreamingWriteCommand =>
         write.table match {
@@ -1417,20 +1411,23 @@ class Analyzer(
   /** Handle INSERT INTO for DSv2 */
   object ResolveInsertInto extends ResolveInsertionBase {
     private object V2WriteRelation {
-      def unapply(plan: LogicalPlan): Option[DataSourceV2Relation] = plan match {
-        case ResolvedWriteTarget(table: ResolvedTable, options, None) =>
-          Some(DataSourceV2Relation.create(
-            table.table, Some(table.catalog), Some(table.identifier), options))
-        case ResolvedWriteTargetWithRelation(_, relation: DataSourceV2Relation) =>
-          Some(relation)
-        case _ => None
+      def unapply(insert: InsertIntoStatement): Option[DataSourceV2Relation] = {
+        insert.table match {
+          case table: ResolvedTable if !table.table.isInstanceOf[V1Table] =>
+            Some(DataSourceV2Relation.create(
+              table.table, Some(table.catalog), Some(table.identifier), insert.tableOptions))
+          case view: ResolvedTempView =>
+            view.viewRelation.plan
+              .map(EliminateSubqueryAliases.apply)
+              .collect { case relation: DataSourceV2Relation => relation }
+          case _ => None
+        }
       }
     }
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(
-          ResolvedWriteTarget(v: ResolvedPersistentView, _, _), _, _, _, _, _, _, _, _) =>
+      case i @ InsertIntoStatement(v: ResolvedPersistentView, _, _, _, _, _, _, _, _, _) =>
         val identifier = v.identifier.asLegacyTableIdentifier(v.catalog.name)
         if (i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
           throw QueryCompilationErrors.writeIntoViewNotAllowedError(identifier, i)
@@ -1438,10 +1435,8 @@ class Analyzer(
           throw QueryCompilationErrors.insertIntoViewNotAllowedError(identifier, i.table)
         }
 
-      case i @ InsertIntoStatement(
-          ResolvedWriteTarget(v: ResolvedTempView, _, Some(OpaqueLogicalPlan(relation))),
-          _, _, _, _, _, _, _, _)
-          if EliminateSubqueryAliases(relation).isInstanceOf[View] =>
+      case i @ InsertIntoStatement(v: ResolvedTempView, _, _, _, _, _, _, _, _, _)
+          if v.viewRelation.plan.forall(p => EliminateSubqueryAliases(p).isInstanceOf[View]) =>
         if (i.replaceCriteriaOpt.exists(_.isReplaceWhere)) {
           throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.metadata.identifier, i)
         } else {
@@ -1449,12 +1444,12 @@ class Analyzer(
             v.metadata.identifier, i.table)
         }
 
-      case i @ InsertIntoStatement(V2WriteRelation(r), _, _, _, _, _, _, _, _)
+      case i @ V2WriteRelation(r)
           if i.query.resolved && i.replaceCriteriaOpt.exists(_.isReplaceOnOrUsing) =>
         throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
           r.table.name())
 
-      case i @ InsertIntoStatement(V2WriteRelation(r), _, _, _, _, _, _, _, _)
+      case i @ V2WriteRelation(r)
           if i.query.resolved &&
             (i.replaceCriteriaOpt.isEmpty || i.replaceCriteriaOpt.exists(_.isReplaceWhere)) =>
         // ifPartitionNotExists is append with validation, but validation is not supported

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC, UNRESOLVED_PROCEDURE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -216,44 +216,6 @@ case class ResolvedTable(
   def name: String = (catalog.name +: identifier.namespace() :+ identifier.name()).quoted
 }
 
-/**
- * A resolved write target and the provider relation prepared for writing, when one is needed.
- *
- * The provider relation is payload rather than a child so generic relation rules cannot interpret
- * a write target as a relation to read.
- */
-case class ResolvedWriteTarget(
-    target: LogicalPlan,
-    options: CaseInsensitiveStringMap,
-    private val writeRelationPlan: Option[OpaqueLogicalPlan] = None) extends UnaryNode {
-  override def child: LogicalPlan = target
-
-  def writeRelation: Option[LogicalPlan] = writeRelationPlan.map(_.plan)
-
-  def withWriteRelation(relation: LogicalPlan): ResolvedWriteTarget = {
-    val updated = copy(writeRelationPlan = Some(OpaqueLogicalPlan(relation)))
-    updated.copyTagsFrom(this)
-    updated
-  }
-
-  override lazy val resolved: Boolean = target.resolved && writeRelation.forall(_.resolved)
-
-  override def output: Seq[Attribute] = writeRelation.map(_.output).getOrElse(target.output)
-
-  override protected def stringArgs: Iterator[Any] = Iterator(options)
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): ResolvedWriteTarget = {
-    copy(target = newChild)
-  }
-}
-
-private[sql] object ResolvedWriteTargetWithRelation {
-  def unapply(plan: LogicalPlan): Option[(ResolvedWriteTarget, LogicalPlan)] = plan match {
-    case target: ResolvedWriteTarget => target.writeRelation.map(target -> _)
-    case _ => None
-  }
-}
-
 object ResolvedTable {
   def create(
       catalog: TableCatalog,
@@ -328,7 +290,8 @@ case class ResolvedTempView(
 
   def metadata: CatalogTable = viewRelation.tableMeta
 
-  override def output: Seq[Attribute] = Nil
+  override lazy val output: Seq[Attribute] =
+    toAttributes(CharVarcharUtils.replaceCharVarcharWithStringInSchema(metadata.schema))
 
   override protected def stringArgs: Iterator[Any] = Iterator(identifier)
 }

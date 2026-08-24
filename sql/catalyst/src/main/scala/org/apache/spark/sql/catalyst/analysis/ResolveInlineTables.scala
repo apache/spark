@@ -34,14 +34,14 @@ object ResolveInlineTables extends Rule[LogicalPlan] with EvalHelper {
       // coercion will cast to the target column's collation.
       // Preserve the inline table's origin so error messages point to the VALUES clause,
       // not the INSERT statement.
-      case i @ InsertIntoStatement(_, _, _, table: UnresolvedInlineTable, _, _, _, _, _)
+      case i @ InsertIntoStatement(_, _, _, table: UnresolvedInlineTable, _, _, _, _, _, _)
           if table.expressionsResolved =>
         CurrentOrigin.withOrigin(table.origin) {
           i.copy(query = EvaluateUnresolvedInlineTable
             .evaluateUnresolvedInlineTable(table, ignoreCollation = true))
         }
       case i @ InsertIntoStatement(
-          _, _, _, sa @ SubqueryAlias(_, table: UnresolvedInlineTable), _, _, _, _, _)
+          _, _, _, sa @ SubqueryAlias(_, table: UnresolvedInlineTable), _, _, _, _, _, _)
           if table.expressionsResolved =>
         CurrentOrigin.withOrigin(table.origin) {
           i.copy(query = sa.copy(child = EvaluateUnresolvedInlineTable

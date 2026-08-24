@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.analysis.ResolvedWriteTargetWithRelation
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, ResolvedTempView}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table, FileTable}
 
 /**
  * Replace the File source V2 table in [[InsertIntoStatement]] to V1 [[FileFormat]].
@@ -34,10 +34,19 @@ import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, FileTable}
  * removed when Catalog support of file data source v2 is finished.
  */
 class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  private object TempViewFileTable {
+    def unapply(insert: InsertIntoStatement)
+        : Option[(ResolvedTempView, DataSourceV2Relation, FileTable)] = insert.table match {
+      case view: ResolvedTempView =>
+        view.viewRelation.plan.map(EliminateSubqueryAliases.apply).collect {
+          case d @ ExtractV2Table(table: FileTable) => (view, d, table)
+        }
+      case _ => None
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(
-        ResolvedWriteTargetWithRelation(target, d @ ExtractV2Table(table: FileTable)),
-        _, _, _, _, _, _, _, _) =>
+    case i @ TempViewFileTable(view, d, table) =>
       val v1FileFormat = table.fallbackFileFormat.getDeclaredConstructor().newInstance()
       val relation = HadoopFsRelation(
         table.fileIndex,
@@ -46,6 +55,10 @@ class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan]
         None,
         v1FileFormat,
         d.options.asScala.toMap)(sparkSession)
-      i.copy(table = target.withWriteRelation(LogicalRelation(relation)))
+      val target = ResolvedTempView(
+        view.identifier,
+        view.viewRelation.copy(plan = Some(LogicalRelation(relation))))
+      target.copyTagsFrom(view)
+      i.copy(table = target)
   }
 }

@@ -562,19 +562,16 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(table, _, _, query, _, _, _, _, _)
-      if table.resolved && query.resolved =>
-      table match {
-        case ResolvedWriteTargetWithRelation(_, relation: HiveTableRelation) =>
+    case i: InsertIntoStatement if i.table.resolved && i.query.resolved =>
+      InsertWriteRelation(SparkSession.active, i) match {
+        case Some(relation: HiveTableRelation) =>
           val metadata = relation.tableMeta
           preprocess(i, metadata.identifier.quotedString, metadata.partitionSchema,
             Some(metadata))
-        case ResolvedWriteTargetWithRelation(
-            _, LogicalRelationWithTable(h: HadoopFsRelation, catalogTable)) =>
+        case Some(LogicalRelationWithTable(h: HadoopFsRelation, catalogTable)) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, h.partitionSchema, catalogTable)
-        case ResolvedWriteTargetWithRelation(
-            _, LogicalRelationWithTable(_: InsertableRelation, catalogTable)) =>
+        case Some(LogicalRelationWithTable(_: InsertableRelation, catalogTable)) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, new StructType(), catalogTable)
         case _ => i
@@ -672,46 +669,45 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoStatement(
-          ResolvedWriteTargetWithRelation(_, LogicalRelationWithTable(relation, _)),
-          partition, _, query, _, _, _, _, _) =>
-        // Get all input data source relations of the query.
-        val srcRelations = query.collect {
-          case l: LogicalRelation => l.relation
-        }
-        if (srcRelations.contains(relation)) {
-          throw new AnalysisException(
-            errorClass = "UNSUPPORTED_INSERT.READ_FROM",
-            messageParameters = Map("relationId" -> toSQLId(relation.toString)))
-        } else {
-          // OK
-        }
+      case insert: InsertIntoStatement =>
+        InsertWriteRelation(SparkSession.active, insert) match {
+          case Some(LogicalRelationWithTable(relation, _)) =>
+            // Get all input data source relations of the query.
+            val srcRelations = insert.query.collect {
+              case l: LogicalRelation => l.relation
+            }
+            if (srcRelations.contains(relation)) {
+              throw new AnalysisException(
+                errorClass = "UNSUPPORTED_INSERT.READ_FROM",
+                messageParameters = Map("relationId" -> toSQLId(relation.toString)))
+            }
 
-        relation match {
-          case _: HadoopFsRelation => // OK
+            relation match {
+              case _: HadoopFsRelation => // OK
 
-          // Right now, we do not support insert into a non-file-based data source table with
-          // partition specs.
-          case i: InsertableRelation if partition.nonEmpty =>
+              // Right now, we do not support insert into a non-file-based data source table with
+              // partition specs.
+              case i: InsertableRelation if insert.partitionSpec.nonEmpty =>
+                throw new AnalysisException(
+                  errorClass = "UNSUPPORTED_INSERT.NOT_PARTITIONED",
+                  messageParameters = Map("relationId" -> toSQLId(i.toString)))
+
+              case _ =>
+                throw new AnalysisException(
+                  errorClass = "UNSUPPORTED_INSERT.NOT_ALLOWED",
+                  messageParameters = Map("relationId" -> toSQLId(relation.toString)))
+            }
+
+          case Some(t) if !t.isInstanceOf[LeafNode] ||
+              t.isInstanceOf[Range] ||
+              t.isInstanceOf[OneRowRelation] ||
+              t.isInstanceOf[LocalRelation] =>
             throw new AnalysisException(
-              errorClass = "UNSUPPORTED_INSERT.NOT_PARTITIONED",
-              messageParameters = Map("relationId" -> toSQLId(i.toString)))
+              errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+              messageParameters = Map.empty)
 
-          case _ =>
-            throw new AnalysisException(
-              errorClass = "UNSUPPORTED_INSERT.NOT_ALLOWED",
-              messageParameters = Map("relationId" -> toSQLId(relation.toString)))
+          case _ => // OK
         }
-
-      case InsertIntoStatement(
-          ResolvedWriteTargetWithRelation(_, t), _, _, _, _, _, _, _, _)
-        if !t.isInstanceOf[LeafNode] ||
-          t.isInstanceOf[Range] ||
-          t.isInstanceOf[OneRowRelation] ||
-          t.isInstanceOf[LocalRelation] =>
-        throw new AnalysisException(
-          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
-          messageParameters = Map.empty)
 
       case _ => // OK
     }

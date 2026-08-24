@@ -27,7 +27,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, FunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, FunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolvedTempView, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -287,19 +287,23 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     manager
   }
 
-  def parseAndResolve(
-      query: String,
-      withDefault: Boolean = false,
-      checkAnalysis: Boolean = false): LogicalPlan = {
+  private def newAnalyzer(withDefault: Boolean): Analyzer = {
     val catalogManager = if (withDefault) {
       catalogManagerWithDefault
     } else {
       catalogManagerWithoutDefault
     }
-    val analyzer = new Analyzer(catalogManager) {
+    new Analyzer(catalogManager) {
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
         new ResolveSessionCatalog(this.catalogManager))
     }
+  }
+
+  def parseAndResolve(
+      query: String,
+      withDefault: Boolean = false,
+      checkAnalysis: Boolean = false): LogicalPlan = {
+    val analyzer = newAnalyzer(withDefault)
     // We don't check analysis here by default, as we expect the plan to be unresolved
     // such as `CreateTable`.
     val analyzed = analyzer.execute(parsePlan(query))
@@ -1300,7 +1304,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
-        _, _, _, _, _) =>
+        _, _, _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1308,7 +1312,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
-        _, _, _, _, _) =>
+        _, _, _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
     }
@@ -1427,6 +1431,22 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           fail(s"Expected V2WriteCommand, but got: $other")
       }
     }
+  }
+
+  test("ResolveRelations uses a direct metadata node for INSERT targets") {
+    val analyzer = newAnalyzer(withDefault = false)
+
+    val tableInsert = analyzer.ResolveRelations(
+      parsePlan("INSERT INTO testcat.tab WITH (`write-option` = 'value') SELECT * FROM v2Table"))
+      .asInstanceOf[InsertIntoStatement]
+    assert(tableInsert.table.isInstanceOf[ResolvedTable])
+    assert(tableInsert.children.head eq tableInsert.table)
+    assert(tableInsert.tableOptions.get("write-option") === "value")
+
+    val tempViewInsert = analyzer.ResolveRelations(
+      parsePlan("INSERT INTO v SELECT * FROM v2Table")).asInstanceOf[InsertIntoStatement]
+    assert(tempViewInsert.table.isInstanceOf[ResolvedTempView])
+    assert(tempViewInsert.children.head eq tempViewInsert.table)
   }
 
   test("function-based IDENTIFIER in INSERT INTO REPLACE USING") {
