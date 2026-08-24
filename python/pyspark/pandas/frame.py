@@ -11761,7 +11761,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         method: Literal["average", "min", "max", "first", "dense"] = "average",
         ascending: bool = True,
         numeric_only: bool = False,
-        na_option: str = "keep",
+        na_option: Literal["keep", "top", "bottom"] = "keep",
         pct: bool = False,
         axis: Axis = 0,
     ) -> "DataFrame":

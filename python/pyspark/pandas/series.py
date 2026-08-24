@@ -4195,7 +4195,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         method: str = "average",
         ascending: bool = True,
         numeric_only: bool = False,
-        na_option: str = "keep",
+        na_option: Literal["keep", "top", "bottom"] = "keep",
         pct: bool = False,
         axis: int = 0,
     ) -> "Series":
@@ -4348,7 +4348,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ascending: bool = True,
         *,
         part_cols: Sequence["ColumnOrName"] = (),
-        na_option: str = "keep",
+        na_option: Literal["keep", "top", "bottom"] = "keep",
         pct: bool = False,
     ) -> "Series":
         if method not in ["average", "min", "max", "first", "dense"]:
