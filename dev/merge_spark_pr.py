@@ -1134,10 +1134,7 @@ def get_jira_issue(prompt, default_jira_id=""):
         if status == "Resolved" or status == "Closed":
             resolution = issue.fields.resolution
             resolution_name = resolution.name if resolution is not None else None
-            print(
-                "JIRA issue %s already has status '%s' (%s)"
-                % (jira_id, status, resolution_name)
-            )
+            print("JIRA issue %s already has status '%s' (%s)" % (jira_id, status, resolution_name))
             # Only a ticket an earlier merge resolved as Fixed can legitimately gain
             # another Fix Version. Duplicate / Won't Fix / Invalid tickets must not be
             # touched.
@@ -2018,9 +2015,7 @@ def main():
                 issue.fields.status.name,
                 issue.fields.issuetype.name,
                 resolution=(
-                    issue.fields.resolution.name
-                    if issue.fields.resolution is not None
-                    else None
+                    issue.fields.resolution.name if issue.fields.resolution is not None else None
                 ),
                 use_color=True,
                 is_followup=is_followup,
