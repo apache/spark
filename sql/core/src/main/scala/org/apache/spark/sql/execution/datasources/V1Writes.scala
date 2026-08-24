@@ -190,7 +190,7 @@ object V1WritesUtils {
     val partitionSet = AttributeSet(partitionColumns)
     var needConvert = false
     val projectList: Seq[NamedExpression] = output.map {
-      case p if partitionSet.contains(p) && p.dataType == StringType && p.nullable =>
+      case p if partitionSet.contains(p) && p.dataType.isInstanceOf[StringType] && p.nullable =>
         needConvert = true
         Alias(Empty2Null(p), p.name)()
       case attr => attr

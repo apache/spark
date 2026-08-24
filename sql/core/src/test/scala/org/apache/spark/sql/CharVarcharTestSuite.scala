@@ -2157,6 +2157,43 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-58794: empty CHAR/VARCHAR partition values become null like STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // CHAR(n>0) pads '' to spaces; CHAR(0) is the empty CHAR that empty2null should treat
+      // the same as VARCHAR/STRING.
+      Seq("CHAR(0)", "VARCHAR(5)").foreach { typ =>
+        withTempPath { path =>
+          sql(s"SELECT 0 AS id, CAST('' AS $typ) AS p UNION ALL SELECT 1, CAST(NULL AS $typ)")
+            .write.mode("overwrite").partitionBy("p").parquet(path.getCanonicalPath)
+          val df = spark.read.parquet(path.getCanonicalPath)
+          checkAnswer(df.where("p IS NULL").select("id"), Seq(Row(0), Row(1)))
+          val dirs = path.listFiles().filterNot(
+            f => f.getName.startsWith(".") || f.getName.startsWith("_"))
+          assert(dirs.length === 1, dirs.map(_.getName).mkString(","))
+        }
+      }
+    }
+  }
+
+  test("SPARK-58794: text datasource accepts CHAR/VARCHAR as a string family type") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sql("SELECT CAST('ab' AS CHAR(4)) AS value").write.mode("overwrite").text(path)
+        val df = spark.read.schema("value CHAR(4)").text(path)
+        assert(df.schema.head.dataType === CharType(4))
+        checkAnswer(df.selectExpr("concat('<', value, '>')"), Row("<ab  >"))
+      }
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sql("SELECT CAST('cd' AS VARCHAR(5)) AS value").write.mode("overwrite").text(path)
+        val df = spark.read.schema("value VARCHAR(5)").text(path)
+        assert(df.schema.head.dataType === VarcharType(5))
+        checkAnswer(df, Row("cd"))
+      }
+    }
+  }
 }
 
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {
@@ -2218,6 +2255,26 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql(s"CREATE TABLE t (col VARCHAR(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("SELECT * FROM t"), Row("12"))
         }
+      }
+      // Catalog write/read and file inference both keep CHAR/VARCHAR.
+      withTable("std_parquet") {
+        sql(s"CREATE TABLE std_parquet (c CHAR(5), v VARCHAR(5)) USING $format")
+        sql("INSERT INTO std_parquet VALUES ('ab', 'cd')")
+        assert(spark.table("std_parquet").schema.map(_.dataType) ===
+          Seq(CharType(5), VarcharType(5)))
+        checkAnswer(
+          sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_parquet"),
+          Row("<ab   >", "<cd>"))
+      }
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sql("SELECT CAST('ab' AS CHAR(4)) AS c").write.mode("overwrite").format(format).save(path)
+        val inferred = spark.read.format(format).load(path)
+        assert(inferred.schema.head.dataType === CharType(4))
+        checkAnswer(inferred.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+        val catalog = spark.read.schema("c VARCHAR(4)").format(format).load(path)
+        assert(catalog.schema.head.dataType === VarcharType(4))
+        checkAnswer(catalog, Row("ab  "))
       }
     }
   }

@@ -408,7 +408,14 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       }
     }
 
-    if (!SQLConf.get.metastorePartitionPruningFastFallback ||
+    // CHAR/VARCHAR partition keys are excluded from the metastore filter (see
+    // SupportedAttribute), because Hive compares them with its own trailing-blank rules. Under
+    // standard semantics that would leave such a query fetching every partition, so prune on the
+    // client instead, where Spark's own comparison semantics apply.
+    val charVarcharPartitionKey = SQLConf.get.charVarcharStandardSemantics &&
+      catalogTable.partitionSchema.exists(f => CharVarcharUtils.hasCharVarchar(f.dataType))
+
+    if ((!SQLConf.get.metastorePartitionPruningFastFallback && !charVarcharPartitionKey) ||
       predicates.isEmpty ||
       predicates.exists(hasTimeZoneAwareExpression)) {
       recordHiveCall()
