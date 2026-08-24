@@ -4315,7 +4315,7 @@ class AstBuilder extends DataTypeAstBuilder
       case v: VarcharType => v.toStringType
       case other => other
     }.getOrElse(StringType)
-    // Default NULL ON NULL behavior is ABSENT (drop NULL elements).
+    // Default ON NULL behavior is ABSENT ON NULL (drop NULL elements).
     val nullBehavior = Option(ctx.nullBehavior)
       .map(buildJsonConstructorNullBehavior)
       .getOrElse(JsonConstructorNullBehavior.Absent)

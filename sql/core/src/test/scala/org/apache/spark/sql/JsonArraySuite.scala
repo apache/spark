@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonArray, JsonConstructorNullBehavior, Literal, ResolvedCollation}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonArray, JsonConstructorNullBehavior, JsonQuery, JsonQueryBehavior, JsonQueryQuotes, JsonQueryWrapper, Literal, ResolvedCollation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{CharType, GeographyType, GeometryType, IntegerType, MapType, StringType, VarcharType}
@@ -207,6 +207,23 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       Row("[[1,2],3]"))
   }
 
+  test("a nested JSON_QUERY is spliced under KEEP QUOTES and quoted under OMIT QUOTES") {
+    // JSON_QUERY emits JSON text under the default KEEP QUOTES, so a lexically nested JSON_QUERY
+    // carries implicit FORMAT JSON and is spliced raw: the matched object is [{"x":1}], not the
+    // quoted string ["{\"x\":1}"].
+    checkAnswer(
+      sql("""SELECT JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a'))"""),
+      Row("""[{"x":1}]"""))
+    checkAnswer(
+      sql("""SELECT JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a'), 2)"""),
+      Row("""[{"x":1},2]"""))
+    // OMIT QUOTES returns the matched scalar string's decoded content (Ada, not "Ada") -- an
+    // ordinary string -- so it takes the quoted path: ["Ada"], never the invalid splice [Ada].
+    checkAnswer(
+      sql("""SELECT JSON_ARRAY(JSON_QUERY('{"n":"Ada"}', '$.n' OMIT QUOTES))"""),
+      Row("""["Ada"]"""))
+  }
+
   test("FORMAT JSON on a non-string argument is rejected at analysis") {
     val e = intercept[AnalysisException] {
       sql("SELECT JSON_ARRAY(123 FORMAT JSON)").collect()
@@ -316,6 +333,35 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     assert(collated.sql.contains("FORMAT JSON"),
       s"expected FORMAT JSON to force the splice, got: ${collated.sql}")
+  }
+
+  test("SQL round-trips a nested JSON_QUERY per its quote mode") {
+    def jsonQuery(quotes: JsonQueryQuotes): JsonQuery = JsonQuery(
+      Literal("""{"a":{"x":1}}"""), "$.a", StringType, JsonQueryWrapper.Without, quotes,
+      JsonQueryBehavior.Null, JsonQueryBehavior.Null)
+    // KEEP QUOTES emits JSON text, so a nested JSON_QUERY left in an implicit (spliced) position
+    // round-trips as-is: reparse re-derives the implicit FORMAT JSON.
+    val keep = jsonQuery(JsonQueryQuotes.Keep)
+    val splicedKeep = JsonArray(
+      Seq(keep), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
+    assert(splicedKeep.sql == """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a'))""")
+    // A KEEP QUOTES JSON_QUERY inlined into a quoted position must be neutralized with a cast so
+    // reparse keeps it quoted rather than re-deriving implicit FORMAT JSON.
+    val quotedKeep = JsonArray(
+      Seq(keep), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
+    assert(quotedKeep.sql == """JSON_ARRAY(CAST(JSON_QUERY('{"a":{"x":1}}', '$.a') AS STRING))""")
+    // OMIT QUOTES emits an ordinary string, so it is not implicit: in a quoted position it renders
+    // as-is, and in a spliced position it must render an explicit FORMAT JSON (it does not
+    // round-trip implicitly).
+    val omit = jsonQuery(JsonQueryQuotes.Omit)
+    val quotedOmit = JsonArray(
+      Seq(omit), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
+    assert(quotedOmit.sql == """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES))""")
+    val splicedOmit = JsonArray(
+      Seq(omit), Seq(true), Seq(true), JsonConstructorNullBehavior.Absent, StringType)
+    assert(
+      splicedOmit.sql ==
+        """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES) FORMAT JSON)""")
   }
 
   test("SQL renders an explicit collated RETURNING and omits only the default") {
@@ -435,8 +481,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     assert(JsonArray(
       Seq(Literal("[1]")), Seq(true), Seq(true),
       JsonConstructorNullBehavior.Absent, StringType).throwable)
-    // A plain JSON_ARRAY with no explicit FORMAT JSON cannot throw (RETURNING is STRING -> STRING),
-    // so it stays non-throwable and remains eligible for predicate pushdown.
+    // A plain JSON_ARRAY with no explicit FORMAT JSON and no throwable children cannot throw
+    // (RETURNING is STRING -> STRING), so it stays non-throwable and remains eligible for predicate
+    // pushdown.
     assert(!JsonArray(
       Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
       .throwable)
@@ -468,10 +515,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     // The optimizer must not push a throwable predicate below the join (PushPredicateThroughJoin
     // only pushes non-throwable conditions), so a malformed-JSON row the join eliminates is never
     // evaluated and does not throw. Were the constructor not throwable, the predicate would push to
-    // the probe side and throw on the eliminated row. Use an equality predicate rather than
-    // `IS NOT NULL`: the constructor is non-nullable, so `NullPropagation` would rewrite
-    // `JSON_ARRAY(...) IS NOT NULL` to `true` and elide it before the join even matters -- an
-    // equality forces per-row evaluation and is not null-propagated.
+    // the probe side and throw on the eliminated row.
     withTempView("t", "u") {
       Seq((1, "[1]"), (2, "1,2")).toDF("id", "s").createOrReplaceTempView("t")
       Seq(1).toDF("id").createOrReplaceTempView("u")

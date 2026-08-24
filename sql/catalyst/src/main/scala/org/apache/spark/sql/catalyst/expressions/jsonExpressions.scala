@@ -1062,9 +1062,16 @@ case class JsonQuery(
   extends UnaryExpression
   with CodegenFallback
   with ExpectsInputTypes
-  with QueryErrorsBase {
+  with QueryErrorsBase
+  with ImplicitlyFormattedAsJson {
 
   override def nullable: Boolean = true
+
+  // JSON_QUERY emits JSON text under the default KEEP QUOTES, so a lexically nested JSON_QUERY is
+  // an implicit `FORMAT JSON` argument that a JSON constructor splices verbatim. OMIT QUOTES
+  // instead returns a matched scalar string's decoded content (e.g. `Ada`, not `"Ada"`) -- an
+  // ordinary string -- so it must be quoted, not spliced (see [[ImplicitlyFormattedAsJson]]).
+  override def emitsImplicitJsonText: Boolean = quotes == JsonQueryQuotes.Keep
 
   // The JSON input must be a STRING; the result is JSON text.
   override def inputTypes: Seq[AbstractDataType] =
@@ -1222,10 +1229,19 @@ object JsonConstructorNullBehavior {
  * this decision from the *lexical* argument at parse time (see `AstBuilder.visitJsonArray`) rather
  * than re-deriving it from the child expression during evaluation, so a later optimizer rewrite
  * (e.g. `CollapseProject` inlining a `JSON_ARRAY` alias into an argument position) cannot change
- * whether a value is spliced or quoted. `JSON_OBJECT` / `JSON_QUERY` should extend this as they are
- * added.
+ * whether a value is spliced or quoted. `JSON_OBJECT` should extend this as it is added.
+ *
+ * Most implementers always emit JSON text, so `emitsImplicitJsonText` defaults to true. An
+ * implementer with a mode that instead emits a plain (non-JSON) string overrides it so that mode
+ * takes the ordinary-string (quoted) path in a JSON constructor rather than being spliced:
+ * `JSON_QUERY(... OMIT QUOTES)` returns a matched scalar string's decoded content (e.g. `Ada`, not
+ * `"Ada"`), which is an ordinary string, so `JsonQuery` returns true only under the default
+ * `KEEP QUOTES`.
  */
-trait ImplicitlyFormattedAsJson extends Expression
+trait ImplicitlyFormattedAsJson extends Expression {
+  /** Whether this specific instance actually emits JSON text (see the trait doc). */
+  def emitsImplicitJsonText: Boolean = true
+}
 
 // scalastyle:off line.size.limit
 /**
@@ -1291,10 +1307,10 @@ case class JsonArray(
 
   // Throwable only when the expression can actually throw at eval: when an element carries an
   // explicit `FORMAT JSON` (validated, may throw on malformed text) or when a child is itself
-  // throwable. A plain `JSON_ARRAY(...)` with no explicit `FORMAT JSON` cannot throw (RETURNING is
-  // restricted to string types at analysis, so the result cast is STRING -> STRING), so leaving it
-  // non-throwable lets `PushPredicateThroughJoin` push safe filters like `JSON_ARRAY(k) = '[42]'`
-  // below a join.
+  // throwable. A plain `JSON_ARRAY(...)` with no explicit `FORMAT JSON` and no throwable children
+  // cannot throw (RETURNING is restricted to string types at analysis, so the result cast is
+  // STRING -> STRING), so leaving it non-throwable lets `PushPredicateThroughJoin` push safe
+  // filters like `JSON_ARRAY(k) = '[42]'` below a join.
   override lazy val throwable: Boolean = children.exists(_.throwable) || hasExplicitFormatJson
 
   // A non-throwing JSON array constructor always yields a value: NULL elements are dropped or
@@ -1399,8 +1415,8 @@ case class JsonArray(
   @transient private lazy val singleElem: Array[Any] = new Array[Any](1)
 
   // Wraps the reused `singleElem` array by reference (GenericArrayData does not copy), so a single
-  // instance is shared across elements and rows: `renderElement` mutates `singleElem` in place and
-  // the serializer reads it synchronously.
+  // instance is shared across elements and rows: `appendRenderedElement` mutates `singleElem` in
+  // place and the serializer reads it synchronously.
   @transient private lazy val singleElemArray: GenericArrayData = new GenericArrayData(singleElem)
 
   @transient private lazy val castInput: GenericInternalRow = new GenericInternalRow(1)
@@ -1435,12 +1451,13 @@ case class JsonArray(
     }
   }
 
-  // Render a single non-null element to its JSON fragment via its own-typed serializer.
+  // Render a single non-null element to its JSON fragment via its own-typed serializer, appending
+  // it straight into the result builder.
   // TODO(SPARK-58730): this serializes each element as a one-element array and strips the brackets,
-  // so a row with N values does N Jackson flushes plus intermediate string/substring allocations.
-  // A JSON_ARRAY-specific evaluator that opens the top-level array once and writes each element
-  // into the shared generator (and codegen for the whole path) would avoid this per-element trip.
-  private def renderElement(idx: Int, value: Any): String = {
+  // so a row with N values does N Jackson flushes plus an intermediate string allocation each. A
+  // JSON_ARRAY-specific evaluator that opens the top-level array once and writes each element into
+  // the shared generator (and codegen for the whole path) would avoid this per-element trip.
+  private def appendRenderedElement(sb: java.lang.StringBuilder, idx: Int, value: Any): Unit = {
     singleElem(0) = value
     var evaluator = elementEvaluators(idx)
     if (evaluator == null) {
@@ -1450,8 +1467,9 @@ case class JsonArray(
     }
     val arrJson = evaluator
       .evaluate(singleElemArray).asInstanceOf[UTF8String].toString
-    // `arrJson` is "[<frag>]" (compact, no spaces); strip the outer brackets.
-    arrJson.substring(1, arrJson.length - 1)
+    // `arrJson` is "[<frag>]" (compact, no spaces); append just the interior fragment so the
+    // serialized text is copied once, without materializing a per-element substring.
+    sb.append(arrJson, 1, arrJson.length - 1)
   }
 
   private def formatJsonText(idx: Int, value: Any): String = {
@@ -1474,7 +1492,7 @@ case class JsonArray(
   }
 
   override def eval(input: InternalRow): Any = {
-    val sb = new StringBuilder("[")
+    val sb = new java.lang.StringBuilder("[")
     var first = true
     var i = 0
     while (i < values.length) {
@@ -1496,7 +1514,7 @@ case class JsonArray(
           // not turn into a spurious per-row validation.
           sb.append(formatJsonText(i, v))
         } else {
-          sb.append(renderElement(i, v))
+          appendRenderedElement(sb, i, v)
         }
       }
       i += 1
@@ -1528,10 +1546,13 @@ case class JsonArray(
       //    an optimizer inlined into a quoted position): render through a neutral
       //    `CAST(... AS STRING)` so reparse keeps it quoted (splicing would flip ["[1]"] to [[1]]).
       //  - otherwise the child's shape already reproduces the flag, so render it as-is.
-      // Note: the splice test uses the *direct* child class (only a bare constructor round-trips
+      // Note: the splice test uses the *direct* child (only a bare implicit value round-trips
       // implicitly); the quote test sees through a value-preserving `Collate` (but not a `Cast`,
       // since the neutralization above relies on a cast reparsing as not-implicit).
-      val directlyImplicit = v.isInstanceOf[ImplicitlyFormattedAsJson]
+      val directlyImplicit = v match {
+        case i: ImplicitlyFormattedAsJson => i.emitsImplicitJsonText
+        case _ => false
+      }
       val transitivelyImplicit = JsonArray.isImplicitlyJson(v)
       if (isJson && !directlyImplicit) {
         s"${v.sql} FORMAT JSON"
@@ -1560,9 +1581,10 @@ case class JsonArray(
 
 object JsonArray {
   /**
-   * Whether `e` is a lexically-nested JSON constructor -- i.e. carries an implicit SQL/JSON
-   * `FORMAT JSON` and should be spliced raw rather than quoted. Sees through a value-preserving
-   * `Collate` (a postfix `... COLLATE c` only annotates the collation of the JSON text, e.g.
+   * Whether `e` lexically emits JSON text -- i.e. carries an implicit SQL/JSON `FORMAT JSON` and
+   * should be spliced raw rather than quoted (a nested JSON constructor, or `JSON_QUERY` under
+   * `KEEP QUOTES`; see [[ImplicitlyFormattedAsJson]]). Sees through a value-preserving `Collate`
+   * (a postfix `... COLLATE c` only annotates the collation of the JSON text, e.g.
    * `JSON_ARRAY(JSON_ARRAY(1) COLLATE UTF8_LCASE)`), but deliberately NOT through a `Cast`:
    * `AstBuilder`/`JsonArray.sql` use a `CAST(... AS STRING)` wrapper specifically to detach a value
    * from implicit `FORMAT JSON`, so unwrapping it would defeat that neutralization.
@@ -1570,7 +1592,7 @@ object JsonArray {
   @scala.annotation.tailrec
   def isImplicitlyJson(e: Expression): Boolean = e match {
     case c: Collate => isImplicitlyJson(c.child)
-    case _: ImplicitlyFormattedAsJson => true
+    case i: ImplicitlyFormattedAsJson => i.emitsImplicitJsonText
     case _ => false
   }
 
@@ -1607,7 +1629,7 @@ object JsonArray {
 }
 
 /**
- * Converts a JSON input string to a [[StructType]], [[ArrayType]] or [[MapType]]
+ * Converts a JSON input string to a [[StructType]], [[ArrayType]], [[MapType]] or [[VariantType]]
  * with the specified schema.
  */
 // scalastyle:off line.size.limit
