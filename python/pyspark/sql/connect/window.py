@@ -14,7 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import TYPE_CHECKING, Any, Union, Sequence, List, Optional, Tuple, cast, Iterable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Union,
+    Sequence,
+    List,
+    Optional,
+    Tuple,
+    cast,
+    Iterable,
+    overload,
+)
 
 from pyspark.sql.column import Column
 from pyspark.sql.window import (
@@ -31,8 +42,8 @@ __all__ = ["Window", "WindowSpec"]
 
 
 def _to_cols(cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]) -> List[Column]:
-    if len(cols) == 1 and isinstance(cols[0], list):
-        cols = cols[0]  # type: ignore[assignment]
+    if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
+        cols = tuple(cols[0])
     return [F._to_col(c) for c in cast(Iterable["ColumnOrName"], cols)]
 
 
@@ -82,12 +93,24 @@ class WindowSpec(ParentWindowSpec):
         self._orderSpec = orderSpec
         self._frame = frame
 
+    @overload
+    def partitionBy(self, *cols: "ColumnOrName") -> "WindowSpec": ...
+
+    @overload
+    def partitionBy(self, __cols: Sequence["ColumnOrName"]) -> "WindowSpec": ...
+
     def partitionBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         return WindowSpec(
             partitionSpec=[c._expr for c in _to_cols(cols)],  # type: ignore[misc]
             orderSpec=self._orderSpec,
             frame=self._frame,
         )
+
+    @overload
+    def orderBy(self, *cols: "ColumnOrName") -> "WindowSpec": ...
+
+    @overload
+    def orderBy(self, __cols: Sequence["ColumnOrName"]) -> "WindowSpec": ...
 
     def orderBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         return WindowSpec(
@@ -136,13 +159,29 @@ class WindowSpec(ParentWindowSpec):
 class Window(ParentWindow):
     _spec = WindowSpec(partitionSpec=[], orderSpec=[], frame=None)
 
+    @overload
+    @staticmethod
+    def partitionBy(*cols: "ColumnOrName") -> "WindowSpec": ...
+
+    @overload
+    @staticmethod
+    def partitionBy(__cols: Sequence["ColumnOrName"]) -> "WindowSpec": ...
+
     @staticmethod
     def partitionBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
-        return Window._spec.partitionBy(*cols)
+        return Window._spec.partitionBy(*cols)  # type: ignore[arg-type]
+
+    @overload
+    @staticmethod
+    def orderBy(*cols: "ColumnOrName") -> "WindowSpec": ...
+
+    @overload
+    @staticmethod
+    def orderBy(__cols: Sequence["ColumnOrName"]) -> "WindowSpec": ...
 
     @staticmethod
     def orderBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
-        return Window._spec.orderBy(*cols)
+        return Window._spec.orderBy(*cols)  # type: ignore[arg-type]
 
     @staticmethod
     def rowsBetween(start: int, end: int) -> "WindowSpec":

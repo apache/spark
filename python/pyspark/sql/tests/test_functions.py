@@ -2078,6 +2078,24 @@ class FunctionsTestsMixin:
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[: len(r)])
 
+    def test_window_partitionBy_orderBy_with_sequence(self):
+        # partitionBy/orderBy accept the columns either spread out as varargs or
+        # passed as a single list/tuple; all forms should be equivalent.
+        df = self.spark.createDataFrame(
+            [(1, "a", 3), (1, "b", 3), (2, "c", 4), (2, "d", 4)], ["key", "value", "number"]
+        )
+
+        def row_numbers(w):
+            return [r[0] for r in df.select(F.row_number().over(w)).orderBy("value").collect()]
+
+        # Window.partitionBy is the static method; the chained .orderBy exercises
+        # WindowSpec.orderBy. Both accept a single list or tuple of columns.
+        varargs = Window.partitionBy("key", "number").orderBy("value", "key")
+        as_list = Window.partitionBy(["key", "number"]).orderBy(["value", "key"])
+        as_tuple = Window.partitionBy(("key", "number")).orderBy(("value", "key"))
+        self.assertEqual(row_numbers(varargs), row_numbers(as_list))
+        self.assertEqual(row_numbers(varargs), row_numbers(as_tuple))
+
     def test_window_functions_cumulative_sum(self):
         df = self.spark.createDataFrame([("one", 1), ("two", 2)], ["key", "value"])
 
