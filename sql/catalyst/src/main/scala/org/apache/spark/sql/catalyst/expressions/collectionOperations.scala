@@ -1430,7 +1430,11 @@ case class Reverse(child: Expression)
       BinaryType,
       ArrayType))
 
-  override def dataType: DataType = child.dataType
+  // Reversing a string transforms its content, so a CHAR/VARCHAR input yields plain STRING (R1).
+  // Array and binary inputs are unaffected. ImplicitTypeCasts already promotes the string branch
+  // (its promotion looks inside a TypeCollection), so this covers the paths that do not go
+  // through implicit casting, such as an expression built directly.
+  override def dataType: DataType = StringHelper.transformingStringResultType(child.dataType)
 
   private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
@@ -2227,6 +2231,91 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 }
 
 /**
+ * Removes the last `n` elements from the given array, per the ANSI SQL `TRIM_ARRAY` function.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, n) - Returns the given array with the last `n` elements removed. Raises an error
+      if `n` is negative or greater than the number of elements in the array.""",
+  arguments = """
+    Arguments:
+      * array - the array to trim.
+      * n - the number of elements to remove from the end of the array. Must be between 0 and the
+          number of elements in the array (inclusive).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3, 4, 5), 2);
+       [1,2,3]
+      > SELECT _FUNC_(array('a', 'b', 'c'), 0);
+       ["a","b","c"]
+      > SELECT _FUNC_(array(1, 2, 3), 3);
+       []
+  """,
+  group = "array_funcs",
+  since = "4.4.0")
+case class TrimArray(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  override def prettyName: String = "trim_array"
+
+  override def dataType: DataType = left.dataType
+
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType)
+
+  @transient private lazy val elementType: DataType =
+    left.dataType.asInstanceOf[ArrayType].elementType
+
+  override def nullSafeEval(arrayVal: Any, nVal: Any): Any = {
+    val arr = arrayVal.asInstanceOf[ArrayData]
+    val n = nVal.asInstanceOf[Int]
+    val numElements = arr.numElements()
+    if (n < 0 || n > numElements) {
+      throw QueryExecutionErrors.invalidElementCountForTrimArrayError(prettyName, numElements, n)
+    }
+    val retainCount = numElements - n
+    val values = new Array[Any](retainCount)
+    for (i <- 0 until retainCount) {
+      if (!arr.isNullAt(i)) values(i) = arr.get(i, elementType)
+    }
+    new GenericArrayData(values)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (array, n) => {
+      val numElements = ctx.freshName("numElements")
+      val resLength = ctx.freshName("resLength")
+      val values = ctx.freshName("values")
+      val i = ctx.freshName("i")
+      val allocation = CodeGenerator.createArrayData(
+        values, elementType, resLength, s" $prettyName failed.")
+      val assignment = CodeGenerator.createArrayAssignment(
+        values, elementType, array, i, i, resultArrayElementNullable)
+      s"""
+         |${CodeGenerator.JAVA_INT} $numElements = $array.numElements();
+         |if ($n < 0 || $n > $numElements) {
+         |  throw QueryExecutionErrors.invalidElementCountForTrimArrayError(
+         |    "$prettyName", $numElements, $n);
+         |}
+         |${CodeGenerator.JAVA_INT} $resLength = $numElements - $n;
+         |$allocation
+         |for (int $i = 0; $i < $resLength; $i ++) {
+         |  $assignment
+         |}
+         |${ev.value} = $values;
+       """.stripMargin
+    })
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TrimArray =
+    copy(left = newLeft, right = newRight)
+}
+
+/**
  * Creates a String containing all the elements of the input array separated by the delimiter.
  */
 @ExpressionDescription(
@@ -2424,7 +2513,10 @@ case class ArrayJoin(
     }
   }
 
-  override def dataType: DataType = array.dataType.asInstanceOf[ArrayType].elementType
+  // The joined result concatenates every element plus delimiters, so it must not inherit the
+  // element's CHAR/VARCHAR length constraint (R1).
+  override def dataType: DataType =
+    StringHelper.transformingStringResultType(array.dataType.asInstanceOf[ArrayType].elementType)
 
   override def prettyName: String = "array_join"
 
@@ -3111,7 +3203,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     if (children.isEmpty) {
       StringType
     } else {
-      super.dataType
+      StringHelper.transformingStringResultType(super.dataType)
     }
   }
 

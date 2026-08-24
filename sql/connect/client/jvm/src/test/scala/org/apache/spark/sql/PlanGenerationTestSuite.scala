@@ -2266,6 +2266,26 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     binary.select(fn.bitmap_or_agg(fn.col("bytes")))
   }
 
+  test("function bitmap_and") {
+    binary.select(fn.bitmap_and(fn.col("bytes"), fn.col("bytes")))
+  }
+
+  test("function bitmap_or") {
+    binary.select(fn.bitmap_or(fn.col("bytes"), fn.col("bytes")))
+  }
+
+  test("function bitmap_andnot") {
+    binary.select(fn.bitmap_andnot(fn.col("bytes"), fn.col("bytes")))
+  }
+
+  test("function bitmap_xor") {
+    binary.select(fn.bitmap_xor(fn.col("bytes"), fn.col("bytes")))
+  }
+
+  test("function bitmap_xor_agg") {
+    binary.select(fn.bitmap_xor_agg(fn.col("bytes")))
+  }
+
   private def temporalFunctionTest(name: String)(f: => Column): Unit = {
     test("function " + name) {
       temporals.select(f)
@@ -2587,6 +2607,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("slice") {
     fn.slice(fn.col("e"), 0, 5)
+  }
+
+  functionTest("trim_array") {
+    fn.trim_array(fn.col("e"), 2)
   }
 
   functionTest("array_join") {

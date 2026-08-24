@@ -68,9 +68,9 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
 
-# The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
-# for code reuse.
-from pyspark.sql.functions import arrow_udf, pandas_udf  # noqa: F401
+# The implementations of pandas_udf, arrow_udf and udaf are embedded in pyspark.sql.functions
+# (they select the classic vs Connect UserDefinedFunction internally), so reuse them here.
+from pyspark.sql.functions import arrow_udf, pandas_udf, udaf  # noqa: F401
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -2518,6 +2518,28 @@ def slice(
 
 
 slice.__doc__ = pysparkfuncs.slice.__doc__
+
+
+def trim_array(x: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
+    n = _enum_to_value(n)
+    if isinstance(n, (Column, str)):
+        _n = n
+    elif isinstance(n, int):
+        _n = lit(n)
+    else:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "n",
+                "arg_type": type(n).__name__,
+            },
+        )
+
+    return _invoke_function_over_columns("trim_array", x, _n)
+
+
+trim_array.__doc__ = pysparkfuncs.trim_array.__doc__
 
 
 def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
@@ -5641,6 +5663,34 @@ def bitmap_count(col: "ColumnOrName") -> Column:
 bitmap_count.__doc__ = pysparkfuncs.bitmap_count.__doc__
 
 
+def bitmap_and(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_and", left, right)
+
+
+bitmap_and.__doc__ = pysparkfuncs.bitmap_and.__doc__
+
+
+def bitmap_or(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_or", left, right)
+
+
+bitmap_or.__doc__ = pysparkfuncs.bitmap_or.__doc__
+
+
+def bitmap_andnot(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_andnot", left, right)
+
+
+bitmap_andnot.__doc__ = pysparkfuncs.bitmap_andnot.__doc__
+
+
+def bitmap_xor(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_xor", left, right)
+
+
+bitmap_xor.__doc__ = pysparkfuncs.bitmap_xor.__doc__
+
+
 def bitmap_or_agg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_or_agg", col)
 
@@ -5653,6 +5703,13 @@ def bitmap_and_agg(col: "ColumnOrName") -> Column:
 
 
 bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
+
+
+def bitmap_xor_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_xor_agg", col)
+
+
+bitmap_xor_agg.__doc__ = pysparkfuncs.bitmap_xor_agg.__doc__
 
 
 # Geospatial ST Functions

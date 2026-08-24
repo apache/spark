@@ -187,6 +187,14 @@ class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         sources["struct<struct>:standard"] = pd.Series([{"a": {"b": 1}}])
         sources["struct<list<int64>>:standard"] = pd.Series([{"a": [1, 2]}])
 
+        # These feed the nested type tests (non_default): a child value that overflows a
+        # narrower element type, and homogeneous-value dicts, which infer as ``struct`` but
+        # convert to ``map`` when the requested type asks for one.
+        sources["list<int64>:overflow"] = pd.Series([[300, 2], [3]])
+        sources["struct:overflow"] = pd.Series([{"a": 300, "b": "x"}])
+        sources["struct<int64>:standard"] = pd.Series([{"a": 1, "b": 2}])
+        sources["struct<int64>:overflow"] = pd.Series([{"a": 300, "b": 2}])
+
         # =====================================================================
         # Temporal types
         # =====================================================================
@@ -296,6 +304,12 @@ class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         sources["string[pyarrow]:standard"] = pd.Series(["hello", "world"], dtype="string[pyarrow]")
         sources["string[pyarrow]:nullable"] = pd.Series(["hello", None], dtype="string[pyarrow]")
         sources["string[pyarrow]:empty"] = pd.Series([], dtype="string[pyarrow]")
+        # Binary is not auto-promoted to large_binary the way string is, so large_binary
+        # has to be requested explicitly.  This is the binary counterpart of the string
+        # rows, and lets the type tests exercise the binary half of SPARK-46776.
+        sources["large_binary[pyarrow]:standard"] = pd.Series(
+            [b"hello", b"world"], dtype="large_binary[pyarrow]"
+        )
         sources["timestamp[us][pyarrow]:standard"] = pd.Series(
             [datetime.datetime(2024, 1, 1, 12, 0, 0)], dtype="timestamp[us][pyarrow]"
         )

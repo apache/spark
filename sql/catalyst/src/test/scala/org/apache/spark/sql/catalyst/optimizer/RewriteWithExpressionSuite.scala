@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{DoubleType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
 
 class RewriteWithExpressionSuite extends PlanTest {
 
@@ -36,20 +37,6 @@ class RewriteWithExpressionSuite extends PlanTest {
 
   private val testRelation = LocalRelation($"a".int, $"b".int)
   private val testRelation2 = LocalRelation($"x".int, $"y".int)
-  private val doubleRelation = LocalRelation($"d".double)
-
-  // The guard of a pre-evaluated definition asks whether a condition held, which for a nullable
-  // condition is not the same as the condition itself: a null condition does not take the branch.
-  private def isTrue(cond: Expression): Expression =
-    EqualNullSafe(cond, Literal.TrueLiteral)
-  private def notTrue(cond: Expression): Expression = Not(isTrue(cond))
-
-  private def countCommonExprColumns(plan: LogicalPlan): Int = {
-    plan.children.head.expressions.count {
-      case alias: Alias => alias.name.startsWith("_common_expr")
-      case _ => false
-    }
-  }
 
   private def normalizeCommonExpressionIds(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressions {
@@ -241,15 +228,85 @@ class RewriteWithExpressionSuite extends PlanTest {
     )
   }
 
+  test("SPARK-58902: a With left in a conditional branch of an aggregate still converges") {
+    val Seq(a, b) = testRelation.output
+    // Not cheap and referenced twice, so it stays a memoizing `With` rather than being inlined.
+    val inBranch = With(a + b) { case Seq(ref) => ref * ref }
+    val plan = testRelation.groupBy(a)(max(Coalesce(Seq(a, inBranch))).as("col"))
+    // The `PhysicalAggregation` arm restructures the aggregate into a `Project` above it, and its
+    // guard is "the expressions contain a `With`", which a surviving one keeps true on every
+    // iteration of this fixed-point batch. Without the eq check in the rule this raises
+    // `Max iterations (5) reached for batch Rewrite With expression`, one `Project` per iteration.
+    val rewritten = Optimizer.execute(plan)
+    // Idempotent: running the batch again changes nothing.
+    comparePlans(Optimizer.execute(rewritten), rewritten)
+    assert(rewritten.collect { case p: Project => p }.size <= 1,
+      s"the rule stacked a Project per iteration:\n$rewritten")
+  }
+
+  test("SPARK-58902: a cheap or single-reference definition in a branch is still inlined") {
+    val Seq(a, b) = testRelation.output
+    // A bare attribute is cheap, so inlining it costs nothing and keeps the branch foldable.
+    val cheap = With(a) { case Seq(ref) => ref * ref }
+    comparePlans(
+      Optimizer.execute(testRelation.select(Coalesce(Seq(b, cheap)).as("col"))),
+      testRelation.select(Coalesce(Seq(b, a * a)).as("col")))
+
+    // Referenced once, so memoizing it would save nothing.
+    val singleRef = With(a + b) { case Seq(ref) => ref * Literal(2) }
+    comparePlans(
+      Optimizer.execute(testRelation.select(Coalesce(Seq(b, singleRef)).as("col"))),
+      testRelation.select(Coalesce(Seq(b, (a + b) * Literal(2))).as("col")))
+
+    // Expensive and referenced twice: this is the one worth a `With`.
+    val kept = With(a + b) { case Seq(ref) => ref * ref }
+    val keptPlan = testRelation.select(Coalesce(Seq(b, kept)).as("col"))
+    comparePlans(Optimizer.execute(keptPlan), keptPlan)
+  }
+
+  test("SPARK-58902: a cheap definition is only inlined if it is also deterministic") {
+    val Seq(a, b) = testRelation.output
+    def udf(e: Expression, deterministic: Boolean): PythonUDF =
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, deterministic)
+
+    // `CollapseProject.isCheap` admits a `PythonUDF` whose arguments are cheap, but it answers what
+    // one evaluation costs, not whether a second one would agree with the first. A nondeterministic
+    // one referenced twice has to stay memoized.
+    val nondet = With(udf(a, deterministic = false)) { case Seq(ref) => ref * ref }
+    val nondetPlan = testRelation.select(Coalesce(Seq(b, nondet)).as("col"))
+    comparePlans(Optimizer.execute(nondetPlan), nondetPlan)
+
+    // The deterministic one is inlined, as cheapness alone would have it.
+    val det = With(udf(a, deterministic = true)) { case Seq(ref) => ref * ref }
+    comparePlans(
+      Optimizer.execute(testRelation.select(Coalesce(Seq(b, det)).as("col"))),
+      testRelation.select(
+        Coalesce(Seq(b, udf(a, deterministic = true) * udf(a, deterministic = true))).as("col")))
+
+    // The same conjunct governs the main rewrite path, which has no `Coalesce` above it: there the
+    // definition is hoisted into a child `Project` instead of being substituted. Nothing in this
+    // batch sends it back -- `PlanHelper.specialExpressionsInUnsupportedOperator` collects only
+    // window, aggregate and generator expressions, so the `fakeProj` check does not force the
+    // substitution. What keeps `CollapseProject` from copying the alias back into its two consumers
+    // is that it requires a deterministic producer, which this suite's batch does not exercise.
+    val nondetMainPath = With(udf(a, deterministic = false)) { case Seq(ref) => ref * ref }
+    comparePlans(
+      Optimizer.execute(testRelation.select(nondetMainPath.as("col"))),
+      testRelation
+        .select((testRelation.output :+ udf(a, deterministic = false).as("_common_expr_0")): _*)
+        .select(($"_common_expr_0" * $"_common_expr_0").as("col"))
+        .analyze)
+  }
+
   test("WITH expression inside conditional expression") {
     val a = testRelation.output.head
-    val expr = Coalesce(Seq(a, With(a + a) { case Seq(ref) =>
-      ref * ref
-    }))
-    val inlinedExpr = Coalesce(Seq(a, (a + a) * (a + a)))
+    val inBranch = With(a + a) { case Seq(ref) => ref * ref }
+    val expr = Coalesce(Seq(a, inBranch))
     val plan = testRelation.select(expr.as("col"))
-    // With in the conditional branches is always inlined.
-    comparePlans(Optimizer.execute(plan), testRelation.select(inlinedExpr.as("col")))
+    // A `With` in a conditional branch is left where it is: it cannot go into a project, which is
+    // always evaluated, and it memoizes its definition per row itself, so the definition is still
+    // evaluated once rather than once per reference.
+    comparePlans(Optimizer.execute(plan), testRelation.select(expr.as("col")))
 
     val expr2 = Coalesce(Seq(With(a + a) { case Seq(ref) =>
       ref * ref
@@ -263,400 +320,6 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select(Coalesce(Seq(($"_common_expr_0" * $"_common_expr_0"), a)).as("col"))
         .analyze
     )
-  }
-
-  test("SPARK-58818: nondeterministic common expression in a conditional branch") {
-    val a = testRelation.output.head
-    // The shape built for `input BETWEEN lower AND upper` references the input twice.
-    def between(input: Expression, lower: Expression, upper: Expression): Expression =
-      With(input) { case Seq(ref) => ref >= lower && ref <= upper }
-
-    // Inlining a nondeterministic common expression draws an independent value per reference,
-    // which is what `With` exists to prevent, so it is pre-evaluated in a project instead. The
-    // guard keeps the draw from happening on the rows that take another branch, so `rand()` is
-    // advanced exactly on the rows that would have advanced it before.
-    val rand = Rand(Literal(1L))
-    val plan = testRelation.select(
-      CaseWhen(Seq((a > 0, Literal(true))), Some(between(rand, Literal(0.4), Literal(0.6))))
-        .as("col"))
-    comparePlans(
-      Optimizer.execute(plan),
-      testRelation
-        .select((testRelation.output :+
-          If(notTrue(a > 0), rand, Literal(0.0d)).as("_common_expr_0")): _*)
-        .select(
-          CaseWhen(
-            Seq((a > 0, Literal(true))),
-            Some($"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6)))
-            .as("col"))
-        .analyze)
-
-    // Control: a deterministic common expression in the same position is still inlined, so the
-    // branch above is what pre-evaluates `rand()` rather than some other precondition.
-    val plan2 = testRelation.select(
-      CaseWhen(Seq((a > 0, Literal(true))), Some(between(a + a, Literal(1), Literal(10))))
-        .as("col"))
-    comparePlans(
-      Optimizer.execute(plan2),
-      testRelation.select(
-        CaseWhen(
-          Seq((a > 0, Literal(true))),
-          Some((a + a) >= Literal(1) && (a + a) <= Literal(10))).as("col")))
-
-    // A nondeterministic expression that can raise stays inlined: pre-evaluating it would run it
-    // for the rows whose branch is not taken, turning a wrong result into a spurious error.
-    // `randstr` is nondeterministic with foldable children and still raises on a negative length.
-    val randStr = new RandStr(Literal(-1), Literal(0))
-    val plan3 = testRelation.select(
-      CaseWhen(Seq((a > 0, Literal(true))), Some(between(randStr, Literal("a"), Literal("z"))))
-        .as("col"))
-    comparePlans(
-      Optimizer.execute(plan3),
-      testRelation.select(
-        CaseWhen(
-          Seq((a > 0, Literal(true))),
-          Some(randStr >= Literal("a") && randStr <= Literal("z"))).as("col")))
-
-    // Same for a nondeterministic expression that is not the root: `rand() / a` reads row data.
-    val divide = Divide(rand, a.cast(DoubleType))
-    val plan4 = testRelation.select(
-      CaseWhen(Seq((a > 0, Literal(true))), Some(between(divide, Literal(0.4), Literal(0.6))))
-        .as("col"))
-    comparePlans(
-      Optimizer.execute(plan4),
-      testRelation.select(
-        CaseWhen(
-          Seq((a > 0, Literal(true))),
-          Some(divide >= Literal(0.4) && divide <= Literal(0.6))).as("col")))
-
-    // A single reference evaluates once either way, so there is nothing to fix and the branch keeps
-    // deciding whether `rand()` runs at all.
-    val plan5 = testRelation.select(
-      CaseWhen(
-        Seq((a > 0, Literal(0.0d))),
-        Some(With(rand) { case Seq(ref) => ref + Literal(1.0d) })).as("col"))
-    comparePlans(
-      Optimizer.execute(plan5),
-      testRelation.select(
-        CaseWhen(Seq((a > 0, Literal(0.0d))), Some(rand + Literal(1.0d))).as("col")))
-
-    // Each definition of one `With` is decided on its own: `rand()` is pre-evaluated while its
-    // `randstr` sibling, which can raise, keeps its inlining rather than being dragged along.
-    val plan6 = testRelation.select(
-      CaseWhen(
-        Seq((a > 0, Literal(true))),
-        Some(With(rand, randStr) { case Seq(r1, r2) =>
-          (r1 >= Literal(0.4) && r1 <= Literal(0.6)) && (r2 >= Literal("a") && r2 <= Literal("z"))
-        })).as("col"))
-    comparePlans(
-      Optimizer.execute(plan6),
-      testRelation
-        .select((testRelation.output :+
-          If(notTrue(a > 0), rand, Literal(0.0d)).as("_common_expr_0")): _*)
-        .select(
-          CaseWhen(
-            Seq((a > 0, Literal(true))),
-            Some(($"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6)) &&
-              (randStr >= Literal("a") && randStr <= Literal("z")))).as("col"))
-        .analyze)
-  }
-
-  test("SPARK-58818: the guard on a pre-evaluated definition tracks the branch reached") {
-    val a = testRelation.output.head
-    val rand = Rand(Literal(1L))
-    def between(input: Expression, lower: Expression, upper: Expression): Expression =
-      With(input) { case Seq(ref) => ref >= lower && ref <= upper }
-    def guarded(guard: Expression): NamedExpression =
-      If(guard, rand, Literal(0.0d)).as("_common_expr_0")
-
-    // A later branch is only reached when no preceding condition held, so its guard accumulates
-    // them.
-    val b = testRelation.output.last
-    val plan = testRelation.select(
-      CaseWhen(
-        Seq(
-          (a > 0, Literal(true)),
-          (b > 0, between(rand, Literal(0.4), Literal(0.6)))),
-        Some(Literal(false))).as("col"))
-    comparePlans(
-      Optimizer.execute(plan),
-      testRelation
-        .select((testRelation.output :+
-          guarded(notTrue(a > 0) && isTrue(b > 0))): _*)
-        .select(
-          CaseWhen(
-            Seq(
-              (a > 0, Literal(true)),
-              (b > 0, $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6))),
-            Some(Literal(false))).as("col"))
-        .analyze)
-
-    // A `With` in a condition is reached when no preceding condition held, and does not depend on
-    // its own condition.
-    val plan2 = testRelation.select(
-      CaseWhen(
-        Seq(
-          (a > 0, Literal(true)),
-          (between(rand, Literal(0.4), Literal(0.6)), Literal(true))),
-        Some(Literal(false))).as("col"))
-    comparePlans(
-      Optimizer.execute(plan2),
-      testRelation
-        .select((testRelation.output :+ guarded(notTrue(a > 0))): _*)
-        .select(
-          CaseWhen(
-            Seq(
-              (a > 0, Literal(true)),
-              ($"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6),
-                Literal(true))),
-            Some(Literal(false))).as("col"))
-        .analyze)
-
-    // `If` guards each of its two branches with the predicate and its negation.
-    val plan3 = testRelation.select(
-      If(a > 0, between(rand, Literal(0.4), Literal(0.6)), Literal(false)).as("col"))
-    comparePlans(
-      Optimizer.execute(plan3),
-      testRelation
-        .select((testRelation.output :+ guarded(isTrue(a > 0))): _*)
-        .select(
-          If(
-            a > 0,
-            $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6),
-            Literal(false)).as("col"))
-        .analyze)
-
-    // `Coalesce` reaches a child only when every preceding child returned null.
-    val pid = SparkPartitionID()
-    val plan4 = testRelation.select(
-      Coalesce(Seq(b, With(pid) { case Seq(ref) => ref + ref })).as("col"))
-    comparePlans(
-      Optimizer.execute(plan4),
-      testRelation
-        .select((testRelation.output :+
-          If(IsNull(b), pid, Literal(0)).as("_common_expr_0")): _*)
-        .select(Coalesce(Seq(b, $"_common_expr_0" + $"_common_expr_0")).as("col"))
-        .analyze)
-
-    // A nondeterministic preceding condition cannot be repeated as a guard: evaluating it a second
-    // time in the project would draw its own value and select a different set of rows than the
-    // branch does. The definition is still pre-evaluated, just without a guard, since inlining it
-    // would hand each reference its own value -- the bug this pre-evaluation exists to fix.
-    val plan5 = testRelation.select(
-      CaseWhen(
-        Seq(
-          (Rand(Literal(2L)) > Literal(0.5d), Literal(true)),
-          (b > 0, between(rand, Literal(0.4), Literal(0.6)))),
-        Some(Literal(false))).as("col"))
-    comparePlans(
-      Optimizer.execute(plan5),
-      testRelation
-        .select((testRelation.output :+ rand.as("_common_expr_0")): _*)
-        .select(
-          CaseWhen(
-            Seq(
-              (Rand(Literal(2L)) > Literal(0.5d), Literal(true)),
-              (b > 0, $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6))),
-            Some(Literal(false))).as("col"))
-        .analyze)
-
-    // Arithmetic can raise, so a condition carrying it is not repeated as a guard: the project
-    // evaluates the guard on every row, and subexpression elimination can hoist a repeated part of
-    // it out of the `If`, so it would raise on rows the branch never reached. The definition is
-    // still pre-evaluated, just without a guard.
-    val plan6 = testRelation.select(
-      CaseWhen(
-        Seq(
-          (between(a + a, Literal(1), Literal(10)), Literal(true)),
-          (b > 0, between(rand, Literal(0.4), Literal(0.6)))),
-        Some(Literal(false))).as("col"))
-    val hoistedCond = ($"_common_expr_1" >= Literal(1)) && ($"_common_expr_1" <= Literal(10))
-    comparePlans(
-      Optimizer.execute(plan6),
-      testRelation
-        .select((testRelation.output ++ Seq(
-          (a + a).as("_common_expr_1"),
-          rand.as("_common_expr_0"))): _*)
-        .select(
-          CaseWhen(
-            Seq(
-              (hoistedCond, Literal(true)),
-              (b > 0, $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6))),
-            Some(Literal(false))).as("col"))
-        .analyze)
-
-    // A condition that reads no row data is measured by its value, so the cast an implicit coercion
-    // puts around a literal -- not a node that can be repeated as a guard -- does not cost the
-    // guard. `a > 0L` in SQL arrives here as this. The guard itself keeps the condition as written,
-    // for `ConstantFolding` to fold along with the rest of the plan.
-    val foldableCast =
-      GreaterThan(a, Cast(Literal(0L), IntegerType, Some(conf.sessionLocalTimeZone)))
-    val plan7 = testRelation.select(
-      CaseWhen(
-        Seq(
-          (foldableCast, Literal(true)),
-          (b > 0, between(rand, Literal(0.4), Literal(0.6)))),
-        Some(Literal(false))).as("col"))
-    comparePlans(
-      Optimizer.execute(plan7),
-      testRelation
-        .select((testRelation.output :+
-          guarded(notTrue(foldableCast) && isTrue(b > 0))): _*)
-        .select(
-          CaseWhen(
-            Seq(
-              (foldableCast, Literal(true)),
-              (b > 0, $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6))),
-            Some(Literal(false))).as("col"))
-        .analyze)
-
-    // A subtree that raises rather than returning a value is left as it is, so it is still a cast
-    // when the condition is measured, and the guard is given up. Under ANSI it would otherwise
-    // raise CAST_INVALID_INPUT on every row of the project.
-    val raisingCast = GreaterThan(
-      a, Cast(Literal("x"), IntegerType, Some(conf.sessionLocalTimeZone), EvalMode.ANSI))
-    val plan8 = testRelation.select(
-      CaseWhen(
-        Seq(
-          (raisingCast, Literal(true)),
-          (b > 0, between(rand, Literal(0.4), Literal(0.6)))),
-        Some(Literal(false))).as("col"))
-    comparePlans(
-      Optimizer.execute(plan8),
-      testRelation
-        .select((testRelation.output :+ rand.as("_common_expr_0")): _*)
-        .select(
-          CaseWhen(
-            Seq(
-              (raisingCast, Literal(true)),
-              (b > 0, $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6))),
-            Some(Literal(false))).as("col"))
-        .analyze)
-
-    // A node can report itself foldable while ignoring its children: `typeof` answers from the
-    // child's type, so `typeof(a + a) = 'int'` and every comparison against it are foldable even
-    // though the addition is not. Measuring the condition by its value would delete the addition
-    // from what is measured while leaving it in the guard that runs, so a subtree is only measured
-    // by its value when it reads no row data.
-    val foldableOverRowData = EqualTo(TypeOf(a + a), Literal("int"))
-    val plan9 = testRelation.select(
-      CaseWhen(
-        Seq(
-          (foldableOverRowData, Literal(true)),
-          (b > 0, between(rand, Literal(0.4), Literal(0.6)))),
-        Some(Literal(false))).as("col"))
-    assert(foldableOverRowData.foldable, "the condition must be foldable to test anything")
-    comparePlans(
-      Optimizer.execute(plan9),
-      testRelation
-        .select((testRelation.output :+ rand.as("_common_expr_0")): _*)
-        .select(
-          CaseWhen(
-            Seq(
-              (foldableOverRowData, Literal(true)),
-              (b > 0, $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6))),
-            Some(Literal(false))).as("col"))
-        .analyze)
-
-    // The guard comes from the conditions as they were before this pass rewrote them: the rewritten
-    // first condition references a column this pass is still adding, which a `Project` cannot read
-    // from its own project list. Here the definition it hoists is a column comparison, which cannot
-    // raise, so inlining it into the guard keeps the guard available.
-    val nonCheapSafeCond = With(a > 0) { case Seq(ref) => ref || ref }
-    val plan10 = testRelation.select(
-      CaseWhen(
-        Seq(
-          (nonCheapSafeCond, Literal(true)),
-          (b > 0, between(rand, Literal(0.4), Literal(0.6)))),
-        Some(Literal(false))).as("col"))
-    val hoistedOr = $"_common_expr_1" || $"_common_expr_1"
-    val inlinedOr = (a > 0) || (a > 0)
-    comparePlans(
-      Optimizer.execute(plan10),
-      testRelation
-        .select((testRelation.output ++ Seq(
-          (a > 0).as("_common_expr_1"),
-          If(notTrue(inlinedOr) && isTrue(b > 0), rand, Literal(0.0d)).as("_common_expr_0"))): _*)
-        .select(
-          CaseWhen(
-            Seq(
-              (hoistedOr, Literal(true)),
-              (b > 0, $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6))),
-            Some(Literal(false))).as("col"))
-        .analyze)
-
-    // `NaNvl` reaches its right child only when the left one is NaN. `IsNaN` is false for a null
-    // input, so it is the whole guard.
-    val d = doubleRelation.output.head
-    val plan11 = doubleRelation.select(
-      NaNvl(d, With(rand) { case Seq(ref) => ref + ref }).as("col"))
-    comparePlans(
-      Optimizer.execute(plan11),
-      doubleRelation
-        .select((doubleRelation.output :+ guarded(IsNaN(d))): _*)
-        .select(NaNvl(d, $"_common_expr_0" + $"_common_expr_0").as("col"))
-        .analyze)
-
-    // A guard has to be evaluated by the same input plan as the definition. In a join condition
-    // where the guard reads one side, the column goes to that side rather than losing the guard.
-    val x = testRelation2.output.head
-    val condition = CaseWhen(
-      Seq((x > 0, between(rand, Literal(0.4), Literal(0.6)))), Some(Literal(false)))
-    comparePlans(
-      Optimizer.execute(testRelation.join(testRelation2, condition = Some(condition))),
-      testRelation
-        .join(
-          testRelation2.select((testRelation2.output :+ guarded(isTrue(x > 0))): _*),
-          condition = Some(CaseWhen(
-            Seq((x > 0, $"_common_expr_0" >= Literal(0.4) && $"_common_expr_0" <= Literal(0.6))),
-            Some(Literal(false)))))
-        .select((testRelation.output ++ testRelation2.output): _*)
-        .analyze)
-  }
-
-  test("SPARK-58818: a guarded pre-evaluated column is not read unconditionally") {
-    val a = testRelation.output.head
-    // One definition shared by a `With` inside a branch and a `With` outside it, so the same id
-    // reaches both the branch path and the main rewrite.
-    val exprDef = CommonExpressionDef(Rand(Literal(1L)))
-    val ref = new CommonExpressionRef(exprDef)
-    val inBranch = With(ref >= Literal(0.4d) && ref <= Literal(0.6d), Seq(exprDef))
-    val unconditional = With(ref + ref, Seq(exprDef))
-
-    // The branch gets a guarded column and the unconditional reference an unguarded one. Reading
-    // the guarded column here would give the default value on the rows taking the other branch.
-    val plan = testRelation.select(
-      CaseWhen(Seq((a > 0, Literal(true))), Some(inBranch)).as("c1"),
-      unconditional.as("c2"))
-    val rewritten = Optimizer.execute(plan)
-    val columns = rewritten.children.head.expressions.collect {
-      case alias: Alias if alias.name.startsWith("_common_expr") => alias
-    }
-    assert(columns.length == 2)
-    val guardedColumn = columns.filter(_.child.isInstanceOf[If])
-    val plainColumn = columns.filterNot(_.child.isInstanceOf[If])
-    assert(guardedColumn.length == 1 && plainColumn.length == 1)
-    val Seq(c1, c2) = rewritten.expressions
-    assert(c1.references.contains(guardedColumn.head.toAttribute))
-    assert(c2.references == AttributeSet(plainColumn.head.toAttribute))
-
-    // Two branches under the same guard share one column; under different guards they get one each,
-    // since a column computed for one branch holds its default value on the other's rows.
-    val sameGuard = testRelation.select(
-      CaseWhen(Seq((a > 0, inBranch)), Some(Literal(false))).as("c1"),
-      CaseWhen(Seq((a > 0, inBranch)), Some(Literal(false))).as("c2"))
-    assert(countCommonExprColumns(Optimizer.execute(sameGuard)) == 1)
-    val differentGuards = testRelation.select(
-      CaseWhen(Seq((a > 0, inBranch)), Some(inBranch)).as("c1"))
-    assert(countCommonExprColumns(Optimizer.execute(differentGuards)) == 2)
-
-    // The branch rewrite also adds unguarded columns, when the branch's conditions cannot be
-    // repeated as a guard. The main rewrite reads those, so the two paths have to agree on what the
-    // column holds even though `semanticEquals` is false for a nondeterministic definition.
-    val nondetCondition = testRelation.select(
-      If(Rand(Literal(2L)) > Literal(0.5d), inBranch, Literal(false)).as("c1"),
-      unconditional.as("c2"))
-    assert(countCommonExprColumns(Optimizer.execute(nondetCondition)) == 1)
   }
 
   test("WITH expression in grouping exprs") {

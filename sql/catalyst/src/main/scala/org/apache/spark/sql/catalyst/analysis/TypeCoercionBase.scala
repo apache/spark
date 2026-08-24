@@ -51,9 +51,53 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.AbstractStringType
+import org.apache.spark.sql.types.{
+  AbstractDataType,
+  DataType,
+  StringHelper,
+  StringType,
+  TypeCollection
+}
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
+
+  /**
+   * R1 promotion for CHAR(n)/VARCHAR(n): where a plain string is expected, promote to STRING the
+   * same way SHORT promotes to INT, and return the promoted type.
+   *
+   * CharType and VarcharType extend StringType, so an expectation such as
+   * `StringTypeWithCollation` accepts them as-is and the implicit cast rules leave the length
+   * constraint in place. Expressions that then require all their string inputs to share a single
+   * type (`overlay`, `string_agg`, ...) cannot unify CHAR(n) with STRING, and RuntimeReplaceable
+   * ones (`right`) build literals from the constrained type that no longer match their other
+   * branches.
+   *
+   * The expectation must actually mention a string type. Promoting at an `AnyDataType` site would
+   * strip the length from pass-through expressions such as `max`, `lag`, and `element_at`, which
+   * are required to preserve CHAR/VARCHAR (R2/R3).
+   */
+  protected def charVarcharToPlainString(
+      inType: DataType,
+      expectedType: AbstractDataType): Option[DataType] = inType match {
+    case st: StringType
+        if SQLConf.get.charVarcharStandardSemantics && !StringHelper.isPlainString(st) =>
+      val plain = StringHelper.plainStringType(st)
+      if (expectsStringType(expectedType) && expectedType.acceptsType(plain)) {
+        Some(plain)
+      } else {
+        None
+      }
+    case _ => None
+  }
+
+  private def expectsStringType(expectedType: AbstractDataType): Boolean = expectedType match {
+    case _: StringType => true
+    case _: AbstractStringType => true
+    case TypeCollection(types) => types.exists(expectsStringType)
+    case _ => false
+  }
 
   /**
    * Type coercion rule that combines multiple type coercion rules and applies them in a single tree

@@ -208,6 +208,71 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * The slots a `CommonExpressionRef` reads: the value and its nullness, plus the flag saying
+   * whether this row has computed them yet, and the definition to compute them from.
+   * `definitionCode` caches the definition's generated code so that every reference emits the same
+   * text -- and so shares the definition's own mutable state, such as an RNG -- rather than
+   * generating it afresh.
+   */
+  case class CommonExprSlots(
+      value: ExprCode,
+      computed: String,
+      definition: Expression,
+      private var definitionCode: Option[ExprCode] = None) {
+    def definitionGen(ctx: CodegenContext): ExprCode = {
+      if (definitionCode.isEmpty) {
+        definitionCode = Some(definition.genCode(ctx))
+      }
+      definitionCode.get
+    }
+  }
+
+  /**
+   * Holding a map of the common expressions of the `With` expressions currently being generated,
+   * the same way [[currentLambdaVars]] holds the variables of the enclosing lambdas.
+   */
+  var currentCommonExprs: mutable.Map[Long, CommonExprSlots] = mutable.HashMap.empty
+
+  /**
+   * Allocates a value slot and a `computed` flag per definition, generates `f` with them in scope,
+   * then takes them out of scope again. A reference generated inside `f` reads the slots back by
+   * id and fills them the first time it is reached on a row -- the enclosing `With` only clears the
+   * flags.
+   */
+  def withCommonExprs(defs: Seq[CommonExpressionDef])(f: Seq[CommonExprSlots] => ExprCode)
+    : ExprCode = {
+    val slots = defs.map { d =>
+      val id = d.id.id
+      if (currentCommonExprs.contains(id)) {
+        throw SparkException.internalError(s"Common expression $id is already being generated")
+      }
+      val isNull = if (d.nullable) {
+        JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "commonExprIsNull"))
+      } else {
+        FalseLiteral
+      }
+      val value = addMutableState(javaType(d.dataType), "commonExprValue")
+      val slot = CommonExprSlots(
+        ExprCode(isNull, JavaCode.global(value, d.dataType)),
+        addMutableState(JAVA_BOOLEAN, "commonExprComputed"),
+        d.child)
+      currentCommonExprs.put(id, slot)
+      slot
+    }
+    try {
+      f(slots)
+    } finally {
+      defs.map(_.id.id).foreach(currentCommonExprs.remove)
+    }
+  }
+
+  def getCommonExpr(id: Long): CommonExprSlots = {
+    currentCommonExprs.getOrElse(
+      id,
+      throw SparkException.internalError(s"Common expression $id is not in scope"))
+  }
+
+  /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
    * 2-tuple: java type, variable name.
    * As an example, ("int", "count") will produce code:
