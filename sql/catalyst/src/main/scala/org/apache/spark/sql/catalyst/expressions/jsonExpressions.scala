@@ -1245,7 +1245,7 @@ trait ImplicitlyFormattedAsJson extends Expression {
 
 // scalastyle:off line.size.limit
 /**
- * The SQL:2016 `JSON_ARRAY` constructor function (feature T811): constructs a JSON array from
+ * The SQL:2016 `JSON_ARRAY` constructor function (feature T811) constructs a JSON array from
  * a list of values, with optional `(NULL | ABSENT) ON NULL` control and `RETURNING` type clause.
  *
  * `NULL ON NULL` (non-default) keeps NULL elements as JSON `null` values.
@@ -1465,8 +1465,9 @@ case class JsonArray(
         Map.empty, ArrayType(values(idx).dataType), Some(resolvedZoneId))
       elementEvaluators(idx) = evaluator
     }
-    val arrJson = evaluator
-      .evaluate(singleElemArray).asInstanceOf[UTF8String].toString
+    // Take the Java String directly (via `evaluateString`) rather than `evaluate`'s `UTF8String`,
+    // which we would immediately decode back to a String here.
+    val arrJson = evaluator.evaluateString(singleElemArray)
     // `arrJson` is "[<frag>]" (compact, no spaces); append just the interior fragment so the
     // serialized text is copied once, without materializing a per-element substring.
     sb.append(arrJson, 1, arrJson.length - 1)
@@ -1562,10 +1563,13 @@ case class JsonArray(
         v.sql
       }
     }.mkString(", ")
-    // Use reference identity, not value equality: an explicit `RETURNING STRING COLLATE ...`
-    // produces a distinct StringType instance that compares equal (`==`) to the default companion
-    // `StringType`, so `==` would drop it. Only the omitted default (the companion, by reference)
-    // should render nothing.
+    // Use reference identity, not value equality: an explicit `RETURNING STRING COLLATE
+    // UTF8_BINARY` (with the same constraint) produces a distinct StringType instance that
+    // compares equal (`==`) to the default companion `StringType`, so `==` would drop it. A
+    // non-default collation such as `UTF8_LCASE` does not compare equal to the companion anyway
+    // (StringType.equals compares both the collation ID and constraint), so reference identity is
+    // needed here specifically to distinguish the explicit default collation from the omitted
+    // default (the companion, by reference), which alone should render nothing.
     val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
     val nullSQL = nullBehavior match {
       case JsonConstructorNullBehavior.Null => " NULL ON NULL"

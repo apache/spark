@@ -457,9 +457,13 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   test("view default collation preserves an explicit collated RETURNING") {
     // Exercises the CREATE VIEW resolution path (in addition to the CTAS path above): the explicit
     // RETURNING collation must survive the view's default collation. Pin the fixed-point analyzer:
-    // the single-pass resolver does not yet resolve a TimeZoneAware JSON constructor's timezone
-    // when re-resolving a view (a pre-existing gap independent of collation); the CTAS test above
-    // already exercises the single-pass path via the dual-run analyzer.
+    // although ExpressionResolver routes every TimeZoneAwareExpression through
+    // TimezoneAwareExpressionResolver on the normal path, the single-pass *view re-resolution* path
+    // (ViewResolver re-resolving the reconstructed plan) leaves this constructor's timezone unset,
+    // so dual-run trips the ResolutionValidator with "Timezone expression must have a timezone"
+    // (verified). This is a pre-existing single-pass view-resolution gap independent of collation:
+    // the CTAS test above uses the same default collation and passes under dual-run, so single-pass
+    // coverage of the default-collation path is already established there.
     withSQLConf(
         SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
         SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
