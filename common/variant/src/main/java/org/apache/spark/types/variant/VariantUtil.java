@@ -698,21 +698,6 @@ public class VariantUtil {
     return Arrays.compareUnsigned(left, right);
   }
 
-  // Compare a metadata key with a UTF-8-encoded key using unsigned byte ordering.
-  static int compareMetadataKey(byte[] metadata, int id, byte[] key) {
-    checkIndex(0, metadata.length);
-    int offsetSize = ((metadata[0] >> 6) & 0x3) + 1;
-    int dictSize = readUnsigned(metadata, 1, offsetSize);
-    if (id >= dictSize) throw malformedVariant();
-    int stringStart = 1 + (dictSize + 2) * offsetSize;
-    int offset = readUnsigned(metadata, 1 + (id + 1) * offsetSize, offsetSize);
-    int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
-    if (offset > nextOffset) throw malformedVariant();
-    checkIndex(stringStart + nextOffset - 1, metadata.length);
-    return Arrays.compareUnsigned(
-        metadata, stringStart + offset, stringStart + nextOffset, key, 0, key.length);
-  }
-
   // Get a key at `id` in the variant metadata.
   // Throw `MALFORMED_VARIANT` if the variant is malformed. An out-of-bound `id` is also considered
   // a malformed variant because it is read from the corresponding variant value.

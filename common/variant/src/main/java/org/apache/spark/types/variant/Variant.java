@@ -163,9 +163,10 @@ public final class Variant {
           // overflows int.
           int mid = (low + high) >>> 1;
           int id = readUnsigned(value, idStart + idSize * mid, idSize);
+          String midKey = getMetadataKey(metadata, id);
           int cmp = attempt == 0
-              ? compareMetadataKey(metadata, id, keyBytes)
-              : getMetadataKey(metadata, id).compareTo(key);
+              ? compareKeys(encodeKey(midKey), keyBytes)
+              : midKey.compareTo(key);
           if (cmp < 0) {
             low = mid + 1;
           } else if (cmp > 0) {
