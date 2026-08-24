@@ -471,6 +471,25 @@ private[spark] class SummarizerBuffer(
   private var currMax: Array[Double] = null
   private var currMin: Array[Double] = null
 
+  private val requestedMean = requestedMetrics.contains(Mean)
+  private val requestedSum = requestedMetrics.contains(Sum)
+  private val requestedVariance = requestedMetrics.contains(Variance)
+  private val requestedStd = requestedMetrics.contains(Std)
+  private val requestedNumNonZeros = requestedMetrics.contains(NumNonZeros)
+  private val requestedMax = requestedMetrics.contains(Max)
+  private val requestedMin = requestedMetrics.contains(Min)
+  private val requestedNormL2 = requestedMetrics.contains(NormL2)
+  private val requestedNormL1 = requestedMetrics.contains(NormL1)
+
+  private val computeMean = requestedCompMetrics.contains(ComputeMean)
+  private val computeM2n = requestedCompMetrics.contains(ComputeM2n)
+  private val computeM2 = requestedCompMetrics.contains(ComputeM2)
+  private val computeL1 = requestedCompMetrics.contains(ComputeL1)
+  private val computeWeightSum = requestedCompMetrics.contains(ComputeWeightSum)
+  private val computeNNZ = requestedCompMetrics.contains(ComputeNNZ)
+  private val computeMax = requestedCompMetrics.contains(ComputeMax)
+  private val computeMin = requestedCompMetrics.contains(ComputeMin)
+
   def this() = {
     this(
       Seq(
@@ -496,28 +515,26 @@ private[spark] class SummarizerBuffer(
     )
   }
 
+  private def initialize(size: Int): Unit = {
+    require(size > 0, s"Vector should have dimension larger than zero.")
+    n = size
+
+    if (computeMean) { currMean = Array.ofDim[Double](n) }
+    if (computeM2n) { currM2n = Array.ofDim[Double](n) }
+    if (computeM2) { currM2 = Array.ofDim[Double](n) }
+    if (computeL1) { currL1 = Array.ofDim[Double](n) }
+    if (computeWeightSum) { currWeightSum = Array.ofDim[Double](n) }
+    if (computeNNZ) { nnz = Array.ofDim[Long](n) }
+    if (computeMax) { currMax = Array.fill[Double](n)(Double.MinValue) }
+    if (computeMin) { currMin = Array.fill[Double](n)(Double.MaxValue) }
+  }
+
   def add(nonZeroIterator: Iterator[(Int, Double)], size: Int, weight: Double): this.type = {
     require(weight >= 0.0, s"sample weight, $weight has to be >= 0.0")
     if (weight == 0.0) return this
 
     if (n == 0) {
-      require(size > 0, s"Vector should have dimension larger than zero.")
-      n = size
-
-      if (requestedCompMetrics.contains(ComputeMean)) { currMean = Array.ofDim[Double](n) }
-      if (requestedCompMetrics.contains(ComputeM2n)) { currM2n = Array.ofDim[Double](n) }
-      if (requestedCompMetrics.contains(ComputeM2)) { currM2 = Array.ofDim[Double](n) }
-      if (requestedCompMetrics.contains(ComputeL1)) { currL1 = Array.ofDim[Double](n) }
-      if (requestedCompMetrics.contains(ComputeWeightSum)) {
-        currWeightSum = Array.ofDim[Double](n)
-      }
-      if (requestedCompMetrics.contains(ComputeNNZ)) { nnz = Array.ofDim[Long](n) }
-      if (requestedCompMetrics.contains(ComputeMax)) {
-        currMax = Array.fill[Double](n)(Double.MinValue)
-      }
-      if (requestedCompMetrics.contains(ComputeMin)) {
-        currMin = Array.fill[Double](n)(Double.MaxValue)
-      }
+      initialize(size)
     }
 
     require(n == size, s"Dimensions mismatch when adding new sample." +
@@ -533,35 +550,32 @@ private[spark] class SummarizerBuffer(
       val localCurrMax = currMax
       val localCurrMin = currMin
       nonZeroIterator.foreach { case (index, value) =>
-        if (localCurrMax != null && localCurrMax(index) < value) {
+        if (computeMax && localCurrMax(index) < value) {
           localCurrMax(index) = value
         }
-        if (localCurrMin != null && localCurrMin(index) > value) {
+        if (computeMin && localCurrMin(index) > value) {
           localCurrMin(index) = value
         }
 
-        if (localCurrWeightSum != null) {
-          if (localCurrMean != null) {
-            val prevMean = localCurrMean(index)
-            val diff = value - prevMean
-            localCurrMean(index) = prevMean +
-              weight * diff / (localCurrWeightSum(index) + weight)
+        if (computeWeightSum) {
+          val prevMean = localCurrMean(index)
+          val diff = value - prevMean
+          localCurrMean(index) = prevMean + weight * diff / (localCurrWeightSum(index) + weight)
 
-            if (localCurrM2n != null) {
-              localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
-            }
+          if (computeM2n) {
+            localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
           }
           localCurrWeightSum(index) += weight
         }
 
-        if (localCurrM2 != null) {
+        if (computeM2) {
           localCurrM2(index) += weight * value * value
         }
-        if (localCurrL1 != null) {
+        if (computeL1) {
           localCurrL1(index) += weight * math.abs(value)
         }
 
-        if (localNumNonzeros != null) {
+        if (computeNNZ) {
           localNumNonzeros(index) += 1
         }
       }
@@ -588,67 +602,81 @@ private[spark] class SummarizerBuffer(
    * @param other The other MultivariateOnlineSummarizer to be merged.
    */
   def merge(other: SummarizerBuffer): this.type = {
-    if (this.totalWeightSum != 0.0 && other.totalWeightSum != 0.0) {
-      require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
-        s"Expecting $n but got ${other.n}.")
-      totalCnt += other.totalCnt
-      totalWeightSum += other.totalWeightSum
-      weightSquareSum += other.weightSquareSum
-      var i = 0
-      while (i < n) {
-        if (currWeightSum != null) {
-          val thisWeightSum = currWeightSum(i)
-          val otherWeightSum = other.currWeightSum(i)
-          val totalWeightSum = thisWeightSum + otherWeightSum
-
-          if (totalWeightSum != 0.0) {
-            if (currMean != null) {
-              val deltaMean = other.currMean(i) - currMean(i)
-              // merge mean together
-              currMean(i) += deltaMean * otherWeightSum / totalWeightSum
-
-              if (currM2n != null) {
-                // merge m2n together
-                currM2n(i) += other.currM2n(i) +
-                  deltaMean * deltaMean * thisWeightSum * otherWeightSum / totalWeightSum
-              }
-            }
-          }
-          currWeightSum(i) = totalWeightSum
-        }
-
-        // merge m2 together
-        if (currM2 != null) { currM2(i) += other.currM2(i) }
-        // merge l1 together
-        if (currL1 != null) { currL1(i) += other.currL1(i) }
-        // merge max and min
-        if (currMax != null) { currMax(i) = math.max(currMax(i), other.currMax(i)) }
-        if (currMin != null) { currMin(i) = math.min(currMin(i), other.currMin(i)) }
-        if (nnz != null) { nnz(i) += other.nnz(i) }
-        i += 1
-      }
-    } else if (totalWeightSum == 0.0 && other.totalWeightSum != 0.0) {
-      this.n = other.n
-      if (other.currMean != null) { this.currMean = other.currMean.clone() }
-      if (other.currM2n != null) { this.currM2n = other.currM2n.clone() }
-      if (other.currM2 != null) { this.currM2 = other.currM2.clone() }
-      if (other.currL1 != null) { this.currL1 = other.currL1.clone() }
-      this.totalCnt = other.totalCnt
-      this.totalWeightSum = other.totalWeightSum
-      this.weightSquareSum = other.weightSquareSum
-      if (other.currWeightSum != null) { this.currWeightSum = other.currWeightSum.clone() }
-      if (other.nnz != null) { this.nnz = other.nnz.clone() }
-      if (other.currMax != null) { this.currMax = other.currMax.clone() }
-      if (other.currMin != null) { this.currMin = other.currMin.clone() }
+    if (other.totalWeightSum == 0.0) {
+      return this
     }
+    if (totalWeightSum == 0.0) {
+      copyFrom(other)
+      return this
+    }
+
+    mergeNonEmpty(other)
     this
+  }
+
+  private def mergeNonEmpty(other: SummarizerBuffer): Unit = {
+    require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
+      s"Expecting $n but got ${other.n}.")
+    totalCnt += other.totalCnt
+    totalWeightSum += other.totalWeightSum
+    weightSquareSum += other.weightSquareSum
+
+    var i = 0
+    while (i < n) {
+      if (computeWeightSum) {
+        val thisWeightSum = currWeightSum(i)
+        val otherWeightSum = other.currWeightSum(i)
+        val totalWeightSum = thisWeightSum + otherWeightSum
+
+        if (totalWeightSum != 0.0) {
+          val deltaMean = other.currMean(i) - currMean(i)
+          currMean(i) += deltaMean * otherWeightSum / totalWeightSum
+
+          if (computeM2n) {
+            currM2n(i) += other.currM2n(i) +
+              deltaMean * deltaMean * thisWeightSum * otherWeightSum / totalWeightSum
+          }
+        }
+        currWeightSum(i) = totalWeightSum
+      }
+
+      if (computeM2) { currM2(i) += other.currM2(i) }
+      if (computeL1) { currL1(i) += other.currL1(i) }
+      if (computeMax) { currMax(i) = math.max(currMax(i), other.currMax(i)) }
+      if (computeMin) { currMin(i) = math.min(currMin(i), other.currMin(i)) }
+      if (computeNNZ) { nnz(i) += other.nnz(i) }
+      i += 1
+    }
+  }
+
+  private def copyFrom(other: SummarizerBuffer): Unit = {
+    this.n = other.n
+    this.currMean = cloneOrNull(other.currMean)
+    this.currM2n = cloneOrNull(other.currM2n)
+    this.currM2 = cloneOrNull(other.currM2)
+    this.currL1 = cloneOrNull(other.currL1)
+    this.totalCnt = other.totalCnt
+    this.totalWeightSum = other.totalWeightSum
+    this.weightSquareSum = other.weightSquareSum
+    this.currWeightSum = cloneOrNull(other.currWeightSum)
+    this.nnz = cloneOrNull(other.nnz)
+    this.currMax = cloneOrNull(other.currMax)
+    this.currMin = cloneOrNull(other.currMin)
+  }
+
+  private def cloneOrNull(values: Array[Double]): Array[Double] = {
+    if (values == null) null else values.clone()
+  }
+
+  private def cloneOrNull(values: Array[Long]): Array[Long] = {
+    if (values == null) null else values.clone()
   }
 
   /**
    * Sample mean of each dimension.
    */
   def mean: Vector = {
-    require(requestedMetrics.contains(Mean), "mean was not a requested metric.")
+    require(requestedMean, "mean was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realMean = Array.ofDim[Double](n)
@@ -664,7 +692,7 @@ private[spark] class SummarizerBuffer(
    * Sum of each dimension.
    */
   def sum: Vector = {
-    require(requestedMetrics.contains(Sum), "sum was not a requested metric.")
+    require(requestedSum, "sum was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realSum = Array.ofDim[Double](n)
@@ -680,7 +708,7 @@ private[spark] class SummarizerBuffer(
    * Unbiased estimate of sample variance of each dimension.
    */
   def variance: Vector = {
-    require(requestedMetrics.contains(Variance), "variance was not a requested metric.")
+    require(requestedVariance, "variance was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realVariance = computeVariance
@@ -691,7 +719,7 @@ private[spark] class SummarizerBuffer(
    * Unbiased estimate of standard deviation of each dimension.
    */
   def std: Vector = {
-    require(requestedMetrics.contains(Std), "std was not a requested metric.")
+    require(requestedStd, "std was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realVariance = computeVariance
@@ -732,7 +760,7 @@ private[spark] class SummarizerBuffer(
    *
    */
   def numNonzeros: Vector = {
-    require(requestedMetrics.contains(NumNonZeros), "numNonZeros was not a requested metric.")
+    require(requestedNumNonZeros, "numNonZeros was not a requested metric.")
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(nnz.map(_.toDouble))
@@ -742,7 +770,7 @@ private[spark] class SummarizerBuffer(
    * Maximum value of each dimension.
    */
   def max: Vector = {
-    require(requestedMetrics.contains(Max), "max was not a requested metric.")
+    require(requestedMax, "max was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     var i = 0
@@ -757,7 +785,7 @@ private[spark] class SummarizerBuffer(
    * Minimum value of each dimension.
    */
   def min: Vector = {
-    require(requestedMetrics.contains(Min), "min was not a requested metric.")
+    require(requestedMin, "min was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     var i = 0
@@ -772,7 +800,7 @@ private[spark] class SummarizerBuffer(
    * L2 (Euclidean) norm of each dimension.
    */
   def normL2: Vector = {
-    require(requestedMetrics.contains(NormL2), "normL2 was not a requested metric.")
+    require(requestedNormL2, "normL2 was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realMagnitude = Array.ofDim[Double](n)
@@ -790,7 +818,7 @@ private[spark] class SummarizerBuffer(
    * L1 norm of each dimension.
    */
   def normL1: Vector = {
-    require(requestedMetrics.contains(NormL1), "normL1 was not a requested metric.")
+    require(requestedNormL1, "normL1 was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(currL1)
