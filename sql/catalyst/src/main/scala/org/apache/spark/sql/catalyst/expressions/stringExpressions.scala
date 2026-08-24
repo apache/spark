@@ -2707,9 +2707,7 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
   // Type the literal branches after ImplicitTypeCasts promotes CHAR/VARCHAR to STRING.
-  // Substring then returns STRING, so the If branches match. CheckAnalysis does not see inside
-  // a RuntimeReplaceable's replacement, so a mismatch would surface later as
-  // COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.
+  // Substring then returns STRING, so the If branches match.
   private lazy val resultType: DataType = str.dataType
 
   override lazy val replacement: Expression = If(

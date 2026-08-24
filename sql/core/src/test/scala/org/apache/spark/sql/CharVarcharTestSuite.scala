@@ -21,6 +21,7 @@ import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
   ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, Literal, ScalarSubquery,
   StringRPad, StringToMap, Upper
@@ -1855,6 +1856,16 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE.key -> "true") {
+      def sql(sqlText: String): DataFrame = {
+        val parsed = spark.sessionState.sqlParser.parsePlan(sqlText)
+        val unsupportedReason =
+          new ResolverGuard(spark.sessionState.catalogManager).apply(parsed).planUnsupportedReason
+        assert(
+          unsupportedReason.isEmpty,
+          s"ResolverGuard skipped dual-run for [$sqlText]: $unsupportedReason")
+        spark.sql(sqlText)
+      }
+
       // CAST / try_cast introduce the type.
       assert(sql("SELECT CAST('ab' AS CHAR(5)) AS c").schema.head.dataType === CharType(5))
       assert(sql("SELECT CAST('hello' AS VARCHAR(5)) AS c").schema.head.dataType ===
@@ -1980,8 +1991,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
       // Bare column references keep the declared type through dual-run analysis.
       withTable("char_varchar_dual_run") {
-        sql("CREATE TABLE char_varchar_dual_run (c CHAR(5), v VARCHAR(5)) USING parquet")
-        sql("INSERT INTO char_varchar_dual_run VALUES ('ab', 'ab')")
+        spark.sql("CREATE TABLE char_varchar_dual_run (c CHAR(5), v VARCHAR(5)) USING parquet")
+        spark.sql("INSERT INTO char_varchar_dual_run VALUES ('ab', 'ab')")
         val df = sql("SELECT c, v FROM char_varchar_dual_run")
         assert(df.schema("c").dataType === CharType(5))
         assert(df.schema("v").dataType === VarcharType(5))
