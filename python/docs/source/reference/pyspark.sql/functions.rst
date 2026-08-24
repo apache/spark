@@ -779,6 +779,7 @@ UDF, UDTF and UDT
     udf
     udtf
     unwrap_udt
+    wrap_udt
 
 
 Table-Valued Functions

@@ -17,41 +17,69 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.types.{DataType, UserDefinedType}
 
 /**
- * Unwrap UDT data type column into its underlying type.
+ * Wrap a column with a UDT whose underlying SQL type matches the column data type.
  *
- * @see [[WrapUDT]] for converting an underlying SQL type column to a UDT.
+ * @see [[UnwrapUDT]] for converting a UDT column to its underlying SQL type.
  */
-case class UnwrapUDT(child: Expression) extends UnaryExpression with NonSQLExpression {
+case class WrapUDT(child: Expression, udt: UserDefinedType[_])
+  extends UnaryExpression with NonSQLExpression {
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.genCode(ctx)
+  def this(child: Expression, udt: Expression) = {
+    this(child, WrapUDT.parseUDT(udt))
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.genCode(ctx)
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[UserDefinedType[_]]) {
+    if (DataTypeUtils.sameType(child.dataType, udt.sqlType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
           "paramIndex" -> ordinalNumber(0),
-          "requiredType" -> toSQLType("UserDefinedType"),
+          "requiredType" -> toSQLType(udt.sqlType),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType)))
     }
   }
-  override def dataType: DataType = child.dataType.asInstanceOf[UserDefinedType[_]].sqlType
+
+  override def dataType: DataType = udt
 
   override def nullSafeEval(input: Any): Any = input
 
-  override def prettyName: String = "unwrap_udt"
+  override def prettyName: String = "wrap_udt"
 
-  override protected def withNewChildInternal(newChild: Expression): UnwrapUDT = {
+  override protected def withNewChildInternal(newChild: Expression): WrapUDT = {
     copy(child = newChild)
+  }
+}
+
+object WrapUDT {
+  private def parseUDT(expression: Expression): UserDefinedType[_] = {
+    ExprUtils.evalTypeExpr(expression) match {
+      case udt: UserDefinedType[_] => udt
+      case dataType =>
+        throw new AnalysisException(
+          errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "sqlExpr" -> toSQLExpr(expression),
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType("UserDefinedType"),
+            "inputSql" -> toSQLExpr(expression),
+            "inputType" -> toSQLType(dataType)))
+    }
   }
 }
