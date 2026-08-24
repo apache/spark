@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.functions.{col, length, lit, not, printf, raise_error, trim,
   unwrap_udt, when, wrap_udt}
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
 
@@ -414,8 +415,8 @@ object MLUtils extends Logging {
    * Converts Matrix columns in an input Dataset from the [[org.apache.spark.mllib.linalg.Matrix]]
    * type to the new [[org.apache.spark.ml.linalg.Matrix]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of matrix columns to be converted. New matrix columns will be ignored. If
-   *             unspecified, all old matrix columns will be converted except nested ones.
+   * @param cols a list of matrix columns to be converted. If unspecified, all matrix columns will
+   *             be converted except nested ones.
    * @return the input `DataFrame` with old matrix columns converted to the new matrix type
    */
   @Since("2.0.0")
@@ -423,20 +424,15 @@ object MLUtils extends Logging {
   def convertMatrixColumnsToML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colSet = if (cols.nonEmpty) {
-      cols.flatMap { c =>
+      cols.map { c =>
         val dataType = schema(c).dataType
-        if (dataType.getClass == classOf[MatrixUDT]) {
-          Some(c)
-        } else {
-          // ignore new matrix columns and raise an exception on other column types
-          require(dataType.getClass == classOf[MLMatrixUDT],
-            s"Column $c must be old Matrix type to be converted to new type but got $dataType.")
-          None
-        }
+        require(isMatrixUDT(dataType),
+          s"Column $c must be Matrix type to be converted to new type but got $dataType.")
+        c
       }.toSet
     } else {
       schema.fields
-        .filter(_.dataType.getClass == classOf[MatrixUDT])
+        .filter(field => isMatrixUDT(field.dataType))
         .map(_.name)
         .toSet
     }
@@ -461,8 +457,8 @@ object MLUtils extends Logging {
    * Converts matrix columns in an input Dataset to the [[org.apache.spark.mllib.linalg.Matrix]]
    * type from the new [[org.apache.spark.ml.linalg.Matrix]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of matrix columns to be converted. Old matrix columns will be ignored. If
-   *             unspecified, all new matrix columns will be converted except nested ones.
+   * @param cols a list of matrix columns to be converted. If unspecified, all matrix columns will
+   *             be converted except nested ones.
    * @return the input `DataFrame` with new matrix columns converted to the old matrix type
    */
   @Since("2.0.0")
@@ -470,20 +466,15 @@ object MLUtils extends Logging {
   def convertMatrixColumnsFromML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colSet = if (cols.nonEmpty) {
-      cols.flatMap { c =>
+      cols.map { c =>
         val dataType = schema(c).dataType
-        if (dataType.getClass == classOf[MLMatrixUDT]) {
-          Some(c)
-        } else {
-          // ignore old matrix columns and raise an exception on other column types
-          require(dataType.getClass == classOf[MatrixUDT],
-            s"Column $c must be new Matrix type to be converted to old type but got $dataType.")
-          None
-        }
+        require(isMatrixUDT(dataType),
+          s"Column $c must be Matrix type to be converted to old type but got $dataType.")
+        c
       }.toSet
     } else {
       schema.fields
-        .filter(_.dataType.getClass == classOf[MLMatrixUDT])
+        .filter(field => isMatrixUDT(field.dataType))
         .map(_.name)
         .toSet
     }
@@ -504,6 +495,9 @@ object MLUtils extends Logging {
     dataset.select(exprs.toImmutableArraySeq: _*)
   }
 
+  private def isMatrixUDT(dataType: DataType): Boolean = {
+    dataType.getClass == classOf[MatrixUDT] || dataType.getClass == classOf[MLMatrixUDT]
+  }
 
   /**
    * Returns the squared Euclidean distance between two vectors. The following formula will be used
