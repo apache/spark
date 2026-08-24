@@ -180,17 +180,11 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val newAlwaysEvaluatedInputs = c.alwaysEvaluatedInputs.map(
           rewriteWithExprAndInputPlans(
             _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith))
-        val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
-        // Use transformUp to handle nested With.
-        newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          case With(child, defs) =>
-            // For With in the conditional branches, they may not be evaluated at all and we can't
-            // pull the common expressions into a project which will always be evaluated. Inline it.
-            val refToExpr = defs.map(d => d.id -> d.child).toMap
-            child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-              case ref: CommonExpressionRef => refToExpr(ref.id)
-            }
-        }
+        // A `With` in a conditional branch is left alone: the branch may not be evaluated at all,
+        // so its definitions cannot go into a project, which always is. The `With` memoizes each
+        // definition per row instead, so a definition is evaluated where the branch would have
+        // evaluated it -- once -- rather than once per reference.
+        c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(

@@ -228,13 +228,13 @@ class RewriteWithExpressionSuite extends PlanTest {
 
   test("WITH expression inside conditional expression") {
     val a = testRelation.output.head
-    val expr = Coalesce(Seq(a, With(a + a) { case Seq(ref) =>
-      ref * ref
-    }))
-    val inlinedExpr = Coalesce(Seq(a, (a + a) * (a + a)))
+    val inBranch = With(a + a) { case Seq(ref) => ref * ref }
+    val expr = Coalesce(Seq(a, inBranch))
     val plan = testRelation.select(expr.as("col"))
-    // With in the conditional branches is always inlined.
-    comparePlans(Optimizer.execute(plan), testRelation.select(inlinedExpr.as("col")))
+    // A `With` in a conditional branch is left where it is: it cannot go into a project, which is
+    // always evaluated, and it memoizes its definition per row itself, so the definition is still
+    // evaluated once rather than once per reference.
+    comparePlans(Optimizer.execute(plan), testRelation.select(expr.as("col")))
 
     val expr2 = Coalesce(Seq(With(a + a) { case Seq(ref) =>
       ref * ref

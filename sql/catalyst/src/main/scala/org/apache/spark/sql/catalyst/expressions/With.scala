@@ -17,9 +17,41 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
 import org.apache.spark.sql.types.DataType
+
+/**
+ * The value of one common expression on the row being evaluated, computed the first time a
+ * [[CommonExpressionRef]] reads it and reused by every later reference.
+ *
+ * The cell holds no expression of its own: the reference passes the definition in, so the cell stays
+ * a pair of mutable slots and serializes with the plan. [[With]] clears it each time it is
+ * evaluated, which is once per row for the row the enclosing expression is evaluating, so a
+ * reference is never read against a value left over from an earlier row -- and on a row that does
+ * not reach the branch holding the `With`, nothing is cleared because nothing is read.
+ */
+class CommonExpressionCell extends Serializable {
+  @transient private var computed: Boolean = false
+  @transient private var cached: Any = _
+
+  private[expressions] def clear(): Unit = {
+    computed = false
+    cached = null
+  }
+
+  private[expressions] def get(definition: Expression, input: InternalRow): Any = {
+    if (!computed) {
+      cached = definition.eval(input)
+      computed = true
+    }
+    cached
+  }
+}
 
 /**
  * An expression holder that keeps a list of common expressions and allow the actual expression to
@@ -27,7 +59,7 @@ import org.apache.spark.sql.types.DataType
  * once even if it's referenced more than once. This is similar to CTE but is expression-level.
  */
 case class With(child: Expression, defs: Seq[CommonExpressionDef])
-  extends Expression with Unevaluable {
+  extends Expression {
   // We do not allow creating a With expression with an AggregateExpression that contains a
   // reference to a common expression defined in that scope (note that it can contain another With
   // expression with a common expression ref of the inner With). This is to prevent the creation of
@@ -38,6 +70,55 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
   override def children: Seq[Expression] = child +: defs
+
+  /**
+   * Points every reference in `child` at the definition it names and the cell that definition owns.
+   * Done once per tree: a rule that rewrites this `With` produces a new one, which wires its own.
+   */
+  @transient private lazy val wireRefs: Unit = {
+    val idToDef = defs.map(d => d.id -> d).toMap
+    child.foreach {
+      case ref: CommonExpressionRef => idToDef.get(ref.id).foreach(ref.bindTo)
+      case _ =>
+    }
+  }
+
+  /**
+   * Clears each definition's cell for this row, then evaluates the child. A reference reached by
+   * that evaluation computes its definition once and every later reference reads the value back, so
+   * a definition is evaluated where the child would have evaluated it -- once -- rather than once
+   * per reference. See [[CommonExpressionCell]].
+   */
+  override def eval(input: InternalRow): Any = {
+    wireRefs
+    defs.foreach(_.cell.clear())
+    child.eval(input)
+  }
+
+  // The cells are cleared per row, so this holds state for the duration of one evaluation.
+  override def stateful: Boolean = true
+
+  /**
+   * Clears each definition's flag for this row, then generates the child. A reference generated
+   * inside that child fills its slots the first time it is reached and reads them back afterwards.
+   * The flags are cleared in the same block the child is generated into, so a reference cannot run
+   * against a flag left set by an earlier row: on a row that does not reach the branch holding this
+   * `With`, neither the clearing nor any reference runs.
+   */
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ctx.withCommonExprs(defs) { slots =>
+      val clearFlags = slots.map(s => s"${s.computed} = false;").mkString("\n")
+      val childGen = child.genCode(ctx)
+      ev.copy(
+        code = code"""
+           |$clearFlags
+           |${childGen.code}
+         """.stripMargin,
+        isNull = childGen.isNull,
+        value = childGen.value)
+    }
+  }
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
     val newDefs = newChildren.tail.map(_.asInstanceOf[CommonExpressionDef])
@@ -149,9 +230,16 @@ object CommonExpressionId {
 
 /**
  * A wrapper of common expression to carry the id.
+ *
+ * The `cell` holds the value on the row being evaluated. It is outside the case class parameters, so
+ * that a definition still compares and canonicalizes by its id and child, and a fresh one is created
+ * by `copy` -- the enclosing [[With]] wires each reference to the cell of the definition that stands
+ * in the tree with it, so a cell that a transform left behind is never read.
  */
 case class CommonExpressionDef(child: Expression, id: CommonExpressionId = new CommonExpressionId())
   extends UnaryExpression with Unevaluable {
+  private[expressions] val cell: CommonExpressionCell = new CommonExpressionCell
+
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
@@ -162,7 +250,57 @@ case class CommonExpressionDef(child: Expression, id: CommonExpressionId = new C
  * referenced, so that we can determine the data type and nullable of the reference node.
  */
 case class CommonExpressionRef(id: CommonExpressionId, dataType: DataType, nullable: Boolean)
-  extends LeafExpression with Unevaluable {
+  extends LeafExpression {
   def this(exprDef: CommonExpressionDef) = this(exprDef.id, exprDef.dataType, exprDef.nullable)
+
+  /**
+   * The definition this reference names, and the cell holding its value for the current row. Both
+   * are wired by the enclosing [[With]] before it evaluates its child, and are left out of the case
+   * class parameters so that equality and canonicalization are unchanged -- and so that a rule
+   * comparing two references does not compare their cells.
+   */
+  private var definition: Expression = _
+  private var cell: CommonExpressionCell = _
+
+  private[expressions] def bindTo(exprDef: CommonExpressionDef): Unit = {
+    definition = exprDef.child
+    cell = exprDef.cell
+  }
+
   override val nodePatterns: Seq[TreePattern] = Seq(COMMON_EXPR_REF)
+
+  // The cell is cleared once per row by the enclosing `With`, so this reads mutable state.
+  override def stateful: Boolean = true
+
+  override def eval(input: InternalRow): Any = {
+    if (cell == null) {
+      throw SparkException.internalError(
+        s"Cannot evaluate a common expression reference outside its With: $this")
+    }
+    cell.get(definition, input)
+  }
+
+  /**
+   * Computes the definition into the shared slots if this row has not done so yet, then reads them.
+   * The definition's code is generated here rather than by the enclosing `With`, so it runs where
+   * the first reference is reached -- behind a short-circuiting operator or a nested conditional if
+   * that is where the reference sits. A second reference generates the code again but never runs it,
+   * since the flag is set.
+   */
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val slots = ctx.getCommonExpr(id.id)
+    val defGen = slots.definition.genCode(ctx)
+    val assignIsNull = if (nullable) s"${slots.value.isNull} = ${defGen.isNull};" else ""
+    ev.copy(
+      code = code"""
+         |if (!${slots.computed}) {
+         |  ${defGen.code}
+         |  $assignIsNull
+         |  ${slots.value.value} = ${defGen.value};
+         |  ${slots.computed} = true;
+         |}
+       """.stripMargin,
+      isNull = slots.value.isNull,
+      value = slots.value.value)
+  }
 }

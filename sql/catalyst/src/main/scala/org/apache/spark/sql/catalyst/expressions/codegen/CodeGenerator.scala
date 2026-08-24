@@ -208,6 +208,55 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * The slots a `CommonExpressionRef` reads: the value and its nullness, plus the flag saying
+   * whether this row has computed them yet, and the definition to compute them from.
+   */
+  case class CommonExprSlots(value: ExprCode, computed: String, definition: Expression)
+
+  /**
+   * Holding a map of the common expressions of the `With` expressions currently being generated,
+   * the same way [[currentLambdaVars]] holds the variables of the enclosing lambdas.
+   */
+  var currentCommonExprs: mutable.Map[Long, CommonExprSlots] = mutable.HashMap.empty
+
+  /**
+   * Allocates a value slot and a `computed` flag per definition, generates `f` with them in scope,
+   * then takes them out of scope again. A reference is generated inside `f`, reads the slots back by
+   * id, and is responsible for filling them the first time it is reached on a row -- the enclosing
+   * `With` only clears the flags.
+   */
+  def withCommonExprs(defs: Seq[CommonExpressionDef])(f: Seq[CommonExprSlots] => ExprCode)
+    : ExprCode = {
+    val slots = defs.map { d =>
+      val id = d.id.id
+      if (currentCommonExprs.contains(id)) {
+        throw SparkException.internalError(s"Common expression $id is already being generated")
+      }
+      val isNull = if (d.nullable) {
+        JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "commonExprIsNull"))
+      } else {
+        FalseLiteral
+      }
+      val value = addMutableState(javaType(d.dataType), "commonExprValue")
+      val slot = CommonExprSlots(
+        ExprCode(isNull, JavaCode.global(value, d.dataType)),
+        addMutableState(JAVA_BOOLEAN, "commonExprComputed"),
+        d.child)
+      currentCommonExprs.put(id, slot)
+      slot
+    }
+    val result = f(slots)
+    defs.map(_.id.id).foreach(currentCommonExprs.remove)
+    result
+  }
+
+  def getCommonExpr(id: Long): CommonExprSlots = {
+    currentCommonExprs.getOrElse(
+      id,
+      throw SparkException.internalError(s"Common expression $id is not in scope"))
+  }
+
+  /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
    * 2-tuple: java type, variable name.
    * As an example, ("int", "count") will produce code:
