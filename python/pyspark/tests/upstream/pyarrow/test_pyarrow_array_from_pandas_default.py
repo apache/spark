@@ -120,9 +120,10 @@ class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         as a golden-file cell, returning ``ERR@<ExceptionClass>`` if the conversion raises.
         """
         try:
-            return self.repr_from_pandas_result(pa.Array.from_pandas(series, **from_pandas_kwargs))
+            result = pa.Array.from_pandas(series, **from_pandas_kwargs)
         except Exception as e:
             return f"ERR@{type(e).__name__}"
+        return self.repr_from_pandas_result(result)
 
     def _numpy_backed_sources(self):
         """
