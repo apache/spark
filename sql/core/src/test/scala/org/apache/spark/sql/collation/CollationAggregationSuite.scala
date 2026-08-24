@@ -390,6 +390,40 @@ class CollationAggregationSuite
     }
   }
 
+  test("collect_set is collation-aware for collated strings nested at depth >= 2") {
+    val tblName = "collect_set_nested_deep"
+    withTable(tblName) {
+      sql(s"CREATE TABLE $tblName (c1 STRING COLLATE UTF8_LCASE) USING PARQUET")
+      sql(s"INSERT INTO $tblName VALUES ('foo'), ('FOO'), ('bar')")
+
+      // array(named_struct('s', c1)) nests the collated string two levels deep (array of struct),
+      // exercising the injectCollationKey recursion below the top-level struct/array cases above.
+      checkAnswer(
+        sql(s"SELECT size(collect_set(array(named_struct('s', c1)))) FROM $tblName"),
+        Seq(Row(2)))
+      checkAnswer(
+        sql(s"SELECT array_sort(transform(collect_set(array(named_struct('s', c1))), " +
+          s"x -> lower(x[0].s))) FROM $tblName"),
+        Seq(Row(Seq("bar", "foo"))))
+    }
+  }
+
+  test("collect_set dedups on a space-trimming collation (UTF8_LCASE_RTRIM)") {
+    val tblName = "collect_set_lcase_rtrim"
+    withTable(tblName) {
+      sql(s"CREATE TABLE $tblName (c1 STRING COLLATE UTF8_LCASE_RTRIM) USING PARQUET")
+      sql(s"INSERT INTO $tblName VALUES ('foo '), ('foo'), ('FOO'), ('bar'), ('BAR  ')")
+
+      // UTF8_LCASE_RTRIM ignores both case and trailing spaces, so 'foo '/'foo'/'FOO' collapse to
+      // one group and 'bar'/'BAR  ' to another. The retained representative may keep trailing
+      // spaces, so collapse with trim(lower(...)) before comparing.
+      checkAnswer(sql(s"SELECT size(collect_set(c1)) FROM $tblName"), Seq(Row(2)))
+      checkAnswer(
+        sql(s"SELECT array_sort(transform(collect_set(c1), x -> trim(lower(x)))) FROM $tblName"),
+        Seq(Row(Seq("bar", "foo"))))
+    }
+  }
+
   test("collect_set collation and float normalization compose for nested structs") {
     val tblName = "collect_set_nested_float"
     withTable(tblName) {
