@@ -18,23 +18,51 @@
 """
 Framework for DataFrame API golden file tests, analogous to SQLQueryTestSuite for SQL.
 
-A test is described by a ``.test`` file which doubles as the golden file: the
-expected outputs are stored inline and rewritten in place when golden files are
-regenerated (``SPARK_GENERATE_GOLDEN_FILES=1``).
+A golden test is a pair of files, laid out like the SQL golden tests under
+``sql/core/src/test/resources/sql-tests``::
 
-``.test`` file format::
+    inputs/test_<topic>.py       the test module declaring the cases
+    results/test_<topic>.py.out  their expected outputs
+
+Everything a case needs in order to run -- the DataFrame program, its name, its
+tags -- lives in the Python class, so cases are ordinary code that can be read,
+imported and stepped through; the file under ``results`` is purely generated
+output, rewritten in place when golden files are regenerated
+(``SPARK_GENERATE_GOLDEN_FILES=1``).
+
+Test module::
+
+    class GroupByGoldenTests(DFGoldenTestMixin, ReusedConnectTestCase):
+        @classmethod
+        def setup_session(cls, spark):
+            spark.sql("CREATE OR REPLACE TEMPORARY VIEW testData AS ...")
+
+        @unordered
+        def _test_group_by_count(self, spark):
+            \"\"\"Aggregate with non-empty GroupBy expressions.\"\"\"
+            return spark.table("testData").groupBy(col("a")).agg(count(col("b")))
+
+Each ``_test_<case>`` method builds and returns the DataFrame of one case, and
+:class:`DFGoldenTestMixin` registers a ``test_<case>`` method for it.  Cases are
+therefore ordinary unittest tests: they are reported individually and can be run
+one at a time::
+
+    python/run-tests --testnames "pyspark.sql.tests.df_golden.inputs.test_group_by \\
+      GroupByGoldenTests.test_group_by_count"
+
+Golden file format::
 
     --! name
     __file_metadata__
     --! source
-    df_golden/group_by
+    pyspark.sql.tests.df_golden.inputs.test_group_by.GroupByGoldenTests
     !-- end
 
 
     --! name
-    range + select + filter + order
-    --! script
-    scripts/group_by/range_select.py
+    group_by_count
+    --! tags
+    unordered
     --! expected_analysis_output
     Sort [k#x ASC NULLS FIRST], true
     +- ...
@@ -53,22 +81,21 @@ regenerated (``SPARK_GENERATE_GOLDEN_FILES=1``).
     <sha256 over the result rows>
     !-- end
 
-The first block may be named ``__file_metadata__``; its remaining sections
-(e.g. ``source``) are file-level metadata, matching the convention used by the
-Scala ``SqlHiFiTestRunner`` framework.  Each test case references a standalone
-Python script (path relative to the ``.test`` file) that is executed with
-``spark`` in scope and must assign the DataFrame under test to a variable
-named ``df``.  Cases run in file order against the same session, so earlier
-cases can set up temp views for later ones.
+Cases appear sorted by name, which is also the order unittest runs them in.  The
+first block is named ``__file_metadata__``; its remaining sections are file-level
+metadata, matching the convention used by the Scala ``SqlHiFiTestRunner``
+framework.  ``source`` records the class the file is generated from, so a golden
+file always points back at the code that produces it.
 
 Sections:
 
-- ``name``: human-readable test case name (required).
-- ``tags``: optional, whitespace/comma separated. Row order is asserted by
-  default; add the ``unordered`` tag to sort result rows before comparison for
-  cases whose result has no deterministic order (aggregate/join/distinct/...
-  without a global sort).
-- ``script``: path to the Python script (required).
+- ``name``: the case method name without its ``_test_`` prefix, which is what
+  ties a block to the method that produced it (required).
+- ``tags``: whitespace/comma separated, written from the case method's
+  decorators and compared like any other section.  Row order is asserted by
+  default; ``@unordered`` sorts result rows before comparison, for cases whose
+  result has no deterministic order (aggregate/join/distinct/... without a
+  global sort).
 - ``expected_analysis_output``: the analyzed logical plan.
 - ``expected_optimized_output``: the optimized logical plan.
 - ``expected_output_schema``: ``df.schema.simpleString()``.
@@ -84,9 +111,33 @@ Sections:
 At comparison time only the ``expected_*`` sections present in the file are
 checked, so optional sections (e.g. ``expected_optimized_output``) may be
 omitted.  Regeneration writes all sections the case produces.
+
+Running the tests::
+
+    python/run-tests --testnames pyspark.sql.tests.df_golden.inputs.test_group_by
+
+Regenerating golden files
+-------------------------
+Set ``SPARK_GENERATE_GOLDEN_FILES=1`` before running the tests, or use the
+wrapper script, which covers every golden test module under ``inputs``::
+
+    python/pyspark/sql/tests/df_golden/regenerate.sh [--verify]
+
+With ``--verify`` the wrapper re-runs the tests afterwards against the
+regenerated files.  Regeneration rewrites a whole file at once, so it has to
+run a whole test class: a filtered run refuses to write rather than drop the
+cases it skipped.
+
+Adding golden tests
+-------------------
+Add a case method to an existing class, or add an ``inputs/test_<topic>.py``
+module with a new class (registering it in ``dev/sparktestsupport/modules.py``,
+as for any PySpark test module).  Then regenerate: the file under ``results`` is
+created or extended from the class, so it needs no hand-editing.
 """
 
 import hashlib
+import inspect
 import math
 import os
 import re
@@ -97,11 +148,10 @@ _CASE_END = "!-- end"
 _SECTION_PREFIX = "--! "
 _FILE_METADATA_NAME = "__file_metadata__"
 
-# Canonical section order used when (re)generating a ``.test`` file.
+# Canonical section order used when (re)generating a golden file.
 _CASE_SECTION_ORDER = [
     "name",
     "tags",
-    "script",
     "expected_analysis_output",
     "expected_optimized_output",
     "expected_output_schema",
@@ -112,32 +162,43 @@ _CASE_SECTION_ORDER = [
 
 _RESULT_SECTIONS = [s for s in _CASE_SECTION_ORDER if s.startswith("expected_")]
 
+# What a run produces and the golden file records, so all of it is compared:
+# a case's tags come from its method and are data like any other section.
+_COMPARED_SECTIONS = ["tags"] + _RESULT_SECTIONS
+
 _KNOWN_HEADER_SECTIONS = {"source"}
 _KNOWN_TAGS = {"unordered"}
 
+# Methods with this prefix declare golden cases; the mixin registers a real
+# ``test_<case>`` method for each one.  The prefix keeps them out of unittest's
+# own collection, which only picks up names starting with ``test``.
+_CASE_METHOD_PREFIX = "_test_"
+
+# Test modules live in one directory and their golden files in the other,
+# mirroring ``sql/core/src/test/resources/sql-tests``.
+_INPUTS_DIR = "inputs"
+_RESULTS_DIR = "results"
+
 
 # ---------------------------------------------------------------------------
-# .test file parsing / serialization
+# Golden file parsing / serialization
 # ---------------------------------------------------------------------------
 
 
-def parse_test_file(filepath, require_terminated=False):
+def parse_test_file(filepath):
     """
-    Parse a ``.test`` file.
+    Parse and validate a golden file.
 
-    When *require_terminated* is set (verify mode), a file whose last case is
-    missing its ``!-- end`` terminator is rejected: in verify mode an unclosed
-    final case is corruption (e.g. a truncating bad merge) that could otherwise
-    pass by matching a partial case or silently merging two. Regeneration leaves
-    it unset and stays lenient, since it rewrites the file with terminators.
+    A file whose last case is missing its ``!-- end`` terminator is rejected:
+    an unclosed final case is corruption (e.g. a truncating bad merge) that
+    could otherwise pass by matching a partial case or silently merging two.
 
     Returns
     -------
-    header : dict
-        File-level metadata sections from the ``__file_metadata__`` block
-        (excluding ``name``), e.g. ``{"source": ...}``.
-    cases : list[dict]
-        One dict per test case, mapping section name to content.
+    dict[str, dict]
+        The test cases by name, in file order, each mapping section name to
+        content.  The ``__file_metadata__`` block is validated but not returned:
+        regeneration writes it from the test class.
     """
     with open(filepath, "r") as f:
         lines = f.read().split("\n")
@@ -188,28 +249,23 @@ def parse_test_file(filepath, require_terminated=False):
             # text, so fail loudly. Blank separator lines are fine.
             raise AssertionError("{}: content outside any section: {!r}".format(filepath, line))
 
-    # A case still open here never hit "!-- end". In verify mode that is
-    # corruption; under regeneration stay lenient and keep it so the rewrite can
-    # fix the formatting.
+    # A case still open here never hit "!-- end", i.e. the file was truncated.
     flush()
-    if current:
-        assert not require_terminated, (
-            "{}: file does not end with `{}` (last case is unterminated)".format(
-                filepath, _CASE_END
-            )
-        )
-        cases.append(current)
+    assert not current, "{}: file does not end with `{}` (last case is unterminated)".format(
+        filepath, _CASE_END
+    )
 
     header = {}
     if cases and cases[0].get("name") == _FILE_METADATA_NAME:
         header = cases.pop(0)
         del header["name"]
 
-    return header, cases
+    _validate_test_file(filepath, header, cases)
+    return {case["name"]: case for case in cases}
 
 
 def write_test_file(filepath, header, cases):
-    """Serialize *header* and *cases* back into ``.test`` file format."""
+    """Serialize *header* and *cases* back into golden file format."""
     blocks = []
     if header:
         header_lines = [_SECTION_PREFIX + "name", _FILE_METADATA_NAME]
@@ -236,6 +292,31 @@ def write_test_file(filepath, header, cases):
 def parse_tags(case):
     """Return the set of tags declared on *case*."""
     return {tag for tag in re.split(r"[,\s]+", case.get("tags", "")) if tag}
+
+
+def case_tags(method):
+    """Return the set of tags *method* is decorated with."""
+    return set(getattr(method, "df_golden_tags", ()))
+
+
+def format_tags(tags):
+    """Render *tags* for the ``tags`` section of a golden file."""
+    return " ".join(sorted(tags))
+
+
+def unordered(method):
+    """
+    Tag a case method whose result rows have no deterministic order.
+
+    Row order is asserted by default; a case whose result has no deterministic
+    order (aggregate/join/distinct/... without a global sort) opts out with this
+    decorator, which sorts the rows before they are compared or written.
+    Deriving orderedness from the rendered plan text was rejected as too loose:
+    it silently sorts genuinely order-sensitive results, hiding real ordering
+    regressions from the golden.
+    """
+    method.df_golden_tags = case_tags(method) | {"unordered"}
+    return method
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +407,7 @@ def get_plan_strings(df):
     Return ``(analyzed, optimized)`` normalized logical plan strings.
 
     Uses ``df._explain_string(mode="extended")``, which exists on Spark
-    Connect only - the framework runs over connect (see ``DFGoldenTestBase``).
+    Connect only - the framework runs over connect (see ``DFGoldenTestMixin``).
     Triggers analysis, so analysis errors surface here.
     """
     explain = df._explain_string(mode="extended")
@@ -483,7 +564,7 @@ def get_result_rows(df):
     output conventions (``NULL`` for None, lowercase booleans, etc.).
 
     Cells are joined with ``\\t`` and later re-split on ``\\t`` by
-    ``render_result_table``, and the ``.test`` format is newline-delimited, so a
+    ``render_result_table``, and the golden format is newline-delimited, so a
     literal tab or newline inside a string value would desync the rendered table
     while the hash stayed self-consistent (``--verify`` could not flag it).
     ``_format_value`` therefore rejects such strings loudly rather than let a
@@ -540,196 +621,123 @@ def hash_result_rows(rows):
 # ---------------------------------------------------------------------------
 
 
-def run_script(spark, script_path):
+def compute_case_outputs(spark, build_df):
     """
-    Execute the test case script and return the DataFrame it assigns to ``df``.
+    Run a single test case and return its sections, as a golden file records them.
 
-    The script runs with ``spark`` in scope and is responsible for its own
-    imports.
-    """
-    with open(script_path, "r") as f:
-        code = f.read()
-    namespace = {"spark": spark}
-    exec(compile(code, script_path, "exec"), namespace)
-    if "df" not in namespace:
-        raise AssertionError(
-            "Test script {} must assign a DataFrame to a variable named `df`".format(script_path)
-        )
-    return namespace["df"]
-
-
-def compute_case_outputs(spark, case, base_dir):
-    """
-    Run a single test case and return a dict of actual ``expected_*`` sections.
+    *build_df* is the case method: it takes the session and returns the
+    DataFrame under test.  Its tags (see :func:`unordered`) are part of the
+    returned sections, so they are compared and written like any other data.
     """
     from pyspark.errors import PySparkException
+    from pyspark.sql import DataFrame
 
-    tags = parse_tags(case)
-    script_path = os.path.join(base_dir, case["script"])
+    tags = case_tags(build_df)
+    sections = {}
+    if tags:
+        sections["tags"] = format_tags(tags)
 
     # Only Spark errors are legitimate expected outputs.  Anything else
-    # (NameError, ImportError, ... from a buggy script) must fail the test;
+    # (NameError, TypeError, ... from a buggy case method) must fail the test;
     # capturing it would write the Python error into the golden file as the
-    # expected output on regeneration.
+    # expected output on regeneration.  Analysis and execution share one block
+    # because, as in the SQL golden suite, an error at either step records only
+    # the message and discards whatever was captured before it.
     try:
-        df = run_script(spark, script_path)
+        df = build_df(spark)
+        if not isinstance(df, DataFrame):
+            raise AssertionError(
+                "case method {} must return the DataFrame under test, got: {!r}".format(
+                    getattr(build_df, "__name__", build_df), df
+                )
+            )
         analyzed, optimized = get_plan_strings(df)
         schema = df.schema.simpleString()
-    except PySparkException as e:
-        return {"expected_error": format_error(e)}
-
-    actual = {
-        "expected_analysis_output": analyzed,
-        "expected_output_schema": schema,
-    }
-    if optimized is not None:
-        actual["expected_optimized_output"] = optimized
-
-    try:
         rows = get_result_rows(df)
     except PySparkException as e:
-        # Match the SQL golden suite: on any error keep only the message and
-        # discard the analyzed plan / schema captured before execution.
-        return {"expected_error": format_error(e)}
+        sections["expected_error"] = format_error(e)
+        return sections
 
-    rows = [replace_not_included(r) for r in rows]
-    # Sort the rows only when the case is explicitly tagged ``unordered``.  Row
-    # order is asserted by default; a case whose result has no deterministic
-    # order (aggregate/join/distinct/... without a global sort) must opt out via
-    # the tag.  Deriving orderedness from the rendered plan text was rejected as
-    # too loose: it silently sorts genuinely order-sensitive results, hiding real
-    # ordering regressions from the golden.
+    sections["expected_analysis_output"] = analyzed
+    if optimized is not None:
+        sections["expected_optimized_output"] = optimized
+    sections["expected_output_schema"] = schema
+
+    rows = [replace_not_included(row) for row in rows]
     if "unordered" in tags:
         rows = sorted(rows)
-    actual["expected_result"] = render_result_table(df.columns, rows)
-    actual["expected_result_hash"] = hash_result_rows(rows)
-    return actual
+    sections["expected_result"] = render_result_table(df.columns, rows)
+    sections["expected_result_hash"] = hash_result_rows(rows)
+    return sections
 
 
-def _validate_test_file(test_file, header, cases, regenerate):
+def _validate_test_file(test_file, header, cases):
     """
-    Fail loudly on malformed ``.test`` content.  A misspelled section or tag
+    Fail loudly on malformed golden file content.  A misspelled section or tag
     that is silently ignored makes a case assert less than it appears to (or
     nothing at all), so unknown names are errors, not noise.
+
+    Only the golden files being checked go through here: regeneration writes a
+    file from scratch and never reads the old one, so a file this rejects can
+    always be repaired by regenerating it.
     """
     unknown_header = set(header) - _KNOWN_HEADER_SECTIONS
     assert not unknown_header, "{}: unknown header sections: {}".format(
         test_file, ", ".join(sorted(unknown_header))
     )
     assert cases, "{}: no test cases found".format(test_file)
+    seen = set()
     for case in cases:
         assert case.get("name"), "{}: every test case needs a name".format(test_file)
         name = case["name"]
-        assert case.get("script"), "{}: case `{}` needs a script".format(test_file, name)
-        # Unknown sections are dropped and rewritten by regeneration, so only
-        # reject them in verify mode.  Enforcing this during regeneration would
-        # block the very migration regeneration exists to perform: a section
-        # renamed or removed in the framework (e.g. the old
-        # ``expected_analysis_error``/``expected_execution_error`` split folded
-        # into ``expected_error``) leaves the on-disk file carrying a name no
-        # longer in ``_CASE_SECTION_ORDER`` until it is regenerated.
-        if not regenerate:
-            unknown = set(case) - set(_CASE_SECTION_ORDER)
-            assert not unknown, "{}: case `{}` has unknown sections: {}".format(
-                test_file, name, ", ".join(sorted(unknown))
-            )
-        # Tags are preserved verbatim across regeneration, so an unknown tag
-        # would persist; reject it in both modes.
+        # Cases are keyed by name, so a duplicate would shadow its twin.
+        assert name not in seen, "{}: duplicate test case `{}`".format(test_file, name)
+        seen.add(name)
+        unknown = set(case) - set(_CASE_SECTION_ORDER)
+        assert not unknown, "{}: case `{}` has unknown sections: {}".format(
+            test_file, name, ", ".join(sorted(unknown))
+        )
         unknown_tags = parse_tags(case) - _KNOWN_TAGS
         assert not unknown_tags, "{}: case `{}` has unknown tags: {}".format(
             test_file, name, ", ".join(sorted(unknown_tags))
         )
-        # In regenerate mode new cases legitimately have no expected_*
-        # sections yet; in verify mode such a case would pass vacuously.
-        if not regenerate:
-            assert any(case.get(key) is not None for key in _RESULT_SECTIONS), (
-                "{}: case `{}` has no expected_* sections and would assert "
-                "nothing; regenerate the golden files".format(test_file, name)
+        # A case with no expected_* section would pass vacuously.
+        assert any(case.get(key) is not None for key in _RESULT_SECTIONS), (
+            "{}: case `{}` has no expected_* sections and would assert "
+            "nothing; regenerate the golden files".format(test_file, name)
+        )
+        # ``compare_case`` only checks sections present in the file, so a
+        # dropped section (merge/manual edit) silently shrinks coverage
+        # without failing. Pin down what a well-formed case must look like:
+        has_error = case.get("expected_error") is not None
+        has_result = case.get("expected_result") is not None
+        has_hash = case.get("expected_result_hash") is not None
+        if has_error:
+            # An error case records only the error (the run discards plan,
+            # schema and result on failure); anything else is a corrupt file.
+            conflicting = sorted(
+                key
+                for key in _RESULT_SECTIONS
+                if key != "expected_error" and case.get(key) is not None
             )
-            # ``_compare_case`` only checks sections present in the file, so a
-            # dropped section (merge/manual edit) silently shrinks coverage
-            # without failing. Pin down what a well-formed case must look like:
-            has_error = case.get("expected_error") is not None
-            has_result = case.get("expected_result") is not None
-            has_hash = case.get("expected_result_hash") is not None
-            if has_error:
-                # An error case records only the error (the run discards plan,
-                # schema and result on failure); anything else is a corrupt file.
-                conflicting = sorted(
-                    key
-                    for key in _RESULT_SECTIONS
-                    if key != "expected_error" and case.get(key) is not None
+            assert not conflicting, (
+                "{}: error case `{}` must carry only `expected_error`, not also: {}".format(
+                    test_file, name, ", ".join(conflicting)
                 )
-                assert not conflicting, (
-                    "{}: error case `{}` must carry only `expected_error`, not also: {}".format(
-                        test_file, name, ", ".join(conflicting)
-                    )
-                )
-            else:
-                # The result table and its hash are a pair; dropping one leaves
-                # the other asserting half the result, so require both or neither.
-                assert has_result == has_hash, (
-                    "{}: case `{}` must have both `expected_result` and "
-                    "`expected_result_hash` or neither".format(test_file, name)
-                )
-
-
-def run_golden_test(test_case, spark, test_file):
-    """
-    Run all cases of a ``.test`` file.
-
-    Parameters
-    ----------
-    test_case : unittest.TestCase
-        The test case instance (for assertions).
-    spark : SparkSession
-        The session to run against.  The caller provides a fresh session per
-        ``.test`` file (the connect counterpart of ``SQLQueryTestSuite``'s
-        per-file ``newSession()``), so state created by case scripts - temp
-        views, UDFs, confs - is discarded with the session and cannot leak
-        into other files.
-    test_file : str
-        Absolute path to the ``.test`` file.
-    """
-    regenerate = os.environ.get("SPARK_GENERATE_GOLDEN_FILES") is not None
-    base_dir = os.path.dirname(test_file)
-
-    header, cases = parse_test_file(test_file, require_terminated=not regenerate)
-    _validate_test_file(test_file, header, cases, regenerate)
-
-    # Golden files are generated with ANSI mode on, matching the SQL golden
-    # tests.  The session is discarded after the file, so nothing to restore.
-    spark.conf.set("spark.sql.ansi.enabled", "true")
-
-    regenerated_cases = []
-    for case in cases:
-        actual = compute_case_outputs(spark, case, base_dir)
-        if regenerate:
-            regenerated_cases.append(_regenerate_case(case, actual))
+            )
         else:
-            _compare_case(test_case, case, actual)
-
-    if regenerate:
-        write_test_file(test_file, header, regenerated_cases)
-
-
-def _regenerate_case(old_case, actual):
-    """
-    Build the regenerated form of *old_case* from this run's *actual* outputs.
-
-    Every populated ``expected_*`` section from this run replaces the on-disk
-    value; ``name`` / ``tags`` / ``script`` are carried over unchanged so the
-    case's identity, ordering guard, and script pointer survive regeneration.
-    """
-    carried = {key: old_case.get(key) for key in ("name", "tags", "script")}
-    carried.update(actual)
-    return carried
+            # The result table and its hash are a pair; dropping one leaves
+            # the other asserting half the result, so require both or neither.
+            assert has_result == has_hash, (
+                "{}: case `{}` must have both `expected_result` and "
+                "`expected_result_hash` or neither".format(test_file, name)
+            )
 
 
-def _compare_case(test_case, case, actual):
-    """Compare the ``expected_*`` sections of *case* against *actual*."""
+def compare_case(test_case, case, actual):
+    """Compare the recorded sections of golden *case* against *actual*."""
     name = case["name"]
-    for key in _RESULT_SECTIONS:
+    for key in _COMPARED_SECTIONS:
         expected = case.get(key)
         if expected is None:
             continue
@@ -744,3 +752,232 @@ def _compare_case(test_case, case, actual):
             got.strip("\n"),
             "[{}] mismatch in `{}`".format(name, key),
         )
+
+
+def is_generating_golden():
+    """Whether this run regenerates the golden files instead of checking them."""
+    return os.environ.get("SPARK_GENERATE_GOLDEN_FILES") is not None
+
+
+def golden_file_for_input(module_file):
+    """
+    Return the golden file path for the test module at *module_file*.
+
+    Mirrors ``SQLQueryTestSuite.resultFileForInputFile``: the ``inputs``
+    directory becomes ``results`` and ``.out`` is appended, so a module and its
+    golden file are named alike and there is nothing to keep in sync by hand.
+    """
+    inputs_dir, filename = os.path.split(os.path.abspath(module_file))
+    base_dir, dir_name = os.path.split(inputs_dir)
+    assert dir_name == _INPUTS_DIR, (
+        "{}: a golden test module must live in the `{}` directory, next to the "
+        "`{}` directory holding the golden files".format(module_file, _INPUTS_DIR, _RESULTS_DIR)
+    )
+    return os.path.join(base_dir, _RESULTS_DIR, filename + ".out")
+
+
+def assert_cases_in_sync(test_file, declared, golden):
+    """
+    Assert that the golden file describes exactly the declared cases, in order.
+
+    Each test asserts against its own block, so a case the golden file has never
+    heard of (or one it still remembers after the method was deleted or renamed)
+    would otherwise go unnoticed.
+    """
+    if declared == golden:
+        return
+    missing = [name for name in declared if name not in golden]
+    extra = [name for name in golden if name not in declared]
+    if missing:
+        detail = "cases with no block in the golden file: " + ", ".join(missing)
+    elif extra:
+        detail = "blocks in the golden file with no case method: " + ", ".join(extra)
+    else:
+        detail = "the golden file lists the cases in a different order"
+    raise AssertionError(
+        "{}: golden file is out of sync with the test class ({}); "
+        "regenerate the golden files".format(test_file, detail)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test class integration
+# ---------------------------------------------------------------------------
+
+
+class DFGoldenTestMixin:
+    """
+    Mixin turning a class of case methods into DataFrame golden file tests.
+
+    Mix into a session-providing test case, listing this class first so its
+    ``setUpClass`` runs once the session exists::
+
+        class GroupByGoldenTests(DFGoldenTestMixin, ReusedConnectTestCase):
+            def _test_group_by_count(self, spark):
+                return spark.table("testData").groupBy(col("a")).agg(count(col("b")))
+
+    Every ``_test_<case>`` method declares one case and returns the DataFrame
+    under test; a ``test_<case>`` method is registered for each, so cases run,
+    report and can be selected individually like any other unittest test.  The
+    golden file is derived from the test module (see
+    :func:`golden_file_for_input`), so there is nothing to declare.
+
+    The cases of a class share one Spark Connect session (``newSession()`` off
+    the session the test class provides, the Connect counterpart of
+    ``SQLQueryTestSuite``'s per-file ``newSession()``), prepared once by
+    :meth:`setup_session`.  State created there -- temp views, UDFs, session
+    confs -- is discarded with the session and cannot leak into other classes.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Only the cases this class declares: an inherited one already has its
+        # test method on the class that declares it.
+        for attr, method in list(vars(cls).items()):
+            if attr.startswith(_CASE_METHOD_PREFIX) and inspect.isfunction(method):
+                cls._register_case_test(attr[len(_CASE_METHOD_PREFIX) :], method)
+
+    @classmethod
+    def _register_case_test(cls, name, case_method):
+        """Add the unittest method that runs the case *name*."""
+
+        def test_case(self):
+            self._run_golden_case(name)
+
+        test_case.__name__ = "test_" + name
+        # Carry the case method's docstring over so verbose runs describe the case.
+        test_case.__doc__ = case_method.__doc__
+        setattr(cls, test_case.__name__, test_case)
+
+    @classmethod
+    def case_names(cls):
+        """The declared case names, including inherited ones, sorted by name."""
+        return [
+            name[len(_CASE_METHOD_PREFIX) :]
+            for name, _ in inspect.getmembers(cls, predicate=inspect.isfunction)
+            if name.startswith(_CASE_METHOD_PREFIX)
+        ]
+
+    @classmethod
+    def golden_file_path(cls):
+        """Absolute path of this class's golden file, derived from its module."""
+        return golden_file_for_input(inspect.getfile(cls))
+
+    @classmethod
+    def setup_session(cls, spark):
+        """
+        Hook: prepare the session shared by this class's cases.
+
+        Override to create the temp views and other session state the cases
+        build on.
+        """
+        pass
+
+    @classmethod
+    def setUpClass(cls):
+        cls._golden_regenerating = is_generating_golden()
+        cls._golden_actual = {}
+        cls._golden_cases = {}
+        cls._golden_session = None
+        case_names = cls.case_names()
+
+        # Read the golden file before the session is started: a malformed or
+        # stale file is worth failing on right away, and failing here leaves
+        # nothing to clean up (unittest skips tearDownClass when setUpClass
+        # raises).  Regeneration writes the file from the class alone, so it
+        # neither reads nor requires an existing one.
+        if case_names:
+            cls._golden_path = cls.golden_file_path()
+            if not cls._golden_regenerating:
+                cls._golden_cases = parse_test_file(cls._golden_path)
+                assert_cases_in_sync(cls._golden_path, case_names, list(cls._golden_cases))
+
+        super().setUpClass()
+
+        if not case_names:
+            return
+        # This mixin has to precede the session-providing test class in the base
+        # list, so that its setUpClass body runs once that class has created the
+        # session.  Checking here rather than when the class is declared keeps
+        # legitimate chains -- a subclass with a setUpClass of its own -- working.
+        assert hasattr(cls, "spark"), (
+            "{}: no session was created; list DFGoldenTestMixin before the "
+            "session-providing test class".format(cls.__name__)
+        )
+        # The one place the session below is released.  A class cleanup runs
+        # after tearDownClass, and also after a setUpClass that raised (which
+        # skips tearDownClass), so registering it before the session exists
+        # covers a failure in the setup that follows.
+        cls.addClassCleanup(cls._close_golden_session)
+        cls._golden_session = cls.spark.newSession()
+        # Golden files are generated with ANSI mode on, matching the SQL golden
+        # tests.  The session is discarded with the class, so there is nothing
+        # to restore.
+        cls._golden_session.conf.set("spark.sql.ansi.enabled", "true")
+        cls.setup_session(cls._golden_session)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            if cls._golden_regenerating and cls.case_names():
+                cls._write_golden_file()
+        finally:
+            super().tearDownClass()
+
+    @classmethod
+    def _close_golden_session(cls):
+        """
+        Release this class's session, whenever its class cleanup gets to run.
+
+        That is after the session-providing class has stopped the session this
+        one was made from, or -- when setUpClass raised, which skips
+        tearDownClass -- before that class stopped anything.  Both orders end up
+        here, so nothing else has to release the session.
+        """
+        if cls._golden_session is None:
+            return
+        client = cls._golden_session.client
+        cls._golden_session = None
+        # Release this session server-side only while the session it was made
+        # from is alive.  Stopping that one takes the local Connect server down
+        # with it (what ``stop()`` does under ``SPARK_LOCAL_REMOTE``, which is
+        # how the tests run), so there is nothing left to release, and the
+        # request would retry against a dead server until the test times out.
+        # For the same reason this must NOT call ``session.stop()`` on the
+        # session it is releasing: that would take the server down mid-suite.
+        if not cls.spark.is_stopped:
+            try:
+                client.release_session()
+            except Exception:
+                pass
+        # The client is closed either way: its channel holds threads that would
+        # otherwise keep the test process from exiting.
+        try:
+            client.close()
+        except Exception:
+            pass
+
+    @classmethod
+    def _write_golden_file(cls):
+        names = cls.case_names()
+        missing = [name for name in names if name not in cls._golden_actual]
+        # Writing what a partial run produced would silently drop the cases that
+        # did not run, so refuse rather than truncate the golden file.
+        assert not missing, (
+            "{}: cannot regenerate, these cases did not run (a failing case, or a run "
+            "filtered to a subset): {}".format(cls._golden_path, ", ".join(missing))
+        )
+        header = {"source": "{}.{}".format(cls.__module__, cls.__qualname__)}
+        # A case's identity is its name; everything else it records comes from
+        # the run, tags included.
+        cases = [dict(cls._golden_actual[name], name=name) for name in names]
+        write_test_file(cls._golden_path, header, cases)
+
+    def _run_golden_case(self, name):
+        cls = type(self)
+        build_df = getattr(self, _CASE_METHOD_PREFIX + name)
+        actual = compute_case_outputs(cls._golden_session, build_df)
+        if cls._golden_regenerating:
+            cls._golden_actual[name] = actual
+        else:
+            compare_case(self, cls._golden_cases[name], actual)
