@@ -447,6 +447,9 @@ public class CredentialProviderLoaderSuite {
     assertEquals("Credential providers have already been closed", e.getMessage());
     assertThrows(IllegalStateException.class,
         () -> loader.providerFor("nonexistent", conf));
+    IllegalStateException discoverError = assertThrows(
+        IllegalStateException.class, loader::discoverAllSchemes);
+    assertEquals("Credential providers have already been closed", discoverError.getMessage());
 
     CredentialProviderLoader nextLoader = new CredentialProviderLoader();
     CredentialProvider second = nextLoader.providerFor("fake", conf).orElseThrow();

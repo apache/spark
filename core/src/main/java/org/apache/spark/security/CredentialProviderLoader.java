@@ -248,8 +248,14 @@ public final class CredentialProviderLoader {
    * (e.g., {@code spark.security.oidc.provider.<scheme>}) is provided.
    *
    * @return a set of all supported scheme names (lowercased), possibly empty
+   * @throws IllegalStateException if providers have already been closed
    */
   public Set<String> discoverAllSchemes() {
+    synchronized (this) {
+      if (providersClosed) {
+        throw new IllegalStateException("Credential providers have already been closed");
+      }
+    }
     List<CredentialProvider> providers = getProviders();
     Set<String> schemes = new HashSet<>();
     for (CredentialProvider provider : providers) {
