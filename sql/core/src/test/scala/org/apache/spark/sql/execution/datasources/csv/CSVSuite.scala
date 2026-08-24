@@ -3096,7 +3096,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-58946: reject file extensions that are not exactly three letters") {
-      Seq("abcd", "ab1", "a").foreach { ext =>
+    Seq("abcd", "ab1", "a").foreach { ext =>
       withTempPath { path =>
         checkError(
           exception = intercept[SparkIllegalArgumentException] {
