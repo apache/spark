@@ -36,6 +36,12 @@ object CodegenFallback {
    * This is what [[CodegenFallback]] gives the expressions that mix it in, and is also used by an
    * expression that can generate code in general but has to fall back for a particular shape of
    * its own tree -- see `With.doGenCode`.
+   *
+   * The two places that reason about which subtrees run interpretively both dispatch on the trait:
+   * `CollapseCodegenStages.supportCodegen`, which turns whole-stage codegen off, and
+   * `With.refUnderCodegenFallback`, which decides whether a memoized reference is reached that way.
+   * A caller that is not a `CodegenFallback` is invisible to both, so a third one has to be added
+   * to them as well.
    */
   def generate(e: Expression, ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // LeafNode does not need `input`
