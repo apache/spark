@@ -4190,9 +4190,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             return self._reduce_for_stat_function(quantile, name="quantile")
 
-    # TODO: add axis, pct, na_option parameter
     def rank(
-        self, method: str = "average", ascending: bool = True, numeric_only: bool = False
+        self,
+        method: str = "average",
+        ascending: bool = True,
+        numeric_only: bool = False,
+        na_option: str = "keep",
+        pct: bool = False,
+        axis: int = 0,
     ) -> "Series":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
@@ -4219,6 +4224,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             .. versionchanged:: 4.0.0
                 The default value of ``numeric_only`` is now ``False``.
 
+        na_option : {'keep', 'top', 'bottom'}, default 'keep'
+            * keep: leave NA values where they are
+            * top: smallest rank if ascending
+            * bottom: largest rank if ascending
+
+            .. versionadded:: 4.4.0
+
+        pct : bool, default False
+            Whether or not to display the returned rankings in percentile form.
+
+            .. versionadded:: 4.4.0
+
+        axis : {0 or 'index'}, default 0
+            Parameter needed for compatibility with DataFrame.
 
         Returns
         -------
@@ -4286,12 +4305,42 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         y    b
         z    c
         Name: A, dtype: object
+
+        With pct=True, ranks are expressed as percentiles.
+
+        >>> s = ps.Series([1, 2, 2, 3], name='A')
+        >>> s.rank(pct=True)
+        0    0.25
+        1    0.625
+        2    0.625
+        3    1.0
+        Name: A, dtype: float64
+
+        With na_option='top', NaN values are assigned the smallest rank.
+
+        >>> s = ps.Series([1, float('nan'), 2, 3], name='A')
+        >>> s.rank(na_option='top')
+        0    2.0
+        1    1.0
+        2    3.0
+        3    4.0
+        Name: A, dtype: float64
+
+        With na_option='bottom', NaN values are assigned the largest rank.
+
+        >>> s.rank(na_option='bottom')
+        0    1.0
+        1    4.0
+        2    2.0
+        3    3.0
+        Name: A, dtype: float64
         """
+        validate_axis(axis)
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
             raise TypeError("Series.rank does not allow numeric_only=True with non-numeric dtype.")
         else:
-            return self._rank(method, ascending).spark.analyzed
+            return self._rank(method, ascending, na_option=na_option, pct=pct).spark.analyzed
 
     def _rank(
         self,
@@ -4299,32 +4348,46 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ascending: bool = True,
         *,
         part_cols: Sequence["ColumnOrName"] = (),
+        na_option: str = "keep",
+        pct: bool = False,
     ) -> "Series":
         if method not in ["average", "min", "max", "first", "dense"]:
             msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
             raise ValueError(msg)
+        if na_option not in ["keep", "top", "bottom"]:
+            raise ValueError("na_option must be one of 'keep', 'top', 'bottom'")
 
         if self._internal.index_level > 1:
             raise NotImplementedError("rank do not support MultiIndex now")
 
+        # Determine ordering with null placement based on na_option.
+        # 'top' always assigns the smallest rank to NaN, 'bottom' the largest,
+        # regardless of ascending direction.
         if ascending:
-            asc_func = PySparkColumn.asc
+            sort_col = (
+                self.spark.column.asc_nulls_first()
+                if na_option == "top"
+                else self.spark.column.asc_nulls_last()
+            )
+            nat_order_col = F.col(NATURAL_ORDER_COLUMN_NAME).asc()
         else:
-            asc_func = PySparkColumn.desc
+            sort_col = (
+                self.spark.column.desc_nulls_first()
+                if na_option == "top"
+                else self.spark.column.desc_nulls_last()
+            )
+            nat_order_col = F.col(NATURAL_ORDER_COLUMN_NAME).desc()
 
         if method == "first":
             window = (
-                Window.orderBy(
-                    asc_func(self.spark.column),
-                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
-                )
+                Window.orderBy(sort_col, nat_order_col)
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
             scol = F.row_number().over(window)
         elif method == "dense":
             window = (
-                Window.orderBy(asc_func(self.spark.column))
+                Window.orderBy(sort_col)
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
@@ -4337,7 +4400,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             elif method == "max":
                 stat_func = F.max
             window1 = (
-                Window.orderBy(asc_func(self.spark.column))
+                Window.orderBy(sort_col)
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
@@ -4346,6 +4409,26 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 cast("List[ColumnOrName]", [self.spark.column]) + list(part_cols)
             ).rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
             scol = stat_func(F.row_number().over(window1)).over(window2)
+
+        if pct:
+            partition_window = Window.partitionBy(*part_cols)
+            if method == "dense":
+                # For dense ranking, pct denominator is the number of distinct values.
+                if na_option == "keep":
+                    denom = F.max(F.when(self.spark.column.isNotNull(), scol)).over(
+                        partition_window
+                    )
+                else:
+                    denom = F.max(scol).over(partition_window)
+            elif na_option == "keep":
+                denom = F.count(self.spark.column).over(partition_window)
+            else:
+                denom = F.count(F.lit(1)).over(partition_window)
+            scol = scol / denom.cast(DoubleType())
+
+        if na_option == "keep":
+            scol = F.when(self.spark.column.isNotNull(), scol)
+
         return self._with_new_scol(scol.cast(DoubleType()))
 
     def filter(

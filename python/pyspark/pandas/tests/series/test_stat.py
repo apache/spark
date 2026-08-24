@@ -344,6 +344,30 @@ class SeriesStatMixin:
         with self.assertRaisesRegex(ValueError, msg):
             psser.rank(method="nothing")
 
+        # pct=True
+        pser = pd.Series([1, 2, 2, 3], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.rank(pct=True), psser.rank(pct=True).sort_index())
+
+        # na_option
+        pser = pd.Series([1, float("nan"), 2, 3], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.rank(na_option="top"), psser.rank(na_option="top").sort_index())
+        self.assert_eq(pser.rank(na_option="bottom"), psser.rank(na_option="bottom").sort_index())
+        self.assert_eq(
+            pser.rank(pct=True, na_option="top"),
+            psser.rank(pct=True, na_option="top").sort_index(),
+        )
+
+        # axis=0 is accepted (no-op for Series)
+        pser = pd.Series([1, 2, 3], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.rank(axis=0), psser.rank(axis=0).sort_index())
+
+        # invalid na_option
+        with self.assertRaisesRegex(ValueError, "na_option must be one of"):
+            psser.rank(na_option="bad")
+
         msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
         with self.assertRaisesRegex(ValueError, msg):
             psser.rank(method="nothing")
