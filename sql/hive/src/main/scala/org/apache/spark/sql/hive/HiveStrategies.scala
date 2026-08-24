@@ -150,6 +150,11 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
     case relation: HiveTableRelation
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       hiveTableWithStats(relation)
+
+    // A resolved INSERT target is not a query child, so update its statistics explicitly.
+    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _, _, _, _, _)
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      i.copy(table = hiveTableWithStats(relation))
   }
 }
 

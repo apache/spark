@@ -552,6 +552,26 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("CTE does not shadow multi-insert targets") {
+    withTable("src", "t1", "t2") {
+      createTable("src", Seq("i"), Seq("int"))
+      createTable("t1", Seq("i"), Seq("int"))
+      createTable("t2", Seq("i"), Seq("int"))
+      sql("INSERT INTO src VALUES (1), (2)")
+
+      sql(
+        """
+          |WITH t1 AS (SELECT 100 AS i)
+          |FROM src
+          |INSERT INTO t1 SELECT i
+          |INSERT INTO t2 SELECT i
+          |""".stripMargin)
+
+      checkAnswer(spark.table("t1"), Seq(Row(1), Row(2)))
+      checkAnswer(spark.table("t2"), Seq(Row(1), Row(2)))
+    }
+  }
+
   test("SPARK-50340: unwrap UDT before insertion") {
     withTempView("v") {
       Seq((1, MyInt(2))).toDF("c1", "c2").createTempView("v")

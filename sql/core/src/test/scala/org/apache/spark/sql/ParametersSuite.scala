@@ -2571,6 +2571,19 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  test("InsertIntoStatement exposes only IDENTIFIER placeholders as target children") {
+    val regularInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO target_table SELECT 1")
+      .asInstanceOf[InsertIntoStatement]
+    assert(regularInsert.children === Seq(regularInsert.query))
+
+    val identifierInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO IDENTIFIER(lower('TARGET_TABLE')) SELECT 1")
+      .asInstanceOf[InsertIntoStatement]
+    assert(identifierInsert.table.isInstanceOf[PlanWithUnresolvedIdentifier])
+    assert(identifierInsert.children === Seq(identifierInsert.table, identifierInsert.query))
+  }
+
   // SPARK-46625: Parameter inside `IDENTIFIER(:p)` on REPLACE WHERE lives in the
   // `InsertIntoStatement.table` child. Verify that the standard `BindParameters` traversal
   // reaches it. Done at the rule level because full analysis would require a v2 catalog.
