@@ -1130,6 +1130,8 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
         self.assertEqual(set(self._states("bad6")), {"retired"})
         self.assertIsNone(unrelated.poll())
+        self.assertEqual(self._pool.purge(), 0)
+        self.assertIsNone(unrelated.poll())
 
     def test_reap_malformed_member_recovers_server_pid(self) -> None:
         # An out-of-range created value makes the full member invalid, but its independently
@@ -1615,6 +1617,51 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 local_server_pool.acquire_pooled_local_connect_server("local[2]", {})
         self.assertIn("POSIX", str(ctx.exception))
 
+
+    def test_purge_kills_everything_and_empties_the_directory(self) -> None:
+        warm = self._live_process()
+        attendant = self._attendant("b007")
+        half_started = self._stubborn_process()
+        duplicate_a = self._live_process()
+        duplicate_b = self._live_process()
+        retiring = self._stubborn_process()
+        with _non_listening_socket() as port:
+            self._write_state(
+                self._directory.server_path("a2a2"), self._server_data(port, warm.pid)
+            )
+            self._write_state(
+                self._directory.pending_path("b007"),
+                {"attendant_pid": attendant.pid, "created": time.time(), "fingerprint": "fp"},
+            )
+            self._write_state(self._directory.conf_path("b007"), {"spark.foo": "bar"})
+            os.makedirs(self._directory.member_dir("a2a2"))
+            self._write_daemon_pid("b007", half_started.pid)
+            # Purge is the corruption escape hatch, so malformed process metadata must not
+            # prevent it from clearing the rest of the pool.
+            self._write_state(self._directory.server_path("bad5"), {"pid": "not-a-pid"})
+            self._write_state(
+                self._directory.claimed_path(111, "d00d"),
+                self._server_data(port, duplicate_a.pid),
+            )
+            self._write_state(
+                self._directory.claimed_path(222, "d00d"),
+                self._server_data(port, duplicate_b.pid),
+            )
+            self._write_state(
+                self._directory.retired_path("e7ed"),
+                {"pid": retiring.pid, "retired": time.time()},
+            )
+
+            signalled = local_server_pool.purge_local_connect_pool()
+
+        self.assertEqual(signalled, 6)
+        self.assertEqual(os.listdir(self._directory.path), [".lock"])
+        self.assertTrue(_wait_proc_dead(warm))
+        self.assertTrue(_wait_proc_dead(attendant))
+        self.assertTrue(_wait_proc_dead(half_started))
+        self.assertTrue(_wait_proc_dead(duplicate_a))
+        self.assertTrue(_wait_proc_dead(duplicate_b))
+        self.assertTrue(_wait_proc_dead(retiring))
 
 if __name__ == "__main__":
     from pyspark.testing import main

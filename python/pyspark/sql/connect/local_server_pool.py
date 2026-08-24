@@ -46,7 +46,8 @@ it. A janitor pass on every acquire is the backstop for members whose attendant 
 
 Servers are only handed to runs they were built for: each member carries a fingerprint of its
 master, seeded confs, working directory, and Python executable, and a run only claims members
-whose fingerprint matches its own.
+whose fingerprint matches its own. ``python -m pyspark.sql.connect.local_server_pool --purge``
+force-stops every member and empties the pool directory.
 """
 
 import argparse
@@ -1127,6 +1128,72 @@ class ServerPool:
             if self._directory.states(uid).get("claimed") == member.claim_path:
                 self._retire(member.claim_path, member.pid, member.process_start_id)
 
+    def purge(self) -> int:
+        """Force-stop every member -- ready, in-flight, or claimed -- and empty the pool
+        directory; the escape hatch back to a clean slate. Returns the number of processes
+        signalled. SIGKILL rather than SIGTERM because nothing tracks a member once its
+        state files are gone, so a shutdown that hangs would leak. Supervising attendants
+        hold no state file; they notice the emptied directory and exit on their own."""
+        signalled_pids: List[int] = []
+
+        def hard_kill_server(pid: Optional[int], process_start_id: Optional[str] = None) -> None:
+            if pid is None or pid in signalled_pids:
+                return
+            if process_start_id is not None:
+                signalled = self._signal_server(pid, process_start_id, signal.SIGKILL)
+            else:
+                # Malformed and half-published states can have only spark-daemon.sh's pid.
+                # Purge is explicitly destructive, but still verify the current command before
+                # signalling rather than trusting a potentially reused numeric pid alone.
+                signalled = _is_local_connect_server(pid) is True and self._signal(
+                    pid, signal.SIGKILL
+                )
+            if signalled:
+                signalled_pids.append(pid)
+
+        def hard_kill_attendant(pid: Optional[int], uid: str) -> None:
+            if (
+                pid is not None
+                and pid not in signalled_pids
+                and self._is_pool_attendant(pid, uid) is True
+                and self._signal_attendant_group(pid, signal.SIGKILL)
+            ):
+                signalled_pids.append(pid)
+
+        with self._directory:
+            uids = self._directory.uids()
+            # Iterate entries directly by kind rather than through states(uid): duplicate
+            # claimed records violate the normal state invariant, but purge is the corruption
+            # escape hatch and must still clear and stop every recoverable member.
+            for kind in ("pending", "conf", "server", "claimed", "retired"):
+                for uid, path in self._directory.paths_of_kind(kind):
+                    data = self._directory.read_json(path)
+                    if kind == "pending":
+                        pending = PendingState.from_data(data)
+                        pid = (
+                            pending.attendant_pid
+                            if pending is not None
+                            else PendingState.attendant_pid_from_data(data)
+                        )
+                        hard_kill_attendant(pid, uid)
+                    elif kind in ("server", "claimed"):
+                        pid, process_start_id = self._recover_server_handle(uid, data)
+                        hard_kill_server(pid, process_start_id)
+                    elif kind == "retired":
+                        record_pid = RetiredState.pid_from_data(data)
+                        pid = self._recover_server_pid(uid, record_pid)
+                        process_start_id = (
+                            RetiredState.process_start_id_from_data(data)
+                            if record_pid is not None
+                            else None
+                        )
+                        hard_kill_server(pid, process_start_id)
+                    self._directory.remove(path)
+            for uid in uids:
+                hard_kill_server(self._recorded_daemon_pid(uid))
+                self._directory.remove_member_dir(uid)
+        return len(signalled_pids)
+
 
 # The member this client process has claimed, if any. Module-level so the session's stop
 # callback and atexit share one idempotent release path.
@@ -1180,6 +1247,12 @@ def release_pooled_local_connect_server() -> None:
         ServerPool(directory).release(member)
         if _claimed_member is member:
             _claimed_member = None
+
+
+def purge_local_connect_pool() -> int:
+    """See :meth:`ServerPool.purge`. Also available as
+    ``python -m pyspark.sql.connect.local_server_pool --purge``."""
+    return ServerPool().purge()
 
 
 class MemberAttendant:
@@ -1321,8 +1394,8 @@ class MemberAttendant:
                     return
                 states = set(self._directory.states(self._uid))
                 if states <= {"member"} and not _pid_alive(server_pid):
-                    # Another process's janitor already tore the member down; only the young
-                    # member directory remains.
+                    # A purge or another process's janitor already tore the member down; only
+                    # the young member directory remains.
                     self._directory.remove_member_dir(self._uid)
                     return
             time.sleep(2)
@@ -1330,7 +1403,13 @@ class MemberAttendant:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run an internal attendant for the opt-in local Spark Connect server pool."
+        description="Manage the opt-in pool of single-use local Spark Connect servers "
+        "(spark.local.connect.pool)."
+    )
+    parser.add_argument(
+        "--purge",
+        action="store_true",
+        help="force-stop every pool member and empty the pool directory",
     )
     # Internal entry point spawned by ServerPool.
     parser.add_argument("--attend", action="store_true", help=argparse.SUPPRESS)
@@ -1340,7 +1419,9 @@ def main() -> None:
     parser.add_argument("--fingerprint", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
-    if args.attend:
+    if args.purge:
+        print(f"Signalled {purge_local_connect_pool()} pool process(es).")
+    elif args.attend:
         attendant = MemberAttendant(
             PoolDirectory(args.pool_dir), args.uid, args.master, args.fingerprint
         )
