@@ -89,11 +89,15 @@ unary_np_spark_mappings = {
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
     "signbit": lambda c: F.when(
-        # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-double
-        # null and must propagate. A NaN from a default (numpy-backed) dtype arrives
-        # as a double null and must map to False (np.signbit(nan) is False); it falls
-        # through to otherwise(False) below. A nullable Float64 <NA> is also a double
-        # null, indistinguishable from a NaN after from_pandas, so it cannot propagate.
+        # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-floating null
+        # and must propagate. A NaN from a default (numpy-backed) dtype arrives as a floating
+        # null and must map to False (np.signbit(nan) is False); it falls through to
+        # otherwise(False) below. Two cases this expression cannot match, seeing only the Spark
+        # value and not the pandas dtype: a nullable float dtype's <NA> (Float32 or Float64) is
+        # also a floating null, indistinguishable from a NaN after from_pandas, so it reads False
+        # instead of propagating; and the sign of a NaN never reaches here (from_pandas nulls a
+        # NaN, and a NaN computed in Spark arrives as +NaN), so a negative NaN reads False where
+        # np.signbit reports True.
         c.isNull() & ~F.typeof(c).isin("float", "double"),
         F.lit(None).cast("boolean"),
     )
