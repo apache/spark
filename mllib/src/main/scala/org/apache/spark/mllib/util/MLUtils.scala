@@ -35,8 +35,8 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.functions.{col, length, lit, not, printf, raise_error, trim,
   unwrap_udt, when, wrap_udt}
-import org.apache.spark.sql.types.DataType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.random.BernoulliCellSampler
 
 /**
@@ -321,8 +321,8 @@ object MLUtils extends Logging {
    * Converts vector columns in an input Dataset from the [[org.apache.spark.mllib.linalg.Vector]]
    * type to the new [[org.apache.spark.ml.linalg.Vector]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of vector columns to be converted. If unspecified, all vector columns will
-   *             be converted except nested ones.
+   * @param cols a list of vector columns to be converted. If unspecified, all old vector columns
+   *             will be converted except nested ones.
    * @return the input `DataFrame` with old vector columns converted to the new vector type
    */
   @Since("2.0.0")
@@ -334,7 +334,7 @@ object MLUtils extends Logging {
       cols.toSet
     } else {
       schema.fields
-        .filter(field => isVectorUDT(field.dataType))
+        .filter(_.dataType.getClass == classOf[VectorUDT])
         .map(_.name)
         .toSet
     }
@@ -351,7 +351,6 @@ object MLUtils extends Logging {
         col(c)
       }
     }
-    import org.apache.spark.util.ArrayImplicits._
     dataset.select(exprs.toImmutableArraySeq: _*)
   }
 
@@ -359,8 +358,8 @@ object MLUtils extends Logging {
    * Converts vector columns in an input Dataset to the [[org.apache.spark.mllib.linalg.Vector]]
    * type from the new [[org.apache.spark.ml.linalg.Vector]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of vector columns to be converted. If unspecified, all vector columns will
-   *             be converted except nested ones.
+   * @param cols a list of vector columns to be converted. If unspecified, all new vector columns
+   *             will be converted except nested ones.
    * @return the input `DataFrame` with new vector columns converted to the old vector type
    */
   @Since("2.0.0")
@@ -372,7 +371,7 @@ object MLUtils extends Logging {
       cols.toSet
     } else {
       schema.fields
-        .filter(field => isVectorUDT(field.dataType))
+        .filter(_.dataType.getClass == classOf[MLVectorUDT])
         .map(_.name)
         .toSet
     }
@@ -389,20 +388,15 @@ object MLUtils extends Logging {
         col(c)
       }
     }
-    import org.apache.spark.util.ArrayImplicits._
     dataset.select(exprs.toImmutableArraySeq: _*)
-  }
-
-  private def isVectorUDT(dataType: DataType): Boolean = {
-    dataType.getClass == classOf[VectorUDT] || dataType.getClass == classOf[MLVectorUDT]
   }
 
   /**
    * Converts Matrix columns in an input Dataset from the [[org.apache.spark.mllib.linalg.Matrix]]
    * type to the new [[org.apache.spark.ml.linalg.Matrix]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of matrix columns to be converted. If unspecified, all matrix columns will
-   *             be converted except nested ones.
+   * @param cols a list of matrix columns to be converted. If unspecified, all old matrix columns
+   *             will be converted except nested ones.
    * @return the input `DataFrame` with old matrix columns converted to the new matrix type
    */
   @Since("2.0.0")
@@ -414,7 +408,7 @@ object MLUtils extends Logging {
       cols.toSet
     } else {
       schema.fields
-        .filter(field => isMatrixUDT(field.dataType))
+        .filter(_.dataType.getClass == classOf[MatrixUDT])
         .map(_.name)
         .toSet
     }
@@ -431,7 +425,6 @@ object MLUtils extends Logging {
         col(c)
       }
     }
-    import org.apache.spark.util.ArrayImplicits._
     dataset.select(exprs.toImmutableArraySeq: _*)
   }
 
@@ -439,8 +432,8 @@ object MLUtils extends Logging {
    * Converts matrix columns in an input Dataset to the [[org.apache.spark.mllib.linalg.Matrix]]
    * type from the new [[org.apache.spark.ml.linalg.Matrix]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of matrix columns to be converted. If unspecified, all matrix columns will
-   *             be converted except nested ones.
+   * @param cols a list of matrix columns to be converted. If unspecified, all new matrix columns
+   *             will be converted except nested ones.
    * @return the input `DataFrame` with new matrix columns converted to the old matrix type
    */
   @Since("2.0.0")
@@ -452,7 +445,7 @@ object MLUtils extends Logging {
       cols.toSet
     } else {
       schema.fields
-        .filter(field => isMatrixUDT(field.dataType))
+        .filter(_.dataType.getClass == classOf[MLMatrixUDT])
         .map(_.name)
         .toSet
     }
@@ -469,12 +462,7 @@ object MLUtils extends Logging {
         col(c)
       }
     }
-    import org.apache.spark.util.ArrayImplicits._
     dataset.select(exprs.toImmutableArraySeq: _*)
-  }
-
-  private def isMatrixUDT(dataType: DataType): Boolean = {
-    dataType.getClass == classOf[MatrixUDT] || dataType.getClass == classOf[MLMatrixUDT]
   }
 
   /**
