@@ -343,15 +343,11 @@ object MLUtils extends Logging {
       return dataset.toDF()
     }
 
-    val exprs = schema.fields.map { field =>
-      val c = field.name
-      if (colSet.contains(c)) {
-        wrap_udt(unwrap_udt(col(c)), new MLVectorUDT).as(c, field.metadata)
-      } else {
-        col(c)
-      }
-    }
-    dataset.select(exprs.toImmutableArraySeq: _*)
+    val fields = schema.fields.filter(field => colSet.contains(field.name)).toImmutableArraySeq
+    dataset.withColumns(
+      fields.map(_.name),
+      fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new MLVectorUDT)),
+      fields.map(_.metadata))
   }
 
   /**
@@ -380,15 +376,11 @@ object MLUtils extends Logging {
       return dataset.toDF()
     }
 
-    val exprs = schema.fields.map { field =>
-      val c = field.name
-      if (colSet.contains(c)) {
-        wrap_udt(unwrap_udt(col(c)), new VectorUDT).as(c, field.metadata)
-      } else {
-        col(c)
-      }
-    }
-    dataset.select(exprs.toImmutableArraySeq: _*)
+    val fields = schema.fields.filter(field => colSet.contains(field.name)).toImmutableArraySeq
+    dataset.withColumns(
+      fields.map(_.name),
+      fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new VectorUDT)),
+      fields.map(_.metadata))
   }
 
   /**
@@ -417,15 +409,11 @@ object MLUtils extends Logging {
       return dataset.toDF()
     }
 
-    val exprs = schema.fields.map { field =>
-      val c = field.name
-      if (colSet.contains(c)) {
-        wrap_udt(unwrap_udt(col(c)), new MLMatrixUDT).as(c, field.metadata)
-      } else {
-        col(c)
-      }
-    }
-    dataset.select(exprs.toImmutableArraySeq: _*)
+    val fields = schema.fields.filter(field => colSet.contains(field.name)).toImmutableArraySeq
+    dataset.withColumns(
+      fields.map(_.name),
+      fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new MLMatrixUDT)),
+      fields.map(_.metadata))
   }
 
   /**
@@ -454,15 +442,11 @@ object MLUtils extends Logging {
       return dataset.toDF()
     }
 
-    val exprs = schema.fields.map { field =>
-      val c = field.name
-      if (colSet.contains(c)) {
-        wrap_udt(unwrap_udt(col(c)), new MatrixUDT).as(c, field.metadata)
-      } else {
-        col(c)
-      }
-    }
-    dataset.select(exprs.toImmutableArraySeq: _*)
+    val fields = schema.fields.filter(field => colSet.contains(field.name)).toImmutableArraySeq
+    dataset.withColumns(
+      fields.map(_.name),
+      fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new MatrixUDT)),
+      fields.map(_.metadata))
   }
 
   /**
