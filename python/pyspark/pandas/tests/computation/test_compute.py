@@ -390,6 +390,16 @@ class FrameComputeMixin:
             psdf.rank(pct=True, na_option="bottom").sort_index(),
         )
 
+        # na_option with ascending=False
+        self.assert_eq(
+            pdf.rank(na_option="top", ascending=False).sort_index(),
+            psdf.rank(na_option="top", ascending=False).sort_index(),
+        )
+        self.assert_eq(
+            pdf.rank(na_option="bottom", ascending=False).sort_index(),
+            psdf.rank(na_option="bottom", ascending=False).sort_index(),
+        )
+
         # all methods
         for method in ["average", "min", "max", "first", "dense"]:
             self.assert_eq(

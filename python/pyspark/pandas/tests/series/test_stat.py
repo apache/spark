@@ -358,6 +358,14 @@ class SeriesStatMixin:
             pser.rank(pct=True, na_option="top"),
             psser.rank(pct=True, na_option="top").sort_index(),
         )
+        self.assert_eq(
+            pser.rank(na_option="top", ascending=False),
+            psser.rank(na_option="top", ascending=False).sort_index(),
+        )
+        self.assert_eq(
+            pser.rank(na_option="bottom", ascending=False),
+            psser.rank(na_option="bottom", ascending=False).sort_index(),
+        )
 
         # axis=0 is accepted (no-op for Series)
         pser = pd.Series([1, 2, 3, 1], name="x")
