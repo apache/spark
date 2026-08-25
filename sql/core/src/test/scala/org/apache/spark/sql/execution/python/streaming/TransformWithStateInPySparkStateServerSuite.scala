@@ -34,7 +34,7 @@ import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{Encoder, Row}
@@ -48,8 +48,7 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class TransformWithStateInPySparkStateServerSuite
-  extends SparkFunSuite with BeforeAndAfterEach with Eventually {
+class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with BeforeAndAfterEach {
   val stateName = "test"
   val iteratorId = "testId"
   val serverSocket: ServerSocketChannel = mock(classOf[ServerSocketChannel])
