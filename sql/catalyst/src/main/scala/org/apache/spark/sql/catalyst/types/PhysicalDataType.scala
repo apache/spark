@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.types
 
+import java.util.Arrays
+
 import scala.reflect.ClassTag
 import scala.reflect.classTag
 
@@ -25,7 +27,7 @@ import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{BinaryView, ByteArray, TimestampNanosVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 sealed abstract class PhysicalDataType {
@@ -130,7 +132,7 @@ object PhysicalIntegralType {
 
 class PhysicalBinaryType() extends PhysicalDataType {
   private[sql] val ordering =
-    (x: Array[Byte], y: Array[Byte]) => ByteArray.compareBinary(x, y)
+    (x: Array[Byte], y: Array[Byte]) => Arrays.compareUnsigned(x, y)
 
   private[sql] type InternalType = Array[Byte]
   @transient private[sql] lazy val tag = classTag[InternalType]
