@@ -3526,6 +3526,13 @@
     </profile>
 
     <profile>
+      <id>oidc-e2e</id>
+      <modules>
+        <module>connector/credential-aws-integration-tests</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>test-java-home</id>
       <activation>
         <property><name>env.JAVA_HOME</name></property>
