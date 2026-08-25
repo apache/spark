@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, 
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, SupportsReportCatalogStatistics, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
@@ -41,6 +41,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -87,23 +88,30 @@ abstract class DataSourceV2RelationBase(
     s"RelationV2$outputString $nameWithTimeTravelSpec"
   }
 
-  override def computeStats(): Statistics = {
-    if (Utils.isTesting) {
-      // when testing, throw an exception if this computeStats method is called because stats should
-      // not be accessed before pushing the projection and filters to create a scan. otherwise, the
-      // stats are not accurate because they are based on a full table scan of all columns.
-      throw SparkException.internalError(
-        s"BUG: computeStats called before pushdown on DSv2 relation: $name")
-    } else {
-      // when not testing, return stats because bad stats are better than failing a query
-      table.asReadable.newScanBuilder(options).build() match {
-        case r: SupportsReportStatistics =>
-          val statistics = r.estimateStatistics()
-          DataSourceV2Relation.transformV2Stats(statistics, conf.defaultSizeInBytes, output)
-        case _ =>
-          Statistics(sizeInBytes = conf.defaultSizeInBytes)
+  override def computeStats(): Statistics = table match {
+    case t: SupportsReportCatalogStatistics =>
+      // The table can report catalog-level statistics without building a scan, so it is legitimate
+      // to estimate stats before pushdown (e.g. for join-type selection in earlyScanPushDownRules).
+      DataSourceV2Relation.transformV2Stats(
+        t.estimateCatalogStatistics(), conf.defaultSizeInBytes, output)
+    case _ =>
+      if (Utils.isTesting) {
+        // when testing, throw an exception if this computeStats method is called because stats
+        // should not be accessed before pushing the projection and filters to create a scan.
+        // otherwise, the stats are not accurate because they are based on a full table scan of all
+        // columns.
+        throw SparkException.internalError(
+          s"BUG: computeStats called before pushdown on DSv2 relation: $name")
+      } else {
+        // when not testing, return stats because bad stats are better than failing a query
+        table.asReadable.newScanBuilder(options).build() match {
+          case r: SupportsReportStatistics =>
+            val statistics = r.estimateStatistics()
+            DataSourceV2Relation.transformV2Stats(statistics, conf.defaultSizeInBytes, output)
+          case _ =>
+            Statistics(sizeInBytes = conf.defaultSizeInBytes)
+        }
       }
-    }
   }
 }
 
