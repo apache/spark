@@ -3462,6 +3462,44 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("partially clustered join keeps its row count when EnsureRequirements re-runs") {
+    // The storage-partitioned join branch has no shuffle of its own, so AQE's re-run of
+    // `EnsureRequirements` (triggered by the other branch below) reaches it. The ALTER between the
+    // two inserts changes the write schema, which opens a second split for id = 1 -- that is what
+    // makes partial clustering replicate the right side across two expected partitions. Regrouping
+    // that replicated layout on the second pass concatenated the replicas and replicated again,
+    // duplicating every id = 1 row.
+    sql("CREATE TABLE testcat.ns.sp1 (id BIGINT, data STRING) PARTITIONED BY (id)")
+    sql("INSERT INTO testcat.ns.sp1 VALUES (1, 'aa'), (2, 'bb')")
+    sql("ALTER TABLE testcat.ns.sp1 ADD COLUMN extra STRING")
+    sql("INSERT INTO testcat.ns.sp1 VALUES (1, 'ab', 'x')")
+
+    sql("CREATE TABLE testcat.ns.sp2 (id BIGINT, data STRING) PARTITIONED BY (id)")
+    sql("INSERT INTO testcat.ns.sp2 VALUES (1, 'p'), (2, 'q')")
+
+    // Unpartitioned, so this branch's join materializes shuffle stages and is converted to a
+    // shuffled hash join, which hands the whole plan back to `EnsureRequirements`.
+    sql("CREATE TABLE testcat.ns.np1 (id BIGINT, data STRING)")
+    sql("INSERT INTO testcat.ns.np1 VALUES (7, 'x')")
+    sql("CREATE TABLE testcat.ns.np2 (id BIGINT, data STRING)")
+    sql("INSERT INTO testcat.ns.np2 VALUES (7, 'y')")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100m") {
+      val df = sql(
+        """
+          |SELECT /*+ MERGE(a, b) */ a.id AS k
+          |FROM testcat.ns.sp1 a JOIN testcat.ns.sp2 b ON a.id = b.id
+          |UNION ALL
+          |SELECT c.id AS k
+          |FROM testcat.ns.np1 c JOIN testcat.ns.np2 d ON c.id = d.id
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1L), Row(1L), Row(2L), Row(7L)))
+    }
+  }
+
   test("SPARK-48949: test partition filters with compatible transforms") {
     val items_partitions = Array(bucket(8, "id"))
     createTable(items, itemsColumns, items_partitions)
