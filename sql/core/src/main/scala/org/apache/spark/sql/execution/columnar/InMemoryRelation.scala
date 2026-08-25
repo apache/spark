@@ -713,13 +713,11 @@ case class InMemoryRelation(
     InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, statsOfPlanToCache)
   }
 
-  override def newInstance(): this.type = {
-    InMemoryRelation(
-      output.map(_.newInstance()),
-      cacheBuilder,
-      outputOrdering,
-      statsOfPlanToCache).asInstanceOf[this.type]
-  }
+  // Goes through `withOutput` so that `outputOrdering` is re-mapped onto the fresh exprIds.
+  // Returning a relation whose `outputOrdering` still references the old attributes would break
+  // canonicalization, which re-maps the ordering through the relation's own `output`.
+  override def newInstance(): this.type =
+    withOutput(output.map(_.newInstance())).asInstanceOf[this.type]
 
   // override `clone` since the default implementation won't carry over mutable states.
   override def clone(): LogicalPlan = {
