@@ -22,10 +22,11 @@ import scala.jdk.CollectionConverters._
 
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.SparkNoSuchElementException
+import org.apache.spark.{SparkEnv, SparkException, SparkNoSuchElementException}
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
+import org.apache.spark.internal.config.{ConfigEntry, SECRET_REDACTION_PATTERN}
 import org.apache.spark.sql.connect.SparkConnectTestUtils
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
@@ -160,6 +161,119 @@ class SparkConnectConfigHandlerSuite extends SharedSparkSession {
       val returned =
         pairs(sendConfigRequest(sessionHolder, _.getIsModifiableBuilder.addKeys(secretKey)))
       assert(returned(secretKey) === Some("false"))
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Validating a write to the session's Python worker environment
+  // ---------------------------------------------------------------------------
+
+  private def envKey(name: String): String = PythonWorkerEnvironment.confPrefix + name
+
+  private def sendSet(
+      sessionHolder: SessionHolder,
+      key: String,
+      value: String,
+      silent: Boolean = false): proto.ConfigResponse = {
+    sendConfigRequest(
+      sessionHolder,
+      _.getSetBuilder.setSilent(silent).addPairsBuilder().setKey(key).setValue(value))
+  }
+
+  /**
+   * Runs `body` with a limit temporarily lowered. The limits are cluster-level static configs.
+   */
+  private def withLimit[T](entry: ConfigEntry[T], value: T)(body: => Unit): Unit = {
+    val conf = SparkEnv.get.conf
+    val previous = conf.get(entry)
+    conf.set(entry, value)
+    try body
+    finally conf.set(entry, previous)
+  }
+
+  private def withEnvKeys(keys: String*)(body: => Unit): Unit = {
+    try body
+    finally keys.foreach(spark.conf.unset)
+  }
+
+  test("SPARK-58752: Set stores a valid environment variable") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    withEnvKeys(envKey("MY_SETTING")) {
+      sendSet(sessionHolder, envKey("MY_SETTING"), "abc")
+      assert(spark.conf.getOption(envKey("MY_SETTING")) === Some("abc"))
+    }
+  }
+
+  test("SPARK-58752: Set rejects an invalid variable name without storing it") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val key = envKey("1INVALID")
+    withEnvKeys(key) {
+      val ex = intercept[SparkException](sendSet(sessionHolder, key, "x"))
+      assert(ex.getCondition === "INVALID_SPARK_CONFIG.INVALID_PYTHON_WORKER_ENV_VAR_NAME")
+      // The point of checking here rather than only when a Python function is built: the write is
+      // refused, so the session is not left carrying an environment none of its queries can use.
+      assert(spark.conf.getOption(key).isEmpty)
+    }
+  }
+
+  test("SPARK-58752: Set rejects a value a process environment cannot carry") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val nul = 0.toChar
+    val key = envKey("WITH_NUL")
+    withEnvKeys(key) {
+      val ex = intercept[SparkException](sendSet(sessionHolder, key, s"abc${nul}def"))
+      assert(ex.getCondition === "INVALID_SPARK_CONFIG.INVALID_PYTHON_WORKER_ENV_VAR_VALUE")
+      assert(spark.conf.getOption(key).isEmpty)
+    }
+  }
+
+  test("SPARK-58752: Set is validated against the environment the write would produce") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    // A limit on the collection cannot be checked against the written entry alone, so the check
+    // has to consider the whole environment the session would end up with.
+    withLimit(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES, 1) {
+      withEnvKeys(envKey("FIRST"), envKey("SECOND")) {
+        sendSet(sessionHolder, envKey("FIRST"), "1")
+        val ex = intercept[SparkException](sendSet(sessionHolder, envKey("SECOND"), "2"))
+        assert(ex.getCondition === "INVALID_SPARK_CONFIG.PYTHON_WORKER_ENV_TOO_MANY_VARIABLES")
+        assert(spark.conf.getOption(envKey("SECOND")).isEmpty)
+        // The write that was already accepted stays.
+        assert(spark.conf.getOption(envKey("FIRST")) === Some("1"))
+      }
+    }
+  }
+
+  test("SPARK-58752: a silent Set reports a rejected variable as a warning") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val key = envKey("1INVALID")
+    withEnvKeys(key) {
+      // This is the path `SparkSession.builder.config` takes: it applies its options silently, so a
+      // rejected one has to come back as a warning rather than failing session creation.
+      val response = sendSet(sessionHolder, key, "x", silent = true)
+      assert(response.getWarningsCount === 1)
+      assert(response.getWarnings(0).contains(key))
+      assert(spark.conf.getOption(key).isEmpty)
+    }
+  }
+
+  test("SPARK-58752: Unset is not validated, so a session can leave an invalid environment") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val key = envKey("1INVALID")
+    withEnvKeys(key) {
+      // Installed the way SQL `SET` installs one, which the config RPC never sees.
+      spark.sessionState.conf.setConfString(key, "x")
+      sendConfigRequest(sessionHolder, _.getUnsetBuilder.addKeys(key))
+      assert(spark.conf.getOption(key).isEmpty)
+    }
+  }
+
+  test("SPARK-58752: a key outside the reserved prefix is not validated as a variable") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    // Shaped like an invalid variable name, but the prefix is not the reserved one.
+    val key = "spark.test.connect.pythonWorkerEnv.1INVALID"
+    withEnvKeys(key) {
+      sendSet(sessionHolder, key, "x")
+      assert(spark.conf.getOption(key) === Some("x"))
     }
   }
 }

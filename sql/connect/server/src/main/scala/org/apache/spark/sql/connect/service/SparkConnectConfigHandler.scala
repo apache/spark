@@ -85,6 +85,10 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     operation.getPairsList.asScala.iterator.foreach { pair =>
       val (key, value) = SparkConnectConfigHandler.toKeyValue(pair)
       try {
+        // Reject a write that would leave the session's Python worker environment invalid, before
+        // it is stored. Inside the try so that a `silent` request reports it as a warning, the way
+        // it reports any other rejected write.
+        PythonWorkerEnvironment.validateConfigChange(conf, key, value)
         conf.set(key, value.orNull)
         getWarning(key).foreach(builder.addWarnings)
       } catch {

@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.internal.SQLConf
 
@@ -73,8 +74,11 @@ private[connect] object PythonWorkerEnvironment {
    * plan cache can tell two environments apart without rejecting an invalid one: an invalid entry
    * has to fail the queries that would install it in a worker, not every query in the session.
    */
-  def read(conf: SQLConf): Map[String, String] = {
-    conf.getAllConfs.iterator
+  def read(conf: SQLConf): Map[String, String] = extract(conf.getAllConfs)
+
+  /** The environment carried by the configurations in `allConfs`. */
+  private def extract(allConfs: Map[String, String]): Map[String, String] = {
+    allConfs.iterator
       .filter { case (key, _) => key.startsWith(confPrefix) }
       .map { case (key, value) => key.substring(confPrefix.length) -> value }
       .toMap
@@ -83,11 +87,11 @@ private[connect] object PythonWorkerEnvironment {
   /**
    * Rejects a malformed or oversized environment.
    *
-   * Validation happens when a Python function is built rather than when a configuration is
-   * written, so that every way of writing a configuration is covered by one check: the Spark
-   * Connect config RPC, SQL `SET`, and the application-level configurations merged into a new
-   * session all arrive here. The cost is that an invalid environment stays in the session until
-   * the user corrects it; the benefit is that it cannot reach a worker.
+   * This runs when a Python function is built, which is the one point that every way of writing a
+   * configuration reaches: the Spark Connect config RPC, SQL `SET`, and the application-level
+   * configurations merged into a new session all arrive here. [[validateConfigChange]] rejects a
+   * write through the config RPC earlier and more helpfully, but it cannot see the other two, so
+   * this is the check that makes an invalid environment unable to reach a worker at all.
    *
    * A message may name a variable but never carries its value, so a rejection cannot copy a value
    * into a log or a stack trace. Note that the name is chosen by the user, so a name is only as
@@ -147,6 +151,36 @@ private[connect] object PythonWorkerEnvironment {
           "size" -> totalSizeBytes.toString,
           "maxSize" -> maxTotalSizeBytes.toString),
         cause = null)
+    }
+  }
+
+  /**
+   * Rejects a configuration write that would leave the session with an invalid environment.
+   *
+   * A no-op for a key outside [[confPrefix]]. For a key under it, the environment that the write
+   * would produce is validated before the write happens, so an invalid environment never enters
+   * the session at all and the failure points at the call that caused it.
+   *
+   * This covers the Spark Connect config RPC, which is both how a client sets a configuration
+   * explicitly and how `SparkSession.builder.config` applies one. It does not cover SQL `SET` or
+   * the application-level configurations merged into a new session: both reach the session
+   * configurations without passing through the RPC, which is why [[validate]] at build time stays
+   * as the check that no invalid environment can reach a worker.
+   *
+   * Removing a variable is deliberately not validated. A removal can only shrink the environment,
+   * and it is how a session recovers from an environment that one of those unchecked paths left
+   * invalid; validating a removal would leave such a session with no way back.
+   *
+   * @throws SparkException
+   *   if the environment the write would produce is malformed or oversized.
+   */
+  def validateConfigChange(conf: RuntimeConfig, key: String, value: Option[String]): Unit = {
+    if (key.startsWith(confPrefix)) {
+      // An absent value is rejected by `SQLConf` itself. Leave that failure where it is instead of
+      // reporting a missing value as an invalid environment.
+      value.foreach { newValue =>
+        validate(extract(conf.getAll) + (key.substring(confPrefix.length) -> newValue))
+      }
     }
   }
 

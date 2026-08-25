@@ -95,31 +95,41 @@ class SparkConnectPythonWorkerEnvTests(ReusedConnectTestCase):
         finally:
             self.spark.conf.unset(PREFIX + "PYTHONUNBUFFERED")
 
-    def test_invalid_name_fails_the_query(self):
-        self.spark.conf.set(PREFIX + "1INVALID", "x")
+    def test_invalid_name_fails_the_set(self):
+        with self.assertRaises(Exception) as context:
+            self.spark.conf.set(PREFIX + "1INVALID", "x")
+        message = str(context.exception)
+        # Assert on the message text rather than the condition name, which the client is not
+        # required to surface in the string form of the exception.
+        self.assertIn("is not valid", message)
+        self.assertIn("1INVALID", message)
+        # The write was refused, so nothing was stored to break later queries.
+        self.assertIsNone(self.spark.conf.get(PREFIX + "1INVALID", None))
+
+    def test_value_containing_nul_fails_the_set(self):
+        with self.assertRaises(Exception) as context:
+            self.spark.conf.set(PREFIX + "WITH_NUL", "abc" + NUL + "def")
+        message = str(context.exception)
+        self.assertIn("NUL character", message)
+        self.assertIn("WITH_NUL", message)
+        # The value must not appear in the failure.
+        self.assertNotIn("abc", message)
+        self.assertIsNone(self.spark.conf.get(PREFIX + "WITH_NUL", None))
+
+    def test_invalid_name_set_through_sql_fails_the_query(self):
+        # SQL `SET` writes the session configuration without going through the config RPC, so the
+        # write-time check cannot see it. The check performed when a Python function is built is
+        # what stops an environment installed this way from reaching a worker.
+        self.spark.sql("SET {}1INVALID=x".format(PREFIX)).collect()
         try:
+            self.assertEqual(self.spark.conf.get(PREFIX + "1INVALID"), "x")
             with self.assertRaises(Exception) as context:
                 self._read_in_worker("ANY")
             message = str(context.exception)
-            # Assert on the message text rather than the condition name, which the client is not
-            # required to surface in the string form of the exception.
             self.assertIn("is not valid", message)
             self.assertIn("1INVALID", message)
         finally:
             self.spark.conf.unset(PREFIX + "1INVALID")
-
-    def test_value_containing_nul_fails_the_query(self):
-        self.spark.conf.set(PREFIX + "WITH_NUL", "abc" + NUL + "def")
-        try:
-            with self.assertRaises(Exception) as context:
-                self._read_in_worker("WITH_NUL")
-            message = str(context.exception)
-            self.assertIn("NUL character", message)
-            self.assertIn("WITH_NUL", message)
-            # The value must not appear in the failure.
-            self.assertNotIn("abc", message)
-        finally:
-            self.spark.conf.unset(PREFIX + "WITH_NUL")
 
     def test_env_var_reaches_map_in_pandas(self):
         import pandas as pd
