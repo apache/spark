@@ -106,6 +106,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   private val printer = JsonFormat.printer().usingTypeRegistry(registry)
 
+  private val testUDT = new TestUDT.NewArrayUDT()
+
   private var session: SparkSession = _
 
   override protected def beforeAll(): Unit = {
@@ -2266,6 +2268,22 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     binary.select(fn.bitmap_or_agg(fn.col("bytes")))
   }
 
+  test("function bitmap_and") {
+    binary.select(fn.bitmap_and(fn.col("bytes"), fn.col("bytes")))
+  }
+
+  test("function bitmap_or") {
+    binary.select(fn.bitmap_or(fn.col("bytes"), fn.col("bytes")))
+  }
+
+  test("function bitmap_andnot") {
+    binary.select(fn.bitmap_andnot(fn.col("bytes"), fn.col("bytes")))
+  }
+
+  test("function bitmap_xor") {
+    binary.select(fn.bitmap_xor(fn.col("bytes"), fn.col("bytes")))
+  }
+
   test("function bitmap_xor_agg") {
     binary.select(fn.bitmap_xor_agg(fn.col("bytes")))
   }
@@ -3282,6 +3300,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("typeof") {
     fn.typeof(fn.col("g"))
+  }
+
+  functionTest("wrap_udt") {
+    fn.wrap_udt(fn.array(fn.col("b")), testUDT)
+  }
+
+  functionTest("unwrap_udt") {
+    fn.unwrap_udt(fn.wrap_udt(fn.array(fn.col("b")), testUDT))
   }
 
   functionTest("stack") {

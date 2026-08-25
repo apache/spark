@@ -974,6 +974,10 @@ object FunctionRegistry {
     expression[BitmapBitPosition]("bitmap_bit_position"),
     expression[BitmapConstructAgg]("bitmap_construct_agg"),
     expression[BitmapCount]("bitmap_count"),
+    expression[BitmapAnd]("bitmap_and"),
+    expression[BitmapOr]("bitmap_or"),
+    expression[BitmapAndNot]("bitmap_andnot"),
+    expression[BitmapXor]("bitmap_xor"),
     expression[BitmapOrAgg]("bitmap_or_agg"),
     expression[BitmapAndAgg]("bitmap_and_agg"),
     expression[BitmapXorAgg]("bitmap_xor_agg"),
@@ -1119,6 +1123,7 @@ object FunctionRegistry {
   registerInternalExpression[Days]("days")
   registerInternalExpression[Hours]("hours")
   registerInternalExpression[UnwrapUDT]("unwrap_udt")
+  registerInternalExpression[WrapUDT]("wrap_udt")
   registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
   registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
   registerInternalExpression[PandasProduct]("pandas_product")

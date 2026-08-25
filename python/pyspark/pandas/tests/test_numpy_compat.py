@@ -15,13 +15,34 @@
 # limitations under the License.
 #
 
+import platform
+import unittest
+
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas import set_option, reset_option
 from pyspark.sql import functions as F
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
+
+
+# np.reciprocal(int 0) and the fmax/fmin signed-zero tie are unspecified by C/IEEE, so NumPy's
+# own answer varies by CPU architecture and NumPy version. pandas-on-Spark returns one fixed
+# value everywhere, which matches NumPy only on the environment it was verified against, so the
+# tests comparing the two run only there.
+_numpy_matches_spark = (
+    platform.system() == "Linux"
+    and platform.machine() == "x86_64"
+    and LooseVersion(np.__version__) >= LooseVersion("2.3.0")
+)
+_skip_if_numpy_differs = unittest.skipIf(
+    not _numpy_matches_spark,
+    "NumPy's reciprocal(int 0) and fmax/fmin signed-zero tie vary by architecture and NumPy "
+    "version, while pandas-on-Spark returns one fixed value that matches NumPy only on "
+    "Linux x86_64 with NumPy >= 2.3.0",
+)
 
 
 class NumPyCompatTestsMixin:
@@ -42,8 +63,10 @@ class NumPyCompatTestsMixin:
         "log",  # flaky
         "log10",  # flaky
         "log1p",  # flaky
-        "modf",
     ]
+    # The sweeps below draw random integers including 0, where reciprocal diverges.
+    if not _numpy_matches_spark:
+        blacklist = blacklist + ["reciprocal"]
 
     @property
     def pdf(self):
@@ -140,6 +163,7 @@ class NumPyCompatTestsMixin:
 
                 self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
 
+    @_skip_if_numpy_differs
     def test_np_reciprocal_integer(self):
         # np.reciprocal on an integer column does integer division (truncated
         # toward zero): 1 -> 1, -1 -> -1, and every other magnitude -> 0. The
@@ -264,6 +288,55 @@ class NumPyCompatTestsMixin:
 
             self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2), almost=True)
 
+    def test_np_modf(self):
+        # np.modf(x) returns a tuple (fractional part, integral part).
+        for pdf in (
+            pd.DataFrame({"a": [-64, -2, -1, 0, 1, 2, 64]}),
+            pd.DataFrame(
+                {"a": [-np.inf, -64.0, -2.0, -0.5, -0.0, 0.0, 0.5, 2.0, 64.0, np.inf, np.nan]}
+            ),
+            pd.DataFrame({"a": pd.array([1, -2, None], dtype="Int64")}),
+        ):
+            psdf = ps.from_pandas(pdf)
+            ps_fractional, ps_integral = np.modf(psdf.a)
+            pd_fractional, pd_integral = np.modf(pdf.a)
+            self.assert_eq(ps_fractional, pd_fractional, almost=True)
+            self.assert_eq(ps_integral, pd_integral, almost=True)
+
+        # almost=True treats -0.0 and 0.0 as equal, so verify the sign of zero explicitly:
+        # the fractional part of a negative whole number (-2.0 -> -0.0) and the fractional
+        # part of -inf (-> -0.0) must keep the input's sign, as must the integral part of a
+        # value in (-1, 0) (-0.5 -> -0.0).
+        pdf = pd.DataFrame({"a": [-2.0, -0.5, -0.0, 0.0, 0.5, 2.0, -np.inf, np.inf]})
+        psdf = ps.from_pandas(pdf)
+        ps_fractional, ps_integral = np.modf(psdf.a)
+        pd_fractional, pd_integral = np.modf(pdf.a)
+        self.assert_eq(np.signbit(ps_fractional.to_pandas()), np.signbit(pd_fractional))
+        self.assert_eq(np.signbit(ps_integral.to_pandas()), np.signbit(pd_integral))
+
+        # DataFrame input: np.modf returns a tuple of DataFrames, one per output.
+        pdf = pd.DataFrame(
+            {
+                "a": [-3.5, -2.0, -0.5, 0.0, 2.7],
+                "b": [1.5, -0.0, np.inf, -np.inf, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        ps_fractional, ps_integral = np.modf(psdf)
+        pd_fractional, pd_integral = np.modf(pdf)
+        self.assert_eq(ps_fractional, pd_fractional, almost=True)
+        self.assert_eq(ps_integral, pd_integral, almost=True)
+        self.assert_eq(np.signbit(ps_fractional.to_pandas()), np.signbit(pd_fractional))
+        self.assert_eq(np.signbit(ps_integral.to_pandas()), np.signbit(pd_integral))
+
+        # Index input: np.modf returns a tuple of Index objects.
+        pidx = pd.Index([-3.5, -2.0, -0.5, 0.0, 2.7])
+        psidx = ps.from_pandas(pidx)
+        ps_fractional, ps_integral = np.modf(psidx)
+        pd_fractional, pd_integral = np.modf(pidx)
+        self.assert_eq(ps_fractional, pd_fractional, almost=True)
+        self.assert_eq(ps_integral, pd_integral, almost=True)
+
     def test_floor_divide_func(self):
         from pyspark.pandas.numpy_compat import _floor_divide_func
 
@@ -380,6 +453,7 @@ class NumPyCompatTestsMixin:
                 self.assert_eq(result, expected, almost=True)
                 self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
 
+    @_skip_if_numpy_differs
     def test_np_fmax_fmin(self):
         for pdf in (
             pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),

@@ -179,6 +179,50 @@ Define the reader logic to generate synthetic data. Use the `faker` library to p
                     row.append(value)
                 yield tuple(row)
 
+Push Down a Limit to a Batch Reader
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When a query only needs the first few rows, a reader can implement ``pushLimit`` to fetch less
+data, for example by adding a page size parameter to a REST request or a ``LIMIT`` clause to a
+SQL query. ``pushLimit`` is called during planning, before ``partitions`` and ``read``, and
+returns whether the reader will make use of the limit. It runs after ``pushFilters`` when the
+query has filters to push down, so state it depends on belongs in ``__init__``.
+
+Pushing down a limit is only a hint: Spark always applies the limit again after the scan, so a
+reader is free to return more rows than requested. Set
+``spark.sql.python.limitPushdown.enabled`` to ``true`` to enable limit pushdown.
+
+.. code-block:: python
+
+    from typing import Dict
+
+    from pyspark.sql.datasource import DataSourceReader, InputPartition
+    from pyspark.sql.types import StructType
+
+    class FakeDataSourceReader(DataSourceReader):
+
+        def __init__(self, schema: StructType, options: Dict[str, str]):
+            self.schema: StructType = schema
+            self.options = options
+            self.limit = None
+
+        def pushLimit(self, limit: int) -> bool:
+            self.limit = limit
+            return True
+
+        def partitions(self):
+            # A limit makes a single request cheaper than a fan-out, since every
+            # partition opens its own connection to the data source.
+            if self.limit is not None:
+                return [InputPartition(None)]
+            return [InputPartition(i) for i in range(16)]
+
+        def read(self, partition):
+            num_rows = int(self.options.get("numRows", 3))
+            if self.limit is not None:
+                num_rows = min(num_rows, self.limit)
+            ...
+
 Implement a Batch Writer
 ~~~~~~~~~~~~~~~~~~~~~~~~
 

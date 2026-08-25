@@ -41,6 +41,7 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
 
   private val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   private val tbl = "scanmerge.t"
+  private val tbl2 = "scanmerge.t2"
 
   before {
     spark.conf.set("spark.sql.catalog.scanmerge",
@@ -171,6 +172,29 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
           s"the merged scan should read the union of both columns; got ${scans.head.output}")
         assertNoPlaceholderRelation(df)
       }
+    }
+  }
+
+  test("SPARK-40259: do not merge DSv2 scans from different tables") {
+    withTable(tbl, tbl2) {
+      sql(s"CREATE TABLE $tbl (part_col string, c1 int) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"CREATE TABLE $tbl2 (part_col string, c2 int) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"INSERT INTO $tbl VALUES ('a', 1), ('a', 2)")
+      sql(s"INSERT INTO $tbl2 VALUES ('a', 10), ('a', 30)")
+
+      val df = sql(
+        s"""
+           |SELECT
+           |  (SELECT max(c1) FROM $tbl WHERE part_col IN ('a')) AS m1,
+           |  (SELECT max(c2) FROM $tbl2 WHERE part_col IN ('a')) AS m2
+           |""".stripMargin)
+
+      checkAnswer(df, Row(2, 30))
+      val scans = v2Scans(df)
+      assert(scans.map(_.canonicalized).distinct.length == 2,
+        s"scans from different tables must remain separate:\n${df.queryExecution.optimizedPlan}")
     }
   }
 

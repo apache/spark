@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Callable, no_type_check
+from typing import Any, Callable, Tuple, Union, no_type_check
 
 import numpy as np
 
@@ -22,6 +22,7 @@ from pyspark.loose_version import LooseVersion
 from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, BooleanType
+from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
 
 
@@ -88,11 +89,15 @@ unary_np_spark_mappings = {
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
     "signbit": lambda c: F.when(
-        # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-double
-        # null and must propagate. A NaN from a default (numpy-backed) dtype arrives
-        # as a double null and must map to False (np.signbit(nan) is False); it falls
-        # through to otherwise(False) below. A nullable Float64 <NA> is also a double
-        # null, indistinguishable from a NaN after from_pandas, so it cannot propagate.
+        # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-floating null
+        # and must propagate. A NaN from a default (numpy-backed) dtype arrives as a floating
+        # null and must map to False (np.signbit(nan) is False); it falls through to
+        # otherwise(False) below. Two cases this expression cannot match, seeing only the Spark
+        # value and not the pandas dtype: a nullable float dtype's <NA> (Float32 or Float64) is
+        # also a floating null, indistinguishable from a NaN after from_pandas, so it reads False
+        # instead of propagating; and the sign of a NaN never reaches here (from_pandas nulls a
+        # NaN, and a NaN computed in Spark arrives as +NaN), so a negative NaN reads False where
+        # np.signbit reports True.
         c.isNull() & ~F.typeof(c).isin("float", "double"),
         F.lit(None).cast("boolean"),
     )
@@ -272,7 +277,6 @@ binary_np_spark_mappings = {
     ),
     "maximum": F.greatest,
     "minimum": F.least,
-    "modf": pandas_udf(lambda s1, s2: np.modf(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "nextafter": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.nextafter(s1, s2), DoubleType()
     ),
@@ -284,11 +288,35 @@ binary_np_spark_mappings = {
 }
 
 
+def _modf_fractional_func(c: Column) -> Column:
+    c_double = c.cast("double")
+    # signum * (abs % 1) keeps the fractional magnitude with the sign of the input,
+    # including the signed zero of a whole number (for example -2.0 -> -0.0), the same
+    # way the "trunc" mapping (reused below for the integral part) relies on signum.
+    fractional = F.signum(c_double) * (F.abs(c_double) % F.lit(1.0))
+    return (
+        F.when(c.isNull() | F.isnan(c_double), c_double)
+        # +-inf has no fractional part; numpy returns a zero with the input's sign.
+        .when(c_double == float("inf"), F.lit(0.0))
+        .when(c_double == float("-inf"), F.lit(-0.0))
+        .otherwise(fractional)
+    )
+
+
+# Every multi-output ufunc numpy ships (modf, frexp) has exactly two outputs, so each entry
+# maps to a pair of Column->Column functions applied independently and returned as a 2-tuple
+# that numpy's __array_ufunc__ unpacks (for example `fractional, integral = np.modf(series)`).
+multi_output_np_spark_mappings = {
+    # np.modf(x) -> (fractional part, integral part); the integral part is exactly trunc.
+    "modf": (_modf_fractional_func, unary_np_spark_mappings["trunc"]),
+}
+
+
 # Copied from pandas.
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_dunder_op(
     ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-) -> IndexOpsMixin:
+) -> SeriesOrIndex:
     special = {
         "add",
         "sub",
@@ -354,10 +382,21 @@ def maybe_dispatch_ufunc_to_dunder_op(
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_spark_func(
     ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-) -> IndexOpsMixin:
+) -> Union[SeriesOrIndex, Tuple[SeriesOrIndex, SeriesOrIndex]]:
     from pyspark.pandas.base import column_op
 
     op_name = ufunc.__name__
+
+    if (
+        method == "__call__"
+        and op_name in multi_output_np_spark_mappings
+        and kwargs.get("out") is None
+    ):
+        # These ufuncs are unary in their input, so the single input is always a Series
+        # that column_op unwraps to a Column -- no literal wrapping needed. Build one
+        # Series per output and return them as a 2-tuple (see the mapping's docstring).
+        first_func, second_func = multi_output_np_spark_mappings[op_name]
+        return column_op(first_func)(*inputs), column_op(second_func)(*inputs)
 
     if (
         method == "__call__"

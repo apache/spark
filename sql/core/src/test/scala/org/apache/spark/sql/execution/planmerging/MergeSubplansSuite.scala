@@ -2036,10 +2036,12 @@ class MergeSubplansSuite extends PlanTest {
    * exactly as in production, where each scan relation is annotated by its own derivation.
    */
   private def v2ScanReportingOn(
-      table: TestV2Table, cols: Seq[String]): DataSourceV2ScanRelation = {
+      table: TestV2Table,
+      cols: Seq[String],
+      funCatalog: FunctionCatalog = TestFreshBindFunctionCatalog): DataSourceV2ScanRelation = {
     val fullOutput = toAttributes(table.schema())
     val relation = DataSourceV2Relation(
-      table, fullOutput, Some(TestFreshBindFunctionCatalog), None, CaseInsensitiveStringMap.empty())
+      table, fullOutput, Some(funCatalog), None, CaseInsensitiveStringMap.empty())
     val output = cols.map(c => fullOutput.find(_.name == c).get)
     val builder = table.newScanBuilder(CaseInsensitiveStringMap.empty())
     builder.asInstanceOf[SupportsPushDownRequiredColumns].pruneColumns(
@@ -2779,11 +2781,11 @@ class MergeSubplansSuite extends PlanTest {
   test("SPARK-58549: merge DSv2 scans reporting the same bucket transform partitioning") {
     // Both inputs report `bucket(4, a)`, each derived independently, so each holds its OWN
     // BoundFunction instance -- what production does, since V2ExpressionUtils binds the function
-    // afresh per derivation and a BoundFunction defines no `equals`. Comparing the two reports by
-    // canonical equality would therefore call them different and decline the merge; they must be
-    // compared by transform semantics (isSameFunction), and then the merge proceeds and the rebuilt
-    // scan re-derives the same report. This is the only test that reaches the transform arm of
-    // sameReportedExpressions: an identity-partitioned source reports a plain attribute instead.
+    // afresh per derivation. The two reports compare equal only because `TestBucketFunction`
+    // implements `equals`/`hashCode` the way `BoundFunction` asks a connector to, so this is the
+    // end-to-end check that Spark honours that contract: the merge proceeds and the rebuilt scan
+    // re-derives the same report. It is also the only test here whose report is a transform rather
+    // than a plain attribute, which is what an identity-partitioned source would report.
     val q = testRelation.select(
       ScalarSubquery(v2ScanReportingOn(v2TableBucketedOnA, Seq("a", "b"))
         .groupBy()(sum($"b").as("sum_b"))),
@@ -2798,6 +2800,23 @@ class MergeSubplansSuite extends PlanTest {
       s"the merged scan should preserve the reported bucket transform; got $kgp")
     assert(kgp.get.flatMap(_.references).exists(_.name == "a"),
       s"the preserved partitioning should be on a; got $kgp")
+  }
+
+  test("SPARK-58769: decline the merge when the reported transform is not comparable") {
+    // The mirror of the test above, and the cost this documents: same query, same reported
+    // `bucket(4, a)`, but the connector's function does not implement `equals`, so the two
+    // independently bound instances do not compare equal and Spark cannot tell the two reports
+    // apart from two different partitionings. It does not derive that identity itself (see
+    // `BoundFunction#equals`), so the merge is declined rather than done on a report it cannot
+    // verify, and the plan is left alone.
+    val q = testRelation.select(
+      ScalarSubquery(
+        v2ScanReportingOn(v2TableBucketedOnA, Seq("a", "b"), TestNotComparableFunctionCatalog)
+          .groupBy()(sum($"b").as("sum_b"))),
+      ScalarSubquery(
+        v2ScanReportingOn(v2TableBucketedOnA, Seq("a", "c"), TestNotComparableFunctionCatalog)
+          .groupBy()(sum($"c").as("sum_c"))))
+    comparePlans(Optimize.execute(q.analyze), q.analyze)
   }
 
   test("SPARK-58549: enforce the required report on the deferred under-Filter scan build") {
@@ -3161,8 +3180,8 @@ private case class TestV2ReportingScan(
  * A `FunctionCatalog` that resolves `bucket`, binding it to a FRESH function instance every time --
  * as a real connector does, since `V2ExpressionUtils.loadV2FunctionOpt` binds the function afresh
  * for every derivation of a reported transform. Spark's own `UnboundBucketFunction` hands back a
- * singleton, which would hide the fact that two independently derived reports have to be
- * compared by transform semantics rather than by function instance.
+ * singleton, which would hide the fact that relating two independently derived reports rests on the
+ * function's own `equals` (see `BoundFunction#equals`).
  */
 private object TestFreshBindFunctionCatalog extends FunctionCatalog {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
@@ -3183,13 +3202,54 @@ private object TestUnboundBucketFunction extends UnboundFunction {
 }
 
 /**
- * A bound `bucket` with no `equals`, so two instances are never `==` -- which is what makes the
- * fixture able to catch an instance-sensitive comparison. `canonicalName` is stable, as the
- * `BoundFunction` contract requires (its default returns a fresh random UUID); that stable name is
- * what identifies two separately bound instances as the same transform, for a storage-partitioned
- * join and for the merge's not-worse check alike.
+ * A bound `bucket` that implements `equals`/`hashCode` over the state identifying it, as
+ * `BoundFunction` asks a connector to. That is what lets Spark recognize two separately bound
+ * instances as the same transform: `V2ExpressionUtils` binds afresh on every derivation, so two
+ * reported partitionings hold two different instances and nothing but this comparison relates them.
+ * `canonicalName` is stable too (its default returns a fresh random UUID), which is what a
+ * storage-partitioned join compares.
  */
 private class TestBucketFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = "testcat.bucket"
+
+  override def equals(other: Any): Boolean = other match {
+    case that: TestBucketFunction =>
+      canonicalName() == that.canonicalName() && resultType() == that.resultType() &&
+        // `Array` equality is reference identity, so compare the elements.
+        inputTypes().sameElements(that.inputTypes())
+    case _ => false
+  }
+
+  override def hashCode(): Int = canonicalName().hashCode
+}
+
+/**
+ * The same catalog with a bound `bucket` that does NOT implement `equals`/`hashCode` -- a connector
+ * that meets only the `canonicalName` obligation. Two of its separately bound instances never
+ * compare equal, so Spark cannot relate two reports of one transform.
+ */
+private object TestNotComparableFunctionCatalog extends FunctionCatalog {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+  override def name(): String = "test_not_comparable"
+  override def listFunctions(namespace: Array[String]): Array[Identifier] =
+    Array(Identifier.of(Array.empty, "bucket"))
+  override def loadFunction(ident: Identifier): UnboundFunction = ident.name() match {
+    case "bucket" => TestUnboundNotComparableBucketFunction
+    case other => throw new UnsupportedOperationException(s"no such function: $other")
+  }
+}
+
+private object TestUnboundNotComparableBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = new TestNotComparableBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+/** A plain class, so it inherits the identity comparison from `Object`. */
+private class TestNotComparableBucketFunction extends ScalarFunction[Int] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "bucket"

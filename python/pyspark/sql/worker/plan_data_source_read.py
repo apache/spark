@@ -42,7 +42,7 @@ from pyspark.sql.types import (
     BinaryType,
     StructType,
 )
-from pyspark.sql.worker.utils import worker_run
+from pyspark.sql.worker.utils import check_pushdown_not_disabled, worker_run
 from pyspark.worker_util import (
     get_sock_file_to_executor,
     read_command,
@@ -283,9 +283,15 @@ def _main(infile: IO, outfile: IO) -> None:
     for creating a `DataSourceReader` object and send the information needed back to the JVM.
 
     The infile and outfile are connected to the JVM via a socket. The JVM sends the following
-    information to this process via the socket:
+    information to this process via the socket, in this order (the protocol is positional):
     - a `DataSource` instance representing the data source
+    - a `StructType` instance representing the input schema from the child plan
     - a `StructType` instance representing the output schema of the data source
+    - the max Arrow batch size (int)
+    - whether filter pushdown is enabled (bool)
+    - whether limit pushdown is enabled (bool)
+    - whether this is a streaming read (bool)
+    - whether binary values are returned as `bytes` (bool)
 
     This process then creates a `DataSourceReader` instance by calling the `reader` method
     on the `DataSource` instance. Then it calls the `partitions()` method of the reader and
@@ -339,6 +345,7 @@ def _main(infile: IO, outfile: IO) -> None:
         f"The maximum arrow batch size should be greater than 0, but got '{max_arrow_batch_size}'"
     )
     enable_pushdown = read_bool(infile)
+    enable_limit_pushdown = read_bool(infile)
 
     is_streaming = read_bool(infile)
     binary_as_bytes = read_bool(infile)
@@ -360,19 +367,9 @@ def _main(infile: IO, outfile: IO) -> None:
                         "actual": f"'{type(reader).__name__}'",
                     },
                 )
-            is_pushdown_implemented = (
-                getattr(reader.pushFilters, "__func__", None) is not DataSourceReader.pushFilters
-            )
-            if is_pushdown_implemented and not enable_pushdown:
-                # Do not silently ignore pushFilters when pushdown is disabled.
-                # Raise an error to ask the user to enable pushdown.
-                raise PySparkAssertionError(
-                    errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
-                    messageParameters={
-                        "type": type(reader).__name__,
-                        "conf": "spark.sql.python.filterPushdown.enabled",
-                    },
-                )
+            # Do not silently ignore a pushdown method that the reader implements while the
+            # corresponding pushdown is disabled. Raise an error to ask the user to enable it.
+            check_pushdown_not_disabled(reader, enable_pushdown, enable_limit_pushdown)
 
         # Send the read function and partitions to the JVM.
         write_read_func_and_partitions(

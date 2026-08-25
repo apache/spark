@@ -19,9 +19,87 @@ from functools import total_ordering
 import itertools
 import os
 import re
-from pathlib import Path
+import sys
+from pathlib import Path, PurePath
 
 all_modules = []
+
+# These are `pathlib.PurePath` glob-style patterns with some customization:
+#   - Bare patterns match a file name at any depth.
+#   - Leading slashes anchor at the repository root.
+#   - A trailing slash denotes an ignored directory subtree.
+# See: https://docs.python.org/3/library/pathlib.html#pathlib.PurePath.match
+#
+# Rejected alternatives:
+# - Regexes present a footgun in that `.` needs to be carefully escaped but
+#   often isn't.
+# - `.gitignore`-style patterns would be ideal but don't have support in the
+#   standard library.
+ignored_file_patterns = (
+    ".asf.yaml",
+    ".gitignore",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "README.md",
+    "/LICENSE-binary",
+    "/NOTICE-binary",
+    "/scalastyle-config.xml",
+    "/SECURITY.md",
+    "/dev/checkstyle-suppressions.xml",
+    "/dev/checkstyle.xml",
+    "/dev/create_jira_and_branch.py",
+    "/dev/create_spark_jira.py",
+    "/dev/create-release/",
+    "/dev/lint-python",
+    "/dev/lint-scala",
+    "/dev/make-distribution.sh",
+    "/dev/merge_spark_pr.py",
+    "/dev/pr_merge_status.py",
+    "/dev/reformat-python",
+    "/dev/requirements.txt",
+    "/dev/spark_merge_footer.py",
+    "/dev/spark-test-image/lint/Dockerfile",
+    "/dev/structured_logging_style.py",
+    "/ui-test/package-lock.json",
+    "/ui-test/package.json",
+)
+
+
+def is_ignored_file(filename: str) -> bool:
+    """
+    Return whether a repository-relative path should be ignored when selecting
+    test modules.
+
+    Bare patterns match a file name at any depth:
+    >>> is_ignored_file("python/README.md")
+    True
+
+    Leading slashes anchor at the repository root:
+    >>> is_ignored_file("SECURITY.md")
+    True
+    >>> is_ignored_file("docs/SECURITY.md")
+    False
+
+    A trailing slash ignores a directory subtree:
+    >>> is_ignored_file("dev/create-release/spark-rm/Dockerfile")
+    True
+
+    Non-matches fall through:
+    >>> is_ignored_file("xasfZyaml")
+    False
+    """
+    path = PurePath("/") / filename
+    for pattern in ignored_file_patterns:
+        # TODO: When Python 3.13 becomes the minimum supported version, migrate
+        # to `PurePath.full_match` and use `**` patterns instead of this custom
+        # trailing slash behavior.
+        if pattern.endswith("/"):
+            ignored_directory = PurePath(pattern)
+            if path == ignored_directory or ignored_directory in path.parents:
+                return True
+        elif path.match(pattern):
+            return True
+    return False
 
 
 @total_ordering
@@ -1737,46 +1815,6 @@ docker_integration_tests = Module(
     test_tags=["org.apache.spark.tags.DockerTest"],
 )
 
-
-# dev_tools is a pseudo module that contains all the dev related files that
-# won't impact the CI build and tests (except for CI which is forced to
-# run anyway).
-# This module is created so modifying files in this module won't trigger any
-# tests to run.
-dev_tools = Module(
-    name="dev-tools",
-    dependencies=[],
-    source_file_regexes=[
-        ".*README.md",
-        ".*AGENTS.md",
-        r".*\.gitignore",
-        "CONTRIBUTING.md",
-        ".asf.yaml",
-        "SECURITY.md",
-        "NOTICE-binary",
-        "LICENSE-binary",
-        "ui-test/package.json",
-        "ui-test/package-lock.json",
-        "scalastyle-config.xml",
-        "dev/checkstyle.xml",
-        "dev/checkstyle-suppressions.xml",
-        "dev/create_jira_and_branch.py",
-        "dev/create_spark_jira.py",
-        "dev/spark-test-image/lint/Dockerfile",
-        "dev/lint-python",
-        "dev/lint-scala",
-        "dev/reformat-python",
-        "dev/structured_logging_style.py",
-        "dev/make-distribution.sh",
-        "dev/merge_spark_pr.py",
-        "dev/requirements.txt",
-        "dev/pr_merge_status.py",
-        "dev/spark_merge_footer.py",
-        "dev/create_spark_jira.py",
-        "dev/create-release/",
-    ],
-)
-
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.
 root = Module(
@@ -1794,3 +1832,15 @@ root = Module(
     should_run_r_tests=True,
     should_run_build_tests=True,
 )
+
+
+def _test():
+    import doctest
+
+    failure_count = doctest.testmod()[0]
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

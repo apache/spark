@@ -685,6 +685,27 @@ class LocalDataToArrowConversion:
                         assert isinstance(value, (list, array.array))
                         return list(value)
 
+            elif isinstance(dataType.elementType, (StringType, BinaryType)):
+                # Inline the scalar identity fast path so elements that are
+                # already the target Python type skip the per-element converter
+                # call entirely: `convert_string`/`convert_binary` return such
+                # elements unchanged. `str` and immutable `bytes` are the two
+                # element types whose converter is a no-op on a matching value.
+                # Any other element -- including `None` (whose nullability is
+                # enforced by `element_conv`) and values that need coercion (e.g.
+                # a bool to string) -- falls back to `element_conv`, reused
+                # unchanged.
+                fast_type = str if isinstance(dataType.elementType, StringType) else bytes
+
+                def convert_array(value: Any) -> Any:
+                    if value is None:
+                        if not nullable:
+                            raise PySparkValueError(f"input for {dataType} must not be None")
+                        return None
+                    else:
+                        assert isinstance(value, (list, array.array))
+                        return [v if type(v) is fast_type else element_conv(v) for v in value]
+
             else:
 
                 def convert_array(value: Any) -> Any:
@@ -742,6 +763,12 @@ class LocalDataToArrowConversion:
                     if not nullable:
                         raise PySparkValueError(f"input for {dataType} must not be None")
                     return None
+                elif type(value) is bytes:
+                    # Fast path: `bytes(value)` returns `value` itself for a `bytes`
+                    # input (no copy, as `bytes` is immutable), but still pays the
+                    # constructor dispatch per element. Returning it directly skips
+                    # that. `bytearray` falls through and is copied into `bytes`.
+                    return value
                 else:
                     assert isinstance(value, (bytes, bytearray))
                     return bytes(value)
@@ -804,13 +831,19 @@ class LocalDataToArrowConversion:
                     if not nullable:
                         raise PySparkValueError(f"input for {dataType} must not be None")
                     return None
+                elif type(value) is str:
+                    # Fast path: `str(value)` returns `value` itself for a `str`
+                    # input (no copy), but still pays the constructor dispatch per
+                    # element. Returning it directly skips that and the bool check.
+                    return value
+                elif value is True:
+                    # To match the PySpark Classic which convert bool to string in
+                    # the JVM side (python.EvaluatePython.makeFromJava)
+                    return "true"
+                elif value is False:
+                    return "false"
                 else:
-                    if isinstance(value, bool):
-                        # To match the PySpark Classic which convert bool to string in
-                        # the JVM side (python.EvaluatePython.makeFromJava)
-                        return str(value).lower()
-                    else:
-                        return str(value)
+                    return str(value)
 
             return convert_string
 

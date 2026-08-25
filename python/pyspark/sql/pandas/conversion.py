@@ -533,7 +533,7 @@ class PandasConversionMixin:
                 jsocket_auth_server,
             ) = self._jdf.collectAsArrowToPython()
 
-        # Collect list of un-ordered batches where last element is a list of correct order indices
+        # Collect the batches already reordered by ArrowCollectSerializer.
         try:
             with _load_from_socket((port, auth_secret), ArrowCollectSerializer()) as batch_stream:
                 if split_batches:
@@ -545,32 +545,23 @@ class PandasConversionMixin:
                     # converted.
                     import pyarrow as pa
 
-                    results = []
-                    for batch_or_indices in batch_stream:
-                        if isinstance(batch_or_indices, pa.RecordBatch):
-                            batch_or_indices = pa.RecordBatch.from_arrays(
-                                [
-                                    # This call actually reallocates the array
-                                    pa.concat_arrays([array])
-                                    for array in batch_or_indices
-                                ],
-                                schema=batch_or_indices.schema,
-                            )
-                        results.append(batch_or_indices)
+                    batches = [
+                        pa.RecordBatch.from_arrays(
+                            # This call actually reallocates the array
+                            [pa.concat_arrays([array]) for array in batch],
+                            schema=batch.schema,
+                        )
+                        for batch in batch_stream
+                    ]
                 else:
-                    results = list(batch_stream)
+                    batches = list(batch_stream)
         finally:
             with unwrap_spark_exception():
                 # Join serving thread and raise any exceptions from collectAsArrowToPython
                 jsocket_auth_server.getResult()
 
-        # Separate RecordBatches from batch order indices in results
-        batches = results[:-1]
-        batch_order = results[-1]
-
         if len(batches) or empty_list_if_zero_records:
-            # Re-order the batch list using the correct order
-            return [batches[i] for i in batch_order]
+            return batches
         else:
             from pyspark.sql.pandas.types import to_arrow_schema
             import pyarrow as pa
