@@ -1368,7 +1368,7 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=()):
 
 
 def update_jira_for_pr(pr_num, title, merge_branches, title_components):
-    skip_jira_title_tags = {"MINOR", "TRIVIAL", "FOLLOWUP"}
+    skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
     tags = set(title_components)
     try:
         parsed = Title.parse(title)
@@ -1376,7 +1376,13 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components):
         tags.update(parsed.components)
     except ValueError:
         pass
-    if not tags.isdisjoint(skip_jira_title_tags):
+    skipped = [tag for tag in skip_jira_title_tags if tag in tags]
+    if skipped:
+        print()
+        print_error(
+            "Skipping JIRA operations for PR #%s because title has %s."
+            % (pr_num, ", ".join("[%s]" % tag for tag in skipped))
+        )
         return
 
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
