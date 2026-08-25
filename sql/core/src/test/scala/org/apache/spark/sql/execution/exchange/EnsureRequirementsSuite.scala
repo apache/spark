@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, _}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
+import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{BinaryExecNode, DummySparkPlan, LeafExecNode, SafeForKWayMerge, SortExec, UnaryExecNode}
 import org.apache.spark.sql.execution.SparkPlan
@@ -1933,6 +1934,63 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         DummyPassthroughUnaryExec(SortExec(ordering, global = false, child = gpe)))
         .exists(anyGpeEnabled))
     }
+  }
+
+  test("only a local sort is looked through when reusing GroupPartitionsExec") {
+    // A global `SortExec` requires `OrderedDistribution`, which a `KeyedPartitioning` can satisfy
+    // (behind `spark.sql.sources.v2.bucketing.sorting.enabled`) through a `GroupPartitionsExec`
+    // built to emit the partition keys in sorted order. Reusing that node for a join would
+    // overwrite its `expectedPartitionKeys` and clear `distributePartitions`, destroying the
+    // ordering it exists to provide. Only a local sort may be looked through.
+    val leaf = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2))))
+    val gpe = GroupPartitionsExec(leaf)
+    val ordering = Seq(SortOrder(exprA, Ascending))
+    def mark(g: GroupPartitionsExec): GroupPartitionsExec = g.copy(distributePartitions = true)
+
+    // A bare GroupPartitionsExec is rewritten in place.
+    EnsureRequirements.rewriteGroupPartitions(gpe)(mark) match {
+      case Some(g: GroupPartitionsExec) => assert(g.distributePartitions)
+      case other => fail(s"expected a rewritten GroupPartitionsExec, got $other")
+    }
+
+    // A local sort is looked through and the GroupPartitionsExec below it is rewritten.
+    val localSort = SortExec(ordering, global = false, gpe)
+    EnsureRequirements.rewriteGroupPartitions(localSort)(mark) match {
+      case Some(SortExec(_, false, g: GroupPartitionsExec, _)) => assert(g.distributePartitions)
+      case other => fail(s"expected the local sort to be looked through, got $other")
+    }
+
+    // A global sort is not looked through, so the caller wraps instead of reusing.
+    val globalSort = SortExec(ordering, global = true, gpe)
+    assert(EnsureRequirements.rewriteGroupPartitions(globalSort)(mark).isEmpty,
+      "a GroupPartitionsExec below a global sort must never be reused")
+  }
+
+  test("a single-child operator over a partially clustered layout still gets grouped") {
+    // A partially clustered `GroupPartitionsExec` reports a non-grouped partitioning by design, so
+    // an operator above it that needs `ClusteredDistribution` (an aggregate or a window, say) must
+    // still have that partitioning grouped -- stacking a second `GroupPartitionsExec` here is
+    // legitimate. See the aggregate and window cases in `KeyGroupedPartitioningSuite`.
+    val leaf = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(
+        Seq(exprA), Seq(InternalRow(1), InternalRow(1), InternalRow(2))))
+    val keys = Seq(
+      (InternalRowComparableWrapper(InternalRow(1), Seq(exprA)), 2),
+      (InternalRowComparableWrapper(InternalRow(2), Seq(exprA)), 1))
+    val gpe = GroupPartitionsExec(leaf, expectedPartitionKeys = Some(keys))
+    assert(!gpe.outputPartitioning.asInstanceOf[KeyedPartitioning].isGrouped,
+      "precondition: a partially clustered GroupPartitionsExec is not grouped")
+
+    val distribution = ClusteredDistribution(Seq(exprA))
+    val parent = DummySparkPlan(
+      children = Seq(gpe),
+      requiredChildDistribution = Seq(distribution),
+      requiredChildOrdering = Seq(Nil))
+
+    val newChild = EnsureRequirements.apply(parent).children.head
+    assert(newChild.outputPartitioning.satisfies(distribution),
+      s"EnsureRequirements must satisfy the required distribution:\n${newChild.treeString}")
   }
 
   private def anyGpeEnabled(plan: SparkPlan): Boolean =
