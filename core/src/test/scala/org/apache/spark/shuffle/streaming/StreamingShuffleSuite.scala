@@ -17,15 +17,17 @@
 
 package org.apache.spark.shuffle.streaming
 
+import java.io.{InputStream, OutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue, Semaphore, TimeoutException, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.reflectiveCalls
 import scala.reflect.ClassTag
 
-import io.netty.buffer.{ByteBufOutputStream, PooledByteBufAllocator}
+import io.netty.buffer.{ByteBuf, ByteBufOutputStream, PooledByteBufAllocator}
 import io.netty.util.ResourceLeakDetector
 import io.netty.util.concurrent.{Future => NettyFuture}
 import org.scalatest.Assertions.intercept
@@ -46,7 +48,7 @@ import org.apache.spark.network.client.{RpcResponseCallback, TransportClient, Tr
 import org.apache.spark.network.shuffle.streaming.{DataMessage, ShuffleChecksum, StreamingShuffleMessage, StreamingShuffleMessageType, TerminationControlMessage}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.MyRDD
-import org.apache.spark.serializer.JavaSerializerInstance
+import org.apache.spark.serializer.{DeserializationStream, JavaSerializerInstance, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.shuffle.ShuffleHandle
 import org.apache.spark.shuffle.streaming.StreamingShuffleManager.QUERY_ID_PROPERTY_KEY
 import org.apache.spark.util.{ErrorNotifier, NextIterator, ThreadUtils}
@@ -129,14 +131,21 @@ class StreamingShuffleSuite
       errorNotifier: ErrorNotifier = new ErrorNotifier())
     extends StreamingShuffleReader[K, C](handle, context, clientHandler, errorNotifier)
 
-  private class ShuffleGroup[T: ClassTag](sc: SparkContext, mappers: Int, reducers: Int) {
+  private class ShuffleGroup[T: ClassTag](
+      sc: SparkContext,
+      mappers: Int,
+      reducers: Int,
+      serializer: Option[Serializer] = None) {
     assert(SparkEnv.get.pipelinedShuffleManager.isInstanceOf[StreamingShuffleManager])
     assert(SparkEnv.get.streamingShuffleOutputTracker.isDefined)
     SparkEnv.get.streamingShuffleOutputTracker.get
       .asInstanceOf[StreamingShuffleOutputTrackerMaster]
       .registerShuffle(shuffleId, mappers, reducers, 0)
     val rdd = new MockRDD[T, T](sc, mappers, Nil)
-    val dep = new ShuffleDependency[T, T, T](rdd, new HashPartitioner(reducers))
+    val dep = new ShuffleDependency[T, T, T](
+      rdd,
+      new HashPartitioner(reducers),
+      serializer = serializer.getOrElse(SparkEnv.get.serializer))
     val handle = new StreamingShuffleHandle(shuffleId, dep)
     val writers: Array[StreamingShuffleWriter[T, T]] = Array.tabulate(mappers) { i =>
       val taskContext = createTaskContext(sc.conf, i)
@@ -233,6 +242,64 @@ class StreamingShuffleSuite
       val dataMsgFunc = StreamingShuffleSuite.newDataMsgFunc(dep, readerId)
       writers(writerId).shards(readerId).send(dataMsgFunc(writerId, datum))
     }
+  }
+
+  /**
+   * A serializer whose serialization stream captures the [[ByteBuf]] it is asked to write into,
+   * and then fails at a configurable point so the writer hits an error while holding a buffer that
+   * is not yet parked in a shard or handed to `send()`. Tests use the captured buffer to assert the
+   * writer releases it on the error path instead of leaking it (see SPARK-XXXXX):
+   *  - `failOnValueNumber = Some(n)` throws on the n-th value written (a mid-serialization failure
+   *    in the writer's per-record path), and
+   *  - `failOnClose = true` throws when the stream is closed (a failure in `ShardState.send` just
+   *    before the buffer is handed off).
+   * Only `serializeStream` is exercised by the writer's failure paths; the others are unused.
+   */
+  private class BufferCapturingThrowingSerializer(
+      capturedBuffer: AtomicReference[ByteBuf],
+      failOnValueNumber: Option[Int] = None,
+      failOnClose: Boolean = false)
+    extends Serializer with Serializable {
+    override def newInstance(): SerializerInstance =
+      new BufferCapturingThrowingSerializerInstance(capturedBuffer, failOnValueNumber, failOnClose)
+  }
+
+  private class BufferCapturingThrowingSerializerInstance(
+      capturedBuffer: AtomicReference[ByteBuf],
+      failOnValueNumber: Option[Int],
+      failOnClose: Boolean)
+    extends SerializerInstance {
+    private var valuesWritten = 0
+
+    override def serializeStream(s: OutputStream): SerializationStream = {
+      // The writer always wraps the target ByteBuf in a ByteBufOutputStream; capture it so the
+      // test can verify the writer's error path releases it.
+      capturedBuffer.set(s.asInstanceOf[ByteBufOutputStream].buffer())
+      new SerializationStream {
+        override def writeObject[T: ClassTag](t: T): SerializationStream = {
+          valuesWritten += 1
+          if (failOnValueNumber.contains(valuesWritten)) {
+            throw new RuntimeException("injected serialization failure")
+          }
+          this
+        }
+        override def flush(): Unit = {}
+        override def close(): Unit = {
+          if (failOnClose) {
+            throw new RuntimeException("injected close failure")
+          }
+        }
+      }
+    }
+
+    override def serialize[T: ClassTag](t: T): ByteBuffer =
+      throw new UnsupportedOperationException("not used in this test")
+    override def deserialize[T: ClassTag](bytes: ByteBuffer): T =
+      throw new UnsupportedOperationException("not used in this test")
+    override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T =
+      throw new UnsupportedOperationException("not used in this test")
+    override def deserializeStream(s: InputStream): DeserializationStream =
+      throw new UnsupportedOperationException("not used in this test")
   }
 
   /**
@@ -1203,6 +1270,38 @@ class StreamingShuffleSuite
         reader.taskDiscoveryExecutor.isShutdown should be(true)
         reader.clientCreationExecutor.isShutdown should be(true)
         reader.messageQueue.isEmpty should be(true)
+      }
+    }
+  }
+
+  // NOTE: SPARK-XXXXX used in the test names and the serializer doc comment above is a
+  // placeholder; replace it with the real Jira id before merge (a SPARK ticket will be created).
+  // Unlike the tests above, which fail the task from the outside (markTaskFailed / interrupt),
+  // this exercises an in-line failure: serialization throws in the middle of the per-record write
+  // path while the writer holds a buffer that is not yet parked in a shard or handed to send().
+  // The task-completion cleanup only drains the pool and shard-parked buffers, so this in-flight
+  // buffer is invisible to it and must be released by the writer's own error path.
+  test("SPARK-XXXXX: writer releases the in-flight buffer when serialization fails mid-write") {
+    withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
+      val capturedBuffer = new AtomicReference[ByteBuf](null)
+      val g = new ShuffleGroup[Int](
+        sc, 1, 1,
+        serializer = Some(
+          new BufferCapturingThrowingSerializer(capturedBuffer, failOnValueNumber = Some(1))))
+      val writer = g.writers(0)
+
+      val e = intercept[RuntimeException] {
+        writer.write(Iterator((1, 1), (2, 2)))
+      }
+      e.getMessage should include("injected serialization failure")
+
+      // The writer allocated a buffer to serialize the record into; serialization then threw
+      // before the buffer was parked or sent. Unless the error path releases it, it leaks
+      // (refCnt stays 1). The buffers are Unpooled direct buffers, so a leak here is reclaimed
+      // only by GC; asserting on refCnt makes the check deterministic rather than GC-dependent.
+      capturedBuffer.get() should not be null
+      eventually(Timeout(30.seconds)) {
+        capturedBuffer.get().refCnt() should be(0)
       }
     }
   }

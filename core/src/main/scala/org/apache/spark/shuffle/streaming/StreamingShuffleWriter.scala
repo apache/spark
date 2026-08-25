@@ -445,41 +445,55 @@ class StreamingShuffleWriter[K, V](
         if (timestampedBuffer == null) {
           timestampedBuffer = newBuffer()
         }
-        val dataStartPos = timestampedBuffer.buffer.writerIndex()
-        val partitionSerializationStream = timestampedBuffer.serializationStream
-        // When UnsafeRowSerializer, the key, record._1, is only used for determining
-        // the partition, and it doesn't need to be sent to the shuffle readers.
-        // However, if JavaSerializer is used (for test mainly), we need to serialize
-        // the key since we will be attempting to read it from the shuffle reader
-        //
-        // TODO we are actually not guaranteeing that a buffer used to send data for a
-        // partition does not exceed BUFFER_SIZE. We currently are not implementing spanning rows
-        // across multiple buffers as it requires interface changes in the serializers
-        if (serializerInstance.isInstanceOf[JavaSerializerInstance]) {
-          partitionSerializationStream.writeKey(record._1.asInstanceOf[Any])
-        }
-        partitionSerializationStream.writeValue(record._2.asInstanceOf[Any])
-        partitionSerializationStream.flush()
+        // The buffer is held only by this local reference here: it has been taken out of the
+        // shard (takeBuffer) and not yet parked back (putBuffer) or handed to send(). If
+        // serialization throws in this window, the task-completion cleanup cannot reclaim it
+        // (cleanupResources() only drains the pool and shard-parked buffers), so release the
+        // buffer and return its memory permit before propagating. The hand-off below is kept
+        // outside this guard: once send() is called it owns the buffer and does its own cleanup,
+        // and releasing here as well would corrupt refcounts.
+        try {
+          val dataStartPos = timestampedBuffer.buffer.writerIndex()
+          val partitionSerializationStream = timestampedBuffer.serializationStream
+          // When UnsafeRowSerializer, the key, record._1, is only used for determining
+          // the partition, and it doesn't need to be sent to the shuffle readers.
+          // However, if JavaSerializer is used (for test mainly), we need to serialize
+          // the key since we will be attempting to read it from the shuffle reader
+          //
+          // TODO we are actually not guaranteeing that a buffer used to send data for a
+          // partition does not exceed BUFFER_SIZE. We currently are not implementing spanning
+          // rows across multiple buffers as it requires interface changes in the serializers
+          if (serializerInstance.isInstanceOf[JavaSerializerInstance]) {
+            partitionSerializationStream.writeKey(record._1.asInstanceOf[Any])
+          }
+          partitionSerializationStream.writeValue(record._2.asInstanceOf[Any])
+          partitionSerializationStream.flush()
 
-        // A single row is never split across buffers (see the TODO above), so an oversized row
-        // grows its buffer past BUFFER_SIZE and inflates the tracked memory budget. Warn
-        // (throttled) so operators can raise the block size or writer memory instead of overshoot.
-        // When a row trips both thresholds the more severe memory warning takes precedence.
-        val rowSize = timestampedBuffer.buffer.writerIndex() - dataStartPos
-        if (rowSize > MAX_BUFFER_BYTES / 4) {
-          hugeRowWarningThrottler(
-            log"Row size ${MDC(LogKeys.BYTE_SIZE, rowSize)} is >25% of " +
-            log"total writer memory " +
-            log"${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, MAX_BUFFER_BYTES)}. " +
-            log"Consider increasing the maximum writer memory.")
-        } else if (rowSize > largeRowThreshold) {
-          largeRowWarningThrottler(
-            log"Row size ${MDC(LogKeys.BYTE_SIZE, rowSize)} is larger than the block size " +
-            log"${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, largeRowThreshold)}. " +
-            log"Consider increasing the block size.")
-        }
+          // A single row is never split across buffers (see the TODO above), so an oversized row
+          // grows its buffer past BUFFER_SIZE and inflates the tracked memory budget. Warn
+          // (throttled) so operators can raise the block size or writer memory instead of
+          // overshoot. When a row trips both thresholds the memory warning takes precedence.
+          val rowSize = timestampedBuffer.buffer.writerIndex() - dataStartPos
+          if (rowSize > MAX_BUFFER_BYTES / 4) {
+            hugeRowWarningThrottler(
+              log"Row size ${MDC(LogKeys.BYTE_SIZE, rowSize)} is >25% of " +
+              log"total writer memory " +
+              log"${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, MAX_BUFFER_BYTES)}. " +
+              log"Consider increasing the maximum writer memory.")
+          } else if (rowSize > largeRowThreshold) {
+            largeRowWarningThrottler(
+              log"Row size ${MDC(LogKeys.BYTE_SIZE, rowSize)} is larger than the block size " +
+              log"${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, largeRowThreshold)}. " +
+              log"Consider increasing the block size.")
+          }
 
-        timestampedBuffer.updateChecksum()
+          timestampedBuffer.updateChecksum()
+        } catch {
+          case e: Throwable =>
+            timestampedBuffer.buffer.release()
+            allocatedBufferBytesSemaphore.release(BUFFER_SIZE)
+            throw e
+        }
 
         // Flush immediately if the buffer is almost full or stale.
         if (timestampedBuffer.totalByteSize() < BUFFER_SIZE * 9 / 10 &&
