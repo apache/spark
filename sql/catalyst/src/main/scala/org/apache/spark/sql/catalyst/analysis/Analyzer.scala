@@ -64,7 +64,6 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.internal.connector.V1Function
-import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -1149,76 +1148,38 @@ class Analyzer(
       }
     }
 
-    private def catalogAndIdentifier(metadata: CatalogTable): (CatalogPlugin, Identifier) = {
-      relationResolution.expandIdentifier(metadata.fullIdent) match {
-        case CatalogAndIdentifier(catalog, identifier) => (catalog, identifier)
+    // A DataFrame temp view may be a direct alias of a V2TableReference and remain a supported
+    // write target. Do not traverse any other plan shape: non-writable views must be rejected
+    // without resolving their stored bodies.
+    private def resolveDirectTableReferenceInTempView(plan: LogicalPlan): Option[LogicalPlan] = {
+      plan match {
+        case alias @ SubqueryAlias(_, child) =>
+          resolveDirectTableReferenceInTempView(child).map { resolvedChild =>
+            val resolvedAlias = alias.copy(child = resolvedChild)
+            resolvedAlias.copyTagsFrom(alias)
+            resolvedAlias
+          }
+        case ref: V2TableReference
+            if ref.context.isInstanceOf[V2TableReference.TemporaryViewContext] =>
+          Some(relationResolution.resolveReference(ref))
+        case _ => None
       }
     }
 
     private def resolveWriteTarget(target: UnresolvedWriteTarget): Option[LogicalPlan] = {
-      val unresolvedRelation = UnresolvedRelation(
-        target.multipartIdentifier,
-        target.options,
-        isStreaming = false).requireWritePrivileges(target.writePrivileges)
-      unresolvedRelation.copyTagsFrom(target)
-
-      def toResolvedTarget(relation: LogicalPlan, viewOnly: Boolean): Option[LogicalPlan] = {
-        val resolvedTarget = withOrigin(target.origin) {
-          EliminateSubqueryAliases(relation) match {
-            case r: DataSourceV2Relation if !viewOnly =>
-              val catalog = r.catalog.getOrElse {
-                throw SparkException.internalError(
-                  s"Resolved write target ${target.name} is missing its catalog")
-              }
-              val identifier = r.identifier.getOrElse {
-                throw SparkException.internalError(
-                  s"Resolved write target ${target.name} is missing its identifier")
-              }
-              Some(ResolvedTable.create(catalog.asTableCatalog, identifier, r.table))
-
-            case u: UnresolvedCatalogRelation if !viewOnly =>
-              val (catalog, identifier) = catalogAndIdentifier(u.tableMeta)
-              Some(ResolvedTable.create(catalog.asTableCatalog, identifier, V1Table(u.tableMeta)))
-
-            case v: View if v.isTempView =>
-              val tempView =
-                relationResolution.lookupTempView(target.multipartIdentifier).getOrElse {
-                  throw SparkException.internalError(
-                    s"Resolved temporary view ${target.name} is no longer registered")
-                }
-              val resolvedTempView = tempView.copy(
-                plan = tempView.plan.map(resolveTableReferencesInTempView))
-              Some(ResolvedTempView(target.multipartIdentifier.asIdentifier, resolvedTempView))
-
-            case v: View =>
-              val (catalog, identifier) = catalogAndIdentifier(v.desc)
-              Some(ResolvedPersistentView(catalog, identifier, new V1View(v.desc)))
-
-            case m: MetricViewPlaceholder =>
-              val (catalog, identifier) = catalogAndIdentifier(m.metadata)
-              Some(ResolvedPersistentView(catalog, identifier, new V1View(m.metadata)))
-
-            case _ if viewOnly => None
-
-            case other =>
-              throw SparkException.internalError(
-                s"Expected ${target.name} to resolve to a table or view, but got " +
-                  other.getClass.getName)
-          }
-        }
-        resolvedTarget.map { plan =>
-          plan.copyTagsFrom(target)
-          plan
-        }
-      }
-
-      resolveRelation(unresolvedRelation).flatMap(toResolvedTarget(_, viewOnly = false)).orElse {
-        // Table lookup must carry write privileges, but views do not accept them. If no table was
-        // found, repeat the same PATH-aware lookup without the privilege marker and retain only a
-        // view result. The write-specific rule below rejects the view without analyzing its body.
-        val unresolvedView = unresolvedRelation.clearWritePrivileges
-        unresolvedView.copyTagsFrom(target)
-        resolveRelation(unresolvedView).flatMap(toResolvedTarget(_, viewOnly = true))
+      withOrigin(target.origin) {
+        relationResolution.resolveWriteTarget(target)
+      }.map {
+        case view: ResolvedTempView =>
+          val resolvedView = view.viewRelation.plan
+            .flatMap(resolveDirectTableReferenceInTempView)
+            .map { resolvedPlan =>
+              ResolvedTempView(view.identifier, view.viewRelation.copy(plan = Some(resolvedPlan)))
+            }
+            .getOrElse(view)
+          resolvedView.copyTagsFrom(view)
+          resolvedView
+        case other => other
       }
     }
 

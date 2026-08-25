@@ -2541,9 +2541,9 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // SPARK-46625: An INSERT INTO statement with a REPLACE WHERE clause parses into
-  // `PlanWithUnresolvedIdentifier` as its table child. Verify that the placeholder lives in the
-  // command instead of wrapping it -- running the analyzer fully would require a v2 catalog.
+  // SPARK-46625: An INSERT INTO statement with a REPLACE WHERE clause parses with a
+  // `PlanWithUnresolvedIdentifier` table child. Verify that the placeholder lives in the command
+  // instead of wrapping it -- running the analyzer fully would require a v2 catalog.
   test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
     // Use a non-literal-string expression so `withIdentClause` produces
     // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedRelation`.

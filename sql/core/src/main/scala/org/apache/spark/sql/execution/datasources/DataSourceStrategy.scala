@@ -76,11 +76,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
   def resolver: Resolver = conf.resolver
 
-  private object V1WriteRelation {
-    def unapply(insert: InsertIntoStatement): Option[LogicalPlan] = {
-      InsertWriteRelation(SparkSession.active, insert)
-    }
-  }
+  private def v1WriteRelation(insert: InsertIntoStatement): Option[LogicalPlan] =
+    InsertWriteRelation(SparkSession.active, insert)
 
   // Visible for testing.
   def convertStaticPartitions(
@@ -148,6 +145,77 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
     projectList
   }
 
+  private def convertHadoopFsRelation(
+      insert: InsertIntoStatement,
+      relation: LogicalRelation,
+      hadoopFsRelation: HadoopFsRelation,
+      table: Option[CatalogTable]): LogicalPlan = {
+    // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
+    // the user has specified static partitions, we add a Project operator on top of the query
+    // to include those constant column values in the query result.
+    //
+    // Example:
+    // Let's say that we have a table "t", which is created by
+    // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
+    // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
+    // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
+    //
+    // Basically, we will put those partition columns having a assigned value back
+    // to the SELECT clause. The output of the SELECT clause is organized as
+    // normal_columns static_partitioning_columns dynamic_partitioning_columns.
+    // static_partitioning_columns are partitioning columns having assigned
+    // values in the PARTITION clause (e.g. b in the above example).
+    // dynamic_partitioning_columns are partitioning columns that do not assigned
+    // values in the PARTITION clause (e.g. c in the above example).
+    val actualQuery = if (insert.partitionSpec.exists(_._2.isDefined)) {
+      val projectList = convertStaticPartitions(
+        sourceAttributes = insert.query.output,
+        providedPartitions = insert.partitionSpec,
+        targetAttributes = relation.output,
+        targetPartitionSchema = hadoopFsRelation.partitionSchema)
+      Project(projectList, insert.query)
+    } else {
+      insert.query
+    }
+
+    // Sanity check
+    if (hadoopFsRelation.location.rootPaths.size != 1) {
+      throw QueryCompilationErrors
+        .cannotWriteDataToRelationsWithMultiplePathsError(hadoopFsRelation.location.rootPaths)
+    }
+
+    val outputPath = hadoopFsRelation.location.rootPaths.head
+    val mode = if (insert.overwrite) SaveMode.Overwrite else SaveMode.Append
+
+    val partitionSchema = actualQuery.resolve(
+      hadoopFsRelation.partitionSchema,
+      hadoopFsRelation.sparkSession.sessionState.analyzer.resolver)
+    val staticPartitions =
+      insert.partitionSpec.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
+
+    val insertCommand = InsertIntoHadoopFsRelationCommand(
+      outputPath,
+      staticPartitions,
+      insert.ifPartitionNotExists,
+      partitionSchema,
+      hadoopFsRelation.bucketSpec,
+      hadoopFsRelation.fileFormat,
+      hadoopFsRelation.options,
+      actualQuery,
+      mode,
+      table,
+      Some(hadoopFsRelation.location),
+      actualQuery.output.map(_.name))
+
+    // For dynamic partition overwrite, we do not delete partition directories ahead.
+    // We write to staging directories and move to final partition directories after writing
+    // job is done. So it is ok to have outputPath try to overwrite inputpath.
+    if (insert.overwrite && !insertCommand.dynamicPartitionOverwrite) {
+      DDLUtils.verifyNotReadPath(actualQuery, outputPath, table)
+    }
+    insertCommand
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       ResolveDefaultColumns.validateTableProviderForDefaultValue(
@@ -169,10 +237,17 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
-    case i @ V1WriteRelation(l @ LogicalRelationWithTable(_: InsertableRelation, _))
-        if i.partitionSpec.isEmpty && !i.ifPartitionNotExists &&
-          i.replaceCriteriaOpt.isEmpty =>
-      InsertIntoDataSourceCommand(l, i.query, i.overwrite)
+    case insert: InsertIntoStatement =>
+      v1WriteRelation(insert) match {
+        case Some(relation @ LogicalRelationWithTable(_: InsertableRelation, _))
+            if insert.partitionSpec.isEmpty && !insert.ifPartitionNotExists &&
+              insert.replaceCriteriaOpt.isEmpty =>
+          InsertIntoDataSourceCommand(relation, insert.query, insert.overwrite)
+        case Some(relation @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, table))
+            if insert.query.resolved && insert.replaceCriteriaOpt.isEmpty =>
+          convertHadoopFsRelation(insert, relation, hadoopFsRelation, table)
+        case _ => insert
+      }
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
       if query.resolved && provider.isDefined &&
@@ -182,71 +257,6 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
-    case i @ V1WriteRelation(l @ LogicalRelationWithTable(t: HadoopFsRelation, table))
-        if i.query.resolved && i.replaceCriteriaOpt.isEmpty =>
-      // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
-      // the user has specified static partitions, we add a Project operator on top of the query
-      // to include those constant column values in the query result.
-      //
-      // Example:
-      // Let's say that we have a table "t", which is created by
-      // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
-      // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
-      // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
-      //
-      // Basically, we will put those partition columns having a assigned value back
-      // to the SELECT clause. The output of the SELECT clause is organized as
-      // normal_columns static_partitioning_columns dynamic_partitioning_columns.
-      // static_partitioning_columns are partitioning columns having assigned
-      // values in the PARTITION clause (e.g. b in the above example).
-      // dynamic_partitioning_columns are partitioning columns that do not assigned
-      // values in the PARTITION clause (e.g. c in the above example).
-      val actualQuery = if (i.partitionSpec.exists(_._2.isDefined)) {
-        val projectList = convertStaticPartitions(
-          sourceAttributes = i.query.output,
-          providedPartitions = i.partitionSpec,
-          targetAttributes = l.output,
-          targetPartitionSchema = t.partitionSchema)
-        Project(projectList, i.query)
-      } else {
-        i.query
-      }
-
-      // Sanity check
-      if (t.location.rootPaths.size != 1) {
-        throw QueryCompilationErrors
-          .cannotWriteDataToRelationsWithMultiplePathsError(t.location.rootPaths)
-      }
-
-      val outputPath = t.location.rootPaths.head
-      val mode = if (i.overwrite) SaveMode.Overwrite else SaveMode.Append
-
-      val partitionSchema = actualQuery.resolve(
-        t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
-      val staticPartitions =
-        i.partitionSpec.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
-
-      val insertCommand = InsertIntoHadoopFsRelationCommand(
-        outputPath,
-        staticPartitions,
-        i.ifPartitionNotExists,
-        partitionSchema,
-        t.bucketSpec,
-        t.fileFormat,
-        t.options,
-        actualQuery,
-        mode,
-        table,
-        Some(t.location),
-        actualQuery.output.map(_.name))
-
-      // For dynamic partition overwrite, we do not delete partition directories ahead.
-      // We write to staging directories and move to final partition directories after writing
-      // job is done. So it is ok to have outputPath try to overwrite inputpath.
-      if (i.overwrite && !insertCommand.dynamicPartitionOverwrite) {
-        DDLUtils.verifyNotReadPath(actualQuery, outputPath, table)
-      }
-      insertCommand
   }
 }
 

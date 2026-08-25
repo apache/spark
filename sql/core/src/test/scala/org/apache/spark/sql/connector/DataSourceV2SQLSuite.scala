@@ -5238,8 +5238,8 @@ class DataSourceV2SQLSuiteV1Filter
         withTable(tbl) {
           sql(s"CREATE TABLE $tbl (i INT)")
 
-          // The write target is resolved after its query, so it used to find the query's
-          // relation in the per-query relation cache and skip `loadTable(ident, writePrivileges)`.
+          // The write target is resolved before its query. Its load must still carry write
+          // privileges rather than reusing or populating the per-query read caches.
           assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT * FROM $tbl"), "INSERT")
           assertPrivilegeError(
             sql(s"INSERT OVERWRITE $tbl SELECT * FROM $tbl"), "DELETE,INSERT")
@@ -5334,6 +5334,30 @@ class DataSourceV2SQLSuiteV1Filter
         spark.table(t).createOrReplaceTempView(v)
         sql(s"INSERT INTO v VALUES (1)")
         checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1)))
+      }
+    }
+  }
+
+  test("INSERT into a temp view does not resolve the view body") {
+    val table = "testcat.default.temp_view_source"
+    val view = "broken_temp_view"
+    withTable(table) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $table (id INT) USING foo")
+        sql(s"CREATE TEMP VIEW $view AS SELECT * FROM $table")
+        sql(s"DROP TABLE $table")
+
+        val statement = s"INSERT INTO $view VALUES (1)"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(statement)
+          },
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          parameters = Map("viewName" -> s"`$view`", "operation" -> "INSERT"),
+          context = ExpectedContext(
+            fragment = view,
+            start = "INSERT INTO ".length,
+            stop = "INSERT INTO ".length + view.length - 1))
       }
     }
   }

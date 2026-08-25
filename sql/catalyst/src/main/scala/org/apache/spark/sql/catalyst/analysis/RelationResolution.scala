@@ -40,6 +40,7 @@ import org.apache.spark.sql.connector.catalog.{
   Table,
   TableCatalog,
   V1Table,
+  V1View,
   V2TableWithV1Fallback,
   View,
   ViewCatalog
@@ -155,6 +156,47 @@ class RelationResolution(
   }
 
   /**
+   * Resolve an identifier using the same temporary-view and persistent-catalog search order as a
+   * query relation. The callbacks keep the lookup payload specific to the caller, so reads can
+   * build relations while commands can resolve metadata-only table/view carriers.
+   */
+  private def resolveInPath[T](
+      identifier: Seq[String],
+      resolveTemp: Seq[String] => Option[T],
+      resolvePersistent: Seq[String] => Option[T]): Option[T] = {
+    // system.session.v (3 parts): only local temp view by name; same as SessionCatalog matching.
+    if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
+      return resolveTemp(normalizeSessionQualifiedViewIdentifier(identifier))
+    }
+
+    // Two-part session.v: local temp view `v`, or persistent relation `v` in schema `session`.
+    // Order follows [[SQLConf.prioritizeSystemCatalog]] (inverse of `PERSISTENT_CATALOG_FIRST`).
+    if (identifier.length == 2 &&
+        identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+      val tempSession = () => resolveTemp(Seq(identifier.last))
+      val persistentSessionDb = () => resolvePersistent(identifier)
+      return if (conf.prioritizeSystemCatalog) {
+        tempSession().orElse(persistentSessionDb())
+      } else {
+        persistentSessionDb().orElse(tempSession())
+      }
+    }
+
+    // Multi-part (but not session-qualified): try temp view first (e.g. global_temp.tbl1), then
+    // persistent.
+    if (identifier.length > 1) {
+      return resolveTemp(identifier).orElse(resolvePersistent(identifier))
+    }
+
+    // 1-part name: try each step in [[relationResolutionSteps]] order (from
+    // [[CatalogManager.sqlResolutionPathEntries]]).
+    relationResolutionSteps.iterator.map {
+      case SessionScopeStep => resolveTemp(identifier)
+      case PersistentCatalogStep(prefix) => resolvePersistent(prefix ++ identifier)
+    }.collectFirst { case Some(resolved) => resolved }
+  }
+
+  /**
    * Resolve relation `u` to v1 relation if it's a v1 table from the session catalog, or to v2
    * relation. This is for resolving DML commands and SELECT queries.
    */
@@ -183,55 +225,82 @@ class RelationResolution(
     val isTimeTravel = finalTimeTravelSpec.isDefined || hasTimeTravelWriteOptions
     val identifier = u.multipartIdentifier
 
-    // system.session.v (3 parts): only local temp view by name; same as SessionCatalog matching.
-    if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
-      val normalized = normalizeSessionQualifiedViewIdentifier(identifier)
-      return resolveTempView(
-        normalized,
-        u.isStreaming,
-        isTimeTravel
-      )
-    }
+    resolveInPath(
+      identifier,
+      resolveTempView(_, u.isStreaming, isTimeTravel),
+      tryResolvePersistent(u, _, finalTimeTravelSpec))
+  }
 
-    // Two-part session.v: local temp view `v`, or persistent relation `v` in schema `session`.
-    // Order follows [[SQLConf.prioritizeSystemCatalog]] (inverse of `PERSISTENT_CATALOG_FIRST`).
-    if (identifier.length == 2 &&
-        identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
-      val viewNameOnly = Seq(identifier.last)
-      val tempSession = () =>
-        resolveTempView(viewNameOnly, u.isStreaming, isTimeTravel)
-      val persistentSessionDb = () =>
-        tryResolvePersistent(u, identifier, finalTimeTravelSpec)
-      return if (conf.prioritizeSystemCatalog) {
-        tempSession().orElse(persistentSessionDb())
-      } else {
-        persistentSessionDb().orElse(tempSession())
+  /**
+   * Resolve an INSERT target to a metadata-only table/view carrier. Unlike [[resolveRelation]],
+   * this path never constructs a readable relation or interacts with the query relation caches.
+   */
+  def resolveWriteTarget(target: UnresolvedWriteTarget): Option[LogicalPlan] = {
+    val resolved = resolveInPath(
+      target.multipartIdentifier,
+      resolveTempWriteTarget(target, _),
+      resolvePersistentWriteTarget(target, _))
+    resolved.map { plan =>
+      plan.copyTagsFrom(target)
+      plan
+    }
+  }
+
+  private def resolveTempWriteTarget(
+      target: UnresolvedWriteTarget,
+      lookupIdentifier: Seq[String]): Option[LogicalPlan] = {
+    lookupTempView(lookupIdentifier).map { tempView =>
+      if (CatalogV2Util.containsTimeTravelOptions(target.options)) {
+        throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(lookupIdentifier))
       }
+      ResolvedTempView(target.multipartIdentifier.asIdentifier, tempView)
     }
+  }
 
-    // Multi-part (but not session-qualified): try temp view first (e.g. global_temp.tbl1), then
-    // persistent.
-    if (identifier.length > 1) {
-      return resolveTempView(
-        identifier,
-        u.isStreaming,
-        isTimeTravel
-      ).orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
-    }
+  private def resolvePersistentWriteTarget(
+      target: UnresolvedWriteTarget,
+      identifier: Seq[String]): Option[LogicalPlan] = {
+    expandIdentifier(identifier) match {
+      case CatalogAndIdentifier(catalog, ident) =>
+        CatalogV2Util.rejectTimeTravelOptionsForWrite(catalog, ident, target.options)
 
-    // 1-part name: try each step in [[relationResolutionSteps]] order (from
-    // [[CatalogManager.sqlResolutionPathEntries]]).
-    val steps = relationResolutionSteps
-    for (step <- steps) {
-      val result = step match {
-        case SessionScopeStep =>
-          resolveTempView(identifier, u.isStreaming, isTimeTravel)
-        case PersistentCatalogStep(prefix) =>
-          tryResolvePersistent(u, prefix ++ identifier, finalTimeTravelSpec)
-      }
-      if (result.isDefined) return result
+        // Table lookup carries the write privileges. Only after it reports that no table exists
+        // do we try the metadata-only persistent-view path, which accepts no write context.
+        val table = if (
+          CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+        ) {
+          try {
+            Option(CatalogV2Util.loadTableForWrite(
+              catalog, ident, target.writePrivileges, target.options))
+          } catch {
+            case _: NoSuchTableException => None
+            case _: NoSuchDatabaseException => None
+          }
+        } else {
+          None
+        }
+
+        table.map {
+          case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
+              v1Table.v1Table.isViewLike =>
+            val v1Ident = v1Table.catalogTable.identifier
+            val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
+            ResolvedPersistentView(catalog, v2Ident, new V1View(v1Table.catalogTable))
+          case loadedTable =>
+            ResolvedTable.create(catalog.asTableCatalog, ident, loadedTable)
+        }.orElse {
+          catalog match {
+            case vc: ViewCatalog =>
+              try {
+                Some(ResolvedPersistentView(catalog, ident, vc.loadView(ident)))
+              } catch {
+                case _: NoSuchViewException => None
+              }
+            case _ => None
+          }
+        }
+      case _ => None
     }
-    None
   }
 
   /**
@@ -355,13 +424,14 @@ class RelationResolution(
                 finalOptions,
                 u.isStreaming,
                 finalTimeTravelSpec)
-              // A write target skips cache lookup above so authorization always runs, but its
-              // freshly loaded Table is still published for subsequent reads, matching the
-              // relation cache behavior below.
-              if (pinnedTable.isEmpty) {
-                table.foreach(tableCache.update(tableKey, _))
+              // Write-loaded tables must not become query read pins. Catalogs may authorize or
+              // select different table state for reads and writes, so only read loads are cached.
+              if (writePrivileges == null) {
+                if (pinnedTable.isEmpty) {
+                  table.foreach(tableCache.update(tableKey, _))
+                }
+                loaded.foreach(relationCache.update(key, _))
               }
-              loaded.foreach(relationCache.update(key, _))
               loaded.map(cloneWithPlanId(_, planId))
             }
           }
