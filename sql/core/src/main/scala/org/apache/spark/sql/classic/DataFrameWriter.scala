@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation, UnresolvedWriteTarget}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedIdentifier, UnresolvedWriteTarget}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
