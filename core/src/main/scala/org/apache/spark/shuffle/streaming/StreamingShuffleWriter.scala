@@ -267,12 +267,25 @@ class StreamingShuffleWriter[K, V](
 
     // Sends buffer as a DataMessage to the shuffle reader. Takes ownership of the buffer.
     def send(timestampedBuffer: TimestampedBuffer): Unit = synchronized {
-      timestampedBuffer.serializationStream.close()
       val rawBuffer = timestampedBuffer.buffer
-      val dataSize = rawBuffer.writerIndex()
-      timestampedBuffer.updateChecksum()
-      val checksumValue = timestampedBuffer.getChecksumValue()
-      val dataMessage = new DataMessage(shuffleWriterId, id, dataSize, rawBuffer, checksumValue)
+      // Everything up to the send() hand-off below runs synchronously and can throw: closing the
+      // serialization stream flushes buffered bytes into rawBuffer, and the checksum reads it.
+      // Until send() is called nothing else references rawBuffer and the release/pool logic lives
+      // in send()'s completion callback, so a throw here would leak the buffer and its permit
+      // (cleanupResources() cannot see a buffer that is neither pooled nor shard-parked). Release
+      // both before propagating; send() takes ownership only once we reach it.
+      val dataMessage = try {
+        timestampedBuffer.serializationStream.close()
+        val dataSize = rawBuffer.writerIndex()
+        timestampedBuffer.updateChecksum()
+        val checksumValue = timestampedBuffer.getChecksumValue()
+        new DataMessage(shuffleWriterId, id, dataSize, rawBuffer, checksumValue)
+      } catch {
+        case e: Throwable =>
+          rawBuffer.release()
+          allocatedBufferBytesSemaphore.release(BUFFER_SIZE)
+          throw e
+      }
 
       // We keep a reference to rawBuffer so we can return it to the pool.
       send(dataMessage, () => {

@@ -1306,6 +1306,35 @@ class StreamingShuffleSuite
     }
   }
 
+  // Like the mid-write test above, but the failure happens later: in ShardState.send the
+  // serialization stream is closed (flushing into the buffer) before the buffer is handed to the
+  // asynchronous send() that owns the release/pool logic. A throw in that window also leaves the
+  // buffer referenced only locally, invisible to the task-completion cleanup, so send() must
+  // release it on the error path.
+  test("SPARK-XXXXX: writer releases the in-flight buffer when the stream close fails on send") {
+    withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
+      val capturedBuffer = new AtomicReference[ByteBuf](null)
+      val g = new ShuffleGroup[Int](
+        sc, 1, 1,
+        serializer = Some(
+          new BufferCapturingThrowingSerializer(capturedBuffer, failOnClose = true)))
+      val writer = g.writers(0)
+
+      // The record serializes fine and is buffered; the failure is triggered when the buffer is
+      // flushed (its serialization stream is closed) during send -- either by the time-based flush
+      // thread or by the final drain in write().
+      val e = intercept[RuntimeException] {
+        writer.write(Iterator((1, 1)))
+      }
+      e.getMessage should include("injected close failure")
+
+      capturedBuffer.get() should not be null
+      eventually(Timeout(30.seconds)) {
+        capturedBuffer.get().refCnt() should be(0)
+      }
+    }
+  }
+
   test("writer resources are cleaned up on task completion even without full iteration") {
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
       val g = new ShuffleGroup[Int](sc, 1, 1)
