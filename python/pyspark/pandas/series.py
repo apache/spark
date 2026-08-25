@@ -4310,16 +4310,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> s = ps.Series([1, 2, 2, 3], name='A')
         >>> s.rank(pct=True)
-        0    0.25
+        0    0.250
         1    0.625
         2    0.625
-        3    1.0
+        3    1.000
         Name: A, dtype: float64
 
         With na_option='top', NaN values are assigned the smallest rank.
 
         >>> s = ps.Series([1, float('nan'), 2, 3], name='A')
-        >>> s.rank(na_option='top')
+        >>> s.rank(na_option='top').sort_index()
         0    2.0
         1    1.0
         2    3.0
@@ -4328,7 +4328,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         With na_option='bottom', NaN values are assigned the largest rank.
 
-        >>> s.rank(na_option='bottom')
+        >>> s.rank(na_option='bottom').sort_index()
         0    1.0
         1    4.0
         2    2.0
