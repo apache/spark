@@ -87,6 +87,15 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
+/**
+ * Translates a Spark Connect request into Catalyst.
+ *
+ * An instance is request-scoped: construct one per request and discard it. Some state is derived
+ * once and reused for the whole request -- notably the Python worker environment, which must be a
+ * single snapshot so that a plan cannot be built with one environment and cached under another.
+ * Reusing an instance across requests would pin that state to whatever the first request
+ * observed.
+ */
 class SparkConnectPlanner(
     val sessionHolder: SessionHolder,
     val executeHolderOpt: Option[ExecuteHolder] = None)
@@ -143,7 +152,7 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
-    val plan = sessionHolder.usePlanCache(rel, cachePlan, pythonWorkerEnvFingerprint) { rel =>
+    val plan = sessionHolder.usePlanCache(rel, cachePlan, pythonWorkerEnvSnapshot) { rel =>
       val plan = rel.getRelTypeCase match {
         // DataFrame API
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
@@ -2230,19 +2239,14 @@ class SparkConnectPlanner(
 
   // The environment to install in the Python workers that run this session's Python functions.
   //
-  // Read once and reused for everything this request does. A planner handles a single request, so
-  // this cannot pin values that a later request replaces; conversely it cannot drift mid-request
-  // if a concurrent request rewrites the configurations, which would otherwise let a plan built
-  // with one environment be cached under the fingerprint of another.
+  // Read once and reused for everything this request does, so that it cannot drift mid-request if a
+  // concurrent request rewrites the configurations, which would otherwise let a plan built with one
+  // environment be cached under the identifier of another. This relies on the request-scoped
+  // lifetime stated in the class documentation.
   private lazy val pythonWorkerEnvSnapshot: Map[String, String] =
     Option(session)
       .map(s => PythonWorkerEnvironment.read(s.sessionState.conf))
       .getOrElse(Map.empty)
-
-  // Identifies the snapshot in the plan cache key. Derived from the snapshot rather than read
-  // again, and bounded in size however large the environment is.
-  private lazy val pythonWorkerEnvFingerprint: String =
-    PythonWorkerEnvironment.fingerprint(pythonWorkerEnvSnapshot)
 
   // The snapshot, validated. Validation is deferred to here so that a malformed environment fails
   // only the queries that would install it in a worker, not every query that consults the cache.

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connect.service
 
 import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.connect.config.Connect
@@ -30,9 +29,11 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * The environment is carried by session configurations under a reserved prefix, one configuration
  * per variable: `spark.pythonWorkerEnv.FOO=bar` makes `FOO` visible as `bar` in `os.environ`
- * inside a Python UDF. The configurations are the authoritative session state; nothing is cached
- * outside them, so the environment follows the session wherever ordinary session configurations
- * follow it, including into a session created by `cloneSession`.
+ * inside a Python UDF. The configurations are the authoritative session state -- no second copy
+ * of the environment is maintained as session state -- so the environment follows the session
+ * wherever ordinary session configurations follow it, including into a session created by
+ * `cloneSession`. A request's snapshot is also held in the plan cache keys of the plans it
+ * caches, since a cached plan is only reusable by a request carrying the same environment.
  *
  * Names are preserved case-sensitively by Spark. On a case-sensitive operating system `FOO` and
  * `foo` are therefore distinct variables; Windows process environments are case-insensitive, so
@@ -150,32 +151,6 @@ private[connect] object PythonWorkerEnvironment {
   }
 
   /**
-   * A bounded identifier for `variables`, for use as part of a plan cache key.
-   *
-   * The environment itself must not go into a cache key. It is unbounded until validated, and a
-   * key holding it would be duplicated once per cached entry, so a session could grow the server
-   * memory it holds by a multiple of the cache size just by issuing ordinary cacheable queries. A
-   * digest is a fixed size whatever the environment holds.
-   *
-   * The empty environment maps to the empty string, so a session that never sets one pays
-   * nothing.
-   */
-  def fingerprint(variables: Map[String, String]): String = {
-    if (variables.isEmpty) {
-      ""
-    } else {
-      val digest = MessageDigest.getInstance("SHA-256")
-      // Lengths are folded in as well as the bytes, so that no two different environments can
-      // produce the same input to the digest by shifting a boundary between a name and a value.
-      variables.toSeq.sortBy(_._1).foreach { case (name, value) =>
-        updateWithLength(digest, name)
-        updateWithLength(digest, value)
-      }
-      digest.digest().map(byte => f"${byte & 0xff}%02x").mkString
-    }
-  }
-
-  /**
    * A fresh mutable copy of `variables` for a single Python function.
    *
    * A copy is required rather than a shared map: the Python runners add their own entries to the
@@ -204,18 +179,6 @@ private[connect] object PythonWorkerEnvironment {
         f"\\x${c.toInt}%02x"
       case c => c.toString
     }
-  }
-
-  private def updateWithLength(digest: MessageDigest, s: String): Unit = {
-    val bytes = s.getBytes(StandardCharsets.UTF_8)
-    val length = bytes.length
-    digest.update(
-      Array[Byte](
-        (length >>> 24).toByte,
-        (length >>> 16).toByte,
-        (length >>> 8).toByte,
-        length.toByte))
-    digest.update(bytes)
   }
 
   private def utf8Length(s: String): Long = s.getBytes(StandardCharsets.UTF_8).length.toLong

@@ -68,10 +68,15 @@ class SparkConnectPythonWorkerEnvTests(ReusedConnectTestCase):
             self.spark.conf.unset(PREFIX + "ROTATING")
 
     def test_env_var_unset_removes_it(self):
+        # try/finally like the others: the session is shared, so a failed assertion here must not
+        # leave the configuration behind to contaminate a later test.
         self.spark.conf.set(PREFIX + "TEMPORARY", "value")
-        self.assertEqual(self._read_in_worker("TEMPORARY"), "value")
-        self.spark.conf.unset(PREFIX + "TEMPORARY")
-        self.assertEqual(self._read_in_worker("TEMPORARY"), "<unset>")
+        try:
+            self.assertEqual(self._read_in_worker("TEMPORARY"), "value")
+            self.spark.conf.unset(PREFIX + "TEMPORARY")
+            self.assertEqual(self._read_in_worker("TEMPORARY"), "<unset>")
+        finally:
+            self.spark.conf.unset(PREFIX + "TEMPORARY")
 
     def test_empty_value_is_visible_as_empty(self):
         # `FOO=` in a shell: the variable exists and its value is the empty string.

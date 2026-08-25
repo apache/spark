@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.util.UUID
+
 import com.google.protobuf.ByteString
 
 import org.apache.spark.{SparkEnv, SparkException}
@@ -45,6 +47,14 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
     PythonWorkerEnvironment.validate(variables)
     variables
   }
+
+  /** A cacheable relation: the plan cache only stores relations that carry a plan id. */
+  private def planIdRelation(planId: Long): proto.Relation =
+    proto.Relation
+      .newBuilder()
+      .setSql(proto.SQL.newBuilder().setQuery("select 1").build())
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planId).build())
+      .build()
 
   /** Overrides a cluster-level limit for the duration of `body`. */
   private def withLimit[T](entry: ConfigEntry[T], value: T)(body: => Unit): Unit = {
@@ -262,7 +272,7 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
   }
 
   // ---------------------------------------------------------------------------
-  // Reading without validation, and the fingerprint
+  // Reading without validation
   // ---------------------------------------------------------------------------
 
   test("SPARK-58752: read does not validate") {
@@ -271,31 +281,6 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
     withSQLConf(key("1INVALID") -> "1") {
       assert(PythonWorkerEnvironment.read(sessionConf) === Map("1INVALID" -> "1"))
     }
-  }
-
-  test("SPARK-58752: the fingerprint of an empty environment is empty") {
-    assert(PythonWorkerEnvironment.fingerprint(Map.empty) === "")
-  }
-
-  test("SPARK-58752: the fingerprint is stable, bounded, and distinguishes environments") {
-    val a = Map("FOO" -> "1", "BAR" -> "2")
-    val b = Map("FOO" -> "1", "BAR" -> "3")
-    val fingerprintA = PythonWorkerEnvironment.fingerprint(a)
-    // Stable across calls and independent of iteration order.
-    assert(fingerprintA === PythonWorkerEnvironment.fingerprint(Map("BAR" -> "2", "FOO" -> "1")))
-    // A different environment gets a different fingerprint.
-    assert(fingerprintA !== PythonWorkerEnvironment.fingerprint(b))
-    // Bounded: a large environment does not produce a large key component.
-    val large = (0 until 100).map(i => s"VAR_$i" -> ("x" * 1024)).toMap
-    assert(PythonWorkerEnvironment.fingerprint(large).length === fingerprintA.length)
-    assert(fingerprintA.length === 64)
-  }
-
-  test("SPARK-58752: the fingerprint does not confuse a shifted name and value boundary") {
-    // Without folding lengths into the digest, these two would hash the same bytes.
-    val first = PythonWorkerEnvironment.fingerprint(Map("AB" -> "C"))
-    val second = PythonWorkerEnvironment.fingerprint(Map("A" -> "BC"))
-    assert(first !== second)
   }
 
   // ---------------------------------------------------------------------------
@@ -471,17 +456,14 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
 
   test("SPARK-58752: a plan cached under one environment is not reused under another") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    val relation = proto.Relation
-      .newBuilder()
-      .setSql(proto.SQL.newBuilder().setQuery("select 1").build())
-      .setCommon(proto.RelationCommon.newBuilder().setPlanId(1L).build())
-      .build()
+    val relation = planIdRelation(1L)
 
     var transformCount = 0
     def transformOnce(): Unit = {
-      val fingerprint =
-        PythonWorkerEnvironment.fingerprint(PythonWorkerEnvironment.read(sessionConf))
-      sessionHolder.usePlanCache(relation, cachePlan = true, fingerprint) { _ =>
+      sessionHolder.usePlanCache(
+        relation,
+        cachePlan = true,
+        PythonWorkerEnvironment.read(sessionConf)) { _ =>
         transformCount += 1
         spark.sql("select 1").logicalPlan
       }
@@ -504,32 +486,108 @@ class PythonWorkerEnvironmentSuite extends SparkConnectPlanTest {
     }
   }
 
-  test("SPARK-58752: the plan cache key does not hold environment values") {
-    // The key must stay bounded: a session cannot grow the memory the cache holds by setting a
-    // large environment.
+  test("SPARK-58752: the plan cache key holds the snapshot the plan was built with") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    val relation = proto.Relation
-      .newBuilder()
-      .setSql(proto.SQL.newBuilder().setQuery("select 1").build())
-      .setCommon(proto.RelationCommon.newBuilder().setPlanId(2L).build())
-      .build()
-
-    val secret = "s3cr3t" * 1024
     try {
-      spark.conf.set(key("FOO"), secret)
-      val fingerprint =
-        PythonWorkerEnvironment.fingerprint(PythonWorkerEnvironment.read(sessionConf))
-      sessionHolder.usePlanCache(relation, cachePlan = true, fingerprint) { _ =>
+      spark.conf.set(key("FOO"), "1")
+      val snapshot = PythonWorkerEnvironment.read(sessionConf)
+      sessionHolder.usePlanCache(planIdRelation(2L), cachePlan = true, snapshot) { _ =>
         spark.sql("select 1").logicalPlan
       }
       val keys = sessionHolder.getPlanCache.get.asMap().keySet()
-      assert(!keys.isEmpty)
-      keys.forEach { cacheKey =>
-        assert(!cacheKey.pythonWorkerEnvFingerprint.contains("s3cr3t"))
-        assert(cacheKey.pythonWorkerEnvFingerprint.length === 64)
-      }
+      assert(keys.size() === 1)
+      keys.forEach(cacheKey => assert(cacheKey.pythonWorkerEnv === Map("FOO" -> "1")))
     } finally {
       spark.conf.unset(key("FOO"))
     }
+  }
+
+  test("SPARK-58752: a concurrent change during planning does not mis-key the cached plan") {
+    // The snapshot is taken once per request. If the key were re-read at insertion time, the plan
+    // built below -- which holds the environment as it was on entry -- would be stored under the
+    // environment installed midway, and a later request would reuse it with the wrong values.
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val relation = planIdRelation(3L)
+    try {
+      spark.conf.set(key("FOO"), "before")
+      val snapshot = PythonWorkerEnvironment.read(sessionConf)
+      sessionHolder.usePlanCache(relation, cachePlan = true, snapshot) { _ =>
+        // Stand in for a concurrent request rewriting the configuration mid-planning.
+        spark.conf.set(key("FOO"), "after")
+        spark.sql("select 1").logicalPlan
+      }
+      val keys = sessionHolder.getPlanCache.get.asMap().keySet()
+      assert(keys.size() === 1)
+      keys.forEach { cacheKey =>
+        assert(
+          cacheKey.pythonWorkerEnv === Map("FOO" -> "before"),
+          "the entry must be keyed on the snapshot the plan was built with")
+      }
+      // A request carrying the new environment therefore misses rather than reusing that plan.
+      var replanned = false
+      sessionHolder.usePlanCache(
+        relation,
+        cachePlan = true,
+        PythonWorkerEnvironment.read(sessionConf)) { _ =>
+        replanned = true
+        spark.sql("select 1").logicalPlan
+      }
+      assert(replanned, "the plan built under the old environment must not be reused")
+    } finally {
+      spark.conf.unset(key("FOO"))
+    }
+  }
+
+  test("SPARK-58752: rapid environment changes each get their own cache entry") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val relation = planIdRelation(4L)
+    try {
+      (0 until 5).foreach { i =>
+        spark.conf.set(key("VERSION"), i.toString)
+        sessionHolder.usePlanCache(
+          relation,
+          cachePlan = true,
+          PythonWorkerEnvironment.read(sessionConf)) { _ =>
+          spark.sql("select 1").logicalPlan
+        }
+      }
+      // One relation, five environments: five distinct keys, none reused for another.
+      assert(sessionHolder.getPlanCache.get.asMap().keySet().size() === 5)
+    } finally {
+      spark.conf.unset(key("VERSION"))
+    }
+  }
+
+  test("SPARK-58752: an oversized environment does not fail a plan without a Python function") {
+    // Validation is deferred to building a Python function, so even an environment that breaks the
+    // size limit must not stop an ordinary query from being planned or cached.
+    val half = "x" * (65 * 1024)
+    withSQLConf(key("A") -> half, key("B") -> half) {
+      transform(inputRelation)
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      sessionHolder.usePlanCache(
+        planIdRelation(5L),
+        cachePlan = true,
+        PythonWorkerEnvironment.read(sessionConf)) { _ =>
+        spark.sql("select 1").logicalPlan
+      }
+      assert(sessionHolder.getPlanCache.get.asMap().keySet().size() === 1)
+    }
+  }
+
+  test("SPARK-58752: a session cloned through the session manager inherits the environment") {
+    // SparkSession.cloneSession is covered above; this is the Connect path, which builds a fresh
+    // SessionHolder around the cloned session.
+    SparkConnectService.sessionManager.invalidateAllSessions()
+    SparkConnectService.sessionManager.initializeBaseSession(() => spark.newSession())
+
+    val sourceKey = SessionKey("testUser", UUID.randomUUID.toString)
+    val source = SparkConnectService.sessionManager.getOrCreateIsolatedSession(sourceKey, None)
+    source.session.conf.set(key("FOO"), "1")
+
+    val cloned = SparkConnectService.sessionManager
+      .cloneSession(sourceKey, UUID.randomUUID.toString, None)
+
+    assert(readValidated(cloned.session.sessionState.conf) === Map("FOO" -> "1"))
   }
 }
