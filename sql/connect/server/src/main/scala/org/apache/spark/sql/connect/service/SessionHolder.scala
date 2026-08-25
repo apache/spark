@@ -608,7 +608,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   The logical plan.
    */
-  private[connect] def usePlanCache(rel: proto.Relation, cachePlan: Boolean)(
+  private[connect] def usePlanCache(
+      rel: proto.Relation,
+      cachePlan: Boolean,
+      pythonWorkerEnvFingerprint: String)(
       transform: proto.Relation => LogicalPlan): LogicalPlan = {
     val planCacheEnabled = Option(session)
       .forall(_.sessionState.conf.getConf(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true))
@@ -622,14 +625,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     // A cached plan holds the Python worker environment of the request that built it, baked into
     // every Python function it contains, so an entry may only be reused by a request whose
-    // environment matches. Read without validation: an invalid environment has to fail the queries
-    // that would install it, not every query that consults the cache.
+    // environment matches. The caller passes the fingerprint of the one snapshot it is planning
+    // with; re-reading the configurations here would let a plan built with one environment be
+    // stored under the key of another that a concurrent request installed meanwhile.
     def cacheKey(rel: proto.Relation): PlanCacheKey =
-      PlanCacheKey(
-        rel,
-        Option(session)
-          .map(s => PythonWorkerEnvironment.read(s.sessionState.conf))
-          .getOrElse(Map.empty))
+      PlanCacheKey(rel, pythonWorkerEnvFingerprint)
 
     def getPlanCache(rel: proto.Relation): Option[LogicalPlan] =
       planCache match {
@@ -668,14 +668,16 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
  *
  * @param relation
  *   the relation the cached plan was built from.
- * @param pythonWorkerEnv
- *   the Python worker environment the plan was built with. Part of the key because it is baked
- *   into every Python function the plan contains, so a plan built with one environment must not
- *   be reused by a request carrying another.
+ * @param pythonWorkerEnvFingerprint
+ *   fingerprint of the Python worker environment the plan was built with. Part of the key because
+ *   the environment is baked into every Python function the plan contains, so a plan built with
+ *   one environment must not be reused by a request carrying another. A fingerprint rather than
+ *   the environment itself, so that the key stays a bounded size however large the environment
+ *   is.
  */
 private[service] case class PlanCacheKey(
     relation: proto.Relation,
-    pythonWorkerEnv: Map[String, String])
+    pythonWorkerEnvFingerprint: String)
 
 object SessionHolder {
 

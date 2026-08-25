@@ -143,7 +143,7 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
-    val plan = sessionHolder.usePlanCache(rel, cachePlan) { rel =>
+    val plan = sessionHolder.usePlanCache(rel, cachePlan, pythonWorkerEnvFingerprint) { rel =>
       val plan = rel.getRelTypeCase match {
         // DataFrame API
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
@@ -2228,11 +2228,28 @@ class SparkConnectPlanner(
       bufferType = if (udf.hasBufferType) transformDataType(udf.getBufferType) else null)
   }
 
-  // The environment installed in the Python workers that run this session's Python functions,
-  // read once per request: a planner handles a single request, so this cannot pin values that a
-  // later request replaces.
-  private lazy val pythonWorkerEnv: Map[String, String] =
-    PythonWorkerEnvironment.readValidated(session.sessionState.conf)
+  // The environment to install in the Python workers that run this session's Python functions.
+  //
+  // Read once and reused for everything this request does. A planner handles a single request, so
+  // this cannot pin values that a later request replaces; conversely it cannot drift mid-request
+  // if a concurrent request rewrites the configurations, which would otherwise let a plan built
+  // with one environment be cached under the fingerprint of another.
+  private lazy val pythonWorkerEnvSnapshot: Map[String, String] =
+    Option(session)
+      .map(s => PythonWorkerEnvironment.read(s.sessionState.conf))
+      .getOrElse(Map.empty)
+
+  // Identifies the snapshot in the plan cache key. Derived from the snapshot rather than read
+  // again, and bounded in size however large the environment is.
+  private lazy val pythonWorkerEnvFingerprint: String =
+    PythonWorkerEnvironment.fingerprint(pythonWorkerEnvSnapshot)
+
+  // The snapshot, validated. Validation is deferred to here so that a malformed environment fails
+  // only the queries that would install it in a worker, not every query that consults the cache.
+  private lazy val pythonWorkerEnv: Map[String, String] = {
+    PythonWorkerEnvironment.validate(pythonWorkerEnvSnapshot)
+    pythonWorkerEnvSnapshot
+  }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(

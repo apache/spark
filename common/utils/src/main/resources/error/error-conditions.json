@@ -5084,6 +5084,11 @@
           "The environment variable name <name>, set under <prefix>, is not valid. Names must match the pattern <pattern> and contain at most <maxLength> characters."
         ]
       },
+      "INVALID_PYTHON_WORKER_ENV_VAR_VALUE" : {
+        "message" : [
+          "The value of the environment variable <name>, set under <prefix>, contains a NUL character, which a process environment cannot carry."
+        ]
+      },
       "INVALID_SPARK_SUBMIT_DEPLOY_MODE_KEY" : {
         "message" : [
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."

@@ -489,20 +489,24 @@ object Connect {
   // memory its own session holds.
   private[spark] val CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES =
     buildStaticConf("spark.connect.session.pythonWorkerEnv.maxVariables")
-      .doc("The maximum number of environment variables a session may set for its Python " +
-        "workers, across all configurations under the reserved prefix.")
+      .doc(
+        "The maximum number of environment variables a session may set for its Python " +
+          "workers, across all configurations under the reserved prefix. Zero accepts no " +
+          "user-provided environment at all.")
       .version("4.4.0")
       .internal()
       .intConf
+      .checkValue(_ >= 0, "The maximum number of variables must not be negative.")
       .createWithDefault(100)
 
   private[spark] val CONNECT_PYTHON_WORKER_ENV_MAX_NAME_LENGTH =
     buildStaticConf("spark.connect.session.pythonWorkerEnv.maxNameLength")
       .doc("The maximum length, in characters, of an environment variable name a session may " +
-        "set for its Python workers.")
+        "set for its Python workers. Zero accepts no user-provided environment at all.")
       .version("4.4.0")
       .internal()
       .intConf
+      .checkValue(_ >= 0, "The maximum name length must not be negative.")
       .createWithDefault(512)
 
   private[spark] val CONNECT_PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES =
@@ -513,6 +517,7 @@ object Connect {
       .version("4.4.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The maximum total size must not be negative.")
       .createWithDefault(128 * 1024) // 128 KiB
 
   val CONNECT_PLAN_COMPRESSION_DEFAULT_ALGORITHM =

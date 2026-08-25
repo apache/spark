@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.service
 
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.connect.config.Connect
@@ -33,14 +34,29 @@ import org.apache.spark.sql.internal.SQLConf
  * outside them, so the environment follows the session wherever ordinary session configurations
  * follow it, including into a session created by `cloneSession`.
  *
- * Names are case-sensitive, matching POSIX.
+ * Names are preserved case-sensitively by Spark. On a case-sensitive operating system `FOO` and
+ * `foo` are therefore distinct variables; Windows process environments are case-insensitive, so
+ * what a worker observes there is the platform's business rather than Spark's.
+ *
+ * A request reads the environment once and uses that one snapshot for everything it does, because
+ * the configurations can change underneath it: another request may set them while this one is
+ * still planning. Re-reading would let a plan be built with one environment and cached under
+ * another.
  */
 private[connect] object PythonWorkerEnvironment {
 
   /** Prefix of the session configurations that carry the environment. */
   val confPrefix: String = "spark.pythonWorkerEnv."
 
-  /** Environment variable names accepted under [[confPrefix]]. */
+  /**
+   * Environment variable names accepted under [[confPrefix]].
+   *
+   * This is deliberately stricter than the operating system requires. A POSIX environment permits
+   * any byte except `=` and NUL in a name, and container platforms accept their own broader sets,
+   * but a name outside this pattern cannot be referenced portably from a shell, so accepting one
+   * would let a session install a variable that some consumers can never read. It is a
+   * portability policy, not a description of what a process environment can hold.
+   */
   val namePattern: String = "^[A-Za-z_][A-Za-z0-9_]*$"
 
   private val compiledNamePattern = namePattern.r
@@ -52,54 +68,35 @@ private[connect] object PythonWorkerEnvironment {
   /**
    * The environment carried by `conf`, without validation.
    *
-   * Used where only a change in the environment matters rather than its validity, so that an
-   * invalid entry fails the queries that would install it rather than every query in the session.
+   * Callers take one snapshot per request and pass it around. Validation is separate so that the
+   * plan cache can tell two environments apart without rejecting an invalid one: an invalid entry
+   * has to fail the queries that would install it in a worker, not every query in the session.
    */
   def read(conf: SQLConf): Map[String, String] = {
     conf.getAllConfs.iterator
-      // A null value is indistinguishable from an unset configuration once installed, so it is
-      // read as absent rather than as a variable with an empty value. An empty string is kept: it
-      // is a valid value, matching `FOO=` in a POSIX shell.
-      .filter { case (key, value) => key.startsWith(confPrefix) && value != null }
+      .filter { case (key, _) => key.startsWith(confPrefix) }
       .map { case (key, value) => key.substring(confPrefix.length) -> value }
       .toMap
   }
 
   /**
-   * The environment carried by `conf`, rejecting a malformed or oversized one.
+   * Rejects a malformed or oversized environment.
    *
-   * Validation happens here, on read, rather than where the configuration is set: an ordinary
-   * configuration write has no interception point on this path, so there is nowhere earlier to
-   * refuse it. A rejection therefore fails the query that would have installed the environment,
-   * which keeps the failure loud instead of silently running a Python function without the
-   * variables it expects.
+   * Validation happens when a Python function is built rather than when a configuration is
+   * written, so that every way of writing a configuration is covered by one check: the Spark
+   * Connect config RPC, SQL `SET`, and the application-level configurations merged into a new
+   * session all arrive here. The cost is that an invalid environment stays in the session until
+   * the user corrects it; the benefit is that it cannot reach a worker.
    *
-   * A message may name a variable but never carries its value, and a long name is truncated
-   * rather than echoed whole, so a rejection cannot copy a credential into a log or a stack
-   * trace.
+   * A message may name a variable but never carries its value, so a rejection cannot copy a value
+   * into a log or a stack trace. Note that the name is chosen by the user, so a name is only as
+   * safe as what the user put in it.
+   *
+   * @throws SparkException
+   *   if a name is malformed or too long, a value cannot be carried by a process environment, or
+   *   the collection exceeds a limit.
    */
-  def readValidated(conf: SQLConf): Map[String, String] = {
-    val variables = read(conf)
-    if (variables.nonEmpty) {
-      validate(variables)
-    }
-    variables
-  }
-
-  /**
-   * A fresh mutable copy of `variables` for a single Python function.
-   *
-   * A copy is required rather than a shared map: the Python runners add their own entries to the
-   * map they are given before launching a worker, so sharing one map across functions would leak
-   * those entries between functions, and an immutable map would fail the same assignment.
-   */
-  def toMutableJavaMap(variables: Map[String, String]): java.util.HashMap[String, String] = {
-    val result = new java.util.HashMap[String, String](variables.size)
-    variables.foreach { case (name, value) => result.put(name, value) }
-    result
-  }
-
-  private def validate(variables: Map[String, String]): Unit = {
+  def validate(variables: Map[String, String]): Unit = {
     val conf = SparkEnv.get.conf
     val maxCount = conf.get(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_VARIABLES)
     val maxNameLength = conf.get(Connect.CONNECT_PYTHON_WORKER_ENV_MAX_NAME_LENGTH)
@@ -123,10 +120,19 @@ private[connect] object PythonWorkerEnvironment {
         throw new SparkException(
           errorClass = "INVALID_SPARK_CONFIG.INVALID_PYTHON_WORKER_ENV_VAR_NAME",
           messageParameters = Map(
-            "name" -> abbreviate(name),
+            "name" -> describeName(name),
             "prefix" -> confPrefix,
             "pattern" -> namePattern,
             "maxLength" -> maxNameLength.toString),
+          cause = null)
+      }
+      // A process environment cannot carry NUL. Rejecting it here rather than letting the worker
+      // launch fail matters for more than the error message: the launch failure is an
+      // `IllegalArgumentException` from the JDK whose own message embeds the offending value.
+      if (value.indexOf(0) >= 0) {
+        throw new SparkException(
+          errorClass = "INVALID_SPARK_CONFIG.INVALID_PYTHON_WORKER_ENV_VAR_VALUE",
+          messageParameters = Map("name" -> describeName(name), "prefix" -> confPrefix),
           cause = null)
       }
       totalSizeBytes += utf8Length(name) + utf8Length(value)
@@ -143,9 +149,73 @@ private[connect] object PythonWorkerEnvironment {
     }
   }
 
-  private def abbreviate(name: String): String = {
-    if (name.length <= maxNameCharsInMessage) name
-    else s"${name.take(maxNameCharsInMessage)}..."
+  /**
+   * A bounded identifier for `variables`, for use as part of a plan cache key.
+   *
+   * The environment itself must not go into a cache key. It is unbounded until validated, and a
+   * key holding it would be duplicated once per cached entry, so a session could grow the server
+   * memory it holds by a multiple of the cache size just by issuing ordinary cacheable queries. A
+   * digest is a fixed size whatever the environment holds.
+   *
+   * The empty environment maps to the empty string, so a session that never sets one pays
+   * nothing.
+   */
+  def fingerprint(variables: Map[String, String]): String = {
+    if (variables.isEmpty) {
+      ""
+    } else {
+      val digest = MessageDigest.getInstance("SHA-256")
+      // Lengths are folded in as well as the bytes, so that no two different environments can
+      // produce the same input to the digest by shifting a boundary between a name and a value.
+      variables.toSeq.sortBy(_._1).foreach { case (name, value) =>
+        updateWithLength(digest, name)
+        updateWithLength(digest, value)
+      }
+      digest.digest().map(byte => f"${byte & 0xff}%02x").mkString
+    }
+  }
+
+  /**
+   * A fresh mutable copy of `variables` for a single Python function.
+   *
+   * A copy is required rather than a shared map: the Python runners add their own entries to the
+   * map they are given before launching a worker, so sharing one map across functions would leak
+   * those entries between functions, and an immutable map would fail the same assignment.
+   */
+  def toMutableJavaMap(variables: Map[String, String]): java.util.HashMap[String, String] = {
+    val result = new java.util.HashMap[String, String](variables.size)
+    variables.foreach { case (name, value) => result.put(name, value) }
+    result
+  }
+
+  /**
+   * A variable name as it may appear in a message.
+   *
+   * Truncation alone is not enough. The name comes from a configuration key, so it can hold
+   * newlines, tabs and terminal escape sequences that would let a rejected name forge log lines;
+   * they are escaped rather than passed through.
+   */
+  private def describeName(name: String): String = {
+    val truncated =
+      if (name.length <= maxNameCharsInMessage) name
+      else s"${name.take(maxNameCharsInMessage)}..."
+    truncated.flatMap {
+      case c if c < 0x20 || (c >= 0x7f && c <= 0x9f) =>
+        f"\\x${c.toInt}%02x"
+      case c => c.toString
+    }
+  }
+
+  private def updateWithLength(digest: MessageDigest, s: String): Unit = {
+    val bytes = s.getBytes(StandardCharsets.UTF_8)
+    val length = bytes.length
+    digest.update(
+      Array[Byte](
+        (length >>> 24).toByte,
+        (length >>> 16).toByte,
+        (length >>> 8).toByte,
+        length.toByte))
+    digest.update(bytes)
   }
 
   private def utf8Length(s: String): Long = s.getBytes(StandardCharsets.UTF_8).length.toLong
