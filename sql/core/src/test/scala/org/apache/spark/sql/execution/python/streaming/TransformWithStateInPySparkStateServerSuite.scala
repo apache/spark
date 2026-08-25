@@ -31,8 +31,8 @@ import scala.concurrent.duration._
 
 import com.google.protobuf.ByteString
 import org.mockito.ArgumentMatchers.{any, argThat}
-import org.mockito.invocation.InvocationOnMock
 import org.mockito.Mockito.{mock, times, verify, when}
+import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 
