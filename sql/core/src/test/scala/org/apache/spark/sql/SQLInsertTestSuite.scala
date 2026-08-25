@@ -553,16 +553,16 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
   }
 
   test("CTE does not shadow multi-insert targets") {
-    withTable("src", "t1", "t2") {
-      createTable("src", Seq("i"), Seq("int"))
+    withTable("cte_src", "t1", "t2") {
+      createTable("cte_src", Seq("i"), Seq("int"))
       createTable("t1", Seq("i"), Seq("int"))
       createTable("t2", Seq("i"), Seq("int"))
-      sql("INSERT INTO src VALUES (1), (2)")
+      sql("INSERT INTO cte_src VALUES (1), (2)")
 
       sql(
         """
           |WITH t1 AS (SELECT 100 AS i)
-          |FROM src
+          |FROM cte_src
           |INSERT INTO t1 SELECT i
           |INSERT INTO t2 SELECT i
           |""".stripMargin)

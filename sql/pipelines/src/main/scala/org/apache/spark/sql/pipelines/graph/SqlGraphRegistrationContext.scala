@@ -22,7 +22,11 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{
+  UnresolvedAttribute,
+  UnresolvedRelation,
+  UnresolvedWriteTarget
+}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcInto, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -593,6 +597,8 @@ class SqlGraphRegistrationContext(
           validateInsertIntoFlow(i, queryOrigin)
           val flowTargetDatasetName = i.table match {
             case u: UnresolvedRelation =>
+              IdentifierHelper.toTableIdentifier(u.multipartIdentifier)
+            case u: UnresolvedWriteTarget =>
               IdentifierHelper.toTableIdentifier(u.multipartIdentifier)
             case _ =>
               throw SqlGraphElementRegistrationException(

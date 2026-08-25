@@ -144,7 +144,7 @@ CreateViewCommand `v`, SELECT 1, false, true, LocalTempView, UNSUPPORTED, true
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedTempView v, `v`
++- ResolvedTempView v
 
 
 -- !query
@@ -783,7 +783,7 @@ SetCommand (spark.sql.legacy.viewSchemaBindingMode,Some(true))
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedTempView v, `v`
++- ResolvedTempView v
 
 
 -- !query
@@ -802,7 +802,7 @@ SetCommand (spark.sql.legacy.viewSchemaCompensation,Some(true))
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedTempView v, `v`
++- ResolvedTempView v
 
 
 -- !query

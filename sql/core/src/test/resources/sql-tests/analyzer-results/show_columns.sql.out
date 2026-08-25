@@ -113,7 +113,7 @@ org.apache.spark.sql.AnalysisException
 SHOW COLUMNS IN showcolumn3
 -- !query analysis
 ShowColumnsCommand `showcolumn3`, [col_name#x]
-+- ResolvedTempView showcolumn3, `showColumn3`
++- ResolvedTempView showcolumn3
 
 
 -- !query
@@ -183,14 +183,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SHOW COLUMNS IN global_temp.showcolumn4
 -- !query analysis
 ShowColumnsCommand `global_temp`.`showcolumn4`, [col_name#x]
-+- ResolvedTempView global_temp.showcolumn4, `global_temp`.`showColumn4`
++- ResolvedTempView global_temp.showcolumn4
 
 
 -- !query
 SHOW COLUMNS IN showcolumn4 FROM global_temp
 -- !query analysis
 ShowColumnsCommand global_temp, `showcolumn4`, [col_name#x]
-+- ResolvedTempView global_temp.showcolumn4, `global_temp`.`showColumn4`
++- ResolvedTempView global_temp.showcolumn4
 
 
 -- !query

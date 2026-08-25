@@ -286,6 +286,9 @@ class RelationResolution(
             val v1Ident = v1Table.catalogTable.identifier
             val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
             ResolvedPersistentView(catalog, v2Ident, new V1View(v1Table.catalogTable))
+          case delegatingTable: DelegatingTable =>
+            val v1Table = V1Table(V1Table.toCatalogTable(catalog, ident, delegatingTable))
+            ResolvedTable.create(catalog.asTableCatalog, ident, v1Table)
           case loadedTable =>
             ResolvedTable.create(catalog.asTableCatalog, ident, loadedTable)
         }.orElse {

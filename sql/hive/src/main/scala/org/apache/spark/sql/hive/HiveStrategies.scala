@@ -130,7 +130,11 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
   override def conf: SQLConf = session.sessionState.conf
 
-  private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
+  private[hive] def withTableStats(relation: HiveTableRelation): HiveTableRelation = {
+    if (relation.tableMeta.stats.nonEmpty) {
+      return relation
+    }
+
     val table = relation.tableMeta
     val partitionCols = relation.partitionCols
     // For partitioned tables, the partition directory may be outside of the table directory.
@@ -157,7 +161,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case relation: HiveTableRelation
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
-      hiveTableWithStats(relation)
+      withTableStats(relation)
   }
 }
 
@@ -244,7 +248,8 @@ case class RelationConversions(
     plan resolveOperators {
       // Write path
       case i @ HiveWriteTable(table) if i.query.resolved && DDLUtils.isHiveTable(table) =>
-        val relation = DDLUtils.readHiveTable(table)
+        val relation = new DetermineTableStats(SparkSession.active)
+          .withTableStats(DDLUtils.readHiveTable(table))
         if (shouldConvertForWrite(relation)) {
           val converted = metastoreCatalog.convert(relation, isWrite = true)
           // The provider relation is local to the write-specific pipeline and is consumed before
