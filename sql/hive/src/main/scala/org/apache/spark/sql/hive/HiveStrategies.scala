@@ -230,8 +230,7 @@ case class RelationConversions(
     if (serde.contains("parquet")) "parquet" else "orc"
   }
 
-  private def shouldConvertForWrite(table: CatalogTable): Boolean = {
-    val relation = DDLUtils.readHiveTable(table)
+  private def shouldConvertForWrite(relation: HiveTableRelation): Boolean = {
     isConvertible(relation) &&
       ((relation.isPartitioned &&
         conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE)) ||
@@ -244,13 +243,17 @@ case class RelationConversions(
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperators {
       // Write path
-      case i @ HiveWriteTable(table) if i.query.resolved && DDLUtils.isHiveTable(table) &&
-          shouldConvertForWrite(table) =>
-        val converted = metastoreCatalog.convert(DDLUtils.readHiveTable(table), isWrite = true)
-        // The provider relation is local to the write-specific pipeline and is consumed before
-        // this rule returns, so generic analyzer traversal never sees it as the INSERT target.
-        val preprocessed = PreprocessTableInsertion(i.copy(table = converted))
-        DataSourceAnalysis(preprocessed)
+      case i @ HiveWriteTable(table) if i.query.resolved && DDLUtils.isHiveTable(table) =>
+        val relation = DDLUtils.readHiveTable(table)
+        if (shouldConvertForWrite(relation)) {
+          val converted = metastoreCatalog.convert(relation, isWrite = true)
+          // The provider relation is local to the write-specific pipeline and is consumed before
+          // this rule returns, so generic analyzer traversal never sees it as the INSERT target.
+          val preprocessed = PreprocessTableInsertion(i.copy(table = converted))
+          DataSourceAnalysis(preprocessed)
+        } else {
+          i
+        }
 
       // Read path
       case relation: HiveTableRelation if doConvertHiveTableRelationForRead(relation) =>

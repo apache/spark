@@ -160,12 +160,12 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
     // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
     // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
     //
-    // Basically, we will put those partition columns having a assigned value back
+    // Basically, we will put those partition columns having an assigned value back
     // to the SELECT clause. The output of the SELECT clause is organized as
     // normal_columns static_partitioning_columns dynamic_partitioning_columns.
     // static_partitioning_columns are partitioning columns having assigned
     // values in the PARTITION clause (e.g. b in the above example).
-    // dynamic_partitioning_columns are partitioning columns that do not assigned
+    // dynamic_partitioning_columns are partitioning columns that do not have assigned
     // values in the PARTITION clause (e.g. c in the above example).
     val actualQuery = if (insert.partitionSpec.exists(_._2.isDefined)) {
       val projectList = convertStaticPartitions(
@@ -208,8 +208,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       actualQuery.output.map(_.name))
 
     // For dynamic partition overwrite, we do not delete partition directories ahead.
-    // We write to staging directories and move to final partition directories after writing
-    // job is done. So it is ok to have outputPath try to overwrite inputpath.
+    // We write to staging directories and move to final partition directories after the write
+    // job is done. So it is okay to have outputPath try to overwrite the input path.
     if (insert.overwrite && !insertCommand.dynamicPartitionOverwrite) {
       DDLUtils.verifyNotReadPath(actualQuery, outputPath, table)
     }
