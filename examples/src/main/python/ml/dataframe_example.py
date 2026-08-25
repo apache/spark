@@ -20,13 +20,13 @@ An example of how to use DataFrame for ML. Run with::
     bin/spark-submit examples/src/main/python/ml/dataframe_example.py <input_path>
 """
 import os
+import shutil
 import sys
 import tempfile
-import shutil
 
-from pyspark.sql import SparkSession
 from pyspark.mllib.stat import Statistics
 from pyspark.mllib.util import MLUtils
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     if len(sys.argv) > 2:

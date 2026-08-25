@@ -44,9 +44,8 @@ import subprocess
 import sys
 import traceback
 from typing import List
-from urllib.request import urlopen
-from urllib.request import Request
 from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 # Shared with dev/pr_merge_status.py so the two committer tools agree on where a PR landed.
 # Importable because Python puts this script's own directory first on sys.path.

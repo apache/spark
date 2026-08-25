@@ -23,25 +23,25 @@ object from MLlib or pass SciPy `scipy.sparse` column vectors if
 SciPy is available in their environment.
 """
 
-import sys
 import array
 import struct
+import sys
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
-    cast,
     Dict,
     Generic,
     Iterable,
     List,
     Optional,
-    overload,
     Sequence,
     Tuple,
     Type,
     TypeVar,
-    TYPE_CHECKING,
     Union,
+    cast,
+    overload,
 )
 
 import numpy as np
@@ -49,20 +49,21 @@ import numpy as np
 from pyspark import since
 from pyspark.ml import linalg as newlinalg
 from pyspark.sql.types import (
-    DataTypeSingleton,
-    UserDefinedType,
-    StructField,
-    StructType,
     ArrayType,
+    BooleanType,
+    ByteType,
+    DataTypeSingleton,
     DoubleType,
     IntegerType,
-    ByteType,
-    BooleanType,
+    StructField,
+    StructType,
+    UserDefinedType,
 )
 
 if TYPE_CHECKING:
-    from pyspark.mllib._typing import VectorLike, NormType
     from numpy.typing import ArrayLike
+
+    from pyspark.mllib._typing import NormType, VectorLike
 
 
 QT = TypeVar("QT")
@@ -1623,6 +1624,7 @@ class QRDecomposition(Generic[QT, RT]):
 
 def _test() -> None:
     import doctest
+
     import numpy
 
     try:

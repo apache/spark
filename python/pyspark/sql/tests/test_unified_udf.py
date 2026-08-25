@@ -19,16 +19,16 @@ import unittest
 from typing import Iterator, Tuple
 
 from pyspark.sql import functions as sf
-from pyspark.sql.window import Window
 from pyspark.sql.functions import udf
 from pyspark.sql.types import LongType
+from pyspark.sql.window import Window
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.util import PythonEvalType
 
 

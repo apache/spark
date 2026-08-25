@@ -92,7 +92,6 @@ import os
 import re
 from decimal import Decimal
 
-
 _CASE_END = "!-- end"
 _SECTION_PREFIX = "--! "
 _FILE_METADATA_NAME = "__file_metadata__"

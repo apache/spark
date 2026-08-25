@@ -14,19 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict, Optional
 import uuid
+from typing import Any, Dict, Optional
 
+import pyspark.sql.connect.plan as plan
 from pyspark.errors import (
-    PySparkTypeError,
-    PySparkValueError,
     IllegalArgumentException,
     PySparkAssertionError,
+    PySparkTypeError,
+    PySparkValueError,
 )
 from pyspark.sql.column import Column
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.observation import Observation as PySparkObservation
-import pyspark.sql.connect.plan as plan
 
 __all__ = ["Observation"]
 
@@ -92,11 +92,12 @@ Observation.__doc__ = PySparkObservation.__doc__
 
 
 def _test() -> None:
+    import doctest
     import os
     import sys
-    import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.observation
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.observation.__dict__.copy()
     globs["spark"] = (

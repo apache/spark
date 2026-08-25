@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from types import FunctionType
-from typing import Any, Callable, Iterable, Union, Optional, NewType, Protocol, Tuple
 import datetime
 import decimal
+from types import FunctionType
+from typing import Any, Callable, Iterable, NewType, Optional, Protocol, Tuple, Union
 
 import pyarrow
 from pandas.core.frame import DataFrame as PandasDataFrame
