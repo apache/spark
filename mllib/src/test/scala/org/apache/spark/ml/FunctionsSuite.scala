@@ -22,7 +22,7 @@ import org.apache.spark.ml.functions._
 import org.apache.spark.ml.linalg.{Matrices, MatrixUDT, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldMatrixUDT,
-  Vectors => OldVectors, VectorUDT => OldVectorUDT}
+  Vector => OldVector, Vectors => OldVectors, VectorUDT => OldVectorUDT}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.functions.{col, unwrap_udt, wrap_udt}
 import org.apache.spark.sql.types.{StructField, StructType, UserDefinedType}
@@ -61,6 +61,13 @@ class FunctionsSuite extends MLTest {
     assert(converted.schema("value").dataType === targetUDT)
     assert(converted.schema("value").nullable)
     assert(converted.collect().map(_.get(0)).toSeq === Seq(expected, null))
+  }
+
+  private def normalizeNaN(rows: Seq[(Int, Int, Double)]): Seq[(Int, Int, String)] = {
+    rows.map {
+      case (id, index, value) if value.isNaN => (id, index, "NaN")
+      case (id, index, value) => (id, index, value.toString)
+    }
   }
 
   test("test vector_to_array") {
@@ -135,6 +142,77 @@ class FunctionsSuite extends MLTest {
     val df3 = Seq(Tuple1(Array(1, 2))).toDF("c1")
     val resultVec3 = df3.select(array_to_vector(col("c1"))).collect()(0)(0).asInstanceOf[Vector]
     assert(resultVec3 === Vectors.dense(Array(1.0, 2.0)))
+  }
+
+  test("test vector_posexplode with vector UDT") {
+    val df = Seq(
+      (0, Vectors.dense(1.0, 0.0, 3.0), OldVectors.dense(10.0, 0.0, 30.0)),
+      (1, Vectors.sparse(4, Seq((1, 2.0), (2, 0.0), (3, 4.0))),
+        OldVectors.sparse(4, Seq((0, 20.0), (1, 0.0), (2, 30.0)))),
+      (2, null.asInstanceOf[Vector], null.asInstanceOf[OldVector]),
+      (3, Vectors.sparse(10, Array.emptyIntArray, Array.emptyDoubleArray),
+        OldVectors.sparse(10, Array.emptyIntArray, Array.emptyDoubleArray)),
+      (4, Vectors.dense(Array.emptyDoubleArray),
+        OldVectors.dense(Array.emptyDoubleArray))
+    ).toDF("id", "vec", "oldVec")
+
+    val result = df.select($"id", vector_posexplode($"vec"))
+      .as[(Int, Int, Double)]
+      .collect()
+      .toSeq
+    assert(normalizeNaN(result) === Seq(
+      (0, -4, "NaN"),
+      (0, 0, "1.0"),
+      (0, 2, "3.0"),
+      (1, -5, "NaN"),
+      (1, 1, "2.0"),
+      (1, 3, "4.0"),
+      (3, -11, "NaN"),
+      (4, -1, "NaN")))
+
+    val oldResult = df.select($"id", vector_posexplode($"oldVec"))
+      .as[(Int, Int, Double)]
+      .collect()
+      .toSeq
+    assert(normalizeNaN(oldResult) === Seq(
+      (0, -4, "NaN"),
+      (0, 0, "10.0"),
+      (0, 2, "30.0"),
+      (1, -5, "NaN"),
+      (1, 0, "20.0"),
+      (1, 2, "30.0"),
+      (3, -11, "NaN"),
+      (4, -1, "NaN")))
+
+    val denseResult = df
+      .where($"id" === 1)
+      .select($"id", vector_posexplode($"vec", mode = "dense"))
+      .as[(Int, Int, Double)]
+      .collect()
+      .toSeq
+    assert(normalizeNaN(denseResult) === Seq(
+      (1, -5, "NaN"),
+      (1, 0, "0.0"),
+      (1, 1, "2.0"),
+      (1, 2, "0.0"),
+      (1, 3, "4.0")))
+
+    val sparseResult = df.select($"id", vector_posexplode($"vec", mode = "sparse"))
+      .as[(Int, Int, Double)]
+      .collect()
+      .toSeq
+    assert(normalizeNaN(sparseResult) === Seq(
+      (0, -4, "NaN"),
+      (0, 0, "1.0"),
+      (0, 2, "3.0"),
+      (1, -5, "NaN"),
+      (1, 1, "2.0"),
+      (1, 3, "4.0"),
+      (3, -11, "NaN"),
+      (4, -1, "NaN")))
+
+    val schema = df.select(vector_posexplode($"vec")).schema
+    assert(schema.simpleString === "struct<index:int,value:double>")
   }
 
   test("test get_vector") {
