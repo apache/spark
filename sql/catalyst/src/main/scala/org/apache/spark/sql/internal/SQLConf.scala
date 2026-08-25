@@ -5371,23 +5371,28 @@ object SQLConf {
       .version("4.0.0")
       .fallbackConf(BUFFER_SIZE)
 
-  val PYTHON_UDF_ARROW_MAX_BYTES_PER_OUTPUT_BATCH =
-    buildConf("spark.sql.execution.pythonUDF.arrow.maxBytesPerOutputBatch")
+  val PYTHON_UDF_ARROW_WORKER_OUTPUT_BATCH_MAX_BYTES =
+    buildConf("spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes")
       .internal()
-      .doc("Byte-size cap for a single Arrow RecordBatch produced by an Arrow-based Python UDF " +
-        "worker before it is sent back to the JVM. Without it a UDF that emits one Arrow batch " +
-        "per unit of work (e.g. applyInPandas, which produces one batch per group) can yield a " +
-        "single oversized batch that strains the JVM and downstream operators; when this is set " +
-        "the worker splits such a batch into ceil(nbytes / max_bytes) row-balanced pieces. This " +
-        "is a best-effort estimate that assumes roughly uniform row size (the per-slice byte " +
-        "size is not measured), so a skewed batch may still exceed the cap. Currently only " +
-        "applyInPandas (SQL_GROUPED_MAP_PANDAS_UDF) honors this; other Arrow-based Python UDFs " +
-        "ignore it. -1 (the default) means no limit.")
+      .doc("Best-effort byte-size target for a single Arrow RecordBatch produced by an " +
+        "Arrow-based Python UDF worker, applied on the worker before the batch is sent to " +
+        "the JVM. applyInPandas hands each group to the UDF as one batch, so a large group " +
+        "can build a batch past Arrow's 2GB limit that then fails to transfer. When set, " +
+        "the worker splits a batch estimated larger than this into ceil(nbytes / value) " +
+        "row-balanced, zero-copy pieces to keep each one under the limit; the estimate " +
+        "assumes roughly uniform row size and is not measured per slice, so a skewed, " +
+        "variable-width batch may still exceed the target. It is distinct from " +
+        "spark.sql.execution.arrow.maxBytesPerOutputBatch, which slices JVM-side with a " +
+        "byte-accurate measure but only after a batch has been read back from the worker, " +
+        "so it cannot help a batch too large to transfer; the two compose, worker split " +
+        "first. Currently only applyInPandas (SQL_GROUPED_MAP_PANDAS_UDF) honors this; " +
+        "other Arrow-based Python UDFs ship the value but ignore it. -1 (the default) " +
+        "means no limit.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(x => x == -1 || (x > 0 && x <= Int.MaxValue),
-        "The value of spark.sql.execution.pythonUDF.arrow.maxBytesPerOutputBatch should " +
+        "The value of spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes should " +
           "be -1 (no limit) or greater than zero and less than or equal to INT_MAX.")
       .createWithDefault(-1)
 

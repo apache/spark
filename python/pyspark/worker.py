@@ -182,9 +182,9 @@ class RunnerConf(Conf):
         return int(self.get("spark.sql.execution.arrow.maxBytesPerBatch", 2**31 - 1))
 
     @property
-    def python_udf_arrow_max_bytes_per_output_batch(self) -> int:
+    def python_udf_arrow_worker_output_batch_max_bytes(self) -> int:
         # -1 (the default) means no limit; only positive values enable output batch resizing.
-        return int(self.get("spark.sql.execution.pythonUDF.arrow.maxBytesPerOutputBatch", -1))
+        return int(self.get("spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes", -1))
 
     @property
     def arrow_concurrency_level(self) -> int:
@@ -3032,7 +3032,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 del result
 
         # Bound each output RecordBatch toward the byte cap (no limit when unset).
-        max_output_bytes = runner_conf.python_udf_arrow_max_bytes_per_output_batch
+        max_output_bytes = runner_conf.python_udf_arrow_worker_output_batch_max_bytes
         if max_output_bytes > 0:
             inner_grouped_func = grouped_func
 
