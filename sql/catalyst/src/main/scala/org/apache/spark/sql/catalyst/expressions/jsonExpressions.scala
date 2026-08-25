@@ -825,11 +825,11 @@ case class JsonValue(
   override def prettyName: String = "json_value"
 
   override def sql: String = {
-    // Reference identity, not value equality: an explicit `RETURNING STRING COLLATE UTF8_BINARY`
-    // is a distinct StringType instance that compares `==` to the default companion, so `==` would
-    // silently drop it. Only the omitted companion default (by reference) should render nothing.
-    // Matches `JsonQuery.sql` / `JsonArray.sql`, keeping a nested `JSON_VALUE` faithful when a JSON
-    // constructor renders it.
+    // Reference identity, not value equality: an explicitly collated `RETURNING STRING COLLATE
+    // UTF8_BINARY` is a distinct instance that compares `==` to the companion, so `==` would drop
+    // it. Only the companion (by reference) renders nothing -- reached by omission and by a plain
+    // `RETURNING STRING` (see `DataTypeAstBuilder`). Matches `JsonQuery.sql` / `JsonArray.sql`,
+    // keeping a nested `JSON_VALUE` faithful when a JSON constructor renders it.
     val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
     def behaviorSQL(b: JsonValueBehavior, default: Option[Expression]): String = b match {
       case JsonValueBehavior.Null => "NULL"
@@ -1163,11 +1163,11 @@ case class JsonQuery(
   override def prettyName: String = "json_query"
 
   override def sql: String = {
-    // Use reference identity, not value equality, so an explicit `RETURNING STRING COLLATE
-    // UTF8_BINARY` (a distinct StringType instance that compares `==` to the default companion) is
-    // still rendered rather than silently dropped -- only the omitted companion default (by
-    // reference) renders nothing. This matches `JsonArray.sql`, and keeps a nested `JSON_QUERY`
-    // faithful when a JSON constructor splices it (see `JsonArray.sql`).
+    // Reference identity, not value equality, so an explicitly collated `RETURNING STRING COLLATE
+    // UTF8_BINARY` (a distinct instance that compares `==` to the companion) is still rendered.
+    // Only the companion (by reference) renders nothing -- reached by omission and by a plain
+    // `RETURNING STRING` (see `DataTypeAstBuilder`). Matches `JsonArray.sql`, keeping a nested
+    // `JSON_QUERY` faithful when a JSON constructor splices it.
     val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
     val wrapperSQL = wrapper match {
       case JsonQueryWrapper.Without => ""
@@ -1489,19 +1489,24 @@ case class JsonArray(
   }
 
   private def formatJsonText(idx: Int, value: Any): String = {
-    val text = value.asInstanceOf[UTF8String].toString
     if (!needsValidation(idx)) {
-      text
+      // Nested JSON constructor: never validated, splice as-is.
+      value.asInstanceOf[UTF8String].toString
     } else if (values(idx).foldable) {
+      // Foldable FORMAT JSON: validate once, cache. `JsonArray` is non-foldable when any element
+      // is FORMAT JSON, so this runs per row; check the cache before decoding the constant value.
       val cached = cachedValidatedFormatJsonTexts(idx)
       if (cached != null) {
         cached
       } else {
+        val text = value.asInstanceOf[UTF8String].toString
         validateJsonText(idx, text)
         cachedValidatedFormatJsonTexts(idx) = text
         text
       }
     } else {
+      // Non-foldable FORMAT JSON: value varies per row, validate every row.
+      val text = value.asInstanceOf[UTF8String].toString
       validateJsonText(idx, text)
       text
     }
@@ -1578,13 +1583,11 @@ case class JsonArray(
         v.sql
       }
     }.mkString(", ")
-    // Use reference identity, not value equality: an explicit `RETURNING STRING COLLATE
-    // UTF8_BINARY` (with the same constraint) produces a distinct StringType instance that
-    // compares equal (`==`) to the default companion `StringType`, so `==` would drop it. A
-    // non-default collation such as `UTF8_LCASE` does not compare equal to the companion anyway
-    // (StringType.equals compares both the collation ID and constraint), so reference identity is
-    // needed here specifically to distinguish the explicit default collation from the omitted
-    // default (the companion, by reference), which alone should render nothing.
+    // Reference identity, not value equality: an explicitly collated `RETURNING STRING COLLATE
+    // UTF8_BINARY` is a distinct instance that compares `==` to the companion, so `==` would drop
+    // it. Only the companion (by reference) renders nothing -- reached by omission and by a plain
+    // `RETURNING STRING`, which `DataTypeAstBuilder` maps to the companion. (A non-default
+    // collation is not `==` to the companion anyway, since StringType.equals compares constraint.)
     val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
     val nullSQL = nullBehavior match {
       case JsonConstructorNullBehavior.Null => " NULL ON NULL"

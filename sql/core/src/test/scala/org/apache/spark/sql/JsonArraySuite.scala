@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonArray, JsonConstructorNullBehavior, JsonQuery, JsonQueryBehavior, JsonQueryQuotes, JsonQueryWrapper, Literal, ResolvedCollation}
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{CharType, GeographyType, GeometryType, IntegerType, MapType, StringType, VarcharType}
@@ -166,15 +167,25 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   test("splicing is decided from the source, not the optimized plan shape") {
     // A JSON_ARRAY result surfaced as a column is a plain STRING and must be quoted -- even though
     // CollapseProject may inline the inner JSON_ARRAY into the outer argument position. The FORMAT
-    // JSON decision is frozen from the lexical argument at parse time, so it does not depend on
-    // whether that inlining happens: the result is ["[1]"], never [[1]].
-    val inlined = sql("SELECT JSON_ARRAY(a) AS r FROM (SELECT JSON_ARRAY(1) AS a) t")
-    checkAnswer(inlined, Row("""["[1]"]"""))
-    // Referencing the alias twice blocks CollapseProject from inlining it; the result is identical,
-    // confirming independence from plan shape.
+    // JSON decision is frozen from the lexical argument at parse time, so it is independent of that
+    // inlining: the result is ["[0]"], never [[0]]. Use a non-foldable producer (JSON_ARRAY(id)):
+    // a foldable one is "cheap" and CollapseProject inlines it even when referenced twice, so both
+    // cases would otherwise cover the same shape.
+    def projectCount(df: DataFrame): Int =
+      df.queryExecution.optimizedPlan.collect { case _: Project => () }.size
+
+    // Single reference: CollapseProject inlines the inner JSON_ARRAY into the outer argument, so
+    // the producer Project collapses away.
+    val inlined = sql("SELECT JSON_ARRAY(a) AS r FROM (SELECT JSON_ARRAY(id) AS a FROM range(1)) t")
+    assert(projectCount(inlined) == 1)
+    checkAnswer(inlined, Row("""["[0]"]"""))
+
+    // Referencing the non-foldable alias twice blocks inlining, so the producer Project survives.
     val notInlined =
-      sql("SELECT JSON_ARRAY(a) AS r, a FROM (SELECT JSON_ARRAY(1) AS a) t")
-    checkAnswer(notInlined, Row("""["[1]"]""", "[1]"))
+      sql("SELECT JSON_ARRAY(a) AS r, a FROM (SELECT JSON_ARRAY(id) AS a FROM range(1)) t")
+    assert(projectCount(notInlined) == 2)
+    // Same splice decision (quoted) despite the different plan shape.
+    checkAnswer(notInlined, Row("""["[0]"]""", "[0]"))
   }
 
   test("JSON_ARRAY column with NULL under both ON NULL modes") {
@@ -473,17 +484,10 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
 
   test("view default collation preserves an explicit collated RETURNING") {
     // Exercises the CREATE VIEW resolution path (in addition to the CTAS path above): the explicit
-    // RETURNING collation must survive the view's default collation. Pin the fixed-point analyzer:
-    // although ExpressionResolver routes every TimeZoneAwareExpression through
-    // TimezoneAwareExpressionResolver on the normal path, the single-pass *view re-resolution* path
-    // (ViewResolver re-resolving the reconstructed plan) leaves this constructor's timezone unset,
-    // so dual-run trips the ResolutionValidator with "Timezone expression must have a timezone"
-    // (verified). This is a pre-existing single-pass view-resolution gap independent of collation:
-    // the CTAS test above uses the same default collation and passes under dual-run, so single-pass
-    // coverage of the default-collation path is already established there.
-    withSQLConf(
-        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
-        SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+    // RETURNING collation must survive the view's default collation. Runs under dual-run so the
+    // single-pass resolver's default-collation coercion (which wraps the constructor in a Cast to
+    // the view collation) is exercised for parity with the fixed-point analyzer.
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
       withView("v") {
         sql(
           """CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS
