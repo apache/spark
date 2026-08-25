@@ -4360,23 +4360,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if self._internal.index_level > 1:
             raise NotImplementedError("rank do not support MultiIndex now")
 
-        # Determine ordering with null placement based on na_option.
-        # 'top' always assigns the smallest rank to NaN, 'bottom' the largest,
-        # regardless of ascending direction.
+        # 'top' always assigns rank 1 to NaN (nulls first in window order).
+        # 'bottom' always assigns the largest rank to NaN (nulls last). 'keep' also nulls last.
+        nulls_first = na_option == "top"
+        asc_func = PySparkColumn.asc if ascending else PySparkColumn.desc
         if ascending:
-            sort_col = (
-                self.spark.column.asc_nulls_first()
-                if na_option == "top"
-                else self.spark.column.asc_nulls_last()
+            null_func = (
+                PySparkColumn.asc_nulls_first if nulls_first else PySparkColumn.asc_nulls_last
             )
-            nat_order_col = F.col(NATURAL_ORDER_COLUMN_NAME).asc()
         else:
-            sort_col = (
-                self.spark.column.desc_nulls_first()
-                if na_option == "top"
-                else self.spark.column.desc_nulls_last()
+            null_func = (
+                PySparkColumn.desc_nulls_first if nulls_first else PySparkColumn.desc_nulls_last
             )
-            nat_order_col = F.col(NATURAL_ORDER_COLUMN_NAME).desc()
+        sort_col = null_func(self.spark.column)
+        nat_order_col = asc_func(F.col(NATURAL_ORDER_COLUMN_NAME))
 
         if method == "first":
             window = (
